@@ -41,7 +41,7 @@ English, Japanese, and Simplified Chinese live in `en/`, `ja/`, and `zh/`. Maint
 
 ## Connect publishing
 
-In the Mintlify dashboard, connect `koharu-rs/koharu` and select the production branch. In Git Settings, enable **docs.json is in a subdirectory** and enter `/packages/docs` without a trailing slash. Configure `koharu.rs` as the custom domain and follow the DNS records shown by Mintlify.
+In the Mintlify dashboard, connect `koharu-rs/koharu` and select the production branch. In Git Settings, enable **docs.json is in a subdirectory** and enter `/packages/docs` without a trailing slash. Until that path is set, a root `docs.json` shim points Mintlify at `packages/docs` so PR previews can find the config. Configure `koharu.rs` as the custom domain and follow the DNS records shown by Mintlify.
 
 <Note>
   Publishing and custom-domain activation require the Mintlify GitHub integration and domain
