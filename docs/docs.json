@@ -1,0 +1,215 @@
+{
+  "theme": "almond",
+  "name": "Koharu",
+  "colors": {
+    "primary": "#d85b6a",
+    "light": "#f28494"
+  },
+  "favicon": "https://media.brand.dev/000eec33-3c04-46f0-9c5a-12c530001151.png",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/koharu-rs/koharu"
+    }
+  },
+  "navigation": {
+    "languages": [
+      {
+        "language": "en",
+        "default": true,
+        "tabs": [
+          {
+            "tab": "Documentation",
+            "groups": [
+              {
+                "group": "Get Started",
+                "pages": [
+                  "introduction",
+                  "getting-started/install",
+                  "getting-started/first-project",
+                  "getting-started/runtimes-and-hardware"
+                ]
+              },
+              {
+                "group": "Workflow",
+                "pages": [
+                  "workflow/projects-and-imports",
+                  "workflow/process-pages",
+                  "workflow/review-text",
+                  "workflow/canvas-basics",
+                  "workflow/cleanup-and-inpainting",
+                  "workflow/typesetting",
+                  "workflow/export"
+                ]
+              },
+              {
+                "group": "Models & Providers",
+                "pages": [
+                  "models/vision-and-inpainting",
+                  "models/translation-providers",
+                  "models/translation-and-generation"
+                ]
+              },
+              {
+                "group": "Koharu Agent",
+                "pages": [
+                  "agent/setup",
+                  "agent/work-with-projects"
+                ]
+              },
+              {
+                "group": "Reference",
+                "pages": [
+                  "reference/settings",
+                  "reference/keyboard-shortcuts",
+                  "reference/formats-and-data",
+                  "reference/troubleshooting"
+                ]
+              },
+              {
+                "group": "Development",
+                "pages": [
+                  "development/contributing",
+                  "development/setup",
+                  "development/architecture",
+                  "development/scene-and-storage",
+                  "development/pipeline-rendering-and-desktop"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "language": "ja",
+        "tabs": [
+          {
+            "tab": "ドキュメント",
+            "groups": [
+              {
+                "group": "はじめに",
+                "pages": [
+                  "ja-JP/introduction",
+                  "ja-JP/getting-started/install",
+                  "ja-JP/getting-started/first-project",
+                  "ja-JP/getting-started/runtimes-and-hardware"
+                ]
+              },
+              {
+                "group": "ワークフロー",
+                "pages": [
+                  "ja-JP/workflow/projects-and-imports",
+                  "ja-JP/workflow/process-pages",
+                  "ja-JP/workflow/review-text",
+                  "ja-JP/workflow/canvas-basics",
+                  "ja-JP/workflow/cleanup-and-inpainting",
+                  "ja-JP/workflow/typesetting",
+                  "ja-JP/workflow/export"
+                ]
+              },
+              {
+                "group": "モデルとプロバイダー",
+                "pages": [
+                  "ja-JP/models/vision-and-inpainting",
+                  "ja-JP/models/translation-providers",
+                  "ja-JP/models/translation-and-generation"
+                ]
+              },
+              {
+                "group": "Koharu Agent",
+                "pages": [
+                  "ja-JP/agent/setup",
+                  "ja-JP/agent/work-with-projects"
+                ]
+              },
+              {
+                "group": "リファレンス",
+                "pages": [
+                  "ja-JP/reference/settings",
+                  "ja-JP/reference/keyboard-shortcuts",
+                  "ja-JP/reference/formats-and-data",
+                  "ja-JP/reference/troubleshooting"
+                ]
+              },
+              {
+                "group": "開発",
+                "pages": [
+                  "ja-JP/development/contributing",
+                  "ja-JP/development/setup",
+                  "ja-JP/development/architecture",
+                  "ja-JP/development/scene-and-storage",
+                  "ja-JP/development/pipeline-rendering-and-desktop"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "language": "zh",
+        "tabs": [
+          {
+            "tab": "文档",
+            "groups": [
+              {
+                "group": "开始使用",
+                "pages": [
+                  "zh-CN/introduction",
+                  "zh-CN/getting-started/install",
+                  "zh-CN/getting-started/first-project",
+                  "zh-CN/getting-started/runtimes-and-hardware"
+                ]
+              },
+              {
+                "group": "工作流",
+                "pages": [
+                  "zh-CN/workflow/projects-and-imports",
+                  "zh-CN/workflow/process-pages",
+                  "zh-CN/workflow/review-text",
+                  "zh-CN/workflow/canvas-basics",
+                  "zh-CN/workflow/cleanup-and-inpainting",
+                  "zh-CN/workflow/typesetting",
+                  "zh-CN/workflow/export"
+                ]
+              },
+              {
+                "group": "模型与提供方",
+                "pages": [
+                  "zh-CN/models/vision-and-inpainting",
+                  "zh-CN/models/translation-providers",
+                  "zh-CN/models/translation-and-generation"
+                ]
+              },
+              {
+                "group": "Koharu Agent",
+                "pages": [
+                  "zh-CN/agent/setup",
+                  "zh-CN/agent/work-with-projects"
+                ]
+              },
+              {
+                "group": "参考",
+                "pages": [
+                  "zh-CN/reference/settings",
+                  "zh-CN/reference/keyboard-shortcuts",
+                  "zh-CN/reference/formats-and-data",
+                  "zh-CN/reference/troubleshooting"
+                ]
+              },
+              {
+                "group": "开发",
+                "pages": [
+                  "zh-CN/development/contributing",
+                  "zh-CN/development/setup",
+                  "zh-CN/development/architecture",
+                  "zh-CN/development/scene-and-storage",
+                  "zh-CN/development/pipeline-rendering-and-desktop"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
