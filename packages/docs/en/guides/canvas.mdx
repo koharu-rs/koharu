@@ -1,0 +1,41 @@
+---
+title: 'Use the canvas'
+description: 'Navigate the page and choose the right tool for text, artwork, and cleanup.'
+icon: 'arrow-pointer'
+---
+
+The toolbar controls pointer behavior. The inspector changes the selected layer's saved properties.
+
+## Navigate and select
+
+Use **Pan** to move the view and the status bar to change zoom. **View → Fit Window**, or `0` by default, fits the active page. Switching pages returns to a fitted view.
+
+Use **Select** to pick editable layers and modifier keys for multiple selection. Supported layers can be moved, resized, and rotated. A drag previews the transform; finishing commits it, and canceling restores the previous presentation.
+
+## Choose an editing tool
+
+<Tabs>
+  <Tab title='Text'>
+    Click with **Text** to create point text, or drag to create a paragraph frame. Enter the
+    translation in the inspector and adjust [typography and fitting](/en/guides/typesetting).
+  </Tab>
+  <Tab title='Brush and Eraser'>
+    **Brush** paints an authored raster layer with the chosen color and diameter. **Eraser** removes
+    pixels from an authored raster target. These edits are separate from generated inpainting.
+  </Tab>
+  <Tab title='Color picker'>
+    Sample the composited canvas with **Color picker**. Apply the sampled color to brush strokes or
+    text styling.
+  </Tab>
+  <Tab title='Remove'>
+    Paint a mask with **Remove**, then run inpainting. The mask identifies source marks to
+    reconstruct; it does not become a visible paint layer. See [cleanup](/en/guides/cleanup).
+  </Tab>
+</Tabs>
+
+<Tip>
+  Hold `Space` and drag to pan temporarily. Release it to restore the previous tool. `Escape`
+  cancels the active gesture or clears selection.
+</Tip>
+
+Single-key tool shortcuts are inactive while a text field is focused. See [keyboard shortcuts](/en/reference/shortcuts).

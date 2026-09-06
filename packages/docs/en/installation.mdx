@@ -1,0 +1,46 @@
+---
+title: 'Install Koharu'
+description: 'Download a release, complete the first launch, and keep the app up to date.'
+icon: 'download'
+---
+
+<Steps>
+  <Step title="Choose a release">
+    Open the [latest GitHub release](https://github.com/koharu-rs/koharu/releases/latest) and select the package for your operating system and processor.
+
+    <Tabs>
+      <Tab title="Windows">
+        Run the Windows installer from the release, or install with WinGet:
+
+        ```powershell
+        winget install --id mayocream.koharu
+        ```
+      </Tab>
+      <Tab title="macOS">
+        Choose the Apple-silicon release and place Koharu in Applications.
+      </Tab>
+      <Tab title="Linux">
+        Choose the package for your distribution and processor. Install any desktop-library dependencies reported by your package manager.
+      </Tab>
+    </Tabs>
+
+  </Step>
+  <Step title="Let the runtime initialize">
+    Launch Koharu and wait for the project browser. First launch can take longer while native packages download. Model files download when you first use the selected model.
+
+    Downloads use GitHub release assets, Hugging Face, and backend package repositories. Keep the app open while downloads finish; the activity center shows progress.
+
+  </Step>
+  <Step title="Create your first project">
+    Follow the [quickstart](/en/quickstart) with one readable manga page. Check [hardware and runtimes](/en/hardware) if device initialization fails.
+  </Step>
+</Steps>
+
+## Install updates
+
+Release builds check a signed GitHub release feed. When an update is offered, let the download complete before restarting Koharu.
+
+<Tip>
+  Use a release build for translation work. Use the [development setup](/en/development/setup) when
+  you want to change Koharu's code.
+</Tip>

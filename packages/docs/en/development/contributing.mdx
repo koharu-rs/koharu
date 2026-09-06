@@ -1,0 +1,55 @@
+---
+title: 'Contribute to Koharu'
+description: 'Prepare a focused change that the project can review and maintain.'
+icon: 'code-pull-request'
+---
+
+Bug fixes, documentation, translations, model-port corrections, and focused product improvements are welcome. Start with [good first issues](https://github.com/koharu-rs/koharu/contribute), search existing [issues](https://github.com/koharu-rs/koharu/issues) and pull requests, or discuss scope on [Discord](https://discord.gg/mHvHkxGnUY).
+
+<Steps>
+  <Step title="Agree on the problem and scope">
+    Small fixes and documentation changes can usually be submitted directly. Before building a new feature, significant UI change, model, provider, platform integration, dependency, public API, schema change, or architectural refactor, discuss the problem and direction in an issue.
+
+    An issue, working implementation, or agreed direction does not guarantee acceptance.
+
+  </Step>
+  <Step title="Follow the owning component">
+    Read the affected crate's README and repository rules. Update every in-repository consumer when APIs or schemas change; do not add compatibility aliases. Keep provider defaults with their provider and safe APIs separate from unsafe FFI and dynamic loading.
+
+    Preserve checkpoint-affecting structure in model ports. Compare structured outputs on identical inputs. Explain ownership, invariants, upstream mapping, or deliberate divergences in comments.
+
+  </Step>
+  <Step title="Verify the change">
+    Review the whole diff. Run the smallest relevant debug check or focused test once, format affected code, and run `git diff --check`.
+
+    Supply screenshots for UI changes, device/input/baseline/result/correctness for performance work, and structured comparisons for model ports. State any checks that could not run.
+
+  </Step>
+  <Step title="Open a focused pull request">
+    Explain the problem, solution, important behavior or ownership changes, and validation. Keep unrelated refactoring out. Be ready to revise the change and ask when review feedback is unclear.
+  </Step>
+</Steps>
+
+Do not commit credentials, model weights, datasets, generated output, build artifacts, or machine-specific files.
+
+## How proposals are evaluated
+
+Maintainers consider product fit, breadth of user value, UX, architecture, performance, security, privacy, platform support, tests, documentation, dependencies, and operational complexity.
+
+A proposal may be declined, postponed, reduced in scope, redesigned, or kept outside the core project. Once merged, its maintenance becomes the project's responsibility. Continued contributor help is welcome, but the project must be able to support the feature if that availability changes.
+
+## AI-assisted contributions
+
+A human contributor must remain the author and owner of a submission. Disclose substantial AI assistance in design or implementation, including its extent and purpose. Routine completion, grammar correction, and translation do not need detailed disclosure.
+
+Before submitting, personally review the complete diff, verify generated claims against code, reproduce reported problems, understand the changes and edge cases, and be able to revise them. Provide the same checks and evidence as any other contribution.
+
+<Warning>
+  Do not submit autonomous or unreviewed issues, pull requests, review comments, or security
+  reports. Treat generated output as a draft, and make descriptions and review responses reflect
+  your own understanding.
+</Warning>
+
+Maintainers may close submissions that appear unreviewed, contain speculative or fabricated claims, cannot be explained or revised, or require more review effort than the value they offer. Ask if you are unsure how these expectations apply.
+
+Continue with [development setup](/en/development/setup).

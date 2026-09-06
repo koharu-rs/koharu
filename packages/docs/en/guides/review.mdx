@@ -1,0 +1,47 @@
+---
+title: 'Review text and layers'
+description: "Correct source text and translation without losing the page's editable structure."
+icon: 'spell-check'
+---
+
+Select a text layer on the canvas or in the inspector. Source analysis, semantic text, and visual layout are separate, so you can correct OCR without rebuilding the text box.
+
+## Correct the text
+
+A text item can hold source text and its detected language, translation and target language, typography, writing mode, and either authored geometry or an automatic fit relationship.
+
+Edit **source text** when OCR is wrong. Edit **translation** for meaning, tone, names, or line breaks.
+
+<Note>
+  Koharu renders translated text only. A source-only layer does not automatically show its OCR text
+  on the canvas or in exports.
+</Note>
+
+## Manage layers
+
+The layer view follows the page hierarchy: groups, text, raster layers, and image or artwork layers. You can select multiple editable layers, move them within the hierarchy, toggle visibility, change opacity, and delete a layer with its descendants.
+
+Analysis regions describe model findings. They are not visible presentation layers and do not compete with artwork or text during selection.
+
+## Review a page
+
+<Steps>
+  <Step title='Check detection and OCR'>
+    Verify the text regions, then correct source recognition errors.
+  </Step>
+  <Step title='Review the translation'>
+    Check meaning, tone, terminology, and names against the source.
+  </Step>
+  <Step title='Inspect the artwork'>
+    Look for remnants of source lettering and damage around cleanup regions.
+  </Step>
+  <Step title='Check the reading experience'>
+    Adjust typography and fitting, then inspect the composite at normal reading size.
+  </Step>
+</Steps>
+
+## Undo and redo
+
+Use **Edit → Undo** or **Redo**. The defaults are `Ctrl+Z` and `Ctrl+Shift+Z` on Windows/Linux, or `Command+Z` and `Command+Shift+Z` on macOS.
+
+One pipeline invocation forms one undo group even when page-stage results commit incrementally. Closing and reopening a project loads the saved state without restoring the previous undo stack.

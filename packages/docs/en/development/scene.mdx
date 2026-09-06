@@ -1,0 +1,57 @@
+---
+title: 'Scene and storage'
+description: 'Understand semantic edits, immutable snapshots, and durable project publication.'
+icon: 'database'
+---
+
+`koharu-scene` owns what a project means. `koharu-storage` owns how complete states and immutable bytes become durable.
+
+## Separate analysis, content, and presentation
+
+Projects contain ordered pages. Each page has stable external entity IDs, a local arena, hierarchy, typed components, and relations.
+
+```mermaid
+flowchart BT
+  presentation["TextLayout + Typography + optional authored Geometry"]
+  content["TextContent + SourceText + Translation"]
+  analysis["Region + Geometry + OCR analysis"]
+  presentation -->|"presents"| content
+  content -->|"recognized-from"| analysis
+```
+
+Detection geometry stays analysis rather than becoming a movable visible layer. Translation can change without losing OCR provenance; typography can change without rewriting semantic text.
+
+## Apply an edit
+
+Snapshots are immutable and cheap to clone. A patch binds to a project and base revision, records operation preconditions, and carries inverses for session undo.
+
+<Note>
+  A stale patch is not accepted silently. Derived work must explicitly rebase, and rebasing fails
+  when an observed input or overlapping write changed.
+</Note>
+
+## Publish a state
+
+Storage is domain-agnostic. It saves an opaque complete scene payload into alternating `state-a.khr` and `state-b.khr` slots, with immutable content-addressed blobs, checksums, and a referenced-blob set.
+
+<Steps>
+  <Step title='Publish missing blobs'>
+    Make referenced bytes available before publishing the state that needs them.
+  </Step>
+  <Step title='Write the inactive state'>
+    Build the new slot beside its destination and flush it.
+  </Step>
+  <Step title='Publish atomically'>
+    Make the new slot durable while retaining the previously valid slot if publication fails.
+  </Step>
+</Steps>
+
+## Recover and collect
+
+Opening selects the newest valid state and can fall back to the other slot if the newer one is corrupt. Blob reads may use read-only memory mapping without exposing that detail to scene consumers.
+
+Explicit garbage collection preserves blobs referenced by both valid disk states and live scene scopes, including undo history.
+
+## Keep application ownership separate
+
+The application owns `.khrproj` directories, names, active-page selection, undo grouping, and UI projection. Renderer, pipeline, and Agent consume snapshots and submit semantic patches; they do not write storage files directly.

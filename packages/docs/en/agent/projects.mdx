@@ -1,0 +1,43 @@
+---
+title: 'Work with Koharu Agent'
+description: 'Ask the Agent to inspect pages, edit content, and run the configured pipeline.'
+icon: 'comment'
+---
+
+Give the Agent a concrete goal within the currently open project. Name the pages, desired change, and anything it should leave untouched.
+
+## Write a scoped request
+
+<Tabs>
+  <Tab title="Text review">
+    > Review pages 3–5. Correct obvious OCR errors and translate into natural English while preserving honorifics. Keep typography unchanged.
+  </Tab>
+  <Tab title="Visual review">
+    > Check whether the text on page 8 overflows its bubble. Adjust only the size and line breaks.
+  </Tab>
+</Tabs>
+
+Semantic inspection is sufficient for many text edits. Ask for visual inspection when appearance matters.
+
+## Available actions
+
+The Agent can inspect current semantic state, render a particular page, rename/reorder/delete pages, add paragraph text boxes, edit source text and translations, change typography and geometry, adjust visibility and opacity, move or delete elements, and run the configured pipeline for project, page, or text-element scopes.
+
+<Note>
+  The project tools do not import source files, export files, manage provider credentials, or
+  operate outside the open project.
+</Note>
+
+## Edits, cancellation, and history
+
+Agent changes use the same project operations as the desktop UI. Successful edits update the scene, renderer, revision, and undo history.
+
+Pipeline runs commit completed stages incrementally. Canceling the Agent request also asks an Agent-started pipeline to stop cooperatively. Only one Agent request runs at a time.
+
+<Steps>
+  <Step title='Inspect the changed pages'>Review source text, translations, and the canvas.</Step>
+  <Step title='Check the layout'>Verify geometry and typography at normal reading size.</Step>
+  <Step title='Keep or undo the change'>
+    Use undo for unwanted changes, and export after your review.
+  </Step>
+</Steps>

@@ -19,4 +19,4 @@ AI tools may assist development or communication, but a human contributor must r
 
 Personally review the complete diff, verify generated claims against the code, understand and be able to explain every change, and provide the same relevant tests and evidence expected from any other contribution. If AI substantially helped design or implement a change, disclose the extent and purpose of that assistance in the pull request description.
 
-For more details, read the complete [contributing guide](https://koharu.rs/development/contributing/).
+For more details, read the complete [contributing guide](https://koharu.rs/en/development/contributing).

@@ -1,0 +1,42 @@
+---
+title: 'Typeset a translation'
+description: 'Fit text with suitable fonts, writing direction, alignment, fill, and stroke.'
+icon: 'font'
+---
+
+Typography is saved in the scene. The canvas and exports use the same page presentation.
+
+<Steps>
+  <Step title="Choose a text frame">
+    Use a detected text or bubble region for automatic fitting, or create point text or a paragraph frame with **Text**.
+
+    A text layer without authored geometry can derive its frame from a fit region. Manually transforming it gives the layer its own geometry.
+
+  </Step>
+  <Step title="Choose fonts with the right coverage">
+    The font picker includes bundled and discovered system fonts. If a face lacks a glyph, Koharu tries the ordered default stack in **Settings → Typesetting**, then system fallback.
+
+    Use fonts that cover the target script. A Latin display font alone is insufficient for Japanese or Chinese dialogue.
+
+  </Step>
+  <Step title="Fit and style the text">
+    Set family, weight, style, size or automatic fitting, writing mode, alignment, fill, and stroke. Visibility and opacity also affect the result.
+
+    Automatic fitting keeps the text inside its presentation frame. Disable it for a fixed size; reset fitting after a substantial translation edit.
+
+  </Step>
+  <Step title="Review at reading size">
+    Check every page using the visibility and opacity you intend to export. Confirm the translation is present: source OCR is never rendered as fallback text.
+  </Step>
+</Steps>
+
+## Vertical CJK text
+
+Vertical writing uses shaping and OpenType features rather than a rotated horizontal line. Columns follow the writing direction; supported fonts supply vertical punctuation forms.
+
+Inspect punctuation, emphasis marks, Latin runs, and small kana individually. Font coverage, vertical metrics, and translation length still determine the quality of the result.
+
+<Tip>
+  Use [PNG for delivery or PSD for layered editing](/en/guides/export), and retain the Koharu
+  project for future changes to semantic text and fitting.
+</Tip>

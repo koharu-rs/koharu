@@ -1,0 +1,42 @@
+---
+title: 'Clean up source lettering'
+description: 'Use inpainting and precise manual masks to remove lettering while preserving artwork.'
+icon: 'eraser'
+---
+
+Inpainting reconstructs the artwork beneath source text. A precise removal region usually matters more than a larger model.
+
+## Review automatic cleanup
+
+Detection produces a removal mask. Inpainting uses it to create derived artwork; without a mask, the stage completes without inference.
+
+Inspect the result at normal reading size and high zoom. Look for glyph fragments, missed punctuation or furigana, erased bubble borders, repeated textures, smeared screentone, and changes outside the lettering.
+
+## Repair a missed region
+
+<Steps>
+  <Step title='Paint a removal mask'>
+    Choose **Remove**, set the brush diameter, and cover only the source marks that need
+    reconstruction. Use controlled strokes and avoid neighboring line art. Cancel the gesture if the
+    mask is wrong.
+  </Step>
+  <Step title='Run inpainting'>
+    Finish the gesture and run inpainting for the current page. Include enough of each glyph for the
+    model to remove it without covering an entire bubble unnecessarily.
+  </Step>
+  <Step title='Touch up and inspect'>
+    Use **Color picker**, **Brush**, and **Eraser** for small deterministic corrections. Check the
+    result again at normal zoom.
+  </Step>
+</Steps>
+
+Stopping a processing job does not turn its temporary removal mask into visible artwork.
+
+## Choose a model
+
+**LaMa** and **AOT** provide direct inpainting. **FLUX.2 Klein** and **RORem Mixed** are generative alternatives with prompt controls and larger resource requirements. See [vision and inpainting models](/en/models/vision).
+
+<Warning>
+  Rerunning inpainting replaces derived cleanup in the selected scope. Keep manual touch-ups on
+  their own authored raster layer.
+</Warning>

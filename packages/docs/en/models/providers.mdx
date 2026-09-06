@@ -1,0 +1,51 @@
+---
+title: 'Connect a translation provider'
+description: 'Use local GGUF models, hosted services, or a compatible model server.'
+icon: 'plug'
+---
+
+The translation picker combines local and hosted backends. A selection records the provider, model ID, optional local quantization, and vision-input setting.
+
+## Available connections
+
+| Connection          | Providers                                                                |
+| ------------------- | ------------------------------------------------------------------------ |
+| Local inference     | GGUF models through llama.cpp                                            |
+| Hosted models       | Atlas Cloud, OpenAI, Gemini, Claude, Grok, MiniMax, DeepSeek, OpenRouter |
+| Compatible servers  | LM Studio and OpenAI-compatible endpoints                                |
+| Machine translation | DeepL, Google Cloud Translation, Caiyun                                  |
+
+Each provider owns its endpoint defaults, request mapping, and model discovery. Available models can change independently of these docs.
+
+<Steps>
+  <Step title='Save the connection'>
+    Open **Settings → Providers**, choose a provider, and fill in its fields. Hosted services
+    require credentials. A local compatible server needs its base URL; whether it needs a secret
+    depends on that server.
+  </Step>
+  <Step title='Select a model'>
+    Open the processing selector or **Settings → Translation**. Opening the model picker refreshes
+    provider discovery. An unreachable provider may have no discovered models even while its saved
+    settings remain intact.
+  </Step>
+  <Step title='Choose whether to include the page image'>
+    Enable **Vision input** only for a model that accepts images. Cataloged text-only models disable
+    the switch. OpenAI-compatible endpoints are user-declared, so verify the endpoint and model
+    support image messages.
+  </Step>
+  <Step title='Try one page'>
+    Check the source OCR, run translation on the current page, and review the response before
+    processing a chapter.
+  </Step>
+</Steps>
+
+## Credentials and privacy
+
+Provider secrets use the operating system's secure credential service. Non-secret endpoint settings live in `~/.koharu/config.toml`.
+
+Local models keep prompts and text on your machine after download. Hosted providers receive request content and apply their own retention terms. Local detection and OCR do not make a hosted translation request local.
+
+<Warning>
+  Keep keys out of project instructions, text layers, and configuration files. Save credentials
+  through **Settings → Providers**.
+</Warning>

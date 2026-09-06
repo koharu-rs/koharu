@@ -1,0 +1,65 @@
+---
+title: 'Development setup'
+description: 'Run the desktop app, choose a focused check, and regenerate derived bindings.'
+icon: 'terminal'
+---
+
+## Prerequisites
+
+Use Rust 1.97.1 or later with the 2024 edition toolchain, Bun 1.3.14 or later, LLVM 22.1.8 or later, and Ninja 1.13.2 or later.
+
+<Tabs>
+  <Tab title='Windows'>Install MSVC C/C++ build tools for native dependencies.</Tab>
+  <Tab title='Linux'>
+    Install the distribution's C/C++ build tools, GTK 3, and X11 desktop development libraries.
+  </Tab>
+  <Tab title='macOS'>
+    Install the platform C/C++ development tools required by native dependencies.
+  </Tab>
+</Tabs>
+
+## Start development
+
+```bash
+git clone https://github.com/koharu-rs/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun dev` launches the Next.js UI and Tauri app. It builds `koharu-canvas` for WASM, then watches `koharu-canvas` and `koharu-rasterizer` and regenerates `packages/bridge/src/wasm`. Turbopack refreshes the browser client after successful rebuilds.
+
+## Check the affected component
+
+Run the smallest relevant debug check or focused test once. For example:
+
+```bash
+cargo check -p koharu
+cargo test -p koharu-pipeline <test_name>
+cargo fmt --all --check
+```
+
+For frontend work, use the package's focused test or typecheck command. Repository formatting checks are available through `bun run check`; `bun run lint` runs frontend linting.
+
+<Note>
+  Do not run full suites, non-debug profiles, or end-to-end tests by default. Run them only when
+  explicitly requested.
+</Note>
+
+## Regenerate IPC bindings
+
+Rust command signatures and Specta types are authoritative:
+
+```bash
+cargo run -p koharu-app --bin generate
+```
+
+Do not hand-edit `packages/bridge/src/protocol.ts`.
+
+## Build an executable
+
+When you need a release executable, `bun run build` invokes `tauri build --no-bundle` and writes to `target/release`. Installer packaging belongs to the release workflow.
+
+<Card title='Work on the documentation' icon='book-open' href='/en/development/documentation'>
+  Preview Mintlify and maintain the English, Japanese, and Chinese documentation.
+</Card>

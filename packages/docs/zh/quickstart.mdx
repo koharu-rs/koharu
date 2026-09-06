@@ -1,0 +1,57 @@
+---
+title: '翻译第一页'
+description: '创建项目，运行处理流程，检查页面并导出 PNG 或 PSD。'
+icon: 'rocket'
+---
+
+准备一张清晰的 PNG、JPEG 或 WebP 漫画图片，并先[安装 Koharu](/zh/installation)。
+
+<Steps>
+  <Step title="创建项目">
+    在开始界面的**新建项目**中输入名称，选择**创建**。Koharu 会在 `Documents/Koharu` 下创建自包含的 `.khrproj` 目录并打开编辑器。
+  </Step>
+  <Step title="导入页面">
+    选择**文件 → 导入页面 → 文件**，或使用页面栏的导入按钮。图片会复制到项目中，之后可以移动原文件。
+  </Step>
+  <Step title="选择翻译输出">
+    打开画布上方的处理选择器，选择翻译模型、目标语言以及项目级指令。
+
+    使用托管模型前，先在**设置 → 服务商**保存连接。详见[翻译服务商](/zh/models/providers)。
+
+  </Step>
+  <Step title="运行处理流程">
+    选择**当前页面**，勾选四个阶段并点击**运行**。
+
+    检测找出文字、气泡和分格；OCR 识别文字；翻译生成目标文本；图像修复清除原文字迹。翻译需要 OCR，而图像修复可以直接使用检测结果。
+
+    在活动中心查看当前页面、阶段和模型。
+
+  </Step>
+  <Step title="检查结果">
+    选择文字图层，在检查器中对照原文与译文，修正 OCR、措辞、名字和换行。
+
+    用**移除**处理遗漏的原文，用**画笔**或**橡皮擦**修补图像，用**文本**补建文字框。不需要的编辑可以撤销。
+
+  </Step>
+  <Step title="调整排字">
+    设置字体、字号、自动适配、对齐、书写方向、填充和描边，并在正常阅读大小下检查。
+
+    <Note>
+      只有译文会被渲染。OCR 原文仍可编辑，但译文为空时不会作为替代文字显示。
+    </Note>
+
+  </Step>
+  <Step title="导出">
+    选择**文件 → 导出 PNG**得到合并图片，或**文件 → 导出 PSD**得到分层文档，然后选择输出目录。
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="处理整章" icon="layers" href="/zh/guides/processing">
+    选择页面范围，只重跑需要调整的阶段。
+  </Card>
+
+  <Card title="完善画面" icon="paintbrush" href="/zh/guides/cleanup">
+    使用精确移除蒙版与手动图像修正。
+  </Card>
+</CardGroup>

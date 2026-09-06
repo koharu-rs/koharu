@@ -1,0 +1,46 @@
+---
+title: 'Export PNG and PSD'
+description: 'Export selected pages as flattened images or layered documents.'
+icon: 'file-export'
+---
+
+Review the page composite before choosing **File → Export PNG** or **File → Export PSD**.
+
+<Steps>
+  <Step title="Select the pages">
+    Select pages in the page rail to export that selection. With no page selection, Koharu exports the active page.
+  </Step>
+  <Step title="Choose a format">
+    <Tabs>
+      <Tab title="PNG">
+        A flattened image for delivery and review. It includes translated text, artwork, visibility, opacity, fitting, fill, and stroke from the retained renderer.
+      </Tab>
+      <Tab title="PSD">
+        A layered document for further typography or artwork edits in a compatible editor.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Choose a destination">
+    Select an output directory in the native folder dialog. Filenames use a project-order prefix and a sanitized page label:
+
+    ```text
+    0001_page-name.png
+    0002_page-name.png
+    ```
+
+    Invalid filename characters are replaced, and an existing extension in a page label is removed before the export extension is added.
+
+  </Step>
+</Steps>
+
+<Note>
+  PSD is an interchange format. It does not preserve all OCR semantics, model provenance, revision
+  history, or renderer behavior as native Photoshop concepts. Keep the `.khrproj` directory as your
+  editable source and backup.
+</Note>
+
+## Check consistency
+
+Canvas, PNG, and PSD begin with the same scene and prepared rendering result. If they differ, report the project revision, page, format, and images through [troubleshooting](/en/reference/troubleshooting).
+
+There is no separate “inpainted image only” export.

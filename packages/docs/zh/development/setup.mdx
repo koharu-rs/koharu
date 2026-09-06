@@ -1,0 +1,58 @@
+---
+title: '开发环境'
+description: '运行桌面应用，选择必要检查，并重新生成派生绑定。'
+icon: 'terminal'
+---
+
+## 前提条件
+
+使用 Rust 1.97.1 或更新版本及 2024 edition 工具链、Bun 1.3.14+、LLVM 22.1.8+、Ninja 1.13.2+。
+
+<Tabs>
+  <Tab title='Windows'>安装原生依赖所需的 MSVC C/C++ 构建工具。</Tab>
+  <Tab title='Linux'>安装发行版的 C/C++ 构建工具、GTK 3 与 X11 开发库。</Tab>
+  <Tab title='macOS'>安装原生依赖所需的平台 C/C++ 开发工具。</Tab>
+</Tabs>
+
+## 启动开发
+
+```bash
+git clone https://github.com/koharu-rs/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun dev` 同时启动 Next.js UI 和 Tauri。它先将 `koharu-canvas` 构建为 WASM，再监听 `koharu-canvas` 与 `koharu-rasterizer`，重新生成 `packages/bridge/src/wasm`。成功构建后，Turbopack 会刷新浏览器客户端。
+
+## 检查受影响组件
+
+只运行一次最小相关 debug 检查或定向测试，例如：
+
+```bash
+cargo check -p koharu
+cargo test -p koharu-pipeline <test_name>
+cargo fmt --all --check
+```
+
+前端使用相关包的定向测试或类型检查。`bun run check` 检查仓库格式，`bun run lint` 运行前端 lint。
+
+<Note>默认不运行完整测试集、非 debug 配置或端到端测试。只有明确要求时才运行。</Note>
+
+## 重新生成 IPC 绑定
+
+Rust 命令签名与 Specta 类型是权威输入：
+
+```bash
+cargo run -p koharu-app --bin generate
+```
+
+不要手动修改 `packages/bridge/src/protocol.ts`。
+
+## 构建可执行文件
+
+需要 release 可执行文件时，`bun run build` 会调用 `tauri build --no-bundle` 并输出到 `target/release`。安装包由发行工作流生成。
+
+<Card title='编辑文档' icon='book-open' href='/zh/development/documentation'>
+  预览 Mintlify，维护英语、日语和中文文档。
+</Card>

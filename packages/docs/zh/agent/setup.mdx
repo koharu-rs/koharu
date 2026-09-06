@@ -1,0 +1,37 @@
+---
+title: '设置 Koharu Agent'
+description: '使用 ChatGPT 登录并配置内置项目助手。'
+icon: 'robot'
+---
+
+Koharu Agent 是编辑器内的 Codex 客户端，使用 ChatGPT 设备代码登录，不需要为 Agent 输入 OpenAI API 密钥。
+
+<Steps>
+  <Step title='打开 Agent 面板'>打开项目，选择右侧 **Agent**。</Step>
+  <Step title='授权设备'>
+    选择**使用 Codex 登录**，在浏览器授权页输入显示的设备代码，并用目标账号批准登录。
+  </Step>
+  <Step title='选择模型'>
+    返回 Koharu，等待账号与模型列表加载。在 Agent
+    属性中选择模型与推理级别。更多推理可能有助于处理模糊任务，但耗时更长。
+  </Step>
+</Steps>
+
+一次只能进行一个登录尝试。开始另一次前请先取消当前尝试。
+
+## 共享哪些上下文
+
+Agent 从当前项目的语义状态开始。只有调用视觉页面检查时，才会渲染并附加该页图片，不会自动附加所有页面。
+
+<Note>
+  Agent 登录与翻译服务凭据相互独立。登录 ChatGPT 不会配置流水线的 OpenAI 服务；保存 API
+  密钥也不会登录 Agent。
+</Note>
+
+## 退出登录
+
+**退出登录**会取消活动任务、清空当前 Agent 会话，并移除 Koharu 使用的 Codex 账号授权。Agent 配置与翻译设置分开保存。
+
+<Card title='让 Agent 操作项目' icon='comment' href='/zh/agent/projects'>
+  明确任务范围，检查编辑结果，并使用项目历史。
+</Card>

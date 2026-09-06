@@ -1,0 +1,65 @@
+---
+title: '開発環境のセットアップ'
+description: 'デスクトップを起動し、必要なチェックとバインディングの再生成を行います。'
+icon: 'terminal'
+---
+
+## 前提条件
+
+Rust 1.97.1 以降と 2024 edition ツールチェーン、Bun 1.3.14 以降、LLVM 22.1.8 以降、Ninja 1.13.2 以降を使います。
+
+<Tabs>
+  <Tab title='Windows'>ネイティブ依存関係用に MSVC の C/C++ ビルドツールを導入します。</Tab>
+  <Tab title='Linux'>
+    ディストリビューションの C/C++ ビルドツール、GTK 3、X11 の開発ライブラリを導入します。
+  </Tab>
+  <Tab title='macOS'>
+    ネイティブ依存関係が要求するプラットフォームの C/C++ 開発ツールを導入します。
+  </Tab>
+</Tabs>
+
+## 開発を開始する
+
+```bash
+git clone https://github.com/koharu-rs/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun dev` は Next.js UI と Tauri を起動します。`koharu-canvas` を WASM 向けにビルドした後、`koharu-canvas` と `koharu-rasterizer` を監視して `packages/bridge/src/wasm` を再生成します。成功すると Turbopack がブラウザークライアントを更新します。
+
+## 変更した部分を確認する
+
+最小限の debug チェックか対象テストを一度実行します。
+
+```bash
+cargo check -p koharu
+cargo test -p koharu-pipeline <test_name>
+cargo fmt --all --check
+```
+
+フロントエンドでは該当パッケージの対象テストや型チェックを使います。`bun run check` は整形チェック、`bun run lint` はフロントエンドの lint です。
+
+<Note>
+  全テスト、debug 以外のプロファイル、E2E
+  テストは既定では実行しません。明示的に依頼された場合だけ実行します。
+</Note>
+
+## IPC バインディングを再生成する
+
+Rust のコマンド署名と Specta 型が正本です。
+
+```bash
+cargo run -p koharu-app --bin generate
+```
+
+`packages/bridge/src/protocol.ts` を手動編集しないでください。
+
+## 実行ファイルをビルドする
+
+リリース実行ファイルが必要な場合、`bun run build` が `tauri build --no-bundle` を実行し、`target/release` に出力します。インストーラーはリリースワークフローで作成します。
+
+<Card title='ドキュメントを編集する' icon='book-open' href='/ja/development/documentation'>
+  Mintlify をプレビューし、英語・日本語・中国語のドキュメントを編集します。
+</Card>

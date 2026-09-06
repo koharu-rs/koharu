@@ -1,0 +1,54 @@
+---
+title: '硬件与运行时'
+description: '了解设备选择、自动下载、缓存和内存使用。'
+icon: 'microchip'
+---
+
+Koharu 会下载所用功能需要的原生库与模型文件。运行发行版不需要安装完整的 CUDA 或 ROCm SDK。
+
+## 设备选择
+
+启动时会从可用后端中选择统一的 ML 设备：Apple 芯片上使用 Metal，其他环境按支持情况选择 CUDA、ROCm/HIP、Vulkan 或 CPU。操作系统、驱动、模型后端和已发布运行时必须同时支持该路径。
+
+<Tabs>
+  <Tab title='NVIDIA'>
+    Windows 和 Linux 支持 CUDA 13.0，需要 Turing 架构或更新的 GPU，以及 R580 系列或更新的驱动。查看
+    NVIDIA
+    的[驱动与架构对应表](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)并[下载驱动](https://www.nvidia.com/en-us/drivers/)。
+  </Tab>
+  <Tab title='AMD'>
+    ROCm/HIP 支持取决于具体 GPU、系统与驱动的组合。安装兼容的 [AMD
+    驱动](https://www.amd.com/en/support)，Koharu 会自动获取需要的 ROCm 运行时。平台要求请查看 AMD
+    的[兼容性表](https://rocm.docs.amd.com/en/docs-10.0.0/compatibility/compatibility-matrix.html)。
+  </Tab>
+  <Tab title='Apple 芯片'>Apple 芯片 macOS 上受支持的本地推理使用 Metal。</Tab>
+  <Tab title='Vulkan 与 CPU'>
+    Windows 和 Linux 也可使用 Vulkan。如果没有完整的加速路径能初始化，Koharu 会回退到 CPU。CPU
+    推理无需 GPU SDK，但速度较慢。
+  </Tab>
+</Tabs>
+
+<Note>
+  编辑器画布使用内置 CEF WebView 的 WebGPU。即使 ML 推理在 CPU 上运行，画布仍需要可用的 WebGPU
+  适配器和显卡驱动。
+</Note>
+
+## 下载与缓存
+
+| 数据                                     | 获取时机               |
+| ---------------------------------------- | ---------------------- |
+| Torch、llama.cpp、diffusion 和后端运行时 | 初始化相应运行时时     |
+| 固定版本的模型权重                       | 首次使用所选处理模型时 |
+| 本地 GGUF 量化文件                       | 选择并使用该模型文件时 |
+
+软件包位于系统缓存目录的 `koharu/packages`，项目位于 `Documents/Koharu`，设置位于 `~/.koharu/config.toml`。详见[数据位置](/zh/reference/data)。
+
+下载会先暂存，再发布到缓存。中断后可以在下次启动或使用模型时重试。
+
+## 内存与模型驻留
+
+资源监视器显示主机内存、计算活动和模型驻留情况。模型按需加载，并可能保留以便复用。后续阶段需要内存时，Koharu 可以驱逐空闲模型。
+
+从中等量化开始。较小的文件通常更省内存，但可能影响质量。磁盘能存下模型，并不代表设备内存也能容纳它。
+
+启动失败时，检查软件包仓库访问与驱动，重试一次。如果仍然失败，保留完整错误并查看[故障排除](/zh/reference/troubleshooting)。

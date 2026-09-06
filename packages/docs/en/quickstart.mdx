@@ -1,0 +1,57 @@
+---
+title: 'Translate your first page'
+description: 'Create a project, run the pipeline, review the page, and export PNG or PSD.'
+icon: 'rocket'
+---
+
+Start with one readable PNG, JPEG, or WebP manga page and an [installed copy of Koharu](/en/installation).
+
+<Steps>
+  <Step title="Create a project">
+    On the start screen, enter a name in **New project** and choose **Create**. Koharu creates a self-contained `.khrproj` directory under `Documents/Koharu` and opens the editor.
+  </Step>
+  <Step title="Import your page">
+    Choose **File → Import Pages → Files**, or use the page rail's import button. Select your image. Koharu copies it into the project, so you can move the original later.
+  </Step>
+  <Step title="Choose the translation output">
+    Open the processing selector above the canvas. Select a translation model, target language, and any project-wide instructions.
+
+    For a hosted model, first save its connection in **Settings → Providers**. See [translation providers](/en/models/providers).
+
+  </Step>
+  <Step title="Run the pipeline">
+    Choose **Current page**, select all four stages, and click **Run**.
+
+    Detection finds text, bubbles, and panels. OCR reads the detected text, translation writes the target-language text, and inpainting removes source lettering. Translation needs OCR; inpainting can proceed from detection.
+
+    Follow the current page, stage, and model in the activity center.
+
+  </Step>
+  <Step title="Review the result">
+    Select a text layer and compare source text with its translation in the inspector. Correct OCR, wording, names, and line breaks.
+
+    Use **Remove** for missed source lettering, **Brush** or **Eraser** for raster touch-ups, and **Text** for a missing text box. Undo an unwanted edit.
+
+  </Step>
+  <Step title="Fit the text">
+    Adjust the font, size, automatic fitting, alignment, writing direction, fill, and stroke. Check the page at normal reading size.
+
+    <Note>
+      Only translated text is rendered. Source OCR stays editable, but it does not appear as fallback text when a translation is empty.
+    </Note>
+
+  </Step>
+  <Step title="Export">
+    Choose **File → Export PNG** for a flattened image or **File → Export PSD** for a layered document. Select an output directory.
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Process a chapter" icon="layers" href="/en/guides/processing">
+    Choose page scopes and rerun only the stages that need work.
+  </Card>
+
+  <Card title="Refine the artwork" icon="paintbrush" href="/en/guides/cleanup">
+    Use precise removal masks and manual raster corrections.
+  </Card>
+</CardGroup>

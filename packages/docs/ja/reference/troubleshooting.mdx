@@ -1,0 +1,144 @@
+---
+title: 'トラブルシューティング'
+description: '問題を切り分け、再現に必要な情報を集めます。'
+icon: 'circle-question'
+---
+
+開始画面、アクティビティセンター、ダイアログに出た完全なエラーから確認します。プロジェクトやキャッシュを変更する前に、失敗した段階を特定してください。
+
+<AccordionGroup>
+  <Accordion title="起動が完了しない">
+    初回はプロジェクト一覧の表示前にネイティブパッケージを取得することがあります。ダウンロードの完了を待ち、配布先へ接続できるか確認します。繰り返し失敗する場合はすべての Koharu プロセスを閉じ、GPU ドライバーを更新して PC を再起動し、安定した回線で再試行します。完全なエラーを保存してください。ライブラリがロードされている間はランタイムを削除しないでください。
+  </Accordion>
+
+<Accordion title='モデルをダウンロードできない'>
+  Hugging Face
+  の対象リポジトリへの接続と、キャッシュの空き容量を確認します。プロキシ、地域制限、認証、ウイルス対策、書き込み中断が原因になることがあります。同じモデルを一度再試行し、同じファイルで失敗するならリポジトリ、ファイル名、完全なエラーを報告してください。
+</Accordion>
+
+<Accordion title='CPU にフォールバックする'>
+  GPU
+  が検出されても、対応ドライバー、バックエンド、ランタイムが必要です。リソース表示と起動ログで実際のデバイスを確認します。使用可能なアクセラレーター経路がなければ
+  CPU になるのは想定内です。[ハードウェア](/ja/hardware)を参照してください。
+</Accordion>
+
+<Accordion title='検出や OCR が文字を見落とす'>
+  ページの向きと可読性を確認し、OCR
+  モデルの変更前に検出領域を見ます。閾値は複数ページで慎重に調整し、日本語ではマンガ向け認識器も試します。翻訳を再実行する前に原文を直してください。
+</Accordion>
+
+<Accordion title='インペイントが画像を壊す'>
+  除去マスクを小さくし、吹き出しの輪郭や線画を避けます。重い生成型の前に直接型モデルを試します。手動修正は独立したラスター層に残してください。
+</Accordion>
+
+<Accordion title='翻訳プロバイダーが失敗する'>
+  **設定 → プロバイダー**で資格情報、ベース
+  URL、固有項目を確認してモデル一覧を開き直します。互換サーバーではチャットエンドポイントを確認し、画像対応モデルだけで**画像入力**を有効にします。
+</Accordion>
+
+<Accordion title='Agent にサインイン・実行できない'>
+  進行中のサインインやリクエストをキャンセルしてから再試行します。意図した ChatGPT
+  アカウントでブラウザー認証が完了したか確認してください。Agent 認証は OpenAI
+  翻訳プロバイダーの資格情報とは別です。
+</Accordion>
+
+<Accordion title='文字が出ない・崩れる'>
+  訳文があり、レイヤーが表示され、不透明度が 0
+  でなく、対象文字を収録したフォントが使われているか確認します。大きな文章変更後は自動フィットをリセットします。原文だけのテキストは描画されません。
+</Accordion>
+
+  <Accordion title="書き出しとキャンバスが違う">
+    プロジェクトのリビジョン、ページ、形式、キャンバスの画像、書き出した画像を保存します。どちらも同じ準備済みフレームを使うため、明確な不一致は報告してください。
+  </Accordion>
+</AccordionGroup>
+
+## 詳細ログを取る
+
+ターミナルから Koharu を起動すると、そのプロセスで詳細ログを有効にできます。ターミナルは入力・貼り付けしたコマンドを実行するウィンドウです。再現中は開いたままにします。
+
+<Warning>
+  先に作業を保存し、すべての Koharu
+  ウィンドウを閉じてください。ログ設定は新しく起動するプロセスにだけ適用されます。
+</Warning>
+
+<Tabs>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="PowerShell を開く">
+        スタートで **PowerShell** を検索し、**Windows PowerShell** を開きます。Windows Terminal の PowerShell タブでも構いません。コマンドプロンプトでは実行しません。
+      </Step>
+      <Step title="Koharu を起動する">
+        `Ctrl+V` または右クリックで貼り付け、Enter を押します。`PS C:\Users\YourName>` の表示はコピーしません。
+
+        ```powershell
+        $env:RUST_LOG="debug"; koharu.exe
+        ```
+      </Step>
+      <Step title="必要ならフルパスを使う">
+        コマンドが認識されなければ、スタートで Koharu を検索し、右クリックして**ファイルの場所を開く**を選びます。ショートカットの**プロパティ**から**リンク先**をコピーし、次の例を置き換えます。`&` と引用符は残してください。
+
+        ```powershell
+        $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
+        ```
+      </Step>
+    </Steps>
+
+    環境変数はこの PowerShell ウィンドウ内でだけ有効です。閉じると解除されます。
+
+  </Tab>
+  <Tab title="macOS">
+    `Command+Space` で **Terminal** を検索し Return を押します。`Command+V` で貼り付けて実行します。
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+    コマンドが見つからない場合はインストール先から起動します。
+
+    ```bash
+    RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
+    ```
+
+    パスが存在しなければ Finder でアプリの場所を確認し、実際のパスへ置き換えてください。
+
+  </Tab>
+  <Tab title="Linux">
+    アプリ一覧で **Terminal** を検索するか `Ctrl+Alt+T` を試します。`Ctrl+Shift+V` で貼り付けて Enter を押します。
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+    見つからなければ Debian/RPM パッケージの場所を試します。
+
+    ```bash
+    RUST_LOG=debug /usr/bin/koharu
+    ```
+
+    ファイルがなければディストリビューション向けパッケージを確認・再インストールします。
+
+  </Tab>
+</Tabs>
+
+この方法で起動した Koharu で問題を再現します。終了までターミナルが入力待ちに戻らない場合があります。最後のエラーだけでなく前後の出力を残してください。通常どおり Koharu を閉じ、起動したプロセスが固まった場合はターミナルで `Ctrl+C` を一度押します。
+
+## ログをファイルに保存する
+
+新しいターミナルで対応するコマンドを実行し、問題を再現してから Koharu を閉じます。ホームフォルダーにログができます。短いコマンドが使えなかった場合は同じフルパスへ置き換えてください。
+
+<Tabs>
+  <Tab title="Windows">
+    ```powershell
+    $env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
+    ```
+  </Tab>
+  <Tab title="macOS と Linux">
+    ```bash
+    RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
+    ```
+  </Tab>
+</Tabs>
+
+共有前に資格情報、非公開のファイル名、ページ本文を `[removed]` に置き換え、周囲の診断情報は残します。OS、Koharu のバージョン、目的、再現手順、エラーのおおよその時刻を添えます。
+
+テキストログを [GitHub issue](https://github.com/koharu-rs/koharu/issues) に添付するか、[Discord](https://discord.gg/mHvHkxGnUY)で相談してください。

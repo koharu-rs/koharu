@@ -1,0 +1,47 @@
+---
+title: 'Formats and data'
+description: 'Locate projects, non-secret settings, credentials, and replaceable caches.'
+icon: 'database'
+---
+
+## Supported formats
+
+| Purpose             | Format                              |
+| ------------------- | ----------------------------------- |
+| Import              | PNG, JPEG, WebP, CBZ, ZIP, RAR, PDF |
+| Flattened export    | PNG                                 |
+| Layered interchange | PSD                                 |
+| Working project     | `.khrproj` directory                |
+
+## Project data
+
+Projects live at `Documents/Koharu/<project-name>.khrproj/`. Each contains alternating durable state files and content-addressed blobs for source images, generated artwork, and authored raster edits.
+
+<Warning>
+  Do not change internal project files while the project is open. Deletion from the project browser
+  permanently removes the complete directory.
+</Warning>
+
+## Settings and credentials
+
+Non-secret typed settings live in `~/.koharu/config.toml`, with sections owned by pipeline, translation providers, typesetting, and Agent. Missing settings use defaults. Invalid manual edits can prevent initialization; use the Settings UI.
+
+Provider credentials use the operating system's secure credential service. A project backup does not include provider keys or the Agent account session.
+
+## Runtime and model cache
+
+Packages are stored at `<cache>/koharu/packages/` under the operating system cache directory. This data is replaceable: removing it while Koharu is closed causes the required packages to download again.
+
+Never remove a package while the desktop process may still have a native library loaded.
+
+## Back up safely
+
+<Steps>
+  <Step title='Close the project'>Finish current work before copying its files.</Step>
+  <Step title='Copy the entire directory'>
+    Keep the state files and blobs together. A PSD export is not a project backup.
+  </Step>
+  <Step title='Save settings separately'>
+    Copy `config.toml` if needed. Reconfigure credentials through Koharu on the restored machine.
+  </Step>
+</Steps>

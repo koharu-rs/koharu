@@ -1,0 +1,57 @@
+---
+title: 'Projects and imports'
+description: 'Keep pages, translations, and artwork together in a portable Koharu project.'
+icon: 'folder-open'
+---
+
+A project owns its source images, analysis, text, artwork edits, and presentation. Koharu saves your work in a `.khrproj` directory; it does not overwrite imported files.
+
+## Create and reopen projects
+
+The start screen lists projects under your operating system's Documents directory:
+
+```text
+Documents/
+  Koharu/
+    My Project.khrproj/
+```
+
+Create, open, or delete projects here. Names must not contain path separators or characters reserved by the operating system. Close the open project to return to the library.
+
+<Warning>
+  Deleting a project permanently removes its entire directory. Session undo cannot restore it.
+</Warning>
+
+## Import pages
+
+<Steps>
+  <Step title='Choose files or a folder'>
+    Open **File → Import Pages → Files** to select images, archives, or PDFs. Choose **Folder** to
+    scan a directory recursively. Wait for any processing job to finish before importing.
+  </Step>
+  <Step title='Check the imported order'>
+    Image paths and archive entries use alphanumeric ordering: `page2.png` comes before
+    `page10.png`. PDF pages retain document order. Folder import skips unsupported files and does
+    not follow symbolic links.
+  </Step>
+  <Step title='Organize the page rail'>
+    Select pages or a range, rename labels, drag pages into order, or delete pages after
+    confirmation. Page order determines processing order and export filename prefixes.
+  </Step>
+</Steps>
+
+| Source                            | Imported result                                   |
+| --------------------------------- | ------------------------------------------------- |
+| PNG, JPEG (`.jpg`, `.jpeg`), WebP | One project page per image                        |
+| CBZ, ZIP, RAR                     | One page per supported image entry                |
+| PDF                               | One losslessly rasterized image per document page |
+
+Imported bytes are copied into content-addressed project storage. Moving or deleting an original source does not remove the imported page.
+
+## Back up and restore
+
+Close the project, then copy the **entire** `.khrproj` directory. Both state files and blobs are required. To restore it, close Koharu and put the complete directory under `Documents/Koharu`.
+
+<Note>
+  Closing a project preserves its latest saved state but clears session undo and redo history.
+</Note>

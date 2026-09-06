@@ -1,0 +1,38 @@
+---
+title: 'Set up Koharu Agent'
+description: 'Sign in with ChatGPT and configure the integrated project assistant.'
+icon: 'robot'
+---
+
+Koharu Agent is a Codex client inside the editor. It uses ChatGPT device-code sign-in; you do not enter an OpenAI API key for the Agent.
+
+<Steps>
+  <Step title='Open the Agent panel'>Open a project and select **Agent** on the right.</Step>
+  <Step title='Authorize the device'>
+    Choose **Sign in with Codex**. In the browser authorization page, enter the displayed device
+    code and approve the sign-in for your account.
+  </Step>
+  <Step title='Choose a model'>
+    Return to Koharu and wait for the account and model list. Select a Codex model and reasoning
+    level in the Agent properties. More reasoning can help with ambiguous edits but takes longer.
+  </Step>
+</Steps>
+
+Only one sign-in attempt can run at a time. Cancel it before starting another.
+
+## What context is shared
+
+The Agent starts with the open project's semantic state. It renders and attaches a page image only when it invokes visual page inspection; it does not automatically attach every page.
+
+<Note>
+  Agent sign-in and translation-provider credentials are separate. ChatGPT sign-in does not
+  configure the pipeline's OpenAI provider, and an OpenAI API key does not sign in the Agent.
+</Note>
+
+## Sign out
+
+**Sign out** cancels active work, clears the current Agent session, and removes the Codex account authorization used by Koharu. Agent configuration is saved separately from translator settings.
+
+<Card title='Work with a project' icon='comment' href='/en/agent/projects'>
+  Give the Agent a precise scope, review its edits, and use project history.
+</Card>

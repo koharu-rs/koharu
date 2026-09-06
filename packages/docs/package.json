@@ -1,0 +1,13 @@
+{
+  "name": "@koharu/docs",
+  "private": true,
+  "scripts": {
+    "dev": "mint dev --port 3001 --no-open"
+  },
+  "devDependencies": {
+    "mint": "4.2.875"
+  },
+  "engines": {
+    "node": "^24.0.0"
+  }
+}

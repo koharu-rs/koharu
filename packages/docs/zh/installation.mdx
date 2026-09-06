@@ -1,0 +1,43 @@
+---
+title: '安装 Koharu'
+description: '下载发行版，完成首次启动，并保持应用更新。'
+icon: 'download'
+---
+
+<Steps>
+  <Step title="选择发行版">
+    打开[最新 GitHub 发行版](https://github.com/koharu-rs/koharu/releases/latest)，选择适合操作系统与处理器的安装包。
+
+    <Tabs>
+      <Tab title="Windows">
+        运行 Windows 安装程序，或使用 WinGet：
+
+        ```powershell
+        winget install --id mayocream.koharu
+        ```
+      </Tab>
+      <Tab title="macOS">
+        选择 Apple 芯片版本，将 Koharu 放入“应用程序”文件夹。
+      </Tab>
+      <Tab title="Linux">
+        选择适合发行版和处理器的软件包，并安装包管理器提示缺少的桌面库。
+      </Tab>
+    </Tabs>
+
+  </Step>
+  <Step title="等待运行时初始化">
+    启动 Koharu，等待项目列表出现。首次启动可能需要下载原生运行时，因此耗时较长。模型文件会在首次使用所选模型时下载。
+
+    下载来源包括 GitHub 发行资源、Hugging Face 和后端软件包仓库。活动中心会显示进度，请保持应用打开直到完成。
+
+  </Step>
+  <Step title="创建项目">
+    准备一张清晰的漫画图片，按照[快速开始](/zh/quickstart)操作。如果设备初始化失败，先查看[硬件与运行时](/zh/hardware)。
+  </Step>
+</Steps>
+
+## 安装更新
+
+发行版会检查带签名的 GitHub 更新源。出现更新提示后，等待下载完成再重启 Koharu。
+
+<Tip>日常翻译使用发行版。需要修改代码时，请参考[开发环境](/zh/development/setup)。</Tip>

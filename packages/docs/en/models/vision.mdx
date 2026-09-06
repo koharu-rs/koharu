@@ -1,0 +1,47 @@
+---
+title: 'Vision and inpainting models'
+description: 'Choose processors for detection, OCR, and artwork reconstruction.'
+icon: 'eye'
+---
+
+Open **Settings → Pipeline** and choose a model for each stage. Models own their preprocessing and options; the [workflow](/en/guides/processing) stays the same.
+
+## Detection
+
+**Koharu Layout RF-DETR Seg 2XL** detects text, speech bubbles, and panels, and produces segmentation data for later stages.
+
+Text, bubble, and panel thresholds control how much evidence each class needs. Lower thresholds retain more uncertain regions and may increase false positives. Compare several representative pages before changing thresholds.
+
+## OCR
+
+| Processor        | Use                                               |
+| ---------------- | ------------------------------------------------- |
+| PaddleOCR-VL 1.6 | Default general vision-language OCR               |
+| Manga OCR        | Japanese manga text                               |
+| Baberu OCR       | Alternative manga-oriented recognition            |
+| Hayai OCR        | Chinese, Korean, Japanese, and English manga text |
+
+<Note>
+  OCR reads detected text regions. Check detection first when text is missing: changing the
+  recognizer cannot recover a region that was never passed to it.
+</Note>
+
+## Inpainting
+
+<Tabs>
+  <Tab title="Direct">
+    **LaMa** is the default. **AOT Inpainting** is another direct reconstruction model. Start here for routine lettering removal.
+  </Tab>
+  <Tab title="Generative">
+    **FLUX.2 Klein** accepts a reconstruction prompt. **RORem Mixed** is manga-focused and exposes positive and negative prompts.
+
+    These choices generally need more runtime data, memory, and time. Describe surrounding artwork and the removal of letters; typeset the translation with text layers.
+
+  </Tab>
+</Tabs>
+
+## Profiles and first runs
+
+Supported processors keep independent settings profiles. Returning to a generative model restores its prompt fields instead of inheriting another model's options.
+
+Models load on demand. A first run includes download and loading costs, so compare warmed models on identical pages before selecting a project default.
