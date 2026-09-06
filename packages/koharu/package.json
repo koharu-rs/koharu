@@ -9,9 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "oxlint -c .oxlintrc.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test": "vitest run"
   },
   "dependencies": {
     "@koharu/bridge": "workspace:*",

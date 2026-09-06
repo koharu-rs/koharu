@@ -11,9 +11,8 @@
   "scripts": {
     "lint": "oxlint src --ignore-pattern src/protocol.ts --ignore-pattern src/wasm",
     "typecheck": "tsc --noEmit",
-    "dev": "nodemon --watch $(npm prefix)/crates/koharu-canvas --watch $(npm prefix)/crates/koharu-rasterizer --ext rs,toml --delay 250ms --on-change-only --exec bun -- run --filter @koharu/bridge build:dev",
-    "build": "bun x wasm-pack@0.15.0 build $(npm prefix)/crates/koharu-canvas --release --target web --out-dir $(npm prefix)/packages/bridge/src/wasm --out-name koharu_canvas --no-pack",
-    "build:dev": "bun x wasm-pack@0.15.0 build $(npm prefix)/crates/koharu-canvas --dev --target web --out-dir $(npm prefix)/packages/bridge/src/wasm --out-name koharu_canvas --no-pack"
+    "dev": "nodemon --watch $(npm prefix)/crates/koharu-canvas --watch $(npm prefix)/crates/koharu-rasterizer --ext rs,toml --delay 250ms --on-change-only --exec bun -- run --filter @koharu/bridge build",
+    "build": "bun x wasm-pack@0.15.0 build $(npm prefix)/crates/koharu-canvas --release --target web --out-dir $(npm prefix)/packages/bridge/src/wasm --out-name koharu_canvas --no-pack"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1"

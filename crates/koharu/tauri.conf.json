@@ -4,8 +4,8 @@
   "build": {
     "devUrl": "http://localhost:3000",
     "frontendDist": "../../packages/koharu/out",
-    "beforeDevCommand": "bun run ui:dev",
-    "beforeBuildCommand": "bun run ui:build"
+    "beforeDevCommand": "bun run --filter @koharu/bridge build && bun run --parallel --filter @koharu/bridge --filter @koharu/app dev",
+    "beforeBuildCommand": "bun run --filter @koharu/bridge build && bun run --filter @koharu/app build"
   },
   "app": {
     "macOSPrivateApi": true,
