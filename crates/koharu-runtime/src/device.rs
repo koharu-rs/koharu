@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::hardware::GfxTarget;
+
 /// Compute backend used by a machine-learning device.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize, strum::Display)]
 pub enum Backend {
@@ -40,7 +42,7 @@ pub struct Device {
     #[serde(skip)]
     pub(crate) compute_capability: u32,
     #[serde(skip)]
-    pub(crate) target: Option<String>,
+    pub(crate) target: Option<GfxTarget>,
 }
 
 impl Device {
@@ -106,7 +108,7 @@ impl Device {
 
     #[must_use]
     pub fn target(&self) -> Option<&str> {
-        self.target.as_deref()
+        self.target.as_ref().map(|target| target.as_ref())
     }
 }
 

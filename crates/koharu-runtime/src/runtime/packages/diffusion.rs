@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use strum::EnumProperty;
 
 use crate::{
-    Hardware, Store, download,
+    Device, Hardware, Store, download,
     runtime::{
         DiscoverablePackage, Package, RuntimePackage,
         graph::Component,
@@ -89,25 +89,21 @@ impl Diffusion {
         self.get_str("library")
             .expect("diffusion package has a library")
     }
-
-    fn complete(self, path: &Path) -> bool {
-        path.join(self.library()).is_file()
-    }
 }
 
 impl sealed::Sealed for Diffusion {}
 
 impl Package for Diffusion {
     async fn install(self) -> Result<PathBuf> {
-        let target = Store::root()
+        let asset = self.asset();
+        let path = Store::root()
             .join("diffusion")
             .join(RELEASE)
-            .join(self.to_string());
+            .join(asset.trim_end_matches(".tar.gz"));
         Store::directory(
-            target,
-            move |path| self.complete(path),
+            path,
+            move |path| path.join(self.library()).is_file(),
             move |stage| async move {
-                let asset = self.asset();
                 let url = format!(
                     "https://github.com/koharu-rs/diffusion/releases/download/{RELEASE}/{asset}"
                 );
@@ -126,32 +122,28 @@ impl Package for Diffusion {
 
 impl DiscoverablePackage for Diffusion {
     fn discover(hardware: &Hardware) -> Option<Self> {
-        if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            if hardware.supports_cuda() {
-                return Some(Self::WindowsCuda);
-            }
-            if Rocm::discover(hardware).is_ok() {
-                return Some(Self::WindowsHip);
-            }
-            if hardware.supports_vulkan() {
-                return Some(Self::WindowsVulkan);
-            }
-            None
-        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            if hardware.supports_cuda() {
-                return Some(Self::LinuxCuda);
-            }
-            if Rocm::discover(hardware).is_ok() {
-                return Some(Self::LinuxHip);
-            }
-            hardware.supports_vulkan().then_some(Self::LinuxVulkan)
-        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            hardware.supports_cuda().then_some(Self::LinuxCuda)
-        } else if hardware.supports_metal() {
-            Some(Self::MacosMetal)
-        } else {
-            None
+        if hardware.supports_cuda() {
+            return Some(if cfg!(target_os = "windows") {
+                Self::WindowsCuda
+            } else {
+                Self::LinuxCuda
+            });
         }
+        if hardware.supports_rocm() {
+            return Some(if cfg!(target_os = "windows") {
+                Self::WindowsHip
+            } else {
+                Self::LinuxHip
+            });
+        }
+        if hardware.supports_vulkan() {
+            return Some(if cfg!(target_os = "windows") {
+                Self::WindowsVulkan
+            } else {
+                Self::LinuxVulkan
+            });
+        }
+        hardware.supports_metal().then_some(Self::MacosMetal)
     }
 }
 
@@ -164,15 +156,18 @@ impl RuntimePackage for Diffusion {
                 Component::Cuda(Cuda::Runtime13),
                 Component::Cuda(Cuda::Blas13),
             ]),
-            Self::WindowsHip | Self::LinuxHip => {
-                Ok(vec![Component::Rocm(Rocm::discover(hardware)?)])
-            }
+            Self::WindowsHip | Self::LinuxHip => Ok(vec![Component::Rocm(Rocm(
+                hardware
+                    .rocm_target()
+                    .context("no ROCm device was discovered")?,
+            ))]),
             Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => Ok(Vec::new()),
         }
     }
 
-    async fn activate(self) -> Result<()> {
+    async fn activate(self, _device: &mut Device) -> Result<()> {
         let root = self.install().await?;
-        loader::load(root.join(self.library()), false)
+        loader::load(root.join(self.library()), false)?;
+        Ok(())
     }
 }

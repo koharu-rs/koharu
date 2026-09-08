@@ -2,8 +2,10 @@
 
 use std::ffi::c_void;
 
-use super::targets::KNOWN_TARGETS;
-use crate::{Backend, Device};
+use strum::EnumProperty;
+
+use super::GfxTarget;
+use crate::{Backend, Device, DeviceType};
 
 type ClInt = i32;
 type ClUint = u32;
@@ -75,20 +77,24 @@ pub(super) fn probe() -> Vec<Device> {
             let Some(name) = opencl.device_name(device) else {
                 continue;
             };
-            let Some(target) = KNOWN_TARGETS.iter().find(|target| target.name == name) else {
+            let Ok(target) = name.parse::<GfxTarget>() else {
                 continue;
             };
             let index = result.len();
             result.push(Device {
                 index,
                 name: format!("ROCm{index}"),
-                description: target.name.to_owned(),
+                description: target.to_string(),
                 backend: Backend::Rocm,
-                device_type: target.device_type,
+                device_type: if target.get_str("integrated").is_some() {
+                    DeviceType::IntegratedGpu
+                } else {
+                    DeviceType::Gpu
+                },
                 memory_total: 0,
                 memory_free: 0,
                 compute_capability: 0,
-                target: Some(target.name.to_owned()),
+                target: Some(target),
             });
         }
     }

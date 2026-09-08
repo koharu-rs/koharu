@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use strum::EnumProperty;
 
 use crate::{
-    Hardware, Store, download,
+    Device, Hardware, Store, download,
     runtime::{
         DiscoverablePackage, Package, RuntimePackage,
         graph::Component,
@@ -64,11 +64,6 @@ impl Torch {
             .split(','))
     }
 
-    fn complete(self, root: &Path) -> bool {
-        self.library_names()
-            .is_ok_and(|names| names.into_iter().all(|name| root.join(name).is_file()))
-    }
-
     fn asset(self) -> Result<String> {
         let target = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             "x86_64-pc-windows-msvc"
@@ -89,15 +84,15 @@ impl sealed::Sealed for Torch {}
 
 impl Package for Torch {
     async fn install(self) -> Result<PathBuf> {
+        let asset = self.asset()?;
+        let libraries = self.library_names()?.collect::<Vec<_>>();
         let path = Store::root()
             .join("torch")
             .join(RELEASE)
-            .join(self.to_string());
-        let asset = self.asset()?;
-
+            .join(asset.trim_end_matches(".tar.gz"));
         Store::directory(
             path,
-            move |path| self.complete(path),
+            |path| libraries.iter().all(|name| path.join(name).is_file()),
             move |stage| async move {
                 let url = format!(
                     "https://github.com/koharu-rs/torch/releases/download/{RELEASE}/{asset}"
@@ -116,24 +111,25 @@ impl Package for Torch {
 }
 
 impl DiscoverablePackage for Torch {
+    fn uses_accelerator(self) -> bool {
+        self != Self::Cpu || cfg!(all(target_os = "macos", target_arch = "aarch64"))
+    }
+
     fn discover(hardware: &Hardware) -> Option<Self> {
         if hardware.supports_metal() {
             return Some(Self::Cpu);
         }
-        if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            return hardware.supports_cuda().then_some(Self::Cuda);
+        if hardware.supports_cuda() {
+            return Some(Self::Cuda);
+        }
+        if hardware.supports_rocm() {
+            return Some(Self::Rocm);
         }
         if !cfg!(any(
             all(target_os = "windows", target_arch = "x86_64"),
             all(target_os = "linux", target_arch = "x86_64")
         )) {
             return None;
-        }
-        if hardware.supports_cuda() {
-            return Some(Self::Cuda);
-        }
-        if hardware.supports_rocm() && Rocm::discover(hardware).is_ok() {
-            return Some(Self::Rocm);
         }
         tracing::warn!("no supported Torch accelerator was discovered; using CPU");
         Some(Self::Cpu)
@@ -146,7 +142,11 @@ impl RuntimePackage for Torch {
     fn dependencies(self, hardware: &Hardware) -> Result<Vec<Component>> {
         match self {
             Self::Cpu => Ok(Vec::new()),
-            Self::Rocm => Ok(vec![Component::Rocm(Rocm::discover(hardware)?)]),
+            Self::Rocm => Ok(vec![Component::Rocm(Rocm(
+                hardware
+                    .rocm_target()
+                    .context("no ROCm device was discovered")?,
+            ))]),
             Self::Cuda => {
                 let packages = [
                     Cuda::Runtime13,
@@ -164,7 +164,7 @@ impl RuntimePackage for Torch {
         }
     }
 
-    async fn activate(self) -> Result<()> {
+    async fn activate(self, _device: &mut Device) -> Result<()> {
         let directory = self.install().await?;
         for library in self.library_names()? {
             loader::load(directory.join(library), false)?;

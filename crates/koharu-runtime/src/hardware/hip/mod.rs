@@ -1,5 +1,6 @@
-#[cfg(any(target_os = "linux", target_os = "windows"))]
 mod targets;
+
+pub(crate) use targets::GfxTarget;
 
 #[cfg(target_os = "linux")]
 mod linux;

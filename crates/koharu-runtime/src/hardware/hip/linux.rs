@@ -5,8 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::targets::KNOWN_TARGETS;
-use crate::{Backend, Device};
+use strum::{EnumProperty, IntoEnumIterator};
+
+use super::GfxTarget;
+use crate::{Backend, Device, DeviceType};
 
 const KFD_TOPOLOGY: &str = "/sys/class/kfd/kfd/topology/nodes";
 
@@ -18,8 +20,6 @@ pub(super) enum ProbeError {
         #[source]
         source: io::Error,
     },
-    #[error("unknown gfx_target_version: {0}")]
-    UnknownTarget(i64),
 }
 
 pub(super) fn probe() -> Result<Vec<Device>, ProbeError> {
@@ -80,21 +80,25 @@ pub(super) fn probe() -> Result<Vec<Device>, ProbeError> {
             continue;
         }
 
-        let target = KNOWN_TARGETS
-            .iter()
-            .find(|target| target.version == version)
-            .ok_or(ProbeError::UnknownTarget(version))?;
+        let Some(target) = GfxTarget::iter().find(|target| *target as i64 == version) else {
+            tracing::warn!(version, path = %path.display(), "skipping unknown AMD architecture");
+            continue;
+        };
         let index = devices.len();
         devices.push(Device {
             index,
             name: format!("ROCm{index}"),
-            description: target.name.to_owned(),
+            description: target.to_string(),
             backend: Backend::Rocm,
-            device_type: target.device_type,
+            device_type: if target.get_str("integrated").is_some() {
+                DeviceType::IntegratedGpu
+            } else {
+                DeviceType::Gpu
+            },
             memory_total: 0,
             memory_free: 0,
             compute_capability: 0,
-            target: Some(target.name.to_owned()),
+            target: Some(target),
         });
     }
     Ok(devices)

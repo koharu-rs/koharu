@@ -1,16 +1,20 @@
-use std::{
-    ffi::c_void,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use std::ffi::c_void;
 
 use anyhow::{Context, Result};
 use strum::IntoEnumIterator;
 
 use crate::{
-    Hardware, Store, download,
-    runtime::{Package, RuntimePackage, loader, sealed},
+    Device, Store, download,
+    hardware::GfxTarget,
+    runtime::{Package, RuntimePackage, sealed},
     source::extract,
 };
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+use crate::runtime::loader;
 
 pub(crate) const VERSION: &str = "10.0.0";
 pub(crate) const INDEX: &str = "https://stable.repo.amd.com/rocm/core/whl-next";
@@ -129,110 +133,23 @@ enum Library {
     Unsupported,
 }
 
-pub(crate) fn wheel_platform() -> Result<&'static str> {
-    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        Ok("win_amd64")
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        Ok("linux_x86_64")
-    } else {
-        anyhow::bail!("ROCm packages support only Windows and Linux x86_64")
-    }
-}
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct Rocm(pub(crate) GfxTarget);
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumString)]
-pub(crate) enum Rocm {
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx908")]
-    Gfx908,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx90a")]
-    Gfx90a,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx942")]
-    Gfx942,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx950")]
-    Gfx950,
-    #[strum(serialize = "gfx1010")]
-    Gfx1010,
-    #[strum(serialize = "gfx1011")]
-    Gfx1011,
-    #[strum(serialize = "gfx1012")]
-    Gfx1012,
-    #[strum(serialize = "gfx1030")]
-    Gfx1030,
-    #[strum(serialize = "gfx1031")]
-    Gfx1031,
-    #[strum(serialize = "gfx1032")]
-    Gfx1032,
-    #[strum(serialize = "gfx1033")]
-    Gfx1033,
-    #[strum(serialize = "gfx1034")]
-    Gfx1034,
-    #[strum(serialize = "gfx1035")]
-    Gfx1035,
-    #[strum(serialize = "gfx1036")]
-    Gfx1036,
-    #[strum(serialize = "gfx1100")]
-    Gfx1100,
-    #[strum(serialize = "gfx1101")]
-    Gfx1101,
-    #[strum(serialize = "gfx1102")]
-    Gfx1102,
-    #[cfg(target_os = "windows")]
-    #[strum(serialize = "gfx1103")]
-    Gfx1103,
-    #[strum(serialize = "gfx1150")]
-    Gfx1150,
-    #[strum(serialize = "gfx1151")]
-    Gfx1151,
-    #[strum(serialize = "gfx1152")]
-    Gfx1152,
-    #[cfg(target_os = "windows")]
-    #[strum(serialize = "gfx1153")]
-    Gfx1153,
-    #[strum(serialize = "gfx1200")]
-    Gfx1200,
-    #[strum(serialize = "gfx1201")]
-    Gfx1201,
+impl std::fmt::Display for Rocm {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
 }
 
 impl Rocm {
-    pub(crate) fn discover(hardware: &Hardware) -> Result<Self> {
-        hardware
-            .rocm_target()
-            .context("no ROCm device was discovered")?
-            .parse()
-            .context("ROCm device is unsupported")
-    }
-
-    pub(crate) async fn probe(self) -> Result<usize> {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    fn probe(self, library: &libloading::Library) -> Result<usize> {
         type GetDeviceCount = unsafe extern "C" fn(*mut i32) -> i32;
         type GetDeviceProperties = unsafe extern "C" fn(*mut c_void, i32) -> i32;
 
         #[repr(C, align(64))]
         struct Properties([u8; 64 * 1024]);
-
-        let root = self.install().await?;
-        let path = if cfg!(target_os = "windows") {
-            root.join("_rocm_sdk_core/bin/amdhip64_7.dll")
-        } else if cfg!(target_os = "linux") {
-            root.join("_rocm_sdk_core/lib/libamdhip64.so.7")
-        } else {
-            anyhow::bail!("ROCm packages support only Windows and Linux")
-        };
-
-        #[cfg(target_os = "windows")]
-        let library: libloading::Library = unsafe {
-            libloading::os::windows::Library::load_with_flags(
-                &path,
-                libloading::os::windows::LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
-                    | libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
-            )?
-            .into()
-        };
-        #[cfg(not(target_os = "windows"))]
-        let library = unsafe { libloading::Library::new(&path)? };
 
         let get_device_count = unsafe { *library.get::<GetDeviceCount>(b"hipGetDeviceCount\0")? };
         let get_device_properties =
@@ -285,18 +202,18 @@ impl Rocm {
         #[cfg(target_os = "linux")]
         let device_library = {
             let root = path.join("_rocm_sdk_libraries/lib/rocblas/library");
-            match self {
-                Self::Gfx90a => {
+            match self.0 {
+                GfxTarget::Gfx90a => {
                     let root = root.join("gfx90a");
                     root.join("Kernels.so-000-gfx90a-xnack+.hsaco").is_file()
                         && root.join("Kernels.so-000-gfx90a-xnack-.hsaco").is_file()
                 }
-                Self::Gfx908
-                | Self::Gfx942
-                | Self::Gfx950
-                | Self::Gfx1150
-                | Self::Gfx1151
-                | Self::Gfx1152 => root
+                GfxTarget::Gfx908
+                | GfxTarget::Gfx942
+                | GfxTarget::Gfx950
+                | GfxTarget::Gfx1150
+                | GfxTarget::Gfx1151
+                | GfxTarget::Gfx1152 => root
                     .join(self.to_string())
                     .join(format!("Kernels.so-000-{self}.hsaco"))
                     .is_file(),
@@ -313,10 +230,17 @@ impl sealed::Sealed for Rocm {}
 
 impl Package for Rocm {
     async fn install(self) -> Result<PathBuf> {
-        let platform = wheel_platform()?;
+        let (platform, target) = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+            ("win_amd64", "x86_64-pc-windows-msvc")
+        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            ("linux_x86_64", "x86_64-unknown-linux-gnu")
+        } else {
+            anyhow::bail!("ROCm packages support only Windows and Linux x86_64")
+        };
         let path = Store::root()
             .join("rocm")
             .join(VERSION)
+            .join(target)
             .join(self.to_string());
         Store::directory(
             path,
@@ -356,39 +280,25 @@ impl Package for Rocm {
 impl RuntimePackage for Rocm {
     const NAME: &'static str = "ROCm";
 
-    async fn activate(self) -> Result<()> {
-        let root = self.install().await?;
-        if !cfg!(any(target_os = "windows", target_os = "linux")) {
+    async fn activate(self, device: &mut Device) -> Result<()> {
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        {
+            let root = self.install().await?;
+            let mut hip = None;
+            for library in Library::iter() {
+                let loaded = loader::load(root.join(library.to_string()), true)?;
+                if matches!(library, Library::Hip) {
+                    hip = Some(loaded);
+                }
+            }
+            device.index = self.probe(hip.context("ROCm manifest has no HIP library")?)?;
+            device.name = format!("ROCm{}", device.index);
+            Ok(())
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        {
+            let _ = device;
             anyhow::bail!("ROCm packages support only Windows and Linux")
         }
-        for library in Library::iter() {
-            loader::load(root.join(library.to_string()), true)?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_supported_targets() {
-        assert_eq!("gfx1010".parse(), Ok(Rocm::Gfx1010));
-        assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
-        assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
-        #[cfg(target_os = "linux")]
-        assert_eq!("gfx908".parse(), Ok(Rocm::Gfx908));
-        #[cfg(not(target_os = "linux"))]
-        assert!("gfx908".parse::<Rocm>().is_err());
-        #[cfg(target_os = "windows")]
-        assert_eq!("gfx1103".parse(), Ok(Rocm::Gfx1103));
-        #[cfg(not(target_os = "windows"))]
-        assert!("gfx1103".parse::<Rocm>().is_err());
-        #[cfg(target_os = "windows")]
-        assert_eq!("gfx1153".parse(), Ok(Rocm::Gfx1153));
-        #[cfg(not(target_os = "windows"))]
-        assert!("gfx1153".parse::<Rocm>().is_err());
-        assert!("gfx1251".parse::<Rocm>().is_err());
     }
 }

@@ -39,6 +39,7 @@ static CLIENT: OnceLock<DownloadClient> = OnceLock::new();
 struct Activity {
     id: u64,
     name: String,
+    finished: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -60,7 +61,11 @@ impl Activity {
             id,
             name: name.clone(),
         });
-        Self { id, name }
+        Self {
+            id,
+            name,
+            finished: false,
+        }
     }
 
     fn progress(&self, completed: u64, total: u64) {
@@ -72,21 +77,34 @@ impl Activity {
         });
     }
 
-    async fn finish(self, destination: &Path, result: Result<()>) -> Result<()> {
-        match result {
-            Ok(()) => {
-                let _ = EVENTS.send(Event::Finished { id: self.id });
-                Ok(())
-            }
-            Err(error) => {
-                let _ = tokio::fs::remove_file(destination).await;
-                let _ = EVENTS.send(Event::Failed {
-                    id: self.id,
-                    name: self.name,
-                    error: error.to_string(),
-                });
-                Err(error)
-            }
+    async fn finish(mut self, destination: &Path, result: Result<()>) -> Result<()> {
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(destination).await;
+        }
+        let event = match &result {
+            Ok(()) => Event::Finished { id: self.id },
+            Err(error) => Event::Failed {
+                id: self.id,
+                name: self.name.clone(),
+                error: error.to_string(),
+            },
+        };
+        self.finished = true;
+        let _ = EVENTS.send(event);
+        result
+    }
+}
+
+impl Drop for Activity {
+    fn drop(&mut self) {
+        // The store owns staged file cleanup; this guard owns terminal events
+        // when a failed sibling or caller cancels the download future.
+        if !self.finished {
+            let _ = EVENTS.send(Event::Failed {
+                id: self.id,
+                name: self.name.clone(),
+                error: "download cancelled".to_owned(),
+            });
         }
     }
 }
@@ -171,7 +189,9 @@ where
     let read_timeout = Duration::from_secs(network::config()?.read_timeout.max(1));
     let activity = Activity::start(name.to_owned());
     let result = async {
-        let (total, stream) = source.await?;
+        let (total, stream) = tokio::time::timeout(read_timeout, source)
+            .await
+            .context("download metadata request timed out")??;
         write_stream(
             &activity,
             destination,

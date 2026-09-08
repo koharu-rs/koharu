@@ -1,12 +1,17 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
 use crate::network;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display)]
 pub(crate) enum Platform {
+    #[strum(serialize = "x86_64-pc-windows-msvc")]
     WindowsX64,
+    #[strum(serialize = "x86_64-unknown-linux-gnu")]
     LinuxX64,
+    #[strum(serialize = "aarch64-unknown-linux-gnu")]
     LinuxArm64,
 }
 
@@ -48,6 +53,7 @@ pub(crate) async fn wheel(project: &str, platform: Platform) -> Result<String> {
     let client = network::http()?;
     let metadata: Metadata = client
         .get(&url)
+        .timeout(Duration::from_secs(network::config()?.read_timeout.max(1)))
         .send()
         .await
         .with_context(|| format!("failed to query {project}"))?

@@ -29,7 +29,7 @@ pub(crate) trait RuntimePackage: Package + std::fmt::Debug + Eq + Hash {
         Ok(Vec::new())
     }
 
-    async fn activate(self) -> Result<()>;
+    async fn activate(self, device: &mut Device) -> Result<()>;
 
     fn label(self) -> String {
         format!("{} {self}", Self::NAME)
@@ -38,6 +38,10 @@ pub(crate) trait RuntimePackage: Package + std::fmt::Debug + Eq + Hash {
 
 pub(crate) trait DiscoverablePackage: RuntimePackage {
     fn discover(hardware: &Hardware) -> Option<Self>;
+
+    fn uses_accelerator(self) -> bool {
+        true
+    }
 }
 
 /// A process-wide runtime capability requested by a consumer.
@@ -57,10 +61,19 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn discover(features: impl IntoIterator<Item = Feature>) -> Result<Self> {
-        let features = features.into_iter().collect::<Vec<_>>();
+        let mut requested = Vec::new();
+        for feature in features {
+            if !requested.contains(&feature) {
+                requested.push(feature);
+            }
+        }
         let hardware = Hardware::discover();
         for candidate in hardware.candidates() {
-            if let Some(plan) = Self::plan(&features, &candidate)? {
+            if let Some(plan) = Self::plan(&requested, &candidate)? {
+                // Keep looking when every requested package falls back to CPU.
+                if candidate.device().is_some() && !plan.uses_accelerator {
+                    continue;
+                }
                 return Ok(Self {
                     plan,
                     hardware: candidate,

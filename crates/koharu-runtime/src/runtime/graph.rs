@@ -34,13 +34,13 @@ impl Component {
         }
     }
 
-    async fn activate(self) -> Result<()> {
+    async fn activate(self, device: &mut Device) -> Result<()> {
         match self {
-            Self::Cuda(package) => activate(package).await,
-            Self::Rocm(package) => activate(package).await,
-            Self::Torch(package) => activate(package).await,
-            Self::Llama(package) => activate(package).await,
-            Self::Diffusion(package) => activate(package).await,
+            Self::Cuda(package) => activate(package, device).await,
+            Self::Rocm(package) => activate(package, device).await,
+            Self::Torch(package) => activate(package, device).await,
+            Self::Llama(package) => activate(package, device).await,
+            Self::Diffusion(package) => activate(package, device).await,
         }
     }
 
@@ -55,9 +55,9 @@ impl Component {
     }
 }
 
-async fn activate<P: RuntimePackage>(package: P) -> Result<()> {
+async fn activate<P: RuntimePackage>(package: P, device: &mut Device) -> Result<()> {
     package
-        .activate()
+        .activate(device)
         .await
         .with_context(|| format!("failed to activate {}", package.label()))
 }
@@ -94,6 +94,7 @@ impl From<Diffusion> for Component {
 
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
+    pub(super) uses_accelerator: bool,
     graph: DiGraph<Component, ()>,
     nodes: HashMap<Component, NodeIndex>,
     expanded: HashSet<Component>,
@@ -105,9 +106,12 @@ impl Plan {
         P: DiscoverablePackage,
         Component: From<P>,
     {
-        P::discover(hardware)
-            .map(|package| self.insert(package.into(), hardware))
-            .transpose()
+        let Some(package) = P::discover(hardware) else {
+            return Ok(None);
+        };
+        let node = self.insert(package.into(), hardware)?;
+        self.uses_accelerator |= package.uses_accelerator();
+        Ok(Some(node))
     }
 
     fn insert(&mut self, component: Component, hardware: &Hardware) -> Result<NodeIndex> {
@@ -143,12 +147,7 @@ impl Plan {
             )
         })?;
         for node in order {
-            let component = self.graph[node];
-            component.activate().await?;
-            if let Component::Rocm(rocm) = component {
-                device.index = rocm.probe().await?;
-                device.name = format!("ROCm{}", device.index);
-            }
+            self.graph[node].activate(&mut device).await?;
         }
         Ok(device)
     }

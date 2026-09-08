@@ -4,7 +4,11 @@ mod vulkan;
 
 use std::{cmp::Reverse, sync::OnceLock};
 
+use strum::EnumProperty;
+
 use crate::{Backend, Device, DeviceType};
+
+pub(crate) use hip::GfxTarget;
 
 /// Accelerator capabilities and their process-wide selection priority.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -54,11 +58,41 @@ impl Hardware {
                 // ROCm, integrated CUDA, integrated ROCm, then Vulkan.
                 let category = match (&device.backend, device.is_integrated()) {
                     (Backend::Metal, _) => 0,
-                    (Backend::Cuda, false) if device.compute_capability >= 75 => 0,
-                    (Backend::Rocm, false) => 1,
-                    (Backend::Cuda, true) if device.compute_capability >= 75 => 2,
-                    (Backend::Rocm, true) => 3,
-                    (Backend::Vulkan, _) => 4,
+                    (Backend::Cuda, integrated)
+                        if cfg!(any(
+                            all(target_os = "windows", target_arch = "x86_64"),
+                            all(target_os = "linux", target_arch = "x86_64"),
+                            all(target_os = "linux", target_arch = "aarch64")
+                        )) && device.compute_capability >= 75 =>
+                    {
+                        if integrated {
+                            2
+                        } else {
+                            0
+                        }
+                    }
+                    (Backend::Rocm, integrated)
+                        if cfg!(all(
+                            target_arch = "x86_64",
+                            any(target_os = "windows", target_os = "linux")
+                        )) && device.target.is_some_and(|target| {
+                            target.get_str(std::env::consts::OS).is_some()
+                        }) =>
+                    {
+                        if integrated {
+                            3
+                        } else {
+                            1
+                        }
+                    }
+                    (Backend::Vulkan, _)
+                        if cfg!(all(
+                            target_arch = "x86_64",
+                            any(target_os = "windows", target_os = "linux")
+                        )) =>
+                    {
+                        4
+                    }
                     _ => return None,
                 };
                 Some((position, category))
@@ -110,7 +144,11 @@ impl Hardware {
 
     #[must_use]
     pub fn supports_cuda(&self) -> bool {
-        matches!(self.device(), Some(device) if device.backend == Backend::Cuda)
+        cfg!(any(
+            all(target_os = "windows", target_arch = "x86_64"),
+            all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "linux", target_arch = "aarch64")
+        )) && matches!(self.device(), Some(device) if device.backend == Backend::Cuda && device.compute_capability >= 75)
     }
 
     #[must_use]
@@ -122,23 +160,74 @@ impl Hardware {
 
     #[must_use]
     pub fn supports_rocm(&self) -> bool {
-        matches!(self.device(), Some(device) if device.backend == Backend::Rocm)
+        cfg!(all(
+            target_arch = "x86_64",
+            any(target_os = "windows", target_os = "linux")
+        )) && self
+            .rocm_target()
+            .is_some_and(|target| target.get_str(std::env::consts::OS).is_some())
     }
 
-    #[must_use]
-    pub fn rocm_target(&self) -> Option<&str> {
+    pub(crate) fn rocm_target(&self) -> Option<GfxTarget> {
         self.device()
             .filter(|device| device.backend == Backend::Rocm)
-            .and_then(Device::target)
+            .and_then(|device| device.target)
     }
 
     #[must_use]
     pub fn supports_vulkan(&self) -> bool {
-        matches!(self.device(), Some(device) if device.backend == Backend::Vulkan)
+        cfg!(all(
+            target_arch = "x86_64",
+            any(target_os = "windows", target_os = "linux")
+        )) && matches!(self.device(), Some(device) if device.backend == Backend::Vulkan)
     }
 
     #[must_use]
     pub fn supports_metal(&self) -> bool {
-        matches!(self.device(), Some(device) if device.backend == Backend::Metal)
+        cfg!(all(target_os = "macos", target_arch = "aarch64"))
+            && matches!(self.device(), Some(device) if device.backend == Backend::Metal)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_supported_targets() {
+        let supported = |target: &str| {
+            let Ok(target) = target.parse::<GfxTarget>() else {
+                return false;
+            };
+            Hardware {
+                devices: vec![Device {
+                    target: Some(target),
+                    ..Device::rocm(0)
+                }],
+                candidates: vec![0],
+                selected: Some(0),
+            }
+            .supports_rocm()
+        };
+        let x64_rocm = cfg!(all(
+            target_arch = "x86_64",
+            any(target_os = "windows", target_os = "linux")
+        ));
+        assert_eq!(supported("gfx1010"), x64_rocm);
+        assert_eq!(supported("gfx1036"), x64_rocm);
+        assert_eq!(supported("gfx1201"), x64_rocm);
+        assert_eq!(
+            supported("gfx908"),
+            cfg!(all(target_os = "linux", target_arch = "x86_64"))
+        );
+        assert_eq!(
+            supported("gfx1103"),
+            cfg!(all(target_os = "windows", target_arch = "x86_64"))
+        );
+        assert_eq!(
+            supported("gfx1153"),
+            cfg!(all(target_os = "windows", target_arch = "x86_64"))
+        );
+        assert!(!supported("gfx1251"));
     }
 }

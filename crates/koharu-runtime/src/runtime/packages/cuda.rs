@@ -5,7 +5,7 @@ use strum::EnumProperty;
 use walkdir::WalkDir;
 
 use crate::{
-    Store, download,
+    Device, Store, download,
     runtime::{Package, RuntimePackage, loader, sealed},
     source::{Platform, extract, wheel},
 };
@@ -152,12 +152,16 @@ impl sealed::Sealed for Cuda {}
 impl Package for Cuda {
     async fn install(self) -> Result<PathBuf> {
         let project = self.project()?;
-        let target = Store::root().join("cuda").join(project.replace('/', "--"));
+        let platform = Platform::host()?;
+        let target = Store::root()
+            .join("cuda")
+            .join(project.replace('/', "--"))
+            .join(platform.to_string());
         Store::directory(
             target,
             move |path| self.library_paths(path).is_ok(),
             move |stage| async move {
-                let url = wheel(project, Platform::host()?).await?;
+                let url = wheel(project, platform).await?;
                 let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
                 download::fetch(&url, archive.path()).await?;
                 extract(
@@ -174,7 +178,7 @@ impl Package for Cuda {
 impl RuntimePackage for Cuda {
     const NAME: &'static str = "CUDA";
 
-    async fn activate(self) -> Result<()> {
+    async fn activate(self, _device: &mut Device) -> Result<()> {
         let directory = self.install().await?;
         for library in self.library_paths(&directory)? {
             loader::load(library, false)?;

@@ -1,13 +1,14 @@
-use std::{mem::forget, path::Path};
+use std::path::Path;
 
 use anyhow::Result;
 
-pub(super) fn load(path: impl AsRef<Path>, global: bool) -> Result<()> {
+pub(super) fn load(path: impl AsRef<Path>, global: bool) -> Result<&'static libloading::Library> {
     let path = path.as_ref();
     let path = dunce::canonicalize(path)?;
     let library = unsafe { open(&path, global) }?;
-    forget(library);
-    Ok(())
+    // Native backends retain symbols for the process lifetime. Return the same
+    // retained handle to packages that need to inspect their loaded runtime.
+    Ok(Box::leak(Box::new(library)))
 }
 
 #[cfg(windows)]
