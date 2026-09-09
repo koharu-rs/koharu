@@ -15,7 +15,7 @@ use serde::Serialize;
 use specta::Type;
 
 /// How long repeated edits of the same target merge into one history state.
-const COALESCE_WINDOW: Duration = Duration::from_secs(2);
+const COALESCE_WINDOW: Duration = Duration::from_secs(3);
 
 /// Default number of retained states (Photoshop "History States"). Bounds the
 /// blob leases that superseded in-memory revisions would otherwise hold for
@@ -373,13 +373,19 @@ impl History {
 
     /// Drops every state except the current one, which becomes the anchor.
     pub(crate) fn clear(&mut self, session: &mut Session) {
-        let current = self.states.swap_remove(self.cursor);
+        let mut current = self.states.swap_remove(self.cursor);
         let discarded = std::mem::take(&mut self.states);
         session.drop_history(
-            discarded
-                .iter()
-                .flat_map(|state| state.related.iter().copied()),
+            current.related.drain(..).chain(
+                discarded
+                    .iter()
+                    .flat_map(|state| state.related.iter().copied()),
+            ),
         );
+        current.forward.clear();
+        current.redo.clear();
+        current.restore_only = false;
+        current.merge = None;
         self.states = vec![current];
         self.cursor = 0;
     }
@@ -522,20 +528,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn clear_keeps_only_current_state() {
+    async fn clear_releases_revisions_and_resets_current_as_anchor() {
         let mut session = Session::memory().await.unwrap();
         let mut history = History::new(session.snapshot(), None, 10);
-        for label in ["a", "b"] {
-            let commit = add_page(&mut session, label).await;
-            history.record(&mut session, HistoryName::Brush, None, None, &commit, None);
-        }
-        history.jump(&mut session, 1).await.unwrap();
+        let anchor = add_page(&mut session, "target").await;
+        history.record(
+            &mut session,
+            HistoryName::AddText,
+            None,
+            None,
+            &anchor,
+            None,
+        );
+        let target = session.snapshot().pages().next().unwrap().id();
+        let current = add_page(&mut session, "a").await;
+        history.record(
+            &mut session,
+            HistoryName::SourceText,
+            None,
+            Some(target),
+            &current,
+            None,
+        );
+
         history.clear(&mut session);
+
         let view = history.view();
         assert_eq!(view.entries.len(), 1);
         assert_eq!(view.cursor, 0);
         assert!(!history.can_undo() && !history.can_redo());
-        assert_eq!(pages(&session), 1);
+        assert_eq!(pages(&session), 2);
+        assert!(
+            session.undo(current.revision).await.is_err(),
+            "the new anchor's inverse is unreachable after clearing"
+        );
+
+        let next = add_page(&mut session, "b").await;
+        history.record(
+            &mut session,
+            HistoryName::SourceText,
+            None,
+            Some(target),
+            &next,
+            None,
+        );
+        assert!(
+            history.can_undo(),
+            "a mergeable edit after clearing must not merge into the anchor"
+        );
     }
 
     #[tokio::test]

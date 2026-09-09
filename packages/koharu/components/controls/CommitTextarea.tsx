@@ -4,13 +4,22 @@ import { useEffect, useRef, useState, type ComponentProps } from 'react'
 
 import { Textarea } from '@koharu/ui/components/textarea'
 
+type HistoryDirection = 'undo' | 'redo'
+
 type CommitTextareaProps = Omit<ComponentProps<typeof Textarea>, 'value' | 'onChange'> & {
   value: string
   delay?: number
-  onCommit: (value: string) => void
+  onCommit: (value: string) => void | Promise<void>
+  onHistoryNavigate?: (direction: HistoryDirection) => void | Promise<void>
 }
 
-export function CommitTextarea({ value, delay = 360, onCommit, ...props }: CommitTextareaProps) {
+export function CommitTextarea({
+  value,
+  delay = 360,
+  onCommit,
+  onHistoryNavigate,
+  ...props
+}: CommitTextareaProps) {
   const [draft, setDraft] = useState(value)
   const timer = useRef<number | null>(null)
   const composing = useRef(false)
@@ -28,21 +37,20 @@ export function CommitTextarea({ value, delay = 360, onCommit, ...props }: Commi
     [],
   )
 
-  const commit = (next: string) => {
+  const commit = async (next: string) => {
     if (timer.current !== null) window.clearTimeout(timer.current)
     timer.current = null
-    if (next !== external.current) onCommit(next)
+    if (next !== external.current) await onCommit(next)
   }
 
   const schedule = (next: string) => {
     if (timer.current !== null) window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => commit(next), delay)
+    timer.current = window.setTimeout(() => void commit(next).catch(() => undefined), delay)
   }
 
   return (
     <Textarea
       {...props}
-      data-history-undo='true'
       value={draft}
       onChange={(event) => {
         const next = event.currentTarget.value
@@ -58,7 +66,18 @@ export function CommitTextarea({ value, delay = 360, onCommit, ...props }: Commi
         setDraft(next)
         schedule(next)
       }}
-      onBlur={() => commit(draft)}
+      onKeyDown={(event) => {
+        if (!onHistoryNavigate || composing.current || (!event.ctrlKey && !event.metaKey)) return
+        const key = event.key.toLowerCase()
+        if (key !== 'z' && key !== 'y') return
+        event.preventDefault()
+        event.stopPropagation()
+        const direction = key === 'y' || event.shiftKey ? 'redo' : 'undo'
+        void commit(draft)
+          .then(() => onHistoryNavigate(direction))
+          .catch(() => undefined)
+      }}
+      onBlur={() => void commit(draft).catch(() => undefined)}
     />
   )
 }

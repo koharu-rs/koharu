@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { TitleBar } from '@/components/app/TitleBar'
 import { WindowControls } from '@/components/app/WindowChrome'
+import { CommitTextarea } from '@/components/controls/CommitTextarea'
 import { ActivityCenter } from '@/components/editor/ActivityCenter'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
 import { Inspector } from '@/components/editor/Inspector'
@@ -714,6 +715,35 @@ describe('greenfield editor', () => {
     fireEvent.change(source, { target: { value: 'corrected OCR' } })
     fireEvent.blur(source)
     await waitFor(() => expect(save).toHaveBeenCalledWith('element', 'corrected OCR'))
+  })
+
+  it('commits a pending text draft before navigating history', async () => {
+    let finishCommit!: () => void
+    const committed = new Promise<void>((resolve) => {
+      finishCommit = resolve
+    })
+    const steps: string[] = []
+    render(
+      <CommitTextarea
+        aria-label='Source text'
+        value='before'
+        onCommit={(value) => {
+          steps.push(`commit:${value}`)
+          return committed
+        }}
+        onHistoryNavigate={(direction) => {
+          steps.push(direction)
+        }}
+      />,
+    )
+    const source = screen.getByRole('textbox', { name: 'Source text' })
+    fireEvent.change(source, { target: { value: 'after' } })
+
+    fireEvent.keyDown(source, { key: 'z', ctrlKey: true })
+
+    expect(steps).toEqual(['commit:after'])
+    finishCommit()
+    await waitFor(() => expect(steps).toEqual(['commit:after', 'undo']))
   })
 
   it('shows actual layers with only the useful text-role distinction', () => {
