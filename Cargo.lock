@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-native-messaging"
-version = "0.77.4"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "async-trait",
