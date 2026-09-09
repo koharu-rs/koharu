@@ -12,9 +12,6 @@ keywords.workspace = true
 publish.workspace = true
 license.workspace = true
 
-[features]
-default = ["tauri/cef"]
-
 [dependencies]
 clap = { workspace = true }
 console = { workspace = true }
@@ -25,6 +22,7 @@ rfd = { workspace = true }
 sentry = { workspace = true }
 serde_json = { workspace = true }
 tauri = { workspace = true }
+tauri-runtime-cef = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-process = { workspace = true }
 tauri-plugin-updater = { workspace = true }

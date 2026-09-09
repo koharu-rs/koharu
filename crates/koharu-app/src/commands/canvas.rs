@@ -9,9 +9,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{
-    AppHandle, Cef, Manager as _, State,
+    AppHandle, Manager as _, State,
     ipc::{Channel, IpcResponse},
 };
+use tauri_runtime_cef::CefRuntime;
 
 use super::{
     ChannelExt as _, Error, processing,
@@ -352,7 +353,7 @@ pub(crate) async fn commit_inpaint(
     expected_revision: Revision,
     points: Vec<Point>,
     diameter: f32,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
     project: State<'_, CurrentProject>,
 ) -> Result<Option<JobId>, Error> {
     if !diameter.is_finite() || diameter <= 0.0 || points.is_empty() {

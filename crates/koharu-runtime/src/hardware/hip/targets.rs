@@ -1,183 +1,90 @@
-//! Canonical AMD targets recognized by `rocm-bootstrap`.
+//! AMD targets supported by the bundled ROCm packages.
 //!
 //! Architecture names and KFD versions follow `rocm-systems` commit
 //! `a022846cf553c2b135410a5168f97705f1b9c6ac`. Device types follow TheRock's
-//! iGPU families, including legacy APUs retained by `rocm-bootstrap`.
+//! supported iGPU families.
 
-use crate::DeviceType;
-use DeviceType::{Gpu, IntegratedGpu};
-
-pub(super) struct GfxTarget {
-    pub(super) name: &'static str,
-    #[allow(dead_code)] // Read by the Linux KFD probe; the table is shared with Windows.
-    pub(super) version: i64,
-    pub(super) device_type: DeviceType,
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    strum::Display,
+    strum::EnumString,
+    strum::EnumIter,
+    strum::EnumProperty,
+)]
+#[strum(serialize_all = "lowercase")]
+pub(crate) enum Target {
+    #[cfg(target_os = "linux")]
+    #[strum(props(version = 90_008, integrated = false))]
+    Gfx908,
+    #[cfg(target_os = "linux")]
+    #[strum(props(version = 90_010, integrated = false))]
+    Gfx90a,
+    #[cfg(target_os = "linux")]
+    #[strum(props(version = 90_402, integrated = false))]
+    Gfx942,
+    #[cfg(target_os = "linux")]
+    #[strum(props(version = 90_500, integrated = false))]
+    Gfx950,
+    #[strum(props(version = 100_100, integrated = false))]
+    Gfx1010,
+    #[strum(props(version = 100_101, integrated = false))]
+    Gfx1011,
+    #[strum(props(version = 100_102, integrated = false))]
+    Gfx1012,
+    #[strum(props(version = 100_300, integrated = false))]
+    Gfx1030,
+    #[strum(props(version = 100_301, integrated = false))]
+    Gfx1031,
+    #[strum(props(version = 100_302, integrated = false))]
+    Gfx1032,
+    #[strum(props(version = 100_303, integrated = true))]
+    Gfx1033,
+    #[strum(props(version = 100_304, integrated = false))]
+    Gfx1034,
+    #[strum(props(version = 100_305, integrated = true))]
+    Gfx1035,
+    #[strum(props(version = 100_306, integrated = true))]
+    Gfx1036,
+    #[strum(props(version = 110_000, integrated = false))]
+    Gfx1100,
+    #[strum(props(version = 110_001, integrated = false))]
+    Gfx1101,
+    #[strum(props(version = 110_002, integrated = false))]
+    Gfx1102,
+    #[cfg(target_os = "windows")]
+    #[strum(props(version = 110_003, integrated = true))]
+    Gfx1103,
+    #[strum(props(version = 110_500, integrated = true))]
+    Gfx1150,
+    #[strum(props(version = 110_501, integrated = true))]
+    Gfx1151,
+    #[strum(props(version = 110_502, integrated = true))]
+    Gfx1152,
+    #[cfg(target_os = "windows")]
+    #[strum(props(version = 110_503, integrated = true))]
+    Gfx1153,
+    #[strum(props(version = 120_000, integrated = false))]
+    Gfx1200,
+    #[strum(props(version = 120_001, integrated = false))]
+    Gfx1201,
 }
 
-pub(super) const KNOWN_TARGETS: &[GfxTarget] = &[
-    GfxTarget {
-        name: "gfx900",
-        version: 90_000,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx902",
-        version: 90_002,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx904",
-        version: 90_004,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx906",
-        version: 90_006,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx908",
-        version: 90_008,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx909",
-        version: 90_009,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx90a",
-        version: 90_010,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx90c",
-        version: 90_012,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx942",
-        version: 90_402,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx950",
-        version: 90_500,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1010",
-        version: 100_100,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1011",
-        version: 100_101,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1012",
-        version: 100_102,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1013",
-        version: 100_103,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1030",
-        version: 100_300,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1031",
-        version: 100_301,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1032",
-        version: 100_302,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1033",
-        version: 100_303,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1034",
-        version: 100_304,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1035",
-        version: 100_305,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1036",
-        version: 100_306,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1100",
-        version: 110_000,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1101",
-        version: 110_001,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1102",
-        version: 110_002,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1103",
-        version: 110_003,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1150",
-        version: 110_500,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1151",
-        version: 110_501,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1152",
-        version: 110_502,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1153",
-        version: 110_503,
-        device_type: IntegratedGpu,
-    },
-    GfxTarget {
-        name: "gfx1200",
-        version: 120_000,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1201",
-        version: 120_001,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1250",
-        version: 120_500,
-        device_type: Gpu,
-    },
-    GfxTarget {
-        name: "gfx1251",
-        version: 120_501,
-        device_type: Gpu,
-    },
-];
+impl Target {
+    pub(super) fn device_type(self) -> crate::DeviceType {
+        use strum::EnumProperty;
+
+        if self
+            .get_bool("integrated")
+            .expect("ROCm target has a device type")
+        {
+            crate::DeviceType::IntegratedGpu
+        } else {
+            crate::DeviceType::Gpu
+        }
+    }
+}

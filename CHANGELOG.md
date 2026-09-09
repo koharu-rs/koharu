@@ -1,3 +1,20 @@
+## [0.81.9](https://github.com/koharu-rs/koharu/compare/0.81.8..0.81.9) - 2026-09-08
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Update Torch to v2.13.0.6 - ([7a6884a](https://github.com/koharu-rs/koharu/commit/7a6884a67b3c0a4b1f48f69eb59dd2230292b0c7))
+
+### 🚜 Refactor
+
+- *(runtime)* Simplify accelerator discovery - ([087b40a](https://github.com/koharu-rs/koharu/commit/087b40aabc9d26c1f0195916963f1980ac7d6f09))
+
+### ⚙️ Miscellaneous Tasks
+
+- Align contribution template wording with OSS conventions - ([edfbf84](https://github.com/koharu-rs/koharu/commit/edfbf8428d33e726ba8530c6b9ca9610015b62a5))
+- Shorten issue template filenames - ([7f046cb](https://github.com/koharu-rs/koharu/commit/7f046cb7f59d9ff18103696f7d80ed5b34c8c9d3))
+- Simplify contribution templates and use issue types - ([e29860a](https://github.com/koharu-rs/koharu/commit/e29860a75f551f1e0d5d4384eda8dc98aba97d73))
+
+
 ## [0.81.8](https://github.com/koharu-rs/koharu/compare/0.81.7..0.81.8) - 2026-09-08
 
 ### 🐛 Bug Fixes

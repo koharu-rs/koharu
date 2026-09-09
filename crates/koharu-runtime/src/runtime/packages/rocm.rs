@@ -3,11 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use strum::IntoEnumIterator;
 
 use crate::{
-    Hardware, Store, download,
+    Store, download,
+    hardware::Target,
     runtime::{Package, RuntimePackage, loader, sealed},
     source::extract,
 };
@@ -139,73 +140,9 @@ pub(crate) fn wheel_platform() -> Result<&'static str> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumString)]
-pub(crate) enum Rocm {
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx908")]
-    Gfx908,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx90a")]
-    Gfx90a,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx942")]
-    Gfx942,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx950")]
-    Gfx950,
-    #[strum(serialize = "gfx1010")]
-    Gfx1010,
-    #[strum(serialize = "gfx1011")]
-    Gfx1011,
-    #[strum(serialize = "gfx1012")]
-    Gfx1012,
-    #[strum(serialize = "gfx1030")]
-    Gfx1030,
-    #[strum(serialize = "gfx1031")]
-    Gfx1031,
-    #[strum(serialize = "gfx1032")]
-    Gfx1032,
-    #[strum(serialize = "gfx1033")]
-    Gfx1033,
-    #[strum(serialize = "gfx1034")]
-    Gfx1034,
-    #[strum(serialize = "gfx1035")]
-    Gfx1035,
-    #[strum(serialize = "gfx1036")]
-    Gfx1036,
-    #[strum(serialize = "gfx1100")]
-    Gfx1100,
-    #[strum(serialize = "gfx1101")]
-    Gfx1101,
-    #[strum(serialize = "gfx1102")]
-    Gfx1102,
-    #[cfg(target_os = "windows")]
-    #[strum(serialize = "gfx1103")]
-    Gfx1103,
-    #[strum(serialize = "gfx1150")]
-    Gfx1150,
-    #[strum(serialize = "gfx1151")]
-    Gfx1151,
-    #[strum(serialize = "gfx1152")]
-    Gfx1152,
-    #[cfg(target_os = "windows")]
-    #[strum(serialize = "gfx1153")]
-    Gfx1153,
-    #[strum(serialize = "gfx1200")]
-    Gfx1200,
-    #[strum(serialize = "gfx1201")]
-    Gfx1201,
-}
+pub(crate) type Rocm = Target;
 
 impl Rocm {
-    pub(crate) fn discover(hardware: &Hardware) -> Result<Self> {
-        hardware
-            .rocm_target()
-            .context("no ROCm device was discovered")?
-            .parse()
-            .context("ROCm device is unsupported")
-    }
-
     pub(crate) async fn probe(self) -> Result<usize> {
         type GetDeviceCount = unsafe extern "C" fn(*mut i32) -> i32;
         type GetDeviceProperties = unsafe extern "C" fn(*mut c_void, i32) -> i32;
@@ -277,35 +214,7 @@ impl Rocm {
     }
 
     fn complete(self, path: &Path) -> bool {
-        #[cfg(target_os = "windows")]
-        let device_library = path
-            .join("_rocm_sdk_libraries/.kpack")
-            .join(format!("blas_lib_{self}.kpack"))
-            .is_file();
-        #[cfg(target_os = "linux")]
-        let device_library = {
-            let root = path.join("_rocm_sdk_libraries/lib/rocblas/library");
-            match self {
-                Self::Gfx90a => {
-                    let root = root.join("gfx90a");
-                    root.join("Kernels.so-000-gfx90a-xnack+.hsaco").is_file()
-                        && root.join("Kernels.so-000-gfx90a-xnack-.hsaco").is_file()
-                }
-                Self::Gfx908
-                | Self::Gfx942
-                | Self::Gfx950
-                | Self::Gfx1150
-                | Self::Gfx1151
-                | Self::Gfx1152 => root
-                    .join(self.to_string())
-                    .join(format!("Kernels.so-000-{self}.hsaco"))
-                    .is_file(),
-                _ => root.join(format!("Kernels.so-000-{self}.hsaco")).is_file(),
-            }
-        };
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-        let device_library = false;
-        Library::iter().all(|library| path.join(library.to_string()).is_file()) && device_library
+        Library::iter().all(|library| path.join(library.to_string()).is_file())
     }
 }
 
@@ -365,30 +274,5 @@ impl RuntimePackage for Rocm {
             loader::load(root.join(library.to_string()), true)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_supported_targets() {
-        assert_eq!("gfx1010".parse(), Ok(Rocm::Gfx1010));
-        assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
-        assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
-        #[cfg(target_os = "linux")]
-        assert_eq!("gfx908".parse(), Ok(Rocm::Gfx908));
-        #[cfg(not(target_os = "linux"))]
-        assert!("gfx908".parse::<Rocm>().is_err());
-        #[cfg(target_os = "windows")]
-        assert_eq!("gfx1103".parse(), Ok(Rocm::Gfx1103));
-        #[cfg(not(target_os = "windows"))]
-        assert!("gfx1103".parse::<Rocm>().is_err());
-        #[cfg(target_os = "windows")]
-        assert_eq!("gfx1153".parse(), Ok(Rocm::Gfx1153));
-        #[cfg(not(target_os = "windows"))]
-        assert!("gfx1153".parse::<Rocm>().is_err());
-        assert!("gfx1251".parse::<Rocm>().is_err());
     }
 }

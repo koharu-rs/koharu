@@ -5,7 +5,8 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use strum::{EnumMessage as _, IntoEnumIterator as _};
-use tauri::{AppHandle, Cef, Manager as _, State, WebviewWindow, ipc::Channel};
+use tauri::{AppHandle, Manager as _, State, WebviewWindow, ipc::Channel};
+use tauri_runtime_cef::CefRuntime;
 use walkdir::WalkDir;
 
 use super::{
@@ -149,7 +150,7 @@ impl From<koharu_pipeline::ResourceSnapshot> for ModelResources {
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn subscribe(
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
     on_canvas: Channel<CanvasState>,
     on_job: Channel<Job>,
     on_download: Channel<Download>,
@@ -179,7 +180,7 @@ pub(crate) async fn subscribe(
     })
 }
 
-async fn replace_project(handle: &AppHandle<Cef>, opened: Project) -> Result<()> {
+async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Result<()> {
     let snapshot = opened.snapshot();
     let page = opened.active_page();
     let info = opened.info();
@@ -265,7 +266,7 @@ pub(crate) async fn list_projects(
 #[specta::specta]
 pub(crate) async fn create_project(
     name: String,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
 ) -> std::result::Result<(), Error> {
     let library = handle.state::<ProjectLibrary>().inner().clone();
     let opened = library.create(&name).await?;
@@ -283,7 +284,7 @@ pub(crate) async fn create_project(
 #[specta::specta]
 pub(crate) async fn open_project(
     name: String,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
 ) -> std::result::Result<(), Error> {
     let library = handle.state::<ProjectLibrary>().inner().clone();
     let opened = library.open(&name).await?;
@@ -299,7 +300,7 @@ pub(crate) async fn open_project(
 )]
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn close_project(handle: AppHandle<Cef>) -> std::result::Result<(), Error> {
+pub(crate) async fn close_project(handle: AppHandle<CefRuntime>) -> std::result::Result<(), Error> {
     close_current_project(&handle).await?;
     Ok(())
 }
@@ -314,7 +315,7 @@ pub(crate) async fn close_project(handle: AppHandle<Cef>) -> std::result::Result
 #[specta::specta]
 pub(crate) async fn delete_project(
     name: String,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
 ) -> std::result::Result<(), Error> {
     let active = handle
         .state::<CurrentProject>()
@@ -333,7 +334,7 @@ pub(crate) async fn delete_project(
     Ok(())
 }
 
-async fn close_current_project(handle: &AppHandle<Cef>) -> Result<()> {
+async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
     handle.state::<AgentState>().reset().await;
     let processing = handle.state::<Processing>();
     for stop in processing.stops.lock().values() {
@@ -365,7 +366,7 @@ async fn close_current_project(handle: &AppHandle<Cef>) -> Result<()> {
 #[specta::specta]
 pub(crate) async fn import_pages(
     source: PageImportSource,
-    window: WebviewWindow<Cef>,
+    window: WebviewWindow<CefRuntime>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     processing: State<'_, Processing>,

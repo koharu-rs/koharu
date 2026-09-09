@@ -43,6 +43,7 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 strum = { workspace = true }
 tauri = { workspace = true }
+tauri-runtime-cef = { workspace = true }
 tauri-plugin-log = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-process = { workspace = true }

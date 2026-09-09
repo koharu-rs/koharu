@@ -1680,30 +1680,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "core-graphics"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "064badf302c3194842cf2c5d61f56cc88e54a759313879cdf03abdd27d0c3b97"
-dependencies = [
- "bitflags 2.13.1",
- "core-foundation 0.10.1",
- "core-graphics-types",
- "foreign-types 0.5.0",
- "libc",
-]
-
-[[package]]
-name = "core-graphics-types"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d44a101f213f6c4cdc1853d4b78aef6db6bdfa3468798cc1d9912f4735013eb"
-dependencies = [
- "bitflags 2.13.1",
- "core-foundation 0.10.1",
- "libc",
-]
-
-[[package]]
 name = "core_maths"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2045,17 +2021,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b1e3a325bc115f096c8b77bbf027a7c2592230e70be2d985be950d3d5e60ebe"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "dbus"
-version = "0.9.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ab69f03cc8c4340c9c8e315114e1658e6775a9b16a04357973aa21cec22b32e"
-dependencies = [
- "libc",
- "libdbus-sys",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2801,28 +2766,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
 dependencies = [
- "foreign-types-shared 0.1.1",
-]
-
-[[package]]
-name = "foreign-types"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
-dependencies = [
- "foreign-types-macros",
- "foreign-types-shared 0.3.1",
-]
-
-[[package]]
-name = "foreign-types-macros"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea5190182e6915eb873ddbc16e23b711b6eb1f9c00a0d0a3a91b5f6228475225"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.4",
+ "foreign-types-shared",
 ]
 
 [[package]]
@@ -2830,12 +2774,6 @@ name = "foreign-types-shared"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
@@ -3058,47 +2996,6 @@ dependencies = [
  "pango-sys",
  "pkg-config",
  "system-deps",
-]
-
-[[package]]
-name = "gdkwayland-sys"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "140071d506d223f7572b9f09b5e155afbd77428cd5cc7af8f2694c41d98dfe69"
-dependencies = [
- "gdk-sys",
- "glib-sys",
- "gobject-sys",
- "libc",
- "pkg-config",
- "system-deps",
-]
-
-[[package]]
-name = "gdkx11"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3caa00e14351bebbc8183b3c36690327eb77c49abc2268dd4bd36b856db3fbfe"
-dependencies = [
- "gdk",
- "gdkx11-sys",
- "gio",
- "glib",
- "libc",
- "x11",
-]
-
-[[package]]
-name = "gdkx11-sys"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e2e7445fe01ac26f11601db260dd8608fe172514eb63b3b5e261ea6b0f4428d"
-dependencies = [
- "gdk-sys",
- "glib-sys",
- "libc",
- "system-deps",
- "x11",
 ]
 
 [[package]]
@@ -4438,29 +4335,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "javascriptcore-rs"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca5671e9ffce8ffba57afc24070e906da7fc4b1ba66f2cabebf61bf2ea257fcc"
-dependencies = [
- "bitflags 1.3.2",
- "glib",
- "javascriptcore-rs-sys",
-]
-
-[[package]]
-name = "javascriptcore-rs-sys"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af1be78d14ffa4b75b66df31840478fef72b51f8c2465d4ca7c194da9f7a5124"
-dependencies = [
- "glib-sys",
- "gobject-sys",
- "libc",
- "system-deps",
-]
-
-[[package]]
 name = "jieba-macros"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4716,7 +4590,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "clap",
  "console",
@@ -4731,6 +4605,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+ "tauri-runtime-cef",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -4739,7 +4614,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4760,7 +4635,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-app"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -4800,6 +4675,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "tauri-runtime-cef",
  "tauri-specta",
  "tokio",
  "tracing",
@@ -4811,7 +4687,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4824,7 +4700,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "futures-channel",
  "js-sys",
@@ -4839,7 +4715,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "atomicwrites",
@@ -4853,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-desktop"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "koharu-rasterizer",
@@ -4868,7 +4744,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
@@ -4878,7 +4754,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4888,7 +4764,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -4903,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4913,7 +4789,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-metrics"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4933,7 +4809,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -4964,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4993,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "image",
  "koharu-rasterizer",
@@ -5006,7 +4882,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rasterizer"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "blake3",
@@ -5022,7 +4898,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -5055,7 +4931,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "backon",
@@ -5077,7 +4953,6 @@ dependencies = [
  "strum",
  "tar",
  "tempfile",
- "thiserror 2.0.20",
  "tokio",
  "toml 1.1.4+spec-1.1.0",
  "tracing",
@@ -5087,7 +4962,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-scene"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "blake3",
  "bytes",
@@ -5109,7 +4984,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-secrets"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "keyring",
@@ -5121,7 +4996,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-storage"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "blake3",
  "bytes",
@@ -5141,7 +5016,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "half",
  "image",
@@ -5157,7 +5032,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -5167,7 +5042,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-translator"
-version = "0.81.8"
+version = "0.81.10"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -5261,15 +5136,6 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
-
-[[package]]
-name = "libdbus-sys"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "328c4789d42200f1eeec05bd86c9c13c7f091d2ba9a6ea35acdf51f31bc0f043"
-dependencies = [
- "pkg-config",
-]
 
 [[package]]
 name = "libflate"
@@ -6086,7 +5952,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a12a8ed07aefc768292f076dc3ac8c48f3781c8f2d5851dd3d98950e8c5a89f"
 dependencies = [
  "objc2-encode",
- "objc2-exception-helper",
 ]
 
 [[package]]
@@ -6210,15 +6075,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33"
 
 [[package]]
-name = "objc2-exception-helper"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7a1c5fbb72d7735b076bb47b578523aedc40f3c439bea6dfd595c089d79d98a"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "objc2-foundation"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6248,16 +6104,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "180788110936d59bab6bd83b6060ffdfffb3b922ba1396b312ae795e1de9d81d"
 dependencies = [
  "bitflags 2.13.1",
- "objc2",
- "objc2-core-foundation",
-]
-
-[[package]]
-name = "objc2-javascript-core"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a1e6550c4caed348956ce3370c9ffeca70bb1dbed4fa96112e7c6170e074586"
-dependencies = [
  "objc2",
  "objc2-core-foundation",
 ]
@@ -6312,17 +6158,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc2-security"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "709fe137109bd1e8b5a99390f77a7d8b2961dafc1a1c5db8f2e60329ad6d895a"
-dependencies = [
- "bitflags 2.13.1",
- "objc2",
- "objc2-core-foundation",
-]
-
-[[package]]
 name = "objc2-system-configuration"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6369,13 +6204,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2e5aaab980c433cf470df9d7af96a7b46a9d892d521a2cbbb2f8a4c16751e7f"
 dependencies = [
  "bitflags 2.13.1",
- "block2",
  "objc2",
  "objc2-app-kit",
- "objc2-core-foundation",
  "objc2-foundation",
- "objc2-javascript-core",
- "objc2-security",
 ]
 
 [[package]]
@@ -6452,7 +6283,7 @@ checksum = "77823a27f0babb03091cb9ed9ef80af3b39dbc82f97e8fa530374b7dafd87a45"
 dependencies = [
  "bitflags 2.13.1",
  "cfg-if 1.0.4",
- "foreign-types 0.3.2",
+ "foreign-types",
  "libc",
  "openssl-macros",
  "openssl-sys",
@@ -8993,32 +8824,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "soup3"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "471f924a40f31251afc77450e781cb26d55c0b650842efafc9c6cbd2f7cc4f9f"
-dependencies = [
- "futures-channel",
- "gio",
- "glib",
- "libc",
- "soup3-sys",
-]
-
-[[package]]
-name = "soup3-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ebe8950a680a12f24f15ebe1bf70db7af98ad242d9db43596ad3108aab86c27"
-dependencies = [
- "gio-sys",
- "glib-sys",
- "gobject-sys",
- "libc",
- "system-deps",
-]
-
-[[package]]
 name = "specta"
 version = "2.0.0-rc.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9366,58 +9171,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tao"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d12c8607b01516c5d4a37e471a9cfb40b4a25cebce8fecbc6a559e125e51b6b"
-dependencies = [
- "bitflags 2.13.1",
- "block2",
- "core-foundation 0.10.1",
- "core-graphics",
- "crossbeam-channel",
- "dbus",
- "dispatch2",
- "dlopen2",
- "dpi",
- "gdkwayland-sys",
- "gdkx11-sys",
- "gtk",
- "jni 0.21.1",
- "libc",
- "log",
- "ndk",
- "ndk-context",
- "ndk-sys",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "objc2-ui-kit",
- "once_cell",
- "parking_lot",
- "percent-encoding",
- "raw-window-handle",
- "tao-macros",
- "unicode-segmentation",
- "url",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-version",
- "x11-dl",
-]
-
-[[package]]
-name = "tao-macros"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f7eeb6d99155545da6150a1795945f16ac9c178deb2a5f2e74d776107bd5849"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "tar"
 version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9437,7 +9190,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 [[package]]
 name = "tauri"
 version = "2.11.5"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "anyhow",
  "bytes",
@@ -9473,14 +9226,10 @@ dependencies = [
  "tauri-build",
  "tauri-macros",
  "tauri-runtime",
- "tauri-runtime-cef",
- "tauri-runtime-wry",
  "tauri-utils",
  "thiserror 2.0.20",
  "tokio",
  "url",
- "webkit2gtk",
- "webview2-com",
  "window-vibrancy",
  "windows 0.61.3",
 ]
@@ -9488,7 +9237,7 @@ dependencies = [
 [[package]]
 name = "tauri-build"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -9508,7 +9257,7 @@ dependencies = [
 [[package]]
 name = "tauri-codegen"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "base64 0.22.1",
  "brotli",
@@ -9534,7 +9283,7 @@ dependencies = [
 [[package]]
 name = "tauri-macros"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -9547,7 +9296,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "anyhow",
  "glob",
@@ -9562,7 +9311,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-log"
 version = "2.8.0"
-source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
 dependencies = [
  "android_logger",
  "fern",
@@ -9582,7 +9331,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-opener"
 version = "2.5.4"
-source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
 dependencies = [
  "dunce",
  "glob",
@@ -9603,7 +9352,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-process"
 version = "2.3.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
 dependencies = [
  "tauri",
  "tauri-plugin",
@@ -9612,7 +9361,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-single-instance"
 version = "2.4.2"
-source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
 dependencies = [
  "serde",
  "serde_json",
@@ -9626,7 +9375,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-updater"
 version = "2.10.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -9658,7 +9407,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-window-state"
 version = "2.4.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
 dependencies = [
  "bitflags 2.13.1",
  "log",
@@ -9672,7 +9421,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime"
 version = "2.11.3"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "cookie",
  "dpi",
@@ -9693,7 +9442,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -9717,38 +9466,14 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "softbuffer",
+ "tauri",
+ "tauri-macros",
  "tauri-runtime",
  "tauri-utils",
  "url",
  "windows 0.61.3",
  "winit",
  "x11-dl",
-]
-
-[[package]]
-name = "tauri-runtime-wry"
-version = "2.11.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
-dependencies = [
- "gtk",
- "http 1.5.0",
- "jni 0.21.1",
- "log",
- "objc2",
- "objc2-app-kit",
- "objc2-web-kit",
- "once_cell",
- "percent-encoding",
- "raw-window-handle",
- "softbuffer",
- "tao",
- "tauri-runtime",
- "tauri-utils",
- "url",
- "webkit2gtk",
- "webview2-com",
- "windows 0.61.3",
- "wry",
 ]
 
 [[package]]
@@ -9785,7 +9510,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "2.9.3"
-source = "git+https://github.com/tauri-apps/tauri?rev=536664d1b34e1989dbd22705e2fde8b57b36aa0c#536664d1b34e1989dbd22705e2fde8b57b36aa0c"
+source = "git+https://github.com/tauri-apps/tauri?rev=fe0e5155c12459f3250dd9ae5867dd627d7c8286#fe0e5155c12459f3250dd9ae5867dd627d7c8286"
 dependencies = [
  "anyhow",
  "brotli",
@@ -11103,50 +10828,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "webkit2gtk"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1027150013530fb2eaf806408df88461ae4815a45c541c8975e61d6f2fc4793"
-dependencies = [
- "bitflags 1.3.2",
- "cairo-rs",
- "gdk",
- "gdk-sys",
- "gio",
- "gio-sys",
- "glib",
- "glib-sys",
- "gobject-sys",
- "gtk",
- "gtk-sys",
- "javascriptcore-rs",
- "libc",
- "once_cell",
- "soup3",
- "webkit2gtk-sys",
-]
-
-[[package]]
-name = "webkit2gtk-sys"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "916a5f65c2ef0dfe12fff695960a2ec3d4565359fdbb2e9943c974e06c734ea5"
-dependencies = [
- "bitflags 1.3.2",
- "cairo-sys-rs",
- "gdk-sys",
- "gio-sys",
- "glib-sys",
- "gobject-sys",
- "gtk-sys",
- "javascriptcore-rs-sys",
- "libc",
- "pkg-config",
- "soup3-sys",
- "system-deps",
-]
-
-[[package]]
 name = "webp"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11172,42 +10853,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
 dependencies = [
  "rustls-pki-types",
-]
-
-[[package]]
-name = "webview2-com"
-version = "0.38.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7130243a7a5b33c54a444e54842e6a9e133de08b5ad7b5861cd8ed9a6a5bc96a"
-dependencies = [
- "webview2-com-macros",
- "webview2-com-sys",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "windows-implement",
- "windows-interface",
-]
-
-[[package]]
-name = "webview2-com-macros"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67a921c1b6914c367b2b823cd4cde6f96beec77d30a939c8199bb377cf9b9b54"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "webview2-com-sys"
-version = "0.38.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "381336cfffd772377d291702245447a5251a2ffa5bad679c99e61bc48bacbf9c"
-dependencies = [
- "thiserror 2.0.20",
- "windows 0.61.3",
- "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -12202,60 +11847,6 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
-
-[[package]]
-name = "wry"
-version = "0.56.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "375becb4aded9913f736443cf88000c6311478db69814cc06070465e4cc44c98"
-dependencies = [
- "base64 0.22.1",
- "block2",
- "cookie",
- "crossbeam-channel",
- "dirs",
- "dom_query",
- "dpi",
- "dunce",
- "gdkx11",
- "gtk",
- "http 1.5.0",
- "javascriptcore-rs",
- "jni 0.21.1",
- "libc",
- "ndk",
- "objc2",
- "objc2-app-kit",
- "objc2-core-foundation",
- "objc2-foundation",
- "objc2-ui-kit",
- "objc2-web-kit",
- "once_cell",
- "percent-encoding",
- "raw-window-handle",
- "sha2 0.10.9",
- "soup3",
- "tao-macros",
- "thiserror 2.0.20",
- "url",
- "webkit2gtk",
- "webkit2gtk-sys",
- "webview2-com",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "windows-version",
- "x11-dl",
-]
-
-[[package]]
-name = "x11"
-version = "2.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "502da5464ccd04011667b11c435cb992822c2c0dbde1770c988480d312a0db2e"
-dependencies = [
- "libc",
- "pkg-config",
-]
 
 [[package]]
 name = "x11-dl"

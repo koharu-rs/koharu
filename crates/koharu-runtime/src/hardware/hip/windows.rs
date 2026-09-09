@@ -2,7 +2,7 @@
 
 use std::ffi::c_void;
 
-use super::targets::KNOWN_TARGETS;
+use super::Target;
 use crate::{Backend, Device};
 
 type ClInt = i32;
@@ -75,20 +75,20 @@ pub(super) fn probe() -> Vec<Device> {
             let Some(name) = opencl.device_name(device) else {
                 continue;
             };
-            let Some(target) = KNOWN_TARGETS.iter().find(|target| target.name == name) else {
+            let Ok(target) = name.parse::<Target>() else {
                 continue;
             };
             let index = result.len();
             result.push(Device {
                 index,
                 name: format!("ROCm{index}"),
-                description: target.name.to_owned(),
+                description: name.clone(),
                 backend: Backend::Rocm,
-                device_type: target.device_type,
+                device_type: target.device_type(),
                 memory_total: 0,
                 memory_free: 0,
                 compute_capability: 0,
-                target: Some(target.name.to_owned()),
+                target: Some(name),
             });
         }
     }
