@@ -322,19 +322,41 @@ export function CanvasWorkspace() {
         event.preventDefault()
         return
       }
-      if (editable(event.target)) return
+      const command = event.ctrlKey || event.metaKey
+      if (editable(event.target)) {
+        // Document text fields route undo/redo to the project history; every
+        // other editable keeps the browser-native behavior.
+        if (!command || event.isComposing) return
+        const key = event.key.toLowerCase()
+        if (key !== 'z' && key !== 'y') return
+        const field =
+          event.target instanceof HTMLElement ? event.target.closest('[data-history-undo]') : null
+        if (!field) return
+        event.preventDefault()
+        void (key === 'y' || event.shiftKey ? commands.redo() : commands.undo())
+          .then(() => refresh(projectKey, pagesKey, pageKey))
+          .catch((error: unknown) => receiveError(errorMessage(error)))
+        return
+      }
       const state = useKoharuStore.getState()
       if (event.code === 'Space') {
         spaceHeld.current = true
         event.preventDefault()
         return
       }
-      const command = event.ctrlKey || event.metaKey
       if (command && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        void call(event.shiftKey ? commands.redo : commands.undo)
+        void (event.shiftKey ? commands.redo() : commands.undo())
           .then(() => refresh(projectKey, pagesKey, pageKey))
-          .catch(() => undefined)
+          .catch((error: unknown) => receiveError(errorMessage(error)))
+        return
+      }
+      if (command && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        void commands
+          .redo()
+          .then(() => refresh(projectKey, pagesKey, pageKey))
+          .catch((error: unknown) => receiveError(errorMessage(error)))
         return
       }
       if (command && event.key.toLowerCase() === 'a' && page) {

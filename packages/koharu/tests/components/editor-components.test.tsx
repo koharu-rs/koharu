@@ -386,6 +386,7 @@ describe('greenfield editor', () => {
           active_page: 'page-3',
           can_undo: true,
           can_redo: false,
+          history: { entries: [], snapshots: [], cursor: 0 },
         },
         page: pages[2]!,
       })
@@ -399,6 +400,7 @@ describe('greenfield editor', () => {
           active_page: 'page-2',
           can_undo: true,
           can_redo: false,
+          history: { entries: [], snapshots: [], cursor: 0 },
         },
         page: pages[1]!,
       })

@@ -16,7 +16,7 @@ flowchart LR
 
 Pages enter in project order. Completed detection makes that page's dependent branches eligible immediately, without waiting for detection on the whole project. At most one job per stage runs at a time, and the number of pages in flight is bounded by the number of selected stages.
 
-Stages return semantic patches. The application commits each result, synchronizes the canvas, and records each commit as its own undo step.
+Stages return semantic patches. The application commits each result, synchronizes the canvas, and records each commit as its own named state in the history panel.
 
 ## Manage residency and stopping
 

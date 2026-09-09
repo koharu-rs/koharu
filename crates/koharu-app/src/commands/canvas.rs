@@ -15,10 +15,13 @@ use tauri::{
 use tauri_runtime_cef::CefRuntime;
 
 use super::{
-    ChannelExt as _, Error, processing,
+    ChannelExt as _, Error,
+    lifecycle::ProjectChannel,
+    processing,
     processing::{JobChannel, JobId, Processing},
     project::{CurrentProject, Page, Project, RasterStrokeMode},
 };
+use crate::history::HistoryName;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, Type)]
 pub struct Point {
@@ -150,19 +153,21 @@ pub(crate) async fn add_point_text(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_channel: State<'_, CanvasChannel>,
+    project_channel: State<'_, ProjectChannel>,
 ) -> Result<LayerCommit, Error> {
-    let (commit, page, layer) = {
+    let (commit, page, info, layer) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let page = project
             .active_page()
             .context("the project has no active page")?;
         let (commit, layer) = project.add_point_text(page, point).await?;
-        project.record_commit(&commit);
-        (commit, project.active_page(), layer)
+        project.record_named(HistoryName::AddText, None, None, &commit);
+        (commit, project.active_page(), project.info(), layer)
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     canvas_channel.channel.publish(desktop.canvas_state());
+    project_channel.channel.publish(Some(info));
     Ok(LayerCommit {
         revision: commit.revision,
         layer,
@@ -182,19 +187,21 @@ pub(crate) async fn add_text_box(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_channel: State<'_, CanvasChannel>,
+    project_channel: State<'_, ProjectChannel>,
 ) -> Result<LayerCommit, Error> {
-    let (commit, page, layer) = {
+    let (commit, page, info, layer) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let page = project
             .active_page()
             .context("the project has no active page")?;
         let (commit, layer) = project.add_text_box(page, frame).await?;
-        project.record_commit(&commit);
-        (commit, project.active_page(), layer)
+        project.record_named(HistoryName::AddText, None, None, &commit);
+        (commit, project.active_page(), project.info(), layer)
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     canvas_channel.channel.publish(desktop.canvas_state());
+    project_channel.channel.publish(Some(info));
     Ok(LayerCommit {
         revision: commit.revision,
         layer,
@@ -209,6 +216,7 @@ pub(crate) async fn add_text_box(
 )]
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn commit_paint(
     expected_revision: Revision,
     layer: Option<EntityId>,
@@ -217,6 +225,7 @@ pub(crate) async fn commit_paint(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_channel: State<'_, CanvasChannel>,
+    project_channel: State<'_, ProjectChannel>,
 ) -> Result<LayerCommit, Error> {
     commit_raster_stroke(
         expected_revision,
@@ -228,6 +237,7 @@ pub(crate) async fn commit_paint(
         &desktop,
         &project,
         &canvas_channel,
+        &project_channel,
     )
     .await
 }
@@ -240,6 +250,7 @@ pub(crate) async fn commit_paint(
 )]
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn commit_erase(
     expected_revision: Revision,
     layer: EntityId,
@@ -248,6 +259,7 @@ pub(crate) async fn commit_erase(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_channel: State<'_, CanvasChannel>,
+    project_channel: State<'_, ProjectChannel>,
 ) -> Result<LayerCommit, Error> {
     commit_raster_stroke(
         expected_revision,
@@ -259,6 +271,7 @@ pub(crate) async fn commit_erase(
         &desktop,
         &project,
         &canvas_channel,
+        &project_channel,
     )
     .await
 }
@@ -274,8 +287,9 @@ async fn commit_raster_stroke(
     desktop: &Desktop,
     project: &CurrentProject,
     canvas_channel: &CanvasChannel,
+    project_channel: &ProjectChannel,
 ) -> Result<LayerCommit, Error> {
-    let (commit, page, element) = {
+    let (commit, page, info, element) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         ensure_revision(project.snapshot().revision(), expected_revision)?;
@@ -298,11 +312,16 @@ async fn commit_raster_stroke(
                     .collect(),
             )
             .await?;
-        project.record_commit(&commit);
-        (commit, project.active_page(), element)
+        let name = match mode {
+            RasterStrokeMode::Paint => HistoryName::Brush,
+            RasterStrokeMode::Erase => HistoryName::Erase,
+        };
+        project.record_named(name, None, None, &commit);
+        (commit, project.active_page(), project.info(), element)
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     canvas_channel.channel.publish(desktop.canvas_state());
+    project_channel.channel.publish(Some(info));
     Ok(LayerCommit {
         revision: commit.revision,
         layer: element,
@@ -323,21 +342,23 @@ pub(crate) async fn commit_transform(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_channel: State<'_, CanvasChannel>,
+    project_channel: State<'_, ProjectChannel>,
 ) -> Result<Option<Revision>, Error> {
     let geometries = desktop.transform_geometries(expected_revision, &elements)?;
     if geometries.is_empty() {
         return Ok(None);
     }
-    let (commit, page) = {
+    let (commit, page, info) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         ensure_revision(project.snapshot().revision(), expected_revision)?;
         let commit = project.set_geometries(geometries).await?;
-        project.record_commit(&commit);
-        (commit, project.active_page())
+        project.record_named(HistoryName::Transform, None, None, &commit);
+        (commit, project.active_page(), project.info())
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     canvas_channel.channel.publish(desktop.canvas_state());
+    project_channel.channel.publish(Some(info));
     Ok(Some(commit.revision))
 }
 

@@ -42,6 +42,7 @@ export function CommitTextarea({ value, delay = 360, onCommit, ...props }: Commi
   return (
     <Textarea
       {...props}
+      data-history-undo='true'
       value={draft}
       onChange={(event) => {
         const next = event.currentTarget.value
