@@ -240,7 +240,7 @@ export function TitleBar() {
               </MenubarItem>
               <MenubarItem
                 onClick={() =>
-                  void openUrl('https://github.com/mayocream/koharu').catch(() => undefined)
+                  void openUrl('https://github.com/koharu-rs/koharu').catch(() => undefined)
                 }
               >
                 {t('menu.github')}

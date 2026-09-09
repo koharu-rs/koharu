@@ -203,6 +203,9 @@ named_ffi_enum! {
         Mxfp4 = sys::SD_TYPE_MXFP4 => "mxfp4",
         Nvfp4 = sys::SD_TYPE_NVFP4 => "nvfp4",
         Q1_0 = sys::SD_TYPE_Q1_0 => "q1_0",
+        Q2_0 = sys::SD_TYPE_Q2_0 => "q2_0",
+        F8E4m3 = sys::SD_TYPE_F8_E4M3 => "f8_e4m3",
+        F8E5m2 = sys::SD_TYPE_F8_E5M2 => "f8_e5m2",
         Auto = sys::SD_TYPE_COUNT => "auto"
     }
 }

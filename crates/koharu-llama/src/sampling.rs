@@ -372,21 +372,14 @@ impl LlamaSampler {
         }
     }
 
-    /// `LLGuidance` sampler for constrained decoding.
+    /// Build and return the reusable llguidance tokenizer environment for `model`.
     ///
-    /// Uses the `llguidance` and `toktrie` Rust crates to enforce grammar constraints during token
-    /// sampling. Add it before samplers that reorder or filter the complete candidate vocabulary.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`GrammarError`] if the grammar is invalid or the sampler cannot be initialized.
+    /// Use it to construct an `llguidance::ParserFactory`, create a matcher for each
+    /// generation, and convert that matcher into a sampler with `LlamaSampler::from`.
     #[cfg(feature = "llguidance")]
-    pub fn llguidance(
-        model: &LlamaModel,
-        grammar_kind: &str,
-        grammar_data: &str,
-    ) -> Result<Self, GrammarError> {
-        crate::llguidance_sampler::create_llg_sampler(model, grammar_kind, grammar_data)
+    #[must_use]
+    pub fn llguidance_tok_env(model: &LlamaModel) -> toktrie::TokEnv {
+        crate::llguidance_sampler::llguidance_build_tok_env(model)
     }
 
     fn sanitize_grammar_strings(

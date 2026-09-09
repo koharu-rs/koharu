@@ -1,5 +1,5 @@
 //! A batch-normalization layer.
-use crate::Tensor;
+use crate::{Cuda, Tensor};
 use std::borrow::Borrow;
 
 /// Batch-normalization config.
@@ -126,7 +126,7 @@ impl super::module::ModuleT for BatchNorm {
             train,
             self.config.momentum,
             self.config.eps,
-            self.config.cudnn_enabled,
+            self.config.cudnn_enabled && Cuda::user_enabled_cudnn(),
         )
     }
 }

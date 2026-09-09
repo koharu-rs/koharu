@@ -1,6 +1,12 @@
 'use client'
 
 import { commands } from '@koharu/bridge/protocol'
+import type {
+  PipelineConfig,
+  Preferences,
+  ProviderPreferences,
+  TypesettingConfig,
+} from '@koharu/bridge/protocol'
 
 import { receiveError, receivePreferences, receiveTranslationModels } from './store'
 
@@ -8,6 +14,8 @@ type Command<Args extends unknown[], Result> = (...args: Args) => Promise<Result
 
 let translationModelsRequest: Promise<void> | null = null
 let translationModelsGeneration = 0
+let preferencesWriteGeneration = 0
+let preferencesWriteQueue: Promise<void> = Promise.resolve()
 
 export async function call<Args extends unknown[], Result>(
   command: Command<Args, Result>,
@@ -28,7 +36,26 @@ export function dispatch<Args extends unknown[], Result>(
 }
 
 export async function refreshPreferences(): Promise<void> {
-  receivePreferences(await call(commands.getPreferences))
+  const generation = preferencesWriteGeneration
+  await preferencesWriteQueue
+  const preferences = await call(commands.getPreferences)
+  if (generation === preferencesWriteGeneration) receivePreferences(preferences)
+}
+
+export function savePreferences(
+  pipeline: PipelineConfig,
+  providers: ProviderPreferences,
+  typesetting: TypesettingConfig,
+): Promise<Preferences> {
+  preferencesWriteGeneration += 1
+  const pending = preferencesWriteQueue
+    .catch(() => undefined)
+    .then(() => call(commands.savePreferences, pipeline, providers, typesetting))
+  preferencesWriteQueue = pending.then(
+    () => undefined,
+    () => undefined,
+  )
+  return pending
 }
 
 export function refreshTranslationModels(force = false): Promise<void> {

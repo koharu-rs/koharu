@@ -487,7 +487,7 @@ async fn prepare(input: &StageInput) -> Result<InpaintInput> {
                 if layer.dimensions() != mask.dimensions() {
                     bail!("{role} dimensions do not match page {page}");
                 }
-                for (target, source) in mask.as_mut().iter_mut().zip(layer.as_raw()) {
+                for (target, source) in mask.iter_mut().zip(layer.as_raw()) {
                     *target = (*target).max(*source);
                 }
                 if role == "text-mask" {

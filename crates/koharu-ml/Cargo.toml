@@ -16,6 +16,7 @@ koharu-diffusion = { workspace = true }
 koharu-llama = { workspace = true, features = ["llguidance"] }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
+llguidance = { workspace = true }
 ab_glyph = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
@@ -97,6 +98,10 @@ harness = false
 
 [[bench]]
 name = "baberu_ocr"
+harness = false
+
+[[bench]]
+name = "hayai_ocr"
 harness = false
 
 [[bench]]

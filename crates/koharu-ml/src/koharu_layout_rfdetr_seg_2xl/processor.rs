@@ -1,7 +1,7 @@
-//! RF-DETR 1.7.0 image preprocessing and instance segmentation postprocessing.
+//! RF-DETR image preprocessing and instance segmentation postprocessing.
 //!
-//! https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/detr.py#L1177-L1430
-//! https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/postprocess.py
+//! https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/detr.py
+//! https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/postprocess.py
 
 use anyhow::{Result, ensure};
 use image::DynamicImage;
@@ -54,9 +54,9 @@ impl KoharuLayoutRFDetrImageProcessor {
             .to_kind(Kind::Float)
             / 255.0;
         if image.width() != self.resolution as u32 || image.height() != self.resolution as u32 {
-            // torchvision.transforms.functional.resize defaults to antialiased bilinear
-            // interpolation for tensor inputs in RF-DETR 1.7.0.
-            pixel_values = pixel_values.internal_upsample_bilinear2d_aa(
+            // Latest upstream disables antialiasing to match the bilinear
+            // Albumentations resize used during training.
+            pixel_values = pixel_values.upsample_bilinear2d(
                 [self.resolution, self.resolution],
                 false,
                 None,

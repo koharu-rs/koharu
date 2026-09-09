@@ -5,7 +5,7 @@ mod runtime;
 mod source;
 mod store;
 
-pub mod downloads;
+pub mod download;
 
 pub use device::{Backend, Device, DeviceType};
 pub use hardware::Hardware;
@@ -15,8 +15,9 @@ pub use store::Store;
 
 /// Builds the shared client used by remote APIs and long-running model requests.
 ///
-/// Requests have no implicit timeout or retry policy. Callers own cancellation,
-/// and non-idempotent generation requests are never replayed automatically.
+/// Connection setup follows the shared HTTP policy. Response reads have no
+/// implicit timeout or retry, so callers retain cancellation ownership and
+/// non-idempotent generation requests are never replayed automatically.
 pub fn http_client() -> anyhow::Result<reqwest::Client> {
-    network::api_client()
+    network::http()
 }

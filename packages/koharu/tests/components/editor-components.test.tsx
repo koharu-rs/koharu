@@ -198,6 +198,11 @@ function render(ui: ReactNode) {
   return testingRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
+function SettingsNavigationHarness() {
+  const settingsOpen = useKoharuStore((state) => state.settingsOpen)
+  return settingsOpen ? <SettingsPage /> : <CanvasCommandBar />
+}
+
 describe('greenfield editor', () => {
   it('registers one native resize listener in React strict mode', async () => {
     const unlisten = vi.fn()
@@ -297,7 +302,7 @@ describe('greenfield editor', () => {
 
     await user.click(screen.getByRole('menuitem', { name: 'Help' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'GitHub' }))
-    expect(nativeOpenUrl).toHaveBeenLastCalledWith('https://github.com/mayocream/koharu')
+    expect(nativeOpenUrl).toHaveBeenLastCalledWith('https://github.com/koharu-rs/koharu')
   })
 
   it('shows the current version and author in About', async () => {
@@ -894,6 +899,44 @@ describe('greenfield editor', () => {
     )
     expect(instructions).toBeInTheDocument()
     expect(instructions).toHaveFocus()
+  })
+
+  it('preserves the runtime shortcuts while visiting settings', async () => {
+    installProject()
+    const user = userEvent.setup()
+    const save = vi
+      .spyOn(commands, 'savePreferences')
+      .mockImplementation(async (pipeline, providers, typesetting) => ({
+        ...preferences,
+        pipeline,
+        providers,
+        typesetting,
+      }))
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsNavigationHarness />
+      </ThemeProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Processing settings' }))
+    await user.click(screen.getByRole('button', { name: /Scope Page/ }))
+    await user.click(screen.getByRole('button', { name: /Entire project/ }))
+    await user.click(screen.getByRole('button', { name: /Stages 4 stages/ }))
+    await user.click(screen.getByRole('button', { name: /Translation/ }))
+    await user.click(screen.getByRole('button', { name: /Inpainting/ }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(screen.getByRole('button', { name: /Output English/ }))
+    await user.click(screen.getByRole('combobox', { name: 'Target language' }))
+    await user.click(await screen.findByRole('option', { name: 'Japanese' }))
+
+    act(() => useKoharuStore.getState().setSettingsOpen(true))
+    await waitFor(() => expect(save).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'Back to editor' }))
+    await user.click(screen.getByRole('button', { name: 'Processing settings' }))
+
+    expect(screen.getByRole('button', { name: /Scope Project/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Stages 2 stages/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Output Japanese/ })).toBeInTheDocument()
   })
 
   it('changes the translation model without re-enabling vision or reasoning', async () => {

@@ -3,6 +3,15 @@
 #define __TORCH_API_GENERATED_H__
 #include "torch_api.h"
 
+#ifndef __cplusplus
+// The generated Rust wrappers borrow their array and UTF-8 inputs. Keep that
+// contract in the public C declaration while preserving the C++ definitions.
+#define tensor const tensor
+#define int64_t const int64_t
+#define double const double
+#define char const uint8_t
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -597,8 +606,6 @@ void atg_affine_grid_generator_out(tensor *, tensor out, tensor theta, int64_t *
 void atg_alias(tensor *, tensor self);
 void atg_alias_copy(tensor *, tensor self);
 void atg_alias_copy_out(tensor *, tensor out, tensor self);
-void atg_align_as(tensor *, tensor self, tensor other);
-tensor *atg_align_tensors(tensor *tensors_data, int tensors_len);
 void atg_all(tensor *, tensor self);
 void atg_all_all_out(tensor *, tensor out, tensor self);
 void atg_all_dim(tensor *, tensor self, int64_t dim, int keepdim);
@@ -2667,5 +2674,10 @@ void atg_zeros_like_out(tensor *, tensor out, tensor self);
 void atg_zeros_out(tensor *, tensor out, int64_t *size_data, int size_len);
 #ifdef __cplusplus
 }
+#else
+#undef tensor
+#undef int64_t
+#undef double
+#undef char
 #endif
 #endif

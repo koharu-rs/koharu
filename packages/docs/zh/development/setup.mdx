@@ -1,0 +1,62 @@
+---
+title: '开发环境'
+description: '运行桌面应用，选择必要检查，并重新生成派生绑定。'
+icon: 'terminal'
+---
+
+## 前提条件
+
+Koharu 基于 Rust 1.97.1（2024 edition）、Bun 1.3.14 和 LLVM 22.1.8 开发，仓库不固定这些版本。LLVM 提供 `-sys` crate 中 bindgen 所需的 libclang；原生库本身是运行时下载的预编译软件包，因此不需要 C++ 构建系统。
+
+<Tabs>
+  <Tab title='Windows'>安装原生依赖所需的 MSVC C/C++ 构建工具。</Tab>
+  <Tab title='Linux'>
+    安装 CI 工作流使用的软件包：`build-essential`、`libgtk-3-dev`、`libxdo-dev`、`libssl-dev`、
+    `libayatana-appindicator3-dev` 和 `librsvg2-dev`。测试还需要 `fonts-noto-cjk`、`dbus-x11` 和
+    `gnome-keyring`。
+  </Tab>
+  <Tab title='macOS'>安装原生依赖所需的平台 C/C++ 开发工具。</Tab>
+</Tabs>
+
+## 启动开发
+
+```bash
+git clone https://github.com/koharu-rs/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun dev` 同时启动 Next.js UI 和 Tauri。它先用 wasm-pack 将 `koharu-canvas` 构建为 WASM 并输出到 `packages/bridge/src/wasm`，再监听 `koharu-canvas` 与 `koharu-rasterizer`，在变更时重新构建。成功构建后，Turbopack 会刷新浏览器客户端。debug 构建在 `http://127.0.0.1:4000` 暴露 CEF 远程调试。
+
+## 检查受影响组件
+
+只运行一次最小相关 debug 检查或定向测试，例如：
+
+```bash
+cargo check -p koharu
+cargo test -p koharu-pipeline <test_name>
+cargo fmt --all --check
+```
+
+前端使用相关包的定向测试或类型检查。`bun run check` 检查仓库格式，`bun run lint` 运行前端 lint。
+
+<Note>默认不运行完整测试集、非 debug 配置或端到端测试。只有明确要求时才运行。</Note>
+
+## 重新生成 IPC 绑定
+
+Rust 命令签名与 Specta 类型是权威输入：
+
+```bash
+cargo run -p koharu-app --bin generate
+```
+
+不要手动修改 `packages/bridge/src/protocol.ts`。
+
+## 构建可执行文件
+
+需要 release 可执行文件时，`bun run build` 会调用 `tauri build --no-bundle` 并输出到 `target/release`。安装包由发行工作流生成。
+
+<Card title='编辑文档' icon='book-open' href='/zh/development/documentation'>
+  预览 Mintlify，维护英语、日语和中文文档。
+</Card>

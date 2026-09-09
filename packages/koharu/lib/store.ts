@@ -10,6 +10,7 @@ import type {
   Model,
   Frame,
   Preferences,
+  Stage,
   StartupState,
   ModelResources,
 } from '@koharu/bridge/protocol'
@@ -30,6 +31,8 @@ export interface CanvasBrush {
 export type InspectorSection = 'copy' | 'type' | 'layers'
 export type ShortcutAction = CanvasTool | 'fit'
 export type Shortcuts = Record<ShortcutAction, string>
+export type PipelineScope = 'page' | 'selected-pages' | 'project'
+export const pipelineStages: readonly Stage[] = ['detection', 'ocr', 'translation', 'inpainting']
 
 interface KoharuStore {
   initialized: boolean
@@ -50,10 +53,14 @@ interface KoharuStore {
   tool: CanvasTool
   brush: CanvasBrush
   inspector: InspectorSection
+  processingScope: PipelineScope
+  processingStages: Stage[]
   settingsOpen: boolean
   shortcuts: Shortcuts
   selectPages: (pages: EntityId[]) => void
   showInspector: (section: InspectorSection) => void
+  setProcessingScope: (scope: PipelineScope) => void
+  setProcessingStages: (stages: Stage[]) => void
   setSettingsOpen: (open: boolean) => void
   selectLayers: (layers: EntityId[]) => void
   setTool: (tool: CanvasTool) => void
@@ -92,12 +99,16 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   selectedLayers: [],
   selectedPages: [],
   tool: 'select',
-  brush: { diameter: 48, color: '#111111' },
+  brush: { diameter: 48, color: '#FFFFFF' },
   inspector: 'copy',
+  processingScope: 'page',
+  processingStages: [...pipelineStages],
   settingsOpen: false,
   shortcuts: defaultShortcuts,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
   showInspector: (inspector) => set({ inspector }),
+  setProcessingScope: (processingScope) => set({ processingScope }),
+  setProcessingStages: (processingStages) => set({ processingStages }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),

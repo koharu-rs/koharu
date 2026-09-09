@@ -14,7 +14,7 @@ use self::{
     processor::{postprocess, preprocess, rearranged_inference},
 };
 
-model_repository!("mayocream/comic-text-detector" @ "15ade029f4dabd502bc97af6051c8b9f2bec24d5" {
+crate::model_repository!("mayocream/comic-text-detector" @ "15ade029f4dabd502bc97af6051c8b9f2bec24d5" {
     YOLO_WEIGHTS = "yolo-v5.safetensors",
     UNET_WEIGHTS = "unet.safetensors",
     DBNET_WEIGHTS = "dbnet.safetensors",

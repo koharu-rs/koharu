@@ -795,7 +795,9 @@ fn premultiply_raster_tile_rgba8(
     let opaque = (0..size.1 as usize).all(|row| {
         let start = row * row_bytes;
         pixels[start..start + tile_row_bytes]
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|pixel| pixel[3] == u8::MAX)
     });
     if opaque {
@@ -806,7 +808,7 @@ fn premultiply_raster_tile_rgba8(
         let source = row * row_bytes;
         let destination = premultiplied.len();
         premultiplied.extend_from_slice(&pixels[source..source + tile_row_bytes]);
-        for pixel in premultiplied[destination..].chunks_exact_mut(4) {
+        for pixel in premultiplied[destination..].as_chunks_mut::<4>().0 {
             let alpha = u16::from(pixel[3]);
             for channel in &mut pixel[..3] {
                 *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;

@@ -6,6 +6,10 @@
   },
   "rules": {
     "react/exhaustive-deps": "warn",
+    "react/incompatible-library": "off",
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react/static-components": "off",
     "no-useless-catch": "warn",
     "typescript/no-useless-empty-export": "warn",
     "unicorn/no-empty-file": "warn",

@@ -1,0 +1,50 @@
+---
+title: 'Install Koharu'
+description: 'Download a release, complete the first launch, and keep the app up to date.'
+icon: 'download'
+---
+
+<Steps>
+  <Step title="Choose a release">
+    Open the [latest GitHub release](https://github.com/koharu-rs/koharu/releases/latest) and select the package for your operating system and processor.
+
+    <Tabs>
+      <Tab title="Windows">
+        Run the Windows installer from the release, or install with WinGet:
+
+        ```powershell
+        winget install koharu
+        ```
+      </Tab>
+      <Tab title="macOS">
+        Choose the Apple-silicon release and place Koharu in Applications, or install with Homebrew:
+
+        ```bash
+        brew install --cask koharu
+        ```
+      </Tab>
+      <Tab title="Linux">
+        Choose the package for your distribution and processor. Install any desktop-library dependencies reported by your package manager.
+      </Tab>
+    </Tabs>
+
+  </Step>
+  <Step title="Let the runtime initialize">
+    Launch Koharu and wait for the project browser. First launch can take longer while native packages download. Model files download when you first use the selected model.
+
+    Runtime packages come from GitHub release assets, PyPI for CUDA, and AMD's repository for ROCm; model weights come from Hugging Face. Keep the app open while downloads finish; the activity center shows progress.
+
+  </Step>
+  <Step title="Create your first project">
+    Follow the [quickstart](/en/quickstart) with one readable manga page. Check [hardware and runtimes](/en/hardware) if device initialization fails.
+  </Step>
+</Steps>
+
+## Install updates
+
+Release builds check a signed GitHub release feed once at startup; there is no manual update check. When an update is offered, let the download complete before Koharu relaunches.
+
+<Tip>
+  Use a release build for translation work. Use the [development setup](/en/development/setup) when
+  you want to change Koharu's code.
+</Tip>

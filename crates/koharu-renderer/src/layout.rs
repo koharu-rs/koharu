@@ -2055,7 +2055,9 @@ fn polygon_inline_spans(
     }
     intersections.sort_by(f32::total_cmp);
     intersections
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| (pair[0], pair[1]))
         .collect()
 }

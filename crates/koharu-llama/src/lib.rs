@@ -5,6 +5,10 @@
 //! llama.cpp. This makes it easier to keep up with the changes in llama.cpp, but does mean that
 //! the API is not as nice as it could be.
 //!
+//! Koharu ports applicable safe-wrapper changes from
+//! [`utilityai/llama-cpp-rs`](https://github.com/utilityai/llama-cpp-rs) through commit
+//! `3d5f424f7cfb7cd3d1f9039440bd0286e29ca050` and supplies its own dynamically loaded FFI.
+//!
 //! # Examples
 //!
 //! - [simple](https://github.com/utilityai/llama-cpp-rs/tree/main/examples/simple)
@@ -37,7 +41,7 @@ pub mod timing;
 pub mod token;
 pub mod token_type;
 
-pub use crate::context::session::LlamaStateSeqFlags;
+pub use crate::context::session::{LlamaStateSeqFlags, SeqState};
 
 /// A failable result from a llama.cpp function.
 pub type Result<T> = std::result::Result<T, LlamaCppError>;
@@ -123,6 +127,19 @@ pub enum LlamaContextLoadError {
     /// llama.cpp returned null
     #[error("null reference from llama.cpp")]
     NullReturn,
+}
+
+/// Errors from the safe sequence-state snapshot API.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum StateSeqError {
+    /// llama.cpp transferred a different number of bytes than expected.
+    #[error("state seq size mismatch: expected {expected}, actual {actual}")]
+    SizeMismatch {
+        /// Expected byte count.
+        expected: usize,
+        /// Actual byte count.
+        actual: usize,
+    },
 }
 
 /// Failed to decode a batch.

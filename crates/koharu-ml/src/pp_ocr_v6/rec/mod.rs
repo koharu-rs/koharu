@@ -15,7 +15,7 @@ pub use self::{
 
 use self::model::Model;
 
-model_repository!("PaddlePaddle/PP-OCRv6_medium_rec_safetensors" @ "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" {
+crate::model_repository!("PaddlePaddle/PP-OCRv6_medium_rec_safetensors" @ "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" {
     CONFIG = "config.json",
     WEIGHTS = "model.safetensors",
     PROCESSOR = "preprocessor_config.json",

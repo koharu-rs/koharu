@@ -69,6 +69,7 @@ pub(super) async fn translate(
                 temperature: generation.temperature,
                 top_p: generation.top_p,
                 max_completion_tokens: generation.max_tokens,
+                response_format: response_format(model, request.segments.len()),
             }),
     )
     .await?;
@@ -100,6 +101,33 @@ struct Request<'a> {
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_completion_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ResponseFormat>,
+}
+
+#[derive(Serialize)]
+struct ResponseFormat {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    json_schema: JsonSchema,
+}
+
+#[derive(Serialize)]
+struct JsonSchema {
+    name: &'static str,
+    strict: bool,
+    schema: serde_json::Value,
+}
+
+fn response_format(model: &str, expected: usize) -> Option<ResponseFormat> {
+    (model == "MiniMax-Text-01").then(|| ResponseFormat {
+        kind: "json_schema",
+        json_schema: JsonSchema {
+            name: "manga_translation",
+            strict: true,
+            schema: prompt::output_schema(expected),
+        },
+    })
 }
 
 #[derive(Serialize)]
@@ -164,6 +192,7 @@ mod tests {
             temperature: Some(0.7),
             top_p: Some(0.95),
             max_completion_tokens: Some(1024),
+            response_format: response_format("MiniMax-M3", 2),
         };
         let value = serde_json::to_value(body).unwrap();
         assert_eq!(value["model"], "MiniMax-M3");
@@ -171,6 +200,34 @@ mod tests {
         assert_eq!(value["messages"][1]["content"], "user");
         assert_eq!(value["max_completion_tokens"], 1024);
         assert!(value.get("response_format").is_none());
+    }
+
+    #[test]
+    fn serializes_schema_only_for_minimax_text_01() {
+        let body = Request {
+            model: "MiniMax-Text-01",
+            messages: [
+                Message {
+                    role: "system",
+                    content: "system".to_owned(),
+                },
+                Message {
+                    role: "user",
+                    content: "user".to_owned(),
+                },
+            ],
+            temperature: None,
+            top_p: None,
+            max_completion_tokens: None,
+            response_format: response_format("MiniMax-Text-01", 2),
+        };
+        let value = serde_json::to_value(body).unwrap();
+
+        assert_eq!(value["response_format"]["type"], "json_schema");
+        assert_eq!(
+            value["response_format"]["json_schema"]["schema"]["properties"]["translations"]["maxItems"],
+            2
+        );
     }
 
     #[test]

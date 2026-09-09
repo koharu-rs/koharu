@@ -86,8 +86,10 @@ beforeEach(() => {
     selectedLayers: [],
     selectedPages: [],
     tool: 'select',
-    brush: { diameter: 48, color: '#111111' },
+    brush: { diameter: 48, color: '#FFFFFF' },
     inspector: 'copy',
+    processingScope: 'page',
+    processingStages: ['detection', 'ocr', 'translation', 'inpainting'],
     settingsOpen: false,
     shortcuts: defaultShortcuts,
   })

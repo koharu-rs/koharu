@@ -483,6 +483,7 @@ impl MtmdBitmap {
                 ctx.context.as_ptr(),
                 path_cstr.as_ptr(),
                 placeholder,
+                koharu_llama_sys::mtmd_helper_init_opt_default(),
             )
         };
 
@@ -535,6 +536,7 @@ impl MtmdBitmap {
                 data.as_ptr(),
                 data.len(),
                 placeholder,
+                koharu_llama_sys::mtmd_helper_init_opt_default(),
             )
         };
 

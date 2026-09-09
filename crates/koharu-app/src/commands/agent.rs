@@ -7,7 +7,8 @@ use koharu_agent::{Account, Agent, Codex, CodexModel, Config, Control, Event, Lo
 use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
-use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
+use tauri::{AppHandle, Manager as _, State, ipc::Channel};
+use tauri_runtime_cef::CefRuntime;
 use tokio::sync::Notify;
 
 use self::host::KoharuHost;
@@ -29,7 +30,7 @@ pub(crate) struct AgentState {
 }
 
 impl AgentState {
-    pub(crate) fn new(handle: AppHandle<Cef>) -> Result<Self> {
+    pub(crate) fn new(handle: AppHandle<CefRuntime>) -> Result<Self> {
         Ok(Self {
             agent: Arc::new(Agent::new(Codex::new()?, KoharuHost::new(handle))?),
             runs: Mutex::new(HashMap::new()),
@@ -39,9 +40,19 @@ impl AgentState {
     }
 
     async fn status(&self) -> Result<AgentStatus> {
-        let account = self.agent.codex().account()?;
+        let mut account = self.agent.codex().account()?;
         let models = if account.is_some() {
-            self.agent.models().await?
+            match self.agent.models().await {
+                Ok(models) => models,
+                Err(error) => {
+                    account = self.agent.codex().account()?;
+                    if account.is_some() {
+                        return Err(error);
+                    }
+                    self.agent.clear().await;
+                    Vec::new()
+                }
+            }
         } else {
             Vec::new()
         };
@@ -88,6 +99,12 @@ pub(crate) async fn get_agent_status(
     Ok(state.status().await?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "agent_login",
+    skip_all,
+    fields(provider = "codex")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn login_agent(
@@ -122,6 +139,12 @@ pub(crate) async fn login_agent(
     Ok(state.status().await?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "agent_logout",
+    skip_all,
+    fields(provider = "codex")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn logout_agent(
@@ -132,13 +155,25 @@ pub(crate) async fn logout_agent(
     Ok(state.status().await?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "preferences_saved",
+    skip_all,
+    fields(setting = "agent")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn save_agent_config(
     config: Config,
     state: State<'_, AgentState>,
 ) -> std::result::Result<Config, Error> {
-    Ok(state.agent.save_config(config)?)
+    let config = state.agent.save_config(config)?;
+    tracing::info!(
+        target: "koharu_metrics",
+        metric = "preference_changed",
+        setting = "agent",
+    );
+    Ok(config)
 }
 
 #[tauri::command]
@@ -146,7 +181,7 @@ pub(crate) async fn save_agent_config(
 pub(crate) async fn run_agent(
     prompt: String,
     on_event: Channel<Event>,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
     state: State<'_, AgentState>,
 ) -> std::result::Result<RunId, Error> {
     let prompt = prompt.trim().to_owned();
@@ -167,6 +202,12 @@ pub(crate) async fn run_agent(
     }
     let agent = state.agent.clone();
     drop(tauri::async_runtime::spawn(async move {
+        let _metric = tracing::info_span!(
+            target: "koharu_metrics",
+            "agent_run",
+            provider = "codex",
+            character_count = prompt.chars().count(),
+        );
         let publish_control = control.clone();
         let result = agent
             .run(run, prompt, control, |event| {
@@ -185,6 +226,12 @@ pub(crate) async fn run_agent(
     Ok(run)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "agent_cancel",
+    skip_all,
+    fields(provider = "codex", state = "requested")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn cancel_agent(

@@ -1,0 +1,25 @@
+name: Task
+description: Track a specific piece of work for Koharu
+type: Task
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for contributing. Please search existing issues before submitting a new task.
+
+        If AI helped substantially with this task description, briefly mention how.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Briefly describe the work and its purpose.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add related issues, references, or other relevant details.

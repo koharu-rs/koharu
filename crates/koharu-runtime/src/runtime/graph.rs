@@ -7,7 +7,7 @@ use petgraph::{
 };
 
 use crate::{
-    Hardware,
+    Device, Hardware,
     runtime::{
         DiscoverablePackage, RuntimePackage,
         packages::{Cuda, Diffusion, Llama, Rocm, Torch},
@@ -135,16 +135,7 @@ impl Plan {
         self.graph.update_edge(before, after, ());
     }
 
-    pub(crate) fn validate(&self) -> Result<()> {
-        toposort(&self.graph, None).map(|_| ()).map_err(|cycle| {
-            anyhow!(
-                "runtime dependency cycle contains {}",
-                self.graph[cycle.node_id()].label()
-            )
-        })
-    }
-
-    pub(crate) async fn initialize(&self) -> Result<()> {
+    pub(crate) async fn initialize(&self, mut device: Device) -> Result<Device> {
         let order = toposort(&self.graph, None).map_err(|cycle| {
             anyhow!(
                 "runtime dependency cycle contains {}",
@@ -152,9 +143,14 @@ impl Plan {
             )
         })?;
         for node in order {
-            self.graph[node].activate().await?;
+            let component = self.graph[node];
+            component.activate().await?;
+            if let Component::Rocm(rocm) = component {
+                device.index = rocm.probe().await?;
+                device.name = format!("ROCm{}", device.index);
+            }
         }
-        Ok(())
+        Ok(device)
     }
 }
 
@@ -185,7 +181,6 @@ mod tests {
             .insert(Diffusion::WindowsCuda.into(), &hardware)
             .unwrap();
         plan.sequence(llama, diffusion);
-        plan.validate().unwrap();
 
         assert_eq!(
             plan.graph

@@ -534,7 +534,7 @@ fn fill_polygon(width: usize, height: usize, polygon: &[[i32; 2]]) -> Vec<bool> 
         active.retain(|edge| edge.y1 != y);
         active.extend(edges.iter().filter(|edge| edge.y0 == y).copied());
         active.sort_by_key(|edge| edge.x);
-        for pair in active.chunks_exact(2) {
+        for pair in active.as_chunks::<2>().0 {
             let left = pair[0].x.min(pair[1].x);
             let right = pair[0].x.max(pair[1].x);
             let x1 = (left + XY_ONE - 1) >> XY_SHIFT;

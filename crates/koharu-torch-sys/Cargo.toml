@@ -11,7 +11,6 @@ repository.workspace = true
 keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
 publish = true
 build = "build.rs"
-links = "koharu_torch"
 
 categories = ["external-ffi-bindings", "science"]
 
@@ -23,18 +22,12 @@ libc = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
-cmake = { workspace = true }
 koharu-bindgen = { workspace = true }
-koharu-runtime = { workspace = true }
-tokio = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [
     "anyhow",
-    "cmake",
     "koharu-bindgen",
-    "koharu-runtime",
     "libc",
     "libloading",
-    "tokio",
 ]

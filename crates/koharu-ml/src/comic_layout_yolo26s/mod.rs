@@ -23,7 +23,7 @@ pub use self::{
 
 use self::model::Model;
 
-model_repository!("mayocream/comic-layout-yolo26s" @ "90f556d6973a8abdefacaace1e7eed4adbcd33a8" {
+crate::model_repository!("mayocream/comic-layout-yolo26s" @ "90f556d6973a8abdefacaace1e7eed4adbcd33a8" {
     CONFIG = "config.json",
     WEIGHTS = "model.safetensors",
 });

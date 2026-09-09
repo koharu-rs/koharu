@@ -16,13 +16,13 @@ use self::{
     processor::{BaberuImageProcessor, Tokenizer},
 };
 
-model_repository!("genshiai-daichi/baberu-ocr" @ "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" {
+crate::model_repository!("genshiai-daichi/baberu-ocr" @ "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" {
     CONFIG = "config.json",
     GENERATION_CONFIG = "generation_config.json",
     WEIGHTS = "model.safetensors",
     VOCABULARY = "tokenizer/vocab.json",
 });
-model_repository!("facebook/dinov2-base" @ "f9e44c814b77203eaa57a6bdbbd535f21ede1415" {
+crate::model_repository!("facebook/dinov2-base" @ "f9e44c814b77203eaa57a6bdbbd535f21ede1415" {
     VISION_CONFIG = "config.json",
     VISION_PROCESSOR = "preprocessor_config.json",
 });

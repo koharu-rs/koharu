@@ -16,8 +16,8 @@ import { useTranslation } from 'react-i18next'
 
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
-import { call, refreshTranslationModels } from '@/lib/backend'
-import { receivePreferences, useKoharuStore } from '@/lib/store'
+import { call, refreshTranslationModels, savePreferences } from '@/lib/backend'
+import { pipelineStages, receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { modelKey, modelSelection, providerName } from '@/lib/translation'
 import {
   commands,
@@ -30,9 +30,6 @@ import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
 
-export type PipelineScope = 'page' | 'selected-pages' | 'project'
-export const pipelineStages: readonly Stage[] = ['detection', 'ocr', 'translation', 'inpainting']
-
 type SelectorView = 'root' | 'model' | 'scope' | 'stages' | 'output'
 
 export function InferenceControl({
@@ -43,8 +40,10 @@ export function InferenceControl({
   disabled: boolean
 }) {
   const { t } = useTranslation()
-  const [scope, setScope] = useState<PipelineScope>('page')
-  const [stages, setStages] = useState<Stage[]>(() => [...pipelineStages])
+  const scope = useKoharuStore((state) => state.processingScope)
+  const stages = useKoharuStore((state) => state.processingStages)
+  const setScope = useKoharuStore((state) => state.setProcessingScope)
+  const setStages = useKoharuStore((state) => state.setProcessingStages)
   const jobs = useKoharuStore((state) => state.jobs)
   const selectedPages = useKoharuStore((state) => state.selectedPages)
   const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
@@ -147,7 +146,7 @@ function RuntimeSelector({
         model: modelSelection(next),
       },
     }
-    void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
+    void savePreferences(pipeline, preferences.providers, preferences.typesetting)
       .then((saved) => {
         receivePreferences(saved)
       })
@@ -171,7 +170,7 @@ function RuntimeSelector({
         instructions: draft.instructions || null,
       },
     }
-    void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
+    void savePreferences(pipeline, preferences.providers, preferences.typesetting)
       .then((saved) => {
         receivePreferences(saved)
       })

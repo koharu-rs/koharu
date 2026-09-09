@@ -328,7 +328,7 @@ fn fill_holes(mask: &mut GrayImage) {
         }
     }
 
-    for (pixel, is_outside) in mask.as_mut().iter_mut().zip(outside) {
+    for (pixel, is_outside) in mask.iter_mut().zip(outside) {
         if *pixel == 0 && !is_outside {
             *pixel = 255;
         }

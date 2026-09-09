@@ -18,7 +18,7 @@ pub use self::{
 
 use self::model::Model;
 
-model_repository!("mayocream/manga109-segmentation-bubble" @ "4c9d7cbfa9905f7003677fa1130b48b93365a16a" {
+crate::model_repository!("mayocream/manga109-segmentation-bubble" @ "4c9d7cbfa9905f7003677fa1130b48b93365a16a" {
     CONFIG = "config.json",
     WEIGHTS = "model.safetensors",
 });

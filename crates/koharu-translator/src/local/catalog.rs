@@ -29,6 +29,7 @@ pub(crate) struct LocalModelDescriptor {
     pub(crate) quantizations: &'static [QuantizationDefinition],
     pub(crate) generation: ModelGeneration,
     pub(crate) repository: &'static str,
+    pub(crate) revision: &'static str,
     pub(crate) projector: Option<&'static str>,
     pub(crate) target_languages: SupportedLanguages,
 }
@@ -62,6 +63,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+        revision: "afbd8eaeab5dd94ba0b079ebfb02517d19641e38",
         projector: None,
         target_languages: SupportedLanguages::Limited(&[
             crate::Language::English,
@@ -104,6 +106,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+        revision: "0102285ad796bd99af90f58de616092e5630e970",
         projector: None,
         target_languages: SupportedLanguages::Limited(&[
             crate::Language::English,
@@ -138,6 +141,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-E2B-it-qat-GGUF",
+        revision: "66a399f68ddd113b06dff02fca9523e55465d11d",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -160,6 +164,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-E4B-it-qat-GGUF",
+        revision: "8c5a9e4fd5482e2be20fe0bf013b4c262a8f4265",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -183,6 +188,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-12B-it-qat-GGUF",
+        revision: "980b060c40a8539ac159e0501a3e0f66a6365af3",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -206,6 +212,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+        revision: "7b92b5b28818151e8669af2e45e88d6086f490dd",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -229,6 +236,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-31B-it-qat-GGUF",
+        revision: "43cc1aeb31adf47ec06a854507ce552cd9862e6f",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -284,6 +292,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+        revision: "da8593c3e407afcd3e7da94ff2d69d77e2a28a48",
         projector: Some("mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -344,6 +353,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+        revision: "45b6a334b4bcd1d7f37179df58b3b1d66a184e5d",
         projector: Some("mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -367,6 +377,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+        revision: "ae8045ac2bd216293ca49a3065da2c942dde4b68",
         projector: Some("mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -390,6 +401,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        revision: "f9093662a2e7ae0503f637088bc96f77a1a70c83",
         projector: Some("mmproj-Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -413,6 +425,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        revision: "9654466e82d83f5ebfe1518a369bc5900873abb1",
         projector: Some("mmproj-Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -442,6 +455,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.5-0.8B-GGUF",
+        revision: "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -471,6 +485,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.5-2B-GGUF",
+        revision: "f6d5376be1edb4d416d56da11e5397a961aca8ae",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -500,6 +515,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.5-4B-GGUF",
+        revision: "e87f176479d0855a907a41277aca2f8ee7a09523",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -529,6 +545,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.5-9B-GGUF",
+        revision: "3885219b6810b007914f3a7950a8d1b469d598a5",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -558,6 +575,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.5-27B-GGUF",
+        revision: "3221f178a6b842d04f1fb42f1c413534adcc0a6a",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -587,6 +605,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.5-35B-A3B-GGUF",
+        revision: "bc014a17be43adabd7066b7a86075ff935c6a4e2",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -616,6 +635,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.6-27B-GGUF",
+        revision: "82d411acf4a06cfb8d9b073a5211bf410bfc29bf",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -656,6 +676,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.6-35B-A3B-GGUF",
+        revision: "a483e9e6cbd595906af30beda3187c2663a1118c",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -685,6 +706,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/Qwen3.8-27B-GGUF",
+        revision: "f975863083b62f54a5e6fac11671c750c2bbc59c",
         projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -725,6 +747,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+        revision: "2bcf35c1ebf62c837c12c1aa90b578ff4717e831",
         projector: Some("mmproj-Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -765,6 +788,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+        revision: "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
         projector: Some("mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -805,6 +829,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+        revision: "0a41c68809d375475f954be12ba7c40efa56c2a9",
         projector: Some("mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -875,6 +900,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced",
+        revision: "9a28c2fbd15f21fb8ed204074c6f58d5bc889941",
         projector: Some("mmproj-Qwen3.6-27B-Uncensored-HauhauCS-Balanced-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
@@ -940,7 +966,79 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+        revision: "f12a584fecbeb5f20001130d8ecd66c9327ae685",
         projector: Some("mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
+        target_languages: SupportedLanguages::All,
+    },
+    LocalModelDescriptor {
+        id: "qwen3.8-27b-uncensored",
+        reasoning: true,
+        name: "Qwen 3.8 27B Uncensored",
+        quantizations: &[
+            QuantizationDefinition::new(
+                "Q4_K_P",
+                "Q4_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ2_M",
+                "IQ2 M",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ3_M",
+                "IQ3 M",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_M.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ3_XS",
+                "IQ3 XS",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_XS.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ4_XS",
+                "IQ4 XS",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ4_XS.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q2_K_P",
+                "Q2_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q2_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q3_K_P",
+                "Q3_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q3_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q5_K_P",
+                "Q5_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q5_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q6_K_P",
+                "Q6_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q6_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q8_K_P",
+                "Q8_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf",
+            ),
+        ],
+        generation: ModelGeneration {
+            temperature: Some(0.2),
+            top_k: Some(20),
+            top_p: Some(0.8),
+            min_p: Some(0.05),
+            max_tokens: Some(1000),
+            repeat_penalty: Some(1.2),
+            frequency_penalty: None,
+            presence_penalty: None,
+        },
+        repository: "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
+        revision: "993a5971fda8f30dd1b7eb2654792ba4415c7460",
+        projector: Some("mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
 ];
@@ -956,13 +1054,19 @@ impl LocalModelDescriptor {
         selection: &ModelSelection,
     ) -> anyhow::Result<ResolvedLocalModel> {
         let filename = self.filename(selection.quantization.as_deref())?;
-        let model = koharu_runtime::HuggingFaceFile::latest(self.repository, filename).resolve();
+        let model =
+            koharu_runtime::HuggingFaceFile::pinned(self.repository, self.revision, filename)
+                .resolve();
         let projector = async {
             match self.projector {
                 Some(filename) => Ok(Some(
-                    koharu_runtime::HuggingFaceFile::latest(self.repository, filename)
-                        .resolve()
-                        .await?,
+                    koharu_runtime::HuggingFaceFile::pinned(
+                        self.repository,
+                        self.revision,
+                        filename,
+                    )
+                    .resolve()
+                    .await?,
                 )),
                 None => Ok(None),
             }
@@ -996,10 +1100,11 @@ mod tests {
 
     #[test]
     fn local_catalog_has_unique_complete_entries() {
-        assert_eq!(MODELS.len(), 26);
+        assert_eq!(MODELS.len(), 27);
         for (index, model) in MODELS.iter().enumerate() {
             let id = model.id;
             assert!(!model.repository.is_empty());
+            assert_eq!(model.revision.len(), 40);
             assert!(!model.quantizations.is_empty());
             if let Some(projector) = model.projector {
                 assert!(!projector.is_empty());

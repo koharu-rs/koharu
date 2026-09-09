@@ -1,5 +1,5 @@
 // Ported from:
-// https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/gemini.rs
+// https://github.com/koharu-rs/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/gemini.rs
 // Model discovery:
 // https://ai.google.dev/api/models
 
@@ -94,7 +94,23 @@ pub(super) async fn translate(
             temperature: generation.temperature,
             max_output_tokens: generation.max_tokens,
             thinking_config: generation.reasoning.map(|enabled| ThinkingConfig {
-                thinking_budget: if enabled { -1 } else { 0 },
+                thinking_budget: model.starts_with("gemini-2.5").then(|| {
+                    if enabled {
+                        -1
+                    } else if model.starts_with("gemini-2.5-pro") {
+                        // Gemini 2.5 Pro cannot disable thinking; 128 is its minimum budget.
+                        128
+                    } else {
+                        0
+                    }
+                }),
+                thinking_level: (!model.starts_with("gemini-2.5")).then_some(if enabled {
+                    "high"
+                } else if model.starts_with("gemma-4") {
+                    "minimal"
+                } else {
+                    "low"
+                }),
             }),
             response_mime_type: "application/json",
             response_json_schema: schema,
@@ -179,7 +195,10 @@ struct GenerationConfig {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -226,18 +245,45 @@ mod tests {
         let config = GenerationConfig {
             temperature: None,
             max_output_tokens: None,
-            thinking_config: Some(ThinkingConfig { thinking_budget: 0 }),
+            thinking_config: None,
             response_mime_type: "application/json",
             response_json_schema: prompt::output_schema(2),
         };
         let value = serde_json::to_value(config).unwrap();
         assert_eq!(value["responseMimeType"], "application/json");
-        assert_eq!(value["thinkingConfig"]["thinkingBudget"], 0);
+        assert!(value.get("thinkingConfig").is_none());
         assert_eq!(
             value["responseJsonSchema"]["properties"]["translations"]["items"]["properties"]["id"]
                 ["maximum"],
             1
         );
+    }
+
+    #[test]
+    fn serializes_model_specific_thinking_controls() {
+        let enabled = serde_json::to_value(ThinkingConfig {
+            thinking_budget: None,
+            thinking_level: Some("high"),
+        })
+        .unwrap();
+        assert_eq!(enabled["thinkingLevel"], "high");
+        assert!(enabled.get("thinkingBudget").is_none());
+
+        let disabled = serde_json::to_value(ThinkingConfig {
+            thinking_budget: None,
+            thinking_level: Some("minimal"),
+        })
+        .unwrap();
+        assert_eq!(disabled["thinkingLevel"], "minimal");
+        assert!(disabled.get("thinkingBudget").is_none());
+
+        let budget = serde_json::to_value(ThinkingConfig {
+            thinking_budget: Some(0),
+            thinking_level: None,
+        })
+        .unwrap();
+        assert_eq!(budget["thinkingBudget"], 0);
+        assert!(budget.get("thinkingLevel").is_none());
     }
 
     #[test]

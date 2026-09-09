@@ -51,7 +51,7 @@ impl Model {
 }
 
 fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
-    let use_accelerator = device.backend != Backend::Cpu;
+    let use_cuda = device.backend == Backend::Cuda;
     ContextParams {
         model_path: Some(paths.version_marker),
         diffusion_model_path: Some(paths.diffusion_model),
@@ -59,13 +59,11 @@ fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
         clip_l_path: Some(paths.clip_l),
         clip_g_path: Some(paths.clip_g),
         enable_mmap: true,
-        flash_attention: use_accelerator,
-        diffusion_flash_attention: use_accelerator,
-        backend: Some(if use_accelerator {
-            device.name.to_ascii_lowercase()
-        } else {
-            "cpu".to_owned()
-        }),
+        flash_attention: use_cuda,
+        diffusion_flash_attention: use_cuda,
+        diffusion_conv_direct: use_cuda,
+        vae_conv_direct: use_cuda,
+        backend: Some(device.name.clone()),
         ..ContextParams::default()
     }
 }

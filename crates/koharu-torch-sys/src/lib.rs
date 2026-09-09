@@ -7,6 +7,7 @@
 
 pub mod c_generated;
 pub mod cuda;
+pub mod io;
 mod traits;
 
 pub use traits::{DoubleList, IntList, IntListOption};
@@ -41,7 +42,7 @@ pub type tensor = *mut C_tensor;
 pub type scalar = *mut C_scalar;
 pub type optimizer = *mut C_optimizer;
 pub type ivalue = *mut CIValue;
-pub type module = *mut CModule_;
+pub type torch_module = *mut CModule_;
 
 include!(concat!(env!("OUT_DIR"), "/torch_api.rs"));
 

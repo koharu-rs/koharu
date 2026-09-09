@@ -5,8 +5,7 @@ use strum::EnumProperty;
 use walkdir::WalkDir;
 
 use crate::{
-    Store,
-    downloads::Transfer,
+    Store, download,
     runtime::{Package, RuntimePackage, loader, sealed},
     source::{Platform, extract, wheel},
 };
@@ -69,15 +68,6 @@ pub(crate) enum Cuda {
     )]
     Rtc13,
     #[strum(
-        serialize = "cupti-13",
-        props(
-            project = "nvidia-cuda-cupti/13.0.48",
-            windows = "nvperf_host.dll,cupti64_2025.3.0.dll",
-            linux = "libnvperf_host.so,libcupti.so.13"
-        )
-    )]
-    Profiler13,
-    #[strum(
         serialize = "nvjitlink-13",
         props(
             project = "nvidia-nvjitlink/13.0.39",
@@ -104,30 +94,6 @@ pub(crate) enum Cuda {
         )
     )]
     Solver12,
-    #[strum(
-        serialize = "cusparselt-0.8",
-        props(project = "nvidia-cusparselt-cu13/0.8.1", linux = "libcusparseLt.so.0")
-    )]
-    #[cfg(target_os = "linux")]
-    SparseLt08,
-    #[strum(
-        serialize = "cufile-1.15",
-        props(project = "nvidia-cufile/1.15.1.6", linux = "libcufile.so.0")
-    )]
-    #[cfg(target_os = "linux")]
-    File115,
-    #[strum(
-        serialize = "nccl-2.29",
-        props(project = "nvidia-nccl-cu13/2.29.7", linux = "libnccl.so.2")
-    )]
-    #[cfg(target_os = "linux")]
-    Collective229,
-    #[strum(
-        serialize = "nvshmem-3.4",
-        props(project = "nvidia-nvshmem-cu13/3.4.5", linux = "libnvshmem_host.so.3")
-    )]
-    #[cfg(target_os = "linux")]
-    SharedMemory34,
 }
 
 impl Cuda {
@@ -193,7 +159,7 @@ impl Package for Cuda {
             move |stage| async move {
                 let url = wheel(project, Platform::host()?).await?;
                 let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
-                Transfer::new()?.fetch(&url, archive.path()).await?;
+                download::fetch(&url, archive.path()).await?;
                 extract(
                     archive.path(),
                     &stage,
@@ -211,7 +177,7 @@ impl RuntimePackage for Cuda {
     async fn activate(self) -> Result<()> {
         let directory = self.install().await?;
         for library in self.library_paths(&directory)? {
-            loader::load(library)?;
+            loader::load(library, false)?;
         }
         Ok(())
     }

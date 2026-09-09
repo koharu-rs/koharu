@@ -1,0 +1,41 @@
+---
+title: 'Settings'
+description: 'Find the controls for appearance, processors, providers, translation, and fonts.'
+icon: 'gear'
+---
+
+Open **File → Settings** or the settings button on the project screen. Pipeline, provider, translation, and typesetting changes save automatically after a short delay.
+
+## Appearance
+
+Choose **Light**, **Dark**, or **System**, and the desktop interface language. These settings do not change page rendering or the translation target language.
+
+## Pipeline
+
+Choose detection, OCR, and inpainting processors. The selected processor exposes its own options, such as class thresholds or generative prompts. Processor profiles are retained independently. Saving pipeline settings unloads any loaded model.
+
+## Providers
+
+Configure a connection listed in [translation providers](/en/models/providers). Credentials use the operating system credential service; URLs and other non-secret options use the shared configuration. Provider changes refresh model discovery.
+
+## Translation
+
+Choose the provider and model, local quantization, target language, and instructions. Generation controls include sampling, repetition penalties, maximum tokens, reasoning, and image input.
+
+The canvas processing selector exposes the frequently changed model and output fields. See [translation settings](/en/models/translation) for their effects.
+
+## Typesetting
+
+Set the ordered default font-family stack. Koharu tries these families when a preferred family cannot supply usable glyphs, then uses system fallback. Individual text layers still own their typography.
+
+## Shortcuts
+
+Assign one character to Select, Text, Brush, Eraser, Color picker, Remove, Pan, and Fit Window. Custom tool bindings apply to the running session only; they are not saved and reset to the defaults when Koharu restarts.
+
+<Note>
+  Pipeline, provider, typesetting, Agent, and HTTP timeout configuration live in
+  `~/.koharu/config.toml`; translation settings are part of the pipeline section. Keep credentials
+  separate and use the Settings UI instead of hand-editing secrets into the file.
+</Note>
+
+See [data locations](/en/reference/data) for project and cache storage.

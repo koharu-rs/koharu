@@ -14,7 +14,7 @@ extern "C" {
 typedef torch::Tensor *tensor;
 typedef torch::Scalar *scalar;
 typedef torch::optim::Optimizer *optimizer;
-typedef torch::jit::script::Module *module;
+typedef torch::jit::script::Module *torch_module;
 typedef torch::jit::IValue *ivalue;
 #define PROTECT(x) \
   try { \
@@ -26,7 +26,7 @@ typedef torch::jit::IValue *ivalue;
 typedef void *tensor;
 typedef void *optimizer;
 typedef void *scalar;
-typedef void *module;
+typedef void *torch_module;
 typedef void *ivalue;
 #endif
 
@@ -75,13 +75,16 @@ void at_copy_(tensor dst, tensor src);
 void at_print(tensor);
 char *at_to_string(tensor, int line_size);
 void at_save(tensor, const char *filename);
+void at_save_to_stream(tensor, void *stream_ptr);
 tensor at_load(const char *filename);
+tensor at_load_from_stream(void *stream_ptr);
 tensor at_load_image(const char *filename);
 tensor at_load_image_from_memory(const unsigned char *img_data, size_t img_size);
 int at_save_image(tensor, const char *filename);
 tensor at_resize_image(tensor, int w, int h);
 
 void at_save_multi(const tensor *tensors, const char *const *tensor_names, int ntensors, const char *filename);
+void at_save_multi_to_stream(const tensor *tensors, const char *const *tensor_names, int ntensors, void *stream_ptr);
 /* [at_load_multi] takes as input an array of nullptr for [tensors]. */
 void at_load_multi(tensor *tensors, const char *const *tensor_names, int ntensors, const char *filename);
 /* [at_load_multi_] takes as input an array of allocation [tensors]. */
@@ -91,6 +94,23 @@ void at_loadz_callback(const char *filename, void *data, void (*f)(void *, const
 void at_loadz_callback_with_device(const char *filename, void *data, void (*f)(void *, const char *, tensor), int device_id);
 void at_load_callback(const char *filename, void *data, void (*f)(void *, const char *, tensor));
 void at_load_callback_with_device(const char *filename, void *data, void (*f)(void *, const char *, tensor), int device_id);
+void at_load_from_stream_callback(void *stream_ptr, void *data, void (*f)(void *, const char *, tensor), bool enable_device_id, int device_id);
+
+typedef void (*tch_stream_destructor_callback)(void *);
+typedef bool (*tch_write_stream_callback)(void *, const uint8_t *, size_t, size_t *);
+typedef bool (*tch_stream_position_callback)(void *, uint64_t *);
+typedef bool (*tch_stream_seek_start_callback)(void *, uint64_t, uint64_t *);
+typedef bool (*tch_stream_seek_end_callback)(void *, int64_t, uint64_t *);
+typedef bool (*tch_read_stream_callback)(void *, uint8_t *, size_t, size_t *);
+
+void at_set_stream_callbacks(
+    tch_stream_destructor_callback write_destructor,
+    tch_write_stream_callback write,
+    tch_stream_destructor_callback read_destructor,
+    tch_stream_position_callback stream_position,
+    tch_stream_seek_start_callback seek_start,
+    tch_stream_seek_end_callback seek_end,
+    tch_read_stream_callback read);
 
 int at_get_num_interop_threads();
 
@@ -194,40 +214,40 @@ int atc_user_enabled_cudnn();
 void atc_set_user_enabled_cudnn(int b);
 void atc_set_benchmark_cudnn(int b);
 
-module atm_load(const char *);
-module atm_load_on_device(const char *, int device);
-module atm_load_str(const char *, size_t sz);
-module atm_load_str_on_device(const char *, size_t sz, int device);
-tensor atm_forward(module, const tensor *tensors, int ntensors);
-ivalue atm_forward_(module,
+torch_module atm_load(const char *);
+torch_module atm_load_on_device(const char *, int device);
+torch_module atm_load_str(const char *, size_t sz);
+torch_module atm_load_str_on_device(const char *, size_t sz, int device);
+tensor atm_forward(torch_module, const tensor *tensors, int ntensors);
+ivalue atm_forward_(torch_module,
                     const ivalue *ivalues,
                     int nivalues);
-tensor atm_method(module,
+tensor atm_method(torch_module,
                   const char *method_name,
                   const tensor *tensors,
                   int ntensors);
-ivalue atm_method_(module,
+ivalue atm_method_(torch_module,
                    const char *method_name,
                    const ivalue *ivalues,
                    int nivalues);
-ivalue atm_create_class_(module,
+ivalue atm_create_class_(torch_module,
                    const char *clz_name,
                    const ivalue *ivalues,
                    int nivalues);
-void atm_eval(module);
-void atm_train(module);
-void atm_free(module);
-void atm_to(module m, int device, int dtype, bool non_blocking);
-void atm_save(module m, const char*);
+void atm_eval(torch_module);
+void atm_train(torch_module);
+void atm_free(torch_module);
+void atm_to(torch_module m, int device, int dtype, bool non_blocking);
+void atm_save(torch_module m, const char*);
 int atm_get_profiling_mode();
 void atm_set_profiling_mode(int);
 void atm_fuser_cuda_set_enabled(bool);
 bool atm_fuser_cuda_is_enabled();
-void atm_named_parameters(module, void *data, void (*f)(void *, const char *, tensor));
+void atm_named_parameters(torch_module, void *data, void (*f)(void *, const char *, tensor));
 
 // This function has to be followed by a call to atm_end_tracing.
-module atm_create_for_tracing(const char *modl_name, const tensor *inputs, int ninputs);
-void atm_end_tracing(module m, const char *fn_name, const tensor *outputs, int noutputs);
+torch_module atm_create_for_tracing(const char *modl_name, const tensor *inputs, int ninputs);
+void atm_end_tracing(torch_module m, const char *fn_name, const tensor *outputs, int noutputs);
 
 ivalue ati_none();
 ivalue ati_tensor(tensor);

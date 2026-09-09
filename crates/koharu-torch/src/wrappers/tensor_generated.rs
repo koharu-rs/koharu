@@ -6162,14 +6162,6 @@ impl Tensor {
         self.f_alias_copy_out(out).unwrap()
     }
 
-    pub fn align_as(&self, other: &Tensor) -> Tensor {
-        self.f_align_as(other).unwrap()
-    }
-
-    pub fn align_tensors<T: Borrow<Tensor>>(tensors: &[T]) -> Vec<Tensor> {
-        Tensor::f_align_tensors(tensors).unwrap()
-    }
-
     pub fn all(&self) -> Tensor {
         self.f_all().unwrap()
     }

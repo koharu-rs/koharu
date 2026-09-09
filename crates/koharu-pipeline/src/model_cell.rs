@@ -20,6 +20,11 @@ impl<M> ModelCell<M> {
     {
         let mut model = self.model.lock().await;
         if model.is_none() {
+            let _metric = tracing::info_span!(
+                target: "koharu_metrics",
+                "model_load",
+                resource = "model",
+            );
             *model = Some(load().await?);
         }
         Ok(())

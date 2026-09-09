@@ -1,13 +1,9 @@
 'use client'
 
-import {
-  InferenceControl,
-  pipelineStages,
-  type PipelineScope,
-} from '@/components/editor/InferenceControl'
+import { InferenceControl } from '@/components/editor/InferenceControl'
 import { call } from '@/lib/backend'
 import { usePage } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
+import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { commands, type Scope, type Stage } from '@koharu/bridge/protocol'
 
 export function CanvasCommandBar() {

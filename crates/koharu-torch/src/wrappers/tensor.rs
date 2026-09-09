@@ -1,3 +1,4 @@
+use super::stream::{read_stream, write_stream};
 use super::utils::{path_to_cstring, ptr_to_string};
 use super::{
     device::{Cuda, Device},
@@ -8,6 +9,7 @@ use crate::TchError;
 use koharu_torch_sys::*;
 use libc::{c_char, c_int, c_void};
 use std::borrow::Borrow;
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 
 /// A tensor object.
@@ -549,12 +551,28 @@ impl Tensor {
         Ok(Tensor { c_tensor })
     }
 
+    /// Loads a tensor from a stream.
+    ///
+    /// The file format is the same as the one used by the PyTorch C++ API.
+    pub fn load_from_stream<T: Read + Seek + 'static>(stream: T) -> Result<Tensor, TchError> {
+        let c_tensor = unsafe_torch_err!(at_load_from_stream(read_stream(stream)));
+        Ok(Tensor { c_tensor })
+    }
+
     /// Saves a tensor to a file.
     ///
     /// The file format is the same as the one used by the PyTorch C++ API.
     pub fn save<T: AsRef<Path>>(&self, path: T) -> Result<(), TchError> {
         let path = path_to_cstring(path)?;
         unsafe_torch_err!(at_save(self.c_tensor, path.as_ptr()));
+        Ok(())
+    }
+
+    /// Saves a tensor to a stream.
+    ///
+    /// The file format is the same as the one used by the PyTorch C++ API.
+    pub fn save_to_stream<T: Write + 'static>(&self, stream: T) -> Result<(), TchError> {
+        unsafe_torch_err!(at_save_to_stream(self.c_tensor, write_stream(stream)));
         Ok(())
     }
 
@@ -581,6 +599,32 @@ impl Tensor {
             name_ptrs.as_ptr(),
             names.len() as i32,
             path.as_ptr(),
+        ));
+        Ok(())
+    }
+
+    /// Saves named tensors to a stream.
+    ///
+    /// The file format is the same as the one used by the PyTorch C++ API.
+    pub fn save_multi_to_stream<S: AsRef<str>, T: AsRef<Tensor>, W: Write + 'static>(
+        named_tensors: &[(S, T)],
+        stream: W,
+    ) -> Result<(), TchError> {
+        let c_tensors = named_tensors
+            .iter()
+            .map(|tensor| tensor.1.as_ref().c_tensor)
+            .collect::<Vec<_>>();
+        let names = named_tensors
+            .iter()
+            .map(|tensor| tensor.0.as_ref().replace('.', "|").into_bytes())
+            .map(std::ffi::CString::new)
+            .collect::<Result<Vec<_>, _>>()?;
+        let name_ptrs = names.iter().map(|name| name.as_ptr()).collect::<Vec<_>>();
+        unsafe_torch_err!(at_save_multi_to_stream(
+            c_tensors.as_ptr(),
+            name_ptrs.as_ptr(),
+            names.len() as i32,
+            write_stream(stream),
         ));
         Ok(())
     }
@@ -617,6 +661,40 @@ impl Tensor {
             device.c_int(),
         ));
         Ok(v)
+    }
+
+    /// Loads named tensors from a stream.
+    ///
+    /// The file format is the same as the one used by the PyTorch C++ API.
+    pub fn load_multi_from_stream<T: Read + Seek + 'static>(
+        stream: T,
+    ) -> Result<Vec<(String, Tensor)>, TchError> {
+        Self::load_multi_from_stream_impl(stream, None)
+    }
+
+    /// Loads named tensors from a stream to a device.
+    ///
+    /// The file format is the same as the one used by the PyTorch C++ API.
+    pub fn load_multi_from_stream_with_device<T: Read + Seek + 'static>(
+        stream: T,
+        device: Device,
+    ) -> Result<Vec<(String, Tensor)>, TchError> {
+        Self::load_multi_from_stream_impl(stream, Some(device))
+    }
+
+    fn load_multi_from_stream_impl<T: Read + Seek + 'static>(
+        stream: T,
+        device: Option<Device>,
+    ) -> Result<Vec<(String, Tensor)>, TchError> {
+        let mut tensors = Vec::new();
+        unsafe_torch_err!(at_load_from_stream_callback(
+            read_stream(stream),
+            &mut tensors as *mut _ as *mut c_void,
+            add_callback,
+            device.is_some(),
+            device.map_or(0, Device::c_int),
+        ));
+        Ok(tensors)
     }
 
     /// Loads some named tensors from a zip file

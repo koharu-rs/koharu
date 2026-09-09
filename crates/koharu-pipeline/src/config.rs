@@ -63,6 +63,7 @@ impl Serialize for PipelineConfig {
             OcrModel::PaddleOcrVl1_6 => "paddleocr-vl-1.6",
             OcrModel::MangaOcr => "manga-ocr",
             OcrModel::BaberuOcr => "baberu-ocr",
+            OcrModel::HayaiOcr => "hayai-ocr",
         };
         let inpainting = match &self.inpainting {
             InpaintingModel::LaMa {} => "lama",
@@ -124,6 +125,7 @@ impl<'de> Deserialize<'de> for PipelineConfig {
             "paddleocr-vl-1.6" => OcrModel::PaddleOcrVl1_6,
             "manga-ocr" => OcrModel::MangaOcr,
             "baberu-ocr" => OcrModel::BaberuOcr,
+            "hayai-ocr" => OcrModel::HayaiOcr,
             model => {
                 return Err(serde::de::Error::custom(format!(
                     "unsupported OCR model {model}"
@@ -231,7 +233,10 @@ impl PipelineConfig {
         let _ = self.inpainting()?;
         if !matches!(
             self.ocr,
-            OcrModel::PaddleOcrVl1_6 | OcrModel::MangaOcr | OcrModel::BaberuOcr
+            OcrModel::PaddleOcrVl1_6
+                | OcrModel::MangaOcr
+                | OcrModel::BaberuOcr
+                | OcrModel::HayaiOcr
         ) {
             bail!("unsupported OCR model")
         }
@@ -266,6 +271,8 @@ pub enum OcrModel {
     MangaOcr,
     #[serde(rename = "baberu-ocr")]
     BaberuOcr,
+    #[serde(rename = "hayai-ocr")]
+    HayaiOcr,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]

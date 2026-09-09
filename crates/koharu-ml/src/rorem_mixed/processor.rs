@@ -138,7 +138,7 @@ impl Processor {
         for (index, &masked) in mask.as_raw().iter().enumerate() {
             if masked == 0 {
                 let offset = index * 3;
-                output.as_mut()[offset..offset + 3]
+                output.as_flat_samples_mut().samples[offset..offset + 3]
                     .copy_from_slice(&original.as_raw()[offset..offset + 3]);
             }
         }

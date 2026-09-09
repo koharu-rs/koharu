@@ -11,7 +11,7 @@ use crate::backend::TryIntoDevice;
 
 use self::{model::Model, processor::Processor};
 
-model_repository!("mayocream/aot-inpainting" @ "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" {
+crate::model_repository!("mayocream/aot-inpainting" @ "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" {
     WEIGHTS = "model.safetensors"
 });
 

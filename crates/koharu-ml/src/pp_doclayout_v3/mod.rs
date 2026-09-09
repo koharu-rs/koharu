@@ -17,7 +17,7 @@ pub use self::{
 
 use self::model::Model;
 
-model_repository!("PaddlePaddle/PP-DocLayoutV3_safetensors" @ "97d101e6db2642e162a1d05392d1b0231c91033e" {
+crate::model_repository!("PaddlePaddle/PP-DocLayoutV3_safetensors" @ "97d101e6db2642e162a1d05392d1b0231c91033e" {
     CONFIG = "config.json",
     WEIGHTS = "model.safetensors",
     PROCESSOR = "preprocessor_config.json",

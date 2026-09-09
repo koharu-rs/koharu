@@ -16,7 +16,7 @@ jobs:
     name: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-2022, ubuntu-latest]
+        os: [macos-latest, windows-latest, ubuntu-latest, ubuntu-24.04-arm]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -38,7 +38,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: koharu-app
+          shared-key: koharu-app-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install macOS CEF helper targets
         if: startsWith(matrix.os, 'macos')
@@ -46,7 +46,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          key: ${{ matrix.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install
       - run: bun run build
       - name: Upload Artifact
@@ -55,7 +55,4 @@ jobs:
           name: koharu-${{ matrix.os }}
           path: |
             target/release/koharu*
-            target/release/koharu-torch.dll
-            target/release/libkoharu-torch.so
-            target/release/libkoharu-torch.dylib
           retention-days: 3

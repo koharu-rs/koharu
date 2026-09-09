@@ -12,7 +12,7 @@ pub use self::processor::Detection;
 
 use self::{config::Config, model::Model, processor::Processor};
 
-model_repository!("mayocream/coo-comic-onomatopoeia-safetensors" @ "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" {
+crate::model_repository!("mayocream/coo-comic-onomatopoeia-safetensors" @ "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" {
     WEIGHTS = "mtsv3/model.safetensors"
 });
 

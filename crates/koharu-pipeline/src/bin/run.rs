@@ -73,6 +73,8 @@ enum OcrChoice {
     MangaOcr,
     #[value(name = "baberu-ocr")]
     BaberuOcr,
+    #[value(name = "hayai-ocr")]
+    HayaiOcr,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -101,6 +103,7 @@ impl Arguments {
                 OcrChoice::PaddleOcrVl1_6 => OcrModel::PaddleOcrVl1_6,
                 OcrChoice::MangaOcr => OcrModel::MangaOcr,
                 OcrChoice::BaberuOcr => OcrModel::BaberuOcr,
+                OcrChoice::HayaiOcr => OcrModel::HayaiOcr,
             },
             translation: TranslationConfig {
                 model: ModelSelection {

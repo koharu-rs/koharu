@@ -12402,37 +12402,6 @@ impl Tensor {
         })
     }
 
-    pub fn f_align_as(&self, other: &Tensor) -> Result<Tensor, TchError> {
-        let mut c_tensors = [std::ptr::null_mut(); 1];
-        unsafe_torch_err!(atg_align_as(
-            c_tensors.as_mut_ptr(),
-            self.c_tensor,
-            other.c_tensor
-        ));
-        Ok(Tensor {
-            c_tensor: c_tensors[0],
-        })
-    }
-
-    pub fn f_align_tensors<T: Borrow<Tensor>>(tensors: &[T]) -> Result<Vec<Tensor>, TchError> {
-        let c_tensors = unsafe_torch_err!(atg_align_tensors(
-            ptr_list(tensors).as_ptr(),
-            tensors.len() as i32
-        ));
-        let mut r__ = vec![];
-        let mut i = 0;
-        loop {
-            let c__ = unsafe { *c_tensors.add(i) };
-            if c__.is_null() {
-                break;
-            }
-            r__.push(Tensor { c_tensor: c__ });
-            i += 1;
-        }
-        unsafe { libc::free(c_tensors as *mut libc::c_void) }
-        Ok(r__)
-    }
-
     pub fn f_all(&self) -> Result<Tensor, TchError> {
         let mut c_tensors = [std::ptr::null_mut(); 1];
         unsafe_torch_err!(atg_all(c_tensors.as_mut_ptr(), self.c_tensor));

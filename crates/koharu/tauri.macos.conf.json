@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/4af26a3f7f8b692d62cca549bbacd93f5ce90b41/crates/tauri-schema-generator/schemas/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/fe0e5155c12459f3250dd9ae5867dd627d7c8286/crates/tauri-schema-generator/schemas/config.schema.json",
   "identifier": "Koharu",
   "app": {
     "windows": [
@@ -23,8 +23,7 @@
   },
   "bundle": {
     "macOS": {
-      "entitlements": "./Entitlements.plist",
-      "frameworks": ["../../target/release/libkoharu-torch.dylib"]
+      "entitlements": "./Entitlements.plist"
     }
   }
 }

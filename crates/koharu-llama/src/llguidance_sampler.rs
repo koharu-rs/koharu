@@ -7,9 +7,8 @@ use std::ffi::c_void;
 use std::sync::Arc;
 
 use llguidance::Matcher;
-use toktrie::{ApproximateTokEnv, TokRxInfo, TokTrie};
+use toktrie::{ApproximateTokEnv, TokEnv, TokRxInfo, TokTrie};
 
-use crate::GrammarError;
 use crate::model::LlamaModel;
 use crate::sampling::LlamaSampler;
 use crate::token::LlamaToken;
@@ -21,10 +20,14 @@ struct LlgContext {
 
 /// Build a [`toktrie::TokEnv`] from a [`LlamaModel`]'s vocabulary.
 ///
-/// This mirrors the logic in upstream `llguidance.cpp` â€” for each token:
+/// Use this to construct and reuse an `llguidance::ParserFactory` for the model.
+/// Building the tokenizer environment walks and detokenizes the entire vocabulary,
+/// so callers should do it once per model rather than once per grammar.
+///
+/// This mirrors the logic in upstream `llguidance.cpp` — for each token:
 /// - Try normal detokenize (special=false)
 /// - If empty, detokenize with special=true and prefix with 0xFF marker byte
-fn build_tok_env(model: &LlamaModel) -> Arc<ApproximateTokEnv> {
+pub fn llguidance_build_tok_env(model: &LlamaModel) -> TokEnv {
     let n_vocab = model.n_vocab().cast_unsigned();
     let tok_eos = {
         let eot = unsafe { koharu_llama_sys::llama_vocab_eot(model.vocab_ptr()) };
@@ -35,10 +38,14 @@ fn build_tok_env(model: &LlamaModel) -> Arc<ApproximateTokEnv> {
         }
     };
     let info = TokRxInfo::new(n_vocab, tok_eos);
+    let mut eog_tokens = vec![tok_eos];
 
     let mut words = Vec::with_capacity(n_vocab as usize);
     for i in 0..n_vocab.cast_signed() {
         let token = LlamaToken(i);
+        if model.is_eog_token(token) && i.cast_unsigned() != tok_eos {
+            eog_tokens.push(i.cast_unsigned());
+        }
         let bytes = model
             .token_to_piece_bytes(token, 32, false, None)
             .unwrap_or_default();
@@ -59,7 +66,7 @@ fn build_tok_env(model: &LlamaModel) -> Arc<ApproximateTokEnv> {
         }
     }
 
-    let trie = TokTrie::from(&info, &words);
+    let trie = TokTrie::from(&info, &words).with_eos_tokens(&eog_tokens);
     Arc::new(ApproximateTokEnv::new(trie))
 }
 
@@ -76,6 +83,9 @@ unsafe extern "C" fn llg_accept(
     token: koharu_llama_sys::llama_token,
 ) {
     let ctx = unsafe { &mut *(*smpl).ctx.cast::<LlgContext>() };
+    if ctx.matcher.is_stopped() {
+        return;
+    }
     let _ = ctx.matcher.consume_token(token.cast_unsigned());
 }
 
@@ -91,7 +101,11 @@ unsafe extern "C" fn llg_apply(
     };
 
     let data = unsafe { std::slice::from_raw_parts_mut(cur_p.data, cur_p.size) };
-    mask.iter_unset_entries(|index| data[index].logit = f32::NEG_INFINITY);
+    for item in data.iter_mut() {
+        if !mask.is_allowed(item.id.cast_unsigned()) {
+            item.logit = f32::NEG_INFINITY;
+        }
+    }
 }
 
 unsafe extern "C" fn llg_reset(smpl: *mut koharu_llama_sys::llama_sampler) {
@@ -136,42 +150,16 @@ static mut LLG_SAMPLER_I: koharu_llama_sys::llama_sampler_i = koharu_llama_sys::
     copy_state: None,
 };
 
-/// Create an llguidance-based constrained decoding sampler.
-pub(crate) fn create_llg_sampler(
-    model: &LlamaModel,
-    grammar_kind: &str,
-    grammar_data: &str,
-) -> Result<LlamaSampler, GrammarError> {
-    let factory = model
-        .llguidance_factory
-        .get_or_init(|| {
-            let tok_env = build_tok_env(model);
-            let tok_env: Arc<dyn toktrie::TokenizerEnv + Sync> = tok_env;
-            llguidance::ParserFactory::new_simple(&tok_env).map_err(|_| GrammarError::NullGrammar)
-        })
-        .as_ref()
-        .map_err(|_| GrammarError::NullGrammar)?;
-    let grammar = llguidance::api::TopLevelGrammar::from_tagged_str(grammar_kind, grammar_data)
-        .map_err(|_| GrammarError::NullGrammar)?;
-
-    let parser = factory
-        .create_parser(grammar)
-        .map_err(|_| GrammarError::NullGrammar)?;
-
-    let matcher = Matcher::new(Ok(parser));
-
-    let ctx = Box::new(LlgContext { matcher });
-
-    let sampler = unsafe {
-        koharu_llama_sys::llama_sampler_init(
-            &raw mut LLG_SAMPLER_I,
-            Box::into_raw(ctx).cast::<c_void>(),
-        )
-    };
-
-    if sampler.is_null() {
-        Err(GrammarError::NullGrammar)
-    } else {
-        Ok(LlamaSampler { sampler })
+/// Wrap an already-built [`llguidance::Matcher`] in a llama.cpp sampler.
+impl From<Matcher> for LlamaSampler {
+    fn from(matcher: Matcher) -> Self {
+        let ctx = Box::new(LlgContext { matcher });
+        let sampler = unsafe {
+            koharu_llama_sys::llama_sampler_init(
+                &raw mut LLG_SAMPLER_I,
+                Box::into_raw(ctx).cast::<c_void>(),
+            )
+        };
+        LlamaSampler { sampler }
     }
 }

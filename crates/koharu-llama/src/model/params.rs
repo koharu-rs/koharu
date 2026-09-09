@@ -480,6 +480,9 @@ impl LlamaModelParams {
     #[must_use]
     pub fn with_no_alloc(mut self, no_alloc: bool) -> Self {
         self.params.no_alloc = no_alloc;
+        if no_alloc {
+            self.params.load_mode = koharu_llama_sys::LLAMA_LOAD_MODE_NONE;
+        }
         self
     }
 

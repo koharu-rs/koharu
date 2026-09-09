@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { orderedLanguageChoices } from '@/lib/translation'
@@ -46,21 +46,57 @@ export function OutputPicker({
   const changed =
     draft.targetLanguage !== targetLanguage || draft.instructions !== (instructions ?? '')
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const latest = useRef({ changed, disabled, draft, onChange, saving })
+  const submitted = useRef<OutputDraft | null>(null)
+  latest.current = { changed, disabled, draft, onChange, saving }
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
+
+  const submit = useCallback(
+    (next: OutputDraft) => {
+      submitted.current = next
+      onChange(next)
+    },
+    [onChange],
+  )
 
   useEffect(() => {
     if (!changed || saving || disabled || !draft.targetLanguage) return
-    saveTimer.current = setTimeout(() => onChange(draft), 350)
+    saveTimer.current = setTimeout(() => submit(draft), 350)
     return () => {
       clearTimeout(saveTimer.current)
       saveTimer.current = undefined
     }
-  }, [changed, disabled, draft, onChange, saving])
+  }, [changed, disabled, draft, saving, submit])
+
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimer.current)
+      const current = latest.current
+      if (
+        current.changed &&
+        !current.saving &&
+        !current.disabled &&
+        current.draft.targetLanguage &&
+        !sameDraft(submitted.current, current.draft)
+      ) {
+        current.onChange(current.draft)
+      }
+    },
+    [],
+  )
 
   const back = () => {
     clearTimeout(saveTimer.current)
     saveTimer.current = undefined
-    if (changed && !saving && !disabled && draft.targetLanguage) onChange(draft)
+    if (
+      changed &&
+      !saving &&
+      !disabled &&
+      draft.targetLanguage &&
+      !sameDraft(submitted.current, draft)
+    ) {
+      submit(draft)
+    }
     onBack()
   }
 
@@ -127,4 +163,8 @@ export function OutputPicker({
       </div>
     </div>
   )
+}
+
+function sameDraft(left: OutputDraft | null, right: OutputDraft): boolean {
+  return left?.targetLanguage === right.targetLanguage && left.instructions === right.instructions
 }

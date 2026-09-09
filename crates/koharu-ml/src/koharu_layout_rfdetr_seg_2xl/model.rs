@@ -1,8 +1,8 @@
 //! Inference-only RF-DETR Seg 2XL port for the KoharuLayout checkpoint.
 //!
-//! The module tree and forward order follow RF-DETR 1.7.0 exactly:
-//! https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/lwdetr.py
-//! https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/transformer.py
+//! The module tree and forward order follow RF-DETR upstream:
+//! https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/lwdetr.py
+//! https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/transformer.py
 
 use std::path::Path;
 
@@ -127,7 +127,7 @@ impl Model {
     }
 }
 
-// https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/backbone/backbone.py
+// https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/backbone/backbone.py
 #[derive(Debug)]
 struct Backbone {
     encoder: DinoBackbone,
@@ -147,7 +147,7 @@ impl Backbone {
     }
 }
 
-// https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/backbone/dinov2_with_windowed_attn.py
+// https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/backbone/dinov2_with_windowed_attn.py
 #[derive(Debug)]
 struct DinoBackbone {
     embeddings: DinoEmbeddings,
@@ -419,7 +419,7 @@ impl DinoMlp {
     }
 }
 
-// https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/backbone/projector.py
+// https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/backbone/projector.py
 #[derive(Debug)]
 struct MultiScaleProjector {
     stage: C2f,
@@ -539,7 +539,7 @@ impl ChannelLayerNorm {
     }
 }
 
-// https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/transformer.py
+// https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/transformer.py
 #[derive(Debug)]
 struct Transformer {
     decoder: TransformerDecoder,
@@ -582,22 +582,25 @@ impl Transformer {
             .output_norm
             .forward(&encoder.output.forward(&output_memory));
         let encoder_class = encoder.class_embed.forward(&encoded_memory);
-        let delta = encoder.bbox_embed.forward(&encoded_memory);
-        let encoder_boxes = Tensor::cat(
-            &[
-                delta.i((.., .., 0..2)) * output_proposals.i((.., .., 2..4))
-                    + output_proposals.i((.., .., 0..2)),
-                delta.i((.., .., 2..4)).exp() * output_proposals.i((.., .., 2..4)),
-            ],
-            -1,
-        );
         let topk = encoder_class
             .max_dim(-1, false)
             .0
             .topk(NUM_QUERIES, 1, true, true)
             .1
             .i(0);
-        let topk_boxes = encoder_boxes.i(0).index_select(0, &topk).unsqueeze(0);
+        let selected_memory = encoded_memory.i(0).index_select(0, &topk).unsqueeze(0);
+        let selected_proposals = output_proposals.i(0).index_select(0, &topk).unsqueeze(0);
+        // The encoder box MLP is token-pointwise. Latest upstream gathers ranked
+        // tokens first instead of evaluating and discarding every unselected box.
+        let delta = encoder.bbox_embed.forward(&selected_memory);
+        let topk_boxes = Tensor::cat(
+            &[
+                delta.i((.., .., 0..2)) * selected_proposals.i((.., .., 2..4))
+                    + selected_proposals.i((.., .., 0..2)),
+                delta.i((.., .., 2..4)).exp() * selected_proposals.i((.., .., 2..4)),
+            ],
+            -1,
+        );
 
         let learned_refpoints = refpoint_embed.unsqueeze(0);
         let references = Tensor::cat(
@@ -808,7 +811,7 @@ impl MultiheadAttention {
     }
 }
 
-// https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/ops/modules/ms_deform_attn.py
+// https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/ops/modules/ms_deform_attn.py
 #[derive(Debug)]
 struct MultiscaleDeformableAttention {
     sampling_offsets: nn::Linear,
@@ -991,7 +994,7 @@ fn sine_position_embedding(feature: &Tensor) -> Tensor {
         .to_kind(feature.kind())
 }
 
-// https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/heads/segmentation.py
+// https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/heads/segmentation.py
 #[derive(Debug)]
 struct SegmentationHead {
     blocks: Vec<DepthwiseConvBlock>,

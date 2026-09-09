@@ -1,0 +1,51 @@
+---
+title: 'Keyboard shortcuts'
+description: 'Default tools, navigation gestures, selection, and undo commands.'
+icon: 'keyboard'
+---
+
+Tool and editing shortcuts apply while a project is open and an input, textarea, or editable text region is not focused.
+
+## Tools
+
+| Tool         | Key |
+| ------------ | --- |
+| Select       | `V` |
+| Text         | `T` |
+| Brush        | `B` |
+| Eraser       | `E` |
+| Color picker | `I` |
+| Remove       | `J` |
+| Pan          | `H` |
+| Fit Window   | `0` |
+
+Change tool characters in **Settings → Shortcuts**.
+
+## Navigation
+
+| Action                             | Gesture                                      |
+| ---------------------------------- | -------------------------------------------- |
+| Pan temporarily                    | Hold `Space` or the middle button and drag   |
+| Pan                                | Scroll; `Shift` + scroll pans horizontally   |
+| Zoom at the pointer                | `Ctrl` + scroll                              |
+| Change brush diameter              | `Alt` + scroll with Brush, Eraser, or Remove |
+| Cancel gesture and clear selection | `Escape`                                     |
+| Fit the active page                | `0` by default                               |
+
+The active tool does not change while `Space` is held. Switching away from Koharu cancels an unfinished canvas gesture.
+
+## Editing
+
+| Action                          | Windows / Linux         | macOS                   |
+| ------------------------------- | ----------------------- | ----------------------- |
+| Undo                            | `Ctrl+Z`                | `Command+Z`             |
+| Redo                            | `Ctrl+Shift+Z`          | `Command+Shift+Z`       |
+| Select all editable page layers | `Ctrl+A`                | `Command+A`             |
+| Delete selected layers          | `Delete` or `Backspace` | `Delete` or `Backspace` |
+
+<Tip>
+  Use a unique character for each tool. If bindings conflict, the Fit Window key is checked first,
+  then the first matching tool in toolbar order wins. Custom bindings reset when Koharu restarts.
+</Tip>
+
+Shortcuts affect the desktop interface, not the exported page.

@@ -25,11 +25,10 @@ import {
 import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
 import { TranslationPreferences } from '@/components/preferences/TranslationPreferences'
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
-import { call, refreshPreferences, refreshTranslationModels } from '@/lib/backend'
+import { refreshPreferences, refreshTranslationModels, savePreferences } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
 import { receivePreferences, useKoharuStore, type ShortcutAction } from '@/lib/store'
 import {
-  commands,
   type PipelineConfig,
   type Preferences,
   type ProviderPreferences as ProviderSettings,
@@ -98,7 +97,7 @@ export function SettingsPage() {
       const generation = ++saveGeneration.current
       const pending = saveQueue.current
         .catch(() => undefined)
-        .then(() => call(commands.savePreferences, pipeline, providers, typesetting))
+        .then(() => savePreferences(pipeline, providers, typesetting))
       lastPending.current = { serialized, promise: pending }
       saveQueue.current = pending.then(
         () => undefined,

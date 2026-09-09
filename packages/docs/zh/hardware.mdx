@@ -1,0 +1,57 @@
+---
+title: '硬件与运行时'
+description: '了解设备选择、自动下载、缓存和内存使用。'
+icon: 'microchip'
+---
+
+Koharu 会下载所用功能需要的原生库与模型文件。运行发行版不需要安装完整的 CUDA 或 ROCm SDK。
+
+## 设备选择
+
+启动时会从可用后端中选择统一的 ML 设备：Apple 芯片上使用 Metal，其他环境按支持情况选择 CUDA、ROCm/HIP、Vulkan 或 CPU。只有 Torch、llama.cpp 和 diffusion 运行时都为某设备发布了软件包时才会选择它，因此操作系统、驱动和模型后端必须同时支持该路径。
+
+<Tabs>
+  <Tab title='NVIDIA'>
+    Windows 和 Linux 支持 CUDA 13.0。只有驱动报告 CUDA 13.0 或更新版本，且 GPU 计算能力达到 7.5
+    或更新时，Koharu 才会选择 CUDA 设备，即需要 Turing 架构或更新的 GPU，以及 R580
+    系列或更新的驱动。查看 NVIDIA
+    的[驱动与架构对应表](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)并[下载驱动](https://www.nvidia.com/en-us/drivers/)。
+  </Tab>
+  <Tab title='AMD'>
+    ROCm/HIP 支持取决于具体 GPU、系统与驱动的组合。安装兼容的 [AMD
+    驱动](https://www.amd.com/en/support)，Koharu 会自动获取需要的 ROCm 运行时。平台要求请查看 AMD
+    的[兼容性表](https://rocm.docs.amd.com/en/docs-10.0.0/compatibility/compatibility-matrix.html)。
+  </Tab>
+  <Tab title='Apple 芯片'>Apple 芯片 macOS 上受支持的本地推理使用 Metal。</Tab>
+  <Tab title='Vulkan 与 CPU'>
+    在 Windows 和 Linux 上，Vulkan 可为 llama.cpp 和 diffusion
+    模型（例如本地翻译、PaddleOCR-VL、FLUX.2 Klein 和 RORem）提供加速。Torch 没有 Vulkan
+    构建，因此在只有 Vulkan 的机器上，检测、其他 OCR 模型、LaMa 和 AOT 会在 CPU
+    上运行。如果没有完整的加速路径能初始化，Koharu 会回退到 CPU。CPU 推理无需 GPU SDK，但速度较慢。
+  </Tab>
+</Tabs>
+
+<Note>
+  编辑器画布使用内置 CEF WebView 的 WebGPU。即使 ML 推理在 CPU 上运行，画布仍需要可用的 WebGPU
+  适配器和显卡驱动。
+</Note>
+
+## 下载与缓存
+
+| 数据                                     | 获取时机               |
+| ---------------------------------------- | ---------------------- |
+| Torch、llama.cpp、diffusion 和后端运行时 | 初始化相应运行时时     |
+| 固定版本的模型权重                       | 首次使用所选处理模型时 |
+| 本地 GGUF 量化文件                       | 选择并使用该模型文件时 |
+
+在 macOS 和 Linux 上，软件包位于系统缓存目录的 `koharu/packages`；在 Windows 上，位于 Koharu 安装目录内的 `store` 目录。项目位于 `Documents/Koharu`，设置位于 `~/.koharu/config.toml`。详见[数据位置](/zh/reference/data)。
+
+下载会先暂存，再发布到缓存。中断后可以在下次启动或使用模型时重试。
+
+## 内存与模型驻留
+
+页面栏底部的资源监视器显示进程和系统内存、CPU 使用率，以及所选设备的利用率与内存。模型在首次使用时加载，并保持加载供后续阶段使用。某阶段因内存不足失败时，Koharu 会卸载其他阶段的模型并重试该阶段一次。保存设置会卸载模型，下次运行时会重新加载。
+
+从中等量化开始。较小的文件通常更省内存，但可能影响质量。磁盘能存下模型，并不代表设备内存也能容纳它。
+
+启动失败时，检查软件包仓库访问与驱动，重试一次。如果仍然失败，保留完整错误并查看[故障排除](/zh/reference/troubleshooting)。

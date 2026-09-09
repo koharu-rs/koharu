@@ -23,7 +23,9 @@ jobs:
             args: '--target aarch64-apple-darwin'
           - platform: 'ubuntu-latest'
             args: ''
-          - platform: 'windows-2022'
+          - platform: 'ubuntu-24.04-arm'
+            args: ''
+          - platform: 'windows-latest'
             args: ''
 
     runs-on: ${{ matrix.platform }}
@@ -37,7 +39,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: koharu-app
+          shared-key: koharu-app-${{ matrix.platform }}
           # Main-branch builds own the shared dependency cache.
           save-if: false
 
@@ -63,7 +65,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          key: ${{ matrix.platform }}-bun-${{ hashFiles('**/bun.lock') }}
 
       - name: Install dependencies
         run: bun install
@@ -128,8 +130,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
-          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
-          GA_API_SECRET: ${{ secrets.GA_API_SECRET }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
           tauriScript: cargo tauri

@@ -5,14 +5,11 @@
   ],
   "scripts": {
     "tauri": "cargo tauri",
-    "postinstall": "cargo install --git https://github.com/tauri-apps/tauri --branch feat/cef --locked tauri-cli",
+    "postinstall": "cargo install --git https://github.com/tauri-apps/tauri --rev fe0e5155c12459f3250dd9ae5867dd627d7c8286 --locked tauri-cli",
     "predev": "kill-port 3000",
-    "dev": "cargo tauri dev --features default",
+    "dev": "cargo tauri dev",
     "build": "cargo tauri build --no-bundle",
-    "ui:dev": "bun run --filter @koharu/bridge build:dev && bun run --parallel --filter '@koharu/*' dev",
-    "ui:build": "bun run --filter @koharu/bridge build && bun run --filter @koharu/app build",
-    "docs:dev": "cd docs && uvx --from zensical==0.0.43 zensical serve",
-    "docs:build": "cd docs && uvx --from zensical==0.0.43 zensical build",
+    "docs": "bun run --filter @koharu/docs dev",
     "lint": "bun run --filter '@koharu/*' lint",
     "test": "bun run --filter @koharu/app test",
     "sponsors": "cd .github/sponsorkit && sponsorkit --force",
@@ -20,11 +17,11 @@
     "check": "oxfmt --check packages tests package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "git-cliff": "^2.13.1",
     "kill-port": "^2.0.1",
-    "oxfmt": "^0.56.0",
-    "sponsorkit": "^17.1.1",
-    "typescript": "^6.0.3"
+    "oxfmt": "^0.65.0",
+    "sponsorkit": "^18.0.0",
+    "typescript": "^7.0.2"
   }
 }

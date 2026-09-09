@@ -1,0 +1,61 @@
+---
+title: 'ハードウェアとランタイム'
+description: 'デバイスの選択、ダウンロード、キャッシュの仕組みを確認します。'
+icon: 'microchip'
+---
+
+Koharu は使用する機能に必要なネイティブライブラリとモデルを取得します。リリース版の実行に CUDA や ROCm の完全な SDK は不要です。
+
+## デバイスの選択
+
+起動時に利用可能なバックエンドから共通の ML デバイスを選びます。Apple シリコンでは Metal、それ以外では対応状況に応じて CUDA、ROCm/HIP、Vulkan、CPU を使います。デバイスは Torch、llama.cpp、diffusion のすべてのランタイムがそのデバイス向けのパッケージを公開している場合にだけ選ばれるため、OS、ドライバー、モデルのバックエンドがすべて対応している必要があります。
+
+<Tabs>
+  <Tab title='NVIDIA'>
+    Windows と Linux で CUDA 13.0 を利用できます。Koharu が CUDA デバイスを選ぶのは、ドライバーが
+    CUDA 13.0 以降を報告し、GPU の compute capability が 7.5 以降の場合だけです。つまり Turing
+    世代以降の GPU と R580 系以降のドライバーが必要です。NVIDIA
+    の[対応表](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)と[ドライバー](https://www.nvidia.com/en-us/drivers/)を確認してください。
+  </Tab>
+  <Tab title='AMD'>
+    ROCm/HIP の対応は GPU、OS、ドライバーの組み合わせで決まります。対応する [AMD
+    ドライバー](https://www.amd.com/en/support)をインストールしてください。必要な ROCm ランタイムは
+    Koharu が自動取得します。プラットフォーム要件は AMD
+    の[互換性表](https://rocm.docs.amd.com/en/docs-10.0.0/compatibility/compatibility-matrix.html)を参照してください。
+  </Tab>
+  <Tab title='Apple シリコン'>
+    Apple シリコン搭載 macOS では、対応するローカル推論に Metal を使います。
+  </Tab>
+  <Tab title='Vulkan と CPU'>
+    Windows と Linux では、ローカル翻訳、PaddleOCR-VL、FLUX.2 Klein、RORem などの llama.cpp と
+    diffusion のモデルに Vulkan を使えます。Torch には Vulkan ビルドがないため、Vulkan
+    しか使えない環境では検出、その他の OCR モデル、LaMa、AOT は CPU
+    で動作します。アクセラレーターを初期化できない場合は CPU にフォールバックします。CPU 推論に GPU
+    SDK は不要ですが、処理は遅くなります。
+  </Tab>
+</Tabs>
+
+<Note>
+  キャンバスは組み込み CEF WebView の WebGPU を使います。ML 推論が CPU でも、動作する WebGPU
+  アダプターとグラフィックスドライバーが必要です。
+</Note>
+
+## 取得されるデータ
+
+| データ                                                | 必要になるタイミング               |
+| ----------------------------------------------------- | ---------------------------------- |
+| Torch、llama.cpp、diffusion、バックエンドのランタイム | 該当ランタイムの初期化時           |
+| バージョンを固定したモデルの重み                      | 選択した処理モデルの初回使用時     |
+| ローカル GGUF 量子化ファイル                          | そのファイルを選択して使用するとき |
+
+パッケージは macOS と Linux では OS キャッシュ内の `koharu/packages`、Windows では Koharu のインストールディレクトリ内の `store` ディレクトリに保存されます。プロジェクトは `Documents/Koharu`、設定は `~/.koharu/config.toml` に保存されます。[データの保存先](/ja/reference/data)も参照してください。
+
+ダウンロードは一時領域で準備してからキャッシュへ公開します。中断した場合は次の起動やモデル使用時に再試行できます。
+
+## メモリとモデルの常駐
+
+ページ一覧の下部にあるリソース表示で、プロセスとシステムのメモリ、CPU 使用率、選択したデバイスの使用率とメモリを確認できます。モデルは初回使用時にロードされ、後続の段階でも使えるようロードされたままになります。段階がメモリ不足で失敗すると、Koharu は他の段階のモデルをアンロードしてその段階を一度だけ再試行します。設定を保存するとモデルはアンロードされ、次の実行時に再ロードされます。
+
+まず中程度の量子化を選んでください。小さいファイルは通常メモリを節約できますが、品質との交換条件があります。ディスクに収まってもデバイスのメモリに収まるとは限りません。
+
+起動に失敗したら配布先への接続とドライバーを確認し、一度再試行します。繰り返す場合は完全なエラーを保存して[トラブルシューティング](/ja/reference/troubleshooting)へ進みます。

@@ -64,6 +64,7 @@ fn unload_other_models(requested: Stage, stages: &Stages) -> bool {
     for stage in Stage::ALL {
         if stage != requested && stages.unload(stage) {
             unloaded = true;
+            tracing::info!(target: "koharu_metrics", metric = "model_unload", stage = %stage);
             tracing::debug!(%stage, "unloaded model while recovering from memory pressure");
         }
     }

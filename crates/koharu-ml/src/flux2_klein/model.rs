@@ -52,20 +52,19 @@ impl Model {
 
 fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
     let use_accelerator = device.backend != Backend::Cpu;
+    let use_cuda = device.backend == Backend::Cuda;
     let keep_parameters_resident = use_accelerator && device.memory_free >= 20 * 1024 * 1024 * 1024;
     ContextParams {
         diffusion_model_path: Some(paths.transformer),
         llm_path: Some(paths.text_encoder),
         vae_path: Some(paths.vae),
         enable_mmap: true,
-        flash_attention: use_accelerator,
-        diffusion_flash_attention: use_accelerator,
+        flash_attention: use_cuda,
+        diffusion_flash_attention: use_cuda,
+        diffusion_conv_direct: use_cuda,
+        vae_conv_direct: use_cuda,
         vae_format: VaeFormat::Flux2,
-        backend: Some(if use_accelerator {
-            device.name.to_ascii_lowercase()
-        } else {
-            "cpu".to_owned()
-        }),
+        backend: Some(device.name.clone()),
         // The text encoder and denoiser run in separate phases. Cards with less
         // headroom keep source parameters in RAM; high-VRAM cards avoid repeated
         // staging by retaining both quantized models on the accelerator.

@@ -1,0 +1,64 @@
+---
+title: 'Hardware and runtimes'
+description: 'Choose a usable device and understand what Koharu downloads and caches.'
+icon: 'microchip'
+---
+
+Koharu downloads the native libraries and model files needed by the features you use. You do not need a full CUDA or ROCm SDK installation to run a release.
+
+## Device selection
+
+Startup chooses a shared ML device from the available backends: Metal on Apple silicon, then CUDA, ROCm/HIP, Vulkan, or CPU where supported. A device is selected only when the Torch, llama.cpp, and diffusion runtimes all publish a package for it, so the operating system, driver, and model backend must all support the selected path.
+
+<Tabs>
+  <Tab title='NVIDIA'>
+    CUDA 13.0 support is available on Windows and Linux. Koharu selects a CUDA device only when the
+    driver reports CUDA 13.0 or newer and the GPU has compute capability 7.5 or newer, which means a
+    Turing-class or newer GPU with an R580-series or newer driver. See NVIDIA's [driver and
+    architecture
+    matrix](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)
+    and [driver downloads](https://www.nvidia.com/en-us/drivers/).
+  </Tab>
+  <Tab title='AMD'>
+    ROCm/HIP support depends on the exact GPU, operating system, and driver. Install a compatible
+    [AMD driver](https://www.amd.com/en/support). Koharu resolves its required ROCm runtime packages
+    automatically. Check AMD's [compatibility
+    matrix](https://rocm.docs.amd.com/en/docs-10.0.0/compatibility/compatibility-matrix.html) for
+    platform requirements.
+  </Tab>
+  <Tab title='Apple silicon'>
+    Koharu uses Metal for supported local inference on Apple-silicon macOS.
+  </Tab>
+  <Tab title='Vulkan and CPU'>
+    Vulkan provides an accelerator option on Windows and Linux for llama.cpp and diffusion models,
+    such as local translation, PaddleOCR-VL, FLUX.2 Klein, and RORem. Torch has no Vulkan build, so
+    detection, the other OCR models, LaMa, and AOT run on CPU on a Vulkan-only machine. If no
+    complete accelerator path initializes, Koharu falls back to CPU. CPU inference requires no GPU
+    SDK and is slower.
+  </Tab>
+</Tabs>
+
+<Note>
+  The editor canvas uses WebGPU in the embedded CEF webview. It still needs a working WebGPU adapter
+  and graphics driver when ML inference runs on CPU.
+</Note>
+
+## Downloads and caches
+
+| Data                                                      | When it is needed                       |
+| --------------------------------------------------------- | --------------------------------------- |
+| Torch, llama.cpp, diffusion, and backend runtime packages | When their runtime is initialized       |
+| Pinned or versioned model weights                         | On first use of the selected processor  |
+| Local GGUF quantizations                                  | When you choose and use that model file |
+
+On macOS and Linux, packages live under the operating system cache directory in `koharu/packages`. On Windows, they live in the `store` directory inside Koharu's installation directory. Projects live under `Documents/Koharu`; settings live in `~/.koharu/config.toml`. See [data locations](/en/reference/data).
+
+Downloads are staged before being published to the cache. Retry an interrupted download on the next launch or model use.
+
+## Memory and model residency
+
+The resource monitor in the page rail footer reports process and system memory, CPU usage, and the selected device's utilization and memory. Models load on first use and stay loaded for later stages. If a stage fails with an out-of-memory error, Koharu unloads the other stages' models and retries that stage once. Saving settings unloads models, so the next run reloads them.
+
+Start with a moderate local quantization. Smaller files usually need less memory, with a possible quality trade-off. A model that fits on disk can still exceed device memory.
+
+If startup fails, check network access to the package repositories, update the driver, and retry once. Capture the full error if it repeats and follow [troubleshooting](/en/reference/troubleshooting).

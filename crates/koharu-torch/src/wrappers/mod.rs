@@ -13,6 +13,7 @@ pub mod kind;
 pub(crate) mod layout;
 pub(crate) mod optimizer;
 pub(crate) mod scalar;
+pub(crate) mod stream;
 pub(crate) mod tensor;
 pub(crate) mod tensor_fallible_generated;
 pub(crate) mod tensor_generated;

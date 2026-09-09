@@ -18,7 +18,7 @@ pub use self::{
 
 use self::model::Model;
 
-model_repository!("mayocream/speech-bubble-segmentation" @ "387bc1e93f3d24702bc8609798b6a13b37420edc" {
+crate::model_repository!("mayocream/speech-bubble-segmentation" @ "387bc1e93f3d24702bc8609798b6a13b37420edc" {
     CONFIG = "config.json",
     WEIGHTS = "model.safetensors",
 });

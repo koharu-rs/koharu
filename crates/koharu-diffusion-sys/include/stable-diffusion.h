@@ -136,10 +136,13 @@ enum sd_type_t {
     // SD_TYPE_IQ4_NL_4_4 = 36,
     // SD_TYPE_IQ4_NL_4_8 = 37,
     // SD_TYPE_IQ4_NL_8_8 = 38,
-    SD_TYPE_MXFP4 = 39,  // MXFP4 (1 block)
-    SD_TYPE_NVFP4 = 40,  // NVFP4 (4 blocks, E4M3 scale)
-    SD_TYPE_Q1_0  = 41,
-    SD_TYPE_COUNT = 42,
+    SD_TYPE_MXFP4   = 39,  // MXFP4 (1 block)
+    SD_TYPE_NVFP4   = 40,  // NVFP4 (4 blocks, E4M3 scale)
+    SD_TYPE_Q1_0    = 41,
+    SD_TYPE_Q2_0    = 42,
+    SD_TYPE_F8_E4M3 = 43,
+    SD_TYPE_F8_E5M2 = 44,
+    SD_TYPE_COUNT   = 45,
 };
 
 enum sd_log_level_t {
@@ -443,6 +446,9 @@ typedef bool (*sd_graph_eval_callback_t)(struct ggml_tensor* t, bool ask, void* 
 
 SD_API void sd_set_log_callback(sd_log_cb_t sd_log_cb, void* data);
 SD_API void sd_set_progress_callback(sd_progress_cb_t cb, void* data);
+// In each sampling pass, a positive interval previews every Nth denoiser step, while a
+// negative interval previews only completed logical step -interval. Zero previews the final
+// completed step of the first sampling pass (base-resolution or high-noise).
 SD_API void sd_set_preview_callback(sd_preview_cb_t cb, enum preview_t mode, int interval, bool denoised, bool noisy, void* data);
 SD_API void sd_set_backend_eval_callback(sd_graph_eval_callback_t cb, void* data);
 SD_API int32_t sd_get_num_physical_cores();

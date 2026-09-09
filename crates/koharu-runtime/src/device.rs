@@ -1,35 +1,20 @@
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
 
 /// Compute backend used by a machine-learning device.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize, strum::Display)]
 pub enum Backend {
+    #[strum(serialize = "CPU")]
     Cpu,
+    #[strum(serialize = "CUDA")]
     Cuda,
+    #[strum(serialize = "ROCm")]
     Rocm,
+    #[strum(serialize = "Vulkan")]
     Vulkan,
+    #[strum(serialize = "MTL")]
     Metal,
+    #[strum(transparent)]
     Other(String),
-}
-
-impl Backend {
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Cpu => "CPU",
-            Self::Cuda => "CUDA",
-            Self::Rocm => "ROCm",
-            Self::Vulkan => "Vulkan",
-            Self::Metal => "Metal",
-            Self::Other(value) => value,
-        }
-    }
-}
-
-impl fmt::Display for Backend {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
 }
 
 /// Broad device category shared by native model backends.

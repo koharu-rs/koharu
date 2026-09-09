@@ -9,9 +9,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{
-    AppHandle, Cef, Manager as _, State,
+    AppHandle, Manager as _, State,
     ipc::{Channel, IpcResponse},
 };
+use tauri_runtime_cef::CefRuntime;
 
 use super::{
     ChannelExt as _, Error, processing,
@@ -136,6 +137,12 @@ pub(crate) async fn get_canvas_page_resource(
     ))
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "point_text_added",
+    skip_all,
+    fields(origin = "user", point_count = 1_u64)
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn add_point_text(
@@ -162,6 +169,12 @@ pub(crate) async fn add_point_text(
     })
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "text_box_added",
+    skip_all,
+    fields(origin = "user", entity_count = 1_u64)
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn add_text_box(
@@ -188,6 +201,12 @@ pub(crate) async fn add_text_box(
     })
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "paint_committed",
+    skip_all,
+    fields(origin = "user", point_count = points.len(), size = f64::from(brush.diameter)),
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn commit_paint(
@@ -213,6 +232,12 @@ pub(crate) async fn commit_paint(
     .await
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "erase_committed",
+    skip_all,
+    fields(origin = "user", point_count = points.len(), size = f64::from(diameter)),
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn commit_erase(
@@ -284,6 +309,12 @@ async fn commit_raster_stroke(
     })
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "transform_committed",
+    skip_all,
+    fields(origin = "user", entity_count = elements.len()),
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn commit_transform(
@@ -310,13 +341,19 @@ pub(crate) async fn commit_transform(
     Ok(Some(commit.revision))
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "inpaint_requested",
+    skip_all,
+    fields(origin = "user", point_count = points.len(), size = f64::from(diameter)),
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn commit_inpaint(
     expected_revision: Revision,
     points: Vec<Point>,
     diameter: f32,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
     project: State<'_, CurrentProject>,
 ) -> Result<Option<JobId>, Error> {
     if !diameter.is_finite() || diameter <= 0.0 || points.is_empty() {

@@ -89,19 +89,13 @@ impl Runtime {
             }
             previous = Some(node);
         }
-        plan.validate()?;
         Ok(Some(plan))
     }
 
-    /// Returns the one accelerator selected for every model backend.
-    #[must_use]
-    pub fn device(&self) -> Option<&Device> {
-        self.hardware.device()
-    }
-
-    /// Installs and activates packages sequentially in topological order.
+    /// Installs and activates packages, then returns the process-wide device.
     #[tracing::instrument(skip_all)]
-    pub async fn initialize(&self) -> Result<()> {
-        self.plan.initialize().await
+    pub async fn initialize(self) -> Result<Device> {
+        let device = self.hardware.device().cloned().unwrap_or_else(Device::cpu);
+        self.plan.initialize(device).await
     }
 }

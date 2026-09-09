@@ -92,7 +92,7 @@ impl InpaintModel {
                 for (index, value) in mask.as_raw().iter().enumerate() {
                     if *value < 127 {
                         let offset = index * 3;
-                        result.as_mut()[offset..offset + 3]
+                        result.as_flat_samples_mut().samples[offset..offset + 3]
                             .copy_from_slice(&image.as_raw()[offset..offset + 3]);
                     }
                 }
@@ -207,7 +207,7 @@ fn boxes_from_mask(mask: &GrayImage) -> Vec<[u32; 4]> {
     for y in 0..cropped_height as usize {
         let source_start = (top as usize + y) * width as usize + left as usize;
         let target_start = (y + 1) * padded_width as usize + 1;
-        padded.as_mut()[target_start..target_start + cropped_width as usize]
+        padded.as_flat_samples_mut().samples[target_start..target_start + cropped_width as usize]
             .copy_from_slice(&mask.as_raw()[source_start..source_start + cropped_width as usize]);
     }
 

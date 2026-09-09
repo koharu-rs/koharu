@@ -18,23 +18,9 @@ The code generation part for the C api on top of libtorch comes from
 
 ## Getting Started
 
-This fork builds a dynamic `koharu-torch` library against libtorch
-*v2.12.1* by default. The Rust crate does not link libtorch directly; callers
-load the shim at runtime before using tensor APIs:
-
-```rust
-unsafe {
-    koharu_torch::load_shim("path/to/koharu-torch.dll")?;
-}
-```
-
-The build script downloads libtorch into Cargo's target directory and copies the
-compiled shim to `target/debug` or `target/release`. If that shim already
-exists, the build script leaves it untouched and skips the C++ build.
-
-Use `koharu_torch::shim_library_name()` to get the platform-specific shim file
-name. The libtorch shared libraries must still be visible to the platform
-dynamic loader when the shim is loaded.
+This fork dynamically loads the `koharu-torch` library built against LibTorch
+*v2.13.0*. Koharu's runtime installs the matching native archive and activates
+LibTorch and its bundled shim before tensor APIs are used.
 
 ### Windows Specific Notes
 
@@ -290,11 +276,6 @@ See some details in [this thread](https://github.com/LaurentMazare/tch-rs/issues
 ### How to get this to work on a M1/M2 mac?
 
 Check this [issue](https://github.com/LaurentMazare/tch-rs/issues/488).
-
-### Compilation is slow, koharu-torch-sys seems to be rebuilt every time cargo gets run.
-See this [issue](https://github.com/LaurentMazare/tch-rs/issues/596), this could
-be caused by rust-analyzer not knowing about the proper environment variables
-like `LIBTORCH` and `LD_LIBRARY_PATH`.
 
 ### Using Rust/tch code from Python.
 It is possible to call Rust/tch code from Python via PyO3,

@@ -79,7 +79,7 @@ pub(crate) async fn translate(
             deepseek::translate(client, &providers.deepseek, model()?, generation, request).await
         }
         Provider::OpenAiCompatible => {
-            openai_compatible::compatible(
+            openai_compatible::translate(
                 client,
                 &providers.openai_compatible,
                 model()?,

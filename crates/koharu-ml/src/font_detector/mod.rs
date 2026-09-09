@@ -16,7 +16,7 @@ pub use processor::{FontPrediction, NamedFontPrediction, TextDirection, TopFont}
 
 use self::{model::Model, processor::Processor};
 
-model_repository!("fffonion/yuzumarker-font-detection" @ "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" {
+crate::model_repository!("fffonion/yuzumarker-font-detection" @ "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" {
     WEIGHTS = "yuzumarker-font-detection.safetensors",
     LABELS = "font-labels-ex.json",
 });

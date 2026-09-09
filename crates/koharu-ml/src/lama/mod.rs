@@ -13,7 +13,7 @@ use crate::backend::TryIntoDevice;
 pub use self::config::{HDStrategy, InpaintRequest};
 use self::{config::FFCResNetGeneratorConfig, model::Model, processor::InpaintModel};
 
-model_repository!("mayocream/lama-manga" @ "f91c85b26913b3e83f9877867b4c336da3675238" {
+crate::model_repository!("mayocream/lama-manga" @ "f91c85b26913b3e83f9877867b4c336da3675238" {
     WEIGHTS = "lama-manga.safetensors"
 });
 

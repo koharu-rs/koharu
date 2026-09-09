@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use strum::{Display, EnumIter, EnumProperty, EnumString, VariantArray};
 
 // Language catalog ported from:
-// https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/language.rs
+// https://github.com/koharu-rs/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/language.rs
 #[derive(
     Debug,
     Clone,

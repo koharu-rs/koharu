@@ -23,7 +23,7 @@ use self::{
     processor::{ImageSlicer, create_text_blocks},
 };
 
-model_repository!("ogkalu/comic-text-and-bubble-detector" @ "16e8a622f91fabc6b5b65c96d32d1183f8843546" {
+crate::model_repository!("ogkalu/comic-text-and-bubble-detector" @ "16e8a622f91fabc6b5b65c96d32d1183f8843546" {
     CONFIG = "config.json",
     PREPROCESSOR_CONFIG = "preprocessor_config.json",
     WEIGHTS = "model.safetensors",

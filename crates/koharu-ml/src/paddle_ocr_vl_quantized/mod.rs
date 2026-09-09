@@ -10,7 +10,7 @@ use crate::{
     paddle_ocr_vl::{MAX_NEW_TOKENS, PaddleOCRVLResult, PaddleOCRVLTask, REPETITION_PENALTY},
 };
 
-model_repository!("PaddlePaddle/PaddleOCR-VL-1.6-GGUF" @ "511b09642bb324401f15f97cc23bc67e8f0a291d" {
+crate::model_repository!("PaddlePaddle/PaddleOCR-VL-1.6-GGUF" @ "511b09642bb324401f15f97cc23bc67e8f0a291d" {
     MODEL = "PaddleOCR-VL-1.6-GGUF.gguf",
     PROJECTOR = "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
 });

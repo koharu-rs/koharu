@@ -12,7 +12,7 @@ pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
 
 use self::{model::Model, processor::Tokenizer};
 
-model_repository!("mayocream/manga-ocr" @ "4380edba990b959c508752350955350c1c80c31c" {
+crate::model_repository!("mayocream/manga-ocr" @ "4380edba990b959c508752350955350c1c80c31c" {
     CONFIG = "config.json",
     WEIGHTS = "model.safetensors",
     PROCESSOR = "preprocessor_config.json",
