@@ -49,7 +49,7 @@ impl Store {
     fn default_root() -> PathBuf {
         dirs::cache_dir()
             .unwrap_or_else(std::env::temp_dir)
-            .join("koharu")
+            .join("Koharu")
             .join("packages")
     }
 
