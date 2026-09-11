@@ -88,6 +88,42 @@ const textLayer: Layer = {
   automatic_region: null,
 }
 
+const secondLayer: Layer = {
+  ...textLayer,
+  id: 'second',
+  content: {
+    ...textLayer.content,
+    id: 'second-content',
+    translation: { text: 'Second', language: null },
+  },
+}
+
+const thirdLayer: Layer = {
+  ...textLayer,
+  id: 'third',
+  content: {
+    ...textLayer.content,
+    id: 'third-content',
+    translation: { text: 'Third', language: null },
+  },
+}
+
+const artworkLayer: Layer = {
+  type: 'artwork',
+  id: 'artwork',
+  parent: 'page',
+  geometry: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+    ],
+  },
+  visibility: { visible: true, opacity: 1 },
+  image: 'source',
+}
+
 const preferences: Preferences = {
   pipeline: {
     detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
@@ -759,42 +795,7 @@ describe('greenfield editor', () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
       ...page,
-      layers: [
-        ...page.layers,
-        {
-          ...textLayer,
-          id: 'second',
-          content: {
-            ...textLayer.content,
-            id: 'second-content',
-            translation: { text: 'Second', language: null },
-          },
-        },
-        {
-          type: 'artwork',
-          id: 'artwork',
-          parent: 'page',
-          geometry: {
-            points: [
-              { x: 0, y: 0 },
-              { x: 10, y: 0 },
-              { x: 10, y: 10 },
-              { x: 0, y: 10 },
-            ],
-          },
-          visibility: { visible: true, opacity: 1 },
-          image: 'source',
-        },
-        {
-          ...textLayer,
-          id: 'third',
-          content: {
-            ...textLayer.content,
-            id: 'third-content',
-            translation: { text: 'Third', language: null },
-          },
-        },
-      ],
+      layers: [...page.layers, secondLayer, artworkLayer, thirdLayer],
     }))
   }
 
