@@ -5045,6 +5045,7 @@ name = "koharu-translator"
 version = "0.81.10"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64 0.23.1",
  "clap",
  "fast_image_resize",
@@ -5055,15 +5056,18 @@ dependencies = [
  "koharu-ml",
  "koharu-runtime",
  "koharu-secrets",
+ "rand 0.10.2",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "specta",
  "strum",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]

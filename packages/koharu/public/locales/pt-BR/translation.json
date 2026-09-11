@@ -275,7 +275,8 @@
     "noResults": "Nenhum modelo corresponde à busca.",
     "search": "Buscar modelos",
     "title": "Escolher um modelo",
-    "useModel": "Usar {{model}} de {{provider}}"
+    "useModel": "Usar {{model}} de {{provider}}",
+    "degraded": "A descoberta de modelos não está disponível; mostrando a lista verificada."
   },
   "navigator": {
     "actionsFor": "Ações para {{page}}",
@@ -331,7 +332,8 @@
     "minimax": "Modelos de linguagem da MiniMax.",
     "openai": "Modelos de linguagem da OpenAI.",
     "openai-compatible": "Qualquer servidor que ofereça uma API compatível com a OpenAI.",
-    "openrouter": "Modelos roteados pelo OpenRouter."
+    "openrouter": "Modelos roteados pelo OpenRouter.",
+    "orcarouter": "Modelos roteados pelo gateway OrcaRouter."
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "Limpar credencial de {{provider}}",
+      "connectFailed": "Não foi possível conectar ao OrcaRouter.",
+      "connectDescription": "Autorize no navegador. Nenhum segredo de cliente é necessário.",
+      "reauth": "A autorização do OrcaRouter foi rejeitada. Conecte novamente.",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "Cancelar autorização",
+      "connecting": "Aguardando autorização…",
+      "connect": "Conectar com o OrcaRouter",
       "configured": "Configurado",
       "connections": "Conexões",
       "connectionsDescription": "As credenciais são armazenadas com segurança neste dispositivo.",

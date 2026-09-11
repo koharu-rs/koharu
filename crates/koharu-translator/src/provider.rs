@@ -8,7 +8,7 @@ use crate::{
     remote::{
         AtlasCloudConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
         GoogleCloudConfig, GrokConfig, LmStudioConfig, MiniMaxConfig, OpenAiCompatibleConfig,
-        OpenAiConfig, OpenRouterConfig,
+        OpenAiConfig, OpenRouterConfig, OrcaRouterConfig,
     },
 };
 
@@ -174,6 +174,12 @@ define_providers! {
         name: "OpenRouter",
         field: openrouter,
         config: OpenRouterConfig,
+    }
+    OrcaRouter {
+        id: "orcarouter",
+        name: "OrcaRouter",
+        field: orcarouter,
+        config: OrcaRouterConfig,
     }
     LmStudio {
         id: "lm-studio",

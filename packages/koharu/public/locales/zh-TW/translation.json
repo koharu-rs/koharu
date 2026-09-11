@@ -275,7 +275,8 @@
     "noResults": "沒有符合此搜尋的模型。",
     "search": "搜尋模型",
     "title": "選擇模型",
-    "useModel": "使用 {{provider}} 的 {{model}}"
+    "useModel": "使用 {{provider}} 的 {{model}}",
+    "degraded": "無法取得線上模型清單，顯示已驗證的清單。"
   },
   "navigator": {
     "actionsFor": "{{page}} 的操作",
@@ -331,7 +332,8 @@
     "minimax": "MiniMax 語言模型。",
     "openai": "OpenAI 語言模型。",
     "openai-compatible": "任何提供 OpenAI 相容 API 的伺服器。",
-    "openrouter": "透過 OpenRouter 路由的模型。"
+    "openrouter": "透過 OpenRouter 路由的模型。",
+    "orcarouter": "透過 OrcaRouter 閘道路由的模型。"
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "清除 {{provider}} 認證資訊",
+      "connectFailed": "無法連線到 OrcaRouter。",
+      "connectDescription": "在瀏覽器中授權。不需要用戶端密鑰。",
+      "reauth": "OrcaRouter 授權已被拒絕。請重新連接。",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "取消授權",
+      "connecting": "正在等待授權…",
+      "connect": "連接 OrcaRouter",
       "configured": "已設定",
       "connections": "連線",
       "connectionsDescription": "認證資訊會安全地儲存在此裝置上。",

@@ -275,7 +275,8 @@
     "noResults": "没有与此搜索匹配的模型。",
     "search": "搜索模型",
     "title": "选择模型",
-    "useModel": "使用 {{provider}} 的 {{model}}"
+    "useModel": "使用 {{provider}} 的 {{model}}",
+    "degraded": "无法获取在线模型列表，正在显示已验证的列表。"
   },
   "navigator": {
     "actionsFor": "{{page}} 的操作",
@@ -331,7 +332,8 @@
     "minimax": "MiniMax 语言模型。",
     "openai": "OpenAI 语言模型。",
     "openai-compatible": "任何提供 OpenAI 兼容 API 的服务器。",
-    "openrouter": "通过 OpenRouter 路由的模型。"
+    "openrouter": "通过 OpenRouter 路由的模型。",
+    "orcarouter": "通过 OrcaRouter 网关路由的模型。"
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "清除 {{provider}} 凭据",
+      "connectFailed": "无法连接到 OrcaRouter。",
+      "connectDescription": "在浏览器中授权。无需客户端密钥。",
+      "reauth": "OrcaRouter 授权已被拒绝。请重新连接。",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "取消授权",
+      "connecting": "正在等待授权…",
+      "connect": "连接 OrcaRouter",
       "configured": "已配置",
       "connections": "连接",
       "connectionsDescription": "凭据安全地存储在此设备上。",

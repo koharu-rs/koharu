@@ -4,6 +4,7 @@ import { Eraser } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { OrcaRouterAuthorization } from '@/components/preferences/OrcaRouterConnection'
 import {
   PreferencePage,
   PreferenceRow,
@@ -32,9 +33,11 @@ type BaseUrlConfig = ConfigWithSetting<ProviderConfig, 'base_url'>
 export function ProviderPreferences({
   value,
   onChange,
+  onConnected,
 }: {
   value: ProviderSettings
   onChange: (value: ProviderSettings) => void
+  onConnected?: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -57,9 +60,19 @@ export function ProviderPreferences({
               {entry.credential && (
                 <CredentialField
                   label={entry.name}
+                  // OrcaRouter exposes two ways in. Label the key field so it is
+                  // never confused with the browser authorization below it.
+                  method={
+                    entry.config.provider === 'orcarouter'
+                      ? t('settings.providers.apiMethod')
+                      : undefined
+                  }
                   value={entry.credential}
                   onChange={(credential) => onChange(replaceEntry(value, { ...entry, credential }))}
                 />
+              )}
+              {entry.config.provider === 'orcarouter' && (
+                <OrcaRouterAuthorization onConnected={onConnected} />
               )}
               {hasBaseUrl(entry.config) && (
                 <TextField
@@ -86,10 +99,12 @@ export function ProviderPreferences({
 
 function CredentialField({
   label,
+  method,
   value,
   onChange,
 }: {
   label: string
+  method?: string
   value: CredentialInput
   onChange: (value: CredentialInput) => void
 }) {
@@ -101,15 +116,16 @@ function CredentialField({
     else if (!value.configured || value.clear) setDraftValue('')
   }, [value.clear, value.configured, value.value])
   const configured = !value.clear && (value.configured || Boolean(draftValue))
+  const name = method ?? label
   return (
     <div className='grid gap-1'>
       <label htmlFor={inputId} className='text-[10px] text-muted-foreground'>
-        {t('settings.providers.credential')}
+        {name === label ? t('settings.providers.credential') : name}
       </label>
       <div className='flex gap-2'>
         <Input
           id={inputId}
-          aria-label={t('settings.providers.credentialLabel', { provider: label })}
+          aria-label={t('settings.providers.credentialLabel', { provider: name })}
           type='text'
           autoComplete='off'
           autoCapitalize='none'
@@ -130,7 +146,7 @@ function CredentialField({
             type='button'
             variant='outline'
             size='icon'
-            aria-label={t('settings.providers.clearCredential', { provider: label })}
+            aria-label={t('settings.providers.clearCredential', { provider: name })}
             onClick={() => {
               setDraftValue('')
               onChange({ configured: false, value: null, clear: true })

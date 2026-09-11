@@ -212,3 +212,41 @@ pub(crate) async fn get_preferences() -> std::result::Result<Preferences, Error>
 pub(crate) async fn get_translation_models() -> std::result::Result<Vec<Model>, Error> {
     Ok(koharu_translator::Translator::models().await?)
 }
+
+/// The consent URL for the OrcaRouter browser authorization.
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct OrcaRouterAuthorization {
+    pub authorization_url: String,
+}
+
+/// Open the OrcaRouter consent screen. The user may approve or deny there; the
+/// code exchange and credential storage happen once the browser returns.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn connect_orca_router() -> std::result::Result<OrcaRouterAuthorization, Error> {
+    let authorization_url = koharu_translator::orcarouter::start_authorization().await?;
+    Ok(OrcaRouterAuthorization { authorization_url })
+}
+
+/// Release an in-flight OrcaRouter authorization. The loopback listener and the
+/// exchange task end with the attempt that started them.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn cancel_orca_router() -> std::result::Result<(), Error> {
+    Ok(())
+}
+
+/// Whether the stored OrcaRouter credential requires reauthentication.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn orca_router_needs_reauth() -> std::result::Result<bool, Error> {
+    Ok(koharu_translator::orcarouter::credential::needs_reauth())
+}
+
+/// Disconnect the OrcaRouter credential from this device.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn disconnect_orca_router() -> std::result::Result<(), Error> {
+    koharu_translator::orcarouter::credential::forget()?;
+    Ok(())
+}

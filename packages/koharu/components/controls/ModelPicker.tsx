@@ -97,7 +97,12 @@ export function ModelPicker({
         className='max-h-64 min-w-0 overflow-hidden'
         viewportClassName='h-auto max-h-64 min-w-0 overscroll-contain'
       >
-        <div className='grid min-w-0 gap-0.5 py-0.5'>
+        <div
+          role='listbox'
+          aria-label={t('modelPicker.title')}
+          aria-expanded={results.length > 0}
+          className='grid min-w-0 gap-0.5 py-0.5'
+        >
           {results.map((model) => {
             const key = modelKey(model)
             const selected = value ? key === modelKey(value) : false

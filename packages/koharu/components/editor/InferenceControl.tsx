@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next'
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
 import { call, refreshTranslationModels, savePreferences } from '@/lib/backend'
+import { type EntryPoint, optionsFor, retainSelection } from '@/lib/providerCapabilities'
 import { pipelineStages, receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { modelKey, modelSelection, providerName } from '@/lib/translation'
 import {
@@ -111,7 +112,18 @@ function RuntimeSelector({
   const translation = preferences?.pipeline.translation ?? null
   const providers = preferences?.providers.entries ?? []
   const languages = preferences?.languages ?? []
-  const choices = availableModels(model, translationModels, providers)
+  // Translation uploads the page image when Vision is on. The selector is bound
+  // to the capability-filtered list, not the raw catalog, so an incompatible
+  // model can never be chosen — and an incompatible saved value is cleared.
+  const entryPoint: EntryPoint =
+    (translation?.generation?.vision ?? true)
+      ? { kind: 'multimodal', modality: 'image' }
+      : { kind: 'text' }
+  const choices = availableModels(
+    retainSelection(translationModels, entryPoint, model) ?? null,
+    optionsFor(translationModels, entryPoint),
+    providers,
+  )
   const modelLabel =
     choices.find((choice) => model && modelKey(choice) === modelKey(model))?.name ??
     (model ? (model.model ?? t('inference.providerDefault')) : t('inference.noModel'))

@@ -275,7 +275,8 @@
     "noResults": "No models match this search.",
     "search": "Search models",
     "title": "Choose a model",
-    "useModel": "Use {{model}} from {{provider}}"
+    "useModel": "Use {{model}} from {{provider}}",
+    "degraded": "Live model discovery is unavailable; showing the verified model list."
   },
   "navigator": {
     "actionsFor": "Actions for {{page}}",
@@ -331,7 +332,8 @@
     "minimax": "MiniMax language models.",
     "openai": "OpenAI language models.",
     "openai-compatible": "Any server exposing an OpenAI-compatible API.",
-    "openrouter": "Models routed through OpenRouter."
+    "openrouter": "Models routed through OpenRouter.",
+    "orcarouter": "Models routed through the OrcaRouter gateway."
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "Clear {{provider}} credential",
+      "connectFailed": "Could not connect to OrcaRouter.",
+      "connectDescription": "Authorize in your browser. No client secret is required.",
+      "reauth": "OrcaRouter authorization was rejected. Reconnect to continue.",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "Cancel authorization",
+      "connecting": "Waiting for authorization…",
+      "connect": "Connect with OrcaRouter",
       "configured": "Configured",
       "connections": "Connections",
       "connectionsDescription": "Credentials are stored securely on this device.",

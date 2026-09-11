@@ -275,7 +275,8 @@
     "noResults": "검색과 일치하는 모델이 없습니다.",
     "search": "모델 검색",
     "title": "모델 선택",
-    "useModel": "{{provider}}의 {{model}} 사용"
+    "useModel": "{{provider}}의 {{model}} 사용",
+    "degraded": "실시간 모델 목록을 가져올 수 없어 검증된 목록을 표시합니다."
   },
   "navigator": {
     "actionsFor": "{{page}} 작업",
@@ -331,7 +332,8 @@
     "minimax": "MiniMax 언어 모델입니다.",
     "openai": "OpenAI 언어 모델입니다.",
     "openai-compatible": "OpenAI 호환 API를 제공하는 모든 서버입니다.",
-    "openrouter": "OpenRouter를 통해 라우팅되는 모델입니다."
+    "openrouter": "OpenRouter를 통해 라우팅되는 모델입니다.",
+    "orcarouter": "OrcaRouter 게이트웨이를 통해 라우팅되는 모델."
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "{{provider}} 자격 증명 지우기",
+      "connectFailed": "OrcaRouter에 연결할 수 없습니다.",
+      "connectDescription": "브라우저에서 승인합니다. 클라이언트 시크릿은 필요하지 않습니다.",
+      "reauth": "OrcaRouter 승인이 거부되었습니다. 다시 연결하세요.",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "승인 취소",
+      "connecting": "승인을 기다리는 중…",
+      "connect": "OrcaRouter 연결",
       "configured": "설정됨",
       "connections": "연결",
       "connectionsDescription": "자격 증명은 이 기기에 안전하게 저장됩니다.",

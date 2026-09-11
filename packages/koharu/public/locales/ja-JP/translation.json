@@ -275,7 +275,8 @@
     "noResults": "この検索に一致するモデルはありません。",
     "search": "モデルを検索",
     "title": "モデルを選択",
-    "useModel": "{{provider}}の{{model}}を使用"
+    "useModel": "{{provider}}の{{model}}を使用",
+    "degraded": "モデル一覧を取得できないため、検証済みの一覧を表示しています。"
   },
   "navigator": {
     "actionsFor": "{{page}}の操作",
@@ -331,7 +332,8 @@
     "minimax": "MiniMax 言語モデル。",
     "openai": "OpenAI の言語モデル。",
     "openai-compatible": "OpenAI 互換 API を公開する任意のサーバー。",
-    "openrouter": "OpenRouter 経由で提供されるモデル。"
+    "openrouter": "OpenRouter 経由で提供されるモデル。",
+    "orcarouter": "OrcaRouter ゲートウェイ経由で提供されるモデル。"
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "{{provider}}の認証情報を消去",
+      "connectFailed": "OrcaRouter に接続できませんでした。",
+      "connectDescription": "ブラウザーで認証します。クライアントシークレットは不要です。",
+      "reauth": "OrcaRouter の認証が拒否されました。再接続してください。",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "認証をキャンセル",
+      "connecting": "認証を待機しています…",
+      "connect": "OrcaRouter に接続",
       "configured": "設定済み",
       "connections": "接続",
       "connectionsDescription": "認証情報はこのデバイスに安全に保存されます。",

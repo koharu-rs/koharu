@@ -275,7 +275,8 @@
     "noResults": "Нет моделей, соответствующих поиску.",
     "search": "Искать модели",
     "title": "Выбрать модель",
-    "useModel": "Использовать {{model}} от {{provider}}"
+    "useModel": "Использовать {{model}} от {{provider}}",
+    "degraded": "Обнаружение моделей недоступно; показан проверенный список."
   },
   "navigator": {
     "actionsFor": "Действия для {{page}}",
@@ -331,7 +332,8 @@
     "minimax": "Языковые модели MiniMax.",
     "openai": "Языковые модели OpenAI.",
     "openai-compatible": "Любой сервер с API, совместимым с OpenAI.",
-    "openrouter": "Модели, маршрутизируемые через OpenRouter."
+    "openrouter": "Модели, маршрутизируемые через OpenRouter.",
+    "orcarouter": "Модели, маршрутизируемые через шлюз OrcaRouter."
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "Удалить учётные данные {{provider}}",
+      "connectFailed": "Не удалось подключиться к OrcaRouter.",
+      "connectDescription": "Авторизуйтесь в браузере. Секрет клиента не требуется.",
+      "reauth": "Авторизация OrcaRouter отклонена. Подключитесь снова.",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "Отменить авторизацию",
+      "connecting": "Ожидание авторизации…",
+      "connect": "Подключить OrcaRouter",
       "configured": "Настроено",
       "connections": "Подключения",
       "connectionsDescription": "Учётные данные безопасно хранятся на этом устройстве.",

@@ -275,7 +275,8 @@
     "noResults": "Bu aramayla eşleşen model yok.",
     "search": "Model ara",
     "title": "Model seç",
-    "useModel": "{{provider}} sağlayıcısından {{model}} kullan"
+    "useModel": "{{provider}} sağlayıcısından {{model}} kullan",
+    "degraded": "Canlı model keşfi kullanılamıyor; doğrulanmış liste gösteriliyor."
   },
   "navigator": {
     "actionsFor": "{{page}} için eylemler",
@@ -331,7 +332,8 @@
     "minimax": "MiniMax dil modelleri.",
     "openai": "OpenAI dil modelleri.",
     "openai-compatible": "OpenAI uyumlu API sunan herhangi bir sunucu.",
-    "openrouter": "OpenRouter üzerinden yönlendirilen modeller."
+    "openrouter": "OpenRouter üzerinden yönlendirilen modeller.",
+    "orcarouter": "OrcaRouter ağ geçidi üzerinden yönlendirilen modeller."
   },
   "resources": {
     "cpu": "CPU",
@@ -408,6 +410,14 @@
     },
     "providers": {
       "clearCredential": "{{provider}} kimlik bilgisini temizle",
+      "connectFailed": "OrcaRouter'a bağlanılamadı.",
+      "connectDescription": "Tarayıcınızda yetkilendirin. İstemci sırrı gerekmez.",
+      "reauth": "OrcaRouter yetkilendirmesi reddedildi. Yeniden bağlanın.",
+      "apiMethod": "OrcaRouter - API",
+      "authMethod": "OrcaRouter - Auth",
+      "cancelAuthorization": "Yetkilendirmeyi iptal et",
+      "connecting": "Yetkilendirme bekleniyor…",
+      "connect": "OrcaRouter ile bağlan",
       "configured": "Yapılandırıldı",
       "connections": "Bağlantılar",
       "connectionsDescription": "Kimlik bilgileri bu cihazda güvenli bir şekilde saklanır.",

@@ -8,14 +8,52 @@ The translation picker combines local and hosted backends. A selection records t
 
 ## Available connections
 
-| Connection          | Providers                                                                |
-| ------------------- | ------------------------------------------------------------------------ |
-| Local inference     | GGUF models through llama.cpp                                            |
-| Hosted models       | Atlas Cloud, OpenAI, Gemini, Claude, Grok, MiniMax, DeepSeek, OpenRouter |
-| Compatible servers  | LM Studio and OpenAI-compatible endpoints                                |
-| Machine translation | DeepL, Google Cloud Translation, Caiyun                                  |
+| Connection          | Providers                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| Local inference     | GGUF models through llama.cpp                                                         |
+| Hosted models       | Atlas Cloud, OpenAI, Gemini, Claude, Grok, MiniMax, DeepSeek, OpenRouter, OrcaRouter |
+| Compatible servers  | LM Studio and OpenAI-compatible endpoints                                             |
+| Machine translation | DeepL, Google Cloud Translation, Caiyun                                               |
 
 Each provider owns its endpoint defaults, request mapping, and model discovery. Available models can change independently of these docs.
+
+## OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenAI-compatible gateway. Its models use a
+`vendor/model` namespace and are listed live, so the picker always reflects the models your own
+OrcaRouter account can call.
+
+There are two ways to connect, and either one is enough:
+
+- **OrcaRouter - API** — paste an `sk-orca-…` key from
+  [the OrcaRouter console](https://www.orcarouter.ai/console/authorized-apps).
+- **Connect with OrcaRouter** — authorize Koharu in your browser. Koharu binds a temporary
+  `127.0.0.1` listener, sends an OAuth 2.0 + PKCE (S256) request to the consent screen, and
+  receives a key for your account. No client secret is involved and there is nothing to
+  pre-register.
+
+Both paths store the same kind of key in the operating system's secure credential service, and the
+rest of Koharu cannot tell which one was used. The key belongs to your account: it is billed to
+you, visible in your console, and revocable at any time. Revoking it makes Koharu ask you to
+reconnect — there is no automatic refresh, because a PKCE-issued key is durable rather than
+refreshable.
+
+Koharu talks to two different OrcaRouter origins, and it never derives one from the other:
+
+| Purpose                | Default                           |
+| ---------------------- | --------------------------------- |
+| Authorization and key exchange | `https://www.orcarouter.ai` |
+| Inference and model discovery  | `https://api.orcarouter.ai/v1` |
+
+Self-hosted deployments can point both at one origin with `ORCA_BASE_URL`, or override them
+separately with `ORCA_AUTH_BASE_URL` and `ORCA_API_BASE_URL`. Explicit settings in
+**Settings → Providers** take precedence over the environment. Remote origins must use HTTPS;
+plain HTTP is accepted only for loopback.
+
+Model lists are filtered per use. The text picker excludes image-generation, rerank and video
+models. With **Vision** on, only models that declare image input are offered, and a saved model
+that no longer qualifies is cleared instead of being sent. If the live catalog is unreachable,
+Koharu shows a small verified fallback list rather than leaving you with no models.
 
 <Steps>
   <Step title='Save the connection'>

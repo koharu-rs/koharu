@@ -11,6 +11,7 @@ mod minimax;
 mod openai;
 mod openai_compatible;
 mod openrouter;
+pub mod orcarouter;
 
 use anyhow::Context;
 use futures::{FutureExt, future::BoxFuture, future::join_all};
@@ -30,6 +31,7 @@ pub use minimax::MiniMaxConfig;
 pub use openai::OpenAiConfig;
 pub use openai_compatible::OpenAiCompatibleConfig;
 pub use openrouter::OpenRouterConfig;
+pub use orcarouter::OrcaRouterConfig;
 
 use crate::{
     Error, GenerationConfig, Model, ModelSelection, Provider, ProvidersConfig, Result,
@@ -92,6 +94,10 @@ pub(crate) async fn translate(
             openrouter::translate(client, &providers.openrouter, model()?, generation, request)
                 .await
         }
+        Provider::OrcaRouter => {
+            orcarouter::translate(client, &providers.orcarouter, model()?, generation, request)
+                .await
+        }
         Provider::LmStudio => {
             lm_studio::translate(client, &providers.lm_studio, model()?, generation, request).await
         }
@@ -116,6 +122,7 @@ pub(crate) async fn models(client: &Client, providers: &ProvidersConfig) -> Vec<
         deepseek::models(client).boxed(),
         openai_compatible::models(client, &providers.openai_compatible).boxed(),
         openrouter::models(client).boxed(),
+        orcarouter::models(client, &providers.orcarouter).boxed(),
         lm_studio::models(client, &providers.lm_studio).boxed(),
         deepl::models().boxed(),
         google_cloud::models().boxed(),

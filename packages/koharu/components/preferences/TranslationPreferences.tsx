@@ -11,6 +11,7 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
+import { type EntryPoint, optionsFor, selectionInvalidated } from '@/lib/providerCapabilities'
 import { modelKey, modelSelection, orderedLanguageChoices, providerName } from '@/lib/translation'
 import type {
   LanguageChoice,
@@ -44,8 +45,15 @@ export function TranslationPreferences({
 }) {
   const { t } = useTranslation()
   const [modelOpen, setModelOpen] = useState(false)
+  // The settings picker mirrors the translation entry point: page images are
+  // uploaded when Vision is on, so the options are capability-filtered there too.
+  const entryPoint: EntryPoint =
+    (value.generation?.vision ?? true)
+      ? { kind: 'multimodal', modality: 'image' }
+      : { kind: 'text' }
+  const offered = optionsFor(modelChoices, entryPoint)
   const selected =
-    modelChoices.find((candidate) => modelKey(candidate) === modelKey(value.model)) ?? null
+    offered.find((candidate) => modelKey(candidate) === modelKey(value.model)) ?? null
   const current: Model = selected ?? {
     ...value.model,
     model: value.model.model ?? null,
@@ -54,7 +62,10 @@ export function TranslationPreferences({
     vision: value.model.vision ?? false,
     reasoning: value.model.reasoning ?? false,
   }
-  const choices = selected ? modelChoices : [current, ...modelChoices]
+  // A saved model that no longer satisfies the entry point is dropped rather
+  // than silently kept, and the user is told to choose again.
+  const invalidated = selectionInvalidated(modelChoices, entryPoint, value.model)
+  const choices = selected || invalidated ? offered : [current, ...offered]
   const quantizations = current.quantizations
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
