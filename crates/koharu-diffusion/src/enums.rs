@@ -403,6 +403,7 @@ ffi_enum! {
     /// Severity attached to a native log message.
     pub enum LogLevel: sys::sd_log_level_t, "log level" {
         Debug = sys::SD_LOG_DEBUG => "debug",
+        Verbose = sys::SD_LOG_VERBOSE => "verbose",
         Info = sys::SD_LOG_INFO => "info",
         Warn = sys::SD_LOG_WARN => "warn",
         Error = sys::SD_LOG_ERROR => "error"

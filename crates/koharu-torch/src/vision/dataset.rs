@@ -1,7 +1,7 @@
 //! A simple dataset structure shared by various computer vision datasets.
 use crate::data::Iter2;
 use crate::{IndexOp, Tensor};
-use rand::Rng;
+use rand::RngExt;
 
 #[derive(Debug)]
 pub struct Dataset {

@@ -60,47 +60,47 @@ serde_json = "1.0.151"
 specta = { version = "=2.0.0-rc.25", features = ["derive", "url", "uuid"] }
 specta-typescript = "=0.0.12"
 tokio = { version = "1.53.1", features = ["full"] }
-log = "0.4.33"
+log = "0.4.34"
 tracing = "0.1.44"
 tracing-core = "0.1.36"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "registry"] }
 console = "0.16.4"
-open = "5.4.1"
+open = "5.4.3"
 rfd = "0.17.2"
 thiserror = "2.0.20"
-blake3 = "1.8.6"
+blake3 = "1.8.7"
 dunce = "1.0.5"
 rayon = "1.12.0"
 # disables `esaxx_fast` feature which is conflicting with `ort`
-tokenizers = { version = "0.23.1", features = ["onig"] }
+tokenizers = { version = "0.23.2", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
 sys-locale = "0.3.2"
 sysinfo = { version = "0.39.6", features = ["system"] }
-rars = "0.6.0"
+rars = "0.9.4"
 zip = { version = "8.6.0", features = ["deflate"] }
-dirs = "6.0.0"
+dirs = "7.0.0"
 futures = "0.3.34"
 futures-channel = "0.3.34"
 hf-hub = "=1.0.0"
 eventsource-stream = "0.2.3"
-encoding_rs = "0.8.35"
+encoding_rs = "0.8.41"
 enumflags2 = "0.7.12"
-reqwest = { version = "0.13.4", features = ["stream", "json", "form", "blocking", "multipart"] }
+reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
 reqwest-middleware = "0.5.2"
 reqwest-retry = "0.9.1"
 secrecy = { version = "0.10.3", features = ["serde"] }
-toml = "1.1.4"
+toml = "1.1.5"
 url = { version = "2.5.8", features = ["serde"] }
 petgraph = "0.8.3"
-imbl = "7.0.1"
+imbl = "7.0.2"
 hashbrown = "0.17.1"
 slotmap = "1.1.1"
-smallvec = "1.15.2"
+smallvec = "1.16.0"
 revision = { version = "0.30.0", features = ["uuid"] }
-flate2 = "1.1.9"
+flate2 = "1.1.10"
 tempfile = "3.27.0"
 libloading = "0.9.0"
-nvml-wrapper = "0.12.1"
+nvml-wrapper = "0.13.0"
 minijinja = "2.24.0"
 minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
 indoc = "2.0.7"
@@ -110,14 +110,14 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
 ] }
-skrifa = "0.46.0"
-harfrust = "0.13.0"
+skrifa = "0.47.0"
+harfrust = "0.13.3"
 hypher = "0.1.7"
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 icu_properties = "2.3.0"
 icu_segmenter = "2.3.0"
 jieba-rs = "0.10.3"
-fontique = "0.11.0"
+fontique = "0.11.1"
 pollster = "1.0.1"
 vello = "0.10.0"
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "fe0e5155c12459f3250dd9ae5867dd627d7c8286", default-features = false, features = [
@@ -136,7 +136,7 @@ tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace"
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "835adce473e8f059f6ba84660dd07bcb19fb9030" }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
-uuid = { version = "1.24.1", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.26.0", features = ["v4", "v7", "serde"] }
 atomicwrites = "0.4.4"
 fs4 = "1.1.0"
 parking_lot = "0.12.5"
@@ -145,30 +145,30 @@ walkdir = "2.5.0"
 base64 = "0.23.1"
 unicode-bidi = "0.3.18"
 criterion = { version = "0.8.2", features = ["html_reports"] }
-keyring = { version = "4.1.6", features = ["linux-keyutils-keyring-store"] }
+keyring = { version = "4.2.0", features = ["linux-keyutils-keyring-store"] }
 keyring-core = "1.0.0"
 linux-keyutils-keyring-store = "1.0.0"
 llguidance = "1.8.0"
-sentry = { version = "0.49.1", features = ["tracing"] }
-fast-glob = "1.1.0"
+sentry = { version = "0.49.2", features = ["tracing"] }
+fast-glob = "1.1.1"
 tar = "0.4.46"
 toktrie = "1.8.0"
 bytes = "1.12.1"
 half = "2.7.1"
-js-sys = "0.3.104"
+js-sys = "0.3.105"
 lazy_static = "1.5.0"
 ndarray = "0.17.2"
-rand = "0.9.5"
+rand = "0.10.2"
 safetensors = "0.8.0"
 serde-wasm-bindgen = "0.6.5"
-wasm-bindgen = "0.2.127"
-wasm-bindgen-futures = "0.4.77"
-web-sys = "0.3.104"
-bindgen = "0.72.1"
+wasm-bindgen = "0.2.128"
+wasm-bindgen-futures = "0.4.78"
+web-sys = "0.3.105"
+bindgen = "0.73.2"
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 quote = "1.0.47"
-syn = { version = "3.0.3", features = ["full"] }
+syn = { version = "3.0.5", features = ["full"] }
 libc = "0.2.189"
 memmap2 = "0.9.11"
 

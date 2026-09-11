@@ -208,7 +208,9 @@ pub fn send_logs_to_tracing() -> Result<()> {
     set_log_callback(|message| {
         let text = message.text.trim_end();
         match message.level {
-            LogLevel::Debug => tracing::debug!(target: "stable-diffusion.cpp", "{text}"),
+            LogLevel::Debug | LogLevel::Verbose => {
+                tracing::debug!(target: "stable-diffusion.cpp", "{text}")
+            }
             LogLevel::Info => tracing::info!(target: "stable-diffusion.cpp", "{text}"),
             LogLevel::Warn => tracing::warn!(target: "stable-diffusion.cpp", "{text}"),
             LogLevel::Error => tracing::error!(target: "stable-diffusion.cpp", "{text}"),

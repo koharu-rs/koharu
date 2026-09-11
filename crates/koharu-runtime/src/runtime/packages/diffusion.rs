@@ -12,7 +12,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "master-841-6b3edaa.2";
+const RELEASE: &str = "master-849-d04e895.1";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Diffusion {
