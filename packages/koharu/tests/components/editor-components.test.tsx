@@ -789,7 +789,7 @@ describe('greenfield editor', () => {
     render(<CanvasCommandBar />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
-    fireEvent.click(screen.getByRole('button', { name: /Scope Page/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Scope Selection/ }))
     fireEvent.click(screen.getByRole('button', { name: /Entire project/ }))
     fireEvent.click(screen.getByRole('button', { name: /Stages 4 stages/ }))
     fireEvent.click(screen.getByRole('button', { name: /Translation/ }))
@@ -817,7 +817,7 @@ describe('greenfield editor', () => {
     )
   })
 
-  it('runs the current page and exposes the runtime shortcuts', async () => {
+  it('runs the selected pages by default and exposes the runtime shortcuts', async () => {
     installProject()
     const run = vi.spyOn(commands, 'process').mockResolvedValue('job')
     render(<CanvasCommandBar />)
@@ -837,7 +837,7 @@ describe('greenfield editor', () => {
     fireEvent.click(selector)
     await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Scope Page/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Scope Selection/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Stages 4 stages/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Output English/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
@@ -919,7 +919,7 @@ describe('greenfield editor', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Processing settings' }))
-    await user.click(screen.getByRole('button', { name: /Scope Page/ }))
+    await user.click(screen.getByRole('button', { name: /Scope Selection/ }))
     await user.click(screen.getByRole('button', { name: /Entire project/ }))
     await user.click(screen.getByRole('button', { name: /Stages 4 stages/ }))
     await user.click(screen.getByRole('button', { name: /Translation/ }))
