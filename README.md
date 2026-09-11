@@ -50,7 +50,7 @@ Koharu supports CUDA and ROCm / HIP on Windows and Linux, Metal on Apple silicon
 
 ### CUDA
 
-CUDA 13.0 requires an NVIDIA Turing-class or newer GPU and an R580 or newer driver. Check NVIDIA's official [CUDA toolkit, driver, and architecture matrix](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html) and install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/).
+CUDA 13.3 requires an NVIDIA Turing-class or newer GPU and an R610 or newer driver. Check NVIDIA's official [CUDA toolkit, driver, and architecture matrix](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html) and install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/).
 
 ### ROCm / HIP
 

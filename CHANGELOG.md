@@ -1,3 +1,25 @@
+## [0.82.1](https://github.com/koharu-rs/koharu/compare/0.82.0..0.82.1) - 2026-09-11
+
+### 🐛 Bug Fixes
+
+- *(ci)* Pin AppImage helper source URL - ([a7431c5](https://github.com/koharu-rs/koharu/commit/a7431c5a5e7517cb7413309e4e4da5679efa20b1))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(app)* Default the processing scope to the selection ([#1088](https://github.com/koharu-rs/koharu/issues/1088)) - ([767e4d0](https://github.com/koharu-rs/koharu/commit/767e4d0441f986c18e55fc4e1af42f3dddfd860e))
+
+
+## [0.82.0](https://github.com/koharu-rs/koharu/compare/0.81.10..0.82.0) - 2026-09-11
+
+### ⛰️  Features
+
+- *(runtime)* Update native runtimes and CUDA 13.3 - ([67d507b](https://github.com/koharu-rs/koharu/commit/67d507b4cf3959208e87201f62b03ba771d3f372))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(scripts)* Add Kindle JP downloader - ([8ccfe9f](https://github.com/koharu-rs/koharu/commit/8ccfe9ffafd8037e06c8999213dd55a78a6f7b37))
+
+
 ## [0.81.9](https://github.com/koharu-rs/koharu/compare/0.81.8..0.81.9) - 2026-09-08
 
 ### 🐛 Bug Fixes

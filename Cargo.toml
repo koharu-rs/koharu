@@ -4,7 +4,7 @@ default-members = ["crates/koharu"]
 resolver = "3"
 
 [workspace.package]
-version = "0.81.10"
+version = "0.82.1"
 edition = "2024"
 description = "Manga translation tools"
 license = "MIT OR Apache-2.0"

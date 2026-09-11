@@ -11,8 +11,8 @@ const ATTRIBUTE_INTEGRATED: c_int = 18;
 const ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
 const ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
 
-// The bundled CUDA 13 runtimes support compute capability 7.5 and newer.
-const MIN_DRIVER_VERSION: c_int = 13000;
+// The bundled CUDA 13.3 runtimes support compute capability 7.5 and newer.
+const MIN_DRIVER_VERSION: c_int = 13030;
 const MIN_COMPUTE_CAPABILITY: u32 = 75;
 
 type Init = unsafe extern "C" fn(c_uint) -> c_int;

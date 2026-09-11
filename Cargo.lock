@@ -4590,7 +4590,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "clap",
  "console",
@@ -4614,7 +4614,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4635,7 +4635,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-app"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -4687,7 +4687,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4700,7 +4700,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "futures-channel",
  "js-sys",
@@ -4715,7 +4715,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "atomicwrites",
@@ -4729,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-desktop"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "koharu-rasterizer",
@@ -4744,7 +4744,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
@@ -4754,7 +4754,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4764,7 +4764,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -4779,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4789,7 +4789,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-metrics"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4809,7 +4809,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4869,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "image",
  "koharu-rasterizer",
@@ -4882,7 +4882,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rasterizer"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4898,7 +4898,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4931,7 +4931,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "backon",
@@ -4962,7 +4962,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-scene"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "blake3",
  "bytes",
@@ -4984,7 +4984,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-secrets"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "keyring",
@@ -4996,7 +4996,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-storage"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "blake3",
  "bytes",
@@ -5016,7 +5016,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "half",
  "image",
@@ -5032,7 +5032,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -5042,7 +5042,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-translator"
-version = "0.81.10"
+version = "0.82.1"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
