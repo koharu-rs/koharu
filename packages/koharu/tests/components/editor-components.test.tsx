@@ -755,6 +755,112 @@ describe('greenfield editor', () => {
     expect(screen.queryByText('Onomatopoeia')).not.toBeInTheDocument()
   })
 
+  function installLayerSelectionFixture() {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        ...page.layers,
+        {
+          ...textLayer,
+          id: 'second',
+          content: {
+            ...textLayer.content,
+            id: 'second-content',
+            translation: { text: 'Second', language: null },
+          },
+        },
+        {
+          type: 'artwork',
+          id: 'artwork',
+          parent: 'page',
+          geometry: {
+            points: [
+              { x: 0, y: 0 },
+              { x: 10, y: 0 },
+              { x: 10, y: 10 },
+              { x: 0, y: 10 },
+            ],
+          },
+          visibility: { visible: true, opacity: 1 },
+          image: 'source',
+        },
+        {
+          ...textLayer,
+          id: 'third',
+          content: {
+            ...textLayer.content,
+            id: 'third-content',
+            translation: { text: 'Third', language: null },
+          },
+        },
+      ],
+    }))
+  }
+
+  it('toggles layers in the selection with ctrl-click', () => {
+    installLayerSelectionFixture()
+    render(<Inspector />)
+
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element'])
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Second' }), { ctrlKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element', 'second'])
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Hello' }), { ctrlKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['second'])
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Second' }), { ctrlKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual([])
+  })
+
+  it('toggles layers in the selection with meta-click', () => {
+    installLayerSelectionFixture()
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Second' }), { metaKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element', 'second'])
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Second' }), { metaKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element'])
+  })
+
+  it('selects a display range with shift-click, skipping locked layers', () => {
+    installLayerSelectionFixture()
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Third' }))
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['third'])
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Hello' }), { shiftKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['third', 'second', 'element'])
+  })
+
+  it('unions a shift range with the existing selection when ctrl is held', () => {
+    installLayerSelectionFixture()
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Second' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Third' }), {
+      ctrlKey: true,
+      shiftKey: true,
+    })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['second', 'third'])
+  })
+
+  it('falls back to single selection when shift-clicking without an anchor', () => {
+    installLayerSelectionFixture()
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Third' }), { shiftKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['third'])
+  })
+
+  it('collapses a multi-selection back to a single layer on plain click', () => {
+    installLayerSelectionFixture()
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Second' }), { ctrlKey: true })
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element', 'second'])
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Hello' }))
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element'])
+  })
+
   it('resets a custom text frame to its automatic region', async () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
