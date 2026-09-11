@@ -442,6 +442,7 @@ export type ProviderPreferences = {
 export type Quantization = {
 	id: string,
 	name: string,
+	downloaded: boolean,
 };
 
 export type RasterLayerKind = "cleanup" | "paint";

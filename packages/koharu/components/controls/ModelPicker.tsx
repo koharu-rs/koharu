@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, ChevronLeft, LoaderCircle, Search, X } from 'lucide-react'
+import { Check, ChevronLeft, HardDrive, LoaderCircle, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -101,6 +101,13 @@ export function ModelPicker({
           {results.map((model) => {
             const key = modelKey(model)
             const selected = value ? key === modelKey(value) : false
+            const downloaded = Boolean(
+              ((selected
+                ? model.quantizations.find(
+                    (quantization) => quantization.id === value?.quantization,
+                  )
+                : undefined) ?? model.quantizations[0])?.downloaded,
+            )
             return (
               <Button
                 key={key}
@@ -121,6 +128,12 @@ export function ModelPicker({
                     {providerName(providers, model.provider)}
                   </span>
                 </span>
+                {downloaded && (
+                  <HardDrive
+                    className='size-3.5 shrink-0 text-muted-foreground'
+                    aria-label={t('modelPicker.downloaded', { defaultValue: 'Downloaded' })}
+                  />
+                )}
                 {busyModel === key ? (
                   <LoaderCircle className='size-3.5 shrink-0 animate-spin text-primary' />
                 ) : (

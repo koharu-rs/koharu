@@ -109,6 +109,18 @@ impl<'a> HuggingFaceFile<'a> {
         }
     }
 
+    #[must_use]
+    pub fn is_present(self) -> bool {
+        Store::root()
+            .join("hugging-face")
+            .join(self.kind.api_route())
+            .join(self.repository.replace(['/', '\\'], "--"))
+            .join("snapshots")
+            .join(self.revision)
+            .join(self.filename)
+            .is_file()
+    }
+
     #[tracing::instrument(skip_all)]
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
         let repository = Repository::new(self.repository);

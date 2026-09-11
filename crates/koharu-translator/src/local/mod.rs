@@ -127,6 +127,20 @@ pub(crate) fn models() -> Vec<Model> {
                 .map(|quantization| Quantization {
                     id: quantization.id.to_owned(),
                     name: quantization.name.to_owned(),
+                    downloaded: koharu_runtime::HuggingFaceFile::pinned(
+                        descriptor.repository,
+                        descriptor.revision,
+                        quantization.filename,
+                    )
+                    .is_present()
+                        && descriptor.projector.is_none_or(|projector| {
+                            koharu_runtime::HuggingFaceFile::pinned(
+                                descriptor.repository,
+                                descriptor.revision,
+                                projector,
+                            )
+                            .is_present()
+                        }),
                 })
                 .collect(),
             vision: descriptor.projector.is_some(),
