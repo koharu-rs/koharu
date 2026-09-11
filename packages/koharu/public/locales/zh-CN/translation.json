@@ -12,6 +12,7 @@
     "downloadingFiles_one": "正在下载 {{count}} 个文件",
     "downloadingFiles_other": "正在下载 {{count}} 个文件",
     "modelDownload": "模型下载",
+    "pageLabel": "第 {{number}} 页：{{label}}",
     "processing": "正在处理",
     "processingFailed": "处理失败。",
     "stop": "停止",

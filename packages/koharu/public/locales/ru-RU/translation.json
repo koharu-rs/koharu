@@ -12,6 +12,7 @@
     "downloadingFiles_one": "Скачивание файлов: {{count}}",
     "downloadingFiles_other": "Скачивание файлов: {{count}}",
     "modelDownload": "Скачивание модели",
+    "pageLabel": "Страница {{number}}: {{label}}",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
     "stop": "Остановить",

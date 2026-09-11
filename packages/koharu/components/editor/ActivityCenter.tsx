@@ -4,6 +4,7 @@ import { CircleAlert, Download, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
+import { usePages } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type Download as DownloadState, type Job } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
@@ -76,6 +77,16 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
 function JobItem({ job }: { job: Job }) {
   const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissJob)
+  // The pipeline reports which page it is on; the rail has already loaded the
+  // labels, so this resolves from cache rather than fetching.
+  const pages = usePages(job.page !== null).data
+  // Numbered by position in the rail, so the row says where in the run this
+  // is as well as which file: a scan filename alone rarely tells you.
+  const pageIndex = job.page ? (pages?.findIndex((page) => page.id === job.page) ?? -1) : -1
+  const page = pageIndex >= 0 ? pages?.[pageIndex] : undefined
+  const pageLabel = page
+    ? t('activity.pageLabel', { number: pageIndex + 1, label: page.label })
+    : undefined
   if (job.state === 'failed') {
     return (
       <Failure
@@ -95,7 +106,6 @@ function JobItem({ job }: { job: Job }) {
               ? t(`phase.${job.stage}`, { defaultValue: job.stage })
               : t('activity.processing')}
           </span>
-          <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>{job.model}</p>
         </div>
         <span className='pt-0.5 text-right text-[10px] tabular-nums'>
           {percent !== null ? `${percent}%` : null}
@@ -109,6 +119,16 @@ function JobItem({ job }: { job: Job }) {
         >
           <Square className='size-2.5 fill-current' />
         </Button>
+        {pageLabel ? (
+          <p className='col-start-2 col-end-4 mt-0.5 truncate text-[10px] text-muted-foreground'>
+            {pageLabel}
+          </p>
+        ) : null}
+        {job.model ? (
+          <p className='col-start-2 col-end-4 truncate text-[10px] text-muted-foreground'>
+            {job.model}
+          </p>
+        ) : null}
         <div className='col-start-2 col-end-4'>
           <Progress value={percent} />
         </div>

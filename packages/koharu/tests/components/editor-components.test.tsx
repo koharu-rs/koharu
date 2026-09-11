@@ -1552,9 +1552,23 @@ describe('greenfield editor', () => {
         },
       },
     })
+    // A real page label is a filename, which says nothing about position in
+    // the run, so the row numbers it too.
+    queryClient.setQueryData(pagesKey, [
+      {
+        id: 'page',
+        label: 'cover.png',
+        size: { width: 1000, height: 1500 },
+        source_asset: 'source',
+        layer_count: 1,
+      },
+    ])
     const stop = vi.spyOn(commands, 'stopJob').mockResolvedValue(null)
     render(<ActivityCenter />)
     expect(screen.getByText('25%')).toBeInTheDocument()
+    // Separate elements, so a long label truncates without taking the model.
+    expect(screen.getByText('Page 1: cover.png')).toBeInTheDocument()
+    expect(screen.getByText('manga-ocr')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     await waitFor(() => expect(stop).toHaveBeenCalledWith('job'))
   })
