@@ -13,6 +13,7 @@ publish.workspace = true
 
 [dependencies]
 koharu-config = { workspace = true }
+koharu-scene = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-secrets = { workspace = true }

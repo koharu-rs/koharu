@@ -4,8 +4,14 @@ import { CircleAlert, Download, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
+import { pagesKey, queryClient } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type Download as DownloadState, type Job } from '@koharu/bridge/protocol'
+import {
+  commands,
+  type Download as DownloadState,
+  type Job,
+  type PageSummary,
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 export function ActivityCenter() {
@@ -13,7 +19,7 @@ export function ActivityCenter() {
   const jobs = useKoharuStore((state) => state.jobs)
   const downloads = useKoharuStore((state) => state.downloads)
   const visibleJobs = Object.values(jobs).filter(
-    (job) => job.state === 'running' || job.state === 'failed',
+    (job) => job.state === 'running' || job.state === 'awaiting_review' || job.state === 'failed',
   )
   const runningDownloads = Object.values(downloads).filter(
     (download) => download.state === 'running',
@@ -76,10 +82,14 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
 function JobItem({ job }: { job: Job }) {
   const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissJob)
-  if (job.state === 'failed') {
+  const setGlossaryOpen = useKoharuStore((state) => state.setGlossaryOpen)
+  if (job.state === 'failed' && !job.workflow) {
     return (
       <Failure
-        message={job.error || t('activity.processingFailed')}
+        message={
+          job.error ||
+          t(job.kind === 'export' ? 'activity.exportFailed' : 'activity.processingFailed')
+        }
         onDismiss={() => dismiss(job.id)}
       />
     )
@@ -91,11 +101,26 @@ function JobItem({ job }: { job: Job }) {
         <span className='mt-1.5 size-1.5 justify-self-center rounded-full bg-primary' />
         <div className='min-w-0'>
           <span className='block truncate text-[12px] font-medium capitalize'>
-            {job.stage
-              ? t(`phase.${job.stage}`, { defaultValue: job.stage })
-              : t('activity.processing')}
+            {job.workflow
+              ? job.workflow.name
+              : job.stage
+                ? t(`phase.${job.stage}`, { defaultValue: job.stage })
+                : t(job.kind === 'export' ? 'activity.exporting' : 'activity.processing')}
           </span>
           <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>{job.model}</p>
+          {job.kind === 'export' && job.page && (
+            <p className='text-[10px]'>
+              {t('activity.currentPage', {
+                page:
+                  queryClient
+                    .getQueryData<PageSummary[]>(pagesKey)
+                    ?.find((page) => page.id === job.page)?.label ?? job.page,
+              })}
+            </p>
+          )}
+          <p className='text-[10px] tabular-nums'>
+            {job.completed} / {job.total}
+          </p>
         </div>
         <span className='pt-0.5 text-right text-[10px] tabular-nums'>
           {percent !== null ? `${percent}%` : null}
@@ -104,15 +129,41 @@ function JobItem({ job }: { job: Job }) {
           size='icon-xs'
           variant='ghost'
           className='-mt-1'
-          aria-label={t('activity.stop')}
-          onClick={() => void call(commands.stopJob, job.id).catch(() => undefined)}
+          aria-label={t(job.state === 'failed' ? 'activity.dismiss' : 'activity.stop')}
+          onClick={() =>
+            job.state === 'failed'
+              ? dismiss(job.id)
+              : void call(commands.stopJob, job.id).catch(() => undefined)
+          }
         >
-          <Square className='size-2.5 fill-current' />
+          {job.state === 'failed' ? <X /> : <Square className='size-2.5 fill-current' />}
         </Button>
         <div className='col-start-2 col-end-4'>
           <Progress value={percent} />
         </div>
       </div>
+      {job.workflow && (
+        <ol className='mt-2 space-y-1 text-[10px]'>
+          {job.workflow.stages.map((stage) => (
+            <li key={stage.stage} className='flex justify-between gap-2'>
+              <span>{t(`phase.${stage.stage}`)}</span>
+              <span className='text-right tabular-nums'>
+                {stage.completed} / {stage.total} · {t(`workflow.states.${stage.state}`)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {job.error && (
+        <p role='alert' className='mt-2 text-xs text-destructive'>
+          {job.error}
+        </p>
+      )}
+      {job.state === 'awaiting_review' && (
+        <Button className='mt-2 w-full' size='sm' onClick={() => setGlossaryOpen(true)}>
+          {t('workflow.review')}
+        </Button>
+      )}
     </div>
   )
 }

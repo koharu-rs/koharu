@@ -11,6 +11,7 @@ mod components;
 mod document;
 mod edit;
 mod error;
+mod glossary;
 mod id;
 mod patch;
 mod schema;
@@ -33,6 +34,10 @@ pub use components::{
 pub use document::{AnalysisRegionRef, GroupRef, TextContentRef, TextLayerRef};
 pub use edit::{At, Edit, RemovePolicy};
 pub use error::{Error, Result};
+pub use glossary::{
+    GlossaryCandidate, GlossaryCategory, GlossaryEntry, GlossaryMatch, ProjectGlossary,
+    glossary_matches, normalize_term, normalize_text, relevant_glossary,
+};
 pub use id::{EntityId, ProducerId, ProjectId, RelationId};
 pub use patch::Patch;
 pub use semantics::{

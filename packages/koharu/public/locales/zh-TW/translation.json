@@ -15,7 +15,10 @@
     "processing": "正在處理",
     "processingFailed": "處理失敗。",
     "stop": "停止",
-    "title": "活動"
+    "title": "活動",
+    "exporting": "Exporting",
+    "exportFailed": "Export failed.",
+    "currentPage": "Current page: {{page}}"
   },
   "agent": {
     "account": "ChatGPT 帳戶",
@@ -261,7 +264,9 @@
     "selectAllLayers": "選取所有圖層",
     "settings": "設定",
     "undo": "復原",
-    "view": "檢視"
+    "view": "檢視",
+    "export": "Export",
+    "exportCbz": "CBZ (entire project)…"
   },
   "model": {
     "baseUrl": "基礎 URL",
@@ -309,7 +314,8 @@
     "detection": "偵測",
     "inpainting": "修補",
     "ocr": "OCR",
-    "translation": "翻譯"
+    "translation": "翻譯",
+    "terminology": "Terminology analysis"
   },
   "phaseDescription": {
     "detection": "找出頁面上的文字。",
@@ -532,5 +538,88 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "restore": "還原"
+  },
+  "export": {
+    "quality": "Quality (1–100)",
+    "imageFormat": "Archive image format",
+    "entireProject": "Exports every page in project order, regardless of the page selection.",
+    "cbzTitle": "Export CBZ",
+    "savedQuality": "Quality is saved for future exports. JPEG uses a white background.",
+    "start": "Export"
+  },
+  "workflow": {
+    "enable": "Use project workflow for Run All",
+    "enableDescription": "Entire-project and multi-page Run All use the selected preset. Single-page and individual-stage actions stay unchanged.",
+    "presetDescription": "Consistent Project Translation runs each stage across all pages, then pauses for glossary review before translation.",
+    "title": "Workflow presets",
+    "description": "Choose page-by-page processing or finish each stage across the whole scope before continuing.",
+    "preset": "Preset",
+    "custom": "Custom preset",
+    "name": "Preset name",
+    "scheduling": "Scheduling",
+    "pageMajor": "Page-major (standard)",
+    "stageMajor": "Stage-major (project-wide)",
+    "scope": "Scope",
+    "project": "Entire project",
+    "selected": "Selected pages ({{count}})",
+    "review": "Review glossary",
+    "skipReview": "Turning review off skips terminology analysis. Confirmed glossary entries still apply.",
+    "savePreset": "Save preset",
+    "deletePreset": "Delete preset",
+    "start": "Start workflow",
+    "states": {
+      "pending": "Pending",
+      "running": "Running",
+      "awaiting_review": "Review required",
+      "complete": "Complete",
+      "failed": "Failed",
+      "stopped": "Stopped"
+    }
+  },
+  "glossary": {
+    "title": "Project glossary",
+    "description": "Confirmed terms are saved with this project and used consistently in translation. Candidates remain inactive until you supply a translation and confirm them.",
+    "running": "Glossary editing is available after processing finishes or pauses for review.",
+    "unsaved": "Save or discard your changes before closing.",
+    "confirmed": "Confirmed",
+    "candidates": "Candidates",
+    "reload": "Reload",
+    "source": "Source",
+    "target": "Translation",
+    "category": "Category",
+    "notes": "Notes",
+    "enabled": "Enabled",
+    "actions": "Actions",
+    "delete": "Delete",
+    "count": "Count",
+    "pages": "Pages",
+    "suggestion": "Suggested translation",
+    "confirm": "Confirm",
+    "ignore": "Ignore",
+    "empty": "No entries",
+    "add": "Add term",
+    "bulkConfirm": "Confirm all with translations",
+    "previous": "Previous",
+    "next": "Next",
+    "import": "Import JSON",
+    "export": "Export JSON",
+    "discard": "Discard changes",
+    "save": "Save glossary",
+    "continue": "Save and continue translation",
+    "categories": {
+      "person": "Person",
+      "place": "Place",
+      "organization": "Organization",
+      "title": "Title",
+      "skill": "Skill",
+      "item": "Item",
+      "terminology": "Terminology",
+      "other": "Other"
+    },
+    "aiTranslate": "AI fill missing translations",
+    "aiDescription": "Use the configured translation model and target language to fill blank candidates in batches. Existing translations are preserved. Review, confirm, and save afterward.",
+    "aiProgress": "AI translation: {{completed}} / {{total}}",
+    "aiStop": "Stop after this batch",
+    "aiStopping": "Finishing current batch…"
   }
 }

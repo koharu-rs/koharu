@@ -36,7 +36,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("openai-compatible")?;
     let (system, user) = prompt::prompts(request)?;
     let user_content = match request.image.as_deref() {
@@ -99,7 +99,7 @@ pub(super) async fn translate(
         "openai-compatible",
         &text,
         &request.segments,
-    )?)
+    ))
 }
 
 pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> Result<Vec<Model>> {

@@ -46,7 +46,9 @@ export function InferenceControl({
   const setStages = useKoharuStore((state) => state.setProcessingStages)
   const jobs = useKoharuStore((state) => state.jobs)
   const selectedPages = useKoharuStore((state) => state.selectedPages)
-  const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
+  const running =
+    Object.values(jobs).find((job) => job.state === 'running' || job.state === 'awaiting_review') ??
+    null
   const unavailable = scope === 'selected-pages' && selectedPages.length === 0
 
   const stop = () => {

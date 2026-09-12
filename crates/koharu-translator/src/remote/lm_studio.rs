@@ -36,7 +36,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("lm-studio")?;
     let (system, user) = prompt::prompts(request)?;
     let user_content = match request.image.as_deref() {
@@ -95,7 +95,7 @@ pub(super) async fn translate(
         .message
         .content
         .context("LM Studio returned no message content")?;
-    Ok(prompt::translations("lm-studio", &text, &request.segments)?)
+    Ok(prompt::translations("lm-studio", &text, &request.segments))
 }
 
 pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<Vec<Model>> {

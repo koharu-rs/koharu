@@ -76,7 +76,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("openai")?.context("openai API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let user_content = match request.image.as_deref() {
@@ -135,7 +135,7 @@ pub(super) async fn translate(
         .message
         .content
         .context("OpenAI returned no message content")?;
-    Ok(prompt::translations("openai", &text, &request.segments)?)
+    Ok(prompt::translations("openai", &text, &request.segments))
 }
 
 #[derive(Serialize)]

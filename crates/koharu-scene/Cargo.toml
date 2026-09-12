@@ -12,6 +12,7 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+icu_normalizer = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
 imbl = { workspace = true }

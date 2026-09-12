@@ -53,9 +53,26 @@ export const commands = {
 	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
 	undo: () => __TAURI_INVOKE<null>("undo"),
 	redo: () => __TAURI_INVOKE<null>("redo"),
+	getProjectGlossary: () => __TAURI_INVOKE<GlossaryDocument>("get_project_glossary"),
+	suggestGlossaryTranslations: (project: ProjectId, sources: string[], glossary: GlossaryEntry[]) => __TAURI_INVOKE<string[]>("suggest_glossary_translations", { project, sources, glossary }),
+	saveProjectGlossary: (expected: GlossaryDocument, glossary: ProjectGlossary) => __TAURI_INVOKE<GlossaryDocument>("save_project_glossary", { expected, glossary }),
+	importProjectGlossary: (expected: GlossaryDocument) => __TAURI_INVOKE<{
+	project: ProjectId,
+	glossary: ProjectGlossary,
+} | null>("import_project_glossary", { expected }),
+	exportProjectGlossary: () => __TAURI_INVOKE<null>("export_project_glossary"),
+	getWorkflowSettings: () => __TAURI_INVOKE<WorkflowSettings>("get_workflow_settings"),
+	configureProjectWorkflow: (enabled: boolean, activePreset: string) => __TAURI_INVOKE<WorkflowSettings>("configure_project_workflow", { enabled, activePreset }),
+	getWorkflowPresets: () => __TAURI_INVOKE<WorkflowPreset[]>("get_workflow_presets"),
+	saveWorkflowPresets: (presets: WorkflowPreset[]) => __TAURI_INVOKE<WorkflowPreset[]>("save_workflow_presets", { presets }),
+	startWorkflow: (scope: Scope, preset: WorkflowPreset) => __TAURI_INVOKE<JobId>("start_workflow", { scope, preset }),
+	resumeWorkflow: (job: JobId) => __TAURI_INVOKE<null>("resume_workflow", { job }),
 	process: (scope: Scope, operation: Operation) => __TAURI_INVOKE<JobId>("process", { scope, operation }),
 	stopJob: (job: JobId) => __TAURI_INVOKE<null>("stop_job", { job }),
 	exportPages: (pages: EntityId[], format: ExportFormat) => __TAURI_INVOKE<null>("export_pages", { pages, format }),
+	exportCbz: (format: ArchiveImageFormat) => __TAURI_INVOKE<string | null>("export_cbz", { format }),
+	getExportConfig: () => __TAURI_INVOKE<ExportConfig>("get_export_config"),
+	saveExportConfig: (exportConfig: ExportConfig) => __TAURI_INVOKE<ExportConfig>("save_export_config", { exportConfig }),
 	getThumbnail: (page: EntityId) => __TAURI_INVOKE<ThumbnailBytes>("get_thumbnail", { page }),
 	getFonts: () => __TAURI_INVOKE<FontFamily[]>("get_fonts"),
 	getFontPreview: (familyName: string) => __TAURI_INVOKE<FontPreviewBytes>("get_font_preview", { familyName }),
@@ -99,6 +116,8 @@ export type AnalysisRegion = {
 	kind: string,
 	label: string | null,
 };
+
+export type ArchiveImageFormat = "png" | "jpeg" | "webp";
 
 export type AtlasCloudConfig = Record<string, never>;
 
@@ -165,6 +184,8 @@ export type DeviceResources = {
 	utilization: number | null,
 };
 
+export type DocumentId = string;
+
 export type Download = {
 	id: number,
 	state: DownloadState,
@@ -181,6 +202,11 @@ export type EntityId = string;
 export type Error = string;
 
 export type Event = { type: "started"; run: RunId } | { type: "text_delta"; run: RunId; delta: string } | { type: "reasoning_delta"; run: RunId; delta: string } | { type: "tool_started"; run: RunId; call_id: string; name: string } | { type: "tool_finished"; run: RunId; call_id: string; name: string; changed: boolean; output: string } | { type: "completed"; run: RunId; message: string } | { type: "failed"; run: RunId; message: string } | { type: "cancelled"; run: RunId };
+
+export type ExportConfig = {
+	jpeg_quality?: number,
+	webp_quality?: number,
+};
 
 export type ExportFormat = "png" | "psd";
 
@@ -254,6 +280,29 @@ export type GeometryUpdate = {
 	points: Point[] | null,
 };
 
+export type GlossaryCandidate = {
+	source: string,
+	suggested_target: string,
+	category: GlossaryCategory,
+	occurrences: number,
+	page_count: number,
+};
+
+export type GlossaryCategory = "person" | "place" | "organization" | "title" | "skill" | "item" | "terminology" | "other";
+
+export type GlossaryDocument = {
+	project: ProjectId,
+	glossary: ProjectGlossary,
+};
+
+export type GlossaryEntry = {
+	source: string,
+	target: string,
+	category: GlossaryCategory,
+	notes: string,
+	enabled: boolean,
+};
+
 export type GoogleCloudConfig = Record<string, never>;
 
 export type GrokConfig = Record<string, never>;
@@ -267,6 +316,8 @@ export type InpaintingModel = { model: "lama" } | { model: "aot-inpainting" } | 
 } & RoremMixedConfig;
 
 export type Job = {
+	kind: JobKind,
+	workflow: WorkflowProgress | null,
 	id: JobId,
 	state: JobState,
 	completed: number,
@@ -279,7 +330,9 @@ export type Job = {
 
 export type JobId = string;
 
-export type JobState = "running" | "finished" | "failed" | "stopped";
+export type JobKind = "processing" | "export" | "workflow";
+
+export type JobState = "running" | "awaiting_review" | "finished" | "failed" | "stopped";
 
 export type KoharuLayoutRFDetrSeg2XLConfig = {
 	text_threshold?: number | null,
@@ -348,7 +401,7 @@ export type OpenAiConfig = Record<string, never>;
 
 export type OpenRouterConfig = Record<string, never>;
 
-export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | { operation: "stages"; stages: Stage[] };
+export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | { operation: "stages"; stages: Stage[] } | { operation: "stage_major"; stages: Stage[] };
 
 export type Page = {
 	id: EntityId,
@@ -413,6 +466,14 @@ export type ProcessorConfig = {
 	"rorem-mixed"?: RoremMixedConfig | null,
 };
 
+export type ProjectGlossary = {
+	entries?: GlossaryEntry[],
+	candidates?: GlossaryCandidate[],
+	ignored?: string[],
+};
+
+export type ProjectId = DocumentId;
+
 export type ProjectInfo = {
 	name: string,
 	revision: Revision,
@@ -456,6 +517,8 @@ export type RoremMixedConfig = {
 };
 
 export type RunId = string;
+
+export type Scheduling = "page_major" | "stage_major";
 
 export type Scope = { scope: "project" } | { scope: "pages"; value: EntityId[] } | { scope: "region"; value: {
 	page: EntityId,
@@ -527,6 +590,38 @@ export type TypographyUpdate = {
 	layer: EntityId,
 	typography: Typography,
 };
+
+export type WorkflowPreset = {
+	name?: string,
+	scheduling?: Scheduling,
+	scope?: WorkflowScope,
+	stages?: WorkflowStep[],
+	review_glossary?: boolean,
+};
+
+export type WorkflowProgress = {
+	name: string,
+	stages: WorkflowStageProgress[],
+};
+
+export type WorkflowScope = "project" | "selected_pages";
+
+export type WorkflowSettings = {
+	enabled?: boolean,
+	active_preset?: string,
+	presets?: WorkflowPreset[],
+};
+
+export type WorkflowStageProgress = {
+	stage: WorkflowStep,
+	state: WorkflowStageState,
+	completed: number,
+	total: number,
+};
+
+export type WorkflowStageState = "pending" | "running" | "awaiting_review" | "complete" | "failed" | "stopped";
+
+export type WorkflowStep = "detection" | "ocr" | "terminology" | "translation" | "inpainting";
 
 export type WritingMode = "Horizontal" | "Vertical";
 

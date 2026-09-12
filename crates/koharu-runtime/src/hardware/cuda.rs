@@ -11,9 +11,13 @@ const ATTRIBUTE_INTEGRATED: c_int = 18;
 const ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
 const ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
 
-// The bundled CUDA 13.3 runtimes support compute capability 7.5 and newer.
-const MIN_DRIVER_VERSION: c_int = 13030;
+// CUDA 13.x supports minor-version compatibility with CUDA 13.0 drivers.
+const MIN_DRIVER_VERSION: c_int = 13000;
 const MIN_COMPUTE_CAPABILITY: u32 = 75;
+
+fn driver_compatible(version: c_int) -> bool {
+    version >= MIN_DRIVER_VERSION
+}
 
 type Init = unsafe extern "C" fn(c_uint) -> c_int;
 type DeviceGetCount = unsafe extern "C" fn(*mut c_int) -> c_int;
@@ -51,7 +55,7 @@ impl Cuda {
             if get_driver_version(&mut driver_version) != 0 {
                 return None;
             }
-            if driver_version < MIN_DRIVER_VERSION {
+            if !driver_compatible(driver_version) {
                 tracing::warn!(
                     driver_version,
                     required = MIN_DRIVER_VERSION,
@@ -171,4 +175,16 @@ fn load_library() -> Option<Library> {
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn load_library() -> Option<Library> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cuda_13_minor_compatible_drivers_are_not_rejected() {
+        assert!(driver_compatible(13000));
+        assert!(driver_compatible(13010));
+        assert!(!driver_compatible(12090));
+    }
 }

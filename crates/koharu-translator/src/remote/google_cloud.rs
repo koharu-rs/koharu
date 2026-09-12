@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::send_json;
-use crate::{Model, Provider, Result, TranslationRequest};
+use crate::{Model, Provider, Result, TranslationRequest, prompt};
 
 const URL: &str = "https://translation.googleapis.com/language/translate/v2";
 
@@ -33,7 +33,7 @@ pub(super) async fn translate(
     client: &Client,
     _config: &GoogleCloudConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("google-cloud-translation")?
         .context("google-cloud-translation API key is not configured")?;
     let mut url = Url::parse(URL).expect("Google API URL is valid");
@@ -49,12 +49,14 @@ pub(super) async fn translate(
         }),
     )
     .await?;
-    Ok(response
-        .data
-        .translations
-        .into_iter()
-        .map(|translation| translation.translated_text)
-        .collect())
+    Ok(prompt::TranslationOutcome::complete(
+        response
+            .data
+            .translations
+            .into_iter()
+            .map(|translation| translation.translated_text)
+            .collect(),
+    ))
 }
 
 #[derive(Serialize)]

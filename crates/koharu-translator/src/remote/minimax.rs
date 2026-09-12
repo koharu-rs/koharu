@@ -46,7 +46,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("minimax")?.context("minimax API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let response: Response = send_json(
@@ -88,7 +88,7 @@ pub(super) async fn translate(
         .context("MiniMax returned no choices")?
         .message
         .content;
-    Ok(prompt::translations("minimax", &text, &request.segments)?)
+    Ok(prompt::translations("minimax", &text, &request.segments))
 }
 
 #[derive(Serialize)]

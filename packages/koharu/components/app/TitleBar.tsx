@@ -3,11 +3,14 @@
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { FilePlus2, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
 import Image from 'next/image'
-import { useState, type ComponentProps } from 'react'
+import { useEffect, useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
+import { ExportCbzDialog } from '@/components/app/ExportCbzDialog'
+import { ProjectGlossaryDialog } from '@/components/app/ProjectGlossaryDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
+import { WorkflowDialog } from '@/components/app/WorkflowDialog'
 import { call } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
 import {
@@ -39,6 +42,16 @@ import { cn } from '@koharu/ui/lib/utils'
 export function TitleBar() {
   const { t } = useTranslation()
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [cbzOpen, setCbzOpen] = useState(false)
+  const [workflowOpen, setWorkflowOpen] = useState(false)
+  const glossaryOpen = useKoharuStore((state) => state.glossaryOpen)
+  const setGlossaryOpen = useKoharuStore((state) => state.setGlossaryOpen)
+  const awaitingReview = useKoharuStore(
+    (state) => Object.values(state.jobs).find((job) => job.state === 'awaiting_review')?.id,
+  )
+  useEffect(() => {
+    if (awaitingReview) setGlossaryOpen(true)
+  }, [awaitingReview, setGlossaryOpen])
   const macOS = useMacOS()
   const project = useProject().data
   const pagesQuery = usePages(Boolean(project))
@@ -102,22 +115,41 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'png')
-                }
-              >
-                {t('menu.exportPng')}
-              </MenubarItem>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'psd')
-                }
-              >
-                {t('menu.exportPsd')}
-              </MenubarItem>
+              <MenubarSub>
+                <MenubarSubTrigger
+                  disabled={!project || pages.length === 0}
+                  className='min-h-8 px-2 py-1 text-xs'
+                >
+                  {t('menu.export')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-44 p-1'>
+                  <MenubarItem
+                    disabled={!project || pages.length === 0}
+                    onClick={() =>
+                      void call(
+                        commands.exportPages,
+                        exportSelection(selectedPages, page?.id),
+                        'png',
+                      )
+                    }
+                  >
+                    {t('menu.exportPng')}
+                  </MenubarItem>
+                  <MenubarItem
+                    disabled={!project || pages.length === 0}
+                    onClick={() =>
+                      void call(
+                        commands.exportPages,
+                        exportSelection(selectedPages, page?.id),
+                        'psd',
+                      )
+                    }
+                  >
+                    {t('menu.exportPsd')}
+                  </MenubarItem>
+                  <MenubarItem onClick={() => setCbzOpen(true)}>{t('menu.exportCbz')}</MenubarItem>
+                </MenubarSubContent>
+              </MenubarSub>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={closeProject}>
                 {t('menu.closeProject')}
@@ -207,6 +239,16 @@ export function TitleBar() {
                 {t('menu.processLayers')}
               </MenubarItem>
               <MenubarSeparator />
+              <MenubarItem
+                disabled={!project || pages.length === 0}
+                onClick={() => setWorkflowOpen(true)}
+              >
+                {t('workflow.title')}
+              </MenubarItem>
+              <MenubarItem disabled={!project} onClick={() => setGlossaryOpen(true)}>
+                {t('glossary.title')}
+              </MenubarItem>
+              <MenubarSeparator />
               {(['detection', 'ocr', 'translation', 'inpainting'] as Stage[]).map((stage) => (
                 <MenubarItem
                   key={stage}
@@ -270,6 +312,17 @@ export function TitleBar() {
 
         {!macOS && <WindowControls />}
       </header>
+      <ExportCbzDialog open={cbzOpen} onOpenChange={setCbzOpen} />
+      <WorkflowDialog
+        key={project?.name}
+        open={Boolean(project) && workflowOpen}
+        onOpenChange={setWorkflowOpen}
+      />
+      <ProjectGlossaryDialog
+        key={project?.name}
+        open={Boolean(project) && glossaryOpen}
+        onOpenChange={setGlossaryOpen}
+      />
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   )

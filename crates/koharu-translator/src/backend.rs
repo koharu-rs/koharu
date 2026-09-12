@@ -17,6 +17,7 @@ pub struct TranslationRequest {
     pub target_language: Language,
     pub instructions: Option<String>,
     pub context: Vec<TranslationContext>,
+    pub glossary: Vec<koharu_scene::GlossaryEntry>,
     pub image: Option<Arc<DynamicImage>>,
 }
 
@@ -32,6 +33,7 @@ impl TranslationRequest {
             target_language,
             instructions: None,
             context: Vec::new(),
+            glossary: Vec::new(),
             image: None,
         }
     }
@@ -59,6 +61,12 @@ impl TranslationRequest {
     #[must_use]
     pub fn with_context(mut self, context: impl IntoIterator<Item = TranslationContext>) -> Self {
         self.context = context.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_glossary(mut self, entries: &[koharu_scene::GlossaryEntry]) -> Self {
+        self.glossary = koharu_scene::relevant_glossary(&self.segments, entries);
         self
     }
 

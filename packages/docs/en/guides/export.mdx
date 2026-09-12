@@ -1,10 +1,10 @@
 ---
-title: 'Export PNG and PSD'
+title: 'Export PNG, PSD, and CBZ'
 description: 'Export selected pages as flattened images or layered documents.'
 icon: 'file-export'
 ---
 
-Review the page composite before choosing **File → Export PNG** or **File → Export PSD**.
+Review the page composite before choosing **File → Export → PNG** or **File → Export → PSD**.
 
 <Steps>
   <Step title="Select the pages">
@@ -44,3 +44,11 @@ Review the page composite before choosing **File → Export PNG** or **File → 
 Canvas, PNG, and PSD begin with the same scene and prepared rendering result. If they differ, report the project revision, page, format, and images through [troubleshooting](/en/reference/troubleshooting).
 
 There is no separate “inpainted image only” export.
+
+## Export a CBZ book
+
+Choose **File → Export → CBZ**, select PNG, JPEG, or WebP, then choose a `.cbz` destination. CBZ always includes the entire project in project order, regardless of page-rail selection, using the same renderer as PNG export.
+
+Members are named `P001.png`, `P002.png`, and so on, with `.jpg` or `.webp` for the other formats. Projects with 1000 pages use four digits (`P0001` through `P1000`). JPEG composites transparency over white. JPEG quality defaults to 90; WebP defaults to 85. Both accept 1–100 and persist between sessions.
+
+Activity shows the current page and completed/total pages. **Stop** cancels at a safe rendering or encoding boundary. Koharu processes one page at a time and writes a temporary archive beside the destination. Only a finalized archive replaces the destination; cancellation or failure removes the temporary file and preserves any previous destination.

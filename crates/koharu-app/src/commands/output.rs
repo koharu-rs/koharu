@@ -122,17 +122,7 @@ pub(crate) async fn export_pages(
                         tokio::task::spawn_blocking(move || -> Result<()> {
                             let file =
                                 std::fs::File::create(directory.join(format!("{stem}.png")))?;
-                            PngEncoder::new_with_quality(
-                                file,
-                                CompressionType::Best,
-                                FilterType::Adaptive,
-                            )
-                            .write_image(
-                                image.as_raw(),
-                                image.width(),
-                                image.height(),
-                                ExtendedColorType::Rgba8,
-                            )?;
+                            encode_png(&image, file)?;
                             Ok(())
                         })
                         .await
@@ -218,7 +208,7 @@ pub(crate) async fn rendered_preview(
     .context("preview encode worker stopped unexpectedly")?
 }
 
-async fn rasterize(
+pub(super) async fn rasterize(
     rasterizer: Arc<Rasterizer>,
     frame: &Frame,
     options: RasterOptions,
@@ -228,4 +218,14 @@ async fn rasterize(
         .await
         .context("rasterizer worker stopped unexpectedly")?
         .map_err(Into::into)
+}
+
+pub(super) fn encode_png(image: &image::RgbaImage, writer: impl std::io::Write) -> Result<()> {
+    PngEncoder::new_with_quality(writer, CompressionType::Best, FilterType::Adaptive).write_image(
+        image.as_raw(),
+        image.width(),
+        image.height(),
+        ExtendedColorType::Rgba8,
+    )?;
+    Ok(())
 }

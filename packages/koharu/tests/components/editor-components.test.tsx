@@ -1217,7 +1217,7 @@ describe('greenfield editor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Pipeline' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Pipeline' })).toBeInTheDocument()
-    expect(screen.getAllByRole('combobox')).toHaveLength(3)
+    expect(screen.getAllByRole('combobox')).toHaveLength(4)
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Text threshold' }), {
       target: { value: '0.42' },
     })
@@ -1650,6 +1650,8 @@ describe('greenfield editor', () => {
         job: {
           state: 'running',
           id: 'job',
+          kind: 'processing',
+          workflow: null,
           completed: 1,
           total: 4,
           page: 'page',

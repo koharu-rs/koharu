@@ -1,4 +1,12 @@
 {
+  "export": {
+    "quality": "质量（1–100）",
+    "imageFormat": "归档内图片格式",
+    "entireProject": "按项目顺序导出全部页面，不受当前选页影响。",
+    "cbzTitle": "导出 CBZ",
+    "savedQuality": "质量设置会保存供下次使用。JPEG 透明区域合成到白色背景。",
+    "start": "导出"
+  },
   "about": {
     "author": "作者",
     "description": "漫画翻译工具",
@@ -13,9 +21,12 @@
     "downloadingFiles_other": "正在下载 {{count}} 个文件",
     "modelDownload": "模型下载",
     "processing": "正在处理",
+    "exporting": "正在导出",
+    "exportFailed": "导出失败。",
     "processingFailed": "处理失败。",
     "stop": "停止",
-    "title": "活动"
+    "title": "活动",
+    "currentPage": "当前页：{{page}}"
   },
   "agent": {
     "account": "ChatGPT 账户",
@@ -247,6 +258,8 @@
     "edit": "编辑",
     "exportPng": "导出 PNG…",
     "exportPsd": "导出 PSD…",
+    "export": "导出",
+    "exportCbz": "CBZ（整个项目）…",
     "file": "文件",
     "fit": "适应窗口",
     "github": "GitHub",
@@ -309,7 +322,8 @@
     "detection": "检测",
     "inpainting": "修补",
     "ocr": "OCR",
-    "translation": "翻译"
+    "translation": "翻译",
+    "terminology": "术语分析"
   },
   "phaseDescription": {
     "detection": "定位页面上的文本。",
@@ -532,5 +546,80 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "restore": "还原"
+  },
+  "workflow": {
+    "enable": "启用项目工作流",
+    "enableDescription": "启用后，“整个项目”和多页选择的完整运行使用下方预设；单页和单独阶段操作保持原有行为。",
+    "presetDescription": "Consistent Project Translation 会先完成全部页面的当前阶段，并在翻译前暂停，等待确认术语表。",
+    "title": "工作流预设",
+    "description": "选择逐页处理，或先完成范围内所有页面的同一阶段，再进入下一阶段。",
+    "preset": "预设",
+    "custom": "自定义预设",
+    "name": "预设名称",
+    "scheduling": "调度方式",
+    "pageMajor": "逐页处理（标准）",
+    "stageMajor": "分阶段处理（项目级）",
+    "scope": "处理范围",
+    "project": "整个项目",
+    "selected": "选中页面（{{count}}）",
+    "review": "审核术语表",
+    "skipReview": "关闭审核将跳过术语分析。已确认的术语仍会用于翻译。",
+    "savePreset": "保存预设",
+    "deletePreset": "删除预设",
+    "start": "开始工作流",
+    "states": {
+      "pending": "待处理",
+      "running": "处理中",
+      "awaiting_review": "等待审核",
+      "complete": "已完成",
+      "failed": "失败",
+      "stopped": "已停止"
+    }
+  },
+  "glossary": {
+    "title": "项目术语表",
+    "description": "已确认术语随项目保存，并用于统一翻译。候选项只有填写译文并确认后才会生效。",
+    "running": "处理完成或暂停等待审核后，可编辑术语表。",
+    "unsaved": "关闭前请保存或放弃修改。",
+    "confirmed": "已确认",
+    "candidates": "候选项",
+    "reload": "重新加载",
+    "source": "原文",
+    "target": "译文",
+    "category": "分类",
+    "notes": "备注",
+    "enabled": "启用",
+    "actions": "操作",
+    "delete": "删除",
+    "count": "出现次数",
+    "pages": "页数",
+    "suggestion": "建议译文",
+    "confirm": "确认",
+    "ignore": "忽略",
+    "empty": "暂无条目",
+    "add": "添加术语",
+    "bulkConfirm": "确认所有已填写译文的候选",
+    "previous": "上一页",
+    "next": "下一页",
+    "import": "导入 JSON",
+    "export": "导出 JSON",
+    "discard": "放弃修改",
+    "save": "保存术语表",
+    "continue": "保存并继续翻译",
+    "categories": {
+      "person": "人名",
+      "place": "地名",
+      "organization": "组织",
+      "title": "称号",
+      "skill": "技能",
+      "item": "物品",
+      "terminology": "术语",
+      "other": "其他"
+    },
+    "aiTranslate": "AI 填写空白译文",
+    "aiDescription": "使用当前配置的翻译模型和目标语言，分批填写空白候选译文。已有译文不覆盖，生成后仍需确认并保存。",
+    "aiProgress": "AI 翻译：{{completed}} / {{total}}",
+    "aiStop": "停止后续批次",
+    "aiStopping": "等待当前批次完成…"
   }
 }

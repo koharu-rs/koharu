@@ -55,7 +55,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("claude")?.context("claude API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let body = Request {
@@ -88,7 +88,7 @@ pub(super) async fn translate(
         .into_iter()
         .find_map(|block| (block.kind == "text").then_some(block.text).flatten())
         .context("Claude returned no text content")?;
-    Ok(prompt::translations("claude", &text, &request.segments)?)
+    Ok(prompt::translations("claude", &text, &request.segments))
 }
 
 #[derive(Serialize)]

@@ -10,7 +10,6 @@ use vello::{
     AaConfig, AaSupport, RenderParams, RendererOptions, Scene,
     kurbo::Affine,
     peniko::Color,
-    util::RenderContext,
     wgpu::{
         self, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
         TexelCopyBufferInfo, Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
@@ -80,8 +79,8 @@ pub struct Raster {
 }
 
 struct GpuState {
-    context: RenderContext,
-    device_id: usize,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
     renderer: vello::Renderer,
     compositor: GpuCompositor,
     targets: Vec<RenderTarget>,
@@ -98,6 +97,7 @@ struct RenderTarget {
 
 /// Reusable headless Vello renderer with a bounded readback-target pool.
 pub struct Rasterizer {
+    adapter: wgpu::AdapterInfo,
     gpu: Mutex<GpuState>,
 }
 
@@ -107,27 +107,56 @@ impl Rasterizer {
     }
 
     fn try_new() -> AnyResult<Self> {
-        let mut context = RenderContext::new();
-        let device_id = pollster::block_on(context.device(None))
-            .context("no WGPU adapter supports Vello's required features")?;
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::from_env().unwrap_or_default(),
+            flags: wgpu::InstanceFlags::from_build_config().with_env(),
+            display: None,
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            backend_options: wgpu::BackendOptions::from_env_or_default(),
+        });
+        let adapter = pollster::block_on(async {
+            if std::env::var_os("WGPU_ADAPTER_NAME").is_some() {
+                wgpu::util::initialize_adapter_from_env(&instance, None).await
+            } else {
+                instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::from_env()
+                            .unwrap_or(wgpu::PowerPreference::HighPerformance),
+                        ..Default::default()
+                    })
+                    .await
+            }
+        })
+        .context("no WGPU adapter supports Vello's required features")?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            required_features: adapter.features()
+                & (wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE),
+            ..Default::default()
+        }))
+        .context("failed to create the export GPU device")?;
         let renderer = vello::Renderer::new(
-            &context.devices[device_id].device,
+            &device,
             RendererOptions {
                 antialiasing_support: AaSupport::area_only(),
                 ..Default::default()
             },
         )
         .map_err(|error| anyhow!("failed to create Vello renderer: {error:?}"))?;
-        let compositor = GpuCompositor::new(&context.devices[device_id].device);
+        let compositor = GpuCompositor::new(&device);
         Ok(Self {
+            adapter: adapter.get_info(),
             gpu: Mutex::new(GpuState {
-                context,
-                device_id,
+                device,
+                queue,
                 renderer,
                 compositor,
                 targets: Vec::new(),
             }),
         })
+    }
+
+    pub fn adapter_info(&self) -> &wgpu::AdapterInfo {
+        &self.adapter
     }
 
     pub fn rasterize(&self, frame: &Frame, options: RasterOptions) -> Result<Raster> {
@@ -269,14 +298,13 @@ impl Rasterizer {
         let (device, submission, target) = {
             let mut gpu = self.gpu.lock();
             let GpuState {
-                context,
-                device_id,
+                device,
+                queue,
                 renderer,
                 compositor,
                 targets,
             } = &mut *gpu;
-            let device = context.devices[*device_id].device.clone();
-            let queue = &context.devices[*device_id].queue;
+            let device = device.clone();
             check_device_limit(&device, width, height)?;
             let target = take_target(targets, &device, width, height)?;
             compositor
@@ -328,14 +356,13 @@ impl Rasterizer {
         let (device, submission, target) = {
             let mut gpu = self.gpu.lock();
             let GpuState {
-                context,
-                device_id,
+                device,
+                queue,
                 renderer,
                 compositor: _,
                 targets,
             } = &mut *gpu;
-            let device = context.devices[*device_id].device.clone();
-            let queue = &context.devices[*device_id].queue;
+            let device = device.clone();
             check_device_limit(&device, width, height)?;
             let target = take_target(targets, &device, width, height)?;
             renderer

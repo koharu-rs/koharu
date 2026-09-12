@@ -54,7 +54,7 @@ impl AcceleratorPermit {
         Self { _lane: Some(lane) }
     }
 
-    fn cpu() -> Self {
+    pub(crate) fn cpu() -> Self {
         Self { _lane: None }
     }
 }

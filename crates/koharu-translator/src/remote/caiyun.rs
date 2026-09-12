@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use super::send_json;
-use crate::{Error, Language, Model, Provider, Result, TranslationRequest};
+use crate::{Error, Language, Model, Provider, Result, TranslationRequest, prompt};
 
 const URL: &str = "https://api.interpreter.caiyunai.com/v1/translator";
 
@@ -27,7 +27,7 @@ pub(super) async fn translate(
     client: &Client,
     _config: &CaiyunConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("caiyun")?.context("caiyun API key is not configured")?;
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "caiyun",
@@ -62,12 +62,12 @@ pub(super) async fn translate(
         )
         .into());
     }
-    Ok(
+    Ok(prompt::TranslationOutcome::complete(
         match response.target.context("Caiyun returned no target")? {
             Target::One(text) => vec![text],
             Target::Many(texts) => texts,
         },
-    )
+    ))
 }
 
 #[derive(Serialize)]

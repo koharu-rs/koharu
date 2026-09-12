@@ -126,3 +126,14 @@ fn linear_filtering_does_not_add_borders_to_any_raster_layer() {
     assert!((126..=129).contains(&edge[2]));
     assert_eq!(edge[3], u8::MAX);
 }
+
+#[test]
+fn reports_selected_export_adapter() {
+    let rasterizer = Rasterizer::new().unwrap();
+    let info = rasterizer.adapter_info();
+    println!(
+        "Export GPU: {} ({:?}, {:?})",
+        info.name, info.device_type, info.backend
+    );
+    assert!(!info.name.is_empty());
+}

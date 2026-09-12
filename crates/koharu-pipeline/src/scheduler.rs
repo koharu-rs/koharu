@@ -49,6 +49,7 @@ pub(crate) struct Scheduler {
     pages: Vec<PageWork>,
     page_index: BTreeMap<EntityId, usize>,
     page_window: usize,
+    stage_major: bool,
     active_pages: usize,
     head: usize,
     total: usize,
@@ -78,10 +79,30 @@ impl Scheduler {
                 .collect(),
             pages,
             page_window: stages.len().max(1),
+            stage_major: false,
             active_pages: 0,
             head: 0,
             total,
         }
+    }
+
+    pub(crate) fn stage_major(mut self) -> Self {
+        self.stage_major = true;
+        self.page_window = usize::MAX;
+        self
+    }
+
+    pub(crate) fn is_stage_major(&self) -> bool {
+        self.stage_major
+    }
+
+    pub(crate) fn stage_complete(&self, stage: Stage) -> bool {
+        self.pages.iter().all(|page| {
+            page.stages
+                .iter()
+                .filter(|work| work.stage == stage)
+                .all(|work| work.state == WorkState::Finished)
+        })
     }
 
     pub(crate) fn total(&self) -> usize {
@@ -92,6 +113,17 @@ impl Scheduler {
         &mut self,
         busy_stages: &BTreeSet<Stage>,
     ) -> Option<(EntityId, Stage)> {
+        let barrier = self
+            .stage_major
+            .then(|| {
+                self.pages
+                    .iter()
+                    .flat_map(|page| &page.stages)
+                    .filter(|work| work.state != WorkState::Finished)
+                    .map(|work| work.stage)
+                    .min()
+            })
+            .flatten();
         for page_index in self.head..self.pages.len() {
             let started = self.pages[page_index].started();
             if !started && self.active_pages >= self.page_window {
@@ -104,6 +136,7 @@ impl Scheduler {
                     .enumerate()
                     .find_map(|(index, work)| {
                         (work.state == WorkState::Pending
+                            && barrier.is_none_or(|stage| work.stage == stage)
                             && !busy_stages.contains(&work.stage)
                             && self.pages[page_index].ready(index))
                         .then_some(index)
@@ -216,5 +249,52 @@ mod tests {
         assert!(scheduler.complete_stage(pages[0], Stage::Inpainting));
         busy.clear();
         assert_eq!(scheduler.start_next(&busy), Some((pages[1], Stage::Ocr)));
+    }
+}
+
+#[cfg(test)]
+mod stage_major_tests {
+    use super::*;
+
+    #[test]
+    fn barriers_cover_every_target_page_in_stage_order() {
+        let pages = [EntityId::new(), EntityId::new(), EntityId::new()];
+        let mut scheduler = Scheduler::new(&pages, &Stage::ALL).stage_major();
+        let busy = BTreeSet::new();
+        for stage in Stage::ALL {
+            for page in pages {
+                assert_eq!(scheduler.start_next(&busy), Some((page, stage)));
+                assert!(scheduler.start_next(&BTreeSet::from([stage])).is_none());
+                scheduler.complete_stage(page, stage);
+            }
+            assert!(scheduler.stage_complete(stage));
+        }
+        assert!(scheduler.start_next(&busy).is_none());
+    }
+
+    #[test]
+    fn an_idle_stage_dispatches_multiple_pages() {
+        let pages = [EntityId::new(), EntityId::new(), EntityId::new()];
+        let mut scheduler = Scheduler::new(&pages, &Stage::ALL).stage_major();
+        let busy = BTreeSet::new();
+        for page in pages {
+            assert_eq!(scheduler.start_next(&busy), Some((page, Stage::Detection)));
+        }
+        assert!(scheduler.start_next(&busy).is_none());
+    }
+
+    #[test]
+    fn only_selected_scope_and_stages_are_scheduled() {
+        let pages = [EntityId::new(), EntityId::new(), EntityId::new()];
+        let mut scheduler =
+            Scheduler::new(&pages[1..], &[Stage::Ocr, Stage::Translation]).stage_major();
+        assert_eq!(scheduler.total(), 4);
+        for stage in [Stage::Ocr, Stage::Translation] {
+            for page in &pages[1..] {
+                assert_eq!(scheduler.start_next(&BTreeSet::new()), Some((*page, stage)));
+                scheduler.complete_stage(*page, stage);
+            }
+        }
+        assert!(scheduler.start_next(&BTreeSet::new()).is_none());
     }
 }
