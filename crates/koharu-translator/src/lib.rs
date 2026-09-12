@@ -172,6 +172,15 @@ impl Translator {
             None
         };
         let expected = request.segments.len();
+        if expected == 0 {
+            // Every segment matched the glossary, so the provider has nothing to translate.
+            tracing::Span::current().record("outcome", "completed");
+            let translated = match protected {
+                Some(protected) => protected.restore(&[])?,
+                None => Vec::new(),
+            };
+            return Ok((provider_id, translated));
+        }
         let mut outcome = self
             .translate_once(selection, &generation, &request)
             .await?;
