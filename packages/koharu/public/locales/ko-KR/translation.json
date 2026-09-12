@@ -246,6 +246,8 @@
     "delete": "선택 항목 삭제",
     "discord": "Discord",
     "edit": "편집",
+    "export": "내보내기",
+    "exportCbz": "CBZ(모든 페이지)…",
     "exportPng": "PNG 내보내기…",
     "exportPsd": "PSD 내보내기…",
     "file": "파일",

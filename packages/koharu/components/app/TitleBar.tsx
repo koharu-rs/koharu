@@ -102,22 +102,43 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'png')
-                }
-              >
-                {t('menu.exportPng')}
-              </MenubarItem>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'psd')
-                }
-              >
-                {t('menu.exportPsd')}
-              </MenubarItem>
+              <MenubarSub>
+                <MenubarSubTrigger
+                  disabled={!project || pages.length === 0}
+                  className='min-h-8 gap-1.5 px-2 py-1 text-xs'
+                >
+                  {t('menu.export')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-40 p-1'>
+                  <MenubarItem
+                    onClick={() =>
+                      void call(
+                        commands.exportPages,
+                        exportSelection(selectedPages, page?.id),
+                        'png',
+                      )
+                    }
+                  >
+                    {t('menu.exportPng')}
+                  </MenubarItem>
+                  <MenubarItem
+                    onClick={() =>
+                      void call(
+                        commands.exportPages,
+                        exportSelection(selectedPages, page?.id),
+                        'psd',
+                      )
+                    }
+                  >
+                    {t('menu.exportPsd')}
+                  </MenubarItem>
+                  <MenubarItem
+                    onClick={() => void call(commands.exportPages, [], 'cbz')}
+                  >
+                    {t('menu.exportCbz')}
+                  </MenubarItem>
+                </MenubarSubContent>
+              </MenubarSub>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={closeProject}>
                 {t('menu.closeProject')}

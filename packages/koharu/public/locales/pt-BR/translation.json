@@ -246,6 +246,8 @@
     "delete": "Excluir seleção",
     "discord": "Discord",
     "edit": "Editar",
+    "export": "Exportar",
+    "exportCbz": "CBZ (todas as páginas)…",
     "exportPng": "Exportar PNG…",
     "exportPsd": "Exportar PSD…",
     "file": "Arquivo",
