@@ -12,6 +12,7 @@
     "downloadingFiles_one": "Descargando {{count}} archivos",
     "downloadingFiles_other": "Descargando {{count}} archivos",
     "modelDownload": "Descarga del modelo",
+    "pageLabel": "Página {{number}}: {{label}}",
     "processing": "Procesando",
     "processingFailed": "Error de procesamiento.",
     "stop": "Detener",
@@ -297,7 +298,8 @@
     "pages": "Páginas",
     "rename": "Cambiar nombre",
     "renameDescription": "Elige un nombre nuevo para esta página.",
-    "renameTitle": "Cambiar nombre de página"
+    "renameTitle": "Cambiar nombre de página",
+    "selected": "{{count}} seleccionadas"
   },
   "outputPicker": {
     "instructions": "Instrucciones de traducción",

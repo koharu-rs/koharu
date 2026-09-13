@@ -12,6 +12,7 @@
     "downloadingFiles_one": "Скачивание файлов: {{count}}",
     "downloadingFiles_other": "Скачивание файлов: {{count}}",
     "modelDownload": "Скачивание модели",
+    "pageLabel": "Страница {{number}}: {{label}}",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
     "stop": "Остановить",
@@ -297,7 +298,8 @@
     "pages": "Страницы",
     "rename": "Переименовать",
     "renameDescription": "Выберите новое имя для страницы.",
-    "renameTitle": "Переименовать страницу"
+    "renameTitle": "Переименовать страницу",
+    "selected": "Выбрано: {{count}}"
   },
   "outputPicker": {
     "instructions": "Инструкции по переводу",

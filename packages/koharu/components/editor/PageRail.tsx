@@ -238,6 +238,17 @@ export function PageRail() {
               {pages.length}
             </span>
           </div>
+          {/* One selected page behaves exactly like acting on the active
+              page, so saying so would be noise. */}
+          {selected.length > 1 && (
+            <span
+              role='status'
+              aria-live='polite'
+              className='ml-auto text-[9px] text-muted-foreground tabular-nums'
+            >
+              {t('navigator.selected', { count: selected.length })}
+            </span>
+          )}
         </header>
 
         {importing && (

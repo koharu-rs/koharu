@@ -12,6 +12,7 @@
     "downloadingFiles_one": "正在下載 {{count}} 個檔案",
     "downloadingFiles_other": "正在下載 {{count}} 個檔案",
     "modelDownload": "模型下載",
+    "pageLabel": "第 {{number}} 頁：{{label}}",
     "processing": "正在處理",
     "processingFailed": "處理失敗。",
     "stop": "停止",
@@ -297,7 +298,8 @@
     "pages": "頁面",
     "rename": "重新命名",
     "renameDescription": "為此頁面選擇新名稱。",
-    "renameTitle": "重新命名頁面"
+    "renameTitle": "重新命名頁面",
+    "selected": "已選擇 {{count}}"
   },
   "outputPicker": {
     "instructions": "翻譯指示",

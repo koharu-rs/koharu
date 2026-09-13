@@ -12,6 +12,7 @@
     "downloadingFiles_one": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_other": "{{count}}件のファイルをダウンロード中",
     "modelDownload": "モデルのダウンロード",
+    "pageLabel": "{{number}}ページ目: {{label}}",
     "processing": "処理中",
     "processingFailed": "処理に失敗しました。",
     "stop": "停止",
@@ -297,7 +298,8 @@
     "pages": "ページ",
     "rename": "名前を変更",
     "renameDescription": "このページの新しい名前を入力します。",
-    "renameTitle": "ページ名を変更"
+    "renameTitle": "ページ名を変更",
+    "selected": "{{count}}件選択中"
   },
   "outputPicker": {
     "instructions": "翻訳指示",

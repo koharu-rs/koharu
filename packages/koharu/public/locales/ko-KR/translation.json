@@ -12,6 +12,7 @@
     "downloadingFiles_one": "{{count}}개 파일 다운로드 중",
     "downloadingFiles_other": "{{count}}개 파일 다운로드 중",
     "modelDownload": "모델 다운로드",
+    "pageLabel": "{{number}}페이지: {{label}}",
     "processing": "처리 중",
     "processingFailed": "처리에 실패했습니다.",
     "stop": "중지",
@@ -297,7 +298,8 @@
     "pages": "페이지",
     "rename": "이름 바꾸기",
     "renameDescription": "이 페이지의 새 이름을 정하세요.",
-    "renameTitle": "페이지 이름 바꾸기"
+    "renameTitle": "페이지 이름 바꾸기",
+    "selected": "{{count}}개 선택됨"
   },
   "outputPicker": {
     "instructions": "번역 지침",
