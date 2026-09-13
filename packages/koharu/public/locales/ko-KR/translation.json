@@ -298,7 +298,8 @@
     "pages": "페이지",
     "rename": "이름 바꾸기",
     "renameDescription": "이 페이지의 새 이름을 정하세요.",
-    "renameTitle": "페이지 이름 바꾸기"
+    "renameTitle": "페이지 이름 바꾸기",
+    "selected": "{{count}}개 선택됨"
   },
   "outputPicker": {
     "instructions": "번역 지침",

@@ -298,7 +298,8 @@
     "pages": "Pages",
     "rename": "Rename",
     "renameDescription": "Choose a new name for this page.",
-    "renameTitle": "Rename page"
+    "renameTitle": "Rename page",
+    "selected": "{{count}} selected"
   },
   "outputPicker": {
     "instructions": "Translation instructions",

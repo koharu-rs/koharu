@@ -298,7 +298,8 @@
     "pages": "ページ",
     "rename": "名前を変更",
     "renameDescription": "このページの新しい名前を入力します。",
-    "renameTitle": "ページ名を変更"
+    "renameTitle": "ページ名を変更",
+    "selected": "{{count}}件選択中"
   },
   "outputPicker": {
     "instructions": "翻訳指示",

@@ -298,7 +298,8 @@
     "pages": "Sayfalar",
     "rename": "Yeniden adlandır",
     "renameDescription": "Bu sayfa için yeni bir ad seçin.",
-    "renameTitle": "Sayfayı yeniden adlandır"
+    "renameTitle": "Sayfayı yeniden adlandır",
+    "selected": "{{count}} seçili"
   },
   "outputPicker": {
     "instructions": "Çeviri talimatları",

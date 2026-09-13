@@ -354,6 +354,26 @@ describe('greenfield editor', () => {
     expect(nativeGetVersion).toHaveBeenCalledTimes(1)
   })
 
+  it('shows how many pages are selected above the filter', async () => {
+    installProject()
+    act(() => {
+      useKoharuStore.setState({ selectedPages: ['page-1'] })
+    })
+    render(<PageRail />)
+
+    // One page behaves like acting on the active page, so it is not worth
+    // announcing.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    act(() => {
+      useKoharuStore.setState({ selectedPages: ['page-1', 'page-2', 'page-3'] })
+    })
+
+    // A status region, so the count reaches assistive technology when it
+    // changes rather than only being visible.
+    expect(await screen.findByRole('status')).toHaveTextContent('3 selected')
+  })
+
   it('loads page thumbnails into the filmstrip', async () => {
     installProject()
     const thumbnail = vi.spyOn(commands, 'getThumbnail').mockResolvedValue([1])
