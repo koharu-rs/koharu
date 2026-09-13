@@ -64,6 +64,10 @@ trait StageProcessor: Send + Sync {
     fn skip(&self, _input: &StageInput) -> Result<bool> {
         Ok(false)
     }
+    // Overlapping work items are safe and do not occupy the accelerator lane.
+    fn concurrent(&self) -> bool {
+        false
+    }
     fn unload(&self) -> bool;
     async fn load(&self) -> Result<()>;
     async fn process(&self, input: StageInput) -> Result<Patch>;
@@ -105,6 +109,10 @@ impl Stages {
 
     pub(crate) fn skip(&self, stage: Stage, input: &StageInput) -> Result<bool> {
         self.processor(stage).skip(input)
+    }
+
+    pub(crate) fn concurrent(&self, stage: Stage) -> bool {
+        self.processor(stage).concurrent()
     }
 
     pub(crate) async fn load(&self, stage: Stage) -> Result<()> {

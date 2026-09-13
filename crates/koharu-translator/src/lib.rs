@@ -66,6 +66,26 @@ impl Translator {
             && (selection.provider != Provider::Local || local::supports_vision(selection))
     }
 
+    /// Whether the provider answers overlapping requests independently.
+    #[must_use]
+    pub fn concurrent(&self, selection: &ModelSelection) -> bool {
+        match selection.provider {
+            Provider::Local | Provider::LmStudio => false,
+            Provider::OpenAiCompatible => self
+                .providers
+                .read()
+                .map(|providers| {
+                    providers
+                        .openai_compatible
+                        .base_url
+                        .as_ref()
+                        .is_none_or(|url| !is_loopback(url))
+                })
+                .unwrap_or(false),
+            _ => true,
+        }
+    }
+
     #[must_use]
     pub fn loaded(&self, selection: &ModelSelection) -> bool {
         if selection.provider != Provider::Local {
@@ -189,6 +209,17 @@ impl Translator {
     }
 }
 
+// Hosted endpoints scale with parallel requests; local servers queue them.
+fn is_loopback(url: &url::Url) -> bool {
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host == "::1"
+            || host
+                .parse::<std::net::Ipv4Addr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,5 +257,38 @@ mod tests {
                 ..GenerationConfig::default()
             }
         ));
+    }
+
+    fn selection(provider: Provider) -> ModelSelection {
+        ModelSelection {
+            provider,
+            model: None,
+            quantization: None,
+            vision: true,
+            reasoning: true,
+        }
+    }
+
+    fn translator(providers: ProvidersConfig) -> Translator {
+        Translator::from_config(Device::cpu(), koharu_config::Config::memory(providers)).unwrap()
+    }
+
+    #[test]
+    fn hosted_providers_allow_overlapping_requests() {
+        let translator = translator(ProvidersConfig::default());
+        assert!(translator.concurrent(&selection(Provider::OpenAi)));
+        assert!(translator.concurrent(&selection(Provider::OpenRouter)));
+        assert!(!translator.concurrent(&selection(Provider::Local)));
+        assert!(!translator.concurrent(&selection(Provider::LmStudio)));
+        // The default OpenAI-compatible endpoint is a local server.
+        assert!(!translator.concurrent(&selection(Provider::OpenAiCompatible)));
+    }
+
+    #[test]
+    fn remote_openai_compatible_endpoints_allow_overlapping_requests() {
+        let mut providers = ProvidersConfig::default();
+        providers.openai_compatible.base_url =
+            Some(url::Url::parse("https://api.example.com/v1").unwrap());
+        assert!(translator(providers).concurrent(&selection(Provider::OpenAiCompatible)));
     }
 }

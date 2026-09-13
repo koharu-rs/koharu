@@ -26,6 +26,10 @@ impl StageProcessor for Processor {
         Translator::model(&self.config.model)
     }
 
+    fn concurrent(&self) -> bool {
+        self.translator.concurrent(&self.config.model)
+    }
+
     fn unload(&self) -> bool {
         self.translator.unload()
     }
