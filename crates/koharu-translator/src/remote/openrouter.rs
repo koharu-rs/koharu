@@ -27,7 +27,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key =
         koharu_secrets::get("openrouter")?.context("openrouter API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
@@ -90,11 +90,7 @@ pub(super) async fn translate(
         .message
         .content
         .context("OpenRouter returned no message content")?;
-    Ok(prompt::translations(
-        "openrouter",
-        &text,
-        &request.segments,
-    )?)
+    Ok(prompt::translations("openrouter", &text, &request.segments))
 }
 
 pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {

@@ -22,6 +22,10 @@ pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
 pub use provider::{Provider, ProviderConfig, ProvidersConfig};
 
+/// Upper bound on the attempts one batch is translated with: the first covers
+/// the whole batch, the remaining ones re-request only what the model dropped.
+const MAX_ATTEMPTS: usize = 3;
+
 #[derive(Clone)]
 pub struct Translator {
     providers: koharu_config::Config<ProvidersConfig>,
@@ -157,15 +161,41 @@ impl Translator {
         }
 
         let expected = request.segments.len();
-        let translated = if provider == Provider::Local {
-            self.local(selection)
-                .await?
-                .translate(request, generation)
-                .await?
-        } else {
-            let providers = self.providers.read()?.clone();
-            remote::translate(&self.client, &providers, selection, &generation, &request).await?
-        };
+        let mut outcome = self
+            .translate_once(selection, &generation, &request)
+            .await?;
+
+        // Models truncate or corrupt the tail of a long batch. Re-request only
+        // the segments the provider never returned before failing the batch.
+        let mut attempt = 1;
+        let mut failure: Option<anyhow::Error> = None;
+        while !outcome.missing.is_empty() && attempt < MAX_ATTEMPTS {
+            attempt += 1;
+            failure = failure.or(outcome.error.take());
+            let missing = std::mem::take(&mut outcome.missing);
+            tracing::debug!(
+                attempt,
+                segments = missing.len(),
+                "re-requesting segments the provider did not return",
+            );
+            let repair = repair_request(&request, &missing);
+            let repaired = self
+                .translate_once(selection, &repair_generation(&generation), &repair)
+                .await?;
+            merge_missing(&mut outcome, &missing, repaired);
+        }
+        if !outcome.missing.is_empty() {
+            let error = Error::SegmentCount {
+                provider: provider_id,
+                expected,
+                actual: expected - outcome.missing.len(),
+            };
+            return Err(match failure.or(outcome.error) {
+                Some(failure) => failure.context(error.to_string()),
+                None => error.into(),
+            });
+        }
+        let translated = outcome.translations;
         if translated.len() != expected {
             return Err(Error::SegmentCount {
                 provider: provider_id,
@@ -176,6 +206,23 @@ impl Translator {
         }
         tracing::Span::current().record("outcome", "completed");
         Ok((provider_id, translated))
+    }
+
+    async fn translate_once(
+        &self,
+        selection: &ModelSelection,
+        generation: &GenerationConfig,
+        request: &TranslationRequest,
+    ) -> Result<prompt::TranslationOutcome> {
+        if selection.provider != Provider::Local {
+            let providers = self.providers.read()?.clone();
+            return remote::translate(&self.client, &providers, selection, generation, request)
+                .await;
+        }
+        self.local(selection)
+            .await?
+            .translate(request.clone(), *generation)
+            .await
     }
 
     #[tracing::instrument(skip_all)]
@@ -218,6 +265,52 @@ fn is_loopback(url: &url::Url) -> bool {
                 .parse::<std::net::Ipv4Addr>()
                 .is_ok_and(|ip| ip.is_loopback())
     })
+}
+
+/// Narrows a batch to the segments a provider did not return, keeping context,
+/// instructions, and image intact.
+fn repair_request(request: &TranslationRequest, missing: &[usize]) -> TranslationRequest {
+    let mut repair = request.clone();
+    repair.segments = missing
+        .iter()
+        .filter_map(|&index| request.segments.get(index).cloned())
+        .collect();
+    repair
+}
+
+/// Repair attempts trade variety for reliability: a dropped or corrupted tail
+/// is usually sampling noise, so a retry runs deterministically.
+fn repair_generation(generation: &GenerationConfig) -> GenerationConfig {
+    GenerationConfig {
+        temperature: Some(0.0),
+        top_p: Some(1.0),
+        reasoning: generation.reasoning.map(|_| false),
+        ..*generation
+    }
+}
+
+/// Folds a repaired response back into the batch. Repair positions map onto the
+/// original missing indices rather than the batch.
+fn merge_missing(
+    outcome: &mut prompt::TranslationOutcome,
+    missing: &[usize],
+    repaired: prompt::TranslationOutcome,
+) {
+    let prompt::TranslationOutcome {
+        translations,
+        missing: dropped,
+        error,
+    } = repaired;
+    let mut remaining = Vec::new();
+    for (position, &index) in missing.iter().enumerate() {
+        if dropped.contains(&position) {
+            remaining.push(index);
+        } else if let Some(text) = translations.get(position) {
+            outcome.translations[index] = text.clone();
+        }
+    }
+    outcome.missing = remaining;
+    outcome.error = error;
 }
 
 #[cfg(test)]
@@ -290,5 +383,53 @@ mod tests {
         providers.openai_compatible.base_url =
             Some(url::Url::parse("https://api.example.com/v1").unwrap());
         assert!(translator(providers).concurrent(&selection(Provider::OpenAiCompatible)));
+    }
+
+    fn outcome(translations: &[&str], missing: &[usize]) -> prompt::TranslationOutcome {
+        prompt::TranslationOutcome {
+            translations: translations.iter().map(|text| (*text).to_owned()).collect(),
+            missing: missing.to_vec(),
+            error: None,
+        }
+    }
+
+    #[test]
+    fn repair_request_narrows_segments_and_keeps_the_rest() {
+        let request = TranslationRequest::new(["one", "two", "three"], Language::English)
+            .with_instructions("keep honorifics");
+        let repair = repair_request(&request, &[0, 2]);
+
+        assert_eq!(repair.segments, vec!["one", "three"]);
+        assert_eq!(repair.instructions.as_deref(), Some("keep honorifics"));
+        assert_eq!(repair.target_language, request.target_language);
+    }
+
+    #[test]
+    fn repair_generation_is_deterministic() {
+        let repaired = repair_generation(&GenerationConfig {
+            temperature: Some(1.3),
+            top_p: Some(0.9),
+            reasoning: Some(true),
+            ..GenerationConfig::default()
+        });
+
+        assert_eq!(repaired.temperature, Some(0.0));
+        assert_eq!(repaired.top_p, Some(1.0));
+        assert_eq!(repaired.reasoning, Some(false));
+    }
+
+    #[test]
+    fn merge_missing_folds_repairs_back_by_original_index() {
+        let mut batch = outcome(&["a", "b", "c", "d"], &[1, 3]);
+        merge_missing(&mut batch, &[1, 3], outcome(&["B", "d"], &[]));
+
+        assert_eq!(batch.translations, vec!["a", "B", "c", "d"]);
+        assert!(batch.missing.is_empty());
+
+        let mut partial = outcome(&["a", "b", "c"], &[0, 1, 2]);
+        merge_missing(&mut partial, &[0, 1, 2], outcome(&["x", "b", "c"], &[2]));
+
+        assert_eq!(partial.translations, vec!["x", "b", "c"]);
+        assert_eq!(partial.missing, vec![2]);
     }
 }

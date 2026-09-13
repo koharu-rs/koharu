@@ -25,7 +25,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("grok")?.context("grok API key is not configured")?;
     let response: Response = send_json(
         "grok",
@@ -45,7 +45,7 @@ pub(super) async fn translate(
                 .flatten()
         })
         .context("Grok returned no output text")?;
-    Ok(prompt::translations("grok", &text, &request.segments)?)
+    Ok(prompt::translations("grok", &text, &request.segments))
 }
 
 pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {

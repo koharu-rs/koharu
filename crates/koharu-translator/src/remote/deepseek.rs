@@ -50,7 +50,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("deepseek")?.context("deepseek API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let user_content = match request.image.as_deref() {
@@ -102,7 +102,7 @@ pub(super) async fn translate(
         .message
         .content
         .context("DeepSeek returned no message content")?;
-    Ok(prompt::translations("deepseek", &text, &request.segments)?)
+    Ok(prompt::translations("deepseek", &text, &request.segments))
 }
 
 #[derive(Serialize)]

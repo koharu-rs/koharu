@@ -57,10 +57,10 @@ impl LocalTranslator {
         &self,
         request: TranslationRequest,
         generation: GenerationConfig,
-    ) -> Result<Vec<String>> {
+    ) -> Result<prompt::TranslationOutcome> {
         let expected = request.segments.len();
         if expected == 0 {
-            return Ok(Vec::new());
+            return Ok(prompt::TranslationOutcome::complete(Vec::new()));
         }
         if !self
             .descriptor
@@ -90,8 +90,11 @@ impl LocalTranslator {
         })
         .await
         .context("local translation task panicked")??;
-        let segments = prompt::translations("local", &output.text, &request.segments)?;
-        Ok(segments)
+        Ok(prompt::translations(
+            "local",
+            &output.text,
+            &request.segments,
+        ))
     }
 
     fn render_prompt(&self, request: &TranslationRequest, reasoning: bool) -> Result<String> {
