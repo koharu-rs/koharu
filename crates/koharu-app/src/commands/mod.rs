@@ -2,12 +2,14 @@ pub(crate) mod agent;
 pub(crate) mod canvas;
 pub(crate) mod editing;
 pub(crate) mod fonts;
+pub(crate) mod glossary;
 pub(crate) mod import;
 pub(crate) mod lifecycle;
 pub(crate) mod output;
 pub(crate) mod preferences;
 pub(crate) mod processing;
 pub(crate) mod project;
+pub(crate) mod workflow;
 
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -86,6 +88,17 @@ pub fn bindings() -> tauri_specta::Builder<tauri_runtime_cef::CefRuntime> {
             editing::move_layer,
             editing::undo,
             editing::redo,
+            glossary::get_project_glossary,
+            glossary::suggest_glossary_translations,
+            glossary::save_project_glossary,
+            glossary::import_project_glossary,
+            glossary::export_project_glossary,
+            workflow::get_workflow_settings,
+            workflow::configure_project_workflow,
+            workflow::get_workflow_presets,
+            workflow::save_workflow_presets,
+            workflow::start_workflow,
+            workflow::resume_workflow,
             processing::process,
             processing::stop_job,
             output::export_pages,

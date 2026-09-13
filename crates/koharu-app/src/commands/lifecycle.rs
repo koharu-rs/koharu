@@ -192,6 +192,7 @@ async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Res
     }
     processing.stops.lock().clear();
     processing.jobs.lock().clear();
+    processing.reviews.lock().clear();
 
     let previous = {
         let current = handle.state::<CurrentProject>();
@@ -342,6 +343,7 @@ async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
     }
     processing.stops.lock().clear();
     processing.jobs.lock().clear();
+    processing.reviews.lock().clear();
     let previous = {
         let current = handle.state::<CurrentProject>();
         let mut current = current.project.lock().await;

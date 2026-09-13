@@ -32,6 +32,10 @@ impl StageRunner {
         })
     }
 
+    pub(crate) fn unload(&self, stage: Stage) {
+        self.stages.unload(stage);
+    }
+
     pub(crate) fn concurrent(&self, stage: Stage) -> bool {
         self.stages.concurrent(stage)
     }

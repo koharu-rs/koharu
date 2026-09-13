@@ -83,7 +83,11 @@ impl<'a> Execution<'a> {
             stop: request.stop,
             progress: request.progress,
             scope,
-            scheduler: Scheduler::new(&pages, &stages),
+            scheduler: if matches!(request.operation, crate::Operation::StageMajor { .. }) {
+                Scheduler::new(&pages, &stages).stage_major()
+            } else {
+                Scheduler::new(&pages, &stages)
+            },
             scene: snapshot,
             images: BTreeMap::new(),
             running: BTreeMap::new(),
@@ -124,6 +128,11 @@ impl<'a> Execution<'a> {
             }
         }
 
+        if self.scheduler.is_stage_major() {
+            for stage in Stage::ALL {
+                self.runner.unload(stage);
+            }
+        }
         self.finalize()
     }
 
@@ -234,8 +243,11 @@ impl<'a> Execution<'a> {
     }
 
     fn mark_complete(&mut self, page: EntityId, stage: Stage) {
-        if self.scheduler.complete_stage(page, stage) {
+        if self.scheduler.complete_stage(page, stage) || self.scheduler.is_stage_major() {
             self.images.remove(&page);
+        }
+        if self.scheduler.is_stage_major() && self.scheduler.stage_complete(stage) {
+            self.runner.unload(stage);
         }
         self.completed += 1;
     }

@@ -42,6 +42,7 @@ macro_rules! component_schema {
 }
 
 component_schema! {
+    GLOSSARY = 18 => crate::ProjectGlossary,
     PROJECT = 0 => Project,
     PAGE = 1 => Page,
     GROUP = 2 => Group,

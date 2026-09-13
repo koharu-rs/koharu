@@ -54,3 +54,17 @@ Stages with no applicable input complete without inference, although the model i
 </Warning>
 
 Continue with [text review](/en/guides/review) or [cleanup](/en/guides/cleanup).
+
+## Project workflow presets and terminology
+
+Enable **Settings → Pipeline → Use project workflow for Run All** and choose a preset. Entire-project and multi-page Run All actions, including the Process menu, then use that preset. Disabling the switch preserves standard page-major processing; single-page and individual-stage actions stay unchanged. Use **Process → Workflow presets** to edit presets or run one directly. **Standard** preserves the existing scheduling behavior. **Consistent Project Translation** finishes detection across the scope, then OCR, terminology analysis and review, translation, and finally inpainting. Each stage waits for all target pages to finish. Choose the entire project or selected pages; save a named preset to retain its scope, scheduling, stages, and review setting.
+
+Terminology analysis reads existing OCR text one page at a time. It combines repetition and cross-page counts with Japanese surname, katakana, compound, title, and organization cues. It normalizes Unicode and punctuation, deduplicates terms, and retains at most 5000 candidates. Extraction does not call an LLM. In the candidate list, **AI fill missing translations** uses the configured translation model and target language in batches of up to 24 terms and 4096 source bytes. It preserves existing translations and supports stopping after the current batch. Review, confirm, and save the suggestions afterward. Turning review off skips analysis; it never silently confirms candidates.
+
+The editor toolbar **Project glossary** button (also available under **Process**) contains **Confirmed** and **Candidates**. Edit source, target, category, notes, and enabled state; add or delete entries manually. Candidates show occurrence and page counts. Fill in a translation and confirm individually, or confirm all candidates with translations. Ignored candidates stay excluded from later analysis. Saved candidate translations survive reanalysis.
+
+When the workflow pauses, select **Save and continue translation** after review. You can leave some candidates unconfirmed; only enabled confirmed terms apply. Activity retains each stage's status and page count and offers review and stop controls. To rerun after cancellation or failure, choose only the remaining stages; completed scene edits remain saved.
+
+The glossary belongs to the native project and participates in undo/redo. Switching providers does not remove it. JSON export supports reuse across projects; import merges confirmed entries and rejects conflicting source terms without changing the project.
+
+Translation batches receive only matching glossary entries, with longer source matches taking precedence. Local and hosted language models share the same consistency instructions. For DeepL, Google Cloud Translation, and Caiyun, confirmed spans are preserved while surrounding fragments are translated; this guarantees those targets but gives the service less sentence context. Review the result when grammatical reordering matters.
