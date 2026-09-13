@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.0",
     "git-cliff": "^2.13.1",
     "kill-port": "^2.0.1",
     "oxfmt": "^0.67.0",
