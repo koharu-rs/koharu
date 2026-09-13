@@ -118,6 +118,8 @@ describe('Tauri runtime', () => {
     act(() => {
       jobChannel.onmessage({
         id: 'job',
+        kind: 'processing',
+        workflow: null,
         state: 'running',
         completed: 0,
         total: 4,
@@ -183,6 +185,8 @@ describe('Tauri runtime', () => {
     const [, jobChannel] = binding.mock.calls[0]
     jobChannel.onmessage({
       id: 'job',
+      kind: 'processing',
+      workflow: null,
       state: 'running',
       completed: 1,
       total: 2,

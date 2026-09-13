@@ -3,11 +3,13 @@
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { FilePlus2, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
 import Image from 'next/image'
-import { useState, type ComponentProps } from 'react'
+import { useEffect, useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
+import { ProjectGlossaryDialog } from '@/components/app/ProjectGlossaryDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
+import { WorkflowDialog } from '@/components/app/WorkflowDialog'
 import { call } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
 import {
@@ -39,6 +41,15 @@ import { cn } from '@koharu/ui/lib/utils'
 export function TitleBar() {
   const { t } = useTranslation()
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [workflowOpen, setWorkflowOpen] = useState(false)
+  const glossaryOpen = useKoharuStore((state) => state.glossaryOpen)
+  const setGlossaryOpen = useKoharuStore((state) => state.setGlossaryOpen)
+  const awaitingReview = useKoharuStore(
+    (state) => Object.values(state.jobs).find((job) => job.state === 'awaiting_review')?.id,
+  )
+  useEffect(() => {
+    if (awaitingReview) setGlossaryOpen(true)
+  }, [awaitingReview, setGlossaryOpen])
   const macOS = useMacOS()
   const project = useProject().data
   const pagesQuery = usePages(Boolean(project))
@@ -207,6 +218,16 @@ export function TitleBar() {
                 {t('menu.processLayers')}
               </MenubarItem>
               <MenubarSeparator />
+              <MenubarItem
+                disabled={!project || pages.length === 0}
+                onClick={() => setWorkflowOpen(true)}
+              >
+                {t('workflow.title')}
+              </MenubarItem>
+              <MenubarItem disabled={!project} onClick={() => setGlossaryOpen(true)}>
+                {t('glossary.title')}
+              </MenubarItem>
+              <MenubarSeparator />
               {(['detection', 'ocr', 'translation', 'inpainting'] as Stage[]).map((stage) => (
                 <MenubarItem
                   key={stage}
@@ -270,6 +291,16 @@ export function TitleBar() {
 
         {!macOS && <WindowControls />}
       </header>
+      <WorkflowDialog
+        key={project?.name}
+        open={Boolean(project) && workflowOpen}
+        onOpenChange={setWorkflowOpen}
+      />
+      <ProjectGlossaryDialog
+        key={project?.name}
+        open={Boolean(project) && glossaryOpen}
+        onOpenChange={setGlossaryOpen}
+      />
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   )

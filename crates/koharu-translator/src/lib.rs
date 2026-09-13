@@ -2,6 +2,7 @@
 
 mod backend;
 mod error;
+mod glossary;
 mod language;
 mod local;
 mod model;
@@ -160,7 +161,26 @@ impl Translator {
             request.remove_image();
         }
 
+        request.glossary = koharu_scene::relevant_glossary(&request.segments, &request.glossary);
+        let protected = if matches!(
+            provider,
+            Provider::DeepL | Provider::GoogleCloudTranslation | Provider::Caiyun
+        ) && !request.glossary.is_empty()
+        {
+            Some(glossary::ProtectedSegments::prepare(&mut request))
+        } else {
+            None
+        };
         let expected = request.segments.len();
+        if expected == 0 {
+            // Every segment matched the glossary, so the provider has nothing to translate.
+            tracing::Span::current().record("outcome", "completed");
+            let translated = match protected {
+                Some(protected) => protected.restore(&[])?,
+                None => Vec::new(),
+            };
+            return Ok((provider_id, translated));
+        }
         let mut outcome = self
             .translate_once(selection, &generation, &request)
             .await?;
@@ -205,6 +225,10 @@ impl Translator {
             .into());
         }
         tracing::Span::current().record("outcome", "completed");
+        let translated = match protected {
+            Some(protected) => protected.restore(&translated)?,
+            None => translated,
+        };
         Ok((provider_id, translated))
     }
 
@@ -256,19 +280,8 @@ impl Translator {
     }
 }
 
-// Hosted endpoints scale with parallel requests; local servers queue them.
-fn is_loopback(url: &url::Url) -> bool {
-    url.host_str().is_some_and(|host| {
-        host.eq_ignore_ascii_case("localhost")
-            || host == "::1"
-            || host
-                .parse::<std::net::Ipv4Addr>()
-                .is_ok_and(|ip| ip.is_loopback())
-    })
-}
-
 /// Narrows a batch to the segments a provider did not return, keeping context,
-/// instructions, and image intact.
+/// glossary, and image intact.
 fn repair_request(request: &TranslationRequest, missing: &[usize]) -> TranslationRequest {
     let mut repair = request.clone();
     repair.segments = missing
@@ -311,6 +324,17 @@ fn merge_missing(
     }
     outcome.missing = remaining;
     outcome.error = error;
+}
+
+// Hosted endpoints scale with parallel requests; local servers queue them.
+fn is_loopback(url: &url::Url) -> bool {
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host == "::1"
+            || host
+                .parse::<std::net::Ipv4Addr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    })
 }
 
 #[cfg(test)]
