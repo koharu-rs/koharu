@@ -7,53 +7,50 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 use fs4::FileExt;
+use serde::{Deserialize, Serialize};
 
 static ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+#[derive(Default, Deserialize, Serialize)]
+struct StoreConfig {
+    packages_path: Option<PathBuf>,
+}
 
 /// Koharu's process-wide immutable package store.
 pub struct Store;
 
 impl Store {
-    /// Selects the store before the first artifact or runtime is resolved.
-    pub fn configure(root: impl Into<PathBuf>) -> Result<()> {
-        let requested = root.into();
-        ensure!(
-            requested.is_absolute(),
-            "runtime store must be absolute: {}",
-            requested.display()
-        );
-
-        if let Some(active) = ROOT.get() {
-            ensure!(
-                active == &requested,
-                "runtime store is already {}",
-                active.display()
-            );
-            return Ok(());
-        }
-
-        if let Err(requested) = ROOT.set(requested) {
-            let active = ROOT
-                .get()
-                .context("runtime store was configured concurrently without a value")?;
-            ensure!(
-                active == &requested,
-                "runtime store is already {}",
-                active.display()
-            );
-        }
-        Ok(())
-    }
-
     /// Returns the configured root, or the operating system cache by default.
     #[must_use]
     pub fn root() -> &'static Path {
-        ROOT.get_or_init(|| {
-            dirs::cache_dir()
-                .unwrap_or_else(std::env::temp_dir)
-                .join("koharu")
-                .join("packages")
-        })
+        ROOT.get_or_init(Self::resolve_root)
+    }
+
+    fn resolve_root() -> PathBuf {
+        match Self::configured_packages_path() {
+            Some(path) if path.is_absolute() => path,
+            Some(path) => {
+                tracing::warn!(
+                    "ignoring non-absolute runtime packages_path: {}",
+                    path.display()
+                );
+                Self::default_root()
+            }
+            None => Self::default_root(),
+        }
+    }
+
+    fn configured_packages_path() -> Option<PathBuf> {
+        let section = koharu_config::load::<StoreConfig>("runtime").ok()?;
+        let value = section.read().ok()?;
+        value.packages_path.clone()
+    }
+
+    fn default_root() -> PathBuf {
+        dirs::cache_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("Koharu")
+            .join("packages")
     }
 
     pub(crate) async fn directory<Valid, Install, Pending>(
