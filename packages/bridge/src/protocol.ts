@@ -18,6 +18,7 @@ export const commands = {
 	active_page: EntityId | null,
 	can_undo: boolean,
 	can_redo: boolean,
+	history: HistoryView,
 } | null>) => __TAURI_INVOKE<StartupState>("subscribe", { onCanvas: mapChannel(onCanvas, (v) => ({...v,revision:v.revision==null?v.revision:v.revision})), onJob, onDownload, onResources: mapChannel(onResources, (v) => ({...v,devices:v.devices.map(i=>({...i,memory_budget:i.memory_budget==null?i.memory_budget:i.memory_budget,memory_used:i.memory_used==null?i.memory_used:i.memory_used,utilization:i.utilization==null?i.utilization:i.utilization}))})), onProject }).then((v) => (({...v,preferences:({...v.preferences,pipeline:({...v.preferences.pipeline,translation:({...v.preferences.pipeline.translation,generation:({...v.preferences.pipeline.translation.generation,temperature:v.preferences.pipeline.translation.generation.temperature==null?v.preferences.pipeline.translation.generation.temperature:v.preferences.pipeline.translation.generation.temperature,top_p:v.preferences.pipeline.translation.generation.top_p==null?v.preferences.pipeline.translation.generation.top_p:v.preferences.pipeline.translation.generation.top_p,min_p:v.preferences.pipeline.translation.generation.min_p==null?v.preferences.pipeline.translation.generation.min_p:v.preferences.pipeline.translation.generation.min_p,repeat_penalty:v.preferences.pipeline.translation.generation.repeat_penalty==null?v.preferences.pipeline.translation.generation.repeat_penalty:v.preferences.pipeline.translation.generation.repeat_penalty,frequency_penalty:v.preferences.pipeline.translation.generation.frequency_penalty==null?v.preferences.pipeline.translation.generation.frequency_penalty:v.preferences.pipeline.translation.generation.frequency_penalty,presence_penalty:v.preferences.pipeline.translation.generation.presence_penalty==null?v.preferences.pipeline.translation.generation.presence_penalty:v.preferences.pipeline.translation.generation.presence_penalty})}),processor:({...v.preferences.pipeline.processor,"koharu-layout-rfdetr-seg-2xl":v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]:({...v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"],text_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold,bubble_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold,panel_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold})})})}),jobs:v.jobs.map(i=>i),canvas:({...v.canvas,revision:v.canvas.revision==null?v.canvas.revision:v.canvas.revision})}) as typeof v)),
 	getProject: () => __TAURI_INVOKE<{
 	name: string,
@@ -25,6 +26,7 @@ export const commands = {
 	active_page: EntityId | null,
 	can_undo: boolean,
 	can_redo: boolean,
+	history: HistoryView,
 } | null>("get_project"),
 	getPages: () => __TAURI_INVOKE<PageSummary[]>("get_pages").then((v) => (v.map(i=>i) as typeof v)),
 	getPage: () => __TAURI_INVOKE<{
@@ -53,6 +55,11 @@ export const commands = {
 	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
 	undo: () => __TAURI_INVOKE<null>("undo"),
 	redo: () => __TAURI_INVOKE<null>("redo"),
+	historyGoTo: (index: number) => __TAURI_INVOKE<null>("history_go_to", { index }),
+	historyClear: () => __TAURI_INVOKE<null>("history_clear"),
+	snapshotCreate: (name: string | null) => __TAURI_INVOKE<null>("snapshot_create", { name }),
+	snapshotRestore: (id: number) => __TAURI_INVOKE<null>("snapshot_restore", { id }),
+	snapshotDelete: (id: number) => __TAURI_INVOKE<null>("snapshot_delete", { id }),
 	process: (scope: Scope, operation: Operation) => __TAURI_INVOKE<JobId>("process", { scope, operation }),
 	stopJob: (job: JobId) => __TAURI_INVOKE<null>("stop_job", { job }),
 	exportPages: (pages: EntityId[], format: ExportFormat) => __TAURI_INVOKE<null>("export_pages", { pages, format }),
@@ -260,6 +267,30 @@ export type GrokConfig = Record<string, never>;
 
 export type GroupRole = "text";
 
+export type HistoryEntryInfo = {
+	index: number,
+	name: HistoryName,
+	detail: string | null,
+	current: boolean,
+	/**
+	 *  True for states right of the cursor (Photoshop dims them; a new edit
+	 *  discards them).
+	 */
+	undone: boolean,
+};
+
+/**
+ *  Semantic name of a history state. Serialized as a snake_case tag; the
+ *  client localizes it through `history.<tag>` keys.
+ */
+export type HistoryName = "open" | "import_pages" | "rename_page" | "delete_pages" | "move_page" | "add_text" | "source_text" | "translation" | "typography" | "geometry" | "transform" | "toggle_layer" | "opacity" | "delete_layers" | "move_layer" | "brush" | "erase" | "pipeline_stage" | "snapshot_restore";
+
+export type HistoryView = {
+	entries: HistoryEntryInfo[],
+	snapshots: SnapshotInfo[],
+	cursor: number,
+};
+
 export type InpaintingModel = { model: "lama" } | { model: "aot-inpainting" } | {
 	model: "flux2-klein",
 } & Flux2KleinConfig | {
@@ -419,6 +450,7 @@ export type ProjectInfo = {
 	active_page: EntityId | null,
 	can_undo: boolean,
 	can_redo: boolean,
+	history: HistoryView,
 };
 
 export type ProjectSummary = {
@@ -461,6 +493,11 @@ export type Scope = { scope: "project" } | { scope: "pages"; value: EntityId[] }
 	page: EntityId,
 	bounds: Bounds,
 } } | { scope: "entities"; value: EntityId[] };
+
+export type SnapshotInfo = {
+	id: number,
+	name: string,
+};
 
 export type SourceText = {
 	text: string,

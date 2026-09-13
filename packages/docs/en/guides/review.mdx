@@ -42,6 +42,8 @@ Analysis regions describe model findings. They are not visible presentation laye
 
 ## Undo and redo
 
-Use **Edit → Undo** or **Redo**. The defaults are `Ctrl+Z` and `Ctrl+Shift+Z` on Windows/Linux, or `Command+Z` and `Command+Shift+Z` on macOS.
+Use **Edit → Undo** or **Redo**. The defaults are `Ctrl+Z` and `Ctrl+Shift+Z` (or `Ctrl+Y`) on Windows/Linux, or `Command+Z` and `Command+Shift+Z` on macOS.
 
-Each page-stage result that the pipeline commits is its own undo step, so undoing a project run takes one step per page and stage. Closing and reopening a project loads the saved state without restoring the previous undo stack.
+The **History** tab in the right sidebar lists every recorded action by name, like Photoshop's History panel. Click any state to jump straight to it; a new edit after jumping back discards the dimmed states below the cursor. The camera button pins the current state as a named snapshot that survives history trimming, and the trash button clears all states without changing the document.
+
+Each page-stage result that the pipeline commits is its own named history state, so undoing a project run takes one step per page and stage. Closing and reopening a project loads the saved state without restoring the previous history.

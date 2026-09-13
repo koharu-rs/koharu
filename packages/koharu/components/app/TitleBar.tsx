@@ -20,7 +20,7 @@ import {
   usePages,
   useProject,
 } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
+import { receiveError, useKoharuStore } from '@/lib/store'
 import { commands, type Operation, type Scope, type Stage } from '@koharu/bridge/protocol'
 import {
   Menubar,
@@ -136,24 +136,26 @@ export function TitleBar() {
               <MenubarItem
                 disabled={!project?.can_undo}
                 onClick={() =>
-                  void call(commands.undo)
+                  void commands
+                    .undo()
                     .then(() => refresh(projectKey, pagesKey, pageKey))
-                    .catch(() => undefined)
+                    .catch((error: unknown) => receiveError(commandErrorMessage(error)))
                 }
               >
                 {t('menu.undo')}
-                <MenubarShortcut>Ctrl+Z</MenubarShortcut>
+                <MenubarShortcut>{macOS ? '⌘Z' : 'Ctrl+Z'}</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
                 disabled={!project?.can_redo}
                 onClick={() =>
-                  void call(commands.redo)
+                  void commands
+                    .redo()
                     .then(() => refresh(projectKey, pagesKey, pageKey))
-                    .catch(() => undefined)
+                    .catch((error: unknown) => receiveError(commandErrorMessage(error)))
                 }
               >
                 {t('menu.redo')}
-                <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>
+                <MenubarShortcut>{macOS ? '⇧⌘Z' : 'Ctrl+Shift+Z'}</MenubarShortcut>
               </MenubarItem>
               <MenubarSeparator />
               <MenubarItem
@@ -273,6 +275,11 @@ export function TitleBar() {
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   )
+}
+
+function commandErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return typeof error === 'string' ? error : 'The operation failed with an unknown error.'
 }
 
 function exportSelection(selected: string[], active?: string): string[] {

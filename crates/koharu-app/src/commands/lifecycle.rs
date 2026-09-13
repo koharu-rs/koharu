@@ -20,6 +20,7 @@ use super::{
         CurrentProject, Page, PageSummary, Project, ProjectInfo, ProjectLibrary, ProjectSummary,
     },
 };
+use crate::history::HistoryName;
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct StartupState {
@@ -371,6 +372,7 @@ pub(crate) async fn import_pages(
     project: State<'_, CurrentProject>,
     processing: State<'_, Processing>,
     canvas_channel: State<'_, CanvasChannel>,
+    project_channel: State<'_, ProjectChannel>,
 ) -> std::result::Result<(), Error> {
     if !processing.stops.lock().is_empty() {
         return Err(anyhow::anyhow!("pages cannot be imported while processing is running").into());
@@ -419,7 +421,7 @@ pub(crate) async fn import_pages(
         .context("page import worker stopped unexpectedly")??;
     let page_count = pages.len();
 
-    let (commit, page) = {
+    let (commit, page, info) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let source = AssetRole::new("source")?;
@@ -450,14 +452,15 @@ pub(crate) async fn import_pages(
             Ok(())
         })?;
         let commit = project.session.commit(patch).await?;
-        project.record(vec![commit.revision]);
+        project.record_named(HistoryName::ImportPages, None, None, &commit);
         project.reconcile_page();
         let page = project.active_page();
-        (commit, page)
+        (commit, page, project.info())
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
+    project_channel.channel.publish(Some(info));
     tracing::info!(target: "koharu_metrics", metric = "page_imported", page_count);
     Ok(())
 }
