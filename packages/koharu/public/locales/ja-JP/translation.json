@@ -246,6 +246,8 @@
     "delete": "選択項目を削除",
     "discord": "Discord",
     "edit": "編集",
+    "export": "書き出す",
+    "exportCbz": "CBZ（全ページ）…",
     "exportPng": "PNGを書き出す…",
     "exportPsd": "PSDを書き出す…",
     "file": "ファイル",

@@ -246,6 +246,8 @@
     "delete": "删除所选项",
     "discord": "Discord",
     "edit": "编辑",
+    "export": "导出",
+    "exportCbz": "CBZ（全部页面）…",
     "exportPng": "导出 PNG…",
     "exportPsd": "导出 PSD…",
     "file": "文件",

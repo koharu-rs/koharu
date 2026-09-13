@@ -246,6 +246,8 @@
     "delete": "刪除所選項目",
     "discord": "Discord",
     "edit": "編輯",
+    "export": "匯出",
+    "exportCbz": "CBZ（所有頁面）…",
     "exportPng": "匯出 PNG…",
     "exportPsd": "匯出 PSD…",
     "file": "檔案",
