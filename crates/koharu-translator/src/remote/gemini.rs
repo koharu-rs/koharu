@@ -79,7 +79,7 @@ pub(super) async fn translate(
     model: &str,
     generation: &TranslationGeneration,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("gemini")?.context("gemini API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let schema = prompt::output_schema(request.segments.len());
@@ -124,7 +124,7 @@ pub(super) async fn translate(
         .and_then(|candidate| candidate.content.parts.into_iter().next())
         .context("Gemini returned no candidate content")?
         .text;
-    Ok(prompt::translations("gemini", &text, &request.segments)?)
+    Ok(prompt::translations("gemini", &text, &request.segments))
 }
 
 #[derive(Serialize)]

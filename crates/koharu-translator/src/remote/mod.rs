@@ -33,7 +33,7 @@ pub use openrouter::OpenRouterConfig;
 
 use crate::{
     Error, GenerationConfig, Model, ModelSelection, Provider, ProvidersConfig, Result,
-    TranslationRequest,
+    TranslationRequest, prompt,
 };
 
 pub(crate) async fn translate(
@@ -42,7 +42,7 @@ pub(crate) async fn translate(
     selection: &ModelSelection,
     generation: &GenerationConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let model = || {
         selection
             .model

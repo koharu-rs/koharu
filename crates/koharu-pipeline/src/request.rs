@@ -30,6 +30,9 @@ pub enum Operation {
     Stages {
         stages: Vec<Stage>,
     },
+    StageMajor {
+        stages: Vec<Stage>,
+    },
 }
 
 impl Operation {
@@ -49,7 +52,7 @@ impl Operation {
                 stage: Stage::Inpainting,
             } => vec![Stage::Detection, Stage::Inpainting],
             Self::Only { stage } => vec![*stage],
-            Self::Stages { stages } => Stage::ALL
+            Self::Stages { stages } | Self::StageMajor { stages } => Stage::ALL
                 .into_iter()
                 .filter(|stage| stages.contains(stage))
                 .collect(),

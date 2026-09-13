@@ -55,12 +55,14 @@ interface KoharuStore {
   inspector: InspectorSection
   processingScope: PipelineScope
   processingStages: Stage[]
+  glossaryOpen: boolean
   settingsOpen: boolean
   shortcuts: Shortcuts
   selectPages: (pages: EntityId[]) => void
   showInspector: (section: InspectorSection) => void
   setProcessingScope: (scope: PipelineScope) => void
   setProcessingStages: (stages: Stage[]) => void
+  setGlossaryOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   selectLayers: (layers: EntityId[]) => void
   setTool: (tool: CanvasTool) => void
@@ -103,12 +105,14 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   inspector: 'copy',
   processingScope: 'selected-pages',
   processingStages: [...pipelineStages],
+  glossaryOpen: false,
   settingsOpen: false,
   shortcuts: defaultShortcuts,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
   showInspector: (inspector) => set({ inspector }),
   setProcessingScope: (processingScope) => set({ processingScope }),
   setProcessingStages: (processingStages) => set({ processingStages }),
+  setGlossaryOpen: (glossaryOpen) => set({ glossaryOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),
@@ -146,7 +150,12 @@ export function receiveCanvas(canvas: CanvasState): void {
 }
 
 export function receiveJob(job: Job): void {
-  useKoharuStore.setState((state) => ({ jobs: { ...state.jobs, [job.id]: job } }))
+  useKoharuStore.setState((state) => ({
+    jobs: { ...state.jobs, [job.id]: job },
+    glossaryOpen:
+      state.glossaryOpen ||
+      (job.state === 'awaiting_review' && state.jobs[job.id]?.state !== 'awaiting_review'),
+  }))
 }
 
 export function receiveDownload(download: Download): void {

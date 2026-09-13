@@ -62,6 +62,10 @@ impl Edit {
         Ok(())
     }
 
+    pub fn observe_project<T: Component>(&mut self) -> Result<()> {
+        self.observe_component(ComponentOwner::Project, key::<T>()?)
+    }
+
     pub fn observe<T: Component>(&mut self, entity: EntityId) -> Result<()> {
         self.observe_component(ComponentOwner::Entity(entity), key::<T>()?)
     }

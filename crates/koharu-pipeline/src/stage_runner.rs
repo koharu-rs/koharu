@@ -8,7 +8,7 @@ use koharu_scene::{EntityId, Patch};
 
 use crate::{
     ErrorKind, PipelineConfig, PipelineError, Progress, ProgressSink, Stage, StopToken,
-    accelerator::AcceleratorGate,
+    accelerator::{AcceleratorGate, AcceleratorPermit},
     progress,
     resources::ResourceMonitor,
     stages::{StageInput, Stages},
@@ -30,6 +30,14 @@ impl StageRunner {
             stages: Stages::new(config, translator, device)?,
             accelerator: AcceleratorGate::new(device, resources),
         })
+    }
+
+    pub(crate) fn unload(&self, stage: Stage) {
+        self.stages.unload(stage);
+    }
+
+    pub(crate) fn concurrent(&self, stage: Stage) -> bool {
+        self.stages.concurrent(stage)
     }
 
     #[tracing::instrument(skip_all)]
@@ -68,7 +76,13 @@ impl StageRunner {
         if skip {
             return Ok(StageOutcome::Skipped);
         }
-        let permit = self.accelerator.acquire().await;
+        // Provider-backed stages compute off-process; sharing the accelerator
+        // lane would serialize pages that the provider can answer in parallel.
+        let permit = if self.stages.concurrent(job.stage) {
+            AcceleratorPermit::cpu()
+        } else {
+            self.accelerator.acquire().await
+        };
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }

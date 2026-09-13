@@ -38,6 +38,8 @@ impl fmt::Display for JobId {
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct Job {
+    pub kind: JobKind,
+    pub workflow: Option<super::workflow::WorkflowProgress>,
     pub id: JobId,
     pub state: JobState,
     #[specta(type = f64)]
@@ -54,14 +56,26 @@ pub struct Job {
 #[serde(rename_all = "snake_case")]
 pub enum JobState {
     Running,
+    AwaitingReview,
     Finished,
     Failed,
     Stopped,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum JobKind {
+    Processing,
+    // Serialized into the bridge protocol; archive exports construct it.
+    #[allow(dead_code)]
+    Export,
+    Workflow,
+}
+
 #[derive(Default)]
 pub(crate) struct Processing {
     pub(crate) stops: Mutex<HashMap<JobId, StopToken>>,
+    pub(crate) reviews: Mutex<HashMap<JobId, tokio::sync::oneshot::Sender<()>>>,
     pub(crate) jobs: Mutex<HashMap<JobId, Job>>,
     pub(crate) inpainting_mask: Mutex<Option<koharu_pipeline::InpaintingMask>>,
 }
@@ -82,6 +96,9 @@ pub(crate) async fn process(
     processing: State<'_, Processing>,
     job_channel: State<'_, JobChannel>,
 ) -> std::result::Result<JobId, Error> {
+    if let Some(preset) = super::workflow::configured_preset(&scope, &operation)? {
+        return super::workflow::start_workflow(handle, scope, preset).await;
+    }
     let snapshot = project
         .project
         .lock()
@@ -100,6 +117,8 @@ pub(crate) async fn process(
     }
     let job = Job {
         id,
+        kind: JobKind::Processing,
+        workflow: None,
         state: JobState::Running,
         completed: 0,
         total: 0,
@@ -205,33 +224,6 @@ pub(crate) async fn process(
             }
         }));
 
-        struct PipelineCommitter {
-            handle: AppHandle<CefRuntime>,
-        }
-
-        #[async_trait::async_trait]
-        impl Committer for PipelineCommitter {
-            async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
-                let (commit, page) = {
-                    let projects = self.handle.state::<CurrentProject>();
-                    let mut projects = projects.project.lock().await;
-                    let project = projects.as_mut().context("no project is open")?;
-                    let Some(commit) = project.commit_rebased(output.patch).await? else {
-                        return Ok(project.snapshot());
-                    };
-                    project.record_commit(&commit);
-                    let page = project.active_page();
-                    (commit, page)
-                };
-                let snapshot = commit.snapshot.clone();
-                let desktop = self.handle.state::<Desktop>();
-                desktop.synchronize(&commit.snapshot, page, &commit).await?;
-                let canvas = desktop.canvas_state();
-                self.handle.state::<CanvasChannel>().channel.publish(canvas);
-                Ok(snapshot)
-            }
-        }
-
         let mut committer = PipelineCommitter {
             handle: task_handle.clone(),
         };
@@ -295,5 +287,33 @@ pub(crate) async fn stop_job(
         .get(&job)
         .with_context(|| format!("job {job} is not running"))?;
     stop.stop();
+    processing.reviews.lock().remove(&job);
     Ok(())
+}
+
+pub(super) struct PipelineCommitter {
+    pub(super) handle: AppHandle<CefRuntime>,
+}
+
+#[async_trait::async_trait]
+impl Committer for PipelineCommitter {
+    async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
+        let (commit, page) = {
+            let projects = self.handle.state::<CurrentProject>();
+            let mut projects = projects.project.lock().await;
+            let project = projects.as_mut().context("no project is open")?;
+            let Some(commit) = project.commit_rebased(output.patch).await? else {
+                return Ok(project.snapshot());
+            };
+            project.record_commit(&commit);
+            let page = project.active_page();
+            (commit, page)
+        };
+        let snapshot = commit.snapshot.clone();
+        let desktop = self.handle.state::<Desktop>();
+        desktop.synchronize(&commit.snapshot, page, &commit).await?;
+        let canvas = desktop.canvas_state();
+        self.handle.state::<CanvasChannel>().channel.publish(canvas);
+        Ok(snapshot)
+    }
 }

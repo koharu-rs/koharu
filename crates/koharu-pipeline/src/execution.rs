@@ -20,6 +20,10 @@ use crate::{
     stages::StageInput,
 };
 
+// Provider-backed stages pay network latency per page, so a handful of pages
+// overlap to hide it without opening unbounded requests.
+const MAX_OVERLAPPING_PAGES: usize = 4;
+
 pub(crate) struct Execution<'a> {
     runner: Arc<StageRunner>,
     resources: Arc<ResourceMonitor>,
@@ -30,7 +34,7 @@ pub(crate) struct Execution<'a> {
     scheduler: Scheduler,
     scene: Snapshot,
     images: BTreeMap<EntityId, Arc<ImageCache>>,
-    busy_stages: BTreeSet<Stage>,
+    running: BTreeMap<Stage, usize>,
     completed: usize,
     failure: Option<PipelineError>,
     base: koharu_scene::Revision,
@@ -79,10 +83,14 @@ impl<'a> Execution<'a> {
             stop: request.stop,
             progress: request.progress,
             scope,
-            scheduler: Scheduler::new(&pages, &stages),
+            scheduler: if matches!(request.operation, crate::Operation::StageMajor { .. }) {
+                Scheduler::new(&pages, &stages).stage_major()
+            } else {
+                Scheduler::new(&pages, &stages)
+            },
             scene: snapshot,
             images: BTreeMap::new(),
-            busy_stages: BTreeSet::new(),
+            running: BTreeMap::new(),
             completed: 0,
             failure: None,
             base,
@@ -109,7 +117,9 @@ impl<'a> Execution<'a> {
             let Some(completion) = running.next().await else {
                 break;
             };
-            self.busy_stages.remove(&completion.stage);
+            if let Some(count) = self.running.get_mut(&completion.stage) {
+                *count = count.saturating_sub(1);
+            }
             if self.stopped() || self.failure.is_some() {
                 continue;
             }
@@ -118,6 +128,11 @@ impl<'a> Execution<'a> {
             }
         }
 
+        if self.scheduler.is_stage_major() {
+            for stage in Stage::ALL {
+                self.runner.unload(stage);
+            }
+        }
         self.finalize()
     }
 
@@ -125,8 +140,9 @@ impl<'a> Execution<'a> {
         if self.stopped() || self.failure.is_some() {
             return None;
         }
-        let (page, stage) = self.scheduler.start_next(&self.busy_stages)?;
-        self.busy_stages.insert(stage);
+        let busy = self.saturated_stages();
+        let (page, stage) = self.scheduler.start_next(&busy)?;
+        *self.running.entry(stage).or_default() += 1;
         let images = self
             .images
             .entry(page)
@@ -148,6 +164,16 @@ impl<'a> Execution<'a> {
             self.stop.clone(),
             self.progress.clone(),
         ))
+    }
+
+    fn saturated_stages(&self) -> BTreeSet<Stage> {
+        saturated_stages(&self.running, |stage| self.page_capacity(stage))
+    }
+
+    // Provider-backed stages overlap pages in either scheduling mode; accelerator
+    // models stay serialized per stage to keep one model resident at a time.
+    fn page_capacity(&self, stage: Stage) -> usize {
+        page_capacity(self.runner.concurrent(stage))
     }
 
     async fn apply_completion(
@@ -217,8 +243,11 @@ impl<'a> Execution<'a> {
     }
 
     fn mark_complete(&mut self, page: EntityId, stage: Stage) {
-        if self.scheduler.complete_stage(page, stage) {
+        if self.scheduler.complete_stage(page, stage) || self.scheduler.is_stage_major() {
             self.images.remove(&page);
+        }
+        if self.scheduler.is_stage_major() && self.scheduler.stage_complete(stage) {
+            self.runner.unload(stage);
         }
         self.completed += 1;
     }
@@ -272,4 +301,60 @@ fn validate_commit(previous: &Snapshot, next: &Snapshot) -> Result<()> {
         "committer did not advance the scene revision"
     );
     Ok(())
+}
+
+const fn page_capacity(concurrent: bool) -> usize {
+    if concurrent { MAX_OVERLAPPING_PAGES } else { 1 }
+}
+
+fn saturated_stages(
+    running: &BTreeMap<Stage, usize>,
+    capacity: impl Fn(Stage) -> usize,
+) -> BTreeSet<Stage> {
+    running
+        .iter()
+        .filter(|(stage, count)| **count >= capacity(**stage))
+        .map(|(stage, _)| *stage)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_provider_stages_overlap_pages() {
+        assert_eq!(page_capacity(true), MAX_OVERLAPPING_PAGES);
+        assert_eq!(page_capacity(false), 1);
+    }
+
+    // Mirrors the execution loop: a stage stays dispatchable until it reaches
+    // its page capacity.
+    fn overlapping_translations(provider: bool) -> usize {
+        let pages: Vec<EntityId> = (0..8).map(|_| EntityId::new()).collect();
+        let mut scheduler = Scheduler::new(&pages, &Stage::ALL);
+        let capacity = |stage: Stage| page_capacity(provider && stage == Stage::Translation);
+        let mut in_flight: BTreeMap<Stage, usize> = BTreeMap::new();
+        let mut translations = 0;
+        while translations < MAX_OVERLAPPING_PAGES {
+            let Some((page, stage)) = scheduler.start_next(&saturated_stages(&in_flight, capacity))
+            else {
+                break;
+            };
+            if stage == Stage::Translation {
+                translations += 1;
+                in_flight.insert(stage, translations);
+                continue;
+            }
+            // Every other stage finishes at once, so it never backpressures.
+            scheduler.complete_stage(page, stage);
+        }
+        translations
+    }
+
+    #[test]
+    fn page_major_overlaps_provider_stages_but_serializes_local_models() {
+        assert_eq!(overlapping_translations(true), MAX_OVERLAPPING_PAGES);
+        assert_eq!(overlapping_translations(false), 1);
+    }
 }

@@ -20,6 +20,7 @@ import {
   PreferenceSection,
   TextField,
 } from '@/components/preferences/PreferenceFields'
+import { WorkflowPreferences } from '@/components/preferences/WorkflowPreferences'
 import type { PipelineConfig } from '@koharu/bridge/protocol'
 import {
   Select,
@@ -48,6 +49,7 @@ export function PipelinePreferences({
       title={t('settings.pipeline.title')}
       description={t('settings.pipeline.description')}
     >
+      <WorkflowPreferences />
       <PreferenceSection title={t('settings.pipeline.processing')}>
         {stages.map(([stage, Icon]) => {
           const model = stageModel(value, stage)

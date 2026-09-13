@@ -8,7 +8,7 @@ use serde::Deserialize;
 use url::Url;
 
 use super::send_json;
-use crate::{Error, Language, Model, Provider, Result, TranslationRequest};
+use crate::{Error, Language, Model, Provider, Result, TranslationRequest, prompt};
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(default)]
@@ -28,7 +28,7 @@ pub(super) async fn translate(
     client: &Client,
     config: &DeepLConfig,
     request: &TranslationRequest,
-) -> Result<Vec<String>> {
+) -> Result<prompt::TranslationOutcome> {
     let api_key = koharu_secrets::get("deepl")?.context("deepl API key is not configured")?;
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "deepl",
@@ -83,11 +83,13 @@ pub(super) async fn translate(
             .form(&form),
     )
     .await?;
-    Ok(response
-        .translations
-        .into_iter()
-        .map(|translation| translation.text)
-        .collect())
+    Ok(prompt::TranslationOutcome::complete(
+        response
+            .translations
+            .into_iter()
+            .map(|translation| translation.text)
+            .collect(),
+    ))
 }
 
 #[derive(Deserialize)]

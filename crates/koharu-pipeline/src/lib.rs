@@ -16,6 +16,8 @@ mod scope;
 mod stage;
 mod stage_runner;
 mod stages;
+mod terminology;
+pub use terminology::analyze_terminology;
 
 pub use config::{
     DetectionModel, InpaintingModel, OcrModel, PipelineConfig, ProcessorConfig, TranslationConfig,
