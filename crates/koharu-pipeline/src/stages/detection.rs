@@ -48,6 +48,7 @@ const COLOR_CLUSTER_COUNT: usize = 4;
 const MIN_EXTREME_COLOR_PIXELS: u32 = 4;
 const MIN_MEASURED_STROKE_WIDTH: u8 = 2;
 const DIALOGUE_MASK_CONTAINMENT_THRESHOLD: f32 = 0.9;
+const TEXT_CONTAINMENT_THRESHOLD: f32 = 0.90;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default)]
@@ -1631,6 +1632,82 @@ fn detection_order(left: &KoharuLayoutDetection, right: &KoharuLayoutDetection) 
 }
 
 fn non_maximum_suppression(detections: &mut Vec<KoharuLayoutDetection>, threshold: f32) {
+    // Choose paragraph representatives before confidence-based NMS can discard them.
+    let mut texts = indices_with_label(detections, "text");
+    texts.sort_by(|&left, &right| {
+        area(detections[right].bbox)
+            .total_cmp(&area(detections[left].bbox))
+            .then_with(|| detections[right].score.total_cmp(&detections[left].score))
+            .then_with(|| detection_order(&detections[left], &detections[right]))
+    });
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for candidate in texts {
+        let bounds = detections[candidate].bbox;
+        // Near-containment is not transitive: compare only original representative boxes.
+        let group = groups.iter_mut().find(|group| {
+            let container = detections[group[0]].bbox;
+            area(container) > area(bounds)
+                && containment(container, bounds) >= TEXT_CONTAINMENT_THRESHOLD
+        });
+        if let Some(group) = group {
+            group.push(candidate);
+        } else {
+            groups.push(vec![candidate]);
+        }
+    }
+
+    let mut keep = vec![true; detections.len()];
+    for group in groups.iter().filter(|group| group.len() > 1) {
+        let mut bbox = detections[group[0]].bbox;
+        for &index in &group[1..] {
+            let bounds = detections[index].bbox;
+            bbox = [
+                bbox[0].min(bounds[0]),
+                bbox[1].min(bounds[1]),
+                bbox[2].max(bounds[2]),
+                bbox[3].max(bounds[3]),
+            ];
+            keep[index] = false;
+        }
+
+        // Preserve protruding ink using mask extents, which are independent of the boxes.
+        let [left, top, right, bottom] = group
+            .iter()
+            .map(|&index| &detections[index].mask)
+            .filter(|mask| valid_mask(mask) && mask.width > 0 && mask.height > 0)
+            .map(|mask| {
+                [
+                    mask.x,
+                    mask.y,
+                    mask.x.saturating_add(mask.width),
+                    mask.y.saturating_add(mask.height),
+                ]
+            })
+            .reduce(union_bounds)
+            .unwrap_or([0; 4]);
+        let mut mask = GrayImage::new(right - left, bottom - top);
+        for &index in group {
+            stamp_mask(&mut mask, &detections[index].mask, left, top);
+        }
+        let representative = &mut detections[group[0]];
+        representative.bbox = bbox;
+        representative.area = mask
+            .as_raw()
+            .iter()
+            .filter(|&&pixel| pixel != 0)
+            .count()
+            .min(u32::MAX as usize) as u32;
+        representative.mask = KoharuLayoutMask {
+            x: left,
+            y: top,
+            width: mask.width(),
+            height: mask.height(),
+            pixels: mask.into_raw(),
+        };
+    }
+    let mut keep = keep.into_iter();
+    detections.retain(|_| keep.next().unwrap());
+
     detections.sort_by(|left, right| {
         right
             .score
@@ -2281,12 +2358,212 @@ mod tests {
             .filter(|detection| detection.label == "text")
             .map(|detection| detection.score)
             .collect::<Vec<_>>();
-        assert_eq!(text_scores, [0.9, 0.6, 0.5]);
+        assert_eq!(text_scores, [0.9, 0.6]);
         assert!(
             detections
                 .iter()
                 .any(|detection| detection.label == "bubble")
         );
+    }
+
+    #[test]
+    fn nms_keeps_enclosing_paragraph_regardless_of_score_or_input_order() {
+        let paragraph = [0.0, 0.0, 100.0, 100.0];
+        for inner_score in [0.5, 0.9] {
+            for reverse in [false, true] {
+                let mut detections = vec![
+                    detection("text", 0.8, paragraph),
+                    detection("text", inner_score, [0.0, 0.0, 20.0, 100.0]),
+                    detection("text", inner_score, [80.0, 0.0, 100.0, 100.0]),
+                    detection("text", inner_score, [10.0, 10.0, 90.0, 90.0]),
+                ];
+                if reverse {
+                    detections.reverse();
+                }
+
+                non_maximum_suppression(&mut detections, 0.5);
+
+                assert_eq!(detections.len(), 1);
+                assert_eq!(detections[0].bbox, paragraph);
+                assert_eq!(detections[0].score, 0.8);
+            }
+        }
+    }
+
+    #[test]
+    fn nms_preserves_partial_overlap_and_ranks_identical_boxes_by_score() {
+        let mut detections = vec![
+            detection("text", 0.5, [0.0, 0.0, 100.0, 100.0]),
+            detection("text", 0.9, [0.0, 0.0, 100.0, 100.0]),
+            detection("text", 0.8, [80.0, 0.0, 180.0, 100.0]),
+            detection("text", 0.7, [200.0, 0.0, 300.0, 100.0]),
+        ];
+
+        non_maximum_suppression(&mut detections, 0.5);
+
+        assert_eq!(
+            detections
+                .iter()
+                .map(|value| value.score)
+                .collect::<Vec<_>>(),
+            [0.9, 0.8, 0.7]
+        );
+    }
+
+    #[test]
+    fn nms_preserves_nested_non_text_regions_and_cross_class_containment() {
+        for label in ["bubble", "panel", "onomatopoeia"] {
+            let mut detections = vec![
+                detection(label, 0.9, [0.0, 0.0, 100.0, 100.0]),
+                detection(label, 0.8, [0.0, 0.0, 20.0, 100.0]),
+                detection("text", 0.7, [0.0, 0.0, 20.0, 100.0]),
+            ];
+
+            non_maximum_suppression(&mut detections, 0.5);
+
+            assert_eq!(detections.len(), 3);
+        }
+    }
+
+    #[test]
+    fn nms_merges_nearly_contained_text_regardless_of_score_or_input_order() {
+        for (paragraph, inner, merged) in [
+            (
+                [20.0, 15.0, 150.0, 427.0],
+                [20.0, 15.0, 70.0, 440.0],
+                [20.0, 15.0, 150.0, 440.0],
+            ),
+            (
+                [10.0, 18.0, 140.0, 650.0],
+                [10.0, 12.0, 73.0, 533.0],
+                [10.0, 12.0, 140.0, 650.0],
+            ),
+            (
+                [13.0, 13.0, 154.0, 414.0],
+                [10.0, 99.0, 53.0, 408.0],
+                [10.0, 13.0, 154.0, 414.0],
+            ),
+        ] {
+            for inner_score in [0.5, 0.9] {
+                for reverse in [false, true] {
+                    let mut detections = vec![
+                        detection("text", 0.8, paragraph),
+                        detection("text", inner_score, inner),
+                    ];
+                    if reverse {
+                        detections.reverse();
+                    }
+
+                    non_maximum_suppression(&mut detections, 0.5);
+
+                    assert_eq!(detections.len(), 1);
+                    assert_eq!(detections[0].bbox, merged);
+                    assert_eq!(detections[0].score, 0.8);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nms_preserves_protruding_mask_pixels_when_merging_text() {
+        let mut detections = vec![
+            detection("text", 0.8, [10.0, 10.0, 110.0, 110.0]),
+            detection("text", 0.9, [10.0, 8.0, 30.0, 108.0]),
+            detection("text", 0.7, [30.0, 12.0, 50.0, 112.0]),
+        ];
+        let mut paragraph_pixels = vec![0; 200];
+        paragraph_pixels[0] = 255;
+        paragraph_pixels[199] = 255;
+        for (detection, mask) in detections.iter_mut().zip([
+            KoharuLayoutMask {
+                x: 12,
+                y: 10,
+                width: 2,
+                height: 100,
+                pixels: paragraph_pixels,
+            },
+            KoharuLayoutMask {
+                x: 12,
+                y: 8,
+                width: 1,
+                height: 3,
+                pixels: vec![255, 0, 255],
+            },
+            KoharuLayoutMask {
+                x: 13,
+                y: 109,
+                width: 2,
+                height: 4,
+                pixels: vec![255, 0, 0, 0, 0, 0, 0, 255],
+            },
+        ]) {
+            detection.mask = mask;
+            detection.area = 2;
+        }
+        let size = ImageSize {
+            width: 120,
+            height: 120,
+        };
+        let expected = mask_for(&detections, "text", size);
+
+        non_maximum_suppression(&mut detections, 0.5);
+
+        assert_eq!(detections.len(), 1);
+        let merged = &detections[0];
+        assert_eq!(merged.bbox, [10.0, 8.0, 110.0, 112.0]);
+        assert_eq!(merged.score, 0.8);
+        assert_eq!(merged.label, "text");
+        assert_eq!(merged.label_id, 0);
+        assert_eq!(merged.area, 4);
+        assert_eq!((merged.mask.x, merged.mask.y), (12, 8));
+        assert_eq!((merged.mask.width, merged.mask.height), (3, 105));
+        assert_eq!(
+            merged
+                .mask
+                .pixels
+                .iter()
+                .filter(|&&pixel| pixel != 0)
+                .count(),
+            4
+        );
+        for (x, y) in [(12, 8), (12, 10), (13, 109), (14, 112)] {
+            assert!(merged.mask.contains(x, y));
+        }
+        assert_eq!(mask_for(&detections, "text", size), expected);
+    }
+
+    #[test]
+    fn nms_merges_text_only_at_the_containment_threshold() {
+        for (top, expected_count) in [(-10.0, 1), (-10.01, 2)] {
+            let mut detections = vec![
+                detection("text", 0.8, [0.0, 0.0, 100.0, 100.0]),
+                detection("text", 0.9, [0.0, top, 20.0, top + 100.0]),
+            ];
+
+            non_maximum_suppression(&mut detections, 0.5);
+
+            assert_eq!(detections.len(), expected_count);
+        }
+    }
+
+    #[test]
+    fn nms_does_not_merge_text_through_absorbed_or_expanded_boxes() {
+        for reverse in [false, true] {
+            let mut detections = vec![
+                detection("text", 0.8, [0.0, 20.0, 100.0, 120.0]),
+                detection("text", 0.9, [0.0, 14.0, 40.0, 114.0]),
+                detection("text", 0.7, [0.0, 8.0, 20.0, 108.0]),
+            ];
+            if reverse {
+                detections.reverse();
+            }
+
+            non_maximum_suppression(&mut detections, 0.5);
+
+            assert_eq!(detections.len(), 2);
+            assert_eq!(detections[0].bbox, [0.0, 14.0, 100.0, 120.0]);
+            assert_eq!(detections[1].bbox, [0.0, 8.0, 20.0, 108.0]);
+        }
     }
 
     #[test]
