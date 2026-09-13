@@ -276,7 +276,7 @@ impl Project {
 
     fn new(session: Session, name: String) -> Self {
         let active_page = session.snapshot().pages().next().map(|page| page.id());
-        let history = History::new(session.snapshot(), active_page, DEFAULT_CAPACITY);
+        let history = History::new(session.snapshot(), DEFAULT_CAPACITY);
         Self {
             session,
             name,
@@ -866,7 +866,7 @@ impl Project {
     }
 
     async fn step(&mut self, forward: bool) -> Result<Option<Commit>> {
-        let (commit, page) = match forward {
+        let commit = match forward {
             true => self.history.step_forward(&mut self.session).await?,
             false => self.history.step_back(&mut self.session).await?,
         }
@@ -874,18 +874,17 @@ impl Project {
             true => "nothing to redo",
             false => "nothing to undo",
         })?;
-        self.active_page = page;
         self.reconcile_page();
         Ok(Some(commit))
     }
 
-    /// Moves history to an arbitrary panel entry. Restores the active page
-    /// recorded on the target state when it still exists.
+    /// Moves history to an arbitrary panel entry. The active page is view
+    /// state and stays put; `reconcile_page` only moves it when the restored
+    /// state no longer contains it.
     pub(crate) async fn jump_to(&mut self, target: usize) -> Result<Option<Commit>> {
-        let Some((commit, page)) = self.history.jump(&mut self.session, target).await? else {
+        let Some(commit) = self.history.jump(&mut self.session, target).await? else {
             return Ok(None);
         };
-        self.active_page = page;
         self.reconcile_page();
         Ok(Some(commit))
     }
@@ -899,14 +898,8 @@ impl Project {
         merge: Option<EntityId>,
         commit: &Commit,
     ) -> bool {
-        self.history.record(
-            &mut self.session,
-            name,
-            detail,
-            merge,
-            commit,
-            self.active_page,
-        )
+        self.history
+            .record(&mut self.session, name, detail, merge, commit)
     }
 
     pub(crate) fn clear_history(&mut self) {
@@ -928,7 +921,7 @@ impl Project {
             .context("no such history snapshot")?;
         let commit = self.session.restore(&snapshot).await?;
         self.history
-            .record_restore(&mut self.session, Some(name), &commit, self.active_page);
+            .record_restore(&mut self.session, Some(name), &commit);
         self.reconcile_page();
         Ok(commit)
     }
@@ -1401,6 +1394,35 @@ mod tests {
             Project::typography_view(typography).writing_mode,
             Some(WritingMode::Vertical)
         );
+    }
+
+    #[tokio::test]
+    async fn history_navigation_keeps_the_active_page() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        setup
+            .add_page(PageDraft::new("first", 100.0, 100.0), At::End)
+            .unwrap();
+        let second = setup
+            .add_page(PageDraft::new("second", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+        project.select_page(second).unwrap();
+
+        let patch = project
+            .snapshot()
+            .patch(|edit| edit.set_page(second, PageDraft::new("second edit", 100.0, 100.0)))
+            .unwrap();
+        let commit = project.commit(patch).await.unwrap();
+        project.record_named(HistoryName::Brush, None, None, &commit);
+
+        project.jump_to(0).await.unwrap();
+        assert_eq!(project.active_page(), Some(second));
+        project.redo().await.unwrap();
+        assert_eq!(project.active_page(), Some(second));
+        project.undo().await.unwrap();
+        assert_eq!(project.active_page(), Some(second));
     }
 
     #[tokio::test]

@@ -73,7 +73,6 @@ pub(crate) struct HistoryState {
     /// must adopt the previous state's pinned snapshot instead.
     restore_only: bool,
     snapshot: Snapshot,
-    active_page: Option<EntityId>,
     merge: Option<MergeKey>,
     at: Instant,
 }
@@ -121,7 +120,7 @@ pub(crate) struct History {
 impl History {
     /// The anchor state `Open` is the state at open/create time, so undo can
     /// walk back to exactly what was on disk.
-    pub(crate) fn new(snapshot: Snapshot, active_page: Option<EntityId>, capacity: usize) -> Self {
+    pub(crate) fn new(snapshot: Snapshot, capacity: usize) -> Self {
         Self {
             states: vec![HistoryState {
                 name: HistoryName::Open,
@@ -131,7 +130,6 @@ impl History {
                 related: Vec::new(),
                 restore_only: false,
                 snapshot,
-                active_page,
                 merge: None,
                 at: Instant::now(),
             }],
@@ -211,7 +209,6 @@ impl History {
         detail: Option<String>,
         merge: Option<EntityId>,
         commit: &Commit,
-        active_page: Option<EntityId>,
     ) -> bool {
         if commit.changes.to == commit.changes.from {
             return false;
@@ -226,7 +223,6 @@ impl History {
                 current.forward.push(revision);
                 current.related.push(revision);
                 current.snapshot = commit.snapshot.clone();
-                current.active_page = active_page;
                 current.at = Instant::now();
                 return true;
             }
@@ -240,7 +236,6 @@ impl History {
             related: vec![revision],
             restore_only: false,
             snapshot: commit.snapshot.clone(),
-            active_page,
             merge: merge.map(|target| MergeKey { name, target }),
             at: Instant::now(),
         });
@@ -257,7 +252,6 @@ impl History {
         session: &mut Session,
         detail: Option<String>,
         commit: &Commit,
-        active_page: Option<EntityId>,
     ) {
         self.truncate_forward(session);
         self.states.push(HistoryState {
@@ -268,7 +262,6 @@ impl History {
             related: Vec::new(),
             restore_only: true,
             snapshot: commit.snapshot.clone(),
-            active_page,
             merge: None,
             at: Instant::now(),
         });
@@ -306,7 +299,7 @@ impl History {
         &mut self,
         session: &mut Session,
         target: usize,
-    ) -> Result<Option<(Commit, Option<EntityId>)>> {
+    ) -> Result<Option<Commit>> {
         if target >= self.states.len() {
             bail!("history target {} is out of range", target);
         }
@@ -316,8 +309,7 @@ impl History {
         let snapshot = self.states[target].snapshot.clone();
         let commit = session.restore(&snapshot).await?;
         self.cursor = target;
-        let page = self.states[self.cursor].active_page;
-        Ok(Some((commit, page)))
+        Ok(Some(commit))
     }
 
     /// One undo step through the state's inverse operations, so the canvas
@@ -325,7 +317,7 @@ impl History {
     pub(crate) async fn step_back(
         &mut self,
         session: &mut Session,
-    ) -> Result<Option<(Commit, Option<EntityId>)>> {
+    ) -> Result<Option<Commit>> {
         if self.cursor == 0 {
             return Ok(None);
         }
@@ -340,8 +332,7 @@ impl History {
         state.related.push(commit.revision);
         state.redo.push(commit.revision);
         self.cursor -= 1;
-        let page = self.states[self.cursor].active_page;
-        Ok(Some((commit, page)))
+        Ok(Some(commit))
     }
 
     /// One redo step. Falls back to adopting the pinned snapshot when the
@@ -349,7 +340,7 @@ impl History {
     pub(crate) async fn step_forward(
         &mut self,
         session: &mut Session,
-    ) -> Result<Option<(Commit, Option<EntityId>)>> {
+    ) -> Result<Option<Commit>> {
         if self.cursor + 1 == self.states.len() {
             return Ok(None);
         }
@@ -367,8 +358,7 @@ impl History {
                     .await?
             }
         };
-        let page = self.states[self.cursor].active_page;
-        Ok(Some((commit, page)))
+        Ok(Some(commit))
     }
 
     /// Drops every state except the current one, which becomes the anchor.
@@ -419,18 +409,17 @@ mod tests {
     #[tokio::test]
     async fn named_states_jump_both_ways() {
         let mut session = Session::memory().await.unwrap();
-        let mut history = History::new(session.snapshot(), None, 10);
+        let mut history = History::new(session.snapshot(), 10);
         let commit = add_page(&mut session, "a").await;
         assert!(history.record(
             &mut session,
             HistoryName::RenamePage,
             None,
             None,
-            &commit,
-            None
+            &commit
         ));
         let second = add_page(&mut session, "b").await;
-        history.record(&mut session, HistoryName::Brush, None, None, &second, None);
+        history.record(&mut session, HistoryName::Brush, None, None, &second);
 
         let view = history.view();
         assert_eq!(view.entries.len(), 3);
@@ -440,8 +429,7 @@ mod tests {
         assert!(view.entries[2].current);
         assert!(history.can_undo() && !history.can_redo());
 
-        let (commit, _) = history.jump(&mut session, 0).await.unwrap().unwrap();
-        let _ = commit;
+        history.jump(&mut session, 0).await.unwrap().unwrap();
         assert_eq!(pages(&session), 0);
         let view = history.view();
         assert!(view.entries[1].undone && view.entries[2].undone);
@@ -455,14 +443,14 @@ mod tests {
     #[tokio::test]
     async fn new_edit_truncates_undone_states() {
         let mut session = Session::memory().await.unwrap();
-        let mut history = History::new(session.snapshot(), None, 10);
+        let mut history = History::new(session.snapshot(), 10);
         for label in ["a", "b"] {
             let commit = add_page(&mut session, label).await;
-            history.record(&mut session, HistoryName::Brush, None, None, &commit, None);
+            history.record(&mut session, HistoryName::Brush, None, None, &commit);
         }
         history.jump(&mut session, 0).await.unwrap();
         let commit = add_page(&mut session, "c").await;
-        history.record(&mut session, HistoryName::Brush, None, None, &commit, None);
+        history.record(&mut session, HistoryName::Brush, None, None, &commit);
 
         let view = history.view();
         assert_eq!(view.entries.len(), 2);
@@ -475,7 +463,7 @@ mod tests {
     #[tokio::test]
     async fn repeated_micro_edits_coalesce_into_one_state() {
         let mut session = Session::memory().await.unwrap();
-        let mut history = History::new(session.snapshot(), None, 10);
+        let mut history = History::new(session.snapshot(), 10);
         let target = add_page(&mut session, "target").await;
         history.record(
             &mut session,
@@ -483,7 +471,6 @@ mod tests {
             None,
             None,
             &target,
-            None,
         );
         let target_entity = session.snapshot().pages().next().unwrap().id();
         for label in ["x1", "x2"] {
@@ -494,7 +481,6 @@ mod tests {
                 None,
                 Some(target_entity),
                 &commit,
-                None,
             );
         }
 
@@ -511,10 +497,10 @@ mod tests {
     #[tokio::test]
     async fn capacity_washes_out_oldest_states() {
         let mut session = Session::memory().await.unwrap();
-        let mut history = History::new(session.snapshot(), None, 3);
+        let mut history = History::new(session.snapshot(), 3);
         for index in 0..5 {
             let commit = add_page(&mut session, &index.to_string()).await;
-            history.record(&mut session, HistoryName::Brush, None, None, &commit, None);
+            history.record(&mut session, HistoryName::Brush, None, None, &commit);
         }
         let view = history.view();
         assert_eq!(view.entries.len(), 3);
@@ -530,7 +516,7 @@ mod tests {
     #[tokio::test]
     async fn clear_releases_revisions_and_resets_current_as_anchor() {
         let mut session = Session::memory().await.unwrap();
-        let mut history = History::new(session.snapshot(), None, 10);
+        let mut history = History::new(session.snapshot(), 10);
         let anchor = add_page(&mut session, "target").await;
         history.record(
             &mut session,
@@ -538,7 +524,6 @@ mod tests {
             None,
             None,
             &anchor,
-            None,
         );
         let target = session.snapshot().pages().next().unwrap().id();
         let current = add_page(&mut session, "a").await;
@@ -548,9 +533,7 @@ mod tests {
             None,
             Some(target),
             &current,
-            None,
         );
-
         history.clear(&mut session);
 
         let view = history.view();
@@ -570,7 +553,6 @@ mod tests {
             None,
             Some(target),
             &next,
-            None,
         );
         assert!(
             history.can_undo(),
@@ -581,12 +563,12 @@ mod tests {
     #[tokio::test]
     async fn snapshot_restore_is_itself_undoable() {
         let mut session = Session::memory().await.unwrap();
-        let mut history = History::new(session.snapshot(), None, 10);
+        let mut history = History::new(session.snapshot(), 10);
         let commit = add_page(&mut session, "a").await;
-        history.record(&mut session, HistoryName::Brush, None, None, &commit, None);
+        history.record(&mut session, HistoryName::Brush, None, None, &commit);
         let snapshot_id = history.create_snapshot(session.snapshot(), None);
         let commit = add_page(&mut session, "b").await;
-        history.record(&mut session, HistoryName::Brush, None, None, &commit, None);
+        history.record(&mut session, HistoryName::Brush, None, None, &commit);
         assert_eq!(pages(&session), 2);
 
         let (snapshot, name) = history
@@ -594,7 +576,7 @@ mod tests {
             .map(|(snapshot, name)| (snapshot.clone(), name.to_owned()))
             .unwrap();
         let commit = session.restore(&snapshot).await.unwrap();
-        history.record_restore(&mut session, Some(name), &commit, None);
+        history.record_restore(&mut session, Some(name), &commit);
         assert_eq!(pages(&session), 1);
         let view = history.view();
         assert_eq!(view.entries.len(), 4);
