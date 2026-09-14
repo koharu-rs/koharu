@@ -621,6 +621,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn element_frame_round_trips_a_committed_angle() {
+        // The canvas control reads this frame, so losing the angle here is what
+        // snaps a rotated text layer back upright.
+        let geometry = Geometry::rotated_rectangle(60.0, 65.0, 80.0, 30.0, 27.0);
+
+        let frame = geometry_frame(&geometry).unwrap();
+        assert!((frame.x - 60.0).abs() < 1e-4);
+        assert!((frame.y - 65.0).abs() < 1e-4);
+        assert!((frame.width - 80.0).abs() < 1e-4);
+        assert!((frame.height - 30.0).abs() < 1e-4);
+        assert!((frame.angle_degrees - 27.0).abs() < 1e-4);
+    }
+
+    #[test]
     fn prepared_raster_tiles_retain_neighbor_gutters() {
         let width = PREPARED_RASTER_TILE_DIMENSION + 1;
         let mut pixels = Vec::with_capacity(width as usize * 4);

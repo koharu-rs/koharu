@@ -709,6 +709,43 @@ mod tests {
     }
 
     #[test]
+    fn authored_rectangle_round_trips_a_committed_angle() {
+        let geometry = Geometry::rotated_rectangle(60.0, 65.0, 80.0, 30.0, 27.0);
+
+        let frame = geometry_frame(&geometry).unwrap();
+        assert!((frame.bounds.x - 60.0).abs() < 1e-4);
+        assert!((frame.bounds.y - 65.0).abs() < 1e-4);
+        assert!((frame.bounds.width - 80.0).abs() < 1e-4);
+        assert!((frame.bounds.height - 30.0).abs() < 1e-4);
+        assert!((frame.angle_degrees - 27.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_contour_cannot_carry_an_angle() {
+        // Turning a many-point contour is not recoverable from its shape, which
+        // is why an authored text frame is stored as four corners instead.
+        let (sin, cos) = 27.0_f64.to_radians().sin_cos();
+        let geometry = Geometry {
+            origin: Origin::User,
+            points: [
+                (-40.0, -15.0),
+                (0.0, -20.0),
+                (40.0, -15.0),
+                (40.0, 15.0),
+                (0.0, 20.0),
+                (-40.0, 15.0),
+            ]
+            .map(|(x, y)| Point {
+                x: 100.0 + x * cos - y * sin,
+                y: 80.0 + x * sin + y * cos,
+            })
+            .into(),
+        };
+
+        assert_eq!(geometry_frame(&geometry).unwrap().angle_degrees, 0.0);
+    }
+
+    #[test]
     fn rotated_rectangle_preserves_layout_dimensions_and_angle() {
         let (sin, cos) = 27.0_f64.to_radians().sin_cos();
         let geometry = Geometry {

@@ -1301,25 +1301,13 @@ fn rotated_rectangle_geometry(
     [left, top, right, bottom]: [f32; 4],
     angle_degrees: f32,
 ) -> Geometry {
-    let width = f64::from((right - left).max(1.0));
-    let height = f64::from((bottom - top).max(1.0));
-    let center_x = f64::from(left + right) * 0.5;
-    let center_y = f64::from(top + bottom) * 0.5;
-    let (sin, cos) = f64::from(angle_degrees).to_radians().sin_cos();
-    Geometry {
-        origin: Origin::User,
-        points: [
-            (-width * 0.5, -height * 0.5),
-            (width * 0.5, -height * 0.5),
-            (width * 0.5, height * 0.5),
-            (-width * 0.5, height * 0.5),
-        ]
-        .map(|(x, y)| Point {
-            x: center_x + x * cos - y * sin,
-            y: center_y + x * sin + y * cos,
-        })
-        .into(),
-    }
+    Geometry::rotated_rectangle(
+        f64::from(left),
+        f64::from(top),
+        f64::from((right - left).max(1.0)),
+        f64::from((bottom - top).max(1.0)),
+        f64::from(angle_degrees),
+    )
 }
 
 fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {

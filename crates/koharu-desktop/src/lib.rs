@@ -5,7 +5,7 @@ use std::{collections::HashSet, future::Future, sync::Arc};
 use anyhow::{Context as _, Result, bail};
 use koharu_rasterizer::{Rasterizer, ResourceId};
 use koharu_renderer::{Frame as RenderedFrame, LayerKind, Renderer};
-use koharu_scene::{Commit, EntityId, Geometry, Point, Revision, Snapshot};
+use koharu_scene::{Commit, EntityId, Geometry, Revision, Snapshot};
 use parking_lot::{Mutex as SyncMutex, RwLock};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -272,26 +272,16 @@ impl Desktop {
                     element.element
                 );
             }
-            let original = layer
-                .element_frame()
-                .context("canvas transform element has no control frame")?;
-            let original = Frame {
-                x: original.x,
-                y: original.y,
-                width: original.width,
-                height: original.height,
-                angle_degrees: original.angle_degrees,
-            };
-            let coefficients = frame_transform(original, element.frame);
-            let geometry = Geometry {
-                origin: layer.geometry().origin.clone(),
-                points: layer
-                    .geometry()
-                    .points
-                    .iter()
-                    .map(|point| transform_point(coefficients, point))
-                    .collect(),
-            };
+            if layer.element_frame().is_none() {
+                bail!(
+                    "canvas transform element {} has no control frame",
+                    element.element
+                );
+            }
+            // A text layer owns a box, not the silhouette of whatever region
+            // placed it. Carrying a region's contour here would also discard
+            // the angle, because readers recover it from four corners.
+            let geometry = authored_frame_geometry(element.frame);
             if geometry != *layer.geometry() {
                 geometries.push((element.element, geometry));
             }
@@ -508,36 +498,14 @@ impl PageFrameCache {
     }
 }
 
-fn frame_transform(original: Frame, preview: Frame) -> [f64; 6] {
-    let original_angle = f64::from(original.angle_degrees).to_radians();
-    let preview_angle = f64::from(preview.angle_degrees).to_radians();
-    let (original_sin, original_cos) = original_angle.sin_cos();
-    let (preview_sin, preview_cos) = preview_angle.sin_cos();
-    let scale_x = f64::from(preview.width / original.width);
-    let scale_y = f64::from(preview.height / original.height);
-    let a = preview_cos * scale_x * original_cos + preview_sin * scale_y * original_sin;
-    let b = preview_sin * scale_x * original_cos - preview_cos * scale_y * original_sin;
-    let c = preview_cos * scale_x * original_sin - preview_sin * scale_y * original_cos;
-    let d = preview_sin * scale_x * original_sin + preview_cos * scale_y * original_cos;
-    let original_center_x = f64::from(original.x + original.width * 0.5);
-    let original_center_y = f64::from(original.y + original.height * 0.5);
-    let preview_center_x = f64::from(preview.x + preview.width * 0.5);
-    let preview_center_y = f64::from(preview.y + preview.height * 0.5);
-    [
-        a,
-        b,
-        c,
-        d,
-        preview_center_x - a * original_center_x - c * original_center_y,
-        preview_center_y - b * original_center_x - d * original_center_y,
-    ]
-}
-
-fn transform_point([a, b, c, d, e, f]: [f64; 6], point: &Point) -> Point {
-    Point {
-        x: a * point.x + c * point.y + e,
-        y: b * point.x + d * point.y + f,
-    }
+fn authored_frame_geometry(frame: Frame) -> Geometry {
+    Geometry::rotated_rectangle(
+        f64::from(frame.x),
+        f64::from(frame.y),
+        f64::from(frame.width),
+        f64::from(frame.height),
+        f64::from(frame.angle_degrees),
+    )
 }
 
 #[cfg(test)]
@@ -546,7 +514,32 @@ mod tests {
 
     use tokio::{sync::Notify, time::timeout};
 
-    use super::Desktop;
+    use super::{Desktop, Frame, authored_frame_geometry};
+
+    #[test]
+    fn authored_frame_geometry_keeps_an_angle_a_reader_can_recover() {
+        let geometry = authored_frame_geometry(Frame {
+            x: 60.0,
+            y: 65.0,
+            width: 80.0,
+            height: 30.0,
+            angle_degrees: 27.0,
+        });
+
+        // Readers measure the angle off the leading edge of exactly four
+        // corners, so a committed frame has to arrive as four corners.
+        assert_eq!(geometry.points.len(), 4);
+        let leading = (
+            geometry.points[1].x - geometry.points[0].x,
+            geometry.points[1].y - geometry.points[0].y,
+        );
+        assert!((leading.1.atan2(leading.0).to_degrees() - 27.0).abs() < 1e-6);
+        assert!((leading.0.hypot(leading.1) - 80.0).abs() < 1e-6);
+        let center_x = geometry.points.iter().map(|point| point.x).sum::<f64>() * 0.25;
+        let center_y = geometry.points.iter().map(|point| point.y).sum::<f64>() * 0.25;
+        assert!((center_x - 100.0).abs() < 1e-6);
+        assert!((center_y - 80.0).abs() < 1e-6);
+    }
 
     #[tokio::test]
     async fn newer_request_preempts_current_preparation_and_acquires_ownership() {
