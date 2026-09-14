@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, anyhow};
 use arc_swap::ArcSwap;
+use futures::future::try_join_all;
 use koharu_rasterizer::{RasterOptions, Rasterizer};
 use koharu_scene::{
     Asset, AssetRole, BlobId, Change, Component, ComponentOwner, EntityChange, EntityId, FitsTo,
@@ -22,6 +23,7 @@ use skrifa::{
     instance::Size,
     outline::{DrawSettings, OutlinePen},
 };
+use tokio_rayon::AsyncThreadPool as _;
 use vello::{
     Scene,
     kurbo::{Affine, BezPath, Rect, Vec2},
@@ -189,7 +191,7 @@ impl Renderer {
             .await
             .map_err(Error::FontResource)?;
         let fonts = self.inner.fonts.clone();
-        let (scene, width) = tokio::task::spawn_blocking(move || {
+        let (scene, width) = tokio_rayon::spawn(move || {
             let preview_fonts = if font.renders(&label, FONT_SIZE) {
                 vec![font]
             } else {
@@ -210,10 +212,8 @@ impl Renderer {
             Ok::<_, anyhow::Error>((scene, width))
         })
         .await
-        .context("font preview worker stopped unexpectedly")
-        .and_then(|result| result)
         .map_err(Error::FontResource)?;
-        tokio::task::spawn_blocking(move || {
+        tokio_rayon::spawn(move || {
             let image = rasterizer
                 .rasterize_scene(
                     &scene,
@@ -230,8 +230,6 @@ impl Renderer {
             )
         })
         .await
-        .context("font preview raster worker stopped unexpectedly")
-        .and_then(|result| result)
         .map_err(Error::FontResource)
     }
 
@@ -300,8 +298,8 @@ impl Renderer {
         if !pending.is_empty() {
             let workers = self.workers()?;
             let fonts = self.inner.fonts.clone();
-            let built = tokio::task::spawn_blocking(move || {
-                workers.install(|| {
+            let built = workers
+                .spawn_async(move || {
                     pending
                         .into_par_iter()
                         .map(|(index, descriptor)| {
@@ -309,9 +307,7 @@ impl Renderer {
                         })
                         .collect::<Result<Vec<_>>>()
                 })
-            })
-            .await
-            .map_err(|source| Error::Backend(anyhow!(source)))??;
+                .await?;
             for (index, node) in built {
                 let node = Arc::new(node);
                 self.inner.nodes.lock().insert(
@@ -334,11 +330,9 @@ impl Renderer {
             rebuilt_layers: rebuilt,
         };
         let workers = self.workers()?;
-        tokio::task::spawn_blocking(move || {
-            workers.install(|| assemble_frame(compiled, nodes, stats))
-        })
-        .await
-        .map_err(|source| Error::Backend(anyhow!(source)))?
+        workers
+            .spawn_async(move || assemble_frame(compiled, nodes, stats))
+            .await
     }
 
     fn workers(&self) -> Result<Arc<rayon::ThreadPool>> {
@@ -382,14 +376,8 @@ impl Renderer {
             }
         }
         for chunk in missing.chunks(MAX_RESOURCE_READS) {
-            let mut loads = tokio::task::JoinSet::new();
-            for &id in chunk {
-                let snapshot = snapshot.clone();
-                let renderer = self.clone();
-                loads.spawn(async move { renderer.load_image(&snapshot, id).await });
-            }
-            while let Some(result) = loads.join_next().await {
-                let (id, image) = result.map_err(|source| Error::Backend(anyhow!(source)))??;
+            let loads = try_join_all(chunk.iter().map(|&id| self.load_image(snapshot, id))).await?;
+            for (id, image) in loads {
                 output.insert(id, image);
             }
         }
@@ -429,10 +417,7 @@ impl Renderer {
             let bytes = snapshot.read_blob(id).await?;
             let bytes: Arc<[u8]> = Arc::from(bytes.as_ref());
             let workers = self.workers()?;
-            let (id, image) =
-                tokio::task::spawn_blocking(move || workers.install(|| decode(id, bytes, None)))
-                    .await
-                    .map_err(|source| Error::Backend(anyhow!(source)))??;
+            let (id, image) = workers.spawn_async(move || decode(id, bytes, None)).await?;
             self.inner.images.lock().insert(id, image.clone());
             *load.image.lock() = Arc::downgrade(&image);
             Ok((id, image))

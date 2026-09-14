@@ -60,6 +60,7 @@ serde_json = "1.0.151"
 specta = { version = "=2.0.0-rc.25", features = ["derive", "url", "uuid"] }
 specta-typescript = "=0.0.12"
 tokio = { version = "1.53.1", features = ["full"] }
+tokio-rayon = "2.1.0"
 log = "0.4.34"
 tracing = "0.1.44"
 tracing-core = "0.1.36"

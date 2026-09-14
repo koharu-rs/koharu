@@ -1,6 +1,7 @@
 'use client'
 
-import { CircleAlert, Download, Square, X } from 'lucide-react'
+import { useMutationState } from '@tanstack/react-query'
+import { CircleAlert, Download, LoaderCircle, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
@@ -13,6 +14,15 @@ export function ActivityCenter() {
   const { t } = useTranslation()
   const jobs = useKoharuStore((state) => state.jobs)
   const downloads = useKoharuStore((state) => state.downloads)
+  const activities = useMutationState({
+    filters: { status: 'pending' },
+    select: (mutation) => ({
+      id: mutation.mutationId,
+      label: mutation.options.meta?.activity,
+    }),
+  }).filter(
+    (activity): activity is { id: number; label: string } => typeof activity.label === 'string',
+  )
   const visibleJobs = Object.values(jobs).filter(
     (job) => job.state === 'running' || job.state === 'failed',
   )
@@ -21,15 +31,32 @@ export function ActivityCenter() {
   )
   const failedDownloads = Object.values(downloads).filter((download) => download.state === 'failed')
   const visibleDownloads = [...runningDownloads, ...failedDownloads]
-  if (visibleJobs.length === 0 && visibleDownloads.length === 0) return null
+  if (activities.length === 0 && visibleJobs.length === 0 && visibleDownloads.length === 0)
+    return null
 
   return (
-    <aside className='absolute right-3 bottom-9 z-30 flex w-72 max-w-[calc(100%-1.5rem)] flex-col rounded-2xl border border-border/50 bg-popover shadow-md'>
+    <aside
+      aria-label={t('activity.title')}
+      className='absolute right-3 bottom-9 z-30 flex w-72 max-w-[calc(100%-1.5rem)] flex-col rounded-2xl border border-border/50 bg-popover shadow-md'
+    >
       <div className='border-b px-3 py-2'>
         <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>
           {t('activity.title')}
         </span>
       </div>
+      {activities.map((activity) => (
+        <div
+          key={activity.id}
+          role='status'
+          className='grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2.5 border-b p-3 last:border-b-0'
+        >
+          <LoaderCircle
+            className='size-3.5 animate-spin justify-self-center text-primary motion-reduce:animate-none'
+            aria-hidden='true'
+          />
+          <span className='truncate text-[12px] font-medium'>{t(activity.label)}</span>
+        </div>
+      ))}
       {runningDownloads.length > 1 ? (
         <DownloadGroup downloads={runningDownloads} />
       ) : (

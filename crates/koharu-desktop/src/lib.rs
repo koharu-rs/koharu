@@ -97,9 +97,7 @@ impl Desktop {
     pub async fn rasterizer(&self) -> Result<Arc<Rasterizer>> {
         self.rasterizer
             .get_or_try_init(|| async {
-                let rasterizer = tokio::task::spawn_blocking(Rasterizer::new)
-                    .await
-                    .context("native rasterizer initialization worker stopped unexpectedly")??;
+                let rasterizer = tokio_rayon::spawn(Rasterizer::new).await?;
                 Ok::<_, anyhow::Error>(Arc::new(rasterizer))
             })
             .await

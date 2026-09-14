@@ -12,6 +12,7 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
 fs4 = { workspace = true }

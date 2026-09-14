@@ -44,6 +44,4 @@ pub enum PsdExportError {
     Image(#[from] image::ImageError),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("background PSD task failed: {0}")]
-    Task(String),
 }

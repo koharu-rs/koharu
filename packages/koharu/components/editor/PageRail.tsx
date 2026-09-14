@@ -251,17 +251,6 @@ export function PageRail() {
           )}
         </header>
 
-        {importing && (
-          <div
-            role='status'
-            aria-live='polite'
-            className='flex h-7 shrink-0 items-center gap-1.5 px-2.5 text-[9px] text-muted-foreground'
-          >
-            <LoaderCircle className='size-3 animate-spin' aria-hidden='true' />
-            {t('navigator.importing')}
-          </div>
-        )}
-
         {pages.length > 0 && (
           <div className='border-b px-2 py-1.5'>
             <label className='flex h-6 items-center gap-1.5 rounded-md border border-input bg-background/70 px-1.5'>

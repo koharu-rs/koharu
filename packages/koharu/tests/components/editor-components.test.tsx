@@ -1,5 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render as testingRender, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render as testingRender,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from 'next-themes'
 import { StrictMode, type ReactNode } from 'react'
@@ -23,6 +30,7 @@ import {
   preparedPageKey,
   projectKey,
   queryClient,
+  useCommand,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import * as canvasRuntime from '@koharu/bridge/canvas'
@@ -295,7 +303,7 @@ describe('greenfield editor', () => {
     const user = userEvent.setup()
     installProject()
     let finishImport: (() => void) | undefined
-    const importPages = vi.spyOn(commands, 'importPages').mockImplementation(
+    const importPages = vi.spyOn(commands, 'import').mockImplementation(
       () =>
         new Promise<null>((resolve) => {
           finishImport = () => resolve(null)
@@ -305,16 +313,18 @@ describe('greenfield editor', () => {
       <>
         <TitleBar />
         <PageRail />
+        <ActivityCenter />
       </>,
     )
 
     expect(screen.getByText('/')).toHaveClass('mx-2')
     expect(screen.queryByRole('button', { name: 'Import pages' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('menuitem', { name: 'File' }))
-    await user.hover(await screen.findByRole('menuitem', { name: 'Import Pages…' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Import Pages' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Files…' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Importing pages…')
+    expect(screen.getByRole('complementary', { name: 'Activity' })).toBeInTheDocument()
     expect(importPages).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('menuitem', { name: 'File' }))
@@ -326,6 +336,88 @@ describe('greenfield editor', () => {
     finishImport?.()
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
+
+  it.each(['png', 'psd', 'cbz'] as const)(
+    'shows %s export activity and prevents duplicate exports',
+    async (format) => {
+      const user = userEvent.setup()
+      installProject()
+      let finishExport: (() => void) | undefined
+      const exportProject = vi.spyOn(commands, 'export').mockImplementation(
+        () =>
+          new Promise<null>((resolve) => {
+            finishExport = () => resolve(null)
+          }),
+      )
+      render(
+        <>
+          <TitleBar />
+          <ActivityCenter />
+        </>,
+      )
+
+      expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('menuitem', { name: 'File' }))
+      await user.hover(await screen.findByRole('menuitem', { name: 'Export Project' }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: `${format.toUpperCase()}…` }))
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Export Project')
+      expect(exportProject).toHaveBeenCalledExactlyOnceWith(format)
+      await user.click(screen.getByRole('menuitem', { name: 'File' }))
+      expect(await screen.findByRole('menuitem', { name: 'Export Project' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+
+      await act(async () => finishExport?.())
+      await waitFor(() =>
+        expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument(),
+      )
+      expect(await screen.findByRole('menuitem', { name: 'Export Project' })).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+    },
+  )
+
+  it.each([
+    { command: 'import', menu: 'Import Pages', choice: 'Files…', pending: 'Importing pages…' },
+    { command: 'export', menu: 'Export Project', choice: 'CBZ…', pending: 'Export Project' },
+  ] as const)(
+    'clears $command activity after failure',
+    async ({ command, menu, choice, pending }) => {
+      const user = userEvent.setup()
+      installProject()
+      let fail: ((error: Error) => void) | undefined
+      vi.spyOn(commands, command).mockImplementation(
+        () =>
+          new Promise<null>((_resolve, reject) => {
+            fail = reject
+          }),
+      )
+      render(
+        <>
+          <TitleBar />
+          <ActivityCenter />
+        </>,
+      )
+
+      await user.click(screen.getByRole('menuitem', { name: 'File' }))
+      await user.hover(await screen.findByRole('menuitem', { name: menu }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: choice }))
+      expect(await screen.findByRole('status')).toHaveTextContent(pending)
+
+      await user.click(screen.getByRole('menuitem', { name: 'File' }))
+      await act(async () => fail?.(new Error('File operation failed')))
+      await waitFor(() =>
+        expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument(),
+      )
+      expect(await screen.findByRole('menuitem', { name: menu })).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
+    },
+  )
 
   it('opens community links through the Tauri opener plugin', async () => {
     nativeOpenUrl.mockClear()
@@ -1661,6 +1753,43 @@ describe('greenfield editor', () => {
     render(<ResourceMonitor />)
     expect(screen.getByText('8%')).toBeInTheDocument()
     expect(screen.getByText('3%')).toBeInTheDocument()
+  })
+
+  it('tracks arbitrary concurrent commands until each one settles', async () => {
+    const first = Promise.withResolvers<string>()
+    const second = Promise.withResolvers<string>()
+    const command = vi
+      .fn<(name: string, count: number) => Promise<string>>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    const { result } = renderHook(
+      () => useCommand(['rebuild-index'], command, 'Rebuilding index…'),
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      },
+    )
+    render(<ActivityCenter />)
+
+    act(() => {
+      result.current.run('first', 2)
+      result.current.run('second', 3)
+    })
+    await waitFor(() => expect(screen.getAllByRole('status')).toHaveLength(2))
+    expect(screen.getAllByText('Rebuilding index…')).toHaveLength(2)
+    expect(command).toHaveBeenNthCalledWith(1, 'first', 2)
+    expect(command).toHaveBeenNthCalledWith(2, 'second', 3)
+    expect(result.current.busy).toBe(true)
+
+    await act(async () => first.resolve('done'))
+    await waitFor(() => expect(screen.getAllByRole('status')).toHaveLength(1))
+    expect(result.current.busy).toBe(true)
+
+    await act(async () => second.reject(new Error('Index failed')))
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+    expect(result.current.busy).toBe(false)
+    expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument()
   })
 
   it('keeps running work visible and stoppable', async () => {

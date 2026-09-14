@@ -34,9 +34,7 @@ pub enum Progress {
 pub type ProgressSink = Arc<dyn Fn(Progress) + Send + Sync>;
 
 pub(crate) fn emit(sink: Option<&ProgressSink>, progress: Progress) {
-    if let Some(sink) = sink
-        && std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink(progress))).is_err()
-    {
-        tracing::warn!("pipeline progress callback panicked");
+    if let Some(sink) = sink {
+        sink(progress);
     }
 }

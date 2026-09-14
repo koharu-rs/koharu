@@ -33,7 +33,7 @@ impl ImageCache {
             .get_or_try_init(|| async {
                 let bytes = scene.read_blob(asset.blob).await?;
                 let role = role.clone();
-                tokio::task::spawn_blocking(move || {
+                tokio_rayon::spawn(move || {
                     image::load_from_memory(&bytes)
                         .map(Arc::new)
                         .with_context(|| {
@@ -44,7 +44,6 @@ impl ImageCache {
                         })
                 })
                 .await
-                .context("image decode worker stopped unexpectedly")?
             })
             .await?
             .clone();

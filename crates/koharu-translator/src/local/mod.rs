@@ -81,15 +81,14 @@ impl LocalTranslator {
         let schema = prompt::output_schema(expected);
         let llm = Arc::clone(&self.llm);
         let generation = self.descriptor.generation.options(generation);
-        let output = tokio::task::spawn_blocking(move || {
+        let output = tokio_rayon::spawn(move || {
             let input = image.as_deref().map_or_else(
                 || Input::new(&prompt),
                 |image| Input::new(&prompt).with_image(image),
             );
             llm.inference_with_json_schema(&input, &generation, &schema)
         })
-        .await
-        .context("local translation task panicked")??;
+        .await?;
         let segments = prompt::translations("local", &output.text, &request.segments)?;
         Ok(segments)
     }

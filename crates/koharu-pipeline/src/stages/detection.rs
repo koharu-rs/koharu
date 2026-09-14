@@ -167,14 +167,13 @@ impl Model {
     async fn detect(&self, image: Arc<DynamicImage>) -> Result<KoharuLayoutDetections> {
         let network = self.network.clone();
         let thresholds = self.thresholds;
-        tokio::task::spawn_blocking(move || {
+        tokio_rayon::spawn(move || {
             let network = network
                 .lock()
                 .map_err(|_| anyhow!("layout model lock is poisoned"))?;
             network.inference_with_thresholds(&image, thresholds)
         })
         .await
-        .context("layout detection task panicked")?
     }
 }
 

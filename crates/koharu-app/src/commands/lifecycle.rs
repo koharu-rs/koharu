@@ -330,7 +330,7 @@ pub(crate) async fn delete_project(
     let library = handle.state::<ProjectLibrary>().inner().clone();
     tokio::task::spawn_blocking(move || library.delete(&name))
         .await
-        .context("project deletion worker stopped unexpectedly")??;
+        .context("project deletion task failed")??;
     Ok(())
 }
 
@@ -364,7 +364,7 @@ async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
 )]
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn import_pages(
+pub(crate) async fn import(
     source: PageImportSource,
     window: WebviewWindow<CefRuntime>,
     desktop: State<'_, Desktop>,
@@ -414,9 +414,7 @@ pub(crate) async fn import_pages(
     if files.is_empty() {
         return Err(anyhow::anyhow!("no supported images were found in the selection").into());
     }
-    let pages = tokio::task::spawn_blocking(move || import::import(files))
-        .await
-        .context("page import worker stopped unexpectedly")??;
+    let pages = tokio_rayon::spawn(move || import::import(files)).await?;
     let page_count = pages.len();
 
     let (commit, page) = {
