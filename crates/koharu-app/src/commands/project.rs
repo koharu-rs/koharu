@@ -1,6 +1,6 @@
 use std::{collections::HashSet, io::Cursor, path::PathBuf};
 
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
@@ -19,6 +19,7 @@ use super::{
     canvas::Point,
     editing::{GeometryUpdate, TypographyUpdate},
 };
+use crate::history::{DEFAULT_CAPACITY, History, HistoryName, HistoryView};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RasterStrokeMode {
@@ -33,6 +34,7 @@ pub struct ProjectInfo {
     pub active_page: Option<EntityId>,
     pub can_undo: bool,
     pub can_redo: bool,
+    pub history: HistoryView,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -254,8 +256,7 @@ pub(crate) struct Project {
     pub(crate) session: Session,
     pub(crate) name: String,
     pub(crate) active_page: Option<EntityId>,
-    pub(crate) undo: Vec<Vec<Revision>>,
-    pub(crate) redo: Vec<Vec<Revision>>,
+    pub(crate) history: History,
 }
 
 impl Project {
@@ -275,12 +276,12 @@ impl Project {
 
     fn new(session: Session, name: String) -> Self {
         let active_page = session.snapshot().pages().next().map(|page| page.id());
+        let history = History::new(session.snapshot(), DEFAULT_CAPACITY);
         Self {
             session,
             name,
             active_page,
-            undo: Vec::new(),
-            redo: Vec::new(),
+            history,
         }
     }
 
@@ -317,8 +318,9 @@ impl Project {
             name: self.name.clone(),
             revision: self.revision(),
             active_page: self.active_page,
-            can_undo: !self.undo.is_empty(),
-            can_redo: !self.redo.is_empty(),
+            can_undo: self.history.can_undo(),
+            can_redo: self.history.can_redo(),
+            history: self.history.view(),
         }
     }
 
@@ -856,42 +858,76 @@ impl Project {
     }
 
     pub(crate) async fn undo(&mut self) -> Result<Commit> {
-        let revisions = self.undo.pop().ok_or_else(|| anyhow!("nothing to undo"))?;
-        let commit = match self.session.undo_many(revisions.iter().copied()).await {
-            Ok(commit) => commit,
-            Err(error) => {
-                self.undo.push(revisions);
-                return Err(error.into());
-            }
-        };
-        self.redo.push(vec![commit.revision]);
-        Ok(commit)
+        self.step(false).await?.context("nothing to undo")
     }
 
     pub(crate) async fn redo(&mut self) -> Result<Commit> {
-        let revisions = self.redo.pop().ok_or_else(|| anyhow!("nothing to redo"))?;
-        let commit = match self.session.undo_many(revisions.iter().copied()).await {
-            Ok(commit) => commit,
-            Err(error) => {
-                self.redo.push(revisions);
-                return Err(error.into());
-            }
+        self.step(true).await?.context("nothing to redo")
+    }
+
+    async fn step(&mut self, forward: bool) -> Result<Option<Commit>> {
+        let commit = match forward {
+            true => self.history.step_forward(&mut self.session).await?,
+            false => self.history.step_back(&mut self.session).await?,
+        }
+        .with_context(|| match forward {
+            true => "nothing to redo",
+            false => "nothing to undo",
+        })?;
+        self.reconcile_page();
+        Ok(Some(commit))
+    }
+
+    /// Moves history to an arbitrary panel entry. The active page is view
+    /// state and stays put; `reconcile_page` only moves it when the restored
+    /// state no longer contains it.
+    pub(crate) async fn jump_to(&mut self, target: usize) -> Result<Option<Commit>> {
+        let Some(commit) = self.history.jump(&mut self.session, target).await? else {
+            return Ok(None);
         };
-        self.undo.push(vec![commit.revision]);
+        self.reconcile_page();
+        Ok(Some(commit))
+    }
+
+    /// Records a commit under a semantic name; the name is part of the call
+    /// signature so no commit can land in history anonymously.
+    pub(crate) fn record_named(
+        &mut self,
+        name: HistoryName,
+        detail: Option<String>,
+        merge: Option<EntityId>,
+        commit: &Commit,
+    ) -> bool {
+        self.history
+            .record(&mut self.session, name, detail, merge, commit)
+    }
+
+    pub(crate) fn clear_history(&mut self) {
+        self.history.clear(&mut self.session);
+    }
+
+    /// Pins the current state as a named snapshot (Photoshop-style).
+    pub(crate) fn create_snapshot(&mut self, name: Option<String>) -> u32 {
+        self.history.create_snapshot(self.session.snapshot(), name)
+    }
+
+    /// Restores a snapshot as a new history state; undoing that state steps
+    /// back to whatever preceded the restore.
+    pub(crate) async fn restore_snapshot(&mut self, id: u32) -> Result<Commit> {
+        let (snapshot, name) = self
+            .history
+            .snapshot(id)
+            .map(|(snapshot, name)| (snapshot.clone(), name.to_owned()))
+            .context("no such history snapshot")?;
+        let commit = self.session.restore(&snapshot).await?;
+        self.history
+            .record_restore(&mut self.session, Some(name), &commit);
+        self.reconcile_page();
         Ok(commit)
     }
 
-    pub(crate) fn record(&mut self, revisions: Vec<Revision>) {
-        if !revisions.is_empty() {
-            self.undo.push(revisions);
-            self.redo.clear();
-        }
-    }
-
-    pub(crate) fn record_commit(&mut self, commit: &Commit) {
-        if commit.changes.to != commit.changes.from {
-            self.record(vec![commit.revision]);
-        }
+    pub(crate) fn delete_snapshot(&mut self, id: u32) -> bool {
+        self.history.delete_snapshot(id)
     }
 
     pub(crate) async fn commit_rebased(
@@ -1358,6 +1394,35 @@ mod tests {
             Project::typography_view(typography).writing_mode,
             Some(WritingMode::Vertical)
         );
+    }
+
+    #[tokio::test]
+    async fn history_navigation_keeps_the_active_page() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        setup
+            .add_page(PageDraft::new("first", 100.0, 100.0), At::End)
+            .unwrap();
+        let second = setup
+            .add_page(PageDraft::new("second", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+        project.select_page(second).unwrap();
+
+        let patch = project
+            .snapshot()
+            .patch(|edit| edit.set_page(second, PageDraft::new("second edit", 100.0, 100.0)))
+            .unwrap();
+        let commit = project.commit(patch).await.unwrap();
+        project.record_named(HistoryName::Brush, None, None, &commit);
+
+        project.jump_to(0).await.unwrap();
+        assert_eq!(project.active_page(), Some(second));
+        project.redo().await.unwrap();
+        assert_eq!(project.active_page(), Some(second));
+        project.undo().await.unwrap();
+        assert_eq!(project.active_page(), Some(second));
     }
 
     #[tokio::test]

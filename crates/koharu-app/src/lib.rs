@@ -2,6 +2,7 @@
 
 mod app;
 mod commands;
+mod history;
 
 pub use app::run;
 pub use commands::bindings;

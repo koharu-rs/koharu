@@ -35,8 +35,16 @@ import {
   isTextLayer,
   layerChildren,
 } from '@/lib/document'
-import { pageKey, projectKey, queryClient, refresh, useFonts, usePage } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
+import {
+  pageKey,
+  pagesKey,
+  projectKey,
+  queryClient,
+  refresh,
+  useFonts,
+  usePage,
+} from '@/lib/queries'
+import { receiveError, useKoharuStore } from '@/lib/store'
 import { previewCanvasOpacity } from '@koharu/bridge/canvas'
 import {
   commands,
@@ -797,6 +805,18 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
       .then(() => refresh(projectKey, pageKey))
       .catch(() => undefined)
   }
+  const navigateHistory = (direction: 'undo' | 'redo') =>
+    commands[direction]()
+      .then(() => refresh(projectKey, pagesKey, pageKey))
+      .catch((error: unknown) =>
+        receiveError(
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'The history operation failed with an unknown error.',
+        ),
+      )
 
   return (
     <div className='grid min-w-0 gap-1.5 px-1.5 pt-0.5 pb-1.5'>
@@ -881,10 +901,11 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
               className='max-h-14 min-h-8 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
               value={layer.content.source?.text ?? ''}
               onCommit={(text) =>
-                void call(commands.setSourceText, layer.id, text)
-                  .then(() => refresh(projectKey, pageKey))
-                  .catch(() => undefined)
+                call(commands.setSourceText, layer.id, text).then(() =>
+                  refresh(projectKey, pageKey),
+                )
               }
+              onHistoryNavigate={navigateHistory}
             />
           </InspectorField>
           <InspectorField label={t('inspector.translation')}>
@@ -895,10 +916,11 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
               className='max-h-16 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md border-primary/25 bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
               value={layer.content.translation?.text ?? ''}
               onCommit={(text) =>
-                void call(commands.setTranslation, layer.id, text.trim() ? text : null)
-                  .then(() => refresh(projectKey, pageKey))
-                  .catch(() => undefined)
+                call(commands.setTranslation, layer.id, text.trim() ? text : null).then(() =>
+                  refresh(projectKey, pageKey),
+                )
               }
+              onHistoryNavigate={navigateHistory}
             />
           </InspectorField>
         </>

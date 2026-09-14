@@ -1490,3 +1490,30 @@ async fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
         Err(Error::Authorship(_))
     ));
 }
+
+#[tokio::test]
+async fn dropped_history_is_not_undoable() {
+    let mut session = Session::memory().await.unwrap();
+    let mut revisions = Vec::new();
+    for _ in 0..5 {
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                edit.add_page(page(), At::End)?;
+                Ok(())
+            })
+            .unwrap();
+        revisions.push(session.commit(patch).await.unwrap().revision);
+    }
+
+    assert_eq!(session.drop_history([revisions[1], revisions[3]]), 2);
+    assert_eq!(session.drop_history([revisions[1]]), 0);
+
+    let Err(Error::Invalid(message)) = session.undo(revisions[1]).await else {
+        panic!("undoing a dropped revision must fail");
+    };
+    assert!(message.contains("not undoable"));
+
+    let undone = session.undo(revisions[0]).await.unwrap();
+    assert_eq!(undone.snapshot.pages().len(), 4);
+}

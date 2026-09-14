@@ -17,11 +17,13 @@ use crate::commands::{
     ChannelExt as _,
     canvas::{CanvasChannel, Point},
     editing::{GeometryUpdate, TypographyUpdate},
+    lifecycle::ProjectChannel,
     output,
     preferences::Preferences,
     processing::{JobId, Processing},
     project::{CurrentProject, Project, Typography},
 };
+use crate::history::HistoryName;
 
 #[derive(Clone)]
 pub(super) struct KoharuHost {
@@ -81,6 +83,8 @@ impl KoharuHost {
 
     async fn mutate<T>(
         &self,
+        name: HistoryName,
+        merge: Option<EntityId>,
         mutation: impl for<'project> FnOnce(
             &'project mut Project,
         ) -> Pin<
@@ -95,12 +99,16 @@ impl KoharuHost {
             let mut current = current.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
             let (commit, value) = mutation(project).await?;
-            project.record_commit(&commit);
+            project.record_named(name, None, merge, &commit);
             project.reconcile_page();
             (commit, value, project.active_page(), project.info())
         };
         let revision = commit.revision;
         self.synchronize(commit, page).await?;
+        self.handle
+            .state::<ProjectChannel>()
+            .channel
+            .publish(Some(project.clone()));
         Invocation::changed(json!({
             "revision": revision,
             "project": project,
@@ -268,7 +276,7 @@ impl Host for KoharuHost {
             "rename_page" => {
                 let arguments: RenamePage = arguments(&call)?;
                 let page = entity(&arguments.page)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::RenamePage, None, |project| {
                     Box::pin(async move {
                         Ok((
                             project.rename_page(page, arguments.label).await?,
@@ -281,7 +289,7 @@ impl Host for KoharuHost {
             "move_page" => {
                 let arguments: MovePage = arguments(&call)?;
                 let page = entity(&arguments.page)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::MovePage, None, |project| {
                     Box::pin(async move {
                         Ok((
                             project.move_page(page, arguments.index).await?,
@@ -294,7 +302,7 @@ impl Host for KoharuHost {
             "delete_pages" => {
                 let arguments: DeletePages = arguments(&call)?;
                 let pages = entities(&arguments.pages)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::DeletePages, None, |project| {
                     Box::pin(async move {
                         Ok((
                             project.delete_pages(pages.clone()).await?,
@@ -314,7 +322,7 @@ impl Host for KoharuHost {
                     height: arguments.height,
                     angle_degrees: arguments.angle_degrees,
                 };
-                self.mutate(|project| {
+                self.mutate(HistoryName::AddText, None, |project| {
                     Box::pin(async move {
                         let (commit, element) = project.add_text_box(page, frame).await?;
                         Ok((commit, json!({ "page": page, "element": element })))
@@ -325,7 +333,7 @@ impl Host for KoharuHost {
             "set_source_text" => {
                 let arguments: SetText = arguments(&call)?;
                 let element = entity(&arguments.element)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::SourceText, Some(element), |project| {
                     Box::pin(async move {
                         Ok((
                             project.set_source_text(element, arguments.text).await?,
@@ -338,7 +346,7 @@ impl Host for KoharuHost {
             "set_translation" => {
                 let arguments: SetTranslation = arguments(&call)?;
                 let element = entity(&arguments.element)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::Translation, Some(element), |project| {
                     Box::pin(async move {
                         Ok((
                             project.set_translation(element, arguments.text).await?,
@@ -363,7 +371,7 @@ impl Host for KoharuHost {
                     alignment: arguments.alignment.map(Into::into),
                     writing_mode: arguments.writing_mode.map(Into::into),
                 };
-                self.mutate(|project| {
+                self.mutate(HistoryName::Typography, Some(element), |project| {
                     Box::pin(async move {
                         Ok((
                             project
@@ -389,7 +397,7 @@ impl Host for KoharuHost {
                         y: point.y,
                     })
                     .collect();
-                self.mutate(|project| {
+                self.mutate(HistoryName::Geometry, Some(element), |project| {
                     Box::pin(async move {
                         Ok((
                             project
@@ -407,7 +415,14 @@ impl Host for KoharuHost {
             "set_visibility" => {
                 let arguments: SetVisibility = arguments(&call)?;
                 let elements = entities(&arguments.elements)?;
-                self.mutate(|project| {
+                let name = if arguments.visible.is_some() {
+                    HistoryName::ToggleLayer
+                } else {
+                    HistoryName::Opacity
+                };
+                let merge =
+                    (arguments.opacity.is_some() && elements.len() == 1).then(|| elements[0]);
+                self.mutate(name, merge, |project| {
                     Box::pin(async move {
                         Ok((
                             project
@@ -426,7 +441,7 @@ impl Host for KoharuHost {
             "delete_elements" => {
                 let arguments: DeleteElements = arguments(&call)?;
                 let elements = entities(&arguments.elements)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::DeleteLayers, None, |project| {
                     Box::pin(async move {
                         Ok((
                             project.delete_layers(elements.clone()).await?,
@@ -440,7 +455,7 @@ impl Host for KoharuHost {
                 let arguments: MoveElement = arguments(&call)?;
                 let element = entity(&arguments.element)?;
                 let parent = entity(&arguments.parent)?;
-                self.mutate(|project| {
+                self.mutate(HistoryName::MoveLayer, None, |project| {
                     Box::pin(async move {
                         Ok((
                             project.move_layer(element, parent, arguments.index).await?,
@@ -463,18 +478,29 @@ struct AgentCommitter {
 #[async_trait]
 impl Committer for AgentCommitter {
     async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
-        let (commit, page) = {
+        let stage = output.stage;
+        let (commit, page, info) = {
             let current = self.host.handle.state::<CurrentProject>();
             let mut current = current.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
             let Some(commit) = project.commit_rebased(output.patch).await? else {
                 return Ok(project.snapshot());
             };
-            project.record_commit(&commit);
-            (commit, project.active_page())
+            project.record_named(
+                HistoryName::PipelineStage,
+                Some(stage.to_string()),
+                None,
+                &commit,
+            );
+            (commit, project.active_page(), project.info())
         };
         let snapshot = commit.snapshot.clone();
         self.host.synchronize(commit, page).await?;
+        self.host
+            .handle
+            .state::<ProjectChannel>()
+            .channel
+            .publish(Some(info));
         Ok(snapshot)
     }
 }

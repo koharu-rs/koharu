@@ -322,6 +322,7 @@ export function CanvasWorkspace() {
         event.preventDefault()
         return
       }
+      const command = event.ctrlKey || event.metaKey
       if (editable(event.target)) return
       const state = useKoharuStore.getState()
       if (event.code === 'Space') {
@@ -329,12 +330,19 @@ export function CanvasWorkspace() {
         event.preventDefault()
         return
       }
-      const command = event.ctrlKey || event.metaKey
       if (command && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        void call(event.shiftKey ? commands.redo : commands.undo)
+        void (event.shiftKey ? commands.redo() : commands.undo())
           .then(() => refresh(projectKey, pagesKey, pageKey))
-          .catch(() => undefined)
+          .catch((error: unknown) => receiveError(errorMessage(error)))
+        return
+      }
+      if (command && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        void commands
+          .redo()
+          .then(() => refresh(projectKey, pagesKey, pageKey))
+          .catch((error: unknown) => receiveError(errorMessage(error)))
         return
       }
       if (command && event.key.toLowerCase() === 'a' && page) {

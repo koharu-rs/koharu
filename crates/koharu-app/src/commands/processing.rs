@@ -10,7 +10,11 @@ use tauri::{AppHandle, Manager as _, State, ipc::Channel};
 use tauri_runtime_cef::CefRuntime;
 use uuid::Uuid;
 
-use super::{ChannelExt as _, Error, canvas::CanvasChannel, project::CurrentProject};
+use super::{
+    ChannelExt as _, Error, canvas::CanvasChannel, lifecycle::ProjectChannel,
+    project::CurrentProject,
+};
+use crate::history::HistoryName;
 use koharu_desktop::Desktop;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
@@ -212,22 +216,31 @@ pub(crate) async fn process(
         #[async_trait::async_trait]
         impl Committer for PipelineCommitter {
             async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
-                let (commit, page) = {
+                let (commit, page, info) = {
                     let projects = self.handle.state::<CurrentProject>();
                     let mut projects = projects.project.lock().await;
                     let project = projects.as_mut().context("no project is open")?;
                     let Some(commit) = project.commit_rebased(output.patch).await? else {
                         return Ok(project.snapshot());
                     };
-                    project.record_commit(&commit);
+                    project.record_named(
+                        HistoryName::PipelineStage,
+                        Some(output.stage.to_string()),
+                        None,
+                        &commit,
+                    );
                     let page = project.active_page();
-                    (commit, page)
+                    (commit, page, project.info())
                 };
                 let snapshot = commit.snapshot.clone();
                 let desktop = self.handle.state::<Desktop>();
                 desktop.synchronize(&commit.snapshot, page, &commit).await?;
                 let canvas = desktop.canvas_state();
                 self.handle.state::<CanvasChannel>().channel.publish(canvas);
+                self.handle
+                    .state::<ProjectChannel>()
+                    .channel
+                    .publish(Some(info));
                 Ok(snapshot)
             }
         }

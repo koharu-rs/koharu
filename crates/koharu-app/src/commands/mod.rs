@@ -2,6 +2,7 @@ pub(crate) mod agent;
 pub(crate) mod canvas;
 pub(crate) mod editing;
 pub(crate) mod fonts;
+pub(crate) mod history;
 pub(crate) mod import;
 pub(crate) mod lifecycle;
 pub(crate) mod output;
@@ -86,6 +87,11 @@ pub fn bindings() -> tauri_specta::Builder<tauri_runtime_cef::CefRuntime> {
             editing::move_layer,
             editing::undo,
             editing::redo,
+            history::history_go_to,
+            history::history_clear,
+            history::snapshot_create,
+            history::snapshot_restore,
+            history::snapshot_delete,
             processing::process,
             processing::stop_job,
             output::export_pages,

@@ -37,7 +37,8 @@ components, and assets they consume. OCR, translation, and inpainting branches
 on one page therefore compose, while a changed input or overlapping write fails
 conflict validation instead of publishing stale derived output.
 
-The application records all revisions from one invocation as one undo group.
+The application records each completed stage as its own named state in the
+project history panel, so a pipeline run can be undone stage by stage.
 
 ## Configuration
 

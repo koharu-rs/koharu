@@ -183,6 +183,50 @@ impl Session {
         self.storage.collect_garbage().await.map_err(Into::into)
     }
 
+    /// Adopts an arbitrary snapshot of this session as the new current state.
+    ///
+    /// Used by snapshot restore: the result is a real revision (the document
+    /// moves forward in time) whose `Change` is deliberately empty — consumers
+    /// must fully re-render instead of applying a diff.
+    pub async fn restore(&mut self, snapshot: &Snapshot) -> Result<Commit> {
+        if snapshot.state.document != self.current.state.document {
+            return Err(Error::invalid("snapshot belongs to another project"));
+        }
+        let next_revision = self
+            .current
+            .revision()
+            .next()
+            .ok_or_else(|| Error::invalid("project revision overflow"))?;
+        let mut state = (*snapshot.state).clone();
+        state.revision = next_revision;
+        let proposed = self.current.storage.update(
+            next_revision,
+            Bytes::from(encode_checkpoint(&state)?),
+            state.referenced_blobs(),
+            Vec::new(),
+        )?;
+        let stored = self.storage.save(&proposed).await?;
+        let snapshot = Snapshot::new(Arc::new(state), stored)?;
+        self.current = snapshot.clone();
+        Ok(Commit {
+            revision: next_revision,
+            changes: Change::empty(next_revision),
+            snapshot,
+        })
+    }
+
+    /// Drops the undo history for the given revisions, releasing each entry's
+    /// blob lease. Returns the number of revisions actually removed.
+    ///
+    /// The caller guarantees the dropped revisions are unreachable for undo;
+    /// the session does not enforce this.
+    pub fn drop_history(&mut self, revisions: impl IntoIterator<Item = crate::Revision>) -> usize {
+        revisions
+            .into_iter()
+            .filter(|revision| self.history.remove(revision).is_some())
+            .count()
+    }
+
     async fn assemble(storage: koharu_storage::Session, state: State) -> Result<Self> {
         let stored = storage.load().await?;
         let current = Snapshot::new(Arc::new(state), stored)?;
