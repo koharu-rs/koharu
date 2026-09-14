@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::OnceLock};
 
-use hf_hub::{HFClient, repository::download::HFByteStream, split_id};
+use hf_hub::{HFClient, HFRepository, RepoType, repository::download::HFByteStream, split_id};
 
 use crate::{Store, download, network};
 
@@ -12,7 +12,7 @@ fn client() -> anyhow::Result<HFClient> {
     }
     let max_retries = network::config()?.max_retries as usize;
     let http = network::http()?;
-    let client = hf_hub::HFClient::builder()
+    let client = HFClient::builder()
         .client(http)
         .cache_enabled(false)
         .retry_max_attempts(max_retries)
@@ -24,59 +24,6 @@ fn client() -> anyhow::Result<HFClient> {
 enum RepositoryKind {
     Model,
     Dataset,
-}
-
-#[derive(Clone, Copy)]
-struct Repository<'a> {
-    id: &'a str,
-    owner: &'a str,
-    name: &'a str,
-}
-
-impl<'a> Repository<'a> {
-    fn new(id: &'a str) -> Self {
-        let (owner, name) = split_id(id);
-        Self { id, owner, name }
-    }
-}
-
-impl RepositoryKind {
-    const fn api_route(self) -> &'static str {
-        match self {
-            Self::Model => "models",
-            Self::Dataset => "datasets",
-        }
-    }
-
-    async fn download(
-        self,
-        client: &HFClient,
-        repository: Repository<'_>,
-        revision: String,
-        filename: &str,
-    ) -> anyhow::Result<(Option<u64>, HFByteStream)> {
-        let result = match self {
-            Self::Model => {
-                client
-                    .model(repository.owner, repository.name)
-                    .download_file_stream()
-                    .filename(filename)
-                    .revision(revision)
-                    .send()
-                    .await
-            }
-            Self::Dataset => {
-                client
-                    .dataset(repository.owner, repository.name)
-                    .download_file_stream()
-                    .filename(filename)
-                    .revision(revision)
-                    .send()
-                    .await
-            }
-        };
-        result.map_err(Into::into)
-    }
 }
 
 /// An immutable file snapshot hosted by Hugging Face.
@@ -103,46 +50,55 @@ impl<'a> HuggingFaceFile<'a> {
     pub const fn pinned_dataset(repository: &'a str, revision: &'a str, filename: &'a str) -> Self {
         Self {
             kind: RepositoryKind::Dataset,
-            repository,
-            revision,
-            filename,
+            ..Self::pinned(repository, revision, filename)
         }
     }
 
     #[must_use]
-    pub fn is_present(self) -> bool {
-        Store::root()
-            .join("hugging-face")
-            .join(self.kind.api_route())
-            .join(self.repository.replace(['/', '\\'], "--"))
-            .join("snapshots")
-            .join(self.revision)
-            .join(self.filename)
-            .is_file()
+    pub fn exists(self) -> bool {
+        self.path().is_file()
     }
 
     #[tracing::instrument(skip_all)]
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
-        let repository = Repository::new(self.repository);
-        let revision = self.revision.to_owned();
-        let repository_name = repository.id.replace(['/', '\\'], "--");
-        let target = Store::root()
-            .join("hugging-face")
-            .join(self.kind.api_route())
-            .join(repository_name)
-            .join("snapshots")
-            .join(&revision)
-            .join(self.filename);
-        Store::file(target, move |stage| async move {
+        Store::file(self.path(), move |stage| async move {
             let client = client()?;
-            download::receive(
-                self.filename,
-                &stage,
-                self.kind
-                    .download(&client, repository, revision, self.filename),
-            )
+            let (owner, name) = split_id(self.repository);
+            download::receive(self.filename, &stage, async {
+                // hf-hub 1.0 builds metadata URLs with T::default(), so use typed repositories.
+                match self.kind {
+                    RepositoryKind::Model => self.download(client.model(owner, name)).await,
+                    RepositoryKind::Dataset => self.download(client.dataset(owner, name)).await,
+                }
+            })
             .await
         })
         .await
+    }
+
+    async fn download(
+        self,
+        repository: HFRepository<impl RepoType>,
+    ) -> anyhow::Result<(Option<u64>, HFByteStream)> {
+        repository
+            .download_file_stream()
+            .filename(self.filename)
+            .revision(self.revision)
+            .send()
+            .await
+            .map_err(Into::into)
+    }
+
+    fn path(self) -> PathBuf {
+        Store::root()
+            .join("hugging-face")
+            .join(match self.kind {
+                RepositoryKind::Model => "models",
+                RepositoryKind::Dataset => "datasets",
+            })
+            .join(self.repository.replace(['/', '\\'], "--"))
+            .join("snapshots")
+            .join(self.revision)
+            .join(self.filename)
     }
 }

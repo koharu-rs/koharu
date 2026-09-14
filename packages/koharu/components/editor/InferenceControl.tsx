@@ -18,7 +18,7 @@ import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
 import { call, refreshTranslationModels, savePreferences } from '@/lib/backend'
 import { pipelineStages, receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
-import { modelKey, modelSelection, providerName } from '@/lib/translation'
+import { modelKey, providerName } from '@/lib/translation'
 import {
   commands,
   type Model,
@@ -130,9 +130,9 @@ function RuntimeSelector({
       .finally(() => setLoadingModels(false))
   }
 
-  const chooseModel = (next: Model) => {
+  const chooseModel = (next: ModelSelection) => {
     if (!preferences || savingModel) return
-    if (model && modelKey(model) === modelKey(next)) {
+    if (model && modelKey(model) === modelKey(next) && model.quantization === next.quantization) {
       setView('root')
       return
     }
@@ -143,7 +143,7 @@ function RuntimeSelector({
       ...preferences.pipeline,
       translation: {
         ...preferences.pipeline.translation,
-        model: modelSelection(next),
+        model: next,
       },
     }
     void savePreferences(pipeline, preferences.providers, preferences.typesetting)
