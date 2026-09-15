@@ -35,7 +35,7 @@ pub enum Error {
         source: anyhow::Error,
     },
 
-    #[error("renderer backend failed")]
+    #[error("renderer backend failed: {0:#}")]
     Backend(#[source] anyhow::Error),
 }
 
