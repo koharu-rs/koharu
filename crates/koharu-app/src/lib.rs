@@ -2,7 +2,6 @@
 
 mod app;
 mod commands;
-mod linux_cef;
 
 pub use app::run;
 pub use commands::bindings;
