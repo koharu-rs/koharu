@@ -66,6 +66,16 @@ pub(crate) async fn initialize(handle: AppHandle<CefRuntime>) -> Result<()> {
 }
 
 pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    if let Some(backend) =
+        crate::linux_cef::gdk_backend_default(std::env::var_os("GDK_BACKEND").as_deref())
+    {
+        // SAFETY: `run` is the process entry before Tauri/GTK start, and this
+        // only sets GDK_BACKEND when the user has not already set it.
+        unsafe {
+            std::env::set_var("GDK_BACKEND", backend);
+        }
+    }
     let cef = Cef::default();
     #[cfg(debug_assertions)]
     let cef = cef.remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
@@ -75,10 +85,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     #[cfg(target_os = "linux")]
     let cef = cef
         .enable_features(["Vulkan", "VulkanFromANGLE"])
-        .command_line_args([
-            ("--enable-unsafe-webgpu", None),
-            ("use-angle", Some("vulkan")),
-        ]);
+        .command_line_args(crate::linux_cef::command_line_args());
     tauri::Builder::<CefRuntime>::new()
         .runtime(cef)
         .plugin(
