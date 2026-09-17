@@ -319,6 +319,7 @@
     "translation": "将原文翻译为目标语言。"
   },
   "providerDescriptions": {
+    "api-route": "由 API Route 托管的语言模型。",
     "caiyun": "Caiyun 翻译 API。",
     "claude": "Anthropic Claude 模型。",
     "deepl": "DeepL 翻译 API。",

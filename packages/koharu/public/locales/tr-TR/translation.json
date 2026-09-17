@@ -319,6 +319,7 @@
     "translation": "Kaynak metni hedef dile çevirir."
   },
   "providerDescriptions": {
+    "api-route": "API Route üzerinde barındırılan dil modelleri.",
     "caiyun": "Caiyun çeviri API'si.",
     "claude": "Anthropic Claude modelleri.",
     "deepl": "DeepL çeviri API'si.",

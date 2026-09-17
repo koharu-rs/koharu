@@ -319,6 +319,7 @@
     "translation": "Convert source text to the target language."
   },
   "providerDescriptions": {
+    "api-route": "API Route hosted language models.",
     "caiyun": "Caiyun translation API.",
     "claude": "Anthropic Claude models.",
     "deepl": "DeepL translation API.",

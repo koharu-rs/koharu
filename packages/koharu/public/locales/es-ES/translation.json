@@ -319,6 +319,7 @@
     "translation": "Convierte el texto original al idioma de destino."
   },
   "providerDescriptions": {
+    "api-route": "Modelos de lenguaje alojados en API Route.",
     "caiyun": "API de traducción de Caiyun.",
     "claude": "Modelos Claude de Anthropic.",
     "deepl": "API de traducción de DeepL.",

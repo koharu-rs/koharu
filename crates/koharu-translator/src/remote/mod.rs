@@ -1,3 +1,4 @@
+mod api_route;
 mod caiyun;
 mod claude;
 mod deepl;
@@ -16,6 +17,7 @@ use futures::{FutureExt, future::BoxFuture, future::join_all};
 use reqwest::{Client, RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 
+pub use api_route::ApiRouteConfig;
 pub use caiyun::CaiyunConfig;
 pub use claude::ClaudeConfig;
 pub use deepl::DeepLConfig;
@@ -48,6 +50,9 @@ pub(crate) async fn translate(
             .with_context(|| format!("{} requires a selected model", selection.provider))
     };
     match selection.provider {
+        Provider::ApiRoute => {
+            api_route::translate(client, &providers.api_route, model()?, generation, request).await
+        }
         Provider::OpenAi => {
             openai::translate(client, &providers.openai, model()?, generation, request).await
         }
@@ -95,6 +100,7 @@ pub(crate) async fn translate(
 pub(crate) async fn models(client: &Client, providers: &ProvidersConfig) -> Vec<Model> {
     let mut models = Vec::new();
     let pending: Vec<BoxFuture<'_, Result<Vec<Model>>>> = vec![
+        api_route::models(client).boxed(),
         openai::models(client).boxed(),
         gemini::models(client).boxed(),
         claude::models(client).boxed(),

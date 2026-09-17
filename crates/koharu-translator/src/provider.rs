@@ -6,9 +6,9 @@ use strum::{Display, EnumIter, EnumString, IntoStaticStr, VariantArray};
 use crate::{
     local::LocalConfig,
     remote::{
-        CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig, GoogleCloudConfig,
-        GrokConfig, LmStudioConfig, MiniMaxConfig, OpenAiCompatibleConfig, OpenAiConfig,
-        OpenRouterConfig,
+        ApiRouteConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
+        GoogleCloudConfig, GrokConfig, LmStudioConfig, MiniMaxConfig, OpenAiCompatibleConfig,
+        OpenAiConfig, OpenRouterConfig,
     },
 };
 
@@ -120,6 +120,12 @@ define_providers! {
         name: "Local",
         field: local,
         config: LocalConfig,
+    }
+    ApiRoute {
+        id: "api-route",
+        name: "API Route",
+        field: api_route,
+        config: ApiRouteConfig,
     }
     OpenAi {
         id: "openai",

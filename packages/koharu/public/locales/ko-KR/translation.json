@@ -319,6 +319,7 @@
     "translation": "원문을 대상 언어로 번역합니다."
   },
   "providerDescriptions": {
+    "api-route": "API Route에서 호스팅되는 언어 모델입니다.",
     "caiyun": "Caiyun 번역 API입니다.",
     "claude": "Anthropic Claude 모델입니다.",
     "deepl": "DeepL 번역 API입니다.",

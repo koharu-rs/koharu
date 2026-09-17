@@ -319,6 +319,7 @@
     "translation": "原文を対象言語に翻訳します。"
   },
   "providerDescriptions": {
+    "api-route": "API Route でホストされる言語モデル。",
     "caiyun": "Caiyun 翻訳 API。",
     "claude": "Anthropic Claude モデル。",
     "deepl": "DeepL 翻訳 API。",
