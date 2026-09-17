@@ -81,11 +81,15 @@ pub fn run(
             let server_host = host.clone();
             let shutdown = host.server_shutdown();
             tauri::async_runtime::spawn(async move {
-                let _ = axum::serve(tokio_listener, crate::http_router(server_host, frontend))
-                    .with_graceful_shutdown(async move {
-                        shutdown.notified().await;
-                    })
-                    .await;
+                if let Err(error) =
+                    axum::serve(tokio_listener, crate::http_router(server_host, frontend))
+                        .with_graceful_shutdown(async move {
+                            shutdown.notified().await;
+                        })
+                        .await
+                {
+                    tracing::error!(%error, "local HTTP server stopped");
+                }
             });
 
             let mut window_config = application

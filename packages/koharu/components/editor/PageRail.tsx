@@ -28,14 +28,14 @@ import {
   usePages,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { commands } from '@koharu/bridge'
 import { prefetchCanvasPages, showCanvasPage } from '@koharu/bridge/canvas'
-import {
-  commands,
-  type CanvasPagePreparation,
-  type Page,
-  type PageImportSource,
-  type PageSummary,
-  type ProjectInfo,
+import type {
+  CanvasPagePreparation,
+  Page,
+  PageImportSource,
+  PageSummary,
+  ProjectInfo,
 } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
@@ -391,7 +391,7 @@ function PageImportMenu({
   onImport,
 }: {
   importing: boolean
-  onImport: (source: PageImportSource) => void
+  onImport: (source: PageImportSource, paths: string[] | null) => void
 }) {
   const { t } = useTranslation()
   const icon = importing ? (
@@ -423,7 +423,7 @@ function PageImportMenu({
         <DropdownMenuItem
           disabled={importing}
           className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-          onClick={() => onImport('files')}
+          onClick={() => onImport('files', null)}
         >
           <FilePlus2 />
           {t('navigator.importFiles')}
@@ -431,7 +431,7 @@ function PageImportMenu({
         <DropdownMenuItem
           disabled={importing}
           className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-          onClick={() => onImport('folder')}
+          onClick={() => onImport('folder', null)}
         >
           <FolderOpen />
           {t('navigator.importFolder')}

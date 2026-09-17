@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { StartView } from '@/components/start/StartView'
 import { queryClient, useProject } from '@/lib/queries'
-import { commands } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/bridge'
 
 function ProjectFlow() {
   const project = useProject().data

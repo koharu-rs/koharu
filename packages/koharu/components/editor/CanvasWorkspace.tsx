@@ -38,8 +38,9 @@ import {
   useKoharuStore,
   type CanvasTool,
 } from '@/lib/store'
+import { commands } from '@koharu/bridge'
 import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
-import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
+import type { Frame, Point, TransformFrame } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 const BRUSH_DIAMETER_STEP = 4

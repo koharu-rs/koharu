@@ -50,6 +50,7 @@ beforeEach(() => {
 })
 
 const startupState = (): StartupState => ({
+  native_dialogs: false,
   preferences,
   jobs: [],
   canvas: {

@@ -8,13 +8,20 @@ import {
   type Canvas,
 } from '@koharu/bridge/canvas'
 
+const protocolCommands = vi.hoisted(() => ({
+  prepareCanvasPage: vi.fn(),
+  getCanvasPageManifest: vi.fn(),
+  getCanvasPageResource: vi.fn(),
+}))
+
 const commands = vi.hoisted(() => ({
   prepareCanvasPage: vi.fn(),
   getCanvasPageManifest: vi.fn(),
   getCanvasPageResource: vi.fn(),
 }))
 
-vi.mock('@koharu/bridge/protocol', () => ({ commands }))
+vi.mock('@koharu/bridge/protocol', () => ({ commands: protocolCommands }))
+vi.mock('@koharu/bridge', () => ({ commands }))
 
 describe('canvas runtime', () => {
   it('routes inspector previews only to the active canvas', () => {
@@ -66,6 +73,9 @@ describe('canvas runtime', () => {
     expect(commands.prepareCanvasPage).toHaveBeenCalledWith('page')
     expect(commands.getCanvasPageManifest).toHaveBeenCalledWith('page', 4)
     expect(commands.getCanvasPageResource).toHaveBeenCalledWith('page', 4, 'resource')
+    expect(protocolCommands.prepareCanvasPage).not.toHaveBeenCalled()
+    expect(protocolCommands.getCanvasPageManifest).not.toHaveBeenCalled()
+    expect(protocolCommands.getCanvasPageResource).not.toHaveBeenCalled()
     expect(canvas.cacheFrame).toHaveBeenCalledWith(7, 'page')
     expect(order).toEqual(['resource', 'frame'])
     expect(result).toEqual([prepared])

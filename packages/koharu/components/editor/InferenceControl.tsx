@@ -19,13 +19,8 @@ import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPick
 import { call, refreshTranslationModels, savePreferences } from '@/lib/backend'
 import { pipelineStages, receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { modelKey, providerName } from '@/lib/translation'
-import {
-  commands,
-  type Model,
-  type ModelSelection,
-  type ProviderPreference,
-  type Stage,
-} from '@koharu/bridge/protocol'
+import { commands } from '@koharu/bridge'
+import type { Model, ModelSelection, ProviderPreference, Stage } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'

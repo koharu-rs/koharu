@@ -4662,6 +4662,7 @@ version = "0.83.3"
 dependencies = [
  "anyhow",
  "axum",
+ "bytes",
  "clap",
  "console",
  "http-body-util",

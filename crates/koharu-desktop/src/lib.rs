@@ -68,24 +68,25 @@ struct CachedPageFrame {
     last_used: u64,
 }
 
+#[derive(Clone)]
 pub struct Desktop {
     renderer: Renderer,
-    rasterizer: OnceCell<Arc<Rasterizer>>,
-    presentation: RwLock<PresentationState>,
-    page_frames: SyncMutex<PageFrameCache>,
-    preparation: Mutex<()>,
-    preparation_changed: Notify,
+    rasterizer: Arc<OnceCell<Arc<Rasterizer>>>,
+    presentation: Arc<RwLock<PresentationState>>,
+    page_frames: Arc<SyncMutex<PageFrameCache>>,
+    preparation: Arc<Mutex<()>>,
+    preparation_changed: Arc<Notify>,
 }
 
 impl Desktop {
     pub fn new() -> Result<Self> {
         Ok(Self {
             renderer: Renderer::new()?,
-            rasterizer: OnceCell::new(),
-            presentation: RwLock::new(PresentationState::default()),
-            page_frames: SyncMutex::new(PageFrameCache::default()),
-            preparation: Mutex::new(()),
-            preparation_changed: Notify::new(),
+            rasterizer: Arc::new(OnceCell::new()),
+            presentation: Arc::new(RwLock::new(PresentationState::default())),
+            page_frames: Arc::new(SyncMutex::new(PageFrameCache::default())),
+            preparation: Arc::new(Mutex::new(())),
+            preparation_changed: Arc::new(Notify::new()),
         })
     }
 
