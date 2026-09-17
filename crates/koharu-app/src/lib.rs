@@ -1,7 +1,12 @@
 //! Koharu's Tauri-managed application state, commands, and lifecycle.
 
-mod app;
-mod commands;
+extern crate self as koharu_app;
 
-pub use app::run;
-pub use commands::bindings;
+mod app;
+mod channel;
+mod commands;
+pub mod host;
+
+pub use app::{http_router, run};
+pub use commands::{protocol_functions, router};
+pub use host::{Host, configure_packaged_store, prepare_runtime};

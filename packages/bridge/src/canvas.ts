@@ -1,6 +1,8 @@
 'use client'
 
-import { commands, type CanvasPagePreparation, type Point, type TransformFrame } from './protocol'
+import { commands } from '@koharu/bridge'
+
+import type { CanvasPagePreparation, Point, TransformFrame } from './protocol'
 
 export type CanvasColor = [number, number, number, number]
 export type CanvasStrokeKind = 'paint' | 'erase' | 'inpaint'

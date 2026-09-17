@@ -6,23 +6,8 @@ import Providers from '@/app/providers'
 import { call } from '@/lib/backend'
 import { useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import {
-  commands,
-  type Preferences,
-  type ProjectInfo,
-  type StartupState,
-} from '@koharu/bridge/protocol'
-
-vi.mock('@tauri-apps/api/core', () => ({
-  Channel: class<T> {
-    onmessage: (payload: T) => void
-
-    constructor(handler: (payload: T) => void) {
-      this.onmessage = handler
-    }
-  },
-  invoke: vi.fn(),
-}))
+import { commands } from '@koharu/bridge'
+import type { Preferences, ProjectInfo, StartupState } from '@koharu/bridge/protocol'
 
 const preferences: Preferences = {
   pipeline: {
@@ -94,7 +79,7 @@ function ProjectProbe() {
   )
 }
 
-describe('Tauri runtime', () => {
+describe('application runtime', () => {
   it('keeps the project unresolved until its backend query returns', async () => {
     const projectPending = deferred<ProjectInfo | null>()
     vi.spyOn(commands, 'getProject').mockReturnValue(projectPending.promise)

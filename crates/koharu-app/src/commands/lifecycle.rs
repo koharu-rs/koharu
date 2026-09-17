@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use anyhow::{Context as _, Result};
 use koharu_desktop::{CanvasState, Desktop};
 use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft};
@@ -5,27 +8,29 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use strum::{EnumMessage as _, IntoEnumIterator as _};
-use tauri::{AppHandle, Manager as _, State, WebviewWindow, ipc::Channel};
+use tauri::WebviewWindow;
 use tauri_runtime_cef::CefRuntime;
 use walkdir::WalkDir;
 
 use super::{
-    ChannelExt as _, Error,
+    Channel, ChannelExt as _, Error,
     agent::AgentState,
     canvas::CanvasChannel,
     import,
     preferences::Preferences,
-    processing::{Job, JobChannel, Processing},
+    processing::{Job, Processing},
     project::{
         CurrentProject, Page, PageSummary, Project, ProjectInfo, ProjectLibrary, ProjectSummary,
     },
 };
+use crate::host::Host;
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct StartupState {
     pub preferences: Preferences,
     pub jobs: Vec<Job>,
     pub canvas: CanvasState,
+    pub native_dialogs: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -41,6 +46,7 @@ pub enum PageImportSource {
     Folder,
 }
 
+#[derive(Clone)]
 pub(crate) struct Initialization {
     ready: tokio::sync::watch::Sender<bool>,
 }
@@ -82,9 +88,9 @@ pub struct Download {
     pub error: Option<String>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct DownloadChannel {
-    pub(crate) channel: Mutex<Option<Channel<Download>>>,
+    pub(crate) channel: Arc<Mutex<Option<Channel<Download>>>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
@@ -105,14 +111,14 @@ pub struct ModelResources {
     pub devices: Vec<DeviceResources>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct ResourceChannel {
-    pub(crate) channel: Mutex<Option<Channel<ModelResources>>>,
+    pub(crate) channel: Arc<Mutex<Option<Channel<ModelResources>>>>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct ProjectChannel {
-    pub(crate) channel: Mutex<Option<Channel<Option<ProjectInfo>>>>,
+    pub(crate) channel: Arc<Mutex<Option<Channel<Option<ProjectInfo>>>>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Type)]
@@ -147,46 +153,47 @@ impl From<koharu_pipeline::ResourceSnapshot> for ModelResources {
     }
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn subscribe(
-    handle: AppHandle<CefRuntime>,
+    host: Host,
     on_canvas: Channel<CanvasState>,
     on_job: Channel<Job>,
     on_download: Channel<Download>,
     on_resources: Channel<ModelResources>,
     on_project: Channel<Option<ProjectInfo>>,
 ) -> std::result::Result<StartupState, Error> {
-    handle.state::<Initialization>().wait().await?;
+    host.initialization.wait().await?;
 
-    *handle.state::<CanvasChannel>().channel.lock() = Some(on_canvas);
-    *handle.state::<JobChannel>().channel.lock() = Some(on_job);
-    *handle.state::<DownloadChannel>().channel.lock() = Some(on_download);
-    *handle.state::<ResourceChannel>().channel.lock() = Some(on_resources);
-    *handle.state::<ProjectChannel>().channel.lock() = Some(on_project);
+    *host.canvas.channel.lock() = Some(on_canvas);
+    *host.jobs.channel.lock() = Some(on_job);
+    *host.downloads.channel.lock() = Some(on_download);
+    *host.resources.channel.lock() = Some(on_resources);
+    *host.project_channel.channel.lock() = Some(on_project);
 
-    let canvas = handle.state::<Desktop>().canvas_state();
+    let canvas_state = host.desktop.canvas_state();
     let preferences = Preferences::load()?;
     Ok(StartupState {
         preferences,
-        jobs: handle
-            .state::<Processing>()
-            .jobs
-            .lock()
-            .values()
-            .cloned()
-            .collect(),
-        canvas,
+        jobs: host.processing.jobs.lock().values().cloned().collect(),
+        canvas: canvas_state,
+        native_dialogs: host.window().is_some(),
     })
 }
 
-async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Result<()> {
+async fn replace_project(
+    state: &AgentState,
+    processing: &Processing,
+    project: &CurrentProject,
+    desktop: &Desktop,
+    canvas: &CanvasChannel,
+    project_channel: &ProjectChannel,
+    opened: Project,
+) -> Result<()> {
     let snapshot = opened.snapshot();
     let page = opened.active_page();
     let info = opened.info();
 
-    handle.state::<AgentState>().reset().await;
-    let processing = handle.state::<Processing>();
+    state.reset().await;
     for stop in processing.stops.lock().values() {
         stop.stop();
     }
@@ -194,32 +201,28 @@ async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Res
     processing.jobs.lock().clear();
 
     let previous = {
-        let current = handle.state::<CurrentProject>();
-        let mut current = current.project.lock().await;
+        let mut current = project.project.lock().await;
         current.replace(opened)
     };
 
-    let desktop = handle.state::<Desktop>();
     desktop.show_page(&snapshot, page).await?;
-    let canvas = desktop.canvas_state();
+    let canvas_state = desktop.canvas_state();
     drop(previous);
-    handle.state::<CanvasChannel>().channel.publish(canvas);
-    handle.state::<ProjectChannel>().channel.publish(Some(info));
+    canvas.channel.publish(canvas_state);
+    project_channel.channel.publish(Some(info));
     Ok(())
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn get_project(
-    project: State<'_, CurrentProject>,
+    project: CurrentProject,
 ) -> std::result::Result<Option<ProjectInfo>, Error> {
     Ok(project.project.lock().await.as_ref().map(Project::info))
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn get_pages(
-    project: State<'_, CurrentProject>,
+    project: CurrentProject,
 ) -> std::result::Result<Vec<PageSummary>, Error> {
     let snapshot = project
         .project
@@ -231,11 +234,8 @@ pub(crate) async fn get_pages(
     Ok(Project::pages(&snapshot)?)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn get_page(
-    project: State<'_, CurrentProject>,
-) -> std::result::Result<Option<Page>, Error> {
+#[koharu_macros::command]
+pub(crate) async fn get_page(project: CurrentProject) -> std::result::Result<Option<Page>, Error> {
     let current = {
         let project = project.project.lock().await;
         project
@@ -248,10 +248,9 @@ pub(crate) async fn get_page(
         .transpose()?)
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn list_projects(
-    library: State<'_, ProjectLibrary>,
+    library: ProjectLibrary,
 ) -> std::result::Result<Vec<ProjectSummary>, Error> {
     Ok(library.list()?)
 }
@@ -262,15 +261,28 @@ pub(crate) async fn list_projects(
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn create_project(
     name: String,
-    handle: AppHandle<CefRuntime>,
+    library: ProjectLibrary,
+    state: AgentState,
+    processing: Processing,
+    project: CurrentProject,
+    desktop: Desktop,
+    canvas: CanvasChannel,
+    project_channel: ProjectChannel,
 ) -> std::result::Result<(), Error> {
-    let library = handle.state::<ProjectLibrary>().inner().clone();
     let opened = library.create(&name).await?;
-    replace_project(&handle, opened).await?;
+    replace_project(
+        &state,
+        &processing,
+        &project,
+        &desktop,
+        &canvas,
+        &project_channel,
+        opened,
+    )
+    .await?;
     Ok(())
 }
 
@@ -280,15 +292,28 @@ pub(crate) async fn create_project(
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn open_project(
     name: String,
-    handle: AppHandle<CefRuntime>,
+    library: ProjectLibrary,
+    state: AgentState,
+    processing: Processing,
+    project: CurrentProject,
+    desktop: Desktop,
+    canvas: CanvasChannel,
+    project_channel: ProjectChannel,
 ) -> std::result::Result<(), Error> {
-    let library = handle.state::<ProjectLibrary>().inner().clone();
     let opened = library.open(&name).await?;
-    replace_project(&handle, opened).await?;
+    replace_project(
+        &state,
+        &processing,
+        &project,
+        &desktop,
+        &canvas,
+        &project_channel,
+        opened,
+    )
+    .await?;
     Ok(())
 }
 
@@ -298,10 +323,24 @@ pub(crate) async fn open_project(
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn close_project(handle: AppHandle<CefRuntime>) -> std::result::Result<(), Error> {
-    close_current_project(&handle).await?;
+#[koharu_macros::command]
+pub(crate) async fn close_project(
+    state: AgentState,
+    processing: Processing,
+    project: CurrentProject,
+    desktop: Desktop,
+    canvas: CanvasChannel,
+    project_channel: ProjectChannel,
+) -> std::result::Result<(), Error> {
+    close_current_project(
+        &state,
+        &processing,
+        &project,
+        &desktop,
+        &canvas,
+        &project_channel,
+    )
+    .await?;
     Ok(())
 }
 
@@ -311,48 +350,63 @@ pub(crate) async fn close_project(handle: AppHandle<CefRuntime>) -> std::result:
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn delete_project(
     name: String,
-    handle: AppHandle<CefRuntime>,
+    library: ProjectLibrary,
+    state: AgentState,
+    processing: Processing,
+    project: CurrentProject,
+    desktop: Desktop,
+    canvas: CanvasChannel,
+    project_channel: ProjectChannel,
 ) -> std::result::Result<(), Error> {
-    let active = handle
-        .state::<CurrentProject>()
+    let active = project
         .project
         .lock()
         .await
         .as_ref()
         .is_some_and(|project| project.name == name);
     if active {
-        close_current_project(&handle).await?;
+        close_current_project(
+            &state,
+            &processing,
+            &project,
+            &desktop,
+            &canvas,
+            &project_channel,
+        )
+        .await?;
     }
-    let library = handle.state::<ProjectLibrary>().inner().clone();
     tokio::task::spawn_blocking(move || library.delete(&name))
         .await
         .context("project deletion task failed")??;
     Ok(())
 }
 
-async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
-    handle.state::<AgentState>().reset().await;
-    let processing = handle.state::<Processing>();
+async fn close_current_project(
+    state: &AgentState,
+    processing: &Processing,
+    project: &CurrentProject,
+    desktop: &Desktop,
+    canvas: &CanvasChannel,
+    project_channel: &ProjectChannel,
+) -> Result<()> {
+    state.reset().await;
     for stop in processing.stops.lock().values() {
         stop.stop();
     }
     processing.stops.lock().clear();
     processing.jobs.lock().clear();
     let previous = {
-        let current = handle.state::<CurrentProject>();
-        let mut current = current.project.lock().await;
+        let mut current = project.project.lock().await;
         current.take()
     };
-    let desktop = handle.state::<Desktop>();
     desktop.clear().await;
-    let result = desktop.canvas_state();
+    let canvas_state = desktop.canvas_state();
     drop(previous);
-    handle.state::<CanvasChannel>().channel.publish(result);
-    handle.state::<ProjectChannel>().channel.publish(None);
+    canvas.channel.publish(canvas_state);
+    project_channel.channel.publish(None);
     Ok(())
 }
 
@@ -362,52 +416,20 @@ async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
     skip_all,
     fields(origin = "user", method = ?source),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn import(
     source: PageImportSource,
     window: WebviewWindow<CefRuntime>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    processing: State<'_, Processing>,
-    canvas_channel: State<'_, CanvasChannel>,
+    paths: Option<Vec<String>>,
+    desktop: Desktop,
+    project: CurrentProject,
+    processing: Processing,
+    canvas: CanvasChannel,
 ) -> std::result::Result<(), Error> {
     if !processing.stops.lock().is_empty() {
         return Err(anyhow::anyhow!("pages cannot be imported while processing is running").into());
     }
-    let extensions = import::Format::iter()
-        .flat_map(|format| format.get_serializations())
-        .collect::<Vec<_>>();
-    let dialog = rfd::AsyncFileDialog::new()
-        .add_filter("Images, archives, and PDF", &extensions)
-        .set_parent(&window);
-    let files = match source {
-        PageImportSource::Files => dialog.pick_files().await.map(|files| {
-            files
-                .into_iter()
-                .map(|file| file.path().to_owned())
-                .collect::<Vec<_>>()
-        }),
-        PageImportSource::Folder => dialog.pick_folder().await.map(|folder| {
-            WalkDir::new(folder.path())
-                .follow_links(false)
-                .into_iter()
-                .filter_map(|entry| match entry {
-                    Ok(entry) if entry.file_type().is_file() => Some(entry.into_path()),
-                    Ok(_) => None,
-                    Err(error) => {
-                        tracing::warn!(%error, "could not inspect an import directory entry");
-                        None
-                    }
-                })
-                .filter(|path| {
-                    path.extension()
-                        .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| extension.parse::<import::Format>().is_ok())
-                })
-                .collect::<Vec<_>>()
-        }),
-    };
+    let files = resolve_import_paths(source, window, paths).await?;
     let Some(files) = files else {
         return Ok(());
     };
@@ -454,10 +476,66 @@ pub(crate) async fn import(
         (commit, page)
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
-    let canvas = desktop.canvas_state();
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = desktop.canvas_state();
+    canvas.channel.publish(canvas_state);
     tracing::info!(target: "koharu_metrics", metric = "page_imported", page_count);
     Ok(())
+}
+
+async fn resolve_import_paths(
+    source: PageImportSource,
+    window: Option<WebviewWindow<CefRuntime>>,
+    paths: Option<Vec<String>>,
+) -> Result<Option<Vec<PathBuf>>, Error> {
+    if let Some(paths) = paths.filter(|paths| !paths.is_empty()) {
+        let paths =
+            crate::host::sanitize_import_paths(paths.into_iter().map(PathBuf::from).collect())?;
+        if matches!(source, PageImportSource::Folder) && paths.len() == 1 && paths[0].is_dir() {
+            return Ok(Some(collect_folder_images(&paths[0])));
+        }
+        return Ok(Some(paths));
+    }
+    let Some(window) = window else {
+        return Err(anyhow::anyhow!("no files to import").into());
+    };
+    let extensions = import::Format::iter()
+        .flat_map(|format| format.get_serializations())
+        .collect::<Vec<_>>();
+    let dialog = rfd::AsyncFileDialog::new()
+        .add_filter("Images, archives, and PDF", &extensions)
+        .set_parent(&window);
+    Ok(match source {
+        PageImportSource::Files => dialog.pick_files().await.map(|files| {
+            files
+                .into_iter()
+                .map(|file| file.path().to_owned())
+                .collect::<Vec<_>>()
+        }),
+        PageImportSource::Folder => dialog
+            .pick_folder()
+            .await
+            .map(|folder| collect_folder_images(folder.path())),
+    })
+}
+
+fn collect_folder_images(folder: &std::path::Path) -> Vec<PathBuf> {
+    WalkDir::new(folder)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|entry| match entry {
+            Ok(entry) if entry.file_type().is_file() => Some(entry.into_path()),
+            Ok(_) => None,
+            Err(error) => {
+                tracing::warn!(%error, "could not inspect an import directory entry");
+                None
+            }
+        })
+        .filter(|path| {
+            path.extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.parse::<import::Format>().is_ok())
+        })
+        .collect()
 }
 
 #[tracing::instrument(
@@ -466,13 +544,12 @@ pub(crate) async fn import(
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn select_page(
-    desktop: State<'_, Desktop>,
+    desktop: Desktop,
     page: koharu_scene::EntityId,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> std::result::Result<PageSelection, Error> {
     let (snapshot, project_info, selected_page) = {
         let mut project = project.project.lock().await;
@@ -484,8 +561,8 @@ pub(crate) async fn select_page(
         (snapshot, project_info, selected_page)
     };
     if desktop.show_page(&snapshot, Some(page)).await? {
-        let canvas = desktop.canvas_state();
-        canvas_channel.channel.publish(canvas);
+        let canvas_state = desktop.canvas_state();
+        canvas.channel.publish(canvas_state);
     }
     Ok(PageSelection {
         project: project_info,

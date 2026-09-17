@@ -5,6 +5,7 @@
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
     "./canvas": "./src/canvas.ts",
     "./protocol": "./src/protocol.ts"
   },
@@ -14,9 +15,7 @@
     "dev": "nodemon --watch $(npm prefix)/crates/koharu-canvas --watch $(npm prefix)/crates/koharu-rasterizer --ext rs,toml --delay 250ms --on-change-only --exec bun -- run --filter @koharu/bridge build",
     "build": "bun x wasm-pack@0.15.0 build $(npm prefix)/crates/koharu-canvas --release --target web --out-dir $(npm prefix)/packages/bridge/src/wasm --out-name koharu_canvas --no-pack"
   },
-  "dependencies": {
-    "@tauri-apps/api": "3.0.0-alpha.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "nodemon": "^3.1.14",
     "oxlint": "^1.82.0",
