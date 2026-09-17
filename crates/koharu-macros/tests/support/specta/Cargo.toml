@@ -1,0 +1,8 @@
+[package]
+name = "koharu-macros-test-specta"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+koharu-macros-test-attrs = { path = "../attrs" }
