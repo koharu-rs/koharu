@@ -4,7 +4,7 @@
   "build": {
     "devUrl": "http://localhost:3000",
     "frontendDist": "../../packages/koharu/out",
-    "beforeDevCommand": "bun run --filter @koharu/bridge build && bun run --parallel --filter @koharu/bridge --filter @koharu/app dev",
+    "beforeDevCommand": "bun run --filter @koharu/bridge build && bun run --filter @koharu/app build",
     "beforeBuildCommand": "bun run --filter @koharu/bridge build && bun run --filter @koharu/app build"
   },
   "app": {

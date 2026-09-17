@@ -194,11 +194,7 @@ async fn replace_project(
     let info = opened.info();
 
     state.reset().await;
-    for stop in processing.stops.lock().values() {
-        stop.stop();
-    }
-    processing.stops.lock().clear();
-    processing.jobs.lock().clear();
+    processing.stop_all();
 
     let previous = {
         let mut current = project.project.lock().await;
@@ -393,11 +389,7 @@ async fn close_current_project(
     project_channel: &ProjectChannel,
 ) -> Result<()> {
     state.reset().await;
-    for stop in processing.stops.lock().values() {
-        stop.stop();
-    }
-    processing.stops.lock().clear();
-    processing.jobs.lock().clear();
+    processing.stop_all();
     let previous = {
         let mut current = project.project.lock().await;
         current.take()

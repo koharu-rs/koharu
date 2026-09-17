@@ -95,7 +95,7 @@
         "pages": [
           {
             "group": "Start here",
-            "pages": ["en/index", "en/installation", "en/quickstart", "en/hardware"]
+            "pages": ["en/index", "en/installation", "en/quickstart", "en/hardware", "en/guides/headless"]
           },
           {
             "group": "Translate a project",
@@ -213,7 +213,7 @@
         "pages": [
           {
             "group": "はじめに",
-            "pages": ["ja/index", "ja/installation", "ja/quickstart", "ja/hardware"]
+            "pages": ["ja/index", "ja/installation", "ja/quickstart", "ja/hardware", "ja/guides/headless"]
           },
           {
             "group": "翻訳ワークフロー",
@@ -331,7 +331,7 @@
         "pages": [
           {
             "group": "开始使用",
-            "pages": ["zh/index", "zh/installation", "zh/quickstart", "zh/hardware"]
+            "pages": ["zh/index", "zh/installation", "zh/quickstart", "zh/hardware", "zh/guides/headless"]
           },
           {
             "group": "翻译项目",

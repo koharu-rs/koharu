@@ -22,7 +22,8 @@ import {
   useProject,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type Operation, type Scope, type Stage } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/bridge'
+import type { Operation, Scope, Stage } from '@koharu/bridge/protocol'
 import {
   Menubar,
   MenubarContent as UiMenubarContent,
@@ -98,11 +99,11 @@ export function TitleBar() {
                   {importing ? t('navigator.importing') : t('menu.import')}
                 </MenubarSubTrigger>
                 <MenubarSubContent className='min-w-40 p-1'>
-                  <MenubarItem disabled={importing} onClick={() => importPages('files')}>
+                  <MenubarItem disabled={importing} onClick={() => importPages('files', null)}>
                     <FilePlus2 />
                     {t('navigator.importFiles')}
                   </MenubarItem>
-                  <MenubarItem disabled={importing} onClick={() => importPages('folder')}>
+                  <MenubarItem disabled={importing} onClick={() => importPages('folder', null)}>
                     <FolderOpen />
                     {t('navigator.importFolder')}
                   </MenubarItem>
@@ -122,7 +123,7 @@ export function TitleBar() {
                     <MenubarItem
                       key={format}
                       disabled={exporting}
-                      onClick={() => exportProject(format)}
+                      onClick={() => exportProject(format, null)}
                     >
                       {format.toUpperCase()}…
                     </MenubarItem>

@@ -29,7 +29,7 @@ use tokio::sync::mpsc;
 
 use crate::channel::Channel;
 use crate::commands::{
-    Error,
+    ChannelExt as _, Error,
     agent::AgentState,
     canvas::CanvasChannel,
     lifecycle::{
@@ -41,6 +41,7 @@ use crate::commands::{
 };
 
 /// Shared application objects for the desktop runtime and HTTP/WebSocket state.
+#[derive(Clone)]
 pub struct Host {
     pub(crate) project: CurrentProject,
     pub(crate) library: ProjectLibrary,
@@ -169,18 +170,18 @@ impl WsSink {
     }
 
     fn finish_session(self) {
-        let mut slot = self.session.lock();
-        if slot
-            .as_ref()
-            .is_some_and(|session| session.generation == self.generation)
-        {
-            slot.take();
-        }
+        take_ws_session(&self.session, self.generation);
     }
 }
 
-pub fn ws_sink(host: &Host, socket: WebSocket) -> WsSink {
-    replace_ws_session(host, socket)
+fn take_ws_session(slot: &parking_lot::Mutex<Option<WsSession>>, generation: u64) {
+    let mut slot = slot.lock();
+    if slot
+        .as_ref()
+        .is_some_and(|session| session.generation == generation)
+    {
+        slot.take();
+    }
 }
 
 pub fn ws_channel<T: serde::Serialize>(
@@ -221,7 +222,7 @@ fn error_envelope(error: impl std::fmt::Display) -> Value {
     serde_json::json!({ "channel": "startup", "error": error.to_string() })
 }
 
-fn replace_ws_session(host: &Host, socket: WebSocket) -> WsSink {
+pub fn ws_sink(host: &Host, socket: WebSocket) -> WsSink {
     let generation = host.ws_generation.fetch_add(1, Ordering::Relaxed) + 1;
     if let Some(previous) = host.ws.lock().take() {
         previous.abort.abort();
@@ -237,8 +238,12 @@ fn replace_ws_session(host: &Host, socket: WebSocket) -> WsSink {
                     let Some(value) = outbound else {
                         break;
                     };
-                    let Ok(text) = serde_json::to_string(&value) else {
-                        continue;
+                    let text = match serde_json::to_string(&value) {
+                        Ok(text) => text,
+                        Err(error) => {
+                            tracing::warn!(%error, "failed to serialize WebSocket envelope");
+                            continue;
+                        }
                     };
                     if sink.send(Message::Text(text.into())).await.is_err() {
                         break;
@@ -258,13 +263,7 @@ fn replace_ws_session(host: &Host, socket: WebSocket) -> WsSink {
                 }
             }
         }
-        let mut slot = host_ws.lock();
-        if slot
-            .as_ref()
-            .is_some_and(|session| session.generation == generation)
-        {
-            slot.take();
-        }
+        take_ws_session(&host_ws, generation);
     })
     .abort_handle();
 
@@ -277,29 +276,6 @@ fn replace_ws_session(host: &Host, socket: WebSocket) -> WsSink {
         tx,
         session: host.ws.clone(),
         generation,
-    }
-}
-
-impl Clone for Host {
-    fn clone(&self) -> Self {
-        Self {
-            project: self.project.clone(),
-            library: self.library.clone(),
-            processing: self.processing.clone(),
-            canvas: self.canvas.clone(),
-            jobs: self.jobs.clone(),
-            downloads: self.downloads.clone(),
-            resources: self.resources.clone(),
-            project_channel: self.project_channel.clone(),
-            initialization: self.initialization.clone(),
-            desktop: self.desktop.clone(),
-            state: self.state.clone(),
-            pipeline: self.pipeline.clone(),
-            ws: self.ws.clone(),
-            ws_generation: self.ws_generation.clone(),
-            window: self.window.clone(),
-            server_shutdown: self.server_shutdown.clone(),
-        }
     }
 }
 
@@ -389,11 +365,7 @@ impl Host {
     }
 
     pub fn shutdown(&self) {
-        for stop in self.processing.stops.lock().values() {
-            stop.stop();
-        }
-        self.processing.stops.lock().clear();
-        self.processing.jobs.lock().clear();
+        self.processing.stop_all();
         self.state.cancel_all();
         self.server_shutdown.notify_waiters();
         if let Some(session) = self.ws.lock().take() {
@@ -480,12 +452,7 @@ impl Host {
                                 }
                             }
                         };
-                        let mut channel = downloads.channel.lock();
-                        if let Some(current) = channel.as_ref()
-                            && current.send(download).is_err()
-                        {
-                            channel.take();
-                        }
+                        downloads.channel.publish(download);
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                         tracing::warn!(skipped, "download channel fell behind");
@@ -535,14 +502,6 @@ impl Host {
         Ok(())
     }
 
-    pub fn pipeline(&self) -> koharu_pipeline::Pipeline {
-        self.pipeline
-            .0
-            .get()
-            .expect("pipeline is not initialized")
-            .clone()
-    }
-
     #[tracing::instrument(
         target = "koharu_metrics",
         name = "app_started",
@@ -562,12 +521,9 @@ impl Host {
         drop(tauri::async_runtime::spawn(async move {
             while resources.changed().await.is_ok() {
                 let snapshot = resources.borrow_and_update().clone();
-                let mut channel = resource_channel.channel.lock();
-                if let Some(current) = channel.as_ref()
-                    && current.send(ModelResources::from(snapshot)).is_err()
-                {
-                    channel.take();
-                }
+                resource_channel
+                    .channel
+                    .publish(ModelResources::from(snapshot));
             }
         }));
 

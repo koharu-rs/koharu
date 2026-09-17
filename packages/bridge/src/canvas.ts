@@ -1,6 +1,6 @@
 'use client'
 
-import { commands } from '@koharu/bridge'
+import { commands } from './protocol'
 
 import type { CanvasPagePreparation, Point, TransformFrame } from './protocol'
 

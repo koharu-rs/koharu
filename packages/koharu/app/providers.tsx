@@ -1,7 +1,6 @@
 'use client'
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Channel } from '@tauri-apps/api/core'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 
@@ -19,13 +18,13 @@ import {
   receiveResources,
   useKoharuStore,
 } from '@/lib/store'
-import {
-  commands,
-  type CanvasState,
-  type Download,
-  type Job,
-  type ModelResources,
-  type ProjectInfo,
+import { Channel, commands } from '@koharu/bridge'
+import type {
+  CanvasState,
+  Download,
+  Job,
+  ModelResources,
+  ProjectInfo,
 } from '@koharu/bridge/protocol'
 import { Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'

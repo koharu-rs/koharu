@@ -1,0 +1,50 @@
+---
+title: 'Headless browser mode'
+description: 'Serve the Koharu editor in a system browser without a desktop CEF window.'
+icon: 'globe'
+---
+
+Without `--headless`, Koharu opens the desktop editor. `koharu --headless` does not create a desktop CEF window. It serves the existing editor Web UI for your system browser.
+
+## Start the editor in a browser
+
+<Tabs>
+  <Tab title="macOS and Linux">
+    ```bash
+    koharu --port 4000 --headless
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    koharu.exe --port 4000 --headless
+    ```
+  </Tab>
+</Tabs>
+
+Open the URL printed in the terminal, by default `http://127.0.0.1:4000/`. Leave the process running while you use the editor, and stop it with `Ctrl+C`.
+
+The browser UI is the same app, connected through the browser transport. Headless mode does not expose MCP or OpenAPI.
+
+<Note>
+  The canvas needs WebGPU in the browser. Use a current Chrome or Firefox build with a working
+  graphics driver. See [hardware and runtimes](/en/hardware).
+</Note>
+
+## Flags
+
+| Flag         | Effect                                         |
+| ------------ | ---------------------------------------------- |
+| `--headless` | Serve the editor over HTTP; skip the desktop window |
+| `--port`     | Bind port. Defaults to `4000`                  |
+| `--host`     | Bind address. Defaults to `127.0.0.1`          |
+| `--download` | Prepare runtimes and models, then exit         |
+| `--cpu`      | Use CPU inference even when a GPU is available |
+| `--debug`    | Enable debug console output                    |
+
+Host defaults to `127.0.0.1` and port defaults to `4000`. In a release build, if you omit `--port` and that port is already in use, Koharu walks upward until a port binds. An explicit `--port` binds only that port.
+
+`--download` prepares runtimes and models, then exits without starting the editor. `--cpu` selects CPU inference.
+
+## Network access
+
+Requests to localhost have no authentication. Binding `--host 0.0.0.0` is deliberate and unprotected: anyone who can reach the port can use the editor. Put a firewall, reverse proxy, or your own authentication in front of a non-loopback bind.

@@ -64,6 +64,18 @@ pub(crate) struct Processing {
     pub(crate) inpainting_mask: Arc<Mutex<Option<koharu_pipeline::InpaintingMask>>>,
 }
 
+impl Processing {
+    pub(crate) fn stop_all(&self) {
+        let mut stops = self.stops.lock();
+        for stop in stops.values() {
+            stop.stop();
+        }
+        stops.clear();
+        drop(stops);
+        self.jobs.lock().clear();
+    }
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct JobChannel {
     pub(crate) channel: Arc<Mutex<Option<Channel<Job>>>>,
