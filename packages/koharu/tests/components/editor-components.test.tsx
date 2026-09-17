@@ -33,14 +33,9 @@ import {
   useCommand,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { commands } from '@koharu/bridge'
 import * as canvasRuntime from '@koharu/bridge/canvas'
-import {
-  commands,
-  type Layer,
-  type PageSummary,
-  type Preferences,
-  type ProjectInfo,
-} from '@koharu/bridge/protocol'
+import type { Layer, PageSummary, Preferences, ProjectInfo } from '@koharu/bridge/protocol'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 const nativeWindow = vi.hoisted(() => ({
@@ -363,7 +358,7 @@ describe('greenfield editor', () => {
       fireEvent.click(await screen.findByRole('menuitem', { name: `${format.toUpperCase()}…` }))
 
       expect(await screen.findByRole('status')).toHaveTextContent('Export Project')
-      expect(exportProject).toHaveBeenCalledExactlyOnceWith(format)
+      expect(exportProject).toHaveBeenCalledExactlyOnceWith(format, null)
       await user.click(screen.getByRole('menuitem', { name: 'File' }))
       expect(await screen.findByRole('menuitem', { name: 'Export Project' })).toHaveAttribute(
         'aria-disabled',

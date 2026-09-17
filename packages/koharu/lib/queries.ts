@@ -9,7 +9,8 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 
-import { commands, type FontFamily } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/bridge'
+import type { FontFamily } from '@koharu/bridge/protocol'
 
 import { call } from './backend'
 

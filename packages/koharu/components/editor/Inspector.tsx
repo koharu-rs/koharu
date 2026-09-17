@@ -37,16 +37,16 @@ import {
 } from '@/lib/document'
 import { pageKey, projectKey, queryClient, refresh, useFonts, usePage } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { commands } from '@koharu/bridge'
 import { previewCanvasOpacity } from '@koharu/bridge/canvas'
-import {
-  commands,
-  type EntityId,
-  type FontFamily,
-  type FontStyle,
-  type Layer,
-  type TextAlignment,
-  type Typography,
-  type WritingMode,
+import type {
+  EntityId,
+  FontFamily,
+  FontStyle,
+  Layer,
+  TextAlignment,
+  Typography,
+  WritingMode,
 } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {

@@ -154,8 +154,7 @@ pub struct LanguageChoice {
     skip_all,
     fields(setting = "application")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn save_preferences(
     mut pipeline: PipelineConfig,
     providers: ProviderPreferences,
@@ -201,14 +200,12 @@ fn remember_pipeline_profiles(config: &mut PipelineConfig) {
     }
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn get_preferences() -> std::result::Result<Preferences, Error> {
     Ok(Preferences::load()?)
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn get_translation_models() -> std::result::Result<Vec<Model>, Error> {
     Ok(koharu_translator::Translator::models().await?)
 }

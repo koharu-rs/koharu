@@ -3,7 +3,6 @@ use koharu_desktop::{CanvasState, Desktop};
 use koharu_scene::EntityId;
 use serde::Deserialize;
 use specta::Type;
-use tauri::State;
 
 use super::{
     ChannelExt as _, Error,
@@ -37,14 +36,13 @@ pub struct TypographyUpdate {
     skip_all,
     fields(origin = "user", character_count = label.chars().count(), empty = label.is_empty()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn rename_page(
     page: EntityId,
     label: String,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -53,8 +51,8 @@ pub(crate) async fn rename_page(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -64,13 +62,12 @@ pub(crate) async fn rename_page(
     skip_all,
     fields(origin = "user", entity_count = pages.len()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn delete_pages(
     pages: Vec<EntityId>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -80,8 +77,8 @@ pub(crate) async fn delete_pages(
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -91,14 +88,13 @@ pub(crate) async fn delete_pages(
     skip_all,
     fields(origin = "user", page_number = index + 1),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn move_page(
     page: EntityId,
     index: u32,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -107,8 +103,8 @@ pub(crate) async fn move_page(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -118,14 +114,13 @@ pub(crate) async fn move_page(
     skip_all,
     fields(origin = "user", character_count = text.chars().count(), empty = text.is_empty()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn set_source_text(
     layer: EntityId,
     text: String,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -134,8 +129,8 @@ pub(crate) async fn set_source_text(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -149,14 +144,13 @@ pub(crate) async fn set_source_text(
         empty = text.as_ref().is_none_or(String::is_empty),
     ),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn set_translation(
     layer: EntityId,
     text: Option<String>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -165,8 +159,8 @@ pub(crate) async fn set_translation(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -176,13 +170,12 @@ pub(crate) async fn set_translation(
     skip_all,
     fields(origin = "user", entity_count = updates.len()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn set_typography(
     updates: Vec<TypographyUpdate>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -191,8 +184,8 @@ pub(crate) async fn set_typography(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -202,13 +195,12 @@ pub(crate) async fn set_typography(
     skip_all,
     fields(origin = "user", entity_count = updates.len()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn set_geometry(
     updates: Vec<GeometryUpdate>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -217,8 +209,8 @@ pub(crate) async fn set_geometry(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -228,15 +220,14 @@ pub(crate) async fn set_geometry(
     skip_all,
     fields(origin = "user", entity_count = layers.len()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn set_visibility(
     layers: Vec<EntityId>,
     visible: Option<bool>,
     opacity: Option<f32>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -245,8 +236,8 @@ pub(crate) async fn set_visibility(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -256,13 +247,12 @@ pub(crate) async fn set_visibility(
     skip_all,
     fields(origin = "user", entity_count = layers.len()),
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn delete_layers(
     layers: Vec<EntityId>,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -271,8 +261,8 @@ pub(crate) async fn delete_layers(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -282,15 +272,14 @@ pub(crate) async fn delete_layers(
     skip_all,
     fields(origin = "user", entity_count = 1_u64)
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn move_layer(
     layer: EntityId,
     parent: EntityId,
     index: u32,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<Page, Error> {
     let (commit, page, view) = {
         let mut project = project.project.lock().await;
@@ -304,7 +293,7 @@ pub(crate) async fn move_layer(
     desktop
         .synchronize(&commit.snapshot, Some(page), &commit)
         .await?;
-    canvas_channel.channel.publish(desktop.canvas_state());
+    canvas.channel.publish(desktop.canvas_state());
     Ok(view)
 }
 
@@ -314,12 +303,11 @@ pub(crate) async fn move_layer(
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn undo(
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -328,8 +316,8 @@ pub(crate) async fn undo(
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }
 
@@ -339,12 +327,11 @@ pub(crate) async fn undo(
     skip_all,
     fields(origin = "user")
 )]
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn redo(
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_channel: State<'_, CanvasChannel>,
+    desktop: Desktop,
+    project: CurrentProject,
+    canvas: CanvasChannel,
 ) -> Result<(), Error> {
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -353,7 +340,7 @@ pub(crate) async fn redo(
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
-    canvas_channel.channel.publish(canvas);
+    let canvas_state = synchronize_canvas(&desktop, &commit, page).await?;
+    canvas.channel.publish(canvas_state);
     Ok(())
 }

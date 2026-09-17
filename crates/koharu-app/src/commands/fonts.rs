@@ -5,7 +5,6 @@ use koharu_renderer::{
 use koharu_scene::FontStyle;
 use serde::Serialize;
 use specta::Type;
-use tauri::{State, ipc::IpcResponse};
 
 use super::Error;
 use koharu_desktop::Desktop;
@@ -53,17 +52,14 @@ pub enum FontSource {
 #[specta(transparent)]
 pub(crate) struct FontPreviewBytes(#[specta(type = Vec<u8>)] Vec<u8>);
 
-impl IpcResponse for FontPreviewBytes {
-    fn body(self) -> tauri::Result<tauri::ipc::InvokeResponseBody> {
-        Ok(self.0.into())
+impl From<FontPreviewBytes> for Vec<u8> {
+    fn from(value: FontPreviewBytes) -> Self {
+        value.0
     }
 }
 
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn get_fonts(
-    desktop: State<'_, Desktop>,
-) -> std::result::Result<Vec<FontFamily>, Error> {
+#[koharu_macros::command]
+pub(crate) async fn get_fonts(desktop: Desktop) -> std::result::Result<Vec<FontFamily>, Error> {
     Ok(desktop
         .renderer()
         .available_fonts()
@@ -120,11 +116,10 @@ impl From<RenderFontRange> for FontRange {
     }
 }
 
-#[tauri::command]
-#[specta::specta]
+#[koharu_macros::command]
 pub(crate) async fn get_font_preview(
     family_name: String,
-    desktop: State<'_, Desktop>,
+    desktop: Desktop,
 ) -> std::result::Result<FontPreviewBytes, Error> {
     let renderer = desktop.renderer();
     let rasterizer = desktop.rasterizer().await?;

@@ -1,0 +1,9 @@
+[package]
+name = "koharu-macros-test-app"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+serde = { version = "1", features = ["derive"] }

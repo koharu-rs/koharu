@@ -1,4 +1,4 @@
-use std::{collections::HashSet, io::Cursor, path::PathBuf};
+use std::{collections::HashSet, io::Cursor, path::PathBuf, sync::Arc};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -171,8 +171,9 @@ pub struct Typography {
     pub writing_mode: Option<koharu_scene::WritingMode>,
 }
 
+#[derive(Clone)]
 pub(crate) struct CurrentProject {
-    pub(crate) project: Mutex<Option<Project>>,
+    pub(crate) project: Arc<Mutex<Option<Project>>>,
 }
 
 #[derive(Clone)]
@@ -185,6 +186,10 @@ impl ProjectLibrary {
         let root = dirs::document_dir()
             .context("the Documents directory is unavailable")?
             .join("Koharu");
+        Self::with_root(root)
+    }
+
+    pub(crate) fn with_root(root: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&root)
             .with_context(|| format!("failed to create {}", root.display()))?;
         Ok(Self { root })
@@ -274,7 +279,7 @@ impl Project {
         Ok(Self::new(session, name))
     }
 
-    fn new(session: Session, name: String) -> Self {
+    pub(crate) fn new(session: Session, name: String) -> Self {
         let active_page = session.snapshot().pages().next().map(|page| page.id());
         Self {
             session,

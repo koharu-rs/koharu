@@ -1,0 +1,31 @@
+[package]
+name = "koharu-macros"
+version.workspace = true
+edition.workspace = true
+description = "Proc macros that expand one command function into a shared body and an axum HTTP handler."
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+license.workspace = true
+autotests = false
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+
+[dev-dependencies]
+axum = { version = "0.8", features = ["ws"] }
+koharu-macros-test-app = { path = "tests/support/koharu-app" }
+koharu-macros-test-specta = { path = "tests/support/specta" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[[test]]
+name = "compile"
+path = "tests/compile.rs"

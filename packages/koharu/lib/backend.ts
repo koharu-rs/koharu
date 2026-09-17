@@ -1,6 +1,6 @@
 'use client'
 
-import { commands } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/bridge'
 import type {
   PipelineConfig,
   Preferences,

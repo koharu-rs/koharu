@@ -1,71 +1,21 @@
 use anyhow::{Context as _, Result};
-use tauri::{AppHandle, Manager as _, WindowEvent};
+use tauri::{Manager as _, WebviewUrl, WindowEvent};
 use tauri_runtime_cef::{Cef, CefRuntime};
-use tokio::sync::Mutex;
 
-use crate::commands::{
-    agent::AgentState,
-    canvas::CanvasChannel,
-    lifecycle::{
-        Download, DownloadChannel, DownloadState, Initialization, ModelResources, ProjectChannel,
-        ResourceChannel,
-    },
-    processing::{JobChannel, Processing},
-    project::{CurrentProject, ProjectLibrary},
-};
+use crate::host::Host;
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "app_started",
-    skip_all,
-    fields(phase = "initialization")
-)]
-pub(crate) async fn initialize(handle: AppHandle<CefRuntime>) -> Result<()> {
-    koharu_ml::init()
-        .await
-        .context("failed to initialize the ML runtime")?;
-    let device = koharu_ml::device(false);
-    koharu_metrics::context(serde_json::json!({
-        "compute_backend": device.backend.to_string().to_ascii_lowercase(),
-        "device_type": format!("{:?}", device.device_type).to_ascii_lowercase(),
-        "gpu_model": device.description.clone(),
-        "vram_bytes": device.memory_total,
-    }));
-    let pipeline = koharu_pipeline::Pipeline::load(device)?;
-    handle.manage(pipeline.clone());
-
-    let mut resources = pipeline.subscribe_resources();
-    let resource_handle = handle.clone();
-    drop(tauri::async_runtime::spawn(async move {
-        while resources.changed().await.is_ok() {
-            let snapshot = resources.borrow_and_update().clone();
-            let resources = resource_handle.state::<ResourceChannel>();
-            let mut channel = resources.channel.lock();
-            if let Some(current) = channel.as_ref()
-                && current.send(ModelResources::from(snapshot)).is_err()
-            {
-                channel.take();
-            }
-        }
-    }));
-
-    let project = handle
-        .state::<CurrentProject>()
-        .project
-        .lock()
-        .await
-        .as_ref()
-        .map(|project| (project.snapshot(), project.active_page()));
-    let desktop = handle.state::<koharu_desktop::Desktop>();
-    if let Some((snapshot, page)) = project {
-        desktop.show_page(&snapshot, page).await?;
-    } else {
-        desktop.clear().await;
-    }
-    Ok(())
+pub fn http_router(host: Host, frontend: axum::Router) -> axum::Router {
+    crate::commands::router()
+        .with_state(host)
+        .fallback_service(frontend)
 }
 
-pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
+pub fn run(
+    context: tauri::Context<CefRuntime>,
+    cpu: bool,
+    listener: std::net::TcpListener,
+    frontend: axum::Router,
+) -> Result<()> {
     let cef = Cef::default();
     #[cfg(debug_assertions)]
     let cef = cef.remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
@@ -112,146 +62,62 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
             #[cfg(all(target_os = "windows", not(debug_assertions)))]
-            koharu_runtime::Store::configure(
+            crate::host::configure_packaged_store(Some(
                 application
                     .path()
                     .resource_dir()
-                    .context("failed to locate Koharu's installation directory")?
-                    .join("store"),
-            )?;
+                    .context("failed to locate Koharu's installation directory")?,
+            ))?;
 
-            application.manage(CurrentProject {
-                project: Mutex::new(None),
+            let host = Host::new()?;
+            listener.set_nonblocking(true)?;
+            let addr = listener.local_addr()?;
+            let tokio_listener = tokio::net::TcpListener::from_std(listener)?;
+            host.install(application);
+            host.spawn_download_events();
+
+            let server_host = host.clone();
+            let shutdown = host.server_shutdown();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) =
+                    axum::serve(tokio_listener, crate::http_router(server_host, frontend))
+                        .with_graceful_shutdown(async move {
+                            shutdown.notified().await;
+                        })
+                        .await
+                {
+                    tracing::error!(%error, "local HTTP server stopped");
+                }
             });
-            application.manage(ProjectLibrary::new()?);
-            application.manage(Processing::default());
-            application.manage(CanvasChannel::default());
-            application.manage(JobChannel::default());
-            application.manage(DownloadChannel::default());
-            application.manage(ResourceChannel::default());
-            application.manage(ProjectChannel::default());
-            application.manage(Initialization::default());
 
-            let handle = application.handle().clone();
-            application.manage(koharu_desktop::Desktop::new()?);
-            application.manage(AgentState::new(handle.clone())?);
-
-            let window_config = application
+            let mut window_config = application
                 .config()
                 .app
                 .windows
                 .iter()
                 .find(|window| window.label == "main")
-                .context("the main Tauri window configuration is unavailable")?;
-            let window = tauri::WebviewWindowBuilder::from_config(application, window_config)?
+                .context("the main Tauri window configuration is unavailable")?
+                .clone();
+            let url: url::Url = format!("http://{addr}/")
+                .parse()
+                .context("invalid local HTTP origin")?;
+            window_config.url = WebviewUrl::External(url);
+            let window = tauri::WebviewWindowBuilder::from_config(application, &window_config)?
                 .build()
                 .context("failed to create the main window")?;
+            host.set_window(window.clone());
             window.show().context("failed to show the main window")?;
             window
                 .set_focus()
                 .context("failed to focus the main window")?;
-            let initialization_handle = handle.clone();
+            let initialization_host = host.clone();
             drop(tauri::async_runtime::spawn(async move {
-                initialize(initialization_handle.clone())
+                initialization_host
+                    .initialize(cpu)
                     .await
                     .expect("failed to initialize the desktop runtime");
-                initialization_handle.state::<Initialization>().ready();
-            }));
-
-            let mut downloads = koharu_runtime::download::subscribe();
-            let download_handle = handle.clone();
-            drop(tauri::async_runtime::spawn(async move {
-                loop {
-                    match downloads.recv().await {
-                        Ok(event) => {
-                            let download = match event {
-                                koharu_runtime::download::Event::Started { id, name } => {
-                                    tracing::info!(
-                                        target: "koharu_metrics",
-                                        metric = "download_start",
-                                        resource = "runtime",
-                                    );
-                                    Download {
-                                        id,
-                                        state: DownloadState::Running,
-                                        name: Some(name),
-                                        completed: 0,
-                                        total: 0,
-                                        error: None,
-                                    }
-                                }
-                                koharu_runtime::download::Event::Progress {
-                                    id,
-                                    name,
-                                    completed,
-                                    total,
-                                } => {
-                                    tracing::info!(
-                                        target: "koharu_metrics",
-                                        metric = "download_progress",
-                                        resource = "runtime",
-                                        used_bytes = completed,
-                                        total_bytes = total,
-                                    );
-                                    Download {
-                                        id,
-                                        state: DownloadState::Running,
-                                        name: Some(name),
-                                        completed,
-                                        total,
-                                        error: None,
-                                    }
-                                }
-                                koharu_runtime::download::Event::Finished { id } => {
-                                    tracing::info!(
-                                        target: "koharu_metrics",
-                                        metric = "download_result",
-                                        resource = "runtime",
-                                        outcome = "completed",
-                                    );
-                                    Download {
-                                        id,
-                                        state: DownloadState::Finished,
-                                        name: None,
-                                        completed: 0,
-                                        total: 0,
-                                        error: None,
-                                    }
-                                }
-                                koharu_runtime::download::Event::Failed { id, name, error } => {
-                                    tracing::info!(
-                                        target: "koharu_metrics",
-                                        metric = "download_result",
-                                        resource = "runtime",
-                                        outcome = "failed",
-                                    );
-                                    Download {
-                                        id,
-                                        state: DownloadState::Failed,
-                                        name: Some(name),
-                                        completed: 0,
-                                        total: 0,
-                                        error: Some(error),
-                                    }
-                                }
-                            };
-                            let downloads = download_handle.state::<DownloadChannel>();
-                            let mut channel = downloads.channel.lock();
-                            if let Some(current) = channel.as_ref()
-                                && current.send(download).is_err()
-                            {
-                                channel.take();
-                            }
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                            tracing::warn!(skipped, "download channel fell behind");
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                    }
-                }
             }));
 
             Ok(())
@@ -261,13 +127,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
                 event,
                 WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
             ) {
-                let processing = window.state::<Processing>();
-                for stop in processing.stops.lock().values() {
-                    stop.stop();
-                }
-                processing.stops.lock().clear();
-                processing.jobs.lock().clear();
-                window.state::<AgentState>().cancel_all();
+                window.state::<Host>().shutdown();
             }
             if matches!(event, WindowEvent::Destroyed) {
                 tracing::info!(
