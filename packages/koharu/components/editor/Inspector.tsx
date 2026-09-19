@@ -814,7 +814,7 @@ function LayersInspector() {
       >
         <ScrollArea className='min-h-0 flex-1'>
           <div className='py-0.5'>
-            {layers.map(({ layer, index, depth }) => {
+            {layers.map(({ layer, depth }, visualIndex) => {
               const locked = isLockedLayer(layer)
               const storedSiblings = page.layers.filter(
                 (candidate) =>
@@ -831,7 +831,7 @@ function LayersInspector() {
                 <LayerRow
                   key={`${layer.type}:${layer.id}`}
                   layer={layer}
-                  index={index}
+                  index={visualIndex}
                   depth={depth}
                   selected={selected.includes(layer.id)}
                   expanded={!locked && expandedLayer === layer.id}
@@ -913,6 +913,7 @@ function LayerRow({
 
   return (
     <div
+      ref={isOverlay ? undefined : sortableRef}
       id={isOverlay ? undefined : `layer-row-${layer.id}`}
       className='group min-w-0 px-1 py-px'
       style={{
@@ -933,10 +934,7 @@ function LayerRow({
             : ''
         }`}
       >
-        <div
-          ref={isOverlay ? undefined : sortableRef}
-          className='relative flex min-w-0 items-center gap-0.5'
-        >
+        <div className='relative flex min-w-0 items-center gap-0.5'>
           <div
             role='button'
             tabIndex={locked ? undefined : 0}
@@ -1068,7 +1066,10 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
   }
 
   return (
-    <div className='grid min-w-0 gap-1.5 px-1.5 pt-0.5 pb-1.5'>
+    <div
+      onPointerDown={(e) => e.stopPropagation()}
+      className='grid min-w-0 gap-1.5 px-1.5 pt-0.5 pb-1.5'
+    >
       <div className='flex min-w-0 items-center gap-1.5'>
         <span className='shrink-0 text-[8px] font-medium text-muted-foreground uppercase'>
           {t('inspector.opacity')}
