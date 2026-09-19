@@ -39,10 +39,7 @@ impl KoharuHost {
             let current = current.project.lock().await;
             let project = current.as_ref().context("no project is open")?;
             let snapshot = project.snapshot();
-            let pages = Project::pages(&snapshot)?
-                .into_iter()
-                .map(|page| Project::page(&snapshot, page.id))
-                .collect::<Result<Vec<_>>>()?;
+            let pages = Project::pages(&snapshot)?;
             (project.info(), pages)
         };
         let preferences = Preferences::load()?;
@@ -182,6 +179,67 @@ impl Host for KoharuHost {
         self.project_context().await
     }
 
+    async fn bulk_review_pages(&self, pages: &[String]) -> Result<Value> {
+        let snapshot = {
+            let current = self.handle.state::<CurrentProject>();
+            let current = current.project.lock().await;
+            let project = current.as_ref().context("no project is open")?;
+            project.snapshot()
+        };
+        let mut result = Vec::new();
+        for (index, page_id) in pages.iter().enumerate() {
+            let page_id_entity = entity_quoted_or_bare(page_id).with_context(|| {
+                format!("cannot read page {page_id} (index {index}) for bulk review")
+            })?;
+            let page = snapshot
+                .page(page_id_entity)
+                .with_context(|| format!("page {page_id} not found for bulk review"))?;
+            let page_value = page.page()?;
+            let descendants = snapshot.descendants(page_id_entity)?;
+            let mut elements = Vec::new();
+            for entity in descendants {
+                let entity_id = entity.id();
+                if snapshot
+                    .component::<koharu_scene::TextLayout>(entity_id)?
+                    .is_none()
+                {
+                    continue;
+                }
+                let text_layer = match snapshot.text_layer(entity_id) {
+                    Ok(layer) => layer,
+                    Err(_) => continue,
+                };
+                let content = match text_layer.content() {
+                    Ok(content) => content,
+                    Err(_) => continue,
+                };
+                let source = content
+                    .source()
+                    .ok()
+                    .flatten()
+                    .map(|s| s.text.value.to_string());
+                let translation = content
+                    .translation()
+                    .ok()
+                    .flatten()
+                    .map(|t| t.text.value.to_string());
+                if source.is_some() || translation.is_some() {
+                    elements.push(json!({
+                        "id": entity_id.to_string(),
+                        "source": source,
+                        "translation": translation,
+                    }));
+                }
+            }
+            result.push(json!({
+                "id": page_id.to_string(),
+                "label": page_value.label,
+                "elements": elements,
+            }));
+        }
+        Ok(json!({ "pages": result }))
+    }
+
     fn tools(&self) -> Vec<Tool> {
         static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
         TOOLS
@@ -189,7 +247,11 @@ impl Host for KoharuHost {
                 vec![
                     definition::<InspectProject>(
                         "inspect_project",
-                        "Read the latest complete semantic project state after edits. This does not include page images.",
+                        "Read the latest project summary and page index. This does not include page contents or images.",
+                    ),
+                    definition::<InspectPages>(
+                        "inspect_pages",
+                        "Read the latest semantic state of the specified pages. Accepts multiple page IDs and does not include rendered images.",
                     ),
                     definition::<ViewPage>(
                         "view_page",
@@ -200,10 +262,6 @@ impl Host for KoharuHost {
                     definition::<DeletePages>("delete_pages", "Delete pages and their contents."),
                     definition::<AddTextBox>("add_text_box", "Add a paragraph text box to a page."),
                     definition::<SetText>("set_source_text", "Replace an element's source text."),
-                    definition::<SetTranslation>(
-                        "set_translation",
-                        "Set an element's translation, or pass null to remove it.",
-                    ),
                     definition::<SetTypography>(
                         "set_typography",
                         "Replace an element's typography settings. Font is a family name from available_fonts.",
@@ -241,6 +299,24 @@ impl Host for KoharuHost {
             "inspect_project" => {
                 let _: InspectProject = arguments(&call)?;
                 Invocation::read(self.project_context().await?)
+            }
+            "inspect_pages" => {
+                let arguments: InspectPages = arguments(&call)?;
+                if arguments.pages.is_empty() {
+                    bail!("inspect_pages requires at least one page ID");
+                }
+                let pages = entities(&arguments.pages)?;
+                let values = {
+                    let current = self.handle.state::<CurrentProject>();
+                    let current = current.project.lock().await;
+                    let project = current.as_ref().context("no project is open")?;
+                    let snapshot = project.snapshot();
+                    pages
+                        .into_iter()
+                        .map(|page| Project::page(&snapshot, page))
+                        .collect::<Result<Vec<_>>>()?
+                };
+                Invocation::read(json!({ "pages": values }))
             }
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;
@@ -343,6 +419,25 @@ impl Host for KoharuHost {
                         Ok((
                             project.set_translation(element, arguments.text).await?,
                             json!({ "element": element }),
+                        ))
+                    })
+                })
+                .await
+            }
+            "set_translations" => {
+                let arguments: SetTranslations = arguments(&call)?;
+                let mut elements = Vec::with_capacity(arguments.updates.len());
+                let mut updates = Vec::with_capacity(arguments.updates.len());
+                for update in arguments.updates {
+                    let element = entity(&update.element)?;
+                    elements.push(element);
+                    updates.push((element, update.text));
+                }
+                self.mutate(|project| {
+                    Box::pin(async move {
+                        Ok((
+                            project.set_translations(updates).await?,
+                            json!({ "elements": elements }),
                         ))
                     })
                 })
@@ -497,12 +592,26 @@ fn entity(value: &str) -> Result<EntityId> {
         .with_context(|| format!("invalid entity ID {value}"))
 }
 
+fn entity_quoted_or_bare(value: &str) -> Result<EntityId> {
+    if value.starts_with('"') {
+        serde_json::from_str::<EntityId>(value)
+            .with_context(|| format!("invalid entity ID {value}"))
+    } else {
+        entity(value)
+    }
+}
+
 fn entities(values: &[String]) -> Result<Vec<EntityId>> {
     values.iter().map(|value| entity(value)).collect()
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct InspectProject {}
+
+#[derive(Deserialize, JsonSchema)]
+struct InspectPages {
+    pages: Vec<String>,
+}
 
 #[derive(Deserialize, JsonSchema)]
 struct ViewPage {
@@ -547,6 +656,11 @@ struct SetText {
 struct SetTranslation {
     element: String,
     text: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct SetTranslations {
+    updates: Vec<SetTranslation>,
 }
 
 #[derive(Clone, Copy, Deserialize, JsonSchema)]
@@ -694,5 +808,27 @@ impl RunPipeline {
             (true, false) => Ok(Scope::Entities(entities(&self.elements)?)),
             (false, false) => bail!("pipeline scope cannot contain both pages and elements"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EntityId, entity_quoted_or_bare};
+
+    #[test]
+    fn bulk_review_accepts_bare_and_quoted_page_ids() {
+        let bare = "0189f0c8-0b1c-7ac0-95cd-d238b71ce20f";
+        let bare_id: EntityId = entity_quoted_or_bare(bare).expect("bare UUID must parse");
+        let quoted = format!("\"{bare}\"");
+        let quoted_id: EntityId =
+            entity_quoted_or_bare(&quoted).expect("JSON-quoted UUID must parse");
+        assert_eq!(bare_id.to_string(), quoted_id.to_string());
+    }
+
+    #[test]
+    fn bulk_review_reports_numeric_page_ids_clearly() {
+        let error = entity_quoted_or_bare("041").expect_err("041 must fail");
+        let message = format!("{error:#}");
+        assert!(message.contains("041"), "{message}");
     }
 }

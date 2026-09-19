@@ -5,29 +5,42 @@ use crate::{Reasoning, Tool};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Request {
-    pub(super) model: String,
-    pub(super) instructions: String,
-    pub(super) input: Vec<Value>,
-    pub(super) tools: Vec<Tool>,
-    pub(super) tool_choice: &'static str,
-    pub(super) parallel_tool_calls: bool,
-    pub(super) reasoning: ReasoningOptions,
-    pub(super) text: TextOptions,
-    pub(super) include: [&'static str; 1],
-    pub(super) stream: bool,
-    pub(super) store: bool,
-    pub(super) prompt_cache_key: String,
+    pub(crate) model: String,
+    pub(crate) instructions: String,
+    pub(crate) input: Vec<Value>,
+    pub(crate) tools: Vec<Tool>,
+    pub(crate) tool_choice: &'static str,
+    pub(crate) parallel_tool_calls: bool,
+    pub(crate) reasoning: ReasoningOptions,
+    pub(crate) text: TextOptions,
+    pub(crate) include: [&'static str; 1],
+    pub(crate) stream: bool,
+    pub(crate) store: bool,
+    pub(crate) prompt_cache_key: String,
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct ReasoningOptions {
-    effort: &'static str,
-    summary: &'static str,
+pub(crate) struct ReasoningOptions {
+    pub(crate) effort: &'static str,
+    pub(crate) summary: &'static str,
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct TextOptions {
-    verbosity: &'static str,
+pub(crate) struct TextOptions {
+    pub(crate) verbosity: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) format: Option<TextFormat>,
+}
+
+/// Structured output for the Responses API lives under `text.format`, not a
+/// top-level `response_format` parameter.
+#[derive(Debug, Serialize)]
+pub(crate) struct TextFormat {
+    #[serde(rename = "type")]
+    pub(crate) kind: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) strict: bool,
+    pub(crate) schema: Value,
 }
 
 impl Request {
@@ -50,12 +63,27 @@ impl Request {
                 effort: reasoning.as_str(),
                 summary: "auto",
             },
-            text: TextOptions { verbosity: "low" },
+            text: TextOptions {
+                verbosity: "low",
+                format: None,
+            },
             include: ["reasoning.encrypted_content"],
             stream: true,
             store: false,
             prompt_cache_key: session,
         }
+    }
+
+    /// Attach an OpenAI-compatible JSON schema structured output under
+    /// `text.format`. Pass `None` for plain text output (the default).
+    pub(crate) fn with_json_schema(mut self, schema: Option<Value>, name: &'static str) -> Self {
+        self.text.format = schema.map(|schema| TextFormat {
+            kind: "json_schema",
+            name,
+            strict: true,
+            schema,
+        });
+        self
     }
 }
 
@@ -115,4 +143,83 @@ pub(crate) fn function_output(
         "call_id": call_id,
         "output": output,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn review_schema() -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "changes": { "type": "array", "items": {
+                    "type": "object",
+                    "properties": {
+                        "element": { "type": "string" },
+                        "translation": { "type": "string" },
+                    },
+                    "required": ["element", "translation"],
+                    "additionalProperties": false,
+                } },
+                "memory_updates": { "type": "array", "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string" },
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false,
+                } },
+            },
+            "required": ["changes", "memory_updates"],
+            "additionalProperties": false,
+        })
+    }
+
+    #[test]
+    fn structured_output_lives_in_text_format() {
+        let request = Request::new(
+            "codex".into(),
+            "instructions".into(),
+            Vec::new(),
+            Vec::new(),
+            Reasoning::Low,
+            "session".into(),
+        )
+        .with_json_schema(Some(review_schema()), "review_response");
+        let value = serde_json::to_value(&request).unwrap();
+        let body = value.to_string();
+        // Structured output must be under text.format.
+        assert_eq!(value["text"]["verbosity"], "low");
+        assert_eq!(value["text"]["format"]["type"], "json_schema");
+        assert_eq!(value["text"]["format"]["name"], "review_response");
+        assert_eq!(value["text"]["format"]["strict"], true);
+        assert_eq!(value["text"]["format"]["schema"]["type"], "object");
+        // There must be no top-level response_format parameter.
+        assert!(value.get("response_format").is_none());
+        assert!(!body.contains("response_format"));
+        // Instructions, tools and reasoning remain wired.
+        assert_eq!(value["instructions"], "instructions");
+        assert_eq!(value["reasoning"]["effort"], "low");
+        assert_eq!(value["tools"], json!([]));
+    }
+
+    #[test]
+    fn plain_request_has_no_text_format() {
+        let request = Request::new(
+            "codex".into(),
+            "i".into(),
+            Vec::new(),
+            Vec::new(),
+            Reasoning::High,
+            "s".into(),
+        );
+        let value = serde_json::to_value(&request).unwrap();
+        assert!(value["text"].get("format").is_none());
+        assert!(value.get("response_format").is_none());
+        assert_eq!(value["text"]["verbosity"], "low");
+    }
 }
