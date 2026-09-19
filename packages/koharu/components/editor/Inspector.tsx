@@ -857,33 +857,7 @@ function LayersInspector() {
             {layers.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
           </div>
         </ScrollArea>
-        <DragOverlay dropAnimation={null}>
-          {draggedId ? (() => {
-            const dragLayerInfo = layers.find((l) => l.layer.id === draggedId)
-            if (!dragLayerInfo) return null
-            return (
-              <div className='opacity-80 pointer-events-none'>
-                <LayerRow
-                  layer={dragLayerInfo.layer}
-                  index={dragLayerInfo.index}
-                  depth={dragLayerInfo.depth}
-                  selected={selected.includes(draggedId)}
-                  expanded={false}
-                  locked={isLockedLayer(dragLayerInfo.layer)}
-                  onSelect={() => {}}
-                  onToggle={() => {}}
-                  onMove={() => {}}
-                  canMoveUp={false}
-                  canMoveDown={false}
-                  reordering={false}
-                  isDragOver={false}
-                  activeDropPos={null}
-                  isOverlay={true}
-                />
-              </div>
-            )
-          })() : null}
-        </DragOverlay>
+        <DragOverlay dropAnimation={null} />
       </DragDropProvider>
     </div>
   )
@@ -943,7 +917,7 @@ function LayerRow({
       className='group min-w-0 px-1 py-px'
       style={{
         paddingLeft: `${depth * 10 + 4}px`,
-        opacity: isDragging ? 0 : 1,
+        opacity: isDragging ? 0.5 : 1,
       }}
     >
       <div
