@@ -4933,6 +4933,7 @@ dependencies = [
  "encoding_rs",
  "fast_image_resize",
  "icu_properties",
+ "icu_segmenter",
  "image",
  "imageproc",
  "koharu-diffusion",

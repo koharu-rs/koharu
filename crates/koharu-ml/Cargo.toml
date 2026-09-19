@@ -23,6 +23,7 @@ clap = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
 icu_properties = { workspace = true }
+icu_segmenter = { workspace = true }
 encoding_rs = { workspace = true }
 fast_image_resize = { workspace = true }
 minijinja = { workspace = true }

@@ -1,0 +1,52 @@
+[
+  {
+    "text": "蒼井レンは霧ノ宮へ向かう。",
+    "entities": [
+      { "surface": "蒼井レン", "kind": "person" },
+      { "surface": "霧ノ宮", "kind": "place" }
+    ]
+  },
+  {
+    "text": "白鷺研究会が星鍵を保管した。",
+    "entities": [
+      { "surface": "白鷺研究会", "kind": "organization" },
+      { "surface": "星鍵", "kind": "item" }
+    ]
+  },
+  {
+    "text": "ミナは蒼炎術を使った。",
+    "entities": [
+      { "surface": "ミナ", "kind": "person" },
+      { "surface": "蒼炎術", "kind": "ability" }
+    ]
+  },
+  {
+    "text": "古文書には月環契約と記されている。",
+    "entities": [
+      { "surface": "月環契約", "kind": "work_specific_term" }
+    ]
+  },
+  {
+    "text": "雨が窓を静かに打つ。",
+    "entities": []
+  },
+  {
+    "text": "もう夜が明ける。",
+    "entities": []
+  },
+  {
+    "text": "黒瀬ユウが天架橋で光刃を構えた。",
+    "entities": [
+      { "surface": "黒瀬ユウ", "kind": "person" },
+      { "surface": "天架橋", "kind": "place" },
+      { "surface": "光刃", "kind": "item" }
+    ]
+  },
+  {
+    "text": "黎明局は鏡渡りを禁じた。",
+    "entities": [
+      { "surface": "黎明局", "kind": "organization" },
+      { "surface": "鏡渡り", "kind": "ability" }
+    ]
+  }
+]
