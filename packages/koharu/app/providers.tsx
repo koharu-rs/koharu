@@ -9,7 +9,7 @@ import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
 import { refreshTranslationModels } from '@/lib/backend'
 import i18n from '@/lib/i18n'
-import { pageKey, pagesKey, projectKey, queryClient, refresh } from '@/lib/queries'
+import { glossaryKey, pageKey, pagesKey, projectKey, queryClient, refresh } from '@/lib/queries'
 import {
   receiveCanvas,
   receiveDownload,
@@ -53,7 +53,7 @@ export function Providers({ children }: { children: ReactNode }) {
             completed.set(job.id, job.completed)
             receiveJob(job)
             if (job.completed > previous || job.state !== 'running') {
-              void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
+              void refresh(projectKey, pagesKey, pageKey, glossaryKey).catch(() => undefined)
             }
           }),
           channel<Download>(receiveDownload),
@@ -61,6 +61,9 @@ export function Providers({ children }: { children: ReactNode }) {
           channel<ProjectInfo | null>((project) => {
             const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
             queryClient.setQueryData(projectKey, project)
+            if (previous?.name !== project?.name || previous?.revision !== project?.revision) {
+              void queryClient.invalidateQueries({ queryKey: glossaryKey })
+            }
             if (previous?.name !== project?.name) {
               const store = useKoharuStore.getState()
               store.selectPages(project?.active_page ? [project.active_page] : [])

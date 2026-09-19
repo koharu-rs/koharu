@@ -3,20 +3,31 @@
 import {
   QueryClient,
   type QueryKey,
+  type UseMutationResult,
   queryOptions,
   useIsMutating,
   useMutation,
   useQuery,
 } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 
 import { commands } from '@koharu/bridge'
-import type { FontFamily } from '@koharu/bridge/protocol'
+import type {
+  FontFamily,
+  GlossaryEntryDraft,
+  GlossaryEntryPatch,
+  GlossaryImportPreview,
+  GlossaryImportStrategy,
+  GlossaryView,
+} from '@koharu/bridge/protocol'
 
 import { call } from './backend'
+import { createGlossaryEntryUpdateQueue, type GlossaryEntryUpdateQueue } from './glossary'
 
 export const projectKey = ['project'] as const
 export const pagesKey = ['pages'] as const
 export const pageKey = ['page'] as const
+export const glossaryKey = ['glossary'] as const
 export const preparedPageKey = (page: string) => ['prepared-page', page] as const
 export const fontsKey = ['fonts'] as const
 
@@ -33,6 +44,11 @@ const pagesQuery = queryOptions({
 const pageQuery = queryOptions({
   queryKey: pageKey,
   queryFn: () => call(commands.getPage),
+})
+
+const glossaryQuery = queryOptions({
+  queryKey: glossaryKey,
+  queryFn: () => call(commands.getGlossary),
 })
 
 const fontsQuery = queryOptions({
@@ -61,6 +77,10 @@ export function usePages(enabled = true) {
 
 export function usePage(enabled = true) {
   return useQuery({ ...pageQuery, enabled })
+}
+
+export function useGlossary(enabled = true) {
+  return useQuery({ ...glossaryQuery, enabled })
 }
 
 export function useFonts(enabled = true) {
@@ -104,6 +124,136 @@ export function useImportPages() {
     refresh(projectKey, pagesKey, pageKey),
   )
   return { importPages: run, importing: busy }
+}
+
+async function updateGlossaryCaches(view?: GlossaryView): Promise<void> {
+  if (view) queryClient.setQueryData(glossaryKey, view)
+  await refresh(projectKey, glossaryKey)
+}
+
+async function recoverGlossaryMutation(): Promise<void> {
+  await refresh(projectKey, glossaryKey)
+}
+
+export function useScanGlossary() {
+  return useMutation({
+    mutationKey: ['glossary', 'scan'],
+    mutationFn: () => call(commands.scanGlossary),
+    meta: { activity: 'glossary.scanning' },
+    onSuccess: () => updateGlossaryCaches(),
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function useSetGlossaryEnabled() {
+  return useMutation({
+    mutationKey: ['glossary', 'toggle'],
+    mutationFn: ({ revision, enabled }: { revision: number; enabled: boolean }) =>
+      call(commands.setGlossaryEnabled, revision, enabled),
+    onSuccess: updateGlossaryCaches,
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function useAddGlossaryEntry() {
+  return useMutation({
+    mutationKey: ['glossary', 'add'],
+    mutationFn: ({ revision, draft }: { revision: number; draft: GlossaryEntryDraft }) =>
+      call(commands.addGlossaryEntry, revision, draft),
+    onSuccess: updateGlossaryCaches,
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function useUpdateGlossaryEntry(revision: number, scope = '') {
+  const owner = useRef<{ scope: string; queue: GlossaryEntryUpdateQueue } | null>(null)
+  if (owner.current === null || owner.current.scope !== scope) {
+    owner.current = {
+      scope,
+      queue: createGlossaryEntryUpdateQueue({
+        initialRevision: revision,
+        execute: (expectedRevision, id, patch) =>
+          call(commands.updateGlossaryEntry, expectedRevision, id, patch),
+        onResponse: async (view, current) => {
+          if (current) queryClient.setQueryData(glossaryKey, view)
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: projectKey }),
+            queryClient.invalidateQueries({
+              queryKey: glossaryKey,
+              refetchType: current ? 'active' : 'none',
+            }),
+          ])
+        },
+      }),
+    }
+  }
+  useEffect(() => owner.current?.queue.setRevision(revision), [revision])
+
+  return useMutation({
+    mutationKey: ['glossary', 'update'],
+    mutationFn: ({ id, patch }: { id: string; patch: GlossaryEntryPatch }) =>
+      owner.current!.queue.enqueue(id, patch),
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function useDeleteGlossaryEntries() {
+  return useMutation({
+    mutationKey: ['glossary', 'delete'],
+    mutationFn: ({ revision, ids }: { revision: number; ids: string[] }) =>
+      call(commands.deleteGlossaryEntries, revision, ids),
+    onSuccess: updateGlossaryCaches,
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function useTranslateGlossaryEntries() {
+  return useMutation({
+    mutationKey: ['glossary', 'translate'],
+    mutationFn: ({ revision, ids }: { revision: number; ids: string[] | null }) =>
+      call(commands.translateGlossaryEntries, revision, ids),
+    meta: { activity: 'glossary.translating' },
+    onSuccess: () => updateGlossaryCaches(),
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function usePreviewGlossaryImport(): UseMutationResult<
+  GlossaryImportPreview,
+  Error,
+  string
+> {
+  return useMutation({
+    mutationKey: ['glossary', 'import-preview'],
+    mutationFn: (document: string) => call(commands.previewGlossaryImport, document),
+  })
+}
+
+export function useApplyGlossaryImport() {
+  return useMutation({
+    mutationKey: ['glossary', 'import-apply'],
+    mutationFn: ({
+      revision,
+      document,
+      strategy,
+      confirmLanguageMismatch,
+    }: {
+      revision: number
+      document: string
+      strategy: GlossaryImportStrategy
+      confirmLanguageMismatch: boolean
+    }) => call(commands.applyGlossaryImport, revision, document, strategy, confirmLanguageMismatch),
+    onSuccess: updateGlossaryCaches,
+    onError: recoverGlossaryMutation,
+  })
+}
+
+export function useExportGlossary() {
+  return useMutation({
+    mutationKey: ['glossary', 'export'],
+    mutationFn: () => call(commands.exportGlossary),
+    meta: { activity: 'glossary.exporting' },
+  })
 }
 
 export async function refresh(...keys: QueryKey[]): Promise<void> {

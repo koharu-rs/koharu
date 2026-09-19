@@ -1,43 +1,56 @@
 'use client'
 
-import { Bot, SlidersHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { Bot, BookOpenText, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AgentPanel } from '@/components/editor/AgentPanel'
+import { GlossaryPanel } from '@/components/editor/GlossaryPanel'
 import { Inspector } from '@/components/editor/Inspector'
-import { Button } from '@koharu/ui/components/button'
+import { useProject } from '@/lib/queries'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@koharu/ui/components/tabs'
+
+type RightPanel = 'properties' | 'glossary' | 'agent'
 
 export function RightSidebar() {
   const { t } = useTranslation()
-  const [panel, setPanel] = useState<'agent' | 'properties'>('properties')
+  const project = useProject().data
+  const [panel, setPanel] = useState<RightPanel>('properties')
+
+  useEffect(() => {
+    if (!project && panel === 'glossary') setPanel('properties')
+  }, [panel, project])
 
   return (
     <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-panel)]'>
-      <div className='flex h-10 shrink-0 items-center gap-1 border-b border-border/80 px-2.5'>
-        <Button
-          variant={panel === 'properties' ? 'secondary' : 'ghost'}
-          size='sm'
-          className='h-7 flex-1 text-[10px]'
-          onClick={() => setPanel('properties')}
-        >
-          <SlidersHorizontal className='size-3' /> {t('agent.properties')}
-        </Button>
-        <Button
-          variant={panel === 'agent' ? 'secondary' : 'ghost'}
-          size='sm'
-          className='h-7 flex-1 text-[10px]'
-          onClick={() => setPanel('agent')}
-        >
-          <Bot className='size-3' /> {t('agent.title')}
-        </Button>
-      </div>
-      <div className={panel === 'agent' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
-        <AgentPanel />
-      </div>
-      <div className={panel === 'properties' ? 'min-h-0 flex-1' : 'hidden'}>
-        <Inspector />
-      </div>
+      <Tabs
+        value={panel}
+        onValueChange={(value) => value && setPanel(value as RightPanel)}
+        className='h-full min-h-0 gap-0'
+      >
+        <div className='flex h-10 shrink-0 items-center border-b border-border/80 px-2.5'>
+          <TabsList variant='default' className='h-7 w-full p-0.5'>
+            <TabsTrigger value='properties' className='text-[9px]'>
+              <SlidersHorizontal className='size-3' /> {t('agent.properties')}
+            </TabsTrigger>
+            <TabsTrigger value='glossary' className='text-[9px]' disabled={!project}>
+              <BookOpenText className='size-3' /> {t('glossary.title')}
+            </TabsTrigger>
+            <TabsTrigger value='agent' className='text-[9px]'>
+              <Bot className='size-3' /> {t('agent.title')}
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value='properties' className='min-h-0 overflow-hidden'>
+          <Inspector />
+        </TabsContent>
+        <TabsContent value='glossary' className='min-h-0 overflow-hidden'>
+          <GlossaryPanel />
+        </TabsContent>
+        <TabsContent value='agent' className='min-h-0 overflow-hidden'>
+          <AgentPanel />
+        </TabsContent>
+      </Tabs>
     </aside>
   )
 }
