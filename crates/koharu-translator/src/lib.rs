@@ -206,6 +206,7 @@ fn validate_request(provider: Provider, request: &TranslationRequest) -> Result<
             provider: provider.into(),
         });
     }
+    prompt::serialized_terminology(request)?;
     Ok(())
 }
 
@@ -217,6 +218,16 @@ mod tests {
         ModelSelection {
             provider: Provider::Local,
             model: Some(model.to_owned()),
+            quantization: None,
+            vision: true,
+            reasoning: true,
+        }
+    }
+
+    fn openai_selection() -> ModelSelection {
+        ModelSelection {
+            provider: Provider::OpenAi,
+            model: None,
             quantization: None,
             vision: true,
             reasoning: true,
@@ -248,11 +259,58 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn empty_request_without_terminology_is_skipped_successfully() {
+        let translator = Translator::from_config(
+            koharu_ml::Device::cpu(),
+            koharu_config::Config::memory(ProvidersConfig::default()),
+        )
+        .unwrap();
+        let request = TranslationRequest::new(std::iter::empty::<String>(), Language::English);
+
+        let translated = translator
+            .translate(&openai_selection(), GenerationConfig::default(), request)
+            .await
+            .unwrap();
+
+        assert_eq!(translated, ("openai", Vec::new()));
+    }
+
+    #[tokio::test]
+    async fn empty_request_rejects_oversized_terminology() {
+        let translator = Translator::from_config(
+            koharu_ml::Device::cpu(),
+            koharu_config::Config::memory(ProvidersConfig::default()),
+        )
+        .unwrap();
+        let request = TranslationRequest::new(std::iter::empty::<String>(), Language::English)
+            .with_terminology([TerminologyEntry {
+                source: "x".repeat(MAX_TERMINOLOGY_PROMPT_BYTES),
+                translation: "target".to_owned(),
+                kind: TerminologyKind::Term,
+            }]);
+        let actual = serde_json::to_vec(&request.terminology).unwrap().len();
+
+        let error = translator
+            .translate(&openai_selection(), GenerationConfig::default(), request)
+            .await
+            .unwrap_err();
+
+        assert!(actual > MAX_TERMINOLOGY_PROMPT_BYTES);
+        assert!(matches!(
+            error.downcast_ref::<Error>(),
+            Some(Error::TerminologyPromptTooLarge {
+                actual: error_actual,
+                max: MAX_TERMINOLOGY_PROMPT_BYTES,
+            }) if *error_actual == actual
+        ));
+    }
+
     #[test]
     fn unsupported_providers_reject_system_prompt_requests_before_dispatch() {
         let request = TranslationRequest::new(["hello"], Language::English).with_terminology([
             TerminologyEntry {
-                source: "name".to_owned(),
+                source: "x".repeat(MAX_TERMINOLOGY_PROMPT_BYTES),
                 translation: "Name".to_owned(),
                 kind: TerminologyKind::Person,
             },

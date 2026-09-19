@@ -5,7 +5,33 @@ use indoc::indoc;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 
-use crate::{Error, Language, TranslationContext, TranslationRequest};
+use crate::{Error, Language, Result as TranslatorResult, TranslationContext, TranslationRequest};
+
+pub(crate) fn serialized_terminology(
+    request: &TranslationRequest,
+) -> TranslatorResult<Option<String>> {
+    if request.terminology.is_empty() {
+        return Ok(None);
+    }
+
+    let mut terminology = request.terminology.iter().collect::<Vec<_>>();
+    terminology.sort_by(|left, right| {
+        left.kind
+            .cmp(&right.kind)
+            .then_with(|| left.source.cmp(&right.source))
+            .then_with(|| left.translation.cmp(&right.translation))
+    });
+    let serialized = serde_json::to_string(&terminology)
+        .context("failed to serialize translation terminology")?;
+    let actual = serialized.len();
+    if actual > crate::MAX_TERMINOLOGY_PROMPT_BYTES {
+        return Err(Error::TerminologyPromptTooLarge {
+            actual,
+            max: crate::MAX_TERMINOLOGY_PROMPT_BYTES,
+        });
+    }
+    Ok(Some(serialized))
+}
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
     let input = TranslationInput {
@@ -163,24 +189,7 @@ fn translation_system_prompt(request: &TranslationRequest) -> anyhow::Result<Str
         "}.trim_end());
     }
 
-    if !request.terminology.is_empty() {
-        let mut terminology = request.terminology.iter().collect::<Vec<_>>();
-        terminology.sort_by(|left, right| {
-            left.kind
-                .cmp(&right.kind)
-                .then_with(|| left.source.cmp(&right.source))
-                .then_with(|| left.translation.cmp(&right.translation))
-        });
-        let serialized = serde_json::to_string(&terminology)
-            .context("failed to serialize translation terminology")?;
-        let actual = serialized.len();
-        if actual > crate::MAX_TERMINOLOGY_PROMPT_BYTES {
-            return Err(Error::TerminologyPromptTooLarge {
-                actual,
-                max: crate::MAX_TERMINOLOGY_PROMPT_BYTES,
-            }
-            .into());
-        }
+    if let Some(serialized) = serialized_terminology(request)? {
         prompt.push_str("\n\n");
         prompt.push_str(
             indoc! {"
