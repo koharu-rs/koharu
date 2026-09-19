@@ -2,6 +2,8 @@ pub(crate) mod agent;
 pub(crate) mod canvas;
 pub(crate) mod editing;
 pub(crate) mod fonts;
+#[allow(dead_code, unused_imports)]
+pub(crate) mod glossary;
 pub(crate) mod import;
 pub(crate) mod lifecycle;
 pub(crate) mod output;
