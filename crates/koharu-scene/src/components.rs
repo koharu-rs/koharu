@@ -6,6 +6,7 @@
 
 mod analysis;
 mod assets;
+mod glossary;
 mod groups;
 mod layers;
 mod provenance;
@@ -18,6 +19,10 @@ pub use analysis::{
 };
 pub(crate) use assets::Assets;
 pub use assets::{Asset, AssetInput, AssetMetadata, AssetRole};
+pub use glossary::{
+    GLOSSARY_EXAMPLE_MAX_CHARS, GLOSSARY_MAX_EXAMPLES, GLOSSARY_TEXT_MAX_CHARS, Glossary,
+    GlossaryEntry, GlossaryEntryId, GlossaryKind, GlossaryValueOrigin, normalize_glossary_source,
+};
 pub use groups::{Group, TextGroup};
 pub use layers::{
     FontStyle, RasterLayer, RasterLayerKind, TextAlignment, TextLayout, TextLayoutKind, Typography,

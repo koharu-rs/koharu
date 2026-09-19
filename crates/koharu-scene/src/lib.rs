@@ -25,10 +25,12 @@ pub use change::{
 pub use component::{Component, ValidationContext};
 pub use components::{
     Asset, AssetInput, AssetMetadata, AssetRole, Authored, DetectionAnalysis, DetectionLabel,
-    EntityOrigin, FontStyle, Generation, Geometry, Group, LanguageTag, OcrAnalysis, Origin, Page,
-    PageDraft, Point, Project, RasterLayer, RasterLayerKind, Region, RegionKind, Relation,
-    RelationKind, SourceText, TextAlignment, TextContent, TextDirection, TextGroup, TextLayout,
-    TextLayoutKind, TextRole, Translation, Typography, Visibility, WritingMode,
+    EntityOrigin, FontStyle, GLOSSARY_EXAMPLE_MAX_CHARS, GLOSSARY_MAX_EXAMPLES,
+    GLOSSARY_TEXT_MAX_CHARS, Generation, Geometry, Glossary, GlossaryEntry, GlossaryEntryId,
+    GlossaryKind, GlossaryValueOrigin, Group, LanguageTag, OcrAnalysis, Origin, Page, PageDraft,
+    Point, Project, RasterLayer, RasterLayerKind, Region, RegionKind, Relation, RelationKind,
+    SourceText, TextAlignment, TextContent, TextDirection, TextGroup, TextLayout, TextLayoutKind,
+    TextRole, Translation, Typography, Visibility, WritingMode, normalize_glossary_source,
 };
 pub use document::{AnalysisRegionRef, GroupRef, TextContentRef, TextLayerRef};
 pub use edit::{At, Edit, RemovePolicy};

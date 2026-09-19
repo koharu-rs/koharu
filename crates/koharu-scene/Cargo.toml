@@ -16,6 +16,7 @@ blake3 = { workspace = true }
 bytes = { workspace = true }
 imbl = { workspace = true }
 hashbrown = { workspace = true }
+icu_normalizer = { workspace = true }
 koharu-storage = { workspace = true }
 revision = { workspace = true }
 serde = { workspace = true }

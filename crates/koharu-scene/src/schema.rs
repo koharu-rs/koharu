@@ -5,9 +5,9 @@
 //! relation endpoints.
 
 use crate::{
-    BubbleRegion, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis,
-    Page, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText, TextContent,
-    TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
+    BubbleRegion, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Glossary, Group,
+    OcrAnalysis, Page, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText,
+    TextContent, TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
     component::{Component, ComponentRecord, ValidationContext, decode, key},
     components::Assets,
     state::{Components, State},
@@ -60,6 +60,7 @@ component_schema! {
     DETECTION_ANALYSIS = 15 => DetectionAnalysis,
     ASSETS = 16 => Assets,
     ENTITY_ORIGIN = 17 => EntityOrigin,
+    GLOSSARY = 18 => Glossary,
 }
 
 pub(crate) fn validate_components(

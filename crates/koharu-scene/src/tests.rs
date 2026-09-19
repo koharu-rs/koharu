@@ -110,6 +110,7 @@ async fn built_in_component_schema_revisions_are_explicit() {
     assert_eq!(
         [
             schema::<Project>(),
+            schema::<Glossary>(),
             schema::<Page>(),
             schema::<RasterLayer>(),
             schema::<Geometry>(),
@@ -128,7 +129,7 @@ async fn built_in_component_schema_revisions_are_explicit() {
             schema::<crate::components::Assets>(),
             schema::<Relation>(),
         ],
-        [1; 18]
+        [1; 19]
     );
     assert_eq!(schema::<TextLayout>(), 2);
 }
@@ -138,6 +139,7 @@ async fn built_in_component_kinds_express_domain_ownership() {
     assert_eq!(
         [
             Project::KIND,
+            Glossary::KIND,
             Page::KIND,
             EntityOrigin::KIND,
             Relation::KIND,
@@ -159,6 +161,7 @@ async fn built_in_component_kinds_express_domain_ownership() {
         ],
         [
             "dev.koharu.project",
+            "dev.koharu.glossary",
             "dev.koharu.page",
             "dev.koharu.entity.origin",
             "dev.koharu.relation",
@@ -1557,4 +1560,200 @@ async fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
         rerun.remove_entity(entity, RemovePolicy::Cascade),
         Err(Error::Authorship(_))
     ));
+}
+
+fn glossary_entry(source: &str) -> GlossaryEntry {
+    GlossaryEntry {
+        id: GlossaryEntryId::new(),
+        source: source.to_owned(),
+        translation: Some("Alice".to_owned()),
+        kind: GlossaryKind::Person,
+        enabled: true,
+        confidence: Some(0.9),
+        occurrence_count: 2,
+        examples: vec!["アリスさん".to_owned()],
+        source_origin: GlossaryValueOrigin::Detected,
+        translation_origin: Some(GlossaryValueOrigin::Automatic),
+        present_in_last_scan: true,
+    }
+}
+
+fn glossary_with(entries: Vec<GlossaryEntry>) -> Glossary {
+    Glossary {
+        enabled: true,
+        source_language: Some(LanguageTag::new("ja").unwrap()),
+        target_language: Some(LanguageTag::new("en").unwrap()),
+        source_fingerprint: Some("ocr-fingerprint".to_owned()),
+        entries,
+    }
+}
+
+async fn assert_invalid_glossary(glossary: Glossary) {
+    let session = Session::memory().await.unwrap();
+    assert!(
+        session
+            .snapshot()
+            .patch(|edit| edit.set_project(&glossary))
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn glossary_project_component_round_trips_through_snapshot() {
+    let mut session = Session::memory().await.unwrap();
+    let glossary = glossary_with(vec![glossary_entry("アリス")]);
+    let patch = session
+        .snapshot()
+        .patch(|edit| edit.set_project(&glossary))
+        .unwrap();
+    let commit = session.commit(patch).await.unwrap();
+
+    assert_eq!(
+        commit.snapshot.project_component::<Glossary>().unwrap(),
+        Some(glossary)
+    );
+    assert!(commit.changes.components.iter().any(|change| {
+        change.owner == ComponentOwner::Project && change.kind == Glossary::KIND
+    }));
+}
+
+#[tokio::test]
+async fn glossary_project_component_changes_support_commit_undo_and_redo() {
+    let mut session = Session::memory().await.unwrap();
+    let original = glossary_with(vec![glossary_entry("アリス")]);
+    let create = session
+        .snapshot()
+        .patch(|edit| edit.set_project(&original))
+        .unwrap();
+    session.commit(create).await.unwrap();
+
+    let mut changed = original.clone();
+    changed.entries[0].translation = Some("Alicia".to_owned());
+    changed.entries[0].translation_origin = Some(GlossaryValueOrigin::User);
+    let update = session
+        .snapshot()
+        .patch(|edit| edit.set_project(&changed))
+        .unwrap();
+    let update = session.commit(update).await.unwrap();
+
+    let undo = session.undo(update.revision).await.unwrap();
+    assert_eq!(
+        undo.snapshot.project_component::<Glossary>().unwrap(),
+        Some(original)
+    );
+
+    let redo = session.undo(undo.revision).await.unwrap();
+    assert_eq!(
+        redo.snapshot.project_component::<Glossary>().unwrap(),
+        Some(changed)
+    );
+}
+
+#[test]
+fn glossary_source_normalization_applies_nfkc_whitespace_and_ascii_lowercase() {
+    assert_eq!(
+        normalize_glossary_source("  Ａlice\t THE   勇者  "),
+        "alice the 勇者"
+    );
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_duplicate_entry_ids() {
+    let first = glossary_entry("アリス");
+    let mut second = glossary_entry("ボブ");
+    second.id = first.id;
+    assert_invalid_glossary(glossary_with(vec![first, second])).await;
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_empty_sources() {
+    let mut entry = glossary_entry("アリス");
+    entry.source = "　 \t".to_owned();
+    assert_invalid_glossary(glossary_with(vec![entry])).await;
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_duplicate_normalized_source_and_kind() {
+    let first = glossary_entry("Ａlice  Smith");
+    let mut second = glossary_entry("alice\t smith");
+    second.kind = first.kind;
+    assert_invalid_glossary(glossary_with(vec![first, second])).await;
+}
+
+#[tokio::test]
+async fn glossary_validation_allows_the_same_normalized_source_for_different_kinds() {
+    let first = glossary_entry("Ａlice");
+    let mut second = glossary_entry("alice");
+    second.kind = GlossaryKind::Place;
+    let glossary = glossary_with(vec![first, second]);
+    let session = Session::memory().await.unwrap();
+    assert!(
+        session
+            .snapshot()
+            .patch(|edit| edit.set_project(&glossary))
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_prohibited_control_characters() {
+    for value in ["bad\0source", "bad\nsource"] {
+        let mut entry = glossary_entry("アリス");
+        entry.source = value.to_owned();
+        assert_invalid_glossary(glossary_with(vec![entry])).await;
+    }
+
+    let mut translation = glossary_entry("アリス");
+    translation.translation = Some("bad\u{7f}translation".to_owned());
+    assert_invalid_glossary(glossary_with(vec![translation])).await;
+
+    let mut example = glossary_entry("アリス");
+    example.examples = vec!["bad\u{85}example".to_owned()];
+    assert_invalid_glossary(glossary_with(vec![example])).await;
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_overlong_source_and_translation() {
+    let mut source = glossary_entry("アリス");
+    source.source = "語".repeat(GLOSSARY_TEXT_MAX_CHARS + 1);
+    assert_invalid_glossary(glossary_with(vec![source])).await;
+
+    let mut translation = glossary_entry("アリス");
+    translation.translation = Some("a".repeat(GLOSSARY_TEXT_MAX_CHARS + 1));
+    assert_invalid_glossary(glossary_with(vec![translation])).await;
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_invalid_confidence() {
+    for confidence in [f32::NAN, f32::INFINITY, -0.01, 1.01] {
+        let mut entry = glossary_entry("アリス");
+        entry.confidence = Some(confidence);
+        assert_invalid_glossary(glossary_with(vec![entry])).await;
+    }
+}
+
+#[tokio::test]
+async fn glossary_validation_rejects_too_many_or_overlong_examples() {
+    let mut too_many = glossary_entry("アリス");
+    too_many.examples = vec!["one".to_owned(); GLOSSARY_MAX_EXAMPLES + 1];
+    assert_invalid_glossary(glossary_with(vec![too_many])).await;
+
+    let mut too_long = glossary_entry("アリス");
+    too_long.examples = vec!["例".repeat(GLOSSARY_EXAMPLE_MAX_CHARS + 1)];
+    assert_invalid_glossary(glossary_with(vec![too_long])).await;
+}
+
+#[tokio::test]
+async fn glossary_validation_allows_enabled_untranslated_entries() {
+    let mut entry = glossary_entry("アリス");
+    entry.translation = None;
+    entry.translation_origin = None;
+    let glossary = glossary_with(vec![entry]);
+    let session = Session::memory().await.unwrap();
+    assert!(
+        session
+            .snapshot()
+            .patch(|edit| edit.set_project(&glossary))
+            .is_ok()
+    );
 }

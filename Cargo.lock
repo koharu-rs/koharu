@@ -5087,6 +5087,7 @@ dependencies = [
  "bytes",
  "criterion",
  "hashbrown 0.17.1",
+ "icu_normalizer",
  "imbl",
  "koharu-storage",
  "revision",
