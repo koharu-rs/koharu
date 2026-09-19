@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Providers from '@/app/providers'
 import { call } from '@/lib/backend'
-import { useProject } from '@/lib/queries'
+import { glossaryKey, queryClient, useGlossary, useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands } from '@koharu/bridge'
-import type { Preferences, ProjectInfo, StartupState } from '@koharu/bridge/protocol'
+import type { GlossaryView, Preferences, ProjectInfo, StartupState } from '@koharu/bridge/protocol'
 
 const preferences: Preferences = {
   pipeline: {
@@ -45,6 +45,17 @@ const project: ProjectInfo = {
   can_redo: false,
 }
 
+const glossary: GlossaryView = {
+  revision: 3,
+  enabled: true,
+  stale: false,
+  sourceLanguage: 'ja',
+  targetLanguage: 'en',
+  savedSourceFingerprint: 'saved',
+  currentSourceFingerprint: 'saved',
+  entries: [],
+}
+
 beforeEach(() => {
   vi.spyOn(commands, 'getTranslationModels').mockResolvedValue([])
 })
@@ -78,6 +89,12 @@ function ProjectProbe() {
     null,
     project === undefined ? 'Loading' : (project?.name ?? 'Closed'),
   )
+}
+
+function GlossaryProbe() {
+  const project = useProject().data
+  const glossary = useGlossary(project?.name).data
+  return createElement('span', null, glossary ? `Glossary ${glossary.revision}` : 'No glossary')
 }
 
 describe('application runtime', () => {
@@ -179,6 +196,67 @@ describe('application runtime', () => {
     })
 
     expect(await screen.findByText('Book')).toBeInTheDocument()
+    view.unmount()
+  })
+
+  it('does not refetch glossary for progress and refetches on terminal glossary transition', async () => {
+    vi.spyOn(commands, 'getProject').mockResolvedValue(project)
+    const getGlossary = vi.spyOn(commands, 'getGlossary').mockResolvedValue(glossary)
+    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
+    const view = render(createElement(Providers, null, createElement(GlossaryProbe)))
+    expect(await screen.findByText('Glossary 3')).toBeInTheDocument()
+    expect(getGlossary).toHaveBeenCalledOnce()
+
+    const [, jobChannel] = binding.mock.calls[0]
+    act(() => {
+      jobChannel.onmessage({
+        id: 'pipeline',
+        kind: 'pipeline',
+        phase: { kind: 'pipeline', stage: 'ocr' },
+        state: 'running',
+        completed: 1,
+        total: 3,
+        page: 'page',
+        error: null,
+      })
+      jobChannel.onmessage({
+        id: 'glossary',
+        kind: 'glossary_scan',
+        phase: { kind: 'extracting_terms' },
+        state: 'running',
+        completed: 1,
+        total: 3,
+        page: null,
+        error: null,
+      })
+      jobChannel.onmessage({
+        id: 'glossary',
+        kind: 'glossary_scan',
+        phase: { kind: 'extracting_terms' },
+        state: 'running',
+        completed: 2,
+        total: 3,
+        page: null,
+        error: null,
+      })
+    })
+    await act(async () => undefined)
+    expect(getGlossary).toHaveBeenCalledOnce()
+
+    act(() => {
+      jobChannel.onmessage({
+        id: 'glossary',
+        kind: 'glossary_scan',
+        phase: { kind: 'extracting_terms' },
+        state: 'finished',
+        completed: 3,
+        total: 3,
+        page: null,
+        error: null,
+      })
+    })
+    await waitFor(() => expect(getGlossary).toHaveBeenCalledTimes(2))
+    expect(queryClient.getQueryData(glossaryKey(project.name))).toEqual(glossary)
     view.unmount()
   })
 })

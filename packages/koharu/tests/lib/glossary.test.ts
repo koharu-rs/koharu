@@ -116,44 +116,83 @@ describe('glossary helpers', () => {
     expect(() => parseGlossaryDocument('[]')).toThrow('document')
   })
 
-  it('serializes inline edits and marks only the newest response as current', async () => {
+  it('publishes only the newest full view while serializing edits to different entries', async () => {
     const first = Promise.withResolvers<GlossaryView>()
     const second = Promise.withResolvers<GlossaryView>()
     const execute = vi
       .fn<(revision: number, id: string, patch: GlossaryEntryPatch) => Promise<GlossaryView>>()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
-    const accepted: string[] = []
+    const published: GlossaryView[] = []
     const queue = createGlossaryEntryUpdateQueue({
       initialRevision: 1,
       execute,
       onResponse: (response, current) => {
-        if (current) accepted.push(response.entries[0]!.source)
+        if (current) published.push(response)
       },
     })
-    const base = { ...entries[0]!, source: 'first' }
-    const firstUpdate = queue.enqueue('haruka', base)
-    const secondUpdate = queue.enqueue('haruka', { ...base, source: 'second' })
+    const firstUpdate = queue.enqueue('haruka', { ...entries[0]!, source: '春香 first' })
+    const secondUpdate = queue.enqueue('academy', {
+      ...entries[1]!,
+      translation: 'Moonlight Academy',
+    })
 
     expect(execute).toHaveBeenCalledExactlyOnceWith(1, 'haruka', {
-      source: 'first',
+      source: '春香 first',
       translation: 'Haruka',
       kind: 'person',
       enabled: true,
     })
-    first.resolve(view(2, 'first'))
+    const firstView = view(2, '春香 first')
+    first.resolve(firstView)
     await firstUpdate
-    expect(execute).toHaveBeenLastCalledWith(2, 'haruka', {
-      source: 'second',
+    expect(execute).toHaveBeenLastCalledWith(2, 'academy', {
+      source: '月影学園',
+      translation: 'Moonlight Academy',
+      kind: 'organization',
+      enabled: true,
+    })
+    expect(published).toEqual([])
+
+    const secondView = {
+      ...firstView,
+      revision: 3,
+      entries: firstView.entries.map((entry) =>
+        entry.id === 'academy'
+          ? { ...entry, revision: 3, translation: 'Moonlight Academy' }
+          : { ...entry, revision: 3 },
+      ),
+    }
+    second.resolve(secondView)
+    await secondUpdate
+    expect(published).toEqual([secondView])
+  })
+
+  it('preserves a newer external revision for the next serialized edit', async () => {
+    const first = Promise.withResolvers<GlossaryView>()
+    const execute = vi
+      .fn<(revision: number, id: string, patch: GlossaryEntryPatch) => Promise<GlossaryView>>()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(view(12, 'latest'))
+    const queue = createGlossaryEntryUpdateQueue({
+      initialRevision: 7,
+      execute,
+      onResponse: vi.fn(),
+    })
+
+    const firstUpdate = queue.enqueue('haruka', { ...entries[0]!, source: 'first' })
+    const secondUpdate = queue.enqueue('haruka', { ...entries[0]!, source: 'latest' })
+    queue.setRevision(11)
+    first.resolve(view(8, 'first'))
+    await firstUpdate
+    await secondUpdate
+
+    expect(execute).toHaveBeenNthCalledWith(2, 11, 'haruka', {
+      source: 'latest',
       translation: 'Haruka',
       kind: 'person',
       enabled: true,
     })
-    expect(accepted).toEqual([])
-
-    second.resolve(view(3, 'second'))
-    await secondUpdate
-    expect(accepted).toEqual(['second'])
   })
 
   it('drops queued edits after a revision conflict instead of replaying them', async () => {

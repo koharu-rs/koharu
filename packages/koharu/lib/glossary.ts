@@ -116,8 +116,8 @@ export function createGlossaryEntryUpdateQueue({
 }: UpdateQueueOptions): GlossaryEntryUpdateQueue {
   let revision = initialRevision
   let running = false
+  let generation = 0
   const pending: PendingUpdate[] = []
-  const generations = new Map<string, number>()
 
   const run = async () => {
     if (running) return
@@ -126,8 +126,8 @@ export function createGlossaryEntryUpdateQueue({
       const update = pending.shift()!
       try {
         const response = await execute(revision, update.id, update.patch)
-        revision = response.revision
-        const current = generations.get(update.id) === update.generation
+        revision = Math.max(revision, response.revision)
+        const current = generation === update.generation
         await onResponse(response, current)
         update.resolve(response)
       } catch (error) {
@@ -141,8 +141,7 @@ export function createGlossaryEntryUpdateQueue({
 
   return {
     enqueue(id, patch) {
-      const generation = (generations.get(id) ?? 0) + 1
-      generations.set(id, generation)
+      generation += 1
       const promise = new Promise<GlossaryView>((resolve, reject) => {
         pending.push({ id, patch: entryPatch(patch), generation, resolve, reject })
       })

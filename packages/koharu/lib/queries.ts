@@ -3,7 +3,6 @@
 import {
   QueryClient,
   type QueryKey,
-  type UseMutationResult,
   queryOptions,
   useIsMutating,
   useMutation,
@@ -16,18 +15,18 @@ import type {
   FontFamily,
   GlossaryEntryDraft,
   GlossaryEntryPatch,
-  GlossaryImportPreview,
   GlossaryImportStrategy,
   GlossaryView,
+  ProjectInfo,
 } from '@koharu/bridge/protocol'
 
-import { call } from './backend'
+import { call, reportError } from './backend'
 import { createGlossaryEntryUpdateQueue, type GlossaryEntryUpdateQueue } from './glossary'
 
 export const projectKey = ['project'] as const
 export const pagesKey = ['pages'] as const
 export const pageKey = ['page'] as const
-export const glossaryKey = ['glossary'] as const
+export const glossaryKey = (projectName: string | undefined) => ['glossary', projectName] as const
 export const preparedPageKey = (page: string) => ['prepared-page', page] as const
 export const fontsKey = ['fonts'] as const
 
@@ -44,11 +43,6 @@ const pagesQuery = queryOptions({
 const pageQuery = queryOptions({
   queryKey: pageKey,
   queryFn: () => call(commands.getPage),
-})
-
-const glossaryQuery = queryOptions({
-  queryKey: glossaryKey,
-  queryFn: () => call(commands.getGlossary),
 })
 
 const fontsQuery = queryOptions({
@@ -79,8 +73,12 @@ export function usePage(enabled = true) {
   return useQuery({ ...pageQuery, enabled })
 }
 
-export function useGlossary(enabled = true) {
-  return useQuery({ ...glossaryQuery, enabled })
+export function useGlossary(projectName: string | undefined) {
+  return useQuery({
+    queryKey: glossaryKey(projectName),
+    queryFn: () => commands.getGlossary(),
+    enabled: projectName !== undefined,
+  })
 }
 
 export function useFonts(enabled = true) {
@@ -126,112 +124,188 @@ export function useImportPages() {
   return { importPages: run, importing: busy }
 }
 
-async function updateGlossaryCaches(view?: GlossaryView): Promise<void> {
-  if (view) queryClient.setQueryData(glossaryKey, view)
-  await refresh(projectKey, glossaryKey)
+interface GlossaryScope {
+  projectName: string | undefined
+  generation: number
 }
 
-async function recoverGlossaryMutation(): Promise<void> {
-  await refresh(projectKey, glossaryKey)
+function useGlossaryScope(projectName: string | undefined) {
+  const scope = useRef<GlossaryScope>({ projectName, generation: 0 })
+  if (scope.current.projectName !== projectName) {
+    scope.current = { projectName, generation: scope.current.generation + 1 }
+  }
+  return scope
 }
 
-export function useScanGlossary() {
+function captureGlossaryScope(scope: { current: GlossaryScope }): GlossaryScope {
+  return { ...scope.current }
+}
+
+function currentProjectName(): string | undefined {
+  return queryClient.getQueryData<ProjectInfo | null>(projectKey)?.name
+}
+
+function glossaryScopeIsCurrent(
+  scope: { current: GlossaryScope },
+  captured: GlossaryScope | undefined,
+): captured is GlossaryScope & { projectName: string } {
+  return (
+    captured !== undefined &&
+    captured.projectName !== undefined &&
+    captured.projectName === scope.current.projectName &&
+    captured.generation === scope.current.generation &&
+    captured.projectName === currentProjectName()
+  )
+}
+
+async function updateGlossaryCaches(
+  scope: { current: GlossaryScope },
+  captured: GlossaryScope | undefined,
+  view?: GlossaryView,
+): Promise<void> {
+  if (!glossaryScopeIsCurrent(scope, captured)) return
+  const key = glossaryKey(captured.projectName)
+  if (view) {
+    const project = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+    if (!project || view.revision >= project.revision) queryClient.setQueryData(key, view)
+  }
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: projectKey, exact: true }),
+    queryClient.invalidateQueries({ queryKey: key, exact: true }),
+  ])
+}
+
+async function recoverGlossaryMutation(
+  scope: { current: GlossaryScope },
+  captured: GlossaryScope | undefined,
+  error: unknown,
+): Promise<void> {
+  if (!glossaryScopeIsCurrent(scope, captured)) return
+  reportError(error)
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: projectKey, exact: true }),
+    queryClient.invalidateQueries({ queryKey: glossaryKey(captured.projectName), exact: true }),
+  ])
+}
+
+export function useScanGlossary(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'scan'],
-    mutationFn: () => call(commands.scanGlossary),
+    mutationKey: ['glossary', projectName, 'scan'],
+    mutationFn: () => commands.scanGlossary(),
     meta: { activity: 'glossary.scanning' },
-    onSuccess: () => updateGlossaryCaches(),
-    onError: recoverGlossaryMutation,
+    onMutate: () => captureGlossaryScope(scope),
+    onSuccess: (_, __, captured) => updateGlossaryCaches(scope, captured),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 
-export function useSetGlossaryEnabled() {
+export function useSetGlossaryEnabled(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'toggle'],
+    mutationKey: ['glossary', projectName, 'toggle'],
     mutationFn: ({ revision, enabled }: { revision: number; enabled: boolean }) =>
-      call(commands.setGlossaryEnabled, revision, enabled),
-    onSuccess: updateGlossaryCaches,
-    onError: recoverGlossaryMutation,
+      commands.setGlossaryEnabled(revision, enabled),
+    onMutate: () => captureGlossaryScope(scope),
+    onSuccess: (view, _, captured) => updateGlossaryCaches(scope, captured, view),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 
-export function useAddGlossaryEntry() {
+export function useAddGlossaryEntry(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'add'],
+    mutationKey: ['glossary', projectName, 'add'],
     mutationFn: ({ revision, draft }: { revision: number; draft: GlossaryEntryDraft }) =>
-      call(commands.addGlossaryEntry, revision, draft),
-    onSuccess: updateGlossaryCaches,
-    onError: recoverGlossaryMutation,
+      commands.addGlossaryEntry(revision, draft),
+    onMutate: () => captureGlossaryScope(scope),
+    onSuccess: (view, _, captured) => updateGlossaryCaches(scope, captured, view),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 
-export function useUpdateGlossaryEntry(revision: number, scope = '') {
-  const owner = useRef<{ scope: string; queue: GlossaryEntryUpdateQueue } | null>(null)
-  if (owner.current === null || owner.current.scope !== scope) {
-    owner.current = {
-      scope,
+export function useUpdateGlossaryEntry(revision: number, projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
+  const owner = useRef<{
+    scope: GlossaryScope
+    queue: GlossaryEntryUpdateQueue
+  } | null>(null)
+  if (
+    owner.current === null ||
+    owner.current.scope.projectName !== scope.current.projectName ||
+    owner.current.scope.generation !== scope.current.generation
+  ) {
+    const ownerScope = captureGlossaryScope(scope)
+    let nextOwner!: { scope: GlossaryScope; queue: GlossaryEntryUpdateQueue }
+    nextOwner = {
+      scope: ownerScope,
       queue: createGlossaryEntryUpdateQueue({
         initialRevision: revision,
         execute: (expectedRevision, id, patch) =>
-          call(commands.updateGlossaryEntry, expectedRevision, id, patch),
+          commands.updateGlossaryEntry(expectedRevision, id, patch),
         onResponse: async (view, current) => {
-          if (current) queryClient.setQueryData(glossaryKey, view)
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: projectKey }),
-            queryClient.invalidateQueries({
-              queryKey: glossaryKey,
-              refetchType: current ? 'active' : 'none',
-            }),
-          ])
+          if (current && owner.current === nextOwner) {
+            await updateGlossaryCaches(scope, ownerScope, view)
+          }
         },
       }),
     }
+    owner.current = nextOwner
   }
   useEffect(() => owner.current?.queue.setRevision(revision), [revision])
 
   return useMutation({
-    mutationKey: ['glossary', 'update'],
-    mutationFn: ({ id, patch }: { id: string; patch: GlossaryEntryPatch }) =>
-      owner.current!.queue.enqueue(id, patch),
-    onError: recoverGlossaryMutation,
+    mutationKey: ['glossary', projectName, 'update'],
+    mutationFn: async ({ id, patch }: { id: string; patch: GlossaryEntryPatch }) => {
+      const mutationOwner = owner.current!
+      try {
+        return await mutationOwner.queue.enqueue(id, patch)
+      } catch (error) {
+        if (owner.current === mutationOwner) {
+          await recoverGlossaryMutation(scope, mutationOwner.scope, error)
+        }
+        throw error
+      }
+    },
   })
 }
 
-export function useDeleteGlossaryEntries() {
+export function useDeleteGlossaryEntries(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'delete'],
+    mutationKey: ['glossary', projectName, 'delete'],
     mutationFn: ({ revision, ids }: { revision: number; ids: string[] }) =>
-      call(commands.deleteGlossaryEntries, revision, ids),
-    onSuccess: updateGlossaryCaches,
-    onError: recoverGlossaryMutation,
+      commands.deleteGlossaryEntries(revision, ids),
+    onMutate: () => captureGlossaryScope(scope),
+    onSuccess: (view, _, captured) => updateGlossaryCaches(scope, captured, view),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 
-export function useTranslateGlossaryEntries() {
+export function useTranslateGlossaryEntries(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'translate'],
+    mutationKey: ['glossary', projectName, 'translate'],
     mutationFn: ({ revision, ids }: { revision: number; ids: string[] | null }) =>
-      call(commands.translateGlossaryEntries, revision, ids),
+      commands.translateGlossaryEntries(revision, ids),
     meta: { activity: 'glossary.translating' },
-    onSuccess: () => updateGlossaryCaches(),
-    onError: recoverGlossaryMutation,
+    onMutate: () => captureGlossaryScope(scope),
+    onSuccess: (_, __, captured) => updateGlossaryCaches(scope, captured),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 
-export function usePreviewGlossaryImport(): UseMutationResult<
-  GlossaryImportPreview,
-  Error,
-  string
-> {
+export function usePreviewGlossaryImport(projectName: string | undefined) {
   return useMutation({
-    mutationKey: ['glossary', 'import-preview'],
-    mutationFn: (document: string) => call(commands.previewGlossaryImport, document),
+    mutationKey: ['glossary', projectName, 'import-preview'],
+    mutationFn: (document: string) => commands.previewGlossaryImport(document),
   })
 }
 
-export function useApplyGlossaryImport() {
+export function useApplyGlossaryImport(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'import-apply'],
+    mutationKey: ['glossary', projectName, 'import-apply'],
     mutationFn: ({
       revision,
       document,
@@ -242,17 +316,21 @@ export function useApplyGlossaryImport() {
       document: string
       strategy: GlossaryImportStrategy
       confirmLanguageMismatch: boolean
-    }) => call(commands.applyGlossaryImport, revision, document, strategy, confirmLanguageMismatch),
-    onSuccess: updateGlossaryCaches,
-    onError: recoverGlossaryMutation,
+    }) => commands.applyGlossaryImport(revision, document, strategy, confirmLanguageMismatch),
+    onMutate: () => captureGlossaryScope(scope),
+    onSuccess: (view, _, captured) => updateGlossaryCaches(scope, captured, view),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 
-export function useExportGlossary() {
+export function useExportGlossary(projectName: string | undefined) {
+  const scope = useGlossaryScope(projectName)
   return useMutation({
-    mutationKey: ['glossary', 'export'],
-    mutationFn: () => call(commands.exportGlossary),
+    mutationKey: ['glossary', projectName, 'export'],
+    mutationFn: () => commands.exportGlossary(),
     meta: { activity: 'glossary.exporting' },
+    onMutate: () => captureGlossaryScope(scope),
+    onError: (error, _, captured) => recoverGlossaryMutation(scope, captured, error),
   })
 }
 

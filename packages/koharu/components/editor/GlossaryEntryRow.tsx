@@ -1,7 +1,7 @@
 'use client'
 
 import { Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { glossaryKinds } from '@/lib/glossary'
@@ -39,6 +39,8 @@ export function GlossaryEntryRow({
   const { t } = useTranslation()
   const [source, setSource] = useState(entry.source)
   const [translation, setTranslation] = useState(entry.translation ?? '')
+  const cancelSourceBlur = useRef(false)
+  const cancelTranslationBlur = useRef(false)
 
   useEffect(() => {
     setSource(entry.source)
@@ -99,10 +101,18 @@ export function GlossaryEntryRow({
           disabled={disabled}
           className='h-7 px-2 text-[11px]'
           onChange={(event) => setSource(event.currentTarget.value)}
-          onBlur={saveSource}
+          onBlur={() => {
+            if (cancelSourceBlur.current) {
+              cancelSourceBlur.current = false
+              return
+            }
+            saveSource()
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') event.currentTarget.blur()
             if (event.key === 'Escape') {
+              event.preventDefault()
+              cancelSourceBlur.current = true
               setSource(entry.source)
               event.currentTarget.blur()
             }
@@ -115,10 +125,18 @@ export function GlossaryEntryRow({
           placeholder={t('glossary.untranslated')}
           className='h-7 px-2 text-[11px]'
           onChange={(event) => setTranslation(event.currentTarget.value)}
-          onBlur={saveTranslation}
+          onBlur={() => {
+            if (cancelTranslationBlur.current) {
+              cancelTranslationBlur.current = false
+              return
+            }
+            saveTranslation()
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') event.currentTarget.blur()
             if (event.key === 'Escape') {
+              event.preventDefault()
+              cancelTranslationBlur.current = true
               setTranslation(entry.translation ?? '')
               event.currentTarget.blur()
             }

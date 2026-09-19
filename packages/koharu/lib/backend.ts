@@ -24,7 +24,7 @@ export async function call<Args extends unknown[], Result>(
   try {
     return await command(...args)
   } catch (error) {
-    throw report(error)
+    throw reportError(error)
   }
 }
 
@@ -73,7 +73,7 @@ export function refreshTranslationModels(force = false): Promise<void> {
   return request
 }
 
-function report(error: unknown): Error {
+export function reportError(error: unknown): Error {
   const message =
     error instanceof Error
       ? error.message

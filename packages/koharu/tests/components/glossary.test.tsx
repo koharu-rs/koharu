@@ -21,6 +21,11 @@ const project: ProjectInfo = {
   can_redo: false,
 }
 
+const otherProject: ProjectInfo = {
+  ...project,
+  name: 'Other Book',
+}
+
 const entries: GlossaryEntryView[] = [
   {
     revision: 7,
@@ -80,12 +85,23 @@ function glossary(overrides: Partial<GlossaryView> = {}): GlossaryView {
   }
 }
 
+function glossaryWithSource(source: string, revision = 7): GlossaryView {
+  return glossary({
+    revision,
+    entries: entries.map((entry) => ({
+      ...entry,
+      revision,
+      source: entry.id === 'haruka' ? source : entry.source,
+    })),
+  })
+}
+
 function install(data: GlossaryView = glossary()) {
   queryClient.setQueryData(projectKey, project)
-  queryClient.setQueryData(glossaryKey, data)
+  queryClient.setQueryData(glossaryKey(project.name), data)
   vi.spyOn(commands, 'getProject').mockResolvedValue(project)
   vi.spyOn(commands, 'getGlossary').mockImplementation(
-    async () => queryClient.getQueryData<GlossaryView>(glossaryKey) ?? data,
+    async () => queryClient.getQueryData<GlossaryView>(glossaryKey(project.name)) ?? data,
   )
 }
 
@@ -113,6 +129,64 @@ describe('project glossary panel', () => {
     expect(screen.getByRole('tab', { name: 'Glossary' })).toHaveAttribute('aria-disabled', 'true')
   })
 
+  it('never renders the previous project glossary while the next project loads', async () => {
+    install(glossaryWithSource('Book term'))
+    const nextGlossary = Promise.withResolvers<GlossaryView>()
+    vi.spyOn(commands, 'getGlossary').mockReturnValue(nextGlossary.promise)
+    render(<GlossaryPanel />)
+    expect(screen.getByText('Book term')).toBeInTheDocument()
+
+    act(() => queryClient.setQueryData(projectKey, otherProject))
+
+    expect(await screen.findByText('Loading…')).toBeInTheDocument()
+    expect(screen.queryByText('Book term')).not.toBeInTheDocument()
+    nextGlossary.resolve(glossaryWithSource('Other term'))
+    expect(await screen.findByText('Other term')).toBeInTheDocument()
+    expect(queryClient.getQueryData(glossaryKey(project.name))).toMatchObject({ revision: 7 })
+    expect(queryClient.getQueryData(glossaryKey(otherProject.name))).toMatchObject({ revision: 7 })
+  })
+
+  it('ignores an old project update after a coincident new-project revision refresh', async () => {
+    install(glossaryWithSource('Book term'))
+    const oldUpdate = Promise.withResolvers<GlossaryView>()
+    const newProjectRefresh = Promise.withResolvers<GlossaryView>()
+    vi.spyOn(commands, 'updateGlossaryEntry').mockReturnValue(oldUpdate.promise)
+    const getProject = vi.spyOn(commands, 'getProject').mockResolvedValue(otherProject)
+    vi.spyOn(commands, 'getGlossary').mockReturnValue(newProjectRefresh.promise)
+    render(<GlossaryPanel />)
+
+    const source = screen.getByRole('textbox', { name: 'Source term Book term' })
+    fireEvent.change(source, { target: { value: 'Old pending edit' } })
+    fireEvent.blur(source)
+    await waitFor(() => expect(commands.updateGlossaryEntry).toHaveBeenCalledOnce())
+
+    const otherView = glossaryWithSource('Other term', 8)
+    act(() => {
+      queryClient.setQueryData(glossaryKey(otherProject.name), otherView)
+      queryClient.setQueryData(projectKey, { ...otherProject, revision: 8 })
+    })
+    act(() => {
+      void queryClient.invalidateQueries({ queryKey: glossaryKey(otherProject.name), exact: true })
+    })
+    expect(
+      await screen.findByRole('textbox', { name: 'Source term Other term' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Enable glossary' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    await act(async () => oldUpdate.resolve(glossaryWithSource('Old pending edit', 8)))
+
+    expect(getProject).not.toHaveBeenCalled()
+    expect(queryClient.getQueryData(glossaryKey(otherProject.name))).toEqual(otherView)
+    expect(screen.getByText('Other term')).toBeInTheDocument()
+    expect(screen.queryByText('Old pending edit')).not.toBeInTheDocument()
+
+    newProjectRefresh.resolve(glossaryWithSource('Other refreshed term', 8))
+    expect(await screen.findByText('Other refreshed term')).toBeInTheDocument()
+  })
+
   it('offers a first scan and changes to rescan when the glossary is stale', async () => {
     const user = userEvent.setup()
     install(glossary({ savedSourceFingerprint: null, entries: [] }))
@@ -123,7 +197,7 @@ describe('project glossary panel', () => {
     await user.click(screen.getByRole('button', { name: 'Scan glossary' }))
     await waitFor(() => expect(scan).toHaveBeenCalledOnce())
 
-    queryClient.setQueryData(glossaryKey, glossary({ stale: true }))
+    queryClient.setQueryData(glossaryKey(project.name), glossary({ stale: true }))
     view.rerender(
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
@@ -215,7 +289,125 @@ describe('project glossary panel', () => {
       ),
     )
     await waitFor(() =>
-      expect(queryClient.getQueryData<GlossaryView>(glossaryKey)?.revision).toBe(9),
+      expect(queryClient.getQueryData<GlossaryView>(glossaryKey(project.name))?.revision).toBe(9),
+    )
+  })
+
+  it('does not publish an older full view over a queued edit to another entry', async () => {
+    install()
+    const first = Promise.withResolvers<GlossaryView>()
+    const second = Promise.withResolvers<GlossaryView>()
+    const update = vi
+      .spyOn(commands, 'updateGlossaryEntry')
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    render(<GlossaryPanel />)
+    const source = screen.getByRole('textbox', { name: 'Source term 春香' })
+    const translation = screen.getByRole('textbox', { name: 'Translation for 月影学園' })
+
+    fireEvent.change(source, { target: { value: '春香 changed' } })
+    fireEvent.blur(source)
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    fireEvent.change(translation, { target: { value: 'Moonlight Academy' } })
+    fireEvent.blur(translation)
+    expect(update).toHaveBeenCalledTimes(1)
+
+    const firstView = glossary({
+      revision: 8,
+      entries: entries.map((entry) =>
+        entry.id === 'haruka' ? { ...entry, revision: 8, source: '春香 changed' } : entry,
+      ),
+    })
+    await act(async () => first.resolve(firstView))
+
+    expect(translation).toHaveValue('Moonlight Academy')
+    await waitFor(() =>
+      expect(update).toHaveBeenNthCalledWith(2, 8, 'academy', {
+        source: '月影学園',
+        translation: 'Moonlight Academy',
+        kind: 'organization',
+        enabled: true,
+      }),
+    )
+    const secondView = glossary({
+      revision: 9,
+      entries: firstView.entries.map((entry) =>
+        entry.id === 'academy'
+          ? { ...entry, revision: 9, translation: 'Moonlight Academy' }
+          : { ...entry, revision: 9 },
+      ),
+    })
+    await act(async () => second.resolve(secondView))
+    expect(queryClient.getQueryData(glossaryKey(project.name))).toEqual(secondView)
+  })
+
+  it('cancels source and translation edits with Escape without mutating', async () => {
+    install()
+    const update = vi.spyOn(commands, 'updateGlossaryEntry').mockResolvedValue(glossary())
+    render(<GlossaryPanel />)
+    const source = screen.getByRole('textbox', { name: 'Source term 春香' })
+    const translation = screen.getByRole('textbox', { name: 'Translation for 春香' })
+
+    fireEvent.focus(source)
+    fireEvent.change(source, { target: { value: 'cancel source' } })
+    fireEvent.keyDown(source, { key: 'Escape' })
+    expect(source).toHaveValue('春香')
+    fireEvent.focus(translation)
+    fireEvent.change(translation, { target: { value: 'cancel translation' } })
+    fireEvent.keyDown(translation, { key: 'Escape' })
+    expect(translation).toHaveValue('Haruka')
+    await act(async () => undefined)
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('saves source with Enter and translation with normal blur', async () => {
+    const user = userEvent.setup()
+    install()
+    const update = vi
+      .spyOn(commands, 'updateGlossaryEntry')
+      .mockResolvedValueOnce(glossaryWithSource('Entered source', 8))
+      .mockResolvedValueOnce(
+        glossary({
+          revision: 9,
+          entries: entries.map((entry) =>
+            entry.id === 'haruka'
+              ? {
+                  ...entry,
+                  revision: 9,
+                  source: 'Entered source',
+                  translation: 'Blurred translation',
+                }
+              : { ...entry, revision: 9 },
+          ),
+        }),
+      )
+    render(<GlossaryPanel />)
+    const source = screen.getByRole('textbox', { name: 'Source term 春香' })
+
+    await user.clear(source)
+    await user.type(source, 'Entered source{Enter}')
+    await waitFor(() =>
+      expect(update).toHaveBeenNthCalledWith(1, 7, 'haruka', {
+        source: 'Entered source',
+        translation: 'Haruka',
+        kind: 'person',
+        enabled: true,
+      }),
+    )
+
+    const translation = await screen.findByRole('textbox', {
+      name: 'Translation for Entered source',
+    })
+    await user.clear(translation)
+    await user.type(translation, 'Blurred translation')
+    await user.tab()
+    await waitFor(() =>
+      expect(update).toHaveBeenNthCalledWith(2, 8, 'haruka', {
+        source: 'Entered source',
+        translation: 'Blurred translation',
+        kind: 'person',
+        enabled: true,
+      }),
     )
   })
 
@@ -254,12 +446,12 @@ describe('project glossary panel', () => {
     await user.clear(screen.getByRole('searchbox', { name: 'Search glossary' }))
 
     await user.click(screen.getByRole('combobox', { name: 'Category filter' }))
-    await user.click(screen.getByRole('option', { name: 'Organization' }))
+    await user.click(await screen.findByRole('option', { name: 'Organization' }))
     expect(screen.getByText('月影学園')).toBeInTheDocument()
     expect(screen.queryByText('春香')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('combobox', { name: 'State filter' }))
-    await user.click(screen.getByRole('option', { name: 'Not present' }))
+    await user.click(await screen.findByRole('option', { name: 'Not present' }))
     expect(screen.getByText('月影学園')).toBeInTheDocument()
     expect(screen.getByText('Not present in the latest scan')).toBeInTheDocument()
   })
@@ -347,6 +539,140 @@ describe('project glossary panel', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Import despite language mismatch' }))
     await user.click(screen.getByRole('button', { name: 'Import glossary' }))
     await waitFor(() => expect(apply).toHaveBeenCalledWith(7, text, 'replace_existing', true))
+  })
+
+  it('keeps only the latest overlapping import preview and disables conflicting actions', async () => {
+    install()
+    const first = Promise.withResolvers<{
+      added: number
+      conflicting: number
+      identical: number
+      languageMismatches: []
+    }>()
+    const second = Promise.withResolvers<{
+      added: number
+      conflicting: number
+      identical: number
+      languageMismatches: []
+    }>()
+    const preview = vi
+      .spyOn(commands, 'previewGlossaryImport')
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    const apply = vi
+      .spyOn(commands, 'applyGlossaryImport')
+      .mockResolvedValue(glossary({ revision: 8 }))
+    const view = render(<GlossaryPanel />)
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement
+    const firstDocument = '{"format":"koharu-glossary","version":1,"entries":[{"source":"first"}]}'
+    const secondDocument =
+      '{"format":"koharu-glossary","version":1,"entries":[{"source":"second"}]}'
+
+    fireEvent.change(input, {
+      target: { files: [new File([firstDocument], 'first.json', { type: 'application/json' })] },
+    })
+    await waitFor(() => expect(preview).toHaveBeenCalledWith(firstDocument))
+    expect(screen.getByRole('button', { name: 'Glossary actions' })).toBeDisabled()
+    fireEvent.change(input, {
+      target: { files: [new File([secondDocument], 'second.json', { type: 'application/json' })] },
+    })
+    await waitFor(() => expect(preview).toHaveBeenCalledWith(secondDocument))
+
+    await act(async () =>
+      second.resolve({ added: 9, conflicting: 2, identical: 3, languageMismatches: [] }),
+    )
+    expect(await screen.findByText('9 to add')).toBeInTheDocument()
+    await act(async () =>
+      first.resolve({ added: 1, conflicting: 0, identical: 0, languageMismatches: [] }),
+    )
+    expect(screen.getByText('9 to add')).toBeInTheDocument()
+    expect(screen.queryByText('1 to add')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import glossary' }))
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith(7, secondDocument, 'keep_existing', false),
+    )
+  })
+
+  it('ignores an obsolete import preview rejection after switching projects', async () => {
+    install()
+    const pending = Promise.withResolvers<never>()
+    vi.spyOn(commands, 'previewGlossaryImport').mockReturnValue(pending.promise)
+    const errorToast = vi.spyOn(toast, 'add')
+    const view = render(<GlossaryPanel />)
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement
+    const document = '{"format":"koharu-glossary","version":1,"entries":[]}'
+
+    fireEvent.change(input, {
+      target: { files: [new File([document], 'old.json', { type: 'application/json' })] },
+    })
+    await waitFor(() => expect(commands.previewGlossaryImport).toHaveBeenCalledOnce())
+    act(() => {
+      queryClient.setQueryData(glossaryKey(otherProject.name), glossaryWithSource('Other term'))
+      queryClient.setQueryData(projectKey, otherProject)
+    })
+    expect(await screen.findByText('Other term')).toBeInTheDocument()
+    await act(async () => pending.reject(new Error('old project preview failed')))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(errorToast).not.toHaveBeenCalled()
+    expect(screen.getByText('Other term')).toBeInTheDocument()
+  })
+
+  it('reports a valid JSON document rejected by backend schema validation', async () => {
+    install()
+    vi.spyOn(commands, 'previewGlossaryImport').mockRejectedValue(new Error('invalid schema'))
+    const errorToast = vi.spyOn(toast, 'add')
+    const view = render(<GlossaryPanel />)
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement
+
+    fireEvent.change(input, {
+      target: { files: [new File(['{}'], 'schema.json', { type: 'application/json' })] },
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The glossary could not be imported.',
+    )
+    expect(errorToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', description: 'invalid schema' }),
+    )
+  })
+
+  it('keeps the import dialog open and handles an apply rejection', async () => {
+    install()
+    vi.spyOn(commands, 'previewGlossaryImport').mockResolvedValue({
+      added: 3,
+      conflicting: 0,
+      identical: 0,
+      languageMismatches: [],
+    })
+    const apply = vi
+      .spyOn(commands, 'applyGlossaryImport')
+      .mockRejectedValue(new Error('revision conflict'))
+    const errorToast = vi.spyOn(toast, 'add')
+    const unhandled = vi.fn()
+    window.addEventListener('unhandledrejection', unhandled)
+    const view = render(<GlossaryPanel />)
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement
+    const document = '{"format":"koharu-glossary","version":1,"entries":[]}'
+
+    fireEvent.change(input, {
+      target: { files: [new File([document], 'glossary.json', { type: 'application/json' })] },
+    })
+    expect(await screen.findByText('3 to add')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Import glossary' }))
+    await waitFor(() => expect(apply).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(errorToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error', description: 'revision conflict' }),
+      ),
+    )
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('3 to add')).toBeInTheDocument()
+    expect(unhandled).not.toHaveBeenCalled()
+    window.removeEventListener('unhandledrejection', unhandled)
   })
 
   it('exports through the generated shared download command', async () => {

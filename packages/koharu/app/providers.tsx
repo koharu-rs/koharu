@@ -37,7 +37,7 @@ export function Providers({ children }: { children: ReactNode }) {
     lifecycle.active = true
     if (!lifecycle.bound) {
       lifecycle.bound = true
-      const completed = new Map<string, number>()
+      const observedJobs = new Map<string, Job>()
       const channel = <T,>(receive: (value: T) => void) =>
         new Channel<T>((value) => {
           if (lifecycle.active) receive(value)
@@ -49,20 +49,48 @@ export function Providers({ children }: { children: ReactNode }) {
         .subscribe(
           channel<CanvasState>(receiveCanvas),
           channel<Job>((job) => {
-            const previous = completed.get(job.id) ?? 0
-            completed.set(job.id, job.completed)
+            const previous = observedJobs.get(job.id)
+            observedJobs.set(job.id, job)
             receiveJob(job)
-            if (job.completed > previous || job.state !== 'running') {
-              void refresh(projectKey, pagesKey, pageKey, glossaryKey).catch(() => undefined)
+            if (job.completed > (previous?.completed ?? 0) || job.state !== 'running') {
+              void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
+            }
+            if (
+              previous?.state === 'running' &&
+              job.state !== 'running' &&
+              (job.kind === 'glossary_scan' || job.kind === 'glossary_translation')
+            ) {
+              const projectName = queryClient.getQueryData<ProjectInfo | null>(projectKey)?.name
+              if (projectName) {
+                void queryClient.invalidateQueries({
+                  queryKey: glossaryKey(projectName),
+                  exact: true,
+                })
+              }
             }
           }),
           channel<Download>(receiveDownload),
           channel<ModelResources>(receiveResources),
           channel<ProjectInfo | null>((project) => {
             const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+            if (previous?.name && previous.name !== project?.name) {
+              const previousKey = glossaryKey(previous.name)
+              void queryClient.cancelQueries({ queryKey: previousKey, exact: true }).then(() => {
+                if (
+                  queryClient.getQueryData<ProjectInfo | null>(projectKey)?.name !== previous.name
+                ) {
+                  queryClient.removeQueries({ queryKey: previousKey, exact: true })
+                }
+              })
+            }
             queryClient.setQueryData(projectKey, project)
             if (previous?.name !== project?.name || previous?.revision !== project?.revision) {
-              void queryClient.invalidateQueries({ queryKey: glossaryKey })
+              if (project?.name) {
+                void queryClient.invalidateQueries({
+                  queryKey: glossaryKey(project.name),
+                  exact: true,
+                })
+              }
             }
             if (previous?.name !== project?.name) {
               const store = useKoharuStore.getState()

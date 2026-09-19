@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 
 import { GlossaryEntryRow } from '@/components/editor/GlossaryEntryRow'
 import { GlossaryImportDialog } from '@/components/editor/GlossaryImportDialog'
+import { reportError } from '@/lib/backend'
 import {
   eligibleGlossaryTranslationIds,
   filterGlossaryEntries,
@@ -42,6 +43,7 @@ import {
 import { useKoharuStore } from '@/lib/store'
 import type {
   GlossaryEntryDraft,
+  GlossaryImportPreview,
   GlossaryImportStrategy,
   GlossaryKind,
   Job,
@@ -68,7 +70,8 @@ import { Switch } from '@koharu/ui/components/switch'
 export function GlossaryPanel() {
   const { t } = useTranslation()
   const project = useProject().data
-  const glossaryQuery = useGlossary(Boolean(project))
+  const projectName = project?.name
+  const glossaryQuery = useGlossary(projectName)
   const glossary = glossaryQuery.data
   const jobs = useKoharuStore((state) => state.jobs)
   const [query, setQuery] = useState('')
@@ -77,19 +80,38 @@ export function GlossaryPanel() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [adding, setAdding] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [importDocument, setImportDocument] = useState<string | null>(null)
+  const [importState, setImportState] = useState<{
+    projectName: string
+    generation: number
+    document: string
+    preview: GlossaryImportPreview
+  } | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const projectGeneration = useRef({ projectName, generation: 0 })
+  const importGeneration = useRef({ projectName, generation: 0 })
+  if (projectGeneration.current.projectName !== projectName) {
+    projectGeneration.current = {
+      projectName,
+      generation: projectGeneration.current.generation + 1,
+    }
+  }
+  if (importGeneration.current.projectName !== projectName) {
+    importGeneration.current = {
+      projectName,
+      generation: importGeneration.current.generation + 1,
+    }
+  }
 
-  const scan = useScanGlossary()
-  const toggle = useSetGlossaryEnabled()
-  const add = useAddGlossaryEntry()
-  const update = useUpdateGlossaryEntry(glossary?.revision ?? 0, project?.name ?? '')
-  const remove = useDeleteGlossaryEntries()
-  const translate = useTranslateGlossaryEntries()
-  const previewImport = usePreviewGlossaryImport()
-  const applyImport = useApplyGlossaryImport()
-  const exportGlossary = useExportGlossary()
+  const scan = useScanGlossary(projectName)
+  const toggle = useSetGlossaryEnabled(projectName)
+  const add = useAddGlossaryEntry(projectName)
+  const update = useUpdateGlossaryEntry(glossary?.revision ?? 0, projectName)
+  const remove = useDeleteGlossaryEntries(projectName)
+  const translate = useTranslateGlossaryEntries(projectName)
+  const previewImport = usePreviewGlossaryImport(projectName)
+  const applyImport = useApplyGlossaryImport(projectName)
+  const exportGlossary = useExportGlossary(projectName)
 
   const activeJob = Object.values(jobs).find((job) => job.state === 'running')
   const activeGlossaryJob = Object.values(jobs).find(
@@ -104,9 +126,26 @@ export function GlossaryPanel() {
     update.isPending ||
     remove.isPending ||
     translate.isPending ||
+    previewImport.isPending ||
     applyImport.isPending ||
     exportGlossary.isPending
-  const processing = Boolean(activeJob) || mutationPending
+  const processing = Boolean(activeJob) || mutationPending || glossaryQuery.isFetching
+
+  const activeImport =
+    importState &&
+    importState.projectName === projectName &&
+    importState.generation === importGeneration.current.generation
+      ? importState
+      : null
+
+  useEffect(() => {
+    setSelected(new Set())
+    setAdding(false)
+    setImportError(null)
+    setImportState(null)
+    setImportOpen(false)
+    if (fileInput.current) fileInput.current.value = ''
+  }, [projectName])
 
   useEffect(() => {
     if (!glossary) return
@@ -153,49 +192,102 @@ export function GlossaryPanel() {
   const statusLabel = t(`glossary.status.${status}`)
   const scanLabel = status === 'unscanned' ? t('glossary.scan') : t('glossary.rescan')
 
-  const deleteSelected = () => {
+  const projectActionIsCurrent = (captured: {
+    projectName: string | undefined
+    generation: number
+  }) =>
+    captured.projectName === projectGeneration.current.projectName &&
+    captured.generation === projectGeneration.current.generation
+
+  const deleteSelected = async () => {
     const ids = [...selected]
-    if (ids.length === 0) return
-    remove.mutate({ revision: glossary.revision, ids }, { onSuccess: () => setSelected(new Set()) })
+    if (processing || ids.length === 0) return
+    const captured = { ...projectGeneration.current }
+    try {
+      await remove.mutateAsync({ revision: glossary.revision, ids })
+      if (projectActionIsCurrent(captured)) setSelected(new Set())
+    } catch {
+      // The scoped mutation reports current-project failures.
+    }
+  }
+
+  const saveEntry = async (draft: GlossaryEntryDraft) => {
+    if (processing) return
+    const captured = { ...projectGeneration.current }
+    try {
+      await add.mutateAsync({ revision: glossary.revision, draft })
+      if (projectActionIsCurrent(captured)) setAdding(false)
+    } catch {
+      // The scoped mutation reports current-project failures.
+    }
   }
 
   const translateIds = (ids: string[]) => {
-    if (ids.length === 0) return
+    if (processing || ids.length === 0) return
     translate.mutate({ revision: glossary.revision, ids })
   }
 
   const readImport = async (file: File | undefined) => {
-    if (!file) return
+    if (!file || !projectName) return
+    const request = {
+      projectName,
+      generation: importGeneration.current.generation + 1,
+    }
+    importGeneration.current = request
     setImportError(null)
+    setImportState(null)
+    setImportOpen(false)
+    const requestIsCurrent = () =>
+      request.projectName === importGeneration.current.projectName &&
+      request.generation === importGeneration.current.generation
     let document: string
     try {
       document = parseGlossaryDocument(await file.text())
     } catch {
-      setImportError(t('glossary.importMalformed'))
-      if (fileInput.current) fileInput.current.value = ''
+      if (requestIsCurrent()) setImportError(t('glossary.importMalformed'))
+      if (requestIsCurrent() && fileInput.current) fileInput.current.value = ''
       return
     }
+    if (!requestIsCurrent()) return
     try {
-      await previewImport.mutateAsync(document)
-      setImportDocument(document)
+      const preview = await previewImport.mutateAsync(document)
+      if (!requestIsCurrent()) return
+      setImportState({ ...request, document, preview })
       setImportOpen(true)
-    } catch {
+    } catch (error) {
+      if (!requestIsCurrent()) return
+      reportError(error)
       setImportError(t('glossary.importFailed'))
     } finally {
-      if (fileInput.current) fileInput.current.value = ''
+      if (requestIsCurrent() && fileInput.current) fileInput.current.value = ''
     }
   }
 
   const apply = async (strategy: GlossaryImportStrategy, confirmLanguageMismatch: boolean) => {
-    if (!importDocument) return
-    await applyImport.mutateAsync({
-      revision: glossary.revision,
-      document: importDocument,
-      strategy,
-      confirmLanguageMismatch,
-    })
-    setImportOpen(false)
-    setImportDocument(null)
+    if (!activeImport || processing) return
+    const capturedProject = { ...projectGeneration.current }
+    const capturedImport = {
+      projectName: activeImport.projectName,
+      generation: activeImport.generation,
+    }
+    try {
+      await applyImport.mutateAsync({
+        revision: glossary.revision,
+        document: activeImport.document,
+        strategy,
+        confirmLanguageMismatch,
+      })
+    } catch {
+      return
+    }
+    if (
+      projectActionIsCurrent(capturedProject) &&
+      capturedImport.projectName === importGeneration.current.projectName &&
+      capturedImport.generation === importGeneration.current.generation
+    ) {
+      setImportOpen(false)
+      setImportState(null)
+    }
   }
 
   return (
@@ -377,12 +469,7 @@ export function GlossaryPanel() {
           <ManualEntryForm
             disabled={processing}
             onCancel={() => setAdding(false)}
-            onSave={(draft) =>
-              add.mutate(
-                { revision: glossary.revision, draft },
-                { onSuccess: () => setAdding(false) },
-              )
-            }
+            onSave={(draft) => void saveEntry(draft)}
           />
         ) : null}
         {glossary.entries.length > 0 ? (
@@ -440,8 +527,8 @@ export function GlossaryPanel() {
       </div>
 
       <GlossaryImportDialog
-        open={importOpen}
-        preview={previewImport.data ?? null}
+        open={importOpen && activeImport !== null}
+        preview={activeImport?.preview ?? null}
         pending={applyImport.isPending}
         onOpenChange={setImportOpen}
         onApply={(strategy, confirm) => void apply(strategy, confirm)}
