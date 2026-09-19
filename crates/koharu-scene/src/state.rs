@@ -7,7 +7,7 @@ use slotmap::{DenseSlotMap, new_key_type};
 use smallvec::SmallVec;
 
 use crate::{
-    BlobId, EntityId, EntityOrigin, Error, Page, Relation, RelationId, Result,
+    BlobId, ComponentOwner, EntityId, EntityOrigin, Error, Page, Relation, RelationId, Result,
     component::{ComponentKey, ComponentRecord, StoredComponent, ValidationContext},
     schema,
 };
@@ -917,7 +917,7 @@ impl State {
         let record_exists = |id| self.contains_entity(id);
         let blob_exists = |_id| true;
         let context = ValidationContext::new(&record_exists, &blob_exists);
-        schema::validate_components(&self.project_components, &context)?;
+        schema::validate_components(&self.project_components, ComponentOwner::Project, &context)?;
         for page_id in self.page_order.iter().copied() {
             let page = self.page(page_id)?;
             if page
@@ -941,14 +941,22 @@ impl State {
                 {
                     return Err(Error::invalid("nested entity carries a page marker"));
                 }
-                schema::validate_components(&entity.components, &context)?;
+                schema::validate_components(
+                    &entity.components,
+                    ComponentOwner::Entity(id),
+                    &context,
+                )?;
                 schema::validate_entity(self, id)?;
             }
             validate_depth(page)?;
         }
-        for relation in self.relations.values() {
+        for (id, relation) in &self.relations {
             schema::validate_relation(self, &relation.value, &context)?;
-            schema::validate_components(&relation.components, &context)?;
+            schema::validate_components(
+                &relation.components,
+                ComponentOwner::Relation(*id),
+                &context,
+            )?;
         }
         Ok(())
     }

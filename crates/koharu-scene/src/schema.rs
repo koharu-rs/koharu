@@ -5,9 +5,10 @@
 //! relation endpoints.
 
 use crate::{
-    BubbleRegion, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Glossary, Group,
-    OcrAnalysis, Page, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText,
-    TextContent, TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
+    BubbleRegion, ComponentOwner, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry,
+    Glossary, Group, OcrAnalysis, Page, Project, RasterLayer, Region, RegionSpec, Relation, Result,
+    SourceText, TextContent, TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography,
+    Visibility,
     component::{Component, ComponentRecord, ValidationContext, decode, key},
     components::Assets,
     state::{Components, State},
@@ -63,11 +64,22 @@ component_schema! {
     GLOSSARY = 18 => Glossary,
 }
 
+pub(crate) fn validate_component_owner(kind: &str, owner: ComponentOwner) -> Result<()> {
+    if kind == Glossary::KIND && owner != ComponentOwner::Project {
+        return Err(Error::invalid(format!(
+            "component {kind} must be owned by the project"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_components(
     components: &Components,
+    owner: ComponentOwner,
     context: &ValidationContext<'_>,
 ) -> Result<()> {
     for (key, raw) in components {
+        validate_component_owner(&key.kind, owner)?;
         validate_component(&key.kind, raw, context)?;
     }
     Ok(())

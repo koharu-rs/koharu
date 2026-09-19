@@ -287,6 +287,7 @@ impl Edit {
         if !self.state.contains_entity(entity) {
             return Err(Error::EntityNotFound(entity));
         }
+        schema::validate_component_owner(T::KIND, ComponentOwner::Entity(entity))?;
         if matches!(
             T::KIND,
             Relation::KIND | Page::KIND | EntityOrigin::KIND | TextGroup::KIND
@@ -306,6 +307,7 @@ impl Edit {
     }
 
     pub fn set_project<T: Component>(&mut self, value: &T) -> Result<()> {
+        schema::validate_component_owner(T::KIND, ComponentOwner::Project)?;
         if matches!(
             T::KIND,
             Relation::KIND | Page::KIND | EntityOrigin::KIND | Group::KIND | TextGroup::KIND
@@ -497,6 +499,7 @@ impl Edit {
         if !self.state.relations.contains_key(&relation) {
             return Err(Error::RelationNotFound(relation));
         }
+        schema::validate_component_owner(T::KIND, ComponentOwner::Relation(relation))?;
         if matches!(
             T::KIND,
             Relation::KIND | Page::KIND | EntityOrigin::KIND | Group::KIND | TextGroup::KIND

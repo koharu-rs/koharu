@@ -1599,6 +1599,141 @@ async fn assert_invalid_glossary(glossary: Glossary) {
 }
 
 #[tokio::test]
+async fn glossary_set_rejects_entity_ownership() {
+    let session = Session::memory().await.unwrap();
+    let glossary = glossary_with(vec![glossary_entry("アリス")]);
+    let error = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let entity = edit.add_entity(page, At::End)?;
+            edit.set(entity, &glossary)
+        })
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        Error::Invalid(message)
+            if message == "component dev.koharu.glossary must be owned by the project"
+    ));
+}
+
+#[tokio::test]
+async fn glossary_set_relation_rejects_relation_ownership() {
+    let session = Session::memory().await.unwrap();
+    let glossary = glossary_with(vec![glossary_entry("アリス")]);
+    let error = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let source = edit.add_entity(page, At::End)?;
+            let target = edit.add_entity(page, At::End)?;
+            let relation = edit.add_relation(
+                RelationKind::new("dev.koharu.test.glossary-owner").unwrap(),
+                source,
+                target,
+            )?;
+            edit.set_relation(relation, &glossary)
+        })
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        Error::Invalid(message)
+            if message == "component dev.koharu.glossary must be owned by the project"
+    ));
+}
+
+async fn glossary_snapshot_with_relation() -> (Snapshot, EntityId, RelationId) {
+    let mut session = Session::memory().await.unwrap();
+    let mut ids = None;
+    let glossary = glossary_with(vec![glossary_entry("アリス")]);
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            edit.set_project(&glossary)?;
+            let page = edit.add_page(page(), At::End)?;
+            let source = edit.add_entity(page, At::End)?;
+            let target = edit.add_entity(page, At::End)?;
+            let relation = edit.add_relation(
+                RelationKind::new("dev.koharu.test.glossary-owner").unwrap(),
+                source,
+                target,
+            )?;
+            ids = Some((source, relation));
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let (entity, relation) = ids.unwrap();
+    (snapshot, entity, relation)
+}
+
+fn take_stored_glossary(
+    stored: &mut crate::state::StoredState,
+) -> crate::state::StoredComponentEntry {
+    let index = stored
+        .project_components
+        .iter()
+        .position(|entry| entry.key.kind == Glossary::KIND)
+        .unwrap();
+    stored.project_components.remove(index)
+}
+
+#[tokio::test]
+async fn glossary_raw_state_rejects_entity_ownership() {
+    let (snapshot, entity, _) = glossary_snapshot_with_relation().await;
+    let mut stored = snapshot.state.to_checkpoint();
+    let glossary = take_stored_glossary(&mut stored);
+    stored
+        .pages
+        .iter_mut()
+        .flat_map(|page| page.entities.iter_mut())
+        .find(|candidate| candidate.id == entity)
+        .unwrap()
+        .components
+        .push(glossary);
+
+    let error = crate::state::State::from_checkpoint(
+        snapshot.state.document,
+        snapshot.state.revision,
+        stored,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        Error::Invalid(message)
+            if message == "component dev.koharu.glossary must be owned by the project"
+    ));
+}
+
+#[tokio::test]
+async fn glossary_raw_state_rejects_relation_ownership() {
+    let (snapshot, _, relation) = glossary_snapshot_with_relation().await;
+    let mut stored = snapshot.state.to_checkpoint();
+    let glossary = take_stored_glossary(&mut stored);
+    stored
+        .relations
+        .iter_mut()
+        .find(|candidate| candidate.id == relation)
+        .unwrap()
+        .components
+        .push(glossary);
+
+    let error = crate::state::State::from_checkpoint(
+        snapshot.state.document,
+        snapshot.state.revision,
+        stored,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        Error::Invalid(message)
+            if message == "component dev.koharu.glossary must be owned by the project"
+    ));
+}
+
+#[tokio::test]
 async fn glossary_project_component_round_trips_through_snapshot() {
     let mut session = Session::memory().await.unwrap();
     let glossary = glossary_with(vec![glossary_entry("アリス")]);
