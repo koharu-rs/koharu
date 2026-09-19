@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use anyhow::{Context as _, Result, bail};
 use koharu_scene::{
-    EntityId, GLOSSARY_MAX_EXAMPLES, Glossary, GlossaryEntry, GlossaryEntryId, GlossaryKind,
-    GlossaryValueOrigin, LanguageTag, Revision, Snapshot, SourceText, normalize_glossary_source,
+    EntityId, GLOSSARY_EXAMPLE_MAX_CHARS, GLOSSARY_MAX_EXAMPLES, GLOSSARY_TEXT_MAX_CHARS, Glossary,
+    GlossaryEntry, GlossaryEntryId, GlossaryKind, GlossaryValueOrigin, LanguageTag, Revision,
+    Snapshot, SourceText, normalize_glossary_source,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -59,6 +60,30 @@ pub(crate) struct ScanCandidate {
     pub kind: GlossaryKind,
     pub confidence: f32,
     pub example: Option<String>,
+}
+
+impl ScanCandidate {
+    fn validate(&self) -> Result<()> {
+        validate_scan_text(&self.source, GLOSSARY_TEXT_MAX_CHARS, false, "source")?;
+        if !self.confidence.is_finite() || !(0.0..=1.0).contains(&self.confidence) {
+            bail!("glossary confidence is invalid");
+        }
+        if let Some(example) = &self.example {
+            validate_scan_text(example, GLOSSARY_EXAMPLE_MAX_CHARS, true, "example")?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_scan_text(value: &str, max_chars: usize, allow_empty: bool, field: &str) -> Result<()> {
+    let valid_length = value.chars().count() <= max_chars;
+    let has_prohibited_control = value.chars().any(char::is_control);
+    let empty = normalize_glossary_source(value).is_empty();
+    if valid_length && !has_prohibited_control && (allow_empty || !empty) {
+        Ok(())
+    } else {
+        bail!("glossary {field} is invalid")
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
@@ -253,13 +278,11 @@ impl crate::commands::project::Project {
         let mut positions = HashMap::<(String, GlossaryKind), usize>::new();
         let mut aggregates = Vec::<Aggregate>::new();
         for candidate in candidates {
+            candidate.validate()?;
             let key = (normalize_glossary_source(&candidate.source), candidate.kind);
             if let Some(&index) = positions.get(&key) {
                 let aggregate = &mut aggregates[index];
-                if !candidate.confidence.is_finite()
-                    || !(0.0..=1.0).contains(&candidate.confidence)
-                    || candidate.confidence > aggregate.confidence
-                {
+                if candidate.confidence > aggregate.confidence {
                     aggregate.confidence = candidate.confidence;
                 }
                 aggregate.occurrence_count = aggregate.occurrence_count.saturating_add(1);
@@ -410,8 +433,9 @@ fn hash_string(hasher: &mut blake3::Hasher, value: &str) {
 #[cfg(test)]
 mod tests {
     use koharu_scene::{
-        At, Authored, EntityId, LanguageTag, Origin, PageDraft, RemovePolicy, Session, SourceText,
-        TextLayout, TextLayoutKind, Translation, Visibility,
+        At, Authored, EntityId, GLOSSARY_EXAMPLE_MAX_CHARS, GLOSSARY_TEXT_MAX_CHARS, LanguageTag,
+        Origin, PageDraft, RemovePolicy, Session, SourceText, TextLayout, TextLayoutKind,
+        Translation, Visibility,
     };
 
     use super::{OcrSourceRecord, ocr_fingerprint, ocr_source_fingerprint};
@@ -728,6 +752,95 @@ mod tests {
             source_origin,
             translation_origin: translation.map(|_| source_origin),
             present_in_last_scan: true,
+        }
+    }
+
+    fn scan_candidate(source: &str, confidence: f32, example: Option<String>) -> ScanCandidate {
+        ScanCandidate {
+            source: source.to_owned(),
+            kind: GlossaryKind::Person,
+            confidence,
+            example,
+        }
+    }
+
+    async fn assert_scan_rejected(candidates: Vec<ScanCandidate>, expected_error: &str) {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let revision = project.revision();
+
+        let error = project
+            .apply_glossary_scan(revision, None, None, candidates)
+            .await
+            .unwrap_err();
+
+        assert!(
+            error.to_string().ends_with(expected_error),
+            "expected {expected_error:?}, got {error:#}"
+        );
+        assert_eq!(project.revision(), revision);
+        assert!(project.undo.is_empty());
+    }
+
+    #[tokio::test]
+    async fn scan_rejects_each_invalid_confidence_in_both_duplicate_orders() {
+        for invalid_confidence in [f32::NAN, -0.01, 1.01] {
+            for invalid_first in [true, false] {
+                let valid = scan_candidate("alice", 0.5, None);
+                let invalid = scan_candidate("ＡLICE", invalid_confidence, None);
+                let candidates = if invalid_first {
+                    vec![invalid, valid]
+                } else {
+                    vec![valid, invalid]
+                };
+
+                assert_scan_rejected(candidates, "glossary confidence is invalid").await;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn scan_rejects_each_invalid_source_before_duplicate_aggregation() {
+        assert_scan_rejected(
+            vec![scan_candidate(" \t", 0.5, None)],
+            "glossary source is invalid",
+        )
+        .await;
+
+        let valid_composed = "é".repeat(GLOSSARY_TEXT_MAX_CHARS / 2 + 1);
+        let invalid_decomposed = "e\u{301}".repeat(GLOSSARY_TEXT_MAX_CHARS / 2 + 1);
+        for invalid_source in ["alice\n".to_owned(), invalid_decomposed] {
+            for invalid_first in [true, false] {
+                let valid = if invalid_source.contains('\n') {
+                    scan_candidate("alice", 0.5, None)
+                } else {
+                    scan_candidate(&valid_composed, 0.5, None)
+                };
+                let invalid = scan_candidate(&invalid_source, 0.5, None);
+                let candidates = if invalid_first {
+                    vec![invalid, valid]
+                } else {
+                    vec![valid, invalid]
+                };
+
+                assert_scan_rejected(candidates, "glossary source is invalid").await;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn scan_rejects_invalid_examples_after_the_aggregate_limit_is_full() {
+        for invalid_example in [
+            "x".repeat(GLOSSARY_EXAMPLE_MAX_CHARS + 1),
+            "invalid\nexample".to_owned(),
+        ] {
+            let candidates = vec![
+                scan_candidate("alice", 0.5, Some("first".to_owned())),
+                scan_candidate("alice", 0.5, Some("second".to_owned())),
+                scan_candidate("alice", 0.5, Some("third".to_owned())),
+                scan_candidate("alice", 0.5, Some(invalid_example)),
+            ];
+
+            assert_scan_rejected(candidates, "glossary example is invalid").await;
         }
     }
 
