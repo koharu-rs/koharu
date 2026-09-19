@@ -148,8 +148,12 @@ impl TranslationRequest {
         self.mode == TranslationMode::Term
     }
 
+    pub(crate) fn terminology_applies(&self) -> bool {
+        self.mode == TranslationMode::Text && !self.terminology.is_empty()
+    }
+
     pub(crate) fn requires_system_prompt(&self) -> bool {
-        self.is_term_translation() || !self.terminology.is_empty()
+        self.is_term_translation() || self.terminology_applies()
     }
 }
 

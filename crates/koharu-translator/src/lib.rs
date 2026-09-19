@@ -307,6 +307,20 @@ mod tests {
     }
 
     #[test]
+    fn term_translation_ignores_oversized_terminology_during_preflight() {
+        let request = TranslationRequest::new_term_translation(["name"], Language::English)
+            .with_terminology([TerminologyEntry {
+                source: "x".repeat(MAX_TERMINOLOGY_PROMPT_BYTES),
+                translation: "Name".to_owned(),
+                kind: TerminologyKind::Person,
+            }]);
+        let actual = serde_json::to_vec(&request.terminology).unwrap().len();
+
+        assert!(actual > MAX_TERMINOLOGY_PROMPT_BYTES);
+        validate_request(Provider::OpenAi, &request).unwrap();
+    }
+
+    #[test]
     fn unsupported_providers_reject_system_prompt_requests_before_dispatch() {
         let request = TranslationRequest::new(["hello"], Language::English).with_terminology([
             TerminologyEntry {

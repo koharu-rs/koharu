@@ -10,7 +10,7 @@ use crate::{Error, Language, Result as TranslatorResult, TranslationContext, Tra
 pub(crate) fn serialized_terminology(
     request: &TranslationRequest,
 ) -> TranslatorResult<Option<String>> {
-    if request.terminology.is_empty() {
+    if !request.terminology_applies() {
         return Ok(None);
     }
 
