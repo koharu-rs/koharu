@@ -7,7 +7,8 @@ use koharu_agent::{Account, Agent, Codex, CodexModel, Config, Control, Event, Lo
 use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
-use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
+use tauri::{AppHandle, Manager as _, State, ipc::Channel};
+use tauri_runtime_cef::CefRuntime;
 use tokio::sync::Notify;
 
 use self::host::KoharuHost;
@@ -29,7 +30,7 @@ pub(crate) struct AgentState {
 }
 
 impl AgentState {
-    pub(crate) fn new(handle: AppHandle<Cef>) -> Result<Self> {
+    pub(crate) fn new(handle: AppHandle<CefRuntime>) -> Result<Self> {
         Ok(Self {
             agent: Arc::new(Agent::new(Codex::new()?, KoharuHost::new(handle))?),
             runs: Mutex::new(HashMap::new()),
@@ -39,9 +40,19 @@ impl AgentState {
     }
 
     async fn status(&self) -> Result<AgentStatus> {
-        let account = self.agent.codex().account()?;
+        let mut account = self.agent.codex().account()?;
         let models = if account.is_some() {
-            self.agent.models().await?
+            match self.agent.models().await {
+                Ok(models) => models,
+                Err(error) => {
+                    account = self.agent.codex().account()?;
+                    if account.is_some() {
+                        return Err(error);
+                    }
+                    self.agent.clear().await;
+                    Vec::new()
+                }
+            }
         } else {
             Vec::new()
         };
@@ -170,7 +181,7 @@ pub(crate) async fn save_agent_config(
 pub(crate) async fn run_agent(
     prompt: String,
     on_event: Channel<Event>,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<CefRuntime>,
     state: State<'_, AgentState>,
 ) -> std::result::Result<RunId, Error> {
     let prompt = prompt.trim().to_owned();

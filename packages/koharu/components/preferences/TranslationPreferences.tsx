@@ -11,7 +11,7 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { modelKey, modelSelection, orderedLanguageChoices, providerName } from '@/lib/translation'
+import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
 import type {
   LanguageChoice,
   Model,
@@ -55,7 +55,9 @@ export function TranslationPreferences({
     reasoning: value.model.reasoning ?? false,
   }
   const choices = selected ? modelChoices : [current, ...modelChoices]
-  const quantizations = current.quantizations
+  const quantization =
+    current.quantizations.find((quantization) => quantization.id === value.model.quantization) ??
+    current.quantizations[0]
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
     <PreferencePage
@@ -77,7 +79,11 @@ export function TranslationPreferences({
               className='flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-[11px] transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
             >
               <span className='min-w-0 flex-1 text-left'>
-                <ModelLabel model={current} providers={providers} />
+                <ModelLabel
+                  model={current}
+                  providers={providers}
+                  quantization={quantization?.name ?? value.model.quantization}
+                />
               </span>
               <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
             </PopoverTrigger>
@@ -94,7 +100,7 @@ export function TranslationPreferences({
                 onSelect={(model) => {
                   onChange({
                     ...value,
-                    model: modelSelection(model),
+                    model,
                   })
                   setModelOpen(false)
                 }}
@@ -102,33 +108,6 @@ export function TranslationPreferences({
             </PopoverContent>
           </Popover>
         </PreferenceRow>
-        {quantizations.length > 0 && (
-          <PreferenceRow
-            title={t('settings.translation.quantization')}
-            description={t('settings.translation.quantizationDescription')}
-          >
-            <Select
-              value={value.model.quantization ?? ''}
-              onValueChange={(quantization) =>
-                onChange({ ...value, model: { ...value.model, quantization } })
-              }
-            >
-              <SelectTrigger
-                aria-label={t('settings.translation.modelQuantization')}
-                className='h-8 w-full text-[11px]'
-              >
-                <SelectValue placeholder={t('settings.translation.selectQuantization')} />
-              </SelectTrigger>
-              <SelectContent>
-                {quantizations.map((quantization) => (
-                  <SelectItem key={quantization.id} value={quantization.id}>
-                    {quantization.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </PreferenceRow>
-        )}
       </PreferenceSection>
 
       <GenerationPreferences
@@ -185,13 +164,24 @@ export function TranslationPreferences({
   )
 }
 
-function ModelLabel({ model, providers }: { model: Model; providers: ProviderPreference[] }) {
+function ModelLabel({
+  model,
+  providers,
+  quantization,
+}: {
+  model: Model
+  providers: ProviderPreference[]
+  quantization: string | null | undefined
+}) {
   return (
     <span className='flex min-w-0 items-center gap-2'>
       <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[9px] font-medium'>
         {providerName(providers, model.provider)}
       </Badge>
-      <span className='truncate'>{model.name}</span>
+      <span className='truncate'>
+        {model.name}
+        {quantization && <span className='text-muted-foreground'> · {quantization}</span>}
+      </span>
     </span>
   )
 }

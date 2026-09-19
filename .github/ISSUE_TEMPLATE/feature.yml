@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement to Koharu
+type: Feature
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement. Please search existing issues before submitting a new request.
+
+        Please discuss substantial changes with maintainers before starting implementation.
+
+        If AI helped substantially with this request, briefly mention how.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Briefly describe the suggested improvement and the problem it would solve.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add examples, screenshots, or existing workarounds.

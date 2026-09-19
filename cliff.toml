@@ -2,7 +2,8 @@
 # https://git-cliff.org/docs/configuration
 
 [remote.github]
-owner = "mayocream"
+# Canonical repository owner used for generated changelog links.
+owner = "koharu-rs"
 repo = "koharu"
 
 [changelog]
@@ -68,7 +69,9 @@ trim = true
 # An array of regex based postprocessors to modify the changelog.
 postprocessors = [
   # Replace the placeholder `<REPO>` with a URL.
-  { pattern = '<REPO>', replace = "https://github.com/mayocream/koharu" }, # replace repository URL
+  { pattern = '<REPO>', replace = "https://github.com/koharu-rs/koharu" }, # replace repository URL
+  # Rewrite repository URLs embedded in historical commit messages.
+  { pattern = 'https://github\.com/mayocream/koharu', replace = "https://github.com/koharu-rs/koharu" },
 ]
 
 [git]

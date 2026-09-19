@@ -3,17 +3,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use strum::IntoEnumIterator;
 
 use crate::{
-    Hardware, Store, download,
+    Store, download,
+    hardware::Target,
     runtime::{Package, RuntimePackage, loader, sealed},
     source::extract,
 };
 
-pub(crate) const VERSION: &str = "7.14.0";
-pub(crate) const INDEX: &str = "https://repo.amd.com/rocm/whl-multi-arch";
+pub(crate) const VERSION: &str = "10.0.0";
+pub(crate) const INDEX: &str = "https://stable.repo.amd.com/rocm/core/whl-next";
 
 #[cfg(target_os = "windows")]
 #[derive(Clone, Copy, strum::Display, strum::EnumIter)]
@@ -26,20 +27,22 @@ enum Library {
     OpenBlas,
     #[strum(serialize = "_rocm_sdk_core/bin/amdhip64_7.dll")]
     Hip,
-    #[strum(serialize = "_rocm_sdk_core/bin/hiprtc-builtins0714.dll")]
+    #[strum(serialize = "_rocm_sdk_core/bin/hiprtc-builtins0715.dll")]
     HipRtcBuiltins,
-    #[strum(serialize = "_rocm_sdk_core/bin/hiprtc0714.dll")]
+    #[strum(serialize = "_rocm_sdk_core/bin/hiprtc0715.dll")]
     HipRtc,
     #[strum(serialize = "_rocm_sdk_libraries/bin/rocrand.dll")]
     RocRand,
     #[strum(serialize = "_rocm_sdk_libraries/bin/hiprand.dll")]
     HipRand,
+    #[strum(serialize = "_rocm_sdk_libraries/bin/origami.dll")]
+    Origami,
+    #[strum(serialize = "_rocm_sdk_libraries/bin/libhipblaslt.dll")]
+    HipBlasLt,
     #[strum(serialize = "_rocm_sdk_libraries/bin/rocblas.dll")]
     RocBlas,
     #[strum(serialize = "_rocm_sdk_libraries/bin/hipblas.dll")]
     HipBlas,
-    #[strum(serialize = "_rocm_sdk_libraries/bin/libhipblaslt.dll")]
-    HipBlasLt,
     #[strum(serialize = "_rocm_sdk_libraries/bin/rocfft.dll")]
     RocFft,
     #[strum(serialize = "_rocm_sdk_libraries/bin/hipfft.dll")]
@@ -85,12 +88,16 @@ enum Library {
     OpenBlas,
     #[strum(serialize = "_rocm_sdk_core/lib/librocm_smi64.so.1")]
     RocmSmi,
+    #[strum(serialize = "_rocm_sdk_libraries/lib/librocroller.so.1")]
+    RocRoller,
+    #[strum(serialize = "_rocm_sdk_libraries/lib/liborigami.so.1")]
+    Origami,
+    #[strum(serialize = "_rocm_sdk_libraries/lib/libhipblaslt.so.1")]
+    HipBlasLt,
     #[strum(serialize = "_rocm_sdk_libraries/lib/librocblas.so.5")]
     RocBlas,
     #[strum(serialize = "_rocm_sdk_libraries/lib/libhipblas.so.3")]
     HipBlas,
-    #[strum(serialize = "_rocm_sdk_libraries/lib/libhipblaslt.so.1")]
-    HipBlasLt,
     #[strum(serialize = "_rocm_sdk_libraries/lib/librocfft.so.0")]
     RocFft,
     #[strum(serialize = "_rocm_sdk_libraries/lib/libhipfft.so.0")]
@@ -133,63 +140,9 @@ pub(crate) fn wheel_platform() -> Result<&'static str> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumString)]
-pub(crate) enum Rocm {
-    #[strum(serialize = "gfx1010")]
-    Gfx1010,
-    #[strum(serialize = "gfx1011")]
-    Gfx1011,
-    #[strum(serialize = "gfx1012")]
-    Gfx1012,
-    #[strum(serialize = "gfx1030")]
-    Gfx1030,
-    #[strum(serialize = "gfx1031")]
-    Gfx1031,
-    #[strum(serialize = "gfx1032")]
-    Gfx1032,
-    #[strum(serialize = "gfx1033")]
-    Gfx1033,
-    #[strum(serialize = "gfx1034")]
-    Gfx1034,
-    #[strum(serialize = "gfx1035")]
-    Gfx1035,
-    #[strum(serialize = "gfx1036")]
-    Gfx1036,
-    #[strum(serialize = "gfx1100")]
-    Gfx1100,
-    #[strum(serialize = "gfx1101")]
-    Gfx1101,
-    #[strum(serialize = "gfx1102")]
-    Gfx1102,
-    #[strum(serialize = "gfx1103")]
-    Gfx1103,
-    #[strum(serialize = "gfx1150")]
-    Gfx1150,
-    #[strum(serialize = "gfx1151")]
-    Gfx1151,
-    #[strum(serialize = "gfx1152")]
-    Gfx1152,
-    #[strum(serialize = "gfx1153")]
-    Gfx1153,
-    #[strum(serialize = "gfx1200")]
-    Gfx1200,
-    #[strum(serialize = "gfx1201")]
-    Gfx1201,
-    #[strum(serialize = "gfx908")]
-    Gfx908,
-    #[strum(serialize = "gfx90a")]
-    Gfx90a,
-}
+pub(crate) type Rocm = Target;
 
 impl Rocm {
-    pub(crate) fn discover(hardware: &Hardware) -> Result<Self> {
-        hardware
-            .rocm_target()
-            .context("no ROCm device was discovered")?
-            .parse()
-            .context("ROCm device is unsupported")
-    }
-
     pub(crate) async fn probe(self) -> Result<usize> {
         type GetDeviceCount = unsafe extern "C" fn(*mut i32) -> i32;
         type GetDeviceProperties = unsafe extern "C" fn(*mut c_void, i32) -> i32;
@@ -262,10 +215,6 @@ impl Rocm {
 
     fn complete(self, path: &Path) -> bool {
         Library::iter().all(|library| path.join(library.to_string()).is_file())
-            && path
-                .join("_rocm_sdk_libraries/.kpack")
-                .join(format!("blas_lib_{self}.kpack"))
-                .is_file()
     }
 }
 
@@ -284,15 +233,21 @@ impl Package for Rocm {
             move |stage| async move {
                 for (url, pattern) in [
                     (
-                        format!("{INDEX}/rocm_sdk_core-{VERSION}-py3-none-{platform}.whl"),
+                        format!(
+                            "{INDEX}/rocm-sdk-core/rocm_sdk_core-{VERSION}-py3-none-{platform}.whl"
+                        ),
                         "_rocm_sdk_core/**/*",
                     ),
                     (
-                        format!("{INDEX}/rocm_sdk_libraries-{VERSION}-py3-none-{platform}.whl"),
+                        format!(
+                            "{INDEX}/rocm-sdk-libraries/rocm_sdk_libraries-{VERSION}-py3-none-{platform}.whl"
+                        ),
                         "_rocm_sdk_libraries/**/*",
                     ),
                     (
-                        format!("{INDEX}/rocm_sdk_device_{self}-{VERSION}-py3-none-{platform}.whl"),
+                        format!(
+                            "{INDEX}/rocm-sdk-device-{self}/rocm_sdk_device_{self}-{VERSION}-py3-none-{platform}.whl"
+                        ),
                         "_rocm_sdk_libraries/**/*",
                     ),
                 ] {
@@ -319,16 +274,5 @@ impl RuntimePackage for Rocm {
             loader::load(root.join(library.to_string()), true)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_supported_targets() {
-        assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
-        assert!("gfx1250".parse::<Rocm>().is_err());
     }
 }

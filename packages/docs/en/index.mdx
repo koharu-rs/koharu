@@ -1,0 +1,136 @@
+---
+title: 'Koharu documentation'
+description: 'Everything you need to translate, edit, and export manga with Koharu.'
+sidebarTitle: 'Introduction'
+icon: 'book-open'
+mode: 'frame'
+hideFooterPagination: true
+---
+
+<div className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+  <div className="mb-12 text-center">
+    <img src="/assets/koharu-icon.png" alt="" width="64" height="64" className="mx-auto mb-5" />
+    <h1 className="text-3xl font-semibold sm:text-4xl">Koharu documentation</h1>
+    <div className="my-6 flex items-center justify-center gap-2">
+      <a href="https://github.com/koharu-rs/koharu" aria-label="GitHub" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="github" iconType="brands" size={24} />
+      </a>
+      <a href="https://discord.gg/mHvHkxGnUY" aria-label="Discord" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="discord" iconType="brands" size={24} />
+      </a>
+      <a href="https://x.com/mayo_irl" aria-label="X" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="x-twitter" iconType="brands" size={24} />
+      </a>
+    </div>
+    <p className="mx-auto max-w-2xl text-lg leading-relaxed">An editable manga translation workflow, from your first page to the final export.</p>
+  </div>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Get started</h2>
+  <CardGroup cols={3}>
+    <Card title='Install Koharu' icon='download' href='/en/installation'>
+      Download a release for Windows, macOS, or Linux.
+    </Card>
+    <Card title='Your first translation' icon='rocket' href='/en/quickstart'>
+      Translate one page, review it, and export the result.
+    </Card>
+    <Card title='Hardware and runtimes' icon='microchip' href='/en/hardware'>
+      Check device support and how models are downloaded.
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Work with pages</h2>
+  <CardGroup cols={3}>
+    <Card title='Projects and imports' icon='folder-open' href='/en/guides/projects'>
+      Bring images, archives, and PDFs into one project.
+    </Card>
+    <Card title='Process pages' icon='play' href='/en/guides/processing'>
+      Choose the pages and stages you want to run.
+    </Card>
+    <Card title='Review text' icon='spell-check' href='/en/guides/review'>
+      Correct OCR, wording, names, and line breaks.
+    </Card>
+    <Card title='Clean up artwork' icon='eraser' href='/en/guides/cleanup'>
+      Remove source lettering and repair the image.
+    </Card>
+    <Card title='Typeset translations' icon='font' href='/en/guides/typesetting'>
+      Fit text with fonts, alignment, fill, and stroke.
+    </Card>
+    <Card title='Export PNG and PSD' icon='file-export' href='/en/guides/export'>
+      Deliver flattened images or editable layered files.
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Models and providers</h2>
+  <CardGroup cols={3}>
+    <Card title='Vision and inpainting' icon='eye' href='/en/models/vision'>
+      Choose detection, OCR, and image-repair models.
+    </Card>
+    <Card title='Translation providers' icon='plug' href='/en/models/providers'>
+      Connect local models or hosted translation services.
+    </Card>
+    <Card title='Translation settings' icon='language' href='/en/models/translation'>
+      Set language, instructions, and generation options.
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Koharu Agent</h2>
+  <CardGroup cols={3}>
+    <Card title='Set up the Agent' icon='robot' href='/en/agent/setup'>
+      Sign in and choose the model for project assistance.
+    </Card>
+    <Card title='Work with a project' icon='comment' href='/en/agent/projects'>
+      Ask the Agent to inspect pages and make scoped edits.
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Developers</h2>
+  <CardGroup cols={3}>
+    <Card title='Build Koharu' icon='terminal' href='/en/development/setup'>
+      Set up a checkout and run the desktop application.
+    </Card>
+    <Card title='Architecture' icon='sitemap' href='/en/development/architecture'>
+      Follow ownership across the UI, scene, and runtimes.
+    </Card>
+    <Card title='Contribute' icon='code-pull-request' href='/en/development/contributing'>
+      Prepare a focused change and a clear pull request.
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Get help</h2>
+  <CardGroup cols={3}>
+    <Card title='Troubleshooting' icon='circle-question' href='/en/reference/troubleshooting'>
+      Diagnose problems and collect useful logs.
+    </Card>
+    <Card title='Settings' icon='gear' href='/en/reference/settings'>
+      Find the controls for your workflow.
+    </Card>
+    <Card title='Keyboard shortcuts' icon='keyboard' href='/en/reference/shortcuts'>
+      Navigate and edit with the default tool bindings.
+    </Card>
+  </CardGroup>
+</section>
+
+  <section className="text-center">
+    <h2 className="mb-6 text-2xl font-semibold">About Koharu</h2>
+
+    Koharu keeps source text, translations, artwork, and layout together in a local project. Run a complete translation pipeline or revise an individual stage, then use the [canvas tools](/en/guides/canvas) to finish the page.
+
+    <Frame caption="Pages, text properties, and editable artwork in the Koharu desktop editor.">
+      <img src="/screenshot.png" alt="Koharu displaying a translated manga page, with a page list on the left and typography and layers on the right." />
+    </Frame>
+
+    <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed">Projects stay on your machine. Hosted translation or generation providers receive the content needed for the requests you send.</p>
+
+  </section>
+</div>

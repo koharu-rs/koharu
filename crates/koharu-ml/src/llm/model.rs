@@ -6,9 +6,10 @@
 //! https://github.com/ggml-org/llama.cpp/blob/99f3dc32296f825fec94f202da1e9fede1e78cf9/tools/mtmd/mtmd-helper.cpp
 
 use std::{
+    fmt::{Debug, Formatter},
     num::NonZeroU32,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, OnceLock},
     time::Instant,
 };
 
@@ -25,6 +26,7 @@ use koharu_llama::{
     sampling::LlamaSampler,
     token::LlamaToken,
 };
+use llguidance::{Matcher, ParserFactory, api::TopLevelGrammar};
 use minijinja::{Environment, Error as TemplateError, ErrorKind as TemplateErrorKind, context};
 use serde::Serialize;
 
@@ -37,7 +39,6 @@ use crate::Backend;
 const DEFAULT_MAX_UBATCH: u32 = 512;
 const CHAT_TEMPLATE_NAME: &str = "chat";
 
-#[derive(Debug)]
 pub(super) struct Model {
     backend: &'static LlamaBackend,
     model: LlamaModel,
@@ -45,6 +46,16 @@ pub(super) struct Model {
     capabilities: Capabilities,
     eos_token: LlamaToken,
     chat_template: ChatTemplate,
+    llguidance_factory: OnceLock<std::result::Result<ParserFactory, String>>,
+}
+
+impl Debug for Model {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Model")
+            .field("model", &self.model)
+            .field("capabilities", &self.capabilities)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug)]
@@ -193,6 +204,7 @@ impl Model {
             capabilities,
             eos_token,
             chat_template,
+            llguidance_factory: OnceLock::new(),
         })
     }
 
@@ -506,10 +518,21 @@ impl Model {
             }
             let schema = serde_json::to_string(&schema)
                 .context("failed to serialize structured output schema")?;
-            samplers.push(
-                LlamaSampler::llguidance(&self.model, "json_schema", &schema)
-                    .context("failed to compile structured output schema")?,
-            );
+            let factory = self
+                .llguidance_factory
+                .get_or_init(|| {
+                    let tok_env = LlamaSampler::llguidance_tok_env(&self.model);
+                    ParserFactory::new_simple(&tok_env).map_err(|error| error.to_string())
+                })
+                .as_ref()
+                .map_err(|error| anyhow::Error::msg(error.clone()))
+                .context("failed to initialize structured output tokenizer")?;
+            let grammar = TopLevelGrammar::from_tagged_str("json_schema", &schema)
+                .context("failed to compile structured output schema")?;
+            let parser = factory
+                .create_parser(grammar)
+                .context("failed to create structured output parser")?;
+            samplers.push(LlamaSampler::from(Matcher::new(Ok(parser))));
         }
 
         let has_repeat =

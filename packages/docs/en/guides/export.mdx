@@ -1,0 +1,46 @@
+---
+title: 'Export PNG and PSD'
+description: 'Export selected pages as flattened images or layered documents.'
+icon: 'file-export'
+---
+
+Review the page composite before choosing **File → Export PNG** or **File → Export PSD**.
+
+<Steps>
+  <Step title="Select the pages">
+    Select pages in the page rail to export that selection. With no page selection, Koharu exports the active page.
+  </Step>
+  <Step title="Choose a format">
+    <Tabs>
+      <Tab title="PNG">
+        A flattened image for delivery and review. It includes translated text, artwork, visibility, opacity, fitting, fill, and stroke from the retained renderer.
+      </Tab>
+      <Tab title="PSD">
+        A layered document for further typography or artwork edits in a compatible editor. It contains the original image, a hidden text-removal mask, one layer per cleanup or paint layer, and editable text layers. The original image layer is hidden when a cleanup layer exists. Per-layer visibility and opacity are not written, although the merged preview honors them. Pages larger than 30000 pixels on a side cannot be exported as PSD.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Choose a destination">
+    Select an output directory in the native folder dialog. Filenames use a four-digit counter in the order the pages are exported, followed by the page label:
+
+    ```text
+    0001_page-name.png
+    0002_page-name.png
+    ```
+
+    A single page or a Shift-click range follows project order; a Ctrl-click selection follows click order. Characters that are invalid in filenames become underscores, and everything after the last dot in a label is dropped, so `vol.1` becomes `vol`. Existing files in the directory are overwritten.
+
+  </Step>
+</Steps>
+
+<Note>
+  PSD is an interchange format. It does not preserve all OCR semantics, model provenance, revision
+  history, or renderer behavior as native Photoshop concepts. Keep the `.khrproj` directory as your
+  editable source and backup.
+</Note>
+
+## Check consistency
+
+Canvas, PNG, and PSD begin with the same scene and prepared rendering result. If they differ, report the project revision, page, format, and images through [troubleshooting](/en/reference/troubleshooting).
+
+There is no separate “inpainted image only” export.

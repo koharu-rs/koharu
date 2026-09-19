@@ -78,13 +78,23 @@
     @apply text-foreground select-none;
     background-color: transparent;
     overflow: hidden;
-    font-family:
-      var(--font-noto-jp), var(--font-noto-sc), var(--font-noto-tc), ui-sans-serif, system-ui,
-      sans-serif;
+    font-family: var(--font-noto-sans-cjk), ui-sans-serif, system-ui, sans-serif;
     font-feature-settings:
       'cv02' 1,
       'cv03' 1,
       'cv04' 1;
+  }
+
+  html:lang(ja-JP) {
+    font-variant-east-asian: jis04;
+  }
+
+  html:lang(zh-CN) {
+    font-variant-east-asian: simplified;
+  }
+
+  html:lang(zh-TW) {
+    font-variant-east-asian: traditional;
   }
 
   input,

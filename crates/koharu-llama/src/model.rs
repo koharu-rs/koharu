@@ -10,6 +10,7 @@ use crate::context::LlamaContext;
 use crate::context::params::LlamaContextParams;
 use crate::llama_backend::LlamaBackend;
 use crate::model::params::LlamaModelParams;
+use crate::sampling::LlamaSampler;
 use crate::token::LlamaToken;
 use crate::token_type::{LlamaTokenAttr, LlamaTokenAttrs};
 use crate::{
@@ -24,9 +25,6 @@ pub mod params;
 #[allow(clippy::module_name_repetitions)]
 pub struct LlamaModel {
     pub(crate) model: NonNull<koharu_llama_sys::llama_model>,
-    #[cfg(feature = "llguidance")]
-    pub(crate) llguidance_factory:
-        std::sync::OnceLock<std::result::Result<llguidance::ParserFactory, crate::GrammarError>>,
 }
 
 impl std::fmt::Debug for LlamaModel {
@@ -603,6 +601,18 @@ impl LlamaModel {
         unsafe { koharu_llama_sys::llama_n_embd(self.model.as_ptr()) }
     }
 
+    /// Returns the width of embeddings produced by the model.
+    #[must_use]
+    pub fn n_embd_out(&self) -> c_int {
+        unsafe { koharu_llama_sys::llama_model_n_embd_out(self.model.as_ptr()) }
+    }
+
+    /// Returns the number of classifier outputs used by rank pooling.
+    #[must_use]
+    pub fn n_cls_out(&self) -> u32 {
+        unsafe { koharu_llama_sys::llama_model_n_cls_out(self.model.as_ptr()) }
+    }
+
     /// Returns the total size of all the tensors in the model in bytes.
     pub fn size(&self) -> u64 {
         unsafe { koharu_llama_sys::llama_model_size(self.model.as_ptr()) }
@@ -776,11 +786,7 @@ impl LlamaModel {
         let model = NonNull::new(llama_model).ok_or(LlamaModelLoadError::NullResult)?;
 
         tracing::debug!(?path, "Loaded model");
-        Ok(LlamaModel {
-            model,
-            #[cfg(feature = "llguidance")]
-            llguidance_factory: std::sync::OnceLock::new(),
-        })
+        Ok(LlamaModel { model })
     }
 
     /// Initializes a lora adapter from a file.
@@ -856,6 +862,48 @@ impl LlamaModel {
         };
         let context = NonNull::new(context).ok_or(LlamaContextLoadError::NullReturn)?;
         Ok(LlamaContext::new(self, context, params.embeddings()))
+    }
+
+    /// Creates a context with backend sampler chains attached to specific sequences.
+    ///
+    /// The context owns the samplers and keeps them alive for its lifetime. Each sampler
+    /// must be a chain whose operations support backend execution.
+    ///
+    /// # Errors
+    ///
+    /// See [`LlamaContextLoadError`].
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn new_context_with_samplers<'a>(
+        &'a self,
+        _: &LlamaBackend,
+        params: LlamaContextParams,
+        samplers: impl IntoIterator<Item = (i32, LlamaSampler)>,
+    ) -> Result<LlamaContext<'a>, LlamaContextLoadError> {
+        let samplers = samplers.into_iter().collect::<Vec<_>>();
+        let mut context_params = params.context_params;
+        let mut sampler_configs = samplers
+            .iter()
+            .map(
+                |(seq_id, sampler)| koharu_llama_sys::llama_sampler_seq_config {
+                    seq_id: *seq_id,
+                    sampler: sampler.sampler,
+                },
+            )
+            .collect::<Vec<_>>();
+        if !sampler_configs.is_empty() {
+            context_params.samplers = sampler_configs.as_mut_ptr();
+            context_params.n_samplers = sampler_configs.len();
+        }
+        let context = unsafe {
+            koharu_llama_sys::llama_new_context_with_model(self.model.as_ptr(), context_params)
+        };
+        let context = NonNull::new(context).ok_or(LlamaContextLoadError::NullReturn)?;
+        Ok(LlamaContext::with_samplers(
+            self,
+            context,
+            params.embeddings(),
+            samplers,
+        ))
     }
 
     /// Apply the models chat template to some messages.

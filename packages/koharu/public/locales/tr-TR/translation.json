@@ -12,6 +12,7 @@
     "downloadingFiles_one": "{{count}} dosya indiriliyor",
     "downloadingFiles_other": "{{count}} dosya indiriliyor",
     "modelDownload": "Model indirme",
+    "pageLabel": "Sayfa {{number}}: {{label}}",
     "processing": "İşleniyor",
     "processingFailed": "İşleme başarısız oldu.",
     "stop": "Durdur",
@@ -245,13 +246,12 @@
     "delete": "Seçilenleri Sil",
     "discord": "Discord",
     "edit": "Düzenle",
-    "exportPng": "PNG Dışa Aktar…",
-    "exportPsd": "PSD Dışa Aktar…",
+    "export": "Projeyi Dışa Aktar",
     "file": "Dosya",
     "fit": "Pencereye Sığdır",
     "github": "GitHub",
     "help": "Yardım",
-    "importPages": "Sayfaları İçe Aktar…",
+    "import": "Sayfaları İçe Aktar",
     "process": "İşle",
     "processLayers": "Seçili Katmanları İşle",
     "processPages": "Seçili Sayfaları İşle",
@@ -297,7 +297,8 @@
     "pages": "Sayfalar",
     "rename": "Yeniden adlandır",
     "renameDescription": "Bu sayfa için yeni bir ad seçin.",
-    "renameTitle": "Sayfayı yeniden adlandır"
+    "renameTitle": "Sayfayı yeniden adlandır",
+    "selected": "{{count}} seçili"
   },
   "outputPicker": {
     "instructions": "Çeviri talimatları",
@@ -318,7 +319,6 @@
     "translation": "Kaynak metni hedef dile çevirir."
   },
   "providerDescriptions": {
-    "atlas-cloud": "Atlas üzerinde barındırılan dil modelleri.",
     "caiyun": "Caiyun çeviri API'si.",
     "claude": "Anthropic Claude modelleri.",
     "deepl": "DeepL çeviri API'si.",

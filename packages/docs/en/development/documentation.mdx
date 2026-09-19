@@ -1,0 +1,51 @@
+---
+title: 'Write and publish docs'
+description: 'Preview Mintlify, maintain translated MDX, and connect the repository for publishing.'
+icon: 'book'
+---
+
+The documentation is the `@koharu/docs` Mintlify workspace in `packages/docs/`. Bun manages its dependencies through the repository's root `bun.lock`.
+
+<Steps>
+  <Step title="Install the docs tooling">
+    Use Node.js 24 LTS and Bun 1.3.14 or later. From the repository root:
+
+    ```bash
+    bun install --frozen-lockfile --ignore-scripts
+    ```
+
+  </Step>
+  <Step title="Preview">
+    ```bash
+    bun run docs
+    ```
+
+    Open `http://localhost:3001`. The preview updates when MDX or configuration changes.
+
+  </Step>
+</Steps>
+
+## Author native MDX
+
+Every page needs a `title` and `description` in frontmatter. Mintlify renders article titles, so do not repeat them as an H1. The landing pages use Almond's native `frame` mode and provide their own single H1.
+
+Use **Steps** for ordered tasks, **Tabs** for platform or model choices, **Note**, **Tip**, and **Warning** for relevant callouts, **Cards** for next actions, and **Accordions** for symptom-specific help. Keep reference tables and fenced Mermaid diagrams readable without custom scripts or CSS.
+
+Use root-relative internal links with no file extension, such as `/en/guides/export`. Shared images live outside the locale folders and need descriptive alt text.
+
+## Keep translations aligned
+
+English, Japanese, and Simplified Chinese live in `en/`, `ja/`, and `zh/`. Maintain matching page slugs, instructions, examples, and technical coverage in all three languages. Translate headings, descriptions, component labels, navigation, and image descriptions as well as prose.
+
+`packages/docs/docs.json` owns themes and navigation. Add a page to every language's navigation when it is introduced. The site uses Mintlify's language switcher and does not keep old Zensical routes or redirects.
+
+## Connect publishing
+
+In the Mintlify dashboard, connect `koharu-rs/koharu` and select the production branch. In Git Settings, enable **docs.json is in a subdirectory** and enter `/packages/docs` without a trailing slash. Configure `koharu.rs` as the custom domain and follow the DNS records shown by Mintlify.
+
+<Note>
+  Publishing and custom-domain activation require the Mintlify GitHub integration and domain
+  configuration.
+</Note>
+
+See Mintlify's [monorepo setup](https://www.mintlify.com/docs/deploy/monorepo) and [custom domains](https://www.mintlify.com/docs/customize/custom-domain) for dashboard instructions.

@@ -238,18 +238,18 @@ export function PageRail() {
               {pages.length}
             </span>
           </div>
+          {/* One selected page behaves exactly like acting on the active
+              page, so saying so would be noise. */}
+          {selected.length > 1 && (
+            <span
+              role='status'
+              aria-live='polite'
+              className='ml-auto text-[9px] text-muted-foreground tabular-nums'
+            >
+              {t('navigator.selected', { count: selected.length })}
+            </span>
+          )}
         </header>
-
-        {importing && (
-          <div
-            role='status'
-            aria-live='polite'
-            className='flex h-7 shrink-0 items-center gap-1.5 px-2.5 text-[9px] text-muted-foreground'
-          >
-            <LoaderCircle className='size-3 animate-spin' aria-hidden='true' />
-            {t('navigator.importing')}
-          </div>
-        )}
 
         {pages.length > 0 && (
           <div className='border-b px-2 py-1.5'>

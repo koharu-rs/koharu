@@ -21,4 +21,8 @@ describe('editor state', () => {
     useKoharuStore.getState().dismissDownload(9)
     expect(useKoharuStore.getState().downloads[9]).toBeUndefined()
   })
+
+  it('defaults paint brush color to pure white (#FFFFFF)', () => {
+    expect(useKoharuStore.getState().brush.color).toBe('#FFFFFF')
+  })
 })

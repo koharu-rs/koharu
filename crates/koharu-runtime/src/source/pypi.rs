@@ -7,6 +7,7 @@ use crate::network;
 pub(crate) enum Platform {
     WindowsX64,
     LinuxX64,
+    LinuxArm64,
 }
 
 impl Platform {
@@ -15,6 +16,8 @@ impl Platform {
             Ok(Self::WindowsX64)
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             Ok(Self::LinuxX64)
+        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+            Ok(Self::LinuxArm64)
         } else {
             anyhow::bail!("PyPI runtime packages do not support this target")
         }
@@ -24,6 +27,7 @@ impl Platform {
         match self {
             Self::WindowsX64 => filename.contains("win_amd64"),
             Self::LinuxX64 => filename.contains("manylinux") && filename.contains("x86_64"),
+            Self::LinuxArm64 => filename.contains("manylinux") && filename.contains("aarch64"),
         }
     }
 }

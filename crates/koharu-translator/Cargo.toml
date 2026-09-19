@@ -30,5 +30,6 @@ specta = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-rayon = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

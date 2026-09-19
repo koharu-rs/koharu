@@ -1,0 +1,49 @@
+name: Bug report
+description: Report something that is not working as expected
+type: Bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue. Please search existing issues before submitting a new report.
+
+        If AI helped substantially with this report, briefly mention how.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide steps or a sample that demonstrates the issue. For intermittent issues, describe the circumstances.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Your environment
+      description: Include your Koharu version and operating system. Add GPU and driver details if relevant and available.
+      placeholder: |
+        Koharu:
+        OS:
+        GPU/runtime, if relevant:
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add relevant screenshots, logs, or other details. Remove private information before sharing.

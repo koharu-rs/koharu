@@ -79,6 +79,7 @@ impl Default for ModelSelection {
 pub struct Quantization {
     pub id: String,
     pub name: String,
+    pub downloaded: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Type)]

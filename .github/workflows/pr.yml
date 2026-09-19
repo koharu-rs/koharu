@@ -20,25 +20,18 @@ jobs:
           issue_message: |
             Thanks for opening your first issue in Koharu.
 
-            Please include:
-            - what you expected to happen
-            - what happened instead
-            - steps to reproduce
-            - screenshots or logs if available
-            - your OS and GPU/runtime setup if the issue is build or inference related
-
-            If this is a support question or you want faster discussion, you can also use Discord:
+            We appreciate the time you took to provide the requested details. If you need support or want faster discussion, you can also use Discord:
             https://discord.gg/mHvHkxGnUY
 
           pr_message: |
             Thanks for your first PR to Koharu.
 
             Please review our contribution guide before review:
-            https://koharu.rs/contribute/introduction/
+            https://koharu.rs/development/contributing/
 
             In the PR description, include:
             - what changed
             - any user-visible behavior differences
             - how you verified the change
 
-            If AI helped produce the patch, a human still needs to review and understand it before submission.
+            If AI substantially helped design or implement the patch, disclose the extent and purpose of that assistance. A human contributor must personally review, understand, and take responsibility for every submission.

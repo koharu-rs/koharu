@@ -1,0 +1,390 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "almond",
+  "name": "Koharu",
+  "description": "Editable manga translation, from the first page to the final export.",
+  "colors": {
+    "primary": "#D85B6A",
+    "light": "#F07B89",
+    "dark": "#D85B6A"
+  },
+  "background": {
+    "color": {
+      "light": "#FFFFFF",
+      "dark": "#000000"
+    }
+  },
+  "favicon": "/assets/koharu-icon.png",
+  "appearance": {
+    "default": "system"
+  },
+  "navigation": {
+    "languages": [
+      {
+        "language": "en",
+        "default": true,
+        "navbar": {
+          "links": [
+            {
+              "type": "github",
+              "href": "https://github.com/koharu-rs/koharu"
+            }
+          ],
+          "primary": {
+            "type": "button",
+            "label": "Download Koharu",
+            "href": "https://github.com/koharu-rs/koharu/releases/latest"
+          }
+        },
+        "footer": {
+          "socials": {
+            "github": "https://github.com/koharu-rs/koharu",
+            "discord": "https://discord.gg/mHvHkxGnUY",
+            "x": "https://x.com/mayo_irl"
+          },
+          "links": [
+            {
+              "header": "Learn",
+              "items": [
+                {
+                  "label": "Installation",
+                  "href": "/en/installation"
+                },
+                {
+                  "label": "First translation",
+                  "href": "/en/quickstart"
+                },
+                {
+                  "label": "Workflow",
+                  "href": "/en/guides/processing"
+                }
+              ]
+            },
+            {
+              "header": "Project",
+              "items": [
+                {
+                  "label": "GitHub",
+                  "href": "https://github.com/koharu-rs/koharu"
+                },
+                {
+                  "label": "Releases",
+                  "href": "https://github.com/koharu-rs/koharu/releases"
+                },
+                {
+                  "label": "Contribute",
+                  "href": "/en/development/contributing"
+                }
+              ]
+            },
+            {
+              "header": "Get help",
+              "items": [
+                {
+                  "label": "Troubleshooting",
+                  "href": "/en/reference/troubleshooting"
+                },
+                {
+                  "label": "Community",
+                  "href": "https://discord.gg/mHvHkxGnUY"
+                }
+              ]
+            }
+          ]
+        },
+        "pages": [
+          {
+            "group": "Start here",
+            "pages": ["en/index", "en/installation", "en/quickstart", "en/hardware"]
+          },
+          {
+            "group": "Translate a project",
+            "pages": [
+              "en/guides/projects",
+              "en/guides/processing",
+              "en/guides/review",
+              "en/guides/canvas",
+              "en/guides/cleanup",
+              "en/guides/typesetting",
+              "en/guides/export"
+            ]
+          },
+          {
+            "group": "Models and providers",
+            "pages": ["en/models/vision", "en/models/providers", "en/models/translation"]
+          },
+          {
+            "group": "Koharu Agent",
+            "pages": ["en/agent/setup", "en/agent/projects"]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "en/development/contributing",
+              "en/development/setup",
+              "en/development/architecture",
+              "en/development/scene",
+              "en/development/rendering",
+              "en/development/documentation"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "en/reference/settings",
+              "en/reference/shortcuts",
+              "en/reference/data",
+              "en/reference/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "language": "ja",
+        "navbar": {
+          "links": [
+            {
+              "type": "github",
+              "href": "https://github.com/koharu-rs/koharu"
+            }
+          ],
+          "primary": {
+            "type": "button",
+            "label": "Koharu をダウンロード",
+            "href": "https://github.com/koharu-rs/koharu/releases/latest"
+          }
+        },
+        "footer": {
+          "socials": {
+            "github": "https://github.com/koharu-rs/koharu",
+            "discord": "https://discord.gg/mHvHkxGnUY",
+            "x": "https://x.com/mayo_irl"
+          },
+          "links": [
+            {
+              "header": "使い方",
+              "items": [
+                {
+                  "label": "インストール",
+                  "href": "/ja/installation"
+                },
+                {
+                  "label": "最初の翻訳",
+                  "href": "/ja/quickstart"
+                },
+                {
+                  "label": "ワークフロー",
+                  "href": "/ja/guides/processing"
+                }
+              ]
+            },
+            {
+              "header": "プロジェクト",
+              "items": [
+                {
+                  "label": "GitHub",
+                  "href": "https://github.com/koharu-rs/koharu"
+                },
+                {
+                  "label": "リリース",
+                  "href": "https://github.com/koharu-rs/koharu/releases"
+                },
+                {
+                  "label": "開発に参加",
+                  "href": "/ja/development/contributing"
+                }
+              ]
+            },
+            {
+              "header": "サポート",
+              "items": [
+                {
+                  "label": "トラブルシューティング",
+                  "href": "/ja/reference/troubleshooting"
+                },
+                {
+                  "label": "コミュニティ",
+                  "href": "https://discord.gg/mHvHkxGnUY"
+                }
+              ]
+            }
+          ]
+        },
+        "pages": [
+          {
+            "group": "はじめに",
+            "pages": ["ja/index", "ja/installation", "ja/quickstart", "ja/hardware"]
+          },
+          {
+            "group": "翻訳ワークフロー",
+            "pages": [
+              "ja/guides/projects",
+              "ja/guides/processing",
+              "ja/guides/review",
+              "ja/guides/canvas",
+              "ja/guides/cleanup",
+              "ja/guides/typesetting",
+              "ja/guides/export"
+            ]
+          },
+          {
+            "group": "モデルとプロバイダー",
+            "pages": ["ja/models/vision", "ja/models/providers", "ja/models/translation"]
+          },
+          {
+            "group": "Koharu Agent",
+            "pages": ["ja/agent/setup", "ja/agent/projects"]
+          },
+          {
+            "group": "開発",
+            "pages": [
+              "ja/development/contributing",
+              "ja/development/setup",
+              "ja/development/architecture",
+              "ja/development/scene",
+              "ja/development/rendering",
+              "ja/development/documentation"
+            ]
+          },
+          {
+            "group": "リファレンス",
+            "pages": [
+              "ja/reference/settings",
+              "ja/reference/shortcuts",
+              "ja/reference/data",
+              "ja/reference/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "language": "zh",
+        "navbar": {
+          "links": [
+            {
+              "type": "github",
+              "href": "https://github.com/koharu-rs/koharu"
+            }
+          ],
+          "primary": {
+            "type": "button",
+            "label": "下载 Koharu",
+            "href": "https://github.com/koharu-rs/koharu/releases/latest"
+          }
+        },
+        "footer": {
+          "socials": {
+            "github": "https://github.com/koharu-rs/koharu",
+            "discord": "https://discord.gg/mHvHkxGnUY",
+            "x": "https://x.com/mayo_irl"
+          },
+          "links": [
+            {
+              "header": "学习",
+              "items": [
+                {
+                  "label": "安装",
+                  "href": "/zh/installation"
+                },
+                {
+                  "label": "首次翻译",
+                  "href": "/zh/quickstart"
+                },
+                {
+                  "label": "工作流",
+                  "href": "/zh/guides/processing"
+                }
+              ]
+            },
+            {
+              "header": "项目",
+              "items": [
+                {
+                  "label": "GitHub",
+                  "href": "https://github.com/koharu-rs/koharu"
+                },
+                {
+                  "label": "发行版",
+                  "href": "https://github.com/koharu-rs/koharu/releases"
+                },
+                {
+                  "label": "参与贡献",
+                  "href": "/zh/development/contributing"
+                }
+              ]
+            },
+            {
+              "header": "获取帮助",
+              "items": [
+                {
+                  "label": "故障排除",
+                  "href": "/zh/reference/troubleshooting"
+                },
+                {
+                  "label": "社区",
+                  "href": "https://discord.gg/mHvHkxGnUY"
+                }
+              ]
+            }
+          ]
+        },
+        "pages": [
+          {
+            "group": "开始使用",
+            "pages": ["zh/index", "zh/installation", "zh/quickstart", "zh/hardware"]
+          },
+          {
+            "group": "翻译项目",
+            "pages": [
+              "zh/guides/projects",
+              "zh/guides/processing",
+              "zh/guides/review",
+              "zh/guides/canvas",
+              "zh/guides/cleanup",
+              "zh/guides/typesetting",
+              "zh/guides/export"
+            ]
+          },
+          {
+            "group": "模型与服务商",
+            "pages": ["zh/models/vision", "zh/models/providers", "zh/models/translation"]
+          },
+          {
+            "group": "Koharu Agent",
+            "pages": ["zh/agent/setup", "zh/agent/projects"]
+          },
+          {
+            "group": "开发",
+            "pages": [
+              "zh/development/contributing",
+              "zh/development/setup",
+              "zh/development/architecture",
+              "zh/development/scene",
+              "zh/development/rendering",
+              "zh/development/documentation"
+            ]
+          },
+          {
+            "group": "参考",
+            "pages": [
+              "zh/reference/settings",
+              "zh/reference/shortcuts",
+              "zh/reference/data",
+              "zh/reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "contextual": {
+    "options": ["copy", "view"]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/koharu-rs/koharu",
+      "discord": "https://discord.gg/mHvHkxGnUY",
+      "x": "https://x.com/mayo_irl"
+    }
+  }
+}

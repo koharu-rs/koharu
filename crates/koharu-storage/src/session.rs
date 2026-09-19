@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::Context as _;
 use bytes::Bytes;
 use fs4::FileExt;
 use parking_lot::RwLock;
@@ -115,7 +116,7 @@ impl Session {
         let path = path.as_ref().to_owned();
         tokio::task::spawn_blocking(move || create_project(path, document, payload, None))
             .await
-            .map_err(|error| Error::Task(error.to_string()))?
+            .context("project creation task failed")?
     }
 
     #[tracing::instrument(level = "info", skip_all, fields(path = %path.as_ref().display()))]
@@ -123,7 +124,7 @@ impl Session {
         let path = path.as_ref().to_owned();
         tokio::task::spawn_blocking(move || open_project(path, None))
             .await
-            .map_err(|error| Error::Task(error.to_string()))?
+            .context("project open task failed")?
     }
 
     pub async fn memory(document: DocumentId, payload: Bytes) -> Result<Self> {
@@ -137,7 +138,7 @@ impl Session {
             )
         })
         .await
-        .map_err(|error| Error::Task(error.to_string()))?
+        .context("temporary project creation task failed")?
     }
 
     #[must_use]
@@ -204,7 +205,7 @@ impl Session {
             Ok::<_, Error>(stored)
         })
         .await
-        .map_err(|error| Error::Task(error.to_string()))??;
+        .context("project save task failed")??;
 
         self.inner.head.write().clone_from(&Head {
             slot,
@@ -238,7 +239,7 @@ impl Session {
             Ok::<_, Error>(GcReport { blobs, bytes })
         })
         .await
-        .map_err(|error| Error::Task(error.to_string()))?
+        .context("storage garbage collection task failed")?
     }
 }
 

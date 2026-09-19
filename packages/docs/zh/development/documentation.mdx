@@ -1,0 +1,48 @@
+---
+title: '编写与发布文档'
+description: '预览 Mintlify，维护翻译 MDX，并连接仓库发布。'
+icon: 'book'
+---
+
+文档是位于 `packages/docs/` 的 Mintlify 工作区 `@koharu/docs`，由仓库根目录的 `bun.lock` 管理依赖。
+
+<Steps>
+  <Step title="安装文档工具">
+    使用 Node.js 24 LTS 和 Bun 1.3.14+，从仓库根目录运行：
+
+    ```bash
+    bun install --frozen-lockfile --ignore-scripts
+    ```
+
+  </Step>
+  <Step title="预览">
+    ```bash
+    bun run docs
+    ```
+
+    打开 `http://localhost:3001`，MDX 或配置更改后会自动更新预览。
+
+  </Step>
+</Steps>
+
+## 使用原生 MDX
+
+每页 frontmatter 都需要 `title` 和 `description`。普通文章标题由 Mintlify 渲染，不要重复添加 H1。首页使用 Almond 原生 `frame` 模式，并在正文中提供唯一的 H1。
+
+顺序任务使用 **Steps**，平台或模型选择使用 **Tabs**，必要提示使用 **Note**、**Tip**、**Warning**，下一步入口使用 **Card**，按症状组织的帮助使用 **Accordion**。参考表格和 Mermaid 代码围栏应易读，不依赖自定义脚本或 CSS。
+
+内部链接使用无扩展名的根相对路径，例如 `/zh/guides/export`。共享图片放在语言目录外，并提供描述性替代文本。
+
+## 保持翻译一致
+
+英语、日语、简体中文分别位于 `en/`、`ja/`、`zh/`。保持页面路径、操作步骤、示例与技术覆盖一致。正文之外，标题、描述、组件标签、导航和图片说明也要翻译。
+
+`packages/docs/docs.json` 管理主题和导航。新增页面时应加入所有语言的导航。站点使用 Mintlify 原生语言切换，不保留旧 Zensical 路由或重定向。
+
+## 连接发布
+
+在 Mintlify 控制台连接 `koharu-rs/koharu` 并选择生产分支。在 Git Settings 中启用 **docs.json is in a subdirectory**，输入不带结尾斜杠的 `/packages/docs`。添加自定义域名 `koharu.rs`，按 Mintlify 显示的记录配置 DNS。
+
+<Note>发布和域名启用需要 Mintlify GitHub 集成与域名配置。</Note>
+
+控制台操作见 Mintlify 的 [monorepo 设置](https://www.mintlify.com/docs/deploy/monorepo)与[自定义域名](https://www.mintlify.com/docs/customize/custom-domain)文档。

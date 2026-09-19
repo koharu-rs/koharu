@@ -7,6 +7,7 @@ use std::slice;
 
 use crate::llama_batch::LlamaBatch;
 use crate::model::{LlamaLoraAdapter, LlamaModel};
+use crate::sampling::LlamaSampler;
 use crate::timing::LlamaTimings;
 use crate::token::LlamaToken;
 use crate::token::data::LlamaTokenData;
@@ -28,6 +29,7 @@ pub struct LlamaContext<'a> {
     pub model: &'a LlamaModel,
     initialized_logits: Vec<i32>,
     embeddings_enabled: bool,
+    _backend_samplers: Vec<(i32, LlamaSampler)>,
 }
 
 impl Debug for LlamaContext<'_> {
@@ -49,6 +51,22 @@ impl<'model> LlamaContext<'model> {
             model: llama_model,
             initialized_logits: Vec::new(),
             embeddings_enabled,
+            _backend_samplers: Vec::new(),
+        }
+    }
+
+    pub(crate) fn with_samplers(
+        llama_model: &'model LlamaModel,
+        llama_context: NonNull<koharu_llama_sys::llama_context>,
+        embeddings_enabled: bool,
+        backend_samplers: Vec<(i32, LlamaSampler)>,
+    ) -> Self {
+        Self {
+            context: llama_context,
+            model: llama_model,
+            initialized_logits: Vec::new(),
+            embeddings_enabled,
+            _backend_samplers: backend_samplers,
         }
     }
 
@@ -120,8 +138,8 @@ impl<'model> LlamaContext<'model> {
     ///
     /// # Returns
     ///
-    /// A slice containing the embeddings for the last decoded batch.
-    /// The size corresponds to the `n_embd` parameter of the context's model.
+    /// A slice containing the embeddings for the last decoded batch. Its size is the
+    /// model's output embedding width, or classifier output width for rank pooling.
     ///
     /// # Errors
     ///
@@ -131,14 +149,11 @@ impl<'model> LlamaContext<'model> {
     ///
     /// # Panics
     ///
-    /// * `n_embd` does not fit into a usize
+    /// * The output width does not fit into a `usize`.
     pub fn embeddings_seq_ith(&self, i: i32) -> Result<&[f32], EmbeddingsError> {
         if !self.embeddings_enabled {
             return Err(EmbeddingsError::NotEnabled);
         }
-
-        let n_embd =
-            usize::try_from(self.model.n_embd()).expect("n_embd does not fit into a usize");
 
         unsafe {
             let embedding = koharu_llama_sys::llama_get_embeddings_seq(self.context.as_ptr(), i);
@@ -147,7 +162,7 @@ impl<'model> LlamaContext<'model> {
             if embedding.is_null() {
                 Err(EmbeddingsError::NonePoolType)
             } else {
-                Ok(slice::from_raw_parts(embedding, n_embd))
+                Ok(slice::from_raw_parts(embedding, self.embeddings_out_len()))
             }
         }
     }
@@ -157,7 +172,7 @@ impl<'model> LlamaContext<'model> {
     /// # Returns
     ///
     /// A slice containing the embeddings for the last decoded batch of the given token.
-    /// The size corresponds to the `n_embd` parameter of the context's model.
+    /// Its size is the model's output embedding width, or classifier output width for rank pooling.
     ///
     /// # Errors
     ///
@@ -167,14 +182,11 @@ impl<'model> LlamaContext<'model> {
     ///
     /// # Panics
     ///
-    /// * `n_embd` does not fit into a usize
+    /// * The output width does not fit into a `usize`.
     pub fn embeddings_ith(&self, i: i32) -> Result<&[f32], EmbeddingsError> {
         if !self.embeddings_enabled {
             return Err(EmbeddingsError::NotEnabled);
         }
-
-        let n_embd =
-            usize::try_from(self.model.n_embd()).expect("n_embd does not fit into a usize");
 
         unsafe {
             let embedding = koharu_llama_sys::llama_get_embeddings_ith(self.context.as_ptr(), i);
@@ -182,8 +194,17 @@ impl<'model> LlamaContext<'model> {
             if embedding.is_null() {
                 Err(EmbeddingsError::LogitsNotEnabled)
             } else {
-                Ok(slice::from_raw_parts(embedding, n_embd))
+                Ok(slice::from_raw_parts(embedding, self.embeddings_out_len()))
             }
+        }
+    }
+
+    fn embeddings_out_len(&self) -> usize {
+        let pooling = unsafe { koharu_llama_sys::llama_pooling_type(self.context.as_ptr()) };
+        if pooling == koharu_llama_sys::LLAMA_POOLING_TYPE_RANK {
+            usize::try_from(self.model.n_cls_out()).expect("n_cls_out does not fit into a usize")
+        } else {
+            usize::try_from(self.model.n_embd_out()).expect("n_embd_out does not fit into a usize")
         }
     }
 
@@ -361,6 +382,14 @@ impl<'model> LlamaContext<'model> {
 
         tracing::debug!("Remove lora adapter");
         Ok(())
+    }
+
+    /// Returns the backend-sampled token at `i`, or `None` if no token was sampled.
+    #[must_use]
+    pub fn sampled_token_ith(&self, i: i32) -> Option<LlamaToken> {
+        let token =
+            unsafe { koharu_llama_sys::llama_get_sampled_token_ith(self.context.as_ptr(), i) };
+        (token != -1).then_some(LlamaToken(token))
     }
 }
 

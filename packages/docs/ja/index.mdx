@@ -1,0 +1,140 @@
+---
+title: 'Koharu ドキュメント'
+description: 'マンガの翻訳、編集、書き出しを Koharu で始めるためのガイドです。'
+sidebarTitle: '概要'
+icon: 'book-open'
+mode: 'frame'
+hideFooterPagination: true
+---
+
+<div className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+  <div className="mb-12 text-center">
+    <img src="/assets/koharu-icon.png" alt="" width="64" height="64" className="mx-auto mb-5" />
+    <h1 className="text-3xl font-semibold sm:text-4xl">Koharu ドキュメント</h1>
+    <div className="my-6 flex items-center justify-center gap-2">
+      <a href="https://github.com/koharu-rs/koharu" aria-label="GitHub" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="github" iconType="brands" size={24} />
+      </a>
+      <a href="https://discord.gg/mHvHkxGnUY" aria-label="Discord" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="discord" iconType="brands" size={24} />
+      </a>
+      <a href="https://x.com/mayo_irl" aria-label="X" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="x-twitter" iconType="brands" size={24} />
+      </a>
+    </div>
+    <p className="mx-auto max-w-2xl text-lg leading-relaxed">最初のページから書き出しまで、いつでも修正できるマンガ翻訳ワークフロー。</p>
+  </div>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>はじめに</h2>
+  <CardGroup cols={3}>
+    <Card title='Koharu をインストール' icon='download' href='/ja/installation'>
+      Windows、macOS、Linux 向けのリリースを入手します。
+    </Card>
+    <Card title='最初の翻訳' icon='rocket' href='/ja/quickstart'>
+      1 ページを翻訳し、確認して書き出します。
+    </Card>
+    <Card title='ハードウェアとランタイム' icon='microchip' href='/ja/hardware'>
+      対応デバイスとモデル取得の仕組みを確認します。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>ページを編集する</h2>
+  <CardGroup cols={3}>
+    <Card title='プロジェクトと読み込み' icon='folder-open' href='/ja/guides/projects'>
+      画像、アーカイブ、PDF をひとつのプロジェクトにまとめます。
+    </Card>
+    <Card title='ページの処理' icon='play' href='/ja/guides/processing'>
+      実行するページと処理段階を選びます。
+    </Card>
+    <Card title='テキストの確認' icon='spell-check' href='/ja/guides/review'>
+      OCR、表現、名前、改行を修正します。
+    </Card>
+    <Card title='画像の修復' icon='eraser' href='/ja/guides/cleanup'>
+      原文の文字を除去し、画像を補修します。
+    </Card>
+    <Card title='訳文の組版' icon='font' href='/ja/guides/typesetting'>
+      フォント、配置、塗り、縁取りを調整します。
+    </Card>
+    <Card title='PNG と PSD の書き出し' icon='file-export' href='/ja/guides/export'>
+      統合画像や編集可能なレイヤー付きファイルを出力します。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>モデルとプロバイダー</h2>
+  <CardGroup cols={3}>
+    <Card title='画像処理モデル' icon='eye' href='/ja/models/vision'>
+      検出、OCR、インペイントのモデルを選びます。
+    </Card>
+    <Card title='翻訳プロバイダー' icon='plug' href='/ja/models/providers'>
+      ローカルモデルやホスト型サービスを接続します。
+    </Card>
+    <Card title='翻訳の設定' icon='language' href='/ja/models/translation'>
+      言語、指示、生成オプションを設定します。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Koharu Agent</h2>
+  <CardGroup cols={3}>
+    <Card title='Agent のセットアップ' icon='robot' href='/ja/agent/setup'>
+      サインインし、プロジェクトを支援するモデルを選びます。
+    </Card>
+    <Card title='プロジェクトの操作' icon='comment' href='/ja/agent/projects'>
+      ページの確認や範囲を指定した編集を依頼します。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>開発者向け</h2>
+  <CardGroup cols={3}>
+    <Card title='Koharu をビルドする' icon='terminal' href='/ja/development/setup'>
+      開発環境を整えてデスクトップアプリを起動します。
+    </Card>
+    <Card title='アーキテクチャ' icon='sitemap' href='/ja/development/architecture'>
+      UI、シーン、ランタイムの担当範囲を確認します。
+    </Card>
+    <Card title='開発に参加する' icon='code-pull-request' href='/ja/development/contributing'>
+      範囲を絞った変更と分かりやすい PR を準備します。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>ヘルプ</h2>
+  <CardGroup cols={3}>
+    <Card
+      title='トラブルシューティング'
+      icon='circle-question'
+      href='/ja/reference/troubleshooting'
+    >
+      問題を切り分け、必要なログを集めます。
+    </Card>
+    <Card title='設定' icon='gear' href='/ja/reference/settings'>
+      作業に必要な設定項目を探します。
+    </Card>
+    <Card title='キーボードショートカット' icon='keyboard' href='/ja/reference/shortcuts'>
+      既定のキー操作で移動や編集を行います。
+    </Card>
+  </CardGroup>
+</section>
+
+  <section className="text-center">
+    <h2 className="mb-6 text-2xl font-semibold">Koharu について</h2>
+
+    Koharu は原文、訳文、画像、レイアウトをローカルのプロジェクトにまとめます。翻訳パイプライン全体を実行することも、個別の段階を修正することもできます。[キャンバスツール](/ja/guides/canvas)でページを仕上げてください。
+
+    <Frame caption="Koharu のデスクトップエディターでページ、テキストの設定、画像を編集できます。">
+      <img src="/screenshot.png" alt="翻訳済みのマンガページを表示した Koharu。左にページ一覧、右に組版設定とレイヤーが並んでいます。" />
+    </Frame>
+
+    <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed">プロジェクトは自分の端末に保存されます。ホスト型の翻訳・生成プロバイダーには、送信するリクエストに必要な内容が渡されます。</p>
+
+  </section>
+</div>

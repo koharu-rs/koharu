@@ -1,43 +1,25 @@
 //! AMD discovery through the Linux KFD topology.
 
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{fs, io, path::Path};
 
-use super::targets::KNOWN_TARGETS;
+use anyhow::Result;
+use strum::{EnumProperty, IntoEnumIterator};
+
+use super::Target;
 use crate::{Backend, Device};
 
 const KFD_TOPOLOGY: &str = "/sys/class/kfd/kfd/topology/nodes";
 
-#[derive(Debug, thiserror::Error)]
-pub(super) enum ProbeError {
-    #[error("{}: {source}", path.display())]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error("unknown gfx_target_version: {0}")]
-    UnknownTarget(i64),
-}
-
-pub(super) fn probe() -> Result<Vec<Device>, ProbeError> {
+pub(super) fn probe() -> Result<Vec<Device>> {
     let topology = Path::new(KFD_TOPOLOGY);
     if !topology.is_dir() {
         return Ok(Vec::new());
     }
 
-    let entries = fs::read_dir(topology).map_err(|source| ProbeError::Io {
-        path: topology.to_owned(),
-        source,
-    })?;
+    let entries = fs::read_dir(topology)?;
     let mut nodes = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|source| ProbeError::Io {
-            path: topology.to_owned(),
-            source,
-        })?;
+        let entry = entry?;
         let path = entry.path();
         if path.is_dir()
             && entry.file_name().to_str().is_some_and(|name| {
@@ -56,7 +38,7 @@ pub(super) fn probe() -> Result<Vec<Device>, ProbeError> {
         let properties = match fs::read_to_string(&path) {
             Ok(properties) => properties,
             Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(source) => return Err(ProbeError::Io { path, source }),
+            Err(error) => return Err(error.into()),
         };
 
         let mut simd_count = 0;
@@ -80,21 +62,22 @@ pub(super) fn probe() -> Result<Vec<Device>, ProbeError> {
             continue;
         }
 
-        let target = KNOWN_TARGETS
-            .iter()
-            .find(|target| target.version == version)
-            .ok_or(ProbeError::UnknownTarget(version))?;
+        let Some(target) = Target::iter().find(|target| target.get_int("version") == Some(version))
+        else {
+            continue;
+        };
+        let name = target.to_string();
         let index = devices.len();
         devices.push(Device {
             index,
             name: format!("ROCm{index}"),
-            description: target.name.to_owned(),
+            description: name.clone(),
             backend: Backend::Rocm,
-            device_type: target.device_type,
+            device_type: target.device_type(),
             memory_total: 0,
             memory_free: 0,
             compute_capability: 0,
-            target: Some(target.name.to_owned()),
+            target: Some(name),
         });
     }
     Ok(devices)

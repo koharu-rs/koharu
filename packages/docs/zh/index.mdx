@@ -1,0 +1,136 @@
+---
+title: 'Koharu 文档'
+description: '了解如何使用 Koharu 翻译、编辑并导出漫画。'
+sidebarTitle: '简介'
+icon: 'book-open'
+mode: 'frame'
+hideFooterPagination: true
+---
+
+<div className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+  <div className="mb-12 text-center">
+    <img src="/assets/koharu-icon.png" alt="" width="64" height="64" className="mx-auto mb-5" />
+    <h1 className="text-3xl font-semibold sm:text-4xl">Koharu 文档</h1>
+    <div className="my-6 flex items-center justify-center gap-2">
+      <a href="https://github.com/koharu-rs/koharu" aria-label="GitHub" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="github" iconType="brands" size={24} />
+      </a>
+      <a href="https://discord.gg/mHvHkxGnUY" aria-label="Discord" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="discord" iconType="brands" size={24} />
+      </a>
+      <a href="https://x.com/mayo_irl" aria-label="X" className="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+        <Icon icon="x-twitter" iconType="brands" size={24} />
+      </a>
+    </div>
+    <p className="mx-auto max-w-2xl text-lg leading-relaxed">从第一页到最终导出，每一步都可以继续修改的漫画翻译工作流。</p>
+  </div>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>开始使用</h2>
+  <CardGroup cols={3}>
+    <Card title='安装 Koharu' icon='download' href='/zh/installation'>
+      下载适合 Windows、macOS 或 Linux 的发行版。
+    </Card>
+    <Card title='首次翻译' icon='rocket' href='/zh/quickstart'>
+      翻译一页漫画，检查结果并导出。
+    </Card>
+    <Card title='硬件与运行时' icon='microchip' href='/zh/hardware'>
+      查看设备支持与模型下载方式。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>编辑页面</h2>
+  <CardGroup cols={3}>
+    <Card title='项目与导入' icon='folder-open' href='/zh/guides/projects'>
+      将图片、压缩包与 PDF 整理到同一项目。
+    </Card>
+    <Card title='处理页面' icon='play' href='/zh/guides/processing'>
+      选择要处理的页面与阶段。
+    </Card>
+    <Card title='检查文字' icon='spell-check' href='/zh/guides/review'>
+      修正 OCR、措辞、名字和换行。
+    </Card>
+    <Card title='清理画面' icon='eraser' href='/zh/guides/cleanup'>
+      移除原文字迹并修补图像。
+    </Card>
+    <Card title='排版译文' icon='font' href='/zh/guides/typesetting'>
+      调整字体、对齐、填充与描边。
+    </Card>
+    <Card title='导出 PNG 与 PSD' icon='file-export' href='/zh/guides/export'>
+      交付合并图片或可编辑的分层文件。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>模型与服务商</h2>
+  <CardGroup cols={3}>
+    <Card title='视觉与修复模型' icon='eye' href='/zh/models/vision'>
+      选择检测、OCR 和图像修复模型。
+    </Card>
+    <Card title='翻译服务商' icon='plug' href='/zh/models/providers'>
+      连接本地模型或托管翻译服务。
+    </Card>
+    <Card title='翻译设置' icon='language' href='/zh/models/translation'>
+      配置语言、指令与生成选项。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>Koharu Agent</h2>
+  <CardGroup cols={3}>
+    <Card title='设置 Agent' icon='robot' href='/zh/agent/setup'>
+      登录并选择协助项目工作的模型。
+    </Card>
+    <Card title='操作项目' icon='comment' href='/zh/agent/projects'>
+      让 Agent 检查页面并按指定范围编辑。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>开发者</h2>
+  <CardGroup cols={3}>
+    <Card title='构建 Koharu' icon='terminal' href='/zh/development/setup'>
+      配置开发环境并运行桌面应用。
+    </Card>
+    <Card title='架构' icon='sitemap' href='/zh/development/architecture'>
+      了解 UI、场景和运行时的职责边界。
+    </Card>
+    <Card title='参与贡献' icon='code-pull-request' href='/zh/development/contributing'>
+      准备聚焦的改动与清楚的拉取请求。
+    </Card>
+  </CardGroup>
+</section>
+
+<section className='mb-12'>
+  <h2 className='mb-6 text-center text-2xl font-semibold'>获取帮助</h2>
+  <CardGroup cols={3}>
+    <Card title='故障排除' icon='circle-question' href='/zh/reference/troubleshooting'>
+      定位问题并收集有用的日志。
+    </Card>
+    <Card title='设置' icon='gear' href='/zh/reference/settings'>
+      查找工作流所需的控制选项。
+    </Card>
+    <Card title='键盘快捷键' icon='keyboard' href='/zh/reference/shortcuts'>
+      使用默认工具键快速浏览和编辑。
+    </Card>
+  </CardGroup>
+</section>
+
+  <section className="text-center">
+    <h2 className="mb-6 text-2xl font-semibold">关于 Koharu</h2>
+
+    Koharu 将原文、译文、图像与布局保存在本地项目中。可以运行完整翻译流程，也可以修改某个阶段，再用[画布工具](/zh/guides/canvas)完善页面。
+
+    <Frame caption="在 Koharu 桌面编辑器中管理页面、调整文字属性并编辑画面。">
+      <img src="/screenshot.png" alt="Koharu 中的翻译漫画页面：左侧是页面列表，右侧是排字设置与图层。" />
+    </Frame>
+
+    <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed">项目保存在你的设备上。使用托管翻译或生成服务时，服务商会收到相应请求所需的内容。</p>
+
+  </section>
+</div>

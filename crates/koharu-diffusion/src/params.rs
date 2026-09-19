@@ -108,7 +108,7 @@ pub struct ContextParams {
     pub force_sdxl_vae_conv_scale: bool,
     pub vae_format: VaeFormat,
     pub max_vram: Option<String>,
-    pub stream_layers: bool,
+    pub disable_prefetch: bool,
     pub eager_load: bool,
     pub backend: Option<String>,
     pub params_backend: Option<String>,
@@ -116,6 +116,7 @@ pub struct ContextParams {
     pub auto_fit: bool,
     pub rpc_servers: Option<String>,
     pub model_args: Option<String>,
+    pub disable_segmented_compute: bool,
 }
 
 impl Default for ContextParams {
@@ -157,7 +158,7 @@ impl Default for ContextParams {
             force_sdxl_vae_conv_scale: false,
             vae_format: VaeFormat::Auto,
             max_vram: None,
-            stream_layers: false,
+            disable_prefetch: false,
             eager_load: false,
             backend: None,
             params_backend: None,
@@ -165,6 +166,7 @@ impl Default for ContextParams {
             auto_fit: false,
             rpc_servers: None,
             model_args: None,
+            disable_segmented_compute: false,
         }
     }
 }
@@ -279,7 +281,7 @@ impl ContextParams {
             force_sdxl_vae_conv_scale: self.force_sdxl_vae_conv_scale,
             vae_format: self.vae_format.as_raw(),
             max_vram,
-            stream_layers: self.stream_layers,
+            disable_prefetch: self.disable_prefetch,
             eager_load: self.eager_load,
             backend,
             params_backend,
@@ -287,6 +289,7 @@ impl ContextParams {
             auto_fit: self.auto_fit,
             rpc_servers,
             model_args,
+            disable_segmented_compute: self.disable_segmented_compute,
         };
         Ok(NativeContextParams {
             raw,

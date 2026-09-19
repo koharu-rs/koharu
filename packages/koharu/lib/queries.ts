@@ -9,7 +9,7 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 
-import { commands, type FontFamily, type PageImportSource } from '@koharu/bridge/protocol'
+import { commands, type FontFamily } from '@koharu/bridge/protocol'
 
 import { call } from './backend'
 
@@ -18,7 +18,6 @@ export const pagesKey = ['pages'] as const
 export const pageKey = ['page'] as const
 export const preparedPageKey = (page: string) => ['prepared-page', page] as const
 export const fontsKey = ['fonts'] as const
-const importPagesKey = ['import-pages'] as const
 
 const projectQuery = queryOptions({
   queryKey: projectKey,
@@ -83,14 +82,27 @@ export function useFontPreview(font: FontFamily | undefined, enabled = true) {
   })
 }
 
-export function useImportPages() {
-  const importing = useIsMutating({ mutationKey: importPagesKey }) > 0
+export function useCommand<Args extends unknown[], Result>(
+  key: QueryKey,
+  command: (...args: Args) => Promise<Result>,
+  label: string,
+  onSuccess?: () => Promise<void>,
+) {
+  const busy = useIsMutating({ mutationKey: key }) > 0
   const mutation = useMutation({
-    mutationKey: importPagesKey,
-    mutationFn: (source: PageImportSource) => call(commands.importPages, source),
-    onSuccess: () => refresh(projectKey, pagesKey, pageKey),
+    mutationKey: key,
+    mutationFn: (args: Args) => call(command, ...args),
+    meta: { activity: label },
+    onSuccess,
   })
-  return { importPages: mutation.mutate, importing }
+  return { run: (...args: Args) => mutation.mutate(args), busy }
+}
+
+export function useImportPages() {
+  const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing', () =>
+    refresh(projectKey, pagesKey, pageKey),
+  )
+  return { importPages: run, importing: busy }
 }
 
 export async function refresh(...keys: QueryKey[]): Promise<void> {

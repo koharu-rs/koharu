@@ -1,8 +1,9 @@
-﻿//! utilities for working with session files
+//! utilities for working with session files
 
 use crate::context::LlamaContext;
 use crate::token::LlamaToken;
 use std::ffi::{CString, NulError};
+use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
 
 /// Flags for state sequence operations.
@@ -19,6 +20,11 @@ impl LlamaStateSeqFlags {
     /// without affecting the KV cache.
     pub const PARTIAL_ONLY: LlamaStateSeqFlags = LlamaStateSeqFlags(1);
 
+    /// Keep copied tensor data in device memory.
+    ///
+    /// Capturing another on-device state for the same sequence invalidates the previous one.
+    pub const ON_DEVICE: LlamaStateSeqFlags = LlamaStateSeqFlags(2);
+
     /// Create an empty flags set.
     pub const fn empty() -> LlamaStateSeqFlags {
         LlamaStateSeqFlags(0)
@@ -27,6 +33,11 @@ impl LlamaStateSeqFlags {
     /// Get the raw flags value.
     pub const fn bits(&self) -> u32 {
         self.0
+    }
+
+    /// Construct flags from their raw representation.
+    pub const fn from_bits(bits: u32) -> LlamaStateSeqFlags {
+        LlamaStateSeqFlags(bits)
     }
 
     /// Check if a flag is set.
@@ -38,6 +49,14 @@ impl LlamaStateSeqFlags {
 impl Default for LlamaStateSeqFlags {
     fn default() -> Self {
         Self::empty()
+    }
+}
+
+impl std::ops::BitOr for LlamaStateSeqFlags {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        Self(self.0 | other.0)
     }
 }
 
@@ -538,5 +557,97 @@ impl LlamaContext<'_> {
                 flags.0,
             ) > 0
         }
+    }
+
+    /// Capture an opaque snapshot of a single sequence's state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::StateSeqError::SizeMismatch`] if llama.cpp writes a different
+    /// number of bytes than it reported.
+    pub fn state_seq_get(
+        &self,
+        seq_id: i32,
+        flags: LlamaStateSeqFlags,
+    ) -> Result<SeqState, crate::StateSeqError> {
+        let size = unsafe {
+            koharu_llama_sys::llama_state_seq_get_size_ext(self.context.as_ptr(), seq_id, flags.0)
+        };
+        let mut bytes = vec![0; size];
+        let actual = unsafe {
+            koharu_llama_sys::llama_state_seq_get_data_ext(
+                self.context.as_ptr(),
+                bytes.as_mut_ptr(),
+                size,
+                seq_id,
+                flags.0,
+            )
+        };
+        if actual != size {
+            return Err(crate::StateSeqError::SizeMismatch {
+                expected: size,
+                actual,
+            });
+        }
+        Ok(SeqState { bytes, flags })
+    }
+
+    /// Restore a sequence state captured by [`Self::state_seq_get`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::StateSeqError::SizeMismatch`] if llama.cpp does not consume
+    /// the complete snapshot.
+    pub fn state_seq_set(
+        &mut self,
+        state: &SeqState,
+        seq_id: i32,
+    ) -> Result<(), crate::StateSeqError> {
+        let actual = unsafe {
+            koharu_llama_sys::llama_state_seq_set_data_ext(
+                self.context.as_ptr(),
+                state.bytes.as_ptr(),
+                state.bytes.len(),
+                seq_id,
+                state.flags.0,
+            )
+        };
+        if actual != state.bytes.len() {
+            return Err(crate::StateSeqError::SizeMismatch {
+                expected: state.bytes.len(),
+                actual,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Opaque, immutable snapshot of a single sequence's state.
+#[derive(Clone)]
+pub struct SeqState {
+    bytes: Vec<u8>,
+    flags: LlamaStateSeqFlags,
+}
+
+impl SeqState {
+    /// Flags used to capture this state.
+    #[must_use]
+    pub fn flags(&self) -> LlamaStateSeqFlags {
+        self.flags
+    }
+
+    /// Serialized state size in bytes.
+    #[must_use]
+    pub fn byte_len(&self) -> usize {
+        self.bytes.len()
+    }
+}
+
+impl Debug for SeqState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SeqState")
+            .field("byte_len", &self.bytes.len())
+            .field("flags", &self.flags)
+            .finish()
     }
 }

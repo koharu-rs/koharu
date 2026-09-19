@@ -58,17 +58,23 @@ pub enum TextLayoutKind {
     Paragraph,
 }
 
-#[revisioned(revision = 1)]
+#[revisioned(revision = 2)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct TextLayout {
     pub origin: Origin,
     pub kind: TextLayoutKind,
+    /// Overrides the axes inferred from geometry when a frame is transformed.
+    #[revision(start = 2)]
+    pub angle_degrees: Option<f32>,
 }
 
 impl Component for TextLayout {
     const KIND: &'static str = "dev.koharu.layer.text";
 
     fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
+        if self.angle_degrees.is_some_and(|angle| !angle.is_finite()) {
+            return Err(Error::invalid("text layout angle must be finite"));
+        }
         self.origin.validate()
     }
 

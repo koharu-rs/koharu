@@ -142,6 +142,9 @@ impl Auth {
             .send()
             .await
             .context("failed to refresh Codex OAuth credentials")?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            self.store.delete()?;
+        }
         let response = success(response).await?;
         let body: TokenResponse = response
             .json()

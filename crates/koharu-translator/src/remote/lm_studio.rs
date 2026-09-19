@@ -1,5 +1,6 @@
-// https://lmstudio.ai/docs/developer/rest/chat
 // https://lmstudio.ai/docs/developer/rest/list
+// https://lmstudio.ai/docs/developer/openai-compat/chat-completions
+// https://lmstudio.ai/docs/developer/openai-compat/structured-output
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
@@ -37,40 +38,69 @@ pub(super) async fn translate(
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
     let api_key = koharu_secrets::get("lm-studio")?;
-    let (system, input) = prompt::prompts(request)?;
+    let (system, user) = prompt::prompts(request)?;
+    let user_content = match request.image.as_deref() {
+        Some(image) => MessageContent::Parts(vec![
+            ContentPart::Text { text: user },
+            ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: encode_image(image)?.data_url(),
+                },
+            },
+        ]),
+        None => MessageContent::Text(user),
+    };
     let body = ChatRequest {
         model,
-        input: ChatInput::new(&input, request.image.as_deref())?,
-        system_prompt: &system,
+        messages: [
+            Message {
+                role: "system",
+                content: MessageContent::Text(system),
+            },
+            Message {
+                role: "user",
+                content: user_content,
+            },
+        ],
         temperature: generation.temperature,
-        max_output_tokens: generation.max_tokens,
-        reasoning: generation
+        top_p: generation.top_p,
+        max_tokens: generation.max_tokens,
+        frequency_penalty: generation.frequency_penalty,
+        presence_penalty: generation.presence_penalty,
+        reasoning_effort: generation
             .reasoning
-            .map(|enabled| if enabled { "on" } else { "off" }),
-        store: false,
+            .map(|enabled| if enabled { "medium" } else { "none" }),
+        response_format: ResponseFormat {
+            kind: "json_schema",
+            json_schema: JsonSchema {
+                name: "manga_translation",
+                strict: true,
+                schema: prompt::output_schema(request.segments.len()),
+            },
+        },
     };
-    let http = client.post(endpoint(config.base_url.as_ref(), "chat"));
+    let http = client
+        .post(endpoint(config.base_url.as_ref(), "v1/chat/completions"))
+        .json(&body);
     let http = match api_key {
         Some(api_key) => http.bearer_auth(api_key.expose_secret()),
         None => http,
     };
-    let response: ChatResponse = send_json("lm-studio", http.json(&body)).await?;
+    let response: ChatResponse = send_json("lm-studio", http).await?;
     let text = response
-        .output
+        .choices
         .into_iter()
-        .rev()
-        .find_map(|output| {
-            (output.kind == "message")
-                .then_some(output.content)
-                .flatten()
-        })
-        .context("LM Studio returned no message output")?;
+        .next()
+        .context("LM Studio returned no choices")?
+        .message
+        .content
+        .context("LM Studio returned no message content")?;
     Ok(prompt::translations("lm-studio", &text, &request.segments)?)
 }
 
 pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<Vec<Model>> {
     let api_key = koharu_secrets::get("lm-studio")?;
-    let request = client.get(endpoint(config.base_url.as_ref(), "models"));
+    let request = client.get(endpoint(config.base_url.as_ref(), "api/v1/models"));
     let request = match api_key {
         Some(api_key) => request.bearer_auth(api_key.expose_secret()),
         None => request,
@@ -100,7 +130,7 @@ pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<V
 fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
     let base_url = base_url.map_or(DEFAULT_BASE_URL, Url::as_str);
     format!(
-        "{}/api/v1/{}",
+        "{}/{}",
         base_url.trim_end_matches('/'),
         suffix.trim_start_matches('/')
     )
@@ -109,54 +139,73 @@ fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
 #[derive(Serialize)]
 struct ChatRequest<'a> {
     model: &'a str,
-    input: ChatInput<'a>,
-    system_prompt: &'a str,
+    messages: [Message; 2],
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_output_tokens: Option<u32>,
+    top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning: Option<&'static str>,
-    store: bool,
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
+    response_format: ResponseFormat,
+}
+
+#[derive(Serialize)]
+struct ResponseFormat {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    json_schema: JsonSchema,
+}
+
+#[derive(Serialize)]
+struct JsonSchema {
+    name: &'static str,
+    strict: bool,
+    schema: serde_json::Value,
+}
+
+#[derive(Serialize)]
+struct Message {
+    role: &'static str,
+    content: MessageContent,
 }
 
 #[derive(Serialize)]
 #[serde(untagged)]
-enum ChatInput<'a> {
-    Text(&'a str),
-    Items(Vec<InputItem<'a>>),
-}
-
-impl<'a> ChatInput<'a> {
-    fn new(text: &'a str, image: Option<&image::DynamicImage>) -> anyhow::Result<Self> {
-        let Some(image) = image else {
-            return Ok(Self::Text(text));
-        };
-        Ok(Self::Items(vec![
-            InputItem::Text { content: text },
-            InputItem::Image {
-                data_url: encode_image(image)?.data_url(),
-            },
-        ]))
-    }
+enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
 }
 
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum InputItem<'a> {
-    Text { content: &'a str },
-    Image { data_url: String },
+enum ContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Serialize)]
+struct ImageUrl {
+    url: String,
 }
 
 #[derive(Deserialize)]
 struct ChatResponse {
-    output: Vec<Output>,
+    choices: Vec<Choice>,
 }
 
 #[derive(Deserialize)]
-struct Output {
-    #[serde(rename = "type")]
-    kind: String,
+struct Choice {
+    message: ResponseMessage,
+}
+
+#[derive(Deserialize)]
+struct ResponseMessage {
     content: Option<String>,
 }
 
@@ -187,51 +236,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uses_native_v1_endpoints() {
+    fn uses_structured_chat_and_native_model_endpoints() {
         let base_url = Url::parse("http://localhost:1234/").unwrap();
         assert_eq!(
-            endpoint(Some(&base_url), "chat"),
-            "http://localhost:1234/api/v1/chat"
+            endpoint(Some(&base_url), "v1/chat/completions"),
+            "http://localhost:1234/v1/chat/completions"
         );
         assert_eq!(
-            endpoint(Some(&base_url), "models"),
+            endpoint(Some(&base_url), "api/v1/models"),
             "http://localhost:1234/api/v1/models"
         );
-    }
-
-    #[test]
-    fn serializes_native_chat_options() {
-        let value = serde_json::to_value(ChatRequest {
-            model: "publisher/model",
-            input: ChatInput::Text("input"),
-            system_prompt: "system",
-            temperature: Some(0.2),
-            max_output_tokens: Some(1024),
-            reasoning: None,
-            store: false,
-        })
-        .unwrap();
-        assert_eq!(value["max_output_tokens"], 1024);
-        assert!(value.get("reasoning").is_none());
-        assert_eq!(value["store"], false);
-        assert!(value.get("messages").is_none());
-    }
-
-    #[test]
-    fn serializes_reasoning_for_supported_models() {
-        for mode in ["on", "off"] {
-            let value = serde_json::to_value(ChatRequest {
-                model: "publisher/reasoning-model",
-                input: ChatInput::Text("input"),
-                system_prompt: "system",
-                temperature: None,
-                max_output_tokens: None,
-                reasoning: Some(mode),
-                store: false,
-            })
-            .unwrap();
-            assert_eq!(value["reasoning"], mode);
-        }
     }
 
     #[test]
@@ -286,20 +300,57 @@ mod tests {
     }
 
     #[test]
-    fn serializes_native_image_input() {
-        let input =
-            ChatInput::new("translate", Some(&image::DynamicImage::new_rgb8(1, 1))).unwrap();
-        let value = serde_json::to_value(input).unwrap();
-        assert_eq!(
-            value[0],
-            serde_json::json!({ "type": "text", "content": "translate" })
-        );
-        assert_eq!(value[1]["type"], "image");
-        assert!(
-            value[1]["data_url"]
-                .as_str()
-                .unwrap()
-                .starts_with("data:image/jpeg;base64,")
-        );
+    fn serializes_lm_studio_request_contract() {
+        let body = ChatRequest {
+            model: "publisher/model",
+            messages: [
+                Message {
+                    role: "system",
+                    content: MessageContent::Text("system".to_owned()),
+                },
+                Message {
+                    role: "user",
+                    content: MessageContent::Text("user".to_owned()),
+                },
+            ],
+            temperature: None,
+            top_p: None,
+            max_tokens: Some(1024),
+            frequency_penalty: None,
+            presence_penalty: None,
+            reasoning_effort: Some("none"),
+            response_format: ResponseFormat {
+                kind: "json_schema",
+                json_schema: JsonSchema {
+                    name: "manga_translation",
+                    strict: true,
+                    schema: prompt::output_schema(2),
+                },
+            },
+        };
+        let value = serde_json::to_value(body).unwrap();
+
+        assert_eq!(value["max_tokens"], 1024);
+        assert_eq!(value["reasoning_effort"], "none");
+        assert_eq!(value["response_format"]["type"], "json_schema");
+        assert_eq!(value["response_format"]["json_schema"]["strict"], true);
+    }
+
+    #[test]
+    fn serializes_openai_compatible_image_input() {
+        let content = MessageContent::Parts(vec![
+            ContentPart::Text {
+                text: "translate".to_owned(),
+            },
+            ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: "data:image/jpeg;base64,image".to_owned(),
+                },
+            },
+        ]);
+        let value = serde_json::to_value(content).unwrap();
+
+        assert_eq!(value[0]["type"], "text");
+        assert_eq!(value[1]["type"], "image_url");
     }
 }

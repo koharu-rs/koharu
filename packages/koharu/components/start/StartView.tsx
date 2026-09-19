@@ -208,7 +208,7 @@ export function StartView() {
                       {projects.map((project) => (
                         <li
                           key={project.name}
-                          className='group flex items-center rounded-lg hover:bg-foreground/[0.045]'
+                          className='group flex min-w-0 items-center rounded-lg hover:bg-foreground/[0.045]'
                         >
                           <button
                             type='button'

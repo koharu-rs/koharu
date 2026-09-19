@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, anyhow};
 use arc_swap::ArcSwap;
+use futures::future::try_join_all;
 use koharu_rasterizer::{RasterOptions, Rasterizer};
 use koharu_scene::{
     Asset, AssetRole, BlobId, Change, Component, ComponentOwner, EntityChange, EntityId, FitsTo,
@@ -22,6 +23,7 @@ use skrifa::{
     instance::Size,
     outline::{DrawSettings, OutlinePen},
 };
+use tokio_rayon::AsyncThreadPool as _;
 use vello::{
     Scene,
     kurbo::{Affine, BezPath, Rect, Vec2},
@@ -189,7 +191,7 @@ impl Renderer {
             .await
             .map_err(Error::FontResource)?;
         let fonts = self.inner.fonts.clone();
-        let (scene, width) = tokio::task::spawn_blocking(move || {
+        let (scene, width) = tokio_rayon::spawn(move || {
             let preview_fonts = if font.renders(&label, FONT_SIZE) {
                 vec![font]
             } else {
@@ -210,10 +212,8 @@ impl Renderer {
             Ok::<_, anyhow::Error>((scene, width))
         })
         .await
-        .context("font preview worker stopped unexpectedly")
-        .and_then(|result| result)
         .map_err(Error::FontResource)?;
-        tokio::task::spawn_blocking(move || {
+        tokio_rayon::spawn(move || {
             let image = rasterizer
                 .rasterize_scene(
                     &scene,
@@ -230,8 +230,6 @@ impl Renderer {
             )
         })
         .await
-        .context("font preview raster worker stopped unexpectedly")
-        .and_then(|result| result)
         .map_err(Error::FontResource)
     }
 
@@ -300,8 +298,8 @@ impl Renderer {
         if !pending.is_empty() {
             let workers = self.workers()?;
             let fonts = self.inner.fonts.clone();
-            let built = tokio::task::spawn_blocking(move || {
-                workers.install(|| {
+            let built = workers
+                .spawn_async(move || {
                     pending
                         .into_par_iter()
                         .map(|(index, descriptor)| {
@@ -309,9 +307,7 @@ impl Renderer {
                         })
                         .collect::<Result<Vec<_>>>()
                 })
-            })
-            .await
-            .map_err(|source| Error::Backend(anyhow!(source)))??;
+                .await?;
             for (index, node) in built {
                 let node = Arc::new(node);
                 self.inner.nodes.lock().insert(
@@ -334,11 +330,9 @@ impl Renderer {
             rebuilt_layers: rebuilt,
         };
         let workers = self.workers()?;
-        tokio::task::spawn_blocking(move || {
-            workers.install(|| assemble_frame(compiled, nodes, stats))
-        })
-        .await
-        .map_err(|source| Error::Backend(anyhow!(source)))?
+        workers
+            .spawn_async(move || assemble_frame(compiled, nodes, stats))
+            .await
     }
 
     fn workers(&self) -> Result<Arc<rayon::ThreadPool>> {
@@ -382,14 +376,8 @@ impl Renderer {
             }
         }
         for chunk in missing.chunks(MAX_RESOURCE_READS) {
-            let mut loads = tokio::task::JoinSet::new();
-            for &id in chunk {
-                let snapshot = snapshot.clone();
-                let renderer = self.clone();
-                loads.spawn(async move { renderer.load_image(&snapshot, id).await });
-            }
-            while let Some(result) = loads.join_next().await {
-                let (id, image) = result.map_err(|source| Error::Backend(anyhow!(source)))??;
+            let loads = try_join_all(chunk.iter().map(|&id| self.load_image(snapshot, id))).await?;
+            for (id, image) in loads {
                 output.insert(id, image);
             }
         }
@@ -429,10 +417,7 @@ impl Renderer {
             let bytes = snapshot.read_blob(id).await?;
             let bytes: Arc<[u8]> = Arc::from(bytes.as_ref());
             let workers = self.workers()?;
-            let (id, image) =
-                tokio::task::spawn_blocking(move || workers.install(|| decode(id, bytes, None)))
-                    .await
-                    .map_err(|source| Error::Backend(anyhow!(source)))??;
+            let (id, image) = workers.spawn_async(move || decode(id, bytes, None)).await?;
             self.inner.images.lock().insert(id, image.clone());
             *load.image.lock() = Arc::downgrade(&image);
             Ok((id, image))
@@ -761,15 +746,8 @@ impl Traversal<'_> {
         } else {
             self.fit(entity, dependencies)?
         };
-        let flow_contour = if authored.is_none() {
-            placement
-                .as_ref()
-                .and_then(|placement| placement.flow_contour.clone())
-        } else {
-            None
-        };
         let (geometry, frame, balloon_contour) = if let Some(geometry) = authored {
-            let Some(frame) = geometry_frame(&geometry) else {
+            let Some(frame) = geometry_frame(&geometry, layout.angle_degrees) else {
                 return Ok(None);
             };
             let balloon = placement
@@ -823,7 +801,6 @@ impl Traversal<'_> {
             width: frame.bounds.width,
             height: frame.bounds.height,
             balloon_contour,
-            flow_contour,
             preferred_font,
             font_families,
             font_weight: typography.as_ref().and_then(|value| value.font_weight),
@@ -881,14 +858,13 @@ impl Traversal<'_> {
         dependencies.insert(RenderDependency::Entity(target));
         dependencies.insert(component_dependency::<Geometry>(target));
         let geometry = self.snapshot.analysis_region(target)?.geometry()?;
-        let Some(frame) = geometry_frame(&geometry) else {
+        let Some(frame) = geometry_frame(&geometry, None) else {
             return Ok(None);
         };
         Ok(Some(ResolvedPlacement {
             geometry,
             frame,
             balloon_contour: None,
-            flow_contour: None,
             dependencies: Arc::from([]),
         }))
     }
@@ -909,14 +885,13 @@ impl Traversal<'_> {
         dependencies.insert(RenderDependency::Entity(target));
         dependencies.insert(component_dependency::<Geometry>(target));
         let geometry = self.snapshot.analysis_region(target)?.geometry()?;
-        let Some(frame) = geometry_frame(&geometry) else {
+        let Some(frame) = geometry_frame(&geometry, None) else {
             return Ok(None);
         };
         Ok(Some(ResolvedPlacement {
             balloon_contour: Some(contour(&geometry, frame)),
             geometry,
             frame,
-            flow_contour: None,
             dependencies: Arc::from([]),
         }))
     }
@@ -927,7 +902,6 @@ struct ResolvedPlacement {
     geometry: Geometry,
     frame: GeometryFrame,
     balloon_contour: Option<Vec<(f32, f32)>>,
-    flow_contour: Option<Vec<(f32, f32)>>,
     dependencies: Arc<[RenderDependency]>,
 }
 
@@ -947,9 +921,8 @@ fn resolve_balloon_flows(snapshot: &Snapshot, page: EntityId) -> Result<BalloonF
     if let Some(group) = snapshot.page(page)?.text_group()? {
         for layer in group.text_layers()? {
             let entity = layer.id();
-            if snapshot.component::<Geometry>(entity)?.is_some() {
-                continue;
-            }
+            // Authored placement does not release a source flow's share of the
+            // balloon. Its original anchor still reserves that area for siblings.
             let Some(relation) = snapshot.relation_from::<FlowsIn>(entity)? else {
                 continue;
             };
@@ -996,7 +969,7 @@ fn resolve_balloon_flows(snapshot: &Snapshot, page: EntityId) -> Result<BalloonF
     for (balloon, seeds) in groups {
         let region = snapshot.analysis_region(balloon)?;
         let geometry = region.geometry()?;
-        let Some(frame) = geometry_frame(&geometry) else {
+        let Some(frame) = geometry_frame(&geometry, None) else {
             continue;
         };
         let balloon_contour = contour(&geometry, frame);
@@ -1023,13 +996,38 @@ fn resolve_balloon_flows(snapshot: &Snapshot, page: EntityId) -> Result<BalloonF
         let cells = (seeds.len() > 1).then(|| flow_cells(frame, &balloon_contour, &anchors));
         let dependencies: Arc<[RenderDependency]> = dependencies.iter().cloned().collect();
         for (index, seed) in seeds.into_iter().enumerate() {
+            // Persisting a canvas transform must preserve the exact shape used
+            // for layout, including the division between joined balloon lobes.
+            let geometry = if let Some(cell) = cells.as_ref().and_then(|cells| cells.get(index)) {
+                let (sin, cos) = f64::from(frame.angle_degrees).to_radians().sin_cos();
+                let half_width = f64::from(frame.bounds.width) * 0.5;
+                let half_height = f64::from(frame.bounds.height) * 0.5;
+                Geometry {
+                    origin: geometry.origin.clone(),
+                    points: cell
+                        .iter()
+                        .map(|&(x, y)| {
+                            let x = f64::from(x) - half_width;
+                            let y = f64::from(y) - half_height;
+                            koharu_scene::Point {
+                                x: f64::from(frame.bounds.x) + half_width + x * cos - y * sin,
+                                y: f64::from(frame.bounds.y) + half_height + x * sin + y * cos,
+                            }
+                        })
+                        .collect(),
+                }
+            } else {
+                geometry.clone()
+            };
+            let Some(frame) = geometry_frame(&geometry, Some(frame.angle_degrees)) else {
+                continue;
+            };
             placements.insert(
                 seed.layer,
                 ResolvedPlacement {
-                    geometry: geometry.clone(),
+                    balloon_contour: Some(contour(&geometry, frame)),
+                    geometry,
                     frame,
-                    balloon_contour: Some(balloon_contour.clone()),
-                    flow_contour: cells.as_ref().and_then(|cells| cells.get(index).cloned()),
                     dependencies: dependencies.clone(),
                 },
             );
@@ -1831,6 +1829,7 @@ mod tests {
                     &SceneTextLayout {
                         origin: Origin::User,
                         kind: TextLayoutKind::Paragraph,
+                        angle_degrees: Some(0.0),
                     },
                 )?;
                 edit.set(text, &Geometry::rectangle(10.0, 10.0, 80.0, 40.0))?;
@@ -1923,6 +1922,7 @@ mod tests {
                     &SceneTextLayout {
                         origin: Origin::User,
                         kind: TextLayoutKind::Paragraph,
+                        angle_degrees: Some(0.0),
                     },
                 )?;
                 edit.set(first, &Geometry::rectangle(10.0, 10.0, 80.0, 40.0))?;
@@ -1948,6 +1948,7 @@ mod tests {
                     &SceneTextLayout {
                         origin: Origin::User,
                         kind: TextLayoutKind::Paragraph,
+                        angle_degrees: Some(0.0),
                     },
                 )?;
                 edit.set(second, &Geometry::rectangle(100.0, 10.0, 80.0, 40.0))?;
@@ -2004,7 +2005,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn joined_balloon_flows_receive_disjoint_layout_cells() {
+    async fn joined_balloon_flows_preserve_layout_when_transformed() {
         let mut session = Session::memory().await.unwrap();
         let mut ids = None;
         let create = session
@@ -2019,8 +2020,8 @@ mod tests {
                 )?;
                 let mut layers = Vec::new();
                 for (index, (x, source, translation)) in [
-                    (35.0, "source one", "The first translated flow"),
-                    (95.0, "source two", "The second translated flow"),
+                    (35.0, "source one", "First flow"),
+                    (95.0, "source two", "Second flow"),
                 ]
                 .into_iter()
                 .enumerate()
@@ -2053,6 +2054,7 @@ mod tests {
                         &SceneTextLayout {
                             origin: Origin::User,
                             kind: TextLayoutKind::Paragraph,
+                            angle_degrees: None,
                         },
                     )?;
                     edit.relate::<RecognizedFrom>(content, region)?;
@@ -2067,17 +2069,20 @@ mod tests {
             .unwrap();
         let base = session.commit(create).await.unwrap().snapshot;
         let (page, bubble, layers) = ids.unwrap();
-        let renderer = Renderer::default();
+        let font = crate::fonts::FontSystem::new().first_font().unwrap();
+        let renderer = Renderer::with_typesetting(TypesettingConfig {
+            font_families: vec![font.family_name().to_owned()],
+        });
         let base_compiled = renderer.compile(&base, page).unwrap();
         let first = base_compiled
             .layers
             .iter()
             .find(|layer| layer.entity == layers[0])
             .unwrap();
-        let NodeDescriptor::Text(descriptor) = &first.descriptor else {
-            panic!("expected a text descriptor");
-        };
-        assert!(descriptor.flow_contour.is_none());
+        assert_eq!(
+            first.geometry,
+            base.analysis_region(bubble).unwrap().geometry().unwrap()
+        );
 
         let add_sibling = base
             .patch(|edit| edit.relate::<FlowsIn>(layers[1], bubble).map(|_| ()))
@@ -2087,7 +2092,7 @@ mod tests {
         assert!(affected.intersects(&first.dependencies));
 
         let compiled = renderer.compile(&joined.snapshot, page).unwrap();
-        let contours = layers
+        let bounds = layers
             .iter()
             .map(|entity| {
                 let layer = compiled
@@ -2095,22 +2100,122 @@ mod tests {
                     .iter()
                     .find(|layer| layer.entity == *entity)
                     .unwrap();
-                let NodeDescriptor::Text(descriptor) = &layer.descriptor else {
-                    panic!("expected a text descriptor");
-                };
-                descriptor.flow_contour.clone().unwrap()
+                layer.frame.bounds
             })
             .collect::<Vec<_>>();
-        let first_right = contours[0]
-            .iter()
-            .map(|(x, _)| *x)
-            .fold(f32::NEG_INFINITY, f32::max);
-        let second_left = contours[1]
-            .iter()
-            .map(|(x, _)| *x)
-            .fold(f32::INFINITY, f32::min);
+        let first_right = bounds[0].x + bounds[0].width;
+        let second_left = bounds[1].x;
         assert!((first_right - second_left).abs() < 1e-4);
-        assert!(first_right > 25.0 && first_right < 85.0);
+        assert!(first_right > 45.0 && first_right < 105.0);
+
+        let original = renderer.render(&joined.snapshot, page).await.unwrap();
+        let mut geometry = original.layer(layers[0]).unwrap().geometry().clone();
+        for point in &mut geometry.points {
+            point.x += 1.0;
+        }
+        let moved = session
+            .commit(
+                joined
+                    .snapshot
+                    .patch(|edit| edit.set(layers[0], &geometry))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let updated = renderer
+            .update(&original, &moved.snapshot, &moved.changes)
+            .await
+            .unwrap();
+        let fresh = renderer.render(&moved.snapshot, page).await.unwrap();
+        for frame in [&updated, &fresh] {
+            let LayerKind::Text(before) = original.layer(layers[0]).unwrap().kind() else {
+                panic!("expected text");
+            };
+            let LayerKind::Text(after) = frame.layer(layers[0]).unwrap().kind() else {
+                panic!("expected text");
+            };
+            let mut expected = before.clone();
+            expected.rendered_bounds.x += 1.0;
+            expected.layout_bounds.x += 1.0;
+            assert_eq!(*after, expected, "dragging must only translate the text");
+            assert_eq!(
+                frame.layer(layers[1]).unwrap().kind(),
+                original.layer(layers[1]).unwrap().kind()
+            );
+        }
+        assert_eq!(updated.stats().rebuilt_layers, 0);
+
+        // Resizing and rotating custom geometry keep the other flow untouched.
+        let mut snapshot = moved.snapshot;
+        for (scale, angle) in [(1.0, 90.0_f32), (1.5, 30.0)] {
+            let transform = Affine::translate((80.0, 50.0))
+                * Affine::rotate(f64::from(angle).to_radians())
+                * Affine::scale(scale)
+                * Affine::translate((-80.0, -50.0));
+            let mut geometry = original.layer(layers[0]).unwrap().geometry().clone();
+            for point in &mut geometry.points {
+                let transformed = transform * vello::kurbo::Point::new(point.x, point.y);
+                point.x = transformed.x;
+                point.y = transformed.y;
+            }
+            let mut layout = snapshot.text_layer(layers[0]).unwrap().layout().unwrap();
+            layout.angle_degrees = Some(angle);
+            let patch = snapshot
+                .patch(|edit| {
+                    edit.set(layers[0], &geometry)?;
+                    edit.set(layers[0], &layout)
+                })
+                .unwrap();
+            snapshot = session.commit(patch).await.unwrap().snapshot;
+            let transformed = renderer.compile(&snapshot, page).unwrap();
+            for (index, entity) in layers.iter().enumerate() {
+                let before = compiled
+                    .layers
+                    .iter()
+                    .find(|layer| layer.entity == *entity)
+                    .unwrap();
+                let after = transformed
+                    .layers
+                    .iter()
+                    .find(|layer| layer.entity == *entity)
+                    .unwrap();
+                if index == 1 {
+                    assert_eq!(after.geometry, before.geometry);
+                    assert_eq!(after.descriptor, before.descriptor);
+                    continue;
+                }
+                assert!(
+                    (after.frame.bounds.width - before.frame.bounds.width * scale as f32).abs()
+                        < 1e-4
+                );
+                assert!(
+                    (after.frame.bounds.height - before.frame.bounds.height * scale as f32).abs()
+                        < 1e-4
+                );
+                assert_eq!(after.frame.angle_degrees, angle);
+            }
+        }
+
+        let mut layout = snapshot.text_layer(layers[0]).unwrap().layout().unwrap();
+        layout.angle_degrees = None;
+        let reset = snapshot
+            .patch(|edit| {
+                edit.remove::<Geometry>(layers[0])?;
+                edit.set(layers[0], &layout)
+            })
+            .unwrap();
+        let reset = session.commit(reset).await.unwrap();
+        let restored = renderer.render(&reset.snapshot, page).await.unwrap();
+        for entity in layers {
+            assert_eq!(
+                restored.layer(entity).unwrap().geometry(),
+                original.layer(entity).unwrap().geometry()
+            );
+            assert_eq!(
+                restored.layer(entity).unwrap().kind(),
+                original.layer(entity).unwrap().kind()
+            );
+        }
     }
 
     #[tokio::test]

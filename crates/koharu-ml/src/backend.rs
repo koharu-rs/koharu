@@ -52,7 +52,7 @@ pub(crate) fn set_precision(var_store: &mut nn::VarStore) {
         .is_some_and(|device| match &device.backend {
             Backend::Cuda => device.compute_capability() >= 80,
             Backend::Rocm => device.target().is_some_and(|target| {
-                matches!(target, "gfx908" | "gfx90a")
+                matches!(target, "gfx908" | "gfx90a" | "gfx942" | "gfx950")
                     || target.starts_with("gfx11")
                     || target.starts_with("gfx12")
             }),

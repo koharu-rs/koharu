@@ -12,6 +12,7 @@
     "downloadingFiles_one": "Baixando {{count}} arquivos",
     "downloadingFiles_other": "Baixando {{count}} arquivos",
     "modelDownload": "Download do modelo",
+    "pageLabel": "Página {{number}}: {{label}}",
     "processing": "Processando",
     "processingFailed": "Falha no processamento.",
     "stop": "Parar",
@@ -245,13 +246,12 @@
     "delete": "Excluir seleção",
     "discord": "Discord",
     "edit": "Editar",
-    "exportPng": "Exportar PNG…",
-    "exportPsd": "Exportar PSD…",
+    "export": "Exportar projeto",
     "file": "Arquivo",
     "fit": "Ajustar à janela",
     "github": "GitHub",
     "help": "Ajuda",
-    "importPages": "Importar páginas…",
+    "import": "Importar páginas",
     "process": "Processar",
     "processLayers": "Processar camadas selecionadas",
     "processPages": "Processar páginas selecionadas",
@@ -297,7 +297,8 @@
     "pages": "Páginas",
     "rename": "Renomear",
     "renameDescription": "Escolha um novo nome para esta página.",
-    "renameTitle": "Renomear página"
+    "renameTitle": "Renomear página",
+    "selected": "{{count}} selecionadas"
   },
   "outputPicker": {
     "instructions": "Instruções de tradução",
@@ -318,7 +319,6 @@
     "translation": "Converte o texto original para o idioma de destino."
   },
   "providerDescriptions": {
-    "atlas-cloud": "Modelos de linguagem hospedados pela Atlas.",
     "caiyun": "API de tradução do Caiyun.",
     "claude": "Modelos Claude da Anthropic.",
     "deepl": "API de tradução do DeepL.",

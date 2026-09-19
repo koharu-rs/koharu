@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result};
-use tauri::{AppHandle, Cef, Manager as _, WindowEvent};
+use tauri::{AppHandle, Manager as _, WindowEvent};
+use tauri_runtime_cef::{Cef, CefRuntime};
 use tokio::sync::Mutex;
 
 use crate::commands::{
@@ -19,7 +20,7 @@ use crate::commands::{
     skip_all,
     fields(phase = "initialization")
 )]
-pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
+pub(crate) async fn initialize(handle: AppHandle<CefRuntime>) -> Result<()> {
     koharu_ml::init()
         .await
         .context("failed to initialize the ML runtime")?;
@@ -64,21 +65,23 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
     Ok(())
 }
 
-pub fn run(context: tauri::Context<Cef>) -> Result<()> {
-    let builder = tauri::Builder::<Cef>::default()
-        .command_line_args::<_, &str>([("--hide-chrome-bubbles", None)]);
+pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
+    let cef = Cef::default();
     #[cfg(debug_assertions)]
-    let builder = builder.command_line_args([
-        ("remote-debugging-port", Some("4000")),
-        ("--use-mock-keychain", None),
-    ]);
+    let cef = cef.remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
+        port: 4000,
+        allowed_origins: Vec::new(),
+    });
     #[cfg(target_os = "linux")]
-    let builder = builder.command_line_args([
-        ("enable-unsafe-webgpu", None),
-        ("enable-features", Some("Vulkan,VulkanFromANGLE")),
-        ("use-angle", Some("vulkan")),
-    ]);
-    builder
+    let cef = cef
+        .enable_features(["Vulkan", "VulkanFromANGLE"])
+        .command_line_args([
+            ("--enable-unsafe-webgpu", None),
+            ("use-angle", Some("vulkan")),
+            ("--ozone-platform", Some("x11")),
+        ]);
+    tauri::Builder::<CefRuntime>::new()
+        .runtime(cef)
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(tauri_plugin_log::log::LevelFilter::Info)
@@ -111,7 +114,7 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
-            #[cfg(target_os = "windows")]
+            #[cfg(all(target_os = "windows", not(debug_assertions)))]
             koharu_runtime::Store::configure(
                 application
                     .path()
