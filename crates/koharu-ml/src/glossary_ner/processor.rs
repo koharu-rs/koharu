@@ -23,30 +23,11 @@ pub(super) fn split_text(text: &str) -> Vec<TextToken> {
     for bounds in boundaries.windows(2) {
         let (start, end) = (bounds[0], bounds[1]);
         let surface = &text[start..end];
-        if surface.chars().all(char::is_whitespace) {
-            continue;
-        }
-        if surface.chars().all(is_han)
-            && tokens.last().is_some_and(|previous| {
-                previous.end == start && text[previous.start..previous.end].chars().all(is_han)
-            })
-        {
-            tokens.last_mut().unwrap().end = end;
-        } else {
+        if !surface.chars().all(char::is_whitespace) {
             tokens.push(TextToken { start, end });
         }
     }
     tokens
-}
-
-fn is_han(character: char) -> bool {
-    matches!(
-        character,
-        '\u{3400}'..='\u{4dbf}'
-            | '\u{4e00}'..='\u{9fff}'
-            | '\u{f900}'..='\u{faff}'
-            | '\u{20000}'..='\u{2fa1f}'
-    )
 }
 
 pub(super) fn token_windows(
@@ -109,8 +90,18 @@ pub(super) fn resolve_overlaps(spans: &mut Vec<GlossaryEntity>) {
 #[derive(Debug)]
 pub(super) struct EncodedWindow {
     pub(super) input_ids: Vec<i64>,
-    pub(super) first_subtokens: Vec<usize>,
+    pub(super) word_subtokens: Vec<Range<usize>>,
     pub(super) prompt_words: usize,
+}
+
+impl EncodedWindow {
+    pub(super) fn fits(&self, max_encoder_tokens: usize) -> bool {
+        self.input_ids.len() <= max_encoder_tokens
+            && self
+                .word_subtokens
+                .iter()
+                .all(|subtokens| subtokens.end <= max_encoder_tokens)
+    }
 }
 
 #[derive(Debug)]
@@ -124,6 +115,9 @@ impl Processor {
         let mut tokenizer = Tokenizer::from_file(path)
             .map_err(|error| anyhow::anyhow!(error.to_string()))
             .with_context(|| format!("failed to parse {}", path.display()))?;
+        tokenizer
+            .with_truncation(None)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         tokenizer
             .add_tokens([
                 AddedToken::from("<<ENT>>", false),
@@ -152,24 +146,83 @@ impl Processor {
             .tokenizer
             .encode(input, true)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let mut first_subtokens = vec![None; prompt_words + tokens.len()];
+        let mut word_subtokens: Vec<Option<Range<usize>>> = vec![None; prompt_words + tokens.len()];
         for (subtoken, word) in encoding.get_word_ids().iter().enumerate() {
             if let Some(word) = word {
-                first_subtokens[*word as usize].get_or_insert(subtoken);
+                let word = *word as usize;
+                let range = word_subtokens.get_mut(word).ok_or_else(|| {
+                    anyhow::anyhow!("GLiNER tokenizer returned unknown word {word}")
+                })?;
+                if let Some(range) = range {
+                    ensure!(
+                        range.end == subtoken,
+                        "GLiNER tokenizer returned non-contiguous subtokens for word {word}"
+                    );
+                    range.end = subtoken + 1;
+                } else {
+                    *range = Some(subtoken..subtoken + 1);
+                }
             }
         }
-        let first_subtokens = first_subtokens
+        let word_subtokens = word_subtokens
             .into_iter()
             .enumerate()
-            .map(|(word, subtoken)| {
-                subtoken.ok_or_else(|| anyhow::anyhow!("GLiNER tokenizer omitted word {word}"))
+            .map(|(word, subtokens)| {
+                subtokens.ok_or_else(|| anyhow::anyhow!("GLiNER tokenizer omitted word {word}"))
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(EncodedWindow {
             input_ids: encoding.get_ids().iter().map(|&id| i64::from(id)).collect(),
-            first_subtokens,
+            word_subtokens,
             prompt_words,
         })
+    }
+
+    pub(super) fn split_oversized_tokens(
+        &self,
+        text: &str,
+        tokens: &[TextToken],
+        max_encoder_tokens: usize,
+    ) -> Result<Vec<TextToken>> {
+        ensure!(
+            max_encoder_tokens > 0,
+            "glossary NER encoder capacity must be positive"
+        );
+        let mut fitted = Vec::with_capacity(tokens.len());
+        for token in tokens {
+            let mut pending = vec![token.clone()];
+            while let Some(candidate) = pending.pop() {
+                let encoded = self.encode(text, std::slice::from_ref(&candidate))?;
+                if encoded.fits(max_encoder_tokens) {
+                    fitted.push(candidate);
+                    continue;
+                }
+
+                let surface = &text[candidate.start..candidate.end];
+                let character_count = surface.chars().count();
+                ensure!(
+                    character_count > 1,
+                    "glossary NER prompt or one text character exceeds the encoder capacity"
+                );
+                let split = candidate.start
+                    + surface
+                        .char_indices()
+                        .nth(character_count / 2)
+                        .map(|(offset, _)| offset)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("failed to split oversized glossary token")
+                        })?;
+                pending.push(TextToken {
+                    start: split,
+                    end: candidate.end,
+                });
+                pending.push(TextToken {
+                    start: candidate.start,
+                    end: split,
+                });
+            }
+        }
+        Ok(fitted)
     }
 }
 
@@ -219,8 +272,33 @@ pub(super) fn decode_scores(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
+    use tokenizers::models::bpe::BPE;
+
     use super::*;
-    use crate::glossary_ner::{GlossaryEntity, GlossaryEntityKind};
+    use crate::glossary_ner::{GlossaryEntity, GlossaryEntityKind, model::MAX_ENCODER_TOKENS};
+
+    fn character_processor() -> Processor {
+        let alphabet = GlossaryEntityKind::ALL
+            .into_iter()
+            .flat_map(|kind| kind.model_label().chars())
+            .chain(['界'])
+            .collect::<BTreeSet<_>>();
+        let vocabulary = alphabet
+            .into_iter()
+            .enumerate()
+            .map(|(index, character)| (character.to_string(), index as u32))
+            .collect();
+        let mut tokenizer = Tokenizer::new(BPE::new(vocabulary, Vec::new()));
+        tokenizer
+            .add_tokens([
+                AddedToken::from("<<ENT>>", false),
+                AddedToken::from("<<SEP>>", false),
+            ])
+            .unwrap();
+        Processor { tokenizer }
+    }
 
     #[test]
     fn tokenization_preserves_multibyte_byte_ranges() {
@@ -232,7 +310,8 @@ mod tests {
                 .map(|token| (&text[token.start..token.end], token.start, token.end))
                 .collect::<Vec<_>>(),
             vec![
-                ("蒼井", 0, 6),
+                ("蒼", 0, 3),
+                ("井", 3, 6),
                 ("レン", 6, 12),
                 ("は", 12, 15),
                 ("東京", 15, 21),
@@ -246,6 +325,69 @@ mod tests {
     }
 
     #[test]
+    fn adjacent_han_word_span_can_cover_only_part_of_run() {
+        let text = "東京大学教授";
+        let tokens = split_text(text);
+        assert_eq!(
+            tokens
+                .iter()
+                .map(|token| &text[token.start..token.end])
+                .collect::<Vec<_>>(),
+            vec!["東京", "大学", "教授"]
+        );
+
+        let classes = GlossaryEntityKind::ALL.len();
+        let mut probabilities = vec![0.0; 6 * classes];
+        probabilities[3 * classes + GlossaryEntityKind::Organization as usize] = 0.9;
+        assert_eq!(
+            decode_scores(text, &tokens, &probabilities, 0.5).unwrap(),
+            vec![GlossaryEntity::new(
+                0,
+                12,
+                "東京大学".into(),
+                GlossaryEntityKind::Organization,
+                0.9,
+            )]
+        );
+    }
+
+    #[test]
+    fn oversized_token_is_split_at_utf8_boundaries_before_encoding() {
+        let processor = character_processor();
+        let text = "界".repeat(600);
+        let tokens = processor
+            .split_oversized_tokens(
+                &text,
+                &[TextToken {
+                    start: 0,
+                    end: text.len(),
+                }],
+                MAX_ENCODER_TOKENS,
+            )
+            .unwrap();
+
+        assert!(tokens.len() > 1);
+        assert_eq!(tokens.first().unwrap().start, 0);
+        assert_eq!(tokens.last().unwrap().end, text.len());
+        assert!(tokens.windows(2).all(|pair| pair[0].end == pair[1].start));
+        for token in &tokens {
+            assert!(text.is_char_boundary(token.start));
+            assert!(text.is_char_boundary(token.end));
+            let encoded = processor
+                .encode(&text, std::slice::from_ref(token))
+                .unwrap();
+            assert!(encoded.input_ids.len() <= MAX_ENCODER_TOKENS);
+            assert_eq!(encoded.word_subtokens.len(), encoded.prompt_words + 1);
+            assert!(
+                encoded
+                    .word_subtokens
+                    .iter()
+                    .all(|subtokens| subtokens.end <= MAX_ENCODER_TOKENS)
+            );
+        }
+    }
+
+    #[test]
     fn windows_overlap_and_cover_all_tokens() {
         let windows = token_windows(10, 4, 2).unwrap();
         assert_eq!(windows, vec![0..4, 2..6, 4..8, 6..10]);
@@ -256,9 +398,9 @@ mod tests {
         let text = "蒼井レン";
         let tokens = split_text(text);
         let classes = GlossaryEntityKind::ALL.len();
-        let mut probabilities = vec![0.0; (2 + 1) * classes];
-        probabilities[GlossaryEntityKind::Person as usize] = 0.7;
-        probabilities[2 * classes + GlossaryEntityKind::Person as usize] = 0.9;
+        let mut probabilities = vec![0.0; 6 * classes];
+        probabilities[3 * classes + GlossaryEntityKind::Person as usize] = 0.7;
+        probabilities[5 * classes + GlossaryEntityKind::Person as usize] = 0.9;
         let entities = decode_scores(text, &tokens, &probabilities, 0.5).unwrap();
         assert_eq!(
             entities,

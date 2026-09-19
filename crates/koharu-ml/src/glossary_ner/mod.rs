@@ -126,33 +126,35 @@ impl GlossaryNer {
         if tokens.is_empty() {
             return Ok(Vec::new());
         }
+        let tokens = self
+            .processor
+            .split_oversized_tokens(text, &tokens, MAX_ENCODER_TOKENS)?;
 
         let mut entities = Vec::new();
         let mut windows =
             VecDeque::from(token_windows(tokens.len(), WINDOW_WORDS, WINDOW_OVERLAP)?);
         while let Some(window) = windows.pop_front() {
-            let mut encoded = self.processor.encode(text, &tokens[window.clone()])?;
-            if encoded.input_ids.len() > MAX_ENCODER_TOKENS && window.len() > 1 {
+            let encoded = self.processor.encode(text, &tokens[window.clone()])?;
+            if !encoded.fits(MAX_ENCODER_TOKENS) && window.len() > 1 {
                 let midpoint = window.start + window.len() / 2;
                 let overlap = WINDOW_OVERLAP.min((window.len() / 2).saturating_sub(1));
                 windows.push_front(midpoint - overlap..window.end);
                 windows.push_front(window.start..midpoint);
                 continue;
             }
-            if encoded.input_ids.len() > MAX_ENCODER_TOKENS {
-                encoded.input_ids.truncate(MAX_ENCODER_TOKENS);
-                ensure!(
-                    encoded
-                        .first_subtokens
-                        .iter()
-                        .all(|&index| index < MAX_ENCODER_TOKENS),
-                    "one glossary NER token exceeds the encoder capacity"
-                );
-            }
+            ensure!(
+                encoded.fits(MAX_ENCODER_TOKENS),
+                "one glossary NER token exceeds the encoder capacity"
+            );
+            let first_subtokens = encoded
+                .word_subtokens
+                .iter()
+                .map(|subtokens| subtokens.start)
+                .collect::<Vec<_>>();
             let text_words = window.len();
             let probabilities = self.model.score(
                 &encoded.input_ids,
-                &encoded.first_subtokens,
+                &first_subtokens,
                 encoded.prompt_words,
                 text_words,
             )?;
