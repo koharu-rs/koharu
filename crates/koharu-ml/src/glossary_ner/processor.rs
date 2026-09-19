@@ -5,7 +5,7 @@ use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
 use tokenizers::{AddedToken, EncodeInput, InputSequence, Tokenizer};
 
 use super::model::MAX_SPAN_WIDTH;
-use super::{GlossaryEntity, GlossaryEntityKind};
+use super::{Cancellation, GlossaryEntity, GlossaryEntityKind};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct TextToken {
@@ -183,7 +183,8 @@ impl Processor {
         text: &str,
         tokens: &[TextToken],
         max_encoder_tokens: usize,
-    ) -> Result<Vec<TextToken>> {
+        cancellation: &Cancellation<'_>,
+    ) -> Result<Option<Vec<TextToken>>> {
         ensure!(
             max_encoder_tokens > 0,
             "glossary NER encoder capacity must be positive"
@@ -192,6 +193,9 @@ impl Processor {
         for token in tokens {
             let mut pending = vec![token.clone()];
             while let Some(candidate) = pending.pop() {
+                if cancellation.cancelled() {
+                    return Ok(None);
+                }
                 let encoded = self.encode(text, std::slice::from_ref(&candidate))?;
                 if encoded.fits(max_encoder_tokens) {
                     fitted.push(candidate);
@@ -222,7 +226,7 @@ impl Processor {
                 });
             }
         }
-        Ok(fitted)
+        Ok(Some(fitted))
     }
 }
 
@@ -363,7 +367,9 @@ mod tests {
                     end: text.len(),
                 }],
                 MAX_ENCODER_TOKENS,
+                &Cancellation::never(),
             )
+            .unwrap()
             .unwrap();
 
         assert!(tokens.len() > 1);

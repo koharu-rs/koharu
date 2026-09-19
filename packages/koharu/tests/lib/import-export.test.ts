@@ -119,11 +119,19 @@ describe('browser import and export', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('downloads an export blob when destination is null', async () => {
-    const bytes = new Uint8Array([137, 80, 78, 71])
-    fetchMock.mockResolvedValue(
-      binaryResponse(bytes, 'image/png', 'attachment; filename="chapter.png"'),
-    )
+  it('downloads project and glossary file responses through the shared HTTP path', async () => {
+    const bytes = new Uint8Array([123, 125])
+    fetchMock
+      .mockResolvedValueOnce(
+        binaryResponse(bytes, 'image/png', 'attachment; filename="chapter.png"'),
+      )
+      .mockResolvedValueOnce(
+        binaryResponse(
+          bytes,
+          'application/json',
+          'attachment; filename="../../volume.glossary.json"',
+        ),
+      )
     const downloads: Array<{ href: string; name: string }> = []
     vi.mocked(HTMLAnchorElement.prototype.click).mockImplementation(
       function (this: HTMLAnchorElement) {
@@ -132,16 +140,25 @@ describe('browser import and export', () => {
     )
 
     await commands.export('png', null)
+    await commands.exportGlossary()
 
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[0][0]).toBe('/rpc/export')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
       format: 'png',
       destination: null,
     })
-    expect(URL.createObjectURL).toHaveBeenCalledOnce()
-    expect(downloads).toEqual([{ href: 'blob:koharu-thumbnail', name: 'chapter.png' }])
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:koharu-thumbnail')
+    expect(fetchMock.mock.calls[1]).toEqual(['/rpc/export_glossary', { method: 'POST' }])
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(URL.createObjectURL).mock.calls.map(([blob]) => (blob as Blob).type)).toEqual([
+      'image/png',
+      'application/json',
+    ])
+    expect(downloads).toEqual([
+      { href: 'blob:koharu-thumbnail', name: 'chapter.png' },
+      { href: 'blob:koharu-thumbnail', name: 'volume.glossary.json' },
+    ])
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2)
   })
 
   it('does not download when export returns no output', async () => {

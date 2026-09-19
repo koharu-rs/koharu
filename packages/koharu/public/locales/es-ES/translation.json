@@ -11,12 +11,15 @@
     "downloadingFiles": "Descargando {{count}} archivos",
     "downloadingFiles_one": "Descargando {{count}} archivos",
     "downloadingFiles_other": "Descargando {{count}} archivos",
+    "extractingTerms": "Extrayendo términos",
     "modelDownload": "Descarga del modelo",
     "pageLabel": "Página {{number}}: {{label}}",
     "processing": "Procesando",
     "processingFailed": "Error de procesamiento.",
+    "preparingOcr": "Preparando OCR",
     "stop": "Detener",
-    "title": "Actividad"
+    "title": "Actividad",
+    "translatingTerms": "Traduciendo términos"
   },
   "agent": {
     "account": "Cuenta de ChatGPT",

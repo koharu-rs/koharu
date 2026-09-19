@@ -115,19 +115,71 @@ async fn run_term_translation_workflow(
     Ok(ScanOutcome::Finished)
 }
 
-struct AppScanRuntime {
+#[async_trait]
+trait ScanPipelineRuntime {
+    async fn execute_ocr(
+        &mut self,
+        snapshot: koharu_scene::Snapshot,
+        request: koharu_pipeline::Request,
+    ) -> Result<koharu_pipeline::RunStatus>;
+
+    async fn extract_terms(
+        &mut self,
+        text: &str,
+        confidence_threshold: f32,
+        stop: &koharu_pipeline::StopToken,
+    ) -> Result<Option<Vec<koharu_ml::glossary_ner::GlossaryEntity>>>;
+}
+
+struct ProductionScanPipeline {
     pipeline: crate::host::Pipeline,
+    project: crate::commands::project::CurrentProject,
+    desktop: koharu_desktop::Desktop,
+    canvas: crate::commands::canvas::CanvasChannel,
+}
+
+#[async_trait]
+impl ScanPipelineRuntime for ProductionScanPipeline {
+    async fn execute_ocr(
+        &mut self,
+        snapshot: koharu_scene::Snapshot,
+        request: koharu_pipeline::Request,
+    ) -> Result<koharu_pipeline::RunStatus> {
+        let mut committer = crate::commands::processing::ProjectCommitter {
+            project: self.project.clone(),
+            desktop: self.desktop.clone(),
+            canvas: self.canvas.clone(),
+        };
+        self.pipeline
+            .execute(snapshot, request, &mut committer)
+            .await
+            .map(|report| report.status)
+            .map_err(|error| anyhow::anyhow!(error))
+    }
+
+    async fn extract_terms(
+        &mut self,
+        text: &str,
+        confidence_threshold: f32,
+        stop: &koharu_pipeline::StopToken,
+    ) -> Result<Option<Vec<koharu_ml::glossary_ner::GlossaryEntity>>> {
+        self.pipeline
+            .extract_glossary_terms(text, confidence_threshold, stop)
+            .await
+    }
+}
+
+struct AppScanRuntime<P> {
+    pipeline: P,
     project: crate::commands::project::CurrentProject,
     processing: crate::commands::processing::Processing,
     jobs: crate::commands::processing::JobChannel,
     job: crate::commands::processing::JobId,
-    desktop: koharu_desktop::Desktop,
-    canvas: crate::commands::canvas::CanvasChannel,
     project_channel: crate::commands::lifecycle::ProjectChannel,
 }
 
 #[async_trait]
-impl ScanRuntime for AppScanRuntime {
+impl<P: ScanPipelineRuntime + Send> ScanRuntime for AppScanRuntime<P> {
     async fn run_ocr(&mut self, stop: &koharu_pipeline::StopToken) -> Result<ScanOutcome> {
         use std::sync::Arc;
 
@@ -179,17 +231,8 @@ impl ScanRuntime for AppScanRuntime {
                 });
             }
         }));
-        let mut committer = crate::commands::processing::ProjectCommitter {
-            project: self.project.clone(),
-            desktop: self.desktop.clone(),
-            canvas: self.canvas.clone(),
-        };
-        let report = self
-            .pipeline
-            .execute(snapshot, request, &mut committer)
-            .await
-            .map_err(|error| anyhow::anyhow!(error))?;
-        Ok(if report.status == RunStatus::Stopped {
+        let status = self.pipeline.execute_ocr(snapshot, request).await?;
+        Ok(if status == RunStatus::Stopped {
             ScanOutcome::Stopped
         } else {
             ScanOutcome::Finished
@@ -272,7 +315,10 @@ impl ScanRuntime for AppScanRuntime {
                 .take(GLOSSARY_EXAMPLE_MAX_CHARS)
                 .collect::<String>();
             let example = (!example.is_empty()).then_some(example);
-            for entity in self.pipeline.extract_glossary_terms(text, 0.3).await? {
+            let Some(entities) = self.pipeline.extract_terms(text, 0.3, stop).await? else {
+                break;
+            };
+            for entity in entities {
                 let kind = match entity.kind {
                     GlossaryEntityKind::Person => GlossaryKind::Person,
                     GlossaryEntityKind::Place => GlossaryKind::Place,
@@ -498,13 +544,16 @@ pub(crate) async fn scan_glossary(
         let phase_processing = processing.clone();
         let phase_jobs = jobs.clone();
         let mut runtime = AppScanRuntime {
-            pipeline,
+            pipeline: ProductionScanPipeline {
+                pipeline,
+                project: project.clone(),
+                desktop,
+                canvas,
+            },
             project,
             processing,
             jobs,
             job: id,
-            desktop,
-            canvas,
             project_channel,
         };
         let result = run_scan_workflow(&mut runtime, &stop, move |phase| {
@@ -533,91 +582,164 @@ pub(crate) async fn scan_glossary(
 mod tests {
     use anyhow::{Result, bail};
     use async_trait::async_trait;
-    use koharu_scene::Revision;
+    use koharu_scene::{At, Authored, PageDraft, Session, SourceText};
 
-    use super::{ScanInput, ScanOutcome, ScanRuntime, run_scan_workflow};
+    use super::{AppScanRuntime, ScanOutcome, ScanPipelineRuntime, run_scan_workflow};
     use crate::commands::{
-        glossary::ScanCandidate,
-        processing::{JobPhase, JobState},
+        glossary::ocr_source_fingerprint,
+        processing::{JobKind, JobPhase, JobState},
+        project::{CurrentProject, Project},
     };
 
-    struct FakeScan {
-        events: Vec<&'static str>,
-        texts: Vec<String>,
-        stop_after_ocr: bool,
-        stop_during_ner: bool,
-        fail_ocr: bool,
-        fingerprint_changed: bool,
+    #[derive(Clone, Copy)]
+    enum ScanScenario {
+        Success,
+        StopAfterOcr,
+        StopDuringNer,
+        FailOcr,
+        NoText,
+        FingerprintChange,
     }
 
-    impl FakeScan {
-        fn success() -> Self {
-            Self {
-                events: Vec::new(),
-                texts: vec!["アリス".to_owned()],
-                stop_after_ocr: false,
-                stop_during_ner: false,
-                fail_ocr: false,
-                fingerprint_changed: false,
-            }
-        }
+    struct RecordingPipeline {
+        project: CurrentProject,
+        requests: std::sync::Arc<
+            std::sync::Mutex<Vec<(koharu_pipeline::Operation, koharu_pipeline::Scope, usize)>>,
+        >,
+        events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        scenario: ScanScenario,
     }
 
     #[async_trait]
-    impl ScanRuntime for FakeScan {
-        async fn run_ocr(&mut self, stop: &koharu_pipeline::StopToken) -> Result<ScanOutcome> {
-            self.events.push("all OCR commits");
-            if self.fail_ocr {
+    impl ScanPipelineRuntime for RecordingPipeline {
+        async fn execute_ocr(
+            &mut self,
+            _snapshot: koharu_scene::Snapshot,
+            request: koharu_pipeline::Request,
+        ) -> Result<koharu_pipeline::RunStatus> {
+            self.requests.lock().unwrap().push((
+                request.operation().clone(),
+                request.scope().clone(),
+                request.terminology().len(),
+            ));
+            if matches!(self.scenario, ScanScenario::FailOcr) {
                 bail!("OCR failed");
             }
-            if self.stop_after_ocr {
-                stop.stop();
-                return Ok(ScanOutcome::Stopped);
+            if !matches!(self.scenario, ScanScenario::NoText) {
+                set_only_source_text(&self.project, "アリス").await?;
+                self.events.lock().unwrap().push("ocr commit".to_owned());
             }
-            Ok(ScanOutcome::Finished)
-        }
-
-        async fn read_sources(&mut self) -> Result<ScanInput> {
-            self.events.push("fresh text");
-            Ok(ScanInput {
-                revision: Revision::new(4),
-                fingerprint: "before".to_owned(),
-                source_language: None,
-                target_language: None,
-                texts: self.texts.clone(),
+            Ok(if matches!(self.scenario, ScanScenario::StopAfterOcr) {
+                koharu_pipeline::RunStatus::Stopped
+            } else {
+                koharu_pipeline::RunStatus::Completed
             })
         }
 
         async fn extract_terms(
             &mut self,
-            _input: &ScanInput,
+            text: &str,
+            _confidence_threshold: f32,
             stop: &koharu_pipeline::StopToken,
-        ) -> Result<Vec<ScanCandidate>> {
-            self.events.push("NER");
-            if self.stop_during_ner {
+        ) -> Result<Option<Vec<koharu_ml::glossary_ner::GlossaryEntity>>> {
+            self.events.lock().unwrap().push(format!("NER: {text}"));
+            if matches!(self.scenario, ScanScenario::StopDuringNer) {
                 stop.stop();
+                return Ok(None);
             }
-            Ok(Vec::new())
-        }
-
-        async fn verify_and_commit(
-            &mut self,
-            _input: ScanInput,
-            _candidates: Vec<ScanCandidate>,
-        ) -> Result<()> {
-            self.events.push("fingerprint/revision check");
-            if self.fingerprint_changed {
-                bail!("project OCR text changed during glossary extraction; rescan the glossary");
+            if matches!(self.scenario, ScanScenario::FingerprintChange) {
+                set_only_source_text(&self.project, "アリス改").await?;
             }
-            self.events.push("glossary commit");
-            Ok(())
+            Ok(Some(vec![koharu_ml::glossary_ner::GlossaryEntity {
+                start: 0,
+                end: text.len(),
+                surface: text.to_owned(),
+                kind: koharu_ml::glossary_ner::GlossaryEntityKind::Person,
+                confidence: 0.9,
+            }]))
         }
     }
 
+    async fn set_only_source_text(project: &CurrentProject, text: &str) -> Result<()> {
+        let mut current = project.project.lock().await;
+        let project = current.as_mut().unwrap();
+        let snapshot = project.snapshot();
+        let page = snapshot.pages().next().unwrap().id();
+        let existing = snapshot
+            .subtree(page)?
+            .find(|entity| {
+                entity
+                    .component::<SourceText>()
+                    .is_ok_and(|value| value.is_some())
+            })
+            .map(|entity| entity.id());
+        let patch = snapshot.patch(|edit| {
+            let content = match existing {
+                Some(content) => content,
+                None => edit.add_text_content(page, At::End)?,
+            };
+            edit.set(
+                content,
+                &SourceText {
+                    text: Authored::user(text.to_owned()),
+                    language: Some(koharu_scene::LanguageTag::new("ja")?),
+                },
+            )
+        })?;
+        let commit = project.session.commit(patch).await?;
+        project.record_commit(&commit);
+        Ok(())
+    }
+
+    async fn scan_fixture(
+        scenario: ScanScenario,
+    ) -> Result<(
+        AppScanRuntime<RecordingPipeline>,
+        CurrentProject,
+        koharu_pipeline::StopToken,
+        std::sync::Arc<
+            std::sync::Mutex<Vec<(koharu_pipeline::Operation, koharu_pipeline::Scope, usize)>>,
+        >,
+        std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    )> {
+        let mut session = Session::memory().await?;
+        let patch = session.snapshot().patch(|edit| {
+            edit.add_page(PageDraft::new("page", 100.0, 100.0), At::End)?;
+            Ok(())
+        })?;
+        session.commit(patch).await?;
+        let project = CurrentProject {
+            project: std::sync::Arc::new(tokio::sync::Mutex::new(Some(Project::new(
+                session,
+                "fixture".to_owned(),
+            )))),
+        };
+        let processing = crate::commands::processing::Processing::default();
+        let jobs = crate::commands::processing::JobChannel::default();
+        let (job, stop) =
+            processing.start_job(JobKind::GlossaryScan, JobPhase::PreparingOcr, &jobs)?;
+        let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let runtime = AppScanRuntime {
+            pipeline: RecordingPipeline {
+                project: project.clone(),
+                requests: requests.clone(),
+                events: events.clone(),
+                scenario,
+            },
+            project: project.clone(),
+            processing,
+            jobs,
+            job,
+            project_channel: crate::commands::lifecycle::ProjectChannel::default(),
+        };
+        Ok((runtime, project, stop, requests, events))
+    }
+
     #[tokio::test]
-    async fn scan_workflow_enforces_the_ocr_barrier_before_one_glossary_commit() {
-        let mut runtime = FakeScan::success();
-        let stop = koharu_pipeline::StopToken::default();
+    async fn app_scan_runtime_enforces_ocr_first_request_and_commits_glossary_once() {
+        let (mut runtime, project, stop, requests, events) =
+            scan_fixture(ScanScenario::Success).await.unwrap();
         let phases = std::sync::Mutex::new(Vec::new());
 
         let outcome = run_scan_workflow(&mut runtime, &stop, |phase| {
@@ -628,49 +750,70 @@ mod tests {
 
         assert_eq!(outcome, ScanOutcome::Finished);
         assert_eq!(
-            runtime.events,
-            [
-                "all OCR commits",
-                "fresh text",
-                "NER",
-                "fingerprint/revision check",
-                "glossary commit"
-            ]
+            requests.lock().unwrap().as_slice(),
+            [(
+                koharu_pipeline::Operation::Through {
+                    stage: koharu_pipeline::Stage::Ocr,
+                },
+                koharu_pipeline::Scope::Project,
+                0,
+            )]
+        );
+        assert_eq!(
+            events.lock().unwrap().as_slice(),
+            ["ocr commit", "NER: アリス"]
         );
         assert_eq!(
             phases.into_inner().unwrap(),
             [JobPhase::PreparingOcr, JobPhase::ExtractingTerms]
         );
+        let current = project.project.lock().await;
+        let project = current.as_ref().unwrap();
+        let snapshot = project.snapshot();
+        let glossary = snapshot
+            .project_component::<koharu_scene::Glossary>()
+            .unwrap()
+            .unwrap();
+        assert_eq!(glossary.entries.len(), 1);
+        assert_eq!(glossary.entries[0].source, "アリス");
+        assert_eq!(
+            glossary.source_fingerprint.as_deref(),
+            Some(ocr_source_fingerprint(&snapshot).unwrap().as_str())
+        );
+        assert_eq!(project.undo.len(), 2);
     }
 
     #[tokio::test]
-    async fn scan_stop_failure_empty_text_and_fingerprint_change_never_commit() {
-        let cases = [
-            (true, false, false, false, vec!["text".to_owned()]),
-            (false, true, false, false, vec!["text".to_owned()]),
-            (false, false, true, false, vec!["text".to_owned()]),
-            (false, false, false, false, Vec::new()),
-            (false, false, false, true, vec!["text".to_owned()]),
-        ];
-
-        for (stop_after_ocr, stop_during_ner, fail_ocr, fingerprint_changed, texts) in cases {
-            let mut runtime = FakeScan {
-                events: Vec::new(),
-                texts,
-                stop_after_ocr,
-                stop_during_ner,
-                fail_ocr,
-                fingerprint_changed,
-            };
-            let stop = koharu_pipeline::StopToken::default();
+    async fn app_scan_runtime_negative_paths_never_commit_glossary() {
+        for scenario in [
+            ScanScenario::StopAfterOcr,
+            ScanScenario::StopDuringNer,
+            ScanScenario::FailOcr,
+            ScanScenario::NoText,
+            ScanScenario::FingerprintChange,
+        ] {
+            let (mut runtime, project, stop, _, _) = scan_fixture(scenario).await.unwrap();
             let result = run_scan_workflow(&mut runtime, &stop, |_| {}).await;
-
-            if stop_after_ocr || stop_during_ner {
+            if matches!(
+                scenario,
+                ScanScenario::StopAfterOcr | ScanScenario::StopDuringNer
+            ) {
                 assert_eq!(result.unwrap(), ScanOutcome::Stopped);
             } else {
                 assert!(result.is_err());
             }
-            assert!(!runtime.events.contains(&"glossary commit"));
+            assert!(
+                project
+                    .project
+                    .lock()
+                    .await
+                    .as_ref()
+                    .unwrap()
+                    .snapshot()
+                    .project_component::<koharu_scene::Glossary>()
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 

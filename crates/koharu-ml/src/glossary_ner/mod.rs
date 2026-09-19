@@ -2,7 +2,7 @@ mod model;
 mod processor;
 mod types;
 
-use std::{collections::VecDeque, path::Path};
+use std::{collections::VecDeque, ops::Range, path::Path};
 
 use anyhow::{Context, Result, ensure};
 use koharu_torch::Device;
@@ -16,6 +16,65 @@ use self::{
 };
 
 pub use types::{GlossaryEntity, GlossaryEntityKind};
+
+pub struct Cancellation<'a> {
+    cancelled: &'a (dyn Fn() -> bool + Sync),
+}
+
+impl<'a> Cancellation<'a> {
+    #[must_use]
+    pub fn new(cancelled: &'a (dyn Fn() -> bool + Sync)) -> Self {
+        Self { cancelled }
+    }
+
+    #[must_use]
+    pub fn never() -> Cancellation<'static> {
+        Cancellation {
+            cancelled: &never_cancelled,
+        }
+    }
+
+    #[must_use]
+    pub fn cancelled(&self) -> bool {
+        (self.cancelled)()
+    }
+}
+
+fn never_cancelled() -> bool {
+    false
+}
+
+enum WindowEncoding<T> {
+    Ready(T),
+    Split(Range<usize>, Range<usize>),
+}
+
+fn run_windowed_extraction<T, O>(
+    mut windows: VecDeque<Range<usize>>,
+    cancellation: &Cancellation<'_>,
+    mut encode: impl FnMut(Range<usize>) -> Result<WindowEncoding<T>>,
+    mut infer: impl FnMut(Range<usize>, T) -> Result<Vec<O>>,
+) -> Result<Option<Vec<O>>> {
+    let mut output = Vec::new();
+    while let Some(window) = windows.pop_front() {
+        if cancellation.cancelled() {
+            return Ok(None);
+        }
+        match encode(window.clone())? {
+            WindowEncoding::Ready(encoded) => {
+                if cancellation.cancelled() {
+                    return Ok(None);
+                }
+                output.extend(infer(window, encoded)?);
+            }
+            WindowEncoding::Split(left, right) => {
+                windows.push_front(right);
+                windows.push_front(left);
+            }
+        }
+    }
+    Ok(Some(output))
+}
 
 crate::model_repository!("urchade/gliner_multi-v2.1" @ "443d26d654e0324125a96bebd8e796c14ff2efe6" {
     CONFIG = "gliner_config.json",
@@ -113,60 +172,79 @@ impl GlossaryNer {
 
     /// Extracts flat, non-overlapping glossary entities. Offsets are UTF-8
     /// byte offsets into `text`; `end` is exclusive.
-    pub fn extract(&self, text: &str, confidence_threshold: f32) -> Result<Vec<GlossaryEntity>> {
-        koharu_torch::no_grad(|| self.extract_inner(text, confidence_threshold))
+    pub fn extract(
+        &self,
+        text: &str,
+        confidence_threshold: f32,
+        cancellation: &Cancellation<'_>,
+    ) -> Result<Option<Vec<GlossaryEntity>>> {
+        koharu_torch::no_grad(|| self.extract_inner(text, confidence_threshold, cancellation))
     }
 
-    fn extract_inner(&self, text: &str, confidence_threshold: f32) -> Result<Vec<GlossaryEntity>> {
+    fn extract_inner(
+        &self,
+        text: &str,
+        confidence_threshold: f32,
+        cancellation: &Cancellation<'_>,
+    ) -> Result<Option<Vec<GlossaryEntity>>> {
         ensure!(
             confidence_threshold.is_finite() && (0.0..=1.0).contains(&confidence_threshold),
             "glossary NER confidence threshold must be between 0 and 1"
         );
         let tokens = split_text(text);
         if tokens.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
-        let tokens = self
-            .processor
-            .split_oversized_tokens(text, &tokens, MAX_ENCODER_TOKENS)?;
+        let Some(tokens) = self.processor.split_oversized_tokens(
+            text,
+            &tokens,
+            MAX_ENCODER_TOKENS,
+            cancellation,
+        )?
+        else {
+            return Ok(None);
+        };
 
-        let mut entities = Vec::new();
-        let mut windows =
-            VecDeque::from(token_windows(tokens.len(), WINDOW_WORDS, WINDOW_OVERLAP)?);
-        while let Some(window) = windows.pop_front() {
-            let encoded = self.processor.encode(text, &tokens[window.clone()])?;
-            if !encoded.fits(MAX_ENCODER_TOKENS) && window.len() > 1 {
-                let midpoint = window.start + window.len() / 2;
-                let overlap = WINDOW_OVERLAP.min((window.len() / 2).saturating_sub(1));
-                windows.push_front(midpoint - overlap..window.end);
-                windows.push_front(window.start..midpoint);
-                continue;
-            }
-            ensure!(
-                encoded.fits(MAX_ENCODER_TOKENS),
-                "one glossary NER token exceeds the encoder capacity"
-            );
-            let first_subtokens = encoded
-                .word_subtokens
-                .iter()
-                .map(|subtokens| subtokens.start)
-                .collect::<Vec<_>>();
-            let text_words = window.len();
-            let probabilities = self.model.score(
-                &encoded.input_ids,
-                &first_subtokens,
-                encoded.prompt_words,
-                text_words,
-            )?;
-            entities.extend(decode_scores(
-                text,
-                &tokens[window],
-                &probabilities,
-                confidence_threshold,
-            )?);
-        }
+        let windows = VecDeque::from(token_windows(tokens.len(), WINDOW_WORDS, WINDOW_OVERLAP)?);
+        let Some(mut entities) = run_windowed_extraction(
+            windows,
+            cancellation,
+            |window| {
+                let encoded = self.processor.encode(text, &tokens[window.clone()])?;
+                if !encoded.fits(MAX_ENCODER_TOKENS) && window.len() > 1 {
+                    let midpoint = window.start + window.len() / 2;
+                    let overlap = WINDOW_OVERLAP.min((window.len() / 2).saturating_sub(1));
+                    return Ok(WindowEncoding::Split(
+                        window.start..midpoint,
+                        midpoint - overlap..window.end,
+                    ));
+                }
+                ensure!(
+                    encoded.fits(MAX_ENCODER_TOKENS),
+                    "one glossary NER token exceeds the encoder capacity"
+                );
+                Ok(WindowEncoding::Ready(encoded))
+            },
+            |window, encoded| {
+                let first_subtokens = encoded
+                    .word_subtokens
+                    .iter()
+                    .map(|subtokens| subtokens.start)
+                    .collect::<Vec<_>>();
+                let probabilities = self.model.score(
+                    &encoded.input_ids,
+                    &first_subtokens,
+                    encoded.prompt_words,
+                    window.len(),
+                )?;
+                decode_scores(text, &tokens[window], &probabilities, confidence_threshold)
+            },
+        )?
+        else {
+            return Ok(None);
+        };
         resolve_overlaps(&mut entities);
-        Ok(entities)
+        Ok(Some(entities))
     }
 }
 
@@ -191,14 +269,51 @@ mod tests {
         assert_eq!(config.model_name, "microsoft/mdeberta-v3-base");
     }
 
+    #[test]
+    fn cancellation_stops_multi_window_extraction_before_later_windows() -> Result<()> {
+        use std::{
+            collections::VecDeque,
+            sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+        };
+
+        let cancelled = AtomicBool::new(false);
+        let is_cancelled = || cancelled.load(Ordering::Relaxed);
+        let cancellation = Cancellation::new(&is_cancelled);
+        let encoded = AtomicUsize::new(0);
+        let inferred = AtomicUsize::new(0);
+        let windows = VecDeque::from(token_windows(300, WINDOW_WORDS, WINDOW_OVERLAP)?);
+
+        let result = run_windowed_extraction(
+            windows,
+            &cancellation,
+            |window| {
+                encoded.fetch_add(1, Ordering::Relaxed);
+                Ok(WindowEncoding::Ready(window))
+            },
+            |_window, encoded| {
+                inferred.fetch_add(1, Ordering::Relaxed);
+                cancelled.store(true, Ordering::Relaxed);
+                Ok(vec![encoded])
+            },
+        )?;
+
+        assert!(result.is_none());
+        assert_eq!(encoded.load(Ordering::Relaxed), 1);
+        assert_eq!(inferred.load(Ordering::Relaxed), 1);
+        Ok(())
+    }
+
     #[tokio::test]
     #[ignore = "downloads a 1.1 GB checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_extracts_multilingual_entities() -> Result<()> {
         let runtime = koharu_runtime::Runtime::discover([koharu_runtime::Feature::Torch])?;
         runtime.initialize().await?;
         let ner = GlossaryNer::load(crate::Device::cpu()).await?;
-        assert!(ner.extract("", 0.3)?.is_empty());
-        let entities = ner.extract("蒼井レンは東京へ向かった。", 0.3)?;
+        let cancellation = Cancellation::never();
+        assert!(ner.extract("", 0.3, &cancellation)?.unwrap().is_empty());
+        let entities = ner
+            .extract("蒼井レンは東京へ向かった。", 0.3, &cancellation)?
+            .unwrap();
         assert!(!entities.is_empty());
         assert!(entities.iter().all(|entity| {
             entity.start < entity.end

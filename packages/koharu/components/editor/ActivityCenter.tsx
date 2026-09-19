@@ -124,16 +124,13 @@ function JobItem({ job }: { job: Job }) {
     )
   }
   const percent = progress(job.completed, job.total)
+  const phase = jobPhaseLabel(job, t)
   return (
     <div className='border-b p-3 last:border-b-0'>
       <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
         <span className='mt-1.5 size-1.5 justify-self-center rounded-full bg-primary' />
         <div className='min-w-0'>
-          <span className='block truncate text-[12px] font-medium capitalize'>
-            {job.stage
-              ? t(`phase.${job.stage}`, { defaultValue: job.stage })
-              : t('activity.processing')}
-          </span>
+          <span className='block truncate text-[12px] font-medium capitalize'>{phase}</span>
         </div>
         <span className='pt-0.5 text-right text-[10px] tabular-nums'>
           {percent !== null ? `${percent}%` : null}
@@ -152,17 +149,31 @@ function JobItem({ job }: { job: Job }) {
             {pageLabel}
           </p>
         ) : null}
-        {job.model ? (
-          <p className='col-start-2 col-end-4 truncate text-[10px] text-muted-foreground'>
-            {job.model}
-          </p>
-        ) : null}
         <div className='col-start-2 col-end-4'>
           <Progress value={percent} />
         </div>
       </div>
     </div>
   )
+}
+
+function jobPhaseLabel(job: Job, t: ReturnType<typeof useTranslation>['t']): string {
+  if (job.kind === 'pipeline') {
+    return job.phase.kind === 'pipeline' && job.phase.stage
+      ? t(`phase.${job.phase.stage}`, { defaultValue: job.phase.stage })
+      : t('activity.processing')
+  }
+  if (job.kind === 'glossary_translation') {
+    return t('activity.translatingTerms')
+  }
+  switch (job.phase.kind) {
+    case 'preparing_ocr':
+      return t('activity.preparingOcr')
+    case 'extracting_terms':
+      return t('activity.extractingTerms')
+    default:
+      return t('activity.processing')
+  }
 }
 
 function DownloadItem({ download }: { download: DownloadState }) {

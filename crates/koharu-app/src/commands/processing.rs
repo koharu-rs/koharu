@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{fmt, sync::Arc};
 
 use anyhow::{Context as _, Result};
 use koharu_pipeline::{Committer, Progress, RunStatus, StageOutput, StopToken};
@@ -78,9 +78,23 @@ pub enum JobState {
 
 #[derive(Clone, Default)]
 pub(crate) struct Processing {
-    pub(crate) stops: Arc<Mutex<HashMap<JobId, StopToken>>>,
-    pub(crate) jobs: Arc<Mutex<HashMap<JobId, Job>>>,
+    registry: Arc<JobRegistry>,
     pub(crate) inpainting_mask: Arc<Mutex<Option<koharu_pipeline::InpaintingMask>>>,
+}
+
+#[derive(Default)]
+struct JobRegistry {
+    state: Mutex<JobRegistryState>,
+}
+
+#[derive(Default)]
+struct JobRegistryState {
+    active: Option<ActiveJob>,
+}
+
+struct ActiveJob {
+    job: Job,
+    stop: StopToken,
 }
 
 impl Processing {
@@ -92,13 +106,6 @@ impl Processing {
     ) -> Result<(JobId, StopToken)> {
         let id = JobId::new();
         let stop = StopToken::default();
-        {
-            let mut stops = self.stops.lock();
-            if !stops.is_empty() {
-                anyhow::bail!("another process is already running");
-            }
-            stops.insert(id, stop.clone());
-        }
         let job = Job {
             id,
             kind,
@@ -109,7 +116,15 @@ impl Processing {
             page: None,
             error: None,
         };
-        self.jobs.lock().insert(id, job.clone());
+        let mut registry = self.registry.state.lock();
+        if registry.active.is_some() {
+            anyhow::bail!("another process is already running");
+        }
+        registry.active = Some(ActiveJob {
+            job: job.clone(),
+            stop: stop.clone(),
+        });
+        drop(registry);
         channel.channel.publish(job);
         Ok((id, stop))
     }
@@ -120,14 +135,14 @@ impl Processing {
         channel: &JobChannel,
         update: impl FnOnce(&mut Job),
     ) {
-        let job = {
-            let mut jobs = self.jobs.lock();
-            jobs.get_mut(&id).map(|job| {
-                update(job);
-                job.clone()
-            })
-        };
-        if let Some(job) = job {
+        let mut registry = self.registry.state.lock();
+        if let Some(active) = registry
+            .active
+            .as_mut()
+            .filter(|active| active.job.id == id)
+        {
+            update(&mut active.job);
+            let job = active.job.clone();
             channel.channel.publish(job);
         }
     }
@@ -139,25 +154,50 @@ impl Processing {
         error: Option<String>,
         channel: &JobChannel,
     ) {
-        self.stops.lock().remove(&id);
-        let job = self.jobs.lock().remove(&id).map(|mut job| {
-            job.state = state;
-            job.error = error;
-            job
-        });
-        if let Some(job) = job {
+        let mut registry = self.registry.state.lock();
+        if registry
+            .active
+            .as_ref()
+            .is_some_and(|active| active.job.id == id)
+        {
+            let mut active = registry.active.take().expect("active job checked");
+            active.job.state = state;
+            active.job.error = error;
+            let job = active.job;
             channel.channel.publish(job);
         }
     }
 
     pub(crate) fn stop_all(&self) {
-        let mut stops = self.stops.lock();
-        for stop in stops.values() {
-            stop.stop();
+        let registry = self.registry.state.lock();
+        if let Some(active) = registry.active.as_ref() {
+            active.stop.stop();
         }
-        stops.clear();
-        drop(stops);
-        self.jobs.lock().clear();
+    }
+
+    pub(crate) fn stop_job(&self, id: JobId) -> Result<()> {
+        let registry = self.registry.state.lock();
+        let active = registry
+            .active
+            .as_ref()
+            .filter(|active| active.job.id == id)
+            .with_context(|| format!("job {id} is not running"))?;
+        active.stop.stop();
+        Ok(())
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.registry.state.lock().active.is_some()
+    }
+
+    pub(crate) fn snapshot(&self) -> Vec<Job> {
+        self.registry
+            .state
+            .lock()
+            .active
+            .as_ref()
+            .map(|active| vec![active.job.clone()])
+            .unwrap_or_default()
     }
 }
 
@@ -306,19 +346,12 @@ pub(crate) async fn process(
                 }
             };
             if let Some((completed, total, page, stage, _model)) = update {
-                let job = {
-                    let mut jobs = progress_processing.jobs.lock();
-                    jobs.get_mut(&id).map(|job| {
-                        job.completed = completed;
-                        job.total = total;
-                        job.page = page;
-                        job.phase = JobPhase::Pipeline { stage };
-                        job.clone()
-                    })
-                };
-                if let Some(job) = job {
-                    progress_jobs.channel.publish(job);
-                }
+                progress_processing.update_job(id, &progress_jobs, |job| {
+                    job.completed = completed;
+                    job.total = total;
+                    job.page = page;
+                    job.phase = JobPhase::Pipeline { stage };
+                });
             }
         }));
 
@@ -366,11 +399,7 @@ pub(crate) async fn process(
 )]
 #[koharu_macros::command]
 pub(crate) async fn stop_job(job: JobId, processing: Processing) -> std::result::Result<(), Error> {
-    let stops = processing.stops.lock();
-    let stop = stops
-        .get(&job)
-        .with_context(|| format!("job {job} is not running"))?;
-    stop.stop();
+    processing.stop_job(job)?;
     Ok(())
 }
 
@@ -438,8 +467,67 @@ mod tests {
         );
 
         processing.finish_job(first, JobState::Stopped, None, &channel);
-        assert!(processing.stops.lock().is_empty());
-        assert!(processing.jobs.lock().is_empty());
+        assert!(processing.snapshot().is_empty());
+    }
+
+    #[test]
+    fn stop_all_cannot_interleave_with_job_publication() {
+        use std::{sync::mpsc, time::Duration};
+
+        let processing = super::Processing::default();
+        let channel = super::JobChannel::default();
+        let (published, published_rx) = mpsc::sync_channel(0);
+        let (release, release_rx) = mpsc::sync_channel(0);
+        let release_rx = std::sync::Mutex::new(release_rx);
+        *channel.channel.lock() = Some(crate::commands::Channel::from_sink(move |_| {
+            published.send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+            true
+        }));
+
+        let starting = processing.clone();
+        let start_channel = channel.clone();
+        let started = std::thread::spawn(move || {
+            starting.start_job(
+                JobKind::GlossaryScan,
+                JobPhase::PreparingOcr,
+                &start_channel,
+            )
+        });
+        published_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+
+        let stopping = processing.clone();
+        let (stopped, stopped_rx) = mpsc::sync_channel(0);
+        let stop_all = std::thread::spawn(move || {
+            stopping.stop_all();
+            stopped.send(()).unwrap();
+        });
+        stopped_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(
+            processing
+                .start_job(
+                    JobKind::Pipeline,
+                    JobPhase::Pipeline { stage: None },
+                    &super::JobChannel::default(),
+                )
+                .is_err()
+        );
+        release.send(()).unwrap();
+        let (job, token) = started.join().unwrap().unwrap();
+        stop_all.join().unwrap();
+
+        assert!(token.stopped());
+        processing.finish_job(job, JobState::Stopped, None, &super::JobChannel::default());
+        assert!(processing.snapshot().is_empty());
+        assert!(
+            processing
+                .start_job(
+                    JobKind::Pipeline,
+                    JobPhase::Pipeline { stage: None },
+                    &super::JobChannel::default(),
+                )
+                .is_ok()
+        );
     }
 
     #[tokio::test]

@@ -11,12 +11,15 @@
     "downloadingFiles": "正在下载 {{count}} 个文件",
     "downloadingFiles_one": "正在下载 {{count}} 个文件",
     "downloadingFiles_other": "正在下载 {{count}} 个文件",
+    "extractingTerms": "正在识别名词",
     "modelDownload": "模型下载",
     "pageLabel": "第 {{number}} 页：{{label}}",
     "processing": "正在处理",
     "processingFailed": "处理失败。",
+    "preparingOcr": "正在准备 OCR",
     "stop": "停止",
-    "title": "活动"
+    "title": "活动",
+    "translatingTerms": "正在翻译名词"
   },
   "agent": {
     "account": "ChatGPT 账户",

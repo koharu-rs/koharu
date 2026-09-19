@@ -111,6 +111,21 @@ impl Request {
         self
     }
 
+    #[must_use]
+    pub fn operation(&self) -> &Operation {
+        &self.operation
+    }
+
+    #[must_use]
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+
+    #[must_use]
+    pub fn terminology(&self) -> &[TerminologyEntry] {
+        &self.terminology
+    }
+
     pub(crate) fn into_parts(self) -> RequestParts {
         RequestParts {
             operation: self.operation,

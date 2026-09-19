@@ -11,12 +11,15 @@
     "downloadingFiles": "{{count}} dosya indiriliyor",
     "downloadingFiles_one": "{{count}} dosya indiriliyor",
     "downloadingFiles_other": "{{count}} dosya indiriliyor",
+    "extractingTerms": "Terimler çıkarılıyor",
     "modelDownload": "Model indirme",
     "pageLabel": "Sayfa {{number}}: {{label}}",
     "processing": "İşleniyor",
     "processingFailed": "İşleme başarısız oldu.",
+    "preparingOcr": "OCR hazırlanıyor",
     "stop": "Durdur",
-    "title": "Etkinlik"
+    "title": "Etkinlik",
+    "translatingTerms": "Terimler çevriliyor"
   },
   "agent": {
     "account": "ChatGPT hesabı",

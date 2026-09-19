@@ -174,7 +174,7 @@ pub(crate) async fn subscribe(
     let preferences = Preferences::load()?;
     Ok(StartupState {
         preferences,
-        jobs: host.processing.jobs.lock().values().cloned().collect(),
+        jobs: host.processing.snapshot(),
         canvas: canvas_state,
         native_dialogs: host.window().is_some(),
     })
@@ -418,7 +418,7 @@ pub(crate) async fn import(
     processing: Processing,
     canvas: CanvasChannel,
 ) -> std::result::Result<(), Error> {
-    if !processing.stops.lock().is_empty() {
+    if processing.is_running() {
         return Err(anyhow::anyhow!("pages cannot be imported while processing is running").into());
     }
     let files = resolve_import_paths(source, window, paths).await?;

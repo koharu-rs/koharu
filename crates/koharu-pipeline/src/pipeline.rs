@@ -15,8 +15,6 @@ pub struct Pipeline {
     current: Arc<ArcSwap<StageRunner>>,
     resources: Arc<ResourceMonitor>,
     execution: Arc<tokio::sync::Mutex<()>>,
-    device: koharu_ml::Device,
-    glossary_ner: Arc<tokio::sync::Mutex<Option<koharu_ml::glossary_ner::GlossaryNer>>>,
 }
 
 impl Pipeline {
@@ -43,7 +41,6 @@ impl Pipeline {
         let current = Arc::new(ArcSwap::from_pointee(runner));
         let watched = current.clone();
         let watched_resources = resources.clone();
-        let owned_device = device.clone();
         let _watcher = tokio::runtime::Handle::try_current()
             .context("pipeline requires a Tokio runtime")?
             .spawn(async move {
@@ -67,8 +64,6 @@ impl Pipeline {
             current,
             resources,
             execution: Arc::new(tokio::sync::Mutex::new(())),
-            device: owned_device,
-            glossary_ner: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
 
@@ -81,19 +76,17 @@ impl Pipeline {
         &self,
         text: &str,
         confidence_threshold: f32,
-    ) -> Result<Vec<koharu_ml::glossary_ner::GlossaryEntity>> {
-        let mut owner = self.glossary_ner.lock().await;
-        if owner.is_none() {
-            *owner = Some(
-                koharu_ml::glossary_ner::GlossaryNer::load(self.device.clone())
-                    .await
-                    .context("failed to load glossary NER model gliner_multi-v2.1")?,
-            );
-        }
-        owner
-            .as_ref()
-            .expect("glossary NER initialized")
-            .extract(text, confidence_threshold)
+        stop: &crate::StopToken,
+    ) -> Result<Option<Vec<koharu_ml::glossary_ner::GlossaryEntity>>> {
+        let _execution = self.execution.lock().await;
+        self.current
+            .load_full()
+            .extract_glossary_terms(text, confidence_threshold, stop)
+            .await
+    }
+
+    pub fn unload_glossary_ner(&self) -> bool {
+        self.current.load_full().unload_glossary_ner()
     }
 
     pub async fn translate_terms(
@@ -134,7 +127,7 @@ mod tests {
     use super::Pipeline;
 
     #[tokio::test]
-    async fn pipeline_clones_share_the_lazy_glossary_ner_owner() {
+    async fn pipeline_clones_share_the_stage_runner_glossary_owner_and_explicit_unload() {
         let pipeline = Pipeline::from_config(
             koharu_config::Config::memory(crate::PipelineConfig::default()),
             koharu_config::Config::memory(koharu_translator::ProvidersConfig::default()),
@@ -144,10 +137,11 @@ mod tests {
         let cloned = pipeline.clone();
 
         assert!(std::sync::Arc::ptr_eq(
-            &pipeline.glossary_ner,
-            &cloned.glossary_ner
+            &pipeline.current.load_full(),
+            &cloned.current.load_full(),
         ));
-        assert!(pipeline.glossary_ner.lock().await.is_none());
+        assert!(!pipeline.unload_glossary_ner());
+        assert!(!cloned.unload_glossary_ner());
     }
 
     #[tokio::test]

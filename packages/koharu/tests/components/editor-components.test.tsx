@@ -1788,18 +1788,18 @@ describe('greenfield editor', () => {
     expect(screen.queryByRole('complementary', { name: 'Activity' })).not.toBeInTheDocument()
   })
 
-  it('keeps running work visible and stoppable', async () => {
+  it('keeps running pipeline work visible and stoppable', async () => {
     installProject()
     useKoharuStore.setState({
       jobs: {
         job: {
           state: 'running',
           id: 'job',
+          kind: 'pipeline',
+          phase: { kind: 'pipeline', stage: 'ocr' },
           completed: 1,
           total: 4,
           page: 'page',
-          stage: 'ocr',
-          model: 'manga-ocr',
           error: null,
         },
       },
@@ -1817,12 +1817,36 @@ describe('greenfield editor', () => {
     ])
     const stop = vi.spyOn(commands, 'stopJob').mockResolvedValue(null)
     render(<ActivityCenter />)
+    expect(screen.getByText('OCR')).toBeInTheDocument()
     expect(screen.getByText('25%')).toBeInTheDocument()
-    // Separate elements, so a long label truncates without taking the model.
     expect(screen.getByText('Page 1: cover.png')).toBeInTheDocument()
-    expect(screen.getByText('manga-ocr')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     await waitFor(() => expect(stop).toHaveBeenCalledWith('job'))
+  })
+
+  it.each([
+    ['glossary_scan', { kind: 'preparing_ocr' }, 'Preparing OCR'],
+    ['glossary_scan', { kind: 'extracting_terms' }, 'Extracting terms'],
+    ['glossary_translation', { kind: 'translating_terms' }, 'Translating terms'],
+  ] as const)('shows the %s job phase', (kind, phase, label) => {
+    useKoharuStore.setState({
+      jobs: {
+        job: {
+          state: 'running',
+          id: 'job',
+          kind,
+          phase,
+          completed: 0,
+          total: 0,
+          page: null,
+          error: null,
+        },
+      },
+    })
+
+    render(<ActivityCenter />)
+
+    expect(screen.getByText(label)).toBeInTheDocument()
   })
 
   it('combines concurrent downloads into one progress bar', () => {

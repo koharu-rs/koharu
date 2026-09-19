@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use koharu_agent::{Control, Host, Invocation, Tool, ToolCall};
 use koharu_desktop::{Desktop, Frame};
-use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput, StopToken};
+use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
@@ -17,7 +17,7 @@ use crate::commands::{
     editing::{GeometryUpdate, TypographyUpdate},
     output,
     preferences::Preferences,
-    processing::{JobId, Processing, terminology_snapshot},
+    processing::{JobChannel, JobKind, JobPhase, JobState, Processing, terminology_snapshot},
     project::{CurrentProject, Project, Typography},
 };
 use crate::host::Pipeline;
@@ -137,15 +137,12 @@ impl KoharuHost {
             .context("no project is open")?
             .snapshot();
         let terminology = terminology_snapshot(&snapshot)?;
-        let job = JobId::new();
-        let stop = StopToken::default();
-        {
-            let mut stops = self.processing.stops.lock();
-            if !stops.is_empty() {
-                bail!("another pipeline process is already running");
-            }
-            stops.insert(job, stop.clone());
-        }
+        let jobs = JobChannel::default();
+        let (job, stop) = self.processing.start_job(
+            JobKind::Pipeline,
+            JobPhase::Pipeline { stage: None },
+            &jobs,
+        )?;
 
         let watcher = tauri::async_runtime::spawn({
             let control = control.clone();
@@ -162,11 +159,25 @@ impl KoharuHost {
             .execute(snapshot, request, &mut committer)
             .await;
         watcher.abort();
-        self.processing.stops.lock().remove(&job);
-        let report = result.map_err(|error| anyhow!(error))?;
+        let report = match result {
+            Ok(report) => report,
+            Err(error) => {
+                self.processing.finish_job(
+                    job,
+                    JobState::Failed,
+                    Some(format!("{error:#}")),
+                    &jobs,
+                );
+                return Err(anyhow!(error));
+            }
+        };
         if report.status == RunStatus::Stopped {
+            self.processing
+                .finish_job(job, JobState::Stopped, None, &jobs);
             bail!("pipeline processing was cancelled");
         }
+        self.processing
+            .finish_job(job, JobState::Finished, None, &jobs);
         Invocation::changed(json!({
             "base_revision": report.base,
             "final_revision": report.final_revision,

@@ -78,7 +78,12 @@ async fn main() -> Result<()> {
             gold.insert((start, start + expected.surface.len(), entity_kind));
         }
         let predicted = model
-            .extract(&fixture.text, threshold)?
+            .extract(
+                &fixture.text,
+                threshold,
+                &koharu_ml::glossary_ner::Cancellation::never(),
+            )?
+            .expect("evaluation is never cancelled")
             .into_iter()
             .map(|entity| (entity.start, entity.end, entity.kind))
             .collect::<BTreeSet<_>>();

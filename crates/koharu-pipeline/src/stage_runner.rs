@@ -1,9 +1,10 @@
 use std::{
+    future::Future,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use koharu_scene::{EntityId, Patch};
 
 use crate::{
@@ -17,6 +18,8 @@ use crate::{
 pub(crate) struct StageRunner {
     stages: Stages,
     accelerator: AcceleratorGate,
+    device: koharu_ml::Device,
+    glossary_ner: crate::ModelCell<koharu_ml::glossary_ner::GlossaryNer>,
 }
 
 impl StageRunner {
@@ -29,6 +32,8 @@ impl StageRunner {
         Ok(Self {
             stages: Stages::new(config, translator, device)?,
             accelerator: AcceleratorGate::new(device, resources),
+            device: device.clone(),
+            glossary_ner: crate::ModelCell::new(),
         })
     }
 
@@ -56,6 +61,84 @@ impl StageRunner {
         self.stages
             .translate_terms(selection, generation, request)
             .await
+    }
+
+    pub(crate) async fn extract_glossary_terms(
+        &self,
+        text: &str,
+        confidence_threshold: f32,
+        stop: &StopToken,
+    ) -> Result<Option<Vec<koharu_ml::glossary_ner::GlossaryEntity>>> {
+        if stop.stopped() {
+            return Ok(None);
+        }
+        let permit = self.accelerator.acquire().await;
+        if stop.stopped() {
+            return Ok(None);
+        }
+        let first = self
+            .load_and_extract_glossary_terms(text, confidence_threshold, stop)
+            .await;
+        let failure = match first {
+            Ok(entities) => return Ok(entities),
+            Err(error) if is_out_of_memory(&error) && !stop.stopped() => error,
+            Err(error) => {
+                self.glossary_ner.unload();
+                return Err(error);
+            }
+        };
+
+        drop(permit);
+        self.glossary_ner.unload();
+        tracing::warn!(error = %failure, "retrying glossary NER after memory pressure");
+        let _permit = self
+            .accelerator
+            .recover(|| {
+                unload_for_recovery(
+                    None,
+                    |stage| self.stages.unload(stage),
+                    || self.glossary_ner.unload(),
+                )
+            })
+            .await;
+        if stop.stopped() {
+            return Ok(None);
+        }
+        let result = self
+            .load_and_extract_glossary_terms(text, confidence_threshold, stop)
+            .await;
+        if result.is_err() {
+            self.glossary_ner.unload();
+        }
+        result
+    }
+
+    async fn load_and_extract_glossary_terms(
+        &self,
+        text: &str,
+        confidence_threshold: f32,
+        stop: &StopToken,
+    ) -> Result<Option<Vec<koharu_ml::glossary_ner::GlossaryEntity>>> {
+        if !ensure_model_with_cancellation(&self.glossary_ner, stop, || {
+            koharu_ml::glossary_ner::GlossaryNer::load(self.device.clone())
+        })
+        .await
+        .context("failed to load glossary NER model gliner_multi-v2.1")?
+        {
+            return Ok(None);
+        }
+        let cancelled = || stop.stopped();
+        let cancellation = koharu_ml::glossary_ner::Cancellation::new(&cancelled);
+        self.glossary_ner
+            .lock()
+            .await
+            .as_ref()
+            .expect("glossary NER initialized")
+            .extract(text, confidence_threshold, &cancellation)
+    }
+
+    pub(crate) fn unload_glossary_ner(&self) -> bool {
+        self.glossary_ner.unload()
     }
 
     async fn run_with_recovery(
@@ -94,7 +177,16 @@ impl StageRunner {
         tracing::warn!(stage = %job.stage, page = %job.input.page(), error = %failure.error, "retrying stage after memory pressure");
         let _metric =
             tracing::info_span!(target: "koharu_metrics", "stage_retry", stage = %job.stage, model);
-        let _permit = self.accelerator.recover(job.stage, &self.stages).await;
+        let _permit = self
+            .accelerator
+            .recover(|| {
+                unload_for_recovery(
+                    Some(job.stage),
+                    |stage| self.stages.unload(stage),
+                    || self.glossary_ner.unload(),
+                )
+            })
+            .await;
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
@@ -173,6 +265,106 @@ fn is_out_of_memory(error: &anyhow::Error) -> bool {
             || message.contains("cuda_error_out_of_memory")
             || message.contains("not enough memory")
     })
+}
+
+async fn ensure_model_with_cancellation<M, F, Fut>(
+    model: &crate::ModelCell<M>,
+    stop: &StopToken,
+    load: F,
+) -> Result<bool>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<M>>,
+{
+    if stop.stopped() {
+        return Ok(false);
+    }
+    model.ensure(load).await?;
+    if stop.stopped() {
+        model.unload();
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+fn unload_for_recovery(
+    keep: Option<Stage>,
+    mut unload_stage: impl FnMut(Stage) -> bool,
+    unload_glossary: impl FnOnce() -> bool,
+) -> bool {
+    let mut unloaded = false;
+    for stage in Stage::ALL {
+        if Some(stage) != keep && unload_stage(stage) {
+            unloaded = true;
+            tracing::info!(target: "koharu_metrics", metric = "model_unload", stage = %stage);
+            tracing::debug!(%stage, "unloaded model while recovering from memory pressure");
+        }
+    }
+    if unload_glossary() {
+        unloaded = true;
+        tracing::info!(target: "koharu_metrics", metric = "model_unload", resource = "glossary_ner");
+    }
+    unloaded
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use std::cell::{Cell, RefCell};
+
+    use super::{ensure_model_with_cancellation, unload_for_recovery};
+    use crate::{ModelCell, Stage, StopToken};
+
+    #[tokio::test]
+    async fn cancellation_skips_or_discards_lazy_model_loading() {
+        let model = ModelCell::new();
+        let stop = StopToken::default();
+        stop.stop();
+        let loads = Cell::new(0_u8);
+        assert!(
+            !ensure_model_with_cancellation(&model, &stop, || async {
+                loads.set(loads.get() + 1);
+                Ok(1_u8)
+            })
+            .await
+            .unwrap()
+        );
+        assert_eq!(loads.get(), 0);
+
+        let stop = StopToken::default();
+        assert!(
+            !ensure_model_with_cancellation(&model, &stop, || async {
+                loads.set(loads.get() + 1);
+                stop.stop();
+                Ok(2_u8)
+            })
+            .await
+            .unwrap()
+        );
+        assert_eq!(loads.get(), 1);
+        assert!(model.lock().await.is_none());
+    }
+
+    #[test]
+    fn memory_recovery_includes_glossary_and_all_other_stage_models() {
+        let unloaded = RefCell::new(Vec::new());
+        let changed = unload_for_recovery(
+            Some(Stage::Ocr),
+            |stage| {
+                unloaded.borrow_mut().push(stage.to_string());
+                true
+            },
+            || {
+                unloaded.borrow_mut().push("glossary_ner".to_owned());
+                true
+            },
+        );
+
+        assert!(changed);
+        assert_eq!(
+            unloaded.into_inner(),
+            ["detection", "translation", "inpainting", "glossary_ner"]
+        );
+    }
 }
 
 pub(crate) struct StageJob {

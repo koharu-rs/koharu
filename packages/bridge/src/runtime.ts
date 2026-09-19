@@ -30,9 +30,6 @@ export function invoke<T>(name: string, args: Json = {}): Promise<T> {
   if (name === 'import') {
     return httpImport(body.source as string, body.paths as string[] | null) as Promise<T>
   }
-  if (name === 'export') {
-    return httpExport(body.format as string, body.destination as string | null) as Promise<T>
-  }
   return httpInvoke<T>(name, body)
 }
 
@@ -52,6 +49,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
   }
   if (response.status === 204) {
     return undefined as T
+  }
+  const filename = filenameFromDisposition(response.headers.get('content-disposition'))
+  if (filename) {
+    downloadBlob(await response.blob(), filename)
+    return null as T
   }
   const contentType = response.headers.get('content-type') ?? ''
   if (contentType.includes('application/json')) {
@@ -151,25 +153,6 @@ async function httpImport(source: string, paths: string[] | null): Promise<unkno
   return httpInvoke('import', { source, paths })
 }
 
-async function httpExport(format: string, destination: string | null): Promise<null> {
-  const response = await fetch(`${rpcPrefix}/export`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ format, destination }),
-  })
-  if (!response.ok) {
-    throw new Error(await readError(response))
-  }
-  const contentType = response.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json') || response.status === 204) {
-    return null
-  }
-  const blob = await response.blob()
-  const filename = filenameFromDisposition(response.headers.get('content-disposition')) ?? `export.${format}`
-  downloadBlob(blob, filename)
-  return null
-}
-
 async function chooseImportFiles(source: string): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
@@ -189,7 +172,25 @@ function filenameFromDisposition(header: string | null): string | null {
     return null
   }
   const match = /filename\*?=(?:UTF-8'')?("?)([^";]+)\1/i.exec(header)
-  return match?.[2] ? decodeURIComponent(match[2]) : null
+  if (!match?.[2]) {
+    return null
+  }
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(match[2])
+  } catch {
+    return null
+  }
+  const basename = decoded.split(/[\\/]/).pop()?.trim()
+  const filename = basename
+    ? Array.from(basename)
+        .filter((character) => {
+          const code = character.charCodeAt(0)
+          return code >= 32 && code !== 127
+        })
+        .join('')
+    : null
+  return filename && filename !== '.' && filename !== '..' ? filename : null
 }
 
 function downloadBlob(blob: Blob, filename: string) {

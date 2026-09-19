@@ -11,12 +11,15 @@
     "downloadingFiles": "Скачивание файлов: {{count}}",
     "downloadingFiles_one": "Скачивание файлов: {{count}}",
     "downloadingFiles_other": "Скачивание файлов: {{count}}",
+    "extractingTerms": "Извлечение терминов",
     "modelDownload": "Скачивание модели",
     "pageLabel": "Страница {{number}}: {{label}}",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
+    "preparingOcr": "Подготовка OCR",
     "stop": "Остановить",
-    "title": "Активность"
+    "title": "Активность",
+    "translatingTerms": "Перевод терминов"
   },
   "agent": {
     "account": "Учётная запись ChatGPT",

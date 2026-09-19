@@ -104,12 +104,12 @@ describe('application runtime', () => {
     act(() => {
       jobChannel.onmessage({
         id: 'job',
+        kind: 'pipeline',
+        phase: { kind: 'pipeline', stage: 'detection' },
         state: 'running',
         completed: 0,
         total: 4,
         page: 'page',
-        stage: 'detection',
-        model: 'model',
         error: null,
       })
     })
@@ -169,12 +169,12 @@ describe('application runtime', () => {
     const [, jobChannel] = binding.mock.calls[0]
     jobChannel.onmessage({
       id: 'job',
+      kind: 'pipeline',
+      phase: { kind: 'pipeline', stage: 'ocr' },
       state: 'running',
       completed: 1,
       total: 2,
       page: 'page',
-      stage: 'ocr',
-      model: 'model',
       error: null,
     })
 

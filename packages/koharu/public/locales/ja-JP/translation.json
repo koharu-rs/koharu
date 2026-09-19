@@ -11,12 +11,15 @@
     "downloadingFiles": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_one": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_other": "{{count}}件のファイルをダウンロード中",
+    "extractingTerms": "用語を抽出中",
     "modelDownload": "モデルのダウンロード",
     "pageLabel": "{{number}}ページ目: {{label}}",
     "processing": "処理中",
     "processingFailed": "処理に失敗しました。",
+    "preparingOcr": "OCRを準備中",
     "stop": "停止",
-    "title": "アクティビティ"
+    "title": "アクティビティ",
+    "translatingTerms": "用語を翻訳中"
   },
   "agent": {
     "account": "ChatGPTアカウント",
