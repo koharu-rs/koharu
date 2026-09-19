@@ -161,6 +161,7 @@ impl KoharuHost {
             stop,
             progress: None,
             inpainting_mask: None,
+            terminology: std::sync::Arc::from([]),
         };
         let result = self
             .pipeline

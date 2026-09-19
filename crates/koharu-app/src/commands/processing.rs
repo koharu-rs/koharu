@@ -139,6 +139,7 @@ pub(crate) async fn process(
             stop: stop.clone(),
             progress: None,
             inpainting_mask,
+            terminology: std::sync::Arc::from([]),
         };
         request.progress = Some(Arc::new(move |event| {
             let update = match event {

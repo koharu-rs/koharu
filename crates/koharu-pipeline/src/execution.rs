@@ -17,7 +17,7 @@ use crate::{
     scheduler::Scheduler,
     scope::NormalizedScope,
     stage_runner::{StageCompletion, StageJob, StageOutcome, StageRunner},
-    stages::StageInput,
+    stages::{StageDispatch, StageInput, TranslationInput},
 };
 
 pub(crate) struct Execution<'a> {
@@ -134,20 +134,27 @@ impl<'a> Execution<'a> {
             .entry(page)
             .or_insert_with(|| Arc::new(ImageCache::default()))
             .clone();
+        let input = StageInput::new(
+            self.scene.clone(),
+            page,
+            self.scope.entities(),
+            self.scope.region(page),
+            images,
+            self.inpainting_mask
+                .as_ref()
+                .filter(|mask| stage == Stage::Inpainting && mask.page == page)
+                .cloned(),
+        );
+        let input = match stage {
+            Stage::Detection => StageDispatch::Detection(input),
+            Stage::Ocr => StageDispatch::Ocr(input),
+            Stage::Translation => {
+                StageDispatch::Translation(TranslationInput::new(input, self.terminology.clone()))
+            }
+            Stage::Inpainting => StageDispatch::Inpainting(input),
+        };
         Some(StageJob::new(
-            stage,
-            StageInput::new(
-                self.scene.clone(),
-                page,
-                self.scope.entities(),
-                self.scope.region(page),
-                images,
-                self.inpainting_mask
-                    .as_ref()
-                    .filter(|mask| stage == Stage::Inpainting && mask.page == page)
-                    .cloned(),
-                self.terminology.clone(),
-            ),
+            input,
             self.stop.clone(),
             self.progress.clone(),
         ))
@@ -355,6 +362,8 @@ mod tests {
         );
         let second = execution.take_ready_job().unwrap();
 
+        let first = first.translation_input().unwrap();
+        let second = second.translation_input().unwrap();
         assert!(Arc::ptr_eq(first.terminology(), &terminology));
         assert!(Arc::ptr_eq(second.terminology(), &terminology));
         assert!(Arc::ptr_eq(first.terminology(), second.terminology()));

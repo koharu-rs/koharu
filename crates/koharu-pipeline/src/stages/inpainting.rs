@@ -93,6 +93,8 @@ impl Processor {
 
 #[async_trait]
 impl StageProcessor for Processor {
+    type Input = StageInput;
+
     fn model(&self) -> &'static str {
         match self.config {
             InpaintingModel::LaMa {} => "lama",
@@ -945,7 +947,6 @@ mod tests {
                 page,
                 png: encode(&DynamicImage::ImageLuma8(transient)),
             }),
-            Arc::from([]),
         );
 
         let prepared = prepare(&input).await.unwrap();
@@ -1000,7 +1001,6 @@ mod tests {
             None,
             Arc::new(crate::ImageCache::default()),
             None,
-            Arc::from([]),
         );
         let manual = StageInput::new(
             snapshot,
@@ -1012,7 +1012,6 @@ mod tests {
                 page,
                 png: Arc::<[u8]>::from([]),
             }),
-            Arc::from([]),
         );
         let processor = Processor::new(InpaintingModel::LaMa {}, koharu_ml::Device::cpu()).unwrap();
 

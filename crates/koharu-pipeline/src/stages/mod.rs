@@ -8,10 +8,10 @@ use std::{collections::BTreeSet, sync::Arc};
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{Edit, EntityId, Generation, Patch, ProducerId, Snapshot};
-use koharu_translator::TerminologyEntry;
 
 pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
 pub use inpainting::{Flux2KleinConfig, RoremMixedConfig};
+pub(crate) use translation::TranslationInput;
 
 use crate::{Bounds, ImageCache, InpaintingMask, PipelineConfig, Stage};
 
@@ -23,7 +23,6 @@ pub(crate) struct StageInput {
     region: Option<Bounds>,
     images: Arc<ImageCache>,
     inpainting_mask: Option<InpaintingMask>,
-    terminology: Arc<[TerminologyEntry]>,
 }
 
 impl StageInput {
@@ -34,7 +33,6 @@ impl StageInput {
         region: Option<Bounds>,
         images: Arc<ImageCache>,
         inpainting_mask: Option<InpaintingMask>,
-        terminology: Arc<[TerminologyEntry]>,
     ) -> Self {
         Self {
             scene,
@@ -43,17 +41,11 @@ impl StageInput {
             region,
             images,
             inpainting_mask,
-            terminology,
         }
     }
 
     pub(crate) fn page(&self) -> EntityId {
         self.page
-    }
-
-    #[cfg(test)]
-    pub(crate) fn terminology(&self) -> &Arc<[TerminologyEntry]> {
-        &self.terminology
     }
 
     fn contains_entity(&self, entity: EntityId) -> Result<bool> {
@@ -69,13 +61,49 @@ impl StageInput {
 
 #[async_trait]
 trait StageProcessor: Send + Sync {
+    type Input;
+
     fn model(&self) -> &'static str;
-    fn skip(&self, _input: &StageInput) -> Result<bool> {
+    fn skip(&self, _input: &Self::Input) -> Result<bool> {
         Ok(false)
     }
     fn unload(&self) -> bool;
     async fn load(&self) -> Result<()>;
-    async fn process(&self, input: StageInput) -> Result<Patch>;
+    async fn process(&self, input: Self::Input) -> Result<Patch>;
+}
+
+#[derive(Clone)]
+pub(crate) enum StageDispatch {
+    Detection(StageInput),
+    Ocr(StageInput),
+    Translation(TranslationInput),
+    Inpainting(StageInput),
+}
+
+impl StageDispatch {
+    pub(crate) fn stage(&self) -> Stage {
+        match self {
+            Self::Detection(_) => Stage::Detection,
+            Self::Ocr(_) => Stage::Ocr,
+            Self::Translation(_) => Stage::Translation,
+            Self::Inpainting(_) => Stage::Inpainting,
+        }
+    }
+
+    pub(crate) fn page(&self) -> EntityId {
+        match self {
+            Self::Detection(input) | Self::Ocr(input) | Self::Inpainting(input) => input.page(),
+            Self::Translation(input) => input.page(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn translation_input(&self) -> Option<&TranslationInput> {
+        match self {
+            Self::Translation(input) => Some(input),
+            _ => None,
+        }
+    }
 }
 
 pub(crate) struct Stages {
@@ -99,33 +127,49 @@ impl Stages {
         })
     }
 
-    fn processor(&self, stage: Stage) -> &dyn StageProcessor {
+    pub(crate) fn model(&self, stage: Stage) -> &'static str {
         match stage {
-            Stage::Detection => &self.detection,
-            Stage::Ocr => &self.ocr,
-            Stage::Translation => &self.translation,
-            Stage::Inpainting => &self.inpainting,
+            Stage::Detection => self.detection.model(),
+            Stage::Ocr => self.ocr.model(),
+            Stage::Translation => self.translation.model(),
+            Stage::Inpainting => self.inpainting.model(),
         }
     }
 
-    pub(crate) fn model(&self, stage: Stage) -> &'static str {
-        self.processor(stage).model()
-    }
-
-    pub(crate) fn skip(&self, stage: Stage, input: &StageInput) -> Result<bool> {
-        self.processor(stage).skip(input)
+    pub(crate) fn skip(&self, input: &StageDispatch) -> Result<bool> {
+        match input {
+            StageDispatch::Detection(input) => self.detection.skip(input),
+            StageDispatch::Ocr(input) => self.ocr.skip(input),
+            StageDispatch::Translation(input) => self.translation.skip(input),
+            StageDispatch::Inpainting(input) => self.inpainting.skip(input),
+        }
     }
 
     pub(crate) async fn load(&self, stage: Stage) -> Result<()> {
-        self.processor(stage).load().await
+        match stage {
+            Stage::Detection => self.detection.load().await,
+            Stage::Ocr => self.ocr.load().await,
+            Stage::Translation => self.translation.load().await,
+            Stage::Inpainting => self.inpainting.load().await,
+        }
     }
 
-    pub(crate) async fn process(&self, stage: Stage, input: StageInput) -> Result<Patch> {
-        self.processor(stage).process(input).await
+    pub(crate) async fn process(&self, input: StageDispatch) -> Result<Patch> {
+        match input {
+            StageDispatch::Detection(input) => self.detection.process(input).await,
+            StageDispatch::Ocr(input) => self.ocr.process(input).await,
+            StageDispatch::Translation(input) => self.translation.process(input).await,
+            StageDispatch::Inpainting(input) => self.inpainting.process(input).await,
+        }
     }
 
     pub(crate) fn unload(&self, stage: Stage) -> bool {
-        self.processor(stage).unload()
+        match stage {
+            Stage::Detection => self.detection.unload(),
+            Stage::Ocr => self.ocr.unload(),
+            Stage::Translation => self.translation.unload(),
+            Stage::Inpainting => self.inpainting.unload(),
+        }
     }
 }
 

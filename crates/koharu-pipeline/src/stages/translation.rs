@@ -1,3 +1,5 @@
+use std::{ops::Deref, sync::Arc};
+
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{Authored, LanguageTag, Origin, SourceText, Translation};
@@ -8,6 +10,34 @@ use crate::TranslationConfig;
 use super::{StageInput, StageProcessor, finish, generation};
 
 const PRODUCER: &str = "dev.koharu.pipeline.translation";
+
+#[derive(Clone)]
+pub(crate) struct TranslationInput {
+    stage: StageInput,
+    terminology: Arc<[koharu_translator::TerminologyEntry]>,
+}
+
+impl TranslationInput {
+    pub(crate) fn new(
+        stage: StageInput,
+        terminology: Arc<[koharu_translator::TerminologyEntry]>,
+    ) -> Self {
+        Self { stage, terminology }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn terminology(&self) -> &Arc<[koharu_translator::TerminologyEntry]> {
+        &self.terminology
+    }
+}
+
+impl Deref for TranslationInput {
+    type Target = StageInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stage
+    }
+}
 
 pub(super) struct Processor {
     config: TranslationConfig,
@@ -22,6 +52,8 @@ impl Processor {
 
 #[async_trait]
 impl StageProcessor for Processor {
+    type Input = TranslationInput;
+
     fn model(&self) -> &'static str {
         Translator::model(&self.config.model)
     }
@@ -34,7 +66,7 @@ impl StageProcessor for Processor {
         self.translator.load_model(&self.config.model).await
     }
 
-    async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
+    async fn process(&self, input: TranslationInput) -> Result<koharu_scene::Patch> {
         let mut targets = Vec::new();
         if let Some(group) = input.scene.page(input.page)?.text_group()? {
             for layer in group.text_layers()? {
@@ -98,7 +130,7 @@ impl StageProcessor for Processor {
 
 fn build_translation_request(
     config: &TranslationConfig,
-    input: &StageInput,
+    input: &TranslationInput,
     segments: impl IntoIterator<Item = impl Into<String>>,
 ) -> TranslationRequest {
     let mut request = TranslationRequest::new(segments, config.target_language)
@@ -116,11 +148,11 @@ mod tests {
     use koharu_scene::{At, PageDraft};
     use koharu_translator::{TerminologyEntry, TerminologyKind};
 
-    use super::{StageInput, build_translation_request};
+    use super::{StageInput, TranslationInput, build_translation_request};
     use crate::{ImageCache, TranslationConfig};
 
     #[tokio::test]
-    async fn repeated_translation_stage_requests_receive_same_terminology_snapshot() {
+    async fn translation_pages_and_retries_share_the_terminology_snapshot() {
         let mut session = koharu_scene::Session::memory().await.unwrap();
         let setup = session
             .snapshot()
@@ -139,23 +171,38 @@ mod tests {
             kind: TerminologyKind::Person,
         }]);
         let input = |page| {
-            StageInput::new(
-                snapshot.clone(),
-                page,
-                None,
-                None,
-                Arc::new(ImageCache::default()),
-                None,
+            TranslationInput::new(
+                StageInput::new(
+                    snapshot.clone(),
+                    page,
+                    None,
+                    None,
+                    Arc::new(ImageCache::default()),
+                    None,
+                ),
                 terminology.clone(),
             )
         };
+        let first_input = input(pages[0]);
+        let retry_input = first_input.clone();
+        let second_input = input(pages[1]);
         let config = TranslationConfig::default();
 
-        let first = build_translation_request(&config, &input(pages[0]), ["first"]);
-        let second = build_translation_request(&config, &input(pages[1]), ["second"]);
+        let first = build_translation_request(&config, &first_input, ["first"]);
+        let retry = build_translation_request(&config, &retry_input, ["first"]);
+        let second = build_translation_request(&config, &second_input, ["second"]);
 
+        assert!(Arc::ptr_eq(first_input.terminology(), &terminology));
+        assert!(Arc::ptr_eq(
+            first_input.terminology(),
+            retry_input.terminology()
+        ));
+        assert!(Arc::ptr_eq(
+            first_input.terminology(),
+            second_input.terminology()
+        ));
         assert_eq!(first.terminology.as_slice(), terminology.as_ref());
+        assert_eq!(retry.terminology.as_slice(), terminology.as_ref());
         assert_eq!(second.terminology.as_slice(), terminology.as_ref());
-        assert_eq!(first.terminology, second.terminology);
     }
 }

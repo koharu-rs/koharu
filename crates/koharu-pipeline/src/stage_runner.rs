@@ -11,7 +11,7 @@ use crate::{
     accelerator::AcceleratorGate,
     progress,
     resources::ResourceMonitor,
-    stages::{StageInput, Stages},
+    stages::{StageDispatch, Stages},
 };
 
 pub(crate) struct StageRunner {
@@ -55,7 +55,7 @@ impl StageRunner {
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
-        let skip = self.stages.skip(job.stage, &job.input).map_err(|error| {
+        let skip = self.stages.skip(&job.input).map_err(|error| {
             self.stage_error(
                 job.stage,
                 model,
@@ -125,7 +125,7 @@ impl StageRunner {
             },
         );
         self.stages
-            .process(job.stage, job.input.clone())
+            .process(job.input.clone())
             .await
             .map(|patch| {
                 if patch.is_empty() {
@@ -166,18 +166,18 @@ fn is_out_of_memory(error: &anyhow::Error) -> bool {
 
 pub(crate) struct StageJob {
     stage: Stage,
-    input: StageInput,
+    input: StageDispatch,
     stop: StopToken,
     progress: Option<ProgressSink>,
 }
 
 impl StageJob {
     pub(crate) fn new(
-        stage: Stage,
-        input: StageInput,
+        input: StageDispatch,
         stop: StopToken,
         progress: Option<ProgressSink>,
     ) -> Self {
+        let stage = input.stage();
         Self {
             stage,
             input,
@@ -187,8 +187,8 @@ impl StageJob {
     }
 
     #[cfg(test)]
-    pub(crate) fn terminology(&self) -> &Arc<[koharu_translator::TerminologyEntry]> {
-        self.input.terminology()
+    pub(crate) fn translation_input(&self) -> Option<&crate::stages::TranslationInput> {
+        self.input.translation_input()
     }
 }
 

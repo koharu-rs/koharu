@@ -34,6 +34,8 @@ impl Processor {
 
 #[async_trait]
 impl StageProcessor for Processor {
+    type Input = StageInput;
+
     fn model(&self) -> &'static str {
         match self.config {
             OcrModel::MangaOcr => "manga-ocr",

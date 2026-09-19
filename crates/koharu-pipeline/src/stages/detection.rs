@@ -95,6 +95,8 @@ impl Processor {
 
 #[async_trait]
 impl StageProcessor for Processor {
+    type Input = StageInput;
+
     fn model(&self) -> &'static str {
         MODEL_NAME
     }
@@ -1895,7 +1897,6 @@ mod tests {
             None,
             std::sync::Arc::new(crate::ImageCache::default()),
             None,
-            std::sync::Arc::from([]),
         );
         let processor = Processor::new(
             DetectionModel::KoharuLayoutRFDetrSeg2XL(KoharuLayoutRFDetrSeg2XLConfig::default()),
