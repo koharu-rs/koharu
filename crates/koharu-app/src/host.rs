@@ -73,6 +73,13 @@ impl Deref for Pipeline {
     }
 }
 
+#[cfg(test)]
+impl Pipeline {
+    pub(crate) fn empty() -> Self {
+        Self(Arc::new(OnceLock::new()))
+    }
+}
+
 struct WsSession {
     generation: u64,
     abort: tokio::task::AbortHandle,
@@ -286,6 +293,7 @@ impl Host {
         };
         let processing = Processing::default();
         let canvas = CanvasChannel::default();
+        let jobs = JobChannel::default();
         let desktop = koharu_desktop::Desktop::new()?;
         let pipeline = Pipeline(Arc::new(OnceLock::new()));
         let state = AgentState::new(
@@ -293,6 +301,7 @@ impl Host {
             desktop.clone(),
             canvas.clone(),
             processing.clone(),
+            jobs.clone(),
             pipeline.clone(),
         )?;
         Ok(Self::assemble(
@@ -300,7 +309,7 @@ impl Host {
             ProjectLibrary::new()?,
             processing,
             canvas,
-            JobChannel::default(),
+            jobs,
             DownloadChannel::default(),
             ResourceChannel::default(),
             ProjectChannel::default(),

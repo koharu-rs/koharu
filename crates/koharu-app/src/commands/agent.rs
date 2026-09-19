@@ -15,7 +15,10 @@ use tokio::sync::Notify;
 
 use self::host::KoharuHost;
 use super::{
-    Channel, Error, canvas::CanvasChannel, processing::Processing, project::CurrentProject,
+    Channel, Error,
+    canvas::CanvasChannel,
+    processing::{JobChannel, Processing},
+    project::CurrentProject,
 };
 use crate::host::Pipeline;
 
@@ -41,6 +44,7 @@ impl AgentState {
         desktop: Desktop,
         canvas: CanvasChannel,
         processing: Processing,
+        jobs: JobChannel,
         pipeline: Pipeline,
     ) -> Result<Self> {
         let state = Self::empty();
@@ -48,7 +52,7 @@ impl AgentState {
             .agent
             .set(Agent::new(
                 Codex::new()?,
-                KoharuHost::new(project, desktop, canvas, processing, pipeline),
+                KoharuHost::new(project, desktop, canvas, processing, jobs, pipeline),
             )?)
             .map_err(|_| anyhow!("agent is already initialized"))?;
         Ok(state)

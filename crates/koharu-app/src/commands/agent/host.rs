@@ -1,11 +1,15 @@
-use std::{future::Future, pin::Pin, sync::OnceLock};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, OnceLock},
+};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use koharu_agent::{Control, Host, Invocation, Tool, ToolCall};
 use koharu_desktop::{Desktop, Frame};
-use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput};
+use koharu_pipeline::{Committer, Operation, Progress, RunStatus, Scope, Stage, StageOutput};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
@@ -28,6 +32,7 @@ pub(super) struct KoharuHost {
     desktop: Desktop,
     canvas: CanvasChannel,
     processing: Processing,
+    jobs: JobChannel,
     pipeline: Pipeline,
 }
 
@@ -37,6 +42,7 @@ impl KoharuHost {
         desktop: Desktop,
         canvas: CanvasChannel,
         processing: Processing,
+        jobs: JobChannel,
         pipeline: Pipeline,
     ) -> Self {
         Self {
@@ -44,6 +50,7 @@ impl KoharuHost {
             desktop,
             canvas,
             processing,
+            jobs,
             pipeline,
         }
     }
@@ -137,23 +144,44 @@ impl KoharuHost {
             .context("no project is open")?
             .snapshot();
         let terminology = terminology_snapshot(&snapshot)?;
-        let jobs = JobChannel::default();
-        let (job, stop) = self.processing.start_job(
-            JobKind::Pipeline,
-            JobPhase::Pipeline { stage: None },
-            &jobs,
-        )?;
+        let job = self.start_pipeline_job()?;
 
         let watcher = tauri::async_runtime::spawn({
             let control = control.clone();
-            let stop = stop.clone();
+            let stop = job.stop.clone();
             async move {
                 control.cancelled().await;
                 stop.stop();
             }
         });
         let mut committer = AgentCommitter { host: self.clone() };
-        let request = koharu_pipeline::Request::new(operation, scope, stop, terminology);
+        let progress = Arc::new(parking_lot::Mutex::new((0_usize, 0_usize)));
+        let progress_job = job.clone();
+        let request =
+            koharu_pipeline::Request::new(operation, scope, job.stop.clone(), terminology)
+                .with_progress(Arc::new(move |event| {
+                    let update = match event {
+                        Progress::Started { pages, stages } => {
+                            let mut progress = progress.lock();
+                            *progress = (0, pages.len().saturating_mul(stages.len()));
+                            Some((0, progress.1, None, None))
+                        }
+                        Progress::Loading { page, stage, .. } => {
+                            let progress = progress.lock();
+                            Some((progress.0, progress.1, Some(page), Some(stage)))
+                        }
+                        Progress::Finished { page, stage, .. }
+                        | Progress::Skipped { page, stage } => {
+                            let mut progress = progress.lock();
+                            progress.0 = progress.0.saturating_add(1).min(progress.1);
+                            Some((progress.0, progress.1, Some(page), Some(stage)))
+                        }
+                        Progress::Running { .. } => None,
+                    };
+                    if let Some((completed, total, page, stage)) = update {
+                        progress_job.update(completed, total, page, stage);
+                    }
+                }));
         let result = self
             .pipeline
             .execute(snapshot, request, &mut committer)
@@ -162,22 +190,15 @@ impl KoharuHost {
         let report = match result {
             Ok(report) => report,
             Err(error) => {
-                self.processing.finish_job(
-                    job,
-                    JobState::Failed,
-                    Some(format!("{error:#}")),
-                    &jobs,
-                );
+                job.finish(JobState::Failed, Some(format!("{error:#}")));
                 return Err(anyhow!(error));
             }
         };
         if report.status == RunStatus::Stopped {
-            self.processing
-                .finish_job(job, JobState::Stopped, None, &jobs);
+            job.finish(JobState::Stopped, None);
             bail!("pipeline processing was cancelled");
         }
-        self.processing
-            .finish_job(job, JobState::Finished, None, &jobs);
+        job.finish(JobState::Finished, None);
         Invocation::changed(json!({
             "base_revision": report.base,
             "final_revision": report.final_revision,
@@ -185,6 +206,45 @@ impl KoharuHost {
             "total": report.total,
             "elapsed_ms": report.elapsed.as_millis(),
         }))
+    }
+
+    fn start_pipeline_job(&self) -> Result<AgentPipelineJob> {
+        AgentPipelineJob::start(&self.processing, &self.jobs)
+    }
+}
+
+#[derive(Clone)]
+struct AgentPipelineJob {
+    id: crate::commands::processing::JobId,
+    stop: koharu_pipeline::StopToken,
+    processing: Processing,
+    jobs: JobChannel,
+}
+
+impl AgentPipelineJob {
+    fn start(processing: &Processing, jobs: &JobChannel) -> Result<Self> {
+        let (id, stop) =
+            processing.start_job(JobKind::Pipeline, JobPhase::Pipeline { stage: None }, jobs)?;
+        Ok(Self {
+            id,
+            stop,
+            processing: processing.clone(),
+            jobs: jobs.clone(),
+        })
+    }
+
+    fn update(&self, completed: usize, total: usize, page: Option<EntityId>, stage: Option<Stage>) {
+        self.processing.update_job(self.id, &self.jobs, |job| {
+            job.completed = completed;
+            job.total = total;
+            job.page = page;
+            job.phase = JobPhase::Pipeline { stage };
+        });
+    }
+
+    fn finish(self, state: JobState, error: Option<String>) {
+        self.processing
+            .finish_job(self.id, state, error, &self.jobs);
     }
 }
 
@@ -703,5 +763,71 @@ impl RunPipeline {
             (true, false) => Ok(Scope::Entities(entities(&self.elements)?)),
             (false, false) => bail!("pipeline scope cannot contain both pages and elements"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        sync::{Arc, mpsc},
+        time::Duration,
+    };
+
+    use super::*;
+    use crate::commands::{Channel, processing::Job};
+
+    #[tokio::test]
+    async fn agent_pipeline_job_uses_shared_channel_across_reconnect() {
+        let processing = Processing::default();
+        let jobs = JobChannel::default();
+        let (first_tx, first_rx) = mpsc::channel();
+        *jobs.channel.lock() = Some(Channel::<Job>::from_sink(move |job| {
+            first_tx.send(job).is_ok()
+        }));
+        let host = KoharuHost::new(
+            CurrentProject {
+                project: Arc::new(tokio::sync::Mutex::new(None)),
+            },
+            Desktop::new().unwrap(),
+            CanvasChannel::default(),
+            processing.clone(),
+            jobs.clone(),
+            Pipeline::empty(),
+        );
+
+        let job = host.start_pipeline_job().unwrap();
+        let running = first_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(running["kind"], "pipeline");
+        assert_eq!(running["state"], "running");
+        let snapshot = processing.snapshot();
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(running["id"], serde_json::to_value(snapshot[0].id).unwrap());
+        assert!(
+            processing
+                .start_job(JobKind::GlossaryScan, JobPhase::PreparingOcr, &jobs)
+                .is_err()
+        );
+
+        let (reconnected_tx, reconnected_rx) = mpsc::channel();
+        *jobs.channel.lock() = Some(Channel::<Job>::from_sink(move |job| {
+            reconnected_tx.send(job).is_ok()
+        }));
+        let snapshot = processing.snapshot();
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].state, JobState::Running);
+
+        job.update(1, 2, None, Some(Stage::Ocr));
+        let progress = reconnected_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(progress["id"], running["id"]);
+        assert_eq!(progress["completed"], 1);
+        assert_eq!(progress["total"], 2);
+        assert_eq!(progress["phase"]["kind"], "pipeline");
+        assert_eq!(progress["phase"]["stage"], "ocr");
+
+        job.finish(JobState::Finished, None);
+        let finished = reconnected_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(finished["id"], running["id"]);
+        assert_eq!(finished["state"], "finished");
+        assert!(processing.snapshot().is_empty());
     }
 }
