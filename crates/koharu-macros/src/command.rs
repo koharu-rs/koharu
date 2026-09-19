@@ -126,12 +126,13 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         .collect();
 
     let ok_ty = result_ok_type(&output);
+    let http_file = ok_ty.as_ref().is_some_and(is_http_file_type);
     let binary = ok_ty.as_ref().is_some_and(is_binary_type);
     let optional_binary = ok_ty
         .as_ref()
         .and_then(|ty| peel_wrapper(ty, "Option"))
         .is_some_and(is_binary_type);
-    let specta_output = if optional_binary {
+    let specta_output = if optional_binary || http_file {
         quote!(-> ())
     } else if let Some(ok) = result_ok_type(&output) {
         quote!(-> #ok)
@@ -209,7 +210,18 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
                 let #payload_ident { #(#payload_field_idents,)* } = payload;
             }
         };
-        if binary {
+        if http_file {
+            quote! {
+                #[allow(unused_variables)]
+                #vis #asyncness fn #http_ident(
+                    ::axum::extract::State(host): ::axum::extract::State<#host_ty>,
+                    #payload_extract
+                ) -> #api_result_ty<::axum::response::Response> {
+                    #payload_bind
+                    Ok(#binary_response_fn(#http_call?))
+                }
+            }
+        } else if binary {
             quote! {
                 #[allow(unused_variables)]
                 #vis #asyncness fn #http_ident(
@@ -493,6 +505,10 @@ fn result_ok_type(output: &ReturnType) -> Option<Type> {
 
 fn is_binary_type(ty: &Type) -> bool {
     last_ident(ty).is_some_and(|ident| ident.to_string().ends_with("Bytes"))
+}
+
+fn is_http_file_type(ty: &Type) -> bool {
+    last_ident(ty).is_some_and(|ident| ident == "HttpFile")
 }
 
 fn path_sibling(host: &Path, ident: &str) -> Path {

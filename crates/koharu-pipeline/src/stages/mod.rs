@@ -163,6 +163,17 @@ impl Stages {
         }
     }
 
+    pub(crate) async fn translate_terms(
+        &self,
+        selection: &koharu_translator::ModelSelection,
+        generation: koharu_translator::GenerationConfig,
+        request: koharu_translator::TranslationRequest,
+    ) -> Result<Vec<String>> {
+        self.translation
+            .translate_terms(selection, generation, request)
+            .await
+    }
+
     pub(crate) fn unload(&self, stage: Stage) -> bool {
         match stage {
             Stage::Detection => self.detection.unload(),

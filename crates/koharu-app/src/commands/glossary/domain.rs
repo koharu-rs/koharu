@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context as _, Result, bail};
 use koharu_scene::{
@@ -19,6 +19,7 @@ pub(crate) struct OcrSourceRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct GlossaryView {
     pub revision: Revision,
     pub enabled: bool,
@@ -31,6 +32,7 @@ pub(crate) struct GlossaryView {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct GlossaryEntryView {
     pub revision: Revision,
     pub id: GlossaryEntryId,
@@ -47,7 +49,17 @@ pub(crate) struct GlossaryEntryView {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
-pub(crate) struct GlossaryEntryInput {
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct GlossaryEntryDraft {
+    pub source: String,
+    pub translation: Option<String>,
+    pub kind: GlossaryKind,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct GlossaryEntryPatch {
     pub source: String,
     pub translation: Option<String>,
     pub kind: GlossaryKind,
@@ -192,7 +204,7 @@ impl crate::commands::project::Project {
     pub(crate) async fn add_glossary_entry(
         &mut self,
         expected_revision: Revision,
-        input: GlossaryEntryInput,
+        input: GlossaryEntryDraft,
     ) -> Result<GlossaryView> {
         self.mutate_glossary(expected_revision, |glossary| {
             glossary.entries.push(GlossaryEntry {
@@ -220,7 +232,7 @@ impl crate::commands::project::Project {
         &mut self,
         expected_revision: Revision,
         id: GlossaryEntryId,
-        input: GlossaryEntryInput,
+        input: GlossaryEntryPatch,
     ) -> Result<GlossaryView> {
         self.mutate_glossary(expected_revision, |glossary| {
             let entry = glossary
@@ -242,17 +254,25 @@ impl crate::commands::project::Project {
         .await
     }
 
-    pub(crate) async fn delete_glossary_entry(
+    pub(crate) async fn delete_glossary_entries(
         &mut self,
         expected_revision: Revision,
-        id: GlossaryEntryId,
+        ids: Vec<GlossaryEntryId>,
     ) -> Result<GlossaryView> {
+        let ids = ids.into_iter().collect::<HashSet<_>>();
+        if ids.is_empty() {
+            bail!("at least one glossary entry must be selected for deletion");
+        }
         self.mutate_glossary(expected_revision, |glossary| {
-            let before = glossary.entries.len();
-            glossary.entries.retain(|entry| entry.id != id);
-            if glossary.entries.len() == before {
-                bail!("glossary entry was not found");
+            let found = glossary
+                .entries
+                .iter()
+                .filter(|entry| ids.contains(&entry.id))
+                .count();
+            if found != ids.len() {
+                bail!("one or more glossary entries were not found");
             }
+            glossary.entries.retain(|entry| !ids.contains(&entry.id));
             Ok(())
         })
         .await
@@ -440,7 +460,10 @@ mod tests {
 
     use super::{OcrSourceRecord, ocr_fingerprint, ocr_source_fingerprint};
     use crate::commands::{
-        glossary::{GlossaryEntryInput, GlossaryView, ScanCandidate, TermTranslationResult},
+        glossary::{
+            GlossaryEntryDraft, GlossaryEntryPatch, GlossaryView, ScanCandidate,
+            TermTranslationResult,
+        },
         project::Project,
     };
     use koharu_scene::{GlossaryKind, GlossaryValueOrigin, Revision};
@@ -635,8 +658,8 @@ mod tests {
         );
     }
 
-    fn entry(source: &str, translation: Option<&str>) -> GlossaryEntryInput {
-        GlossaryEntryInput {
+    fn entry(source: &str, translation: Option<&str>) -> GlossaryEntryDraft {
+        GlossaryEntryDraft {
             source: source.to_owned(),
             translation: translation.map(str::to_owned),
             kind: GlossaryKind::Person,
@@ -698,7 +721,7 @@ mod tests {
             .update_glossary_entry(
                 Revision::new(2),
                 id,
-                GlossaryEntryInput {
+                GlossaryEntryPatch {
                     source: "アリシア".to_owned(),
                     translation: None,
                     kind: GlossaryKind::Term,
@@ -725,7 +748,7 @@ mod tests {
         assert_eq!(project.undo.len(), 3);
 
         let deleted = project
-            .delete_glossary_entry(Revision::new(3), id)
+            .delete_glossary_entries(Revision::new(3), vec![id])
             .await
             .unwrap();
         assert_view_revision(&deleted, Revision::new(4));

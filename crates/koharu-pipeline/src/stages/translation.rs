@@ -48,6 +48,19 @@ impl Processor {
     pub(super) fn new(config: TranslationConfig, translator: Translator) -> Self {
         Self { config, translator }
     }
+
+    pub(super) async fn translate_terms(
+        &self,
+        selection: &koharu_translator::ModelSelection,
+        generation: koharu_translator::GenerationConfig,
+        request: TranslationRequest,
+    ) -> Result<Vec<String>> {
+        let (_, translated) = self
+            .translator
+            .translate(selection, generation, request)
+            .await?;
+        Ok(translated)
+    }
 }
 
 #[async_trait]

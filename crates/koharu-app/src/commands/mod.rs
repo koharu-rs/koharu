@@ -98,6 +98,16 @@ macro_rules! command_list {
             editing::redo,
             processing::process,
             processing::stop_job,
+            glossary::get_glossary,
+            glossary::scan_glossary,
+            glossary::set_glossary_enabled,
+            glossary::add_glossary_entry,
+            glossary::update_glossary_entry,
+            glossary::delete_glossary_entries,
+            glossary::translate_glossary_entries,
+            glossary::preview_glossary_import,
+            glossary::apply_glossary_import,
+            glossary::export_glossary,
             output::export,
             output::get_thumbnail,
             fonts::get_fonts,
@@ -301,5 +311,91 @@ mod tests {
             bytes.starts_with(b"PK"),
             "expected zip bytes, got {bytes:?}"
         );
+    }
+
+    #[test]
+    fn glossary_commands_are_registered_once_in_the_protocol() {
+        let mut types = specta::Types::default();
+        let functions = protocol_functions(&mut types);
+        for name in [
+            "get_glossary",
+            "scan_glossary",
+            "set_glossary_enabled",
+            "add_glossary_entry",
+            "update_glossary_entry",
+            "delete_glossary_entries",
+            "translate_glossary_entries",
+            "preview_glossary_import",
+            "apply_glossary_import",
+            "export_glossary",
+        ] {
+            assert_eq!(
+                functions
+                    .iter()
+                    .filter(|function| function.name() == name)
+                    .count(),
+                1,
+                "{name} must be registered exactly once"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn glossary_routes_accept_camel_case_and_report_revision_conflicts() {
+        let host = Host::for_router_tests().unwrap();
+        host.open_memory_project("demo").await.unwrap();
+        let app = test_router(host);
+        let ok = app
+            .clone()
+            .oneshot(
+                Request::post("/rpc/set_glossary_enabled")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"expectedRevision":1,"enabled":true}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(ok.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_str(&body_text(ok).await).unwrap();
+        assert_eq!(body["enabled"], true);
+        assert!(body.get("currentSourceFingerprint").is_some());
+        assert!(body.get("current_source_fingerprint").is_none());
+
+        let conflict = app
+            .oneshot(
+                Request::post("/rpc/set_glossary_enabled")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"expectedRevision":1,"enabled":false}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(conflict.status(), StatusCode::BAD_REQUEST);
+        assert!(body_text(conflict).await.contains("expected revision 1"));
+    }
+
+    #[tokio::test]
+    async fn glossary_export_uses_json_download_headers_and_shared_router() {
+        let host = Host::for_router_tests().unwrap();
+        host.open_memory_project("demo").await.unwrap();
+        let frontend = axum::Router::new();
+        let response = crate::app::http_router(host, frontend)
+            .oneshot(
+                Request::post("/rpc/export_glossary")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "application/json");
+        assert_eq!(
+            response.headers()[CONTENT_DISPOSITION],
+            "attachment; filename=\"demo.glossary.json\""
+        );
+        let document: serde_json::Value = serde_json::from_str(&body_text(response).await).unwrap();
+        assert_eq!(document["format"], "koharu-glossary");
+        assert_eq!(document["version"], 1);
     }
 }

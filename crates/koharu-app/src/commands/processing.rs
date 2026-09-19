@@ -37,15 +37,34 @@ impl fmt::Display for JobId {
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct Job {
     pub id: JobId,
+    pub kind: JobKind,
+    pub phase: JobPhase,
     pub state: JobState,
     #[specta(type = f64)]
     pub completed: usize,
     #[specta(type = f64)]
     pub total: usize,
     pub page: Option<koharu_scene::EntityId>,
-    pub stage: Option<koharu_pipeline::Stage>,
-    pub model: Option<String>,
     pub error: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum JobKind {
+    Pipeline,
+    GlossaryScan,
+    GlossaryTranslation,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum JobPhase {
+    Pipeline {
+        stage: Option<koharu_pipeline::Stage>,
+    },
+    PreparingOcr,
+    ExtractingTerms,
+    TranslatingTerms,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
@@ -65,6 +84,72 @@ pub(crate) struct Processing {
 }
 
 impl Processing {
+    pub(crate) fn start_job(
+        &self,
+        kind: JobKind,
+        phase: JobPhase,
+        channel: &JobChannel,
+    ) -> Result<(JobId, StopToken)> {
+        let id = JobId::new();
+        let stop = StopToken::default();
+        {
+            let mut stops = self.stops.lock();
+            if !stops.is_empty() {
+                anyhow::bail!("another process is already running");
+            }
+            stops.insert(id, stop.clone());
+        }
+        let job = Job {
+            id,
+            kind,
+            phase,
+            state: JobState::Running,
+            completed: 0,
+            total: 0,
+            page: None,
+            error: None,
+        };
+        self.jobs.lock().insert(id, job.clone());
+        channel.channel.publish(job);
+        Ok((id, stop))
+    }
+
+    pub(crate) fn update_job(
+        &self,
+        id: JobId,
+        channel: &JobChannel,
+        update: impl FnOnce(&mut Job),
+    ) {
+        let job = {
+            let mut jobs = self.jobs.lock();
+            jobs.get_mut(&id).map(|job| {
+                update(job);
+                job.clone()
+            })
+        };
+        if let Some(job) = job {
+            channel.channel.publish(job);
+        }
+    }
+
+    pub(crate) fn finish_job(
+        &self,
+        id: JobId,
+        state: JobState,
+        error: Option<String>,
+        channel: &JobChannel,
+    ) {
+        self.stops.lock().remove(&id);
+        let job = self.jobs.lock().remove(&id).map(|mut job| {
+            job.state = state;
+            job.error = error;
+            job
+        });
+        if let Some(job) = job {
+            channel.channel.publish(job);
+        }
+    }
+
     pub(crate) fn stop_all(&self) {
         let mut stops = self.stops.lock();
         for stop in stops.values() {
@@ -79,6 +164,44 @@ impl Processing {
 #[derive(Clone, Default)]
 pub(crate) struct JobChannel {
     pub(crate) channel: Arc<Mutex<Option<Channel<Job>>>>,
+}
+
+pub(crate) struct ProjectCommitter {
+    pub(crate) project: CurrentProject,
+    pub(crate) desktop: Desktop,
+    pub(crate) canvas: CanvasChannel,
+}
+
+#[async_trait::async_trait]
+impl Committer for ProjectCommitter {
+    async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
+        let (commit, page) = {
+            let mut projects = self.project.project.lock().await;
+            let project = projects.as_mut().context("no project is open")?;
+            let Some(commit) = project.commit_rebased(output.patch).await? else {
+                return Ok(project.snapshot());
+            };
+            project.record_commit(&commit);
+            let page = project.active_page();
+            (commit, page)
+        };
+        let snapshot = commit.snapshot.clone();
+        self.desktop
+            .synchronize(&commit.snapshot, page, &commit)
+            .await?;
+        let canvas_state = self.desktop.canvas_state();
+        self.canvas.channel.publish(canvas_state);
+        Ok(snapshot)
+    }
+}
+
+pub(crate) fn terminology_snapshot(
+    snapshot: &Snapshot,
+) -> Result<Arc<[koharu_translator::TerminologyEntry]>> {
+    let Some(glossary) = snapshot.project_component::<koharu_scene::Glossary>()? else {
+        return Ok(Arc::from([]));
+    };
+    Ok(koharu_pipeline::terminology_from_glossary(&glossary))
 }
 
 #[koharu_macros::command]
@@ -99,27 +222,9 @@ pub(crate) async fn process(
         .as_ref()
         .context("no project is open")?
         .snapshot();
-    let id = JobId::new();
-    let stop = StopToken::default();
-    {
-        let mut stops = processing.stops.lock();
-        if !stops.is_empty() {
-            return Err(anyhow::anyhow!("another process is already running").into());
-        }
-        stops.insert(id, stop.clone());
-    }
-    let job = Job {
-        id,
-        state: JobState::Running,
-        completed: 0,
-        total: 0,
-        page: None,
-        stage: None,
-        model: None,
-        error: None,
-    };
-    processing.jobs.lock().insert(id, job.clone());
-    jobs.channel.publish(job);
+    let terminology = terminology_snapshot(&snapshot)?;
+    let (id, stop) =
+        processing.start_job(JobKind::Pipeline, JobPhase::Pipeline { stage: None }, &jobs)?;
 
     let inpainting_mask = processing.inpainting_mask.lock().take();
     let progress_processing = processing.clone();
@@ -134,7 +239,7 @@ pub(crate) async fn process(
         let progress_processing = progress_processing.clone();
         let progress_jobs = progress_jobs.clone();
         let mut request =
-            koharu_pipeline::Request::new(operation, scope, stop.clone(), Arc::from([]));
+            koharu_pipeline::Request::new(operation, scope, stop.clone(), terminology);
         if let Some(inpainting_mask) = inpainting_mask {
             request = request.with_inpainting_mask(inpainting_mask);
         }
@@ -200,15 +305,14 @@ pub(crate) async fn process(
                     None
                 }
             };
-            if let Some((completed, total, page, stage, model)) = update {
+            if let Some((completed, total, page, stage, _model)) = update {
                 let job = {
                     let mut jobs = progress_processing.jobs.lock();
                     jobs.get_mut(&id).map(|job| {
                         job.completed = completed;
                         job.total = total;
                         job.page = page;
-                        job.stage = stage;
-                        job.model = model;
+                        job.phase = JobPhase::Pipeline { stage };
                         job.clone()
                     })
                 };
@@ -218,36 +322,7 @@ pub(crate) async fn process(
             }
         }));
 
-        struct PipelineCommitter {
-            project: CurrentProject,
-            desktop: Desktop,
-            canvas: CanvasChannel,
-        }
-
-        #[async_trait::async_trait]
-        impl Committer for PipelineCommitter {
-            async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
-                let (commit, page) = {
-                    let mut projects = self.project.project.lock().await;
-                    let project = projects.as_mut().context("no project is open")?;
-                    let Some(commit) = project.commit_rebased(output.patch).await? else {
-                        return Ok(project.snapshot());
-                    };
-                    project.record_commit(&commit);
-                    let page = project.active_page();
-                    (commit, page)
-                };
-                let snapshot = commit.snapshot.clone();
-                self.desktop
-                    .synchronize(&commit.snapshot, page, &commit)
-                    .await?;
-                let canvas_state = self.desktop.canvas_state();
-                self.canvas.channel.publish(canvas_state);
-                Ok(snapshot)
-            }
-        }
-
-        let mut committer = PipelineCommitter {
+        let mut committer = ProjectCommitter {
             project: commit_project,
             desktop: commit_desktop,
             canvas: commit_canvas,
@@ -271,21 +346,14 @@ pub(crate) async fn process(
                 "completed"
             },
         );
-        finish_processing.stops.lock().remove(&id);
-        let job = finish_processing.jobs.lock().remove(&id).map(|mut job| {
-            job.state = if stopped {
-                JobState::Stopped
-            } else if error.is_some() {
-                JobState::Failed
-            } else {
-                JobState::Finished
-            };
-            job.error = error;
-            job
-        });
-        if let Some(job) = job {
-            finish_jobs.channel.publish(job);
-        }
+        let state = if stopped {
+            JobState::Stopped
+        } else if error.is_some() {
+            JobState::Failed
+        } else {
+            JobState::Finished
+        };
+        finish_processing.finish_job(id, state, error, &finish_jobs);
     }));
     Ok(id)
 }
@@ -304,4 +372,112 @@ pub(crate) async fn stop_job(job: JobId, processing: Processing) -> std::result:
         .with_context(|| format!("job {job} is not running"))?;
     stop.stop();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Job, JobId, JobKind, JobPhase, JobState};
+
+    #[test]
+    fn job_protocol_uses_explicit_kind_and_phase_without_legacy_fields() {
+        let job = Job {
+            id: JobId::new(),
+            kind: JobKind::Pipeline,
+            phase: JobPhase::Pipeline {
+                stage: Some(koharu_pipeline::Stage::Ocr),
+            },
+            state: JobState::Running,
+            completed: 1,
+            total: 2,
+            page: None,
+            error: None,
+        };
+
+        let value = serde_json::to_value(job).unwrap();
+        assert_eq!(value["kind"], "pipeline");
+        assert_eq!(value["phase"]["kind"], "pipeline");
+        assert_eq!(value["phase"]["stage"], "ocr");
+        assert!(value.get("stage").is_none());
+        assert!(value.get("model").is_none());
+    }
+
+    #[test]
+    fn glossary_jobs_have_dedicated_protocol_states() {
+        assert_eq!(
+            serde_json::to_value(JobKind::GlossaryScan).unwrap(),
+            "glossary_scan"
+        );
+        assert_eq!(
+            serde_json::to_value(JobKind::GlossaryTranslation).unwrap(),
+            "glossary_translation"
+        );
+        for (phase, expected) in [
+            (JobPhase::PreparingOcr, "preparing_ocr"),
+            (JobPhase::ExtractingTerms, "extracting_terms"),
+            (JobPhase::TranslatingTerms, "translating_terms"),
+        ] {
+            assert_eq!(serde_json::to_value(phase).unwrap()["kind"], expected);
+        }
+    }
+
+    #[test]
+    fn every_job_kind_reserves_the_same_processing_slot() {
+        let processing = super::Processing::default();
+        let channel = super::JobChannel::default();
+        let (first, _) = processing
+            .start_job(JobKind::GlossaryScan, JobPhase::PreparingOcr, &channel)
+            .unwrap();
+        assert!(
+            processing
+                .start_job(
+                    JobKind::Pipeline,
+                    JobPhase::Pipeline { stage: None },
+                    &channel,
+                )
+                .is_err()
+        );
+
+        processing.finish_job(first, JobState::Stopped, None, &channel);
+        assert!(processing.stops.lock().is_empty());
+        assert!(processing.jobs.lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn process_terminology_is_taken_once_from_the_starting_snapshot() {
+        use koharu_scene::{
+            Glossary, GlossaryEntry, GlossaryEntryId, GlossaryKind, GlossaryValueOrigin, Session,
+        };
+
+        let mut session = Session::memory().await.unwrap();
+        let glossary = Glossary {
+            enabled: true,
+            source_language: None,
+            target_language: None,
+            source_fingerprint: None,
+            entries: vec![GlossaryEntry {
+                id: GlossaryEntryId::new(),
+                source: "アリス".to_owned(),
+                translation: Some("Alice".to_owned()),
+                kind: GlossaryKind::Person,
+                enabled: true,
+                confidence: None,
+                occurrence_count: 0,
+                examples: Vec::new(),
+                source_origin: GlossaryValueOrigin::User,
+                translation_origin: Some(GlossaryValueOrigin::User),
+                present_in_last_scan: true,
+            }],
+        };
+        let patch = session
+            .snapshot()
+            .patch(|edit| edit.set_project(&glossary))
+            .unwrap();
+        session.commit(patch).await.unwrap();
+        let snapshot = session.snapshot();
+
+        let terminology = super::terminology_snapshot(&snapshot).unwrap();
+        assert_eq!(terminology.len(), 1);
+        assert_eq!(terminology[0].source, "アリス");
+        assert_eq!(terminology[0].translation, "Alice");
+    }
 }

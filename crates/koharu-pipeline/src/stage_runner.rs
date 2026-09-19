@@ -47,6 +47,17 @@ impl StageRunner {
         }
     }
 
+    pub(crate) async fn translate_terms(
+        &self,
+        selection: &koharu_translator::ModelSelection,
+        generation: koharu_translator::GenerationConfig,
+        request: koharu_translator::TranslationRequest,
+    ) -> Result<Vec<String>> {
+        self.stages
+            .translate_terms(selection, generation, request)
+            .await
+    }
+
     async fn run_with_recovery(
         &self,
         job: &StageJob,

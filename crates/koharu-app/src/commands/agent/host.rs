@@ -17,7 +17,7 @@ use crate::commands::{
     editing::{GeometryUpdate, TypographyUpdate},
     output,
     preferences::Preferences,
-    processing::{JobId, Processing},
+    processing::{JobId, Processing, terminology_snapshot},
     project::{CurrentProject, Project, Typography},
 };
 use crate::host::Pipeline;
@@ -136,6 +136,7 @@ impl KoharuHost {
             .as_ref()
             .context("no project is open")?
             .snapshot();
+        let terminology = terminology_snapshot(&snapshot)?;
         let job = JobId::new();
         let stop = StopToken::default();
         {
@@ -155,8 +156,7 @@ impl KoharuHost {
             }
         });
         let mut committer = AgentCommitter { host: self.clone() };
-        let request =
-            koharu_pipeline::Request::new(operation, scope, stop, std::sync::Arc::from([]));
+        let request = koharu_pipeline::Request::new(operation, scope, stop, terminology);
         let result = self
             .pipeline
             .execute(snapshot, request, &mut committer)

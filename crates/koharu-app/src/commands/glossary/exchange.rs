@@ -47,6 +47,7 @@ pub(crate) enum LanguageField {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LanguageMismatch {
     pub field: LanguageField,
     pub current: Option<LanguageTag>,
@@ -54,6 +55,7 @@ pub(crate) struct LanguageMismatch {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct GlossaryImportPreview {
     pub added: u32,
     pub conflicting: u32,

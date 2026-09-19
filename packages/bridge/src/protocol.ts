@@ -42,12 +42,12 @@ export const commands = {
 	element_frames: TransformFrame[],
 }>, onJob: Channel<{
 	id: JobId,
+	kind: JobKind,
+	phase: JobPhase,
 	state: JobState,
 	completed: number,
 	total: number,
 	page: EntityId | null,
-	stage: Stage | null,
-	model: string | null,
 	error: string | null,
 }>, onDownload: Channel<{
 	id: number,
@@ -121,6 +121,85 @@ export const commands = {
 	bounds: Bounds,
 } } | { scope: "entities"; value: EntityId[] }, operation: { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage } | { operation: "stages"; stages: Stage[] }) => invoke<string>("process", { scope, operation }),
   stopJob: (job: string) => invoke<null>("stop_job", { job }),
+  getGlossary: () => invoke<{
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+}>("get_glossary"),
+  scanGlossary: () => invoke<string>("scan_glossary"),
+  setGlossaryEnabled: (expectedRevision: number, enabled: boolean) => invoke<{
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+}>("set_glossary_enabled", { expectedRevision, enabled }),
+  addGlossaryEntry: (expectedRevision: number, draft: {
+	source: string,
+	translation: string | null,
+	kind: GlossaryKind,
+	enabled: boolean,
+}) => invoke<{
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+}>("add_glossary_entry", { expectedRevision, draft }),
+  updateGlossaryEntry: (expectedRevision: number, id: string, patch: {
+	source: string,
+	translation: string | null,
+	kind: GlossaryKind,
+	enabled: boolean,
+}) => invoke<{
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+}>("update_glossary_entry", { expectedRevision, id, patch }),
+  deleteGlossaryEntries: (expectedRevision: number, ids: GlossaryEntryId[]) => invoke<{
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+}>("delete_glossary_entries", { expectedRevision, ids }),
+  translateGlossaryEntries: (expectedRevision: number, ids: GlossaryEntryId[] | null) => invoke<string>("translate_glossary_entries", { expectedRevision, ids }),
+  previewGlossaryImport: (document: string) => invoke<{
+	added: number,
+	conflicting: number,
+	identical: number,
+	languageMismatches: LanguageMismatch[],
+}>("preview_glossary_import", { document }),
+  applyGlossaryImport: (expectedRevision: number, document: string, strategy: "keep_existing" | "replace_existing", confirmLanguageMismatch: boolean) => invoke<{
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+}>("apply_glossary_import", { expectedRevision, document, strategy, confirmLanguageMismatch }),
+  exportGlossary: () => invoke<null>("export_glossary"),
   export: (format: "png" | "psd" | "cbz", destination: string | null) => invoke<null>("export", { format, destination }),
   getThumbnail: (page: string) => invoke<number[]>("get_thumbnail", { page }),
   getFonts: () => invoke<FontFamily[]>("get_fonts"),
@@ -363,6 +442,61 @@ export type GeometryUpdate = {
 	points: Point[] | null,
 };
 
+export type GlossaryEntryDraft = {
+	source: string,
+	translation: string | null,
+	kind: GlossaryKind,
+	enabled: boolean,
+};
+
+export type GlossaryEntryId = string;
+
+export type GlossaryEntryPatch = {
+	source: string,
+	translation: string | null,
+	kind: GlossaryKind,
+	enabled: boolean,
+};
+
+export type GlossaryEntryView = {
+	revision: Revision,
+	id: GlossaryEntryId,
+	source: string,
+	translation: string | null,
+	kind: GlossaryKind,
+	enabled: boolean,
+	confidence: number | null,
+	occurrenceCount: number,
+	examples: string[],
+	sourceOrigin: GlossaryValueOrigin,
+	translationOrigin: GlossaryValueOrigin | null,
+	presentInLastScan: boolean,
+};
+
+export type GlossaryImportPreview = {
+	added: number,
+	conflicting: number,
+	identical: number,
+	languageMismatches: LanguageMismatch[],
+};
+
+export type GlossaryImportStrategy = "keep_existing" | "replace_existing";
+
+export type GlossaryKind = "person" | "place" | "organization" | "item" | "ability" | "term" | "other";
+
+export type GlossaryValueOrigin = "detected" | "automatic" | "user" | "imported";
+
+export type GlossaryView = {
+	revision: Revision,
+	enabled: boolean,
+	stale: boolean,
+	sourceLanguage: LanguageTag | null,
+	targetLanguage: LanguageTag | null,
+	savedSourceFingerprint: string | null,
+	currentSourceFingerprint: string,
+	entries: GlossaryEntryView[],
+};
+
 export type GoogleCloudConfig = Record<string, never>;
 
 export type GrokConfig = Record<string, never>;
@@ -377,16 +511,20 @@ export type InpaintingModel = { model: "lama" } | { model: "aot-inpainting" } | 
 
 export type Job = {
 	id: JobId,
+	kind: JobKind,
+	phase: JobPhase,
 	state: JobState,
 	completed: number,
 	total: number,
 	page: EntityId | null,
-	stage: Stage | null,
-	model: string | null,
 	error: string | null,
 };
 
 export type JobId = string;
+
+export type JobKind = "pipeline" | "glossary_scan" | "glossary_translation";
+
+export type JobPhase = { kind: "pipeline"; stage: Stage | null } | { kind: "preparing_ocr" } | { kind: "extracting_terms" } | { kind: "translating_terms" };
 
 export type JobState = "running" | "finished" | "failed" | "stopped";
 
@@ -400,6 +538,16 @@ export type LanguageChoice = {
 	tag: string,
 	name: string,
 };
+
+export type LanguageField = "source" | "target";
+
+export type LanguageMismatch = {
+	field: LanguageField,
+	current: LanguageTag | null,
+	imported: LanguageTag | null,
+};
+
+export type LanguageTag = string;
 
 export type Layer = { type: "group"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; name: string; role: GroupRole | null } | { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; angle_degrees: number | null; visibility: LayerVisibility; content: TextContent; typography: Typography | null; layout: TextLayoutKind; automatic_region: EntityId | null } | { type: "raster"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; image: string | null; name: string; kind: RasterLayerKind } | { type: "image"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string } | { type: "artwork"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string };
 
