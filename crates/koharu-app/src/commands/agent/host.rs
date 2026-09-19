@@ -155,14 +155,8 @@ impl KoharuHost {
             }
         });
         let mut committer = AgentCommitter { host: self.clone() };
-        let request = koharu_pipeline::Request {
-            operation,
-            scope,
-            stop,
-            progress: None,
-            inpainting_mask: None,
-            terminology: std::sync::Arc::from([]),
-        };
+        let request =
+            koharu_pipeline::Request::new(operation, scope, stop, std::sync::Arc::from([]));
         let result = self
             .pipeline
             .execute(snapshot, request, &mut committer)

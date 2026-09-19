@@ -133,15 +133,12 @@ pub(crate) async fn process(
         let progress = Arc::new(Mutex::new((0_usize, 0_usize)));
         let progress_processing = progress_processing.clone();
         let progress_jobs = progress_jobs.clone();
-        let mut request = koharu_pipeline::Request {
-            operation,
-            scope,
-            stop: stop.clone(),
-            progress: None,
-            inpainting_mask,
-            terminology: std::sync::Arc::from([]),
-        };
-        request.progress = Some(Arc::new(move |event| {
+        let mut request =
+            koharu_pipeline::Request::new(operation, scope, stop.clone(), Arc::from([]));
+        if let Some(inpainting_mask) = inpainting_mask {
+            request = request.with_inpainting_mask(inpainting_mask);
+        }
+        request = request.with_progress(Arc::new(move |event| {
             let update = match event {
                 Progress::Started { pages, stages } => {
                     tracing::info!(

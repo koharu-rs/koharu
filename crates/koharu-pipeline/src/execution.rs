@@ -13,6 +13,7 @@ use crate::{
     StageOutput, StopToken,
     images::ImageCache,
     progress,
+    request::RequestParts,
     resources::ResourceMonitor,
     scheduler::Scheduler,
     scope::NormalizedScope,
@@ -49,14 +50,21 @@ impl<'a> Execution<'a> {
     ) -> std::result::Result<Self, PipelineError> {
         let started = Instant::now();
         let base = snapshot.revision();
-        let stages = request
-            .operation
+        let RequestParts {
+            operation,
+            scope: requested_scope,
+            stop,
+            progress,
+            inpainting_mask,
+            terminology,
+        } = request.into_parts();
+        let stages = operation
             .stages()
             .map_err(|error| PipelineError::new(ErrorKind::InvalidInput, None, error))?;
-        let scope = NormalizedScope::new(&snapshot, &request.scope, &stages)
+        let scope = NormalizedScope::new(&snapshot, &requested_scope, &stages)
             .map_err(|error| PipelineError::new(ErrorKind::InvalidInput, None, error))?;
         let pages = scope.pages().to_vec();
-        if let Some(mask) = request.inpainting_mask.as_ref()
+        if let Some(mask) = inpainting_mask.as_ref()
             && (!pages.contains(&mask.page) || !stages.contains(&Stage::Inpainting))
         {
             return Err(PipelineError::new(
@@ -66,7 +74,7 @@ impl<'a> Execution<'a> {
             ));
         }
         progress::emit(
-            request.progress.as_ref(),
+            progress.as_ref(),
             Progress::Started {
                 pages: pages.clone(),
                 stages: stages.clone(),
@@ -77,8 +85,8 @@ impl<'a> Execution<'a> {
             runner,
             resources,
             committer,
-            stop: request.stop,
-            progress: request.progress,
+            stop,
+            progress,
             scope,
             scheduler: Scheduler::new(&pages, &stages),
             scene: snapshot,
@@ -88,8 +96,8 @@ impl<'a> Execution<'a> {
             failure: None,
             base,
             started,
-            inpainting_mask: request.inpainting_mask,
-            terminology: request.terminology,
+            inpainting_mask,
+            terminology,
         })
     }
 
@@ -293,7 +301,7 @@ mod tests {
 
     use super::Execution;
     use crate::{
-        Committer, Operation, PipelineConfig, Request, Scope, Stage, StageOutput,
+        Committer, Operation, PipelineConfig, Request, Scope, Stage, StageOutput, StopToken,
         resources::ResourceMonitor, stage_runner::StageRunner,
     };
 
@@ -325,14 +333,14 @@ mod tests {
             translation: "Alice".to_owned(),
             kind: TerminologyKind::Person,
         }]);
-        let request = Request {
-            operation: Operation::Only {
+        let request = Request::new(
+            Operation::Only {
                 stage: Stage::Translation,
             },
-            scope: Scope::Project,
-            ..Request::default()
-        }
-        .with_terminology(terminology.clone());
+            Scope::Project,
+            StopToken::default(),
+            terminology.clone(),
+        );
         let device = koharu_ml::Device::cpu();
         let resources = ResourceMonitor::new(&device);
         let translator = koharu_translator::Translator::from_config(

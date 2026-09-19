@@ -12,7 +12,7 @@ use koharu_config::Config;
 use koharu_pipeline::{
     Committer, DetectionModel, Flux2KleinConfig, InpaintingModel, KoharuLayoutRFDetrSeg2XLConfig,
     OcrModel, Operation, Pipeline, PipelineConfig, Progress, Request, RoremMixedConfig, Scope,
-    StageOutput, TranslationConfig,
+    StageOutput, StopToken, TranslationConfig,
 };
 use koharu_rasterizer::{RasterOptions, Rasterizer};
 use koharu_renderer::Renderer;
@@ -186,16 +186,17 @@ async fn main() -> Result<()> {
     let report = pipeline
         .execute(
             snapshot,
-            Request {
-                operation: Operation::Full,
-                scope: Scope::Pages(vec![page]),
-                progress: Some(Arc::new(|event| {
-                    if let Progress::Finished { stage, elapsed, .. } = event {
-                        eprintln!("{stage} finished in {:.2}s", elapsed.as_secs_f64());
-                    }
-                })),
-                ..Request::default()
-            },
+            Request::new(
+                Operation::Full,
+                Scope::Pages(vec![page]),
+                StopToken::default(),
+                Arc::from([]),
+            )
+            .with_progress(Arc::new(|event| {
+                if let Progress::Finished { stage, elapsed, .. } = event {
+                    eprintln!("{stage} finished in {:.2}s", elapsed.as_secs_f64());
+                }
+            })),
             &mut committer,
         )
         .await?;

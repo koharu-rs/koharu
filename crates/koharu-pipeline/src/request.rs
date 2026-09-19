@@ -64,32 +64,62 @@ impl Operation {
 
 #[derive(Clone)]
 pub struct Request {
-    pub operation: Operation,
-    pub scope: Scope,
-    pub stop: StopToken,
-    pub progress: Option<ProgressSink>,
-    pub inpainting_mask: Option<InpaintingMask>,
-    pub terminology: Arc<[TerminologyEntry]>,
+    operation: Operation,
+    scope: Scope,
+    stop: StopToken,
+    progress: Option<ProgressSink>,
+    inpainting_mask: Option<InpaintingMask>,
+    terminology: Arc<[TerminologyEntry]>,
 }
 
-impl Default for Request {
-    fn default() -> Self {
-        Self {
-            operation: Operation::Full,
-            scope: Scope::Project,
-            stop: StopToken::default(),
-            progress: None,
-            inpainting_mask: None,
-            terminology: Arc::from([]),
-        }
-    }
+pub(crate) struct RequestParts {
+    pub(crate) operation: Operation,
+    pub(crate) scope: Scope,
+    pub(crate) stop: StopToken,
+    pub(crate) progress: Option<ProgressSink>,
+    pub(crate) inpainting_mask: Option<InpaintingMask>,
+    pub(crate) terminology: Arc<[TerminologyEntry]>,
 }
 
 impl Request {
     #[must_use]
-    pub fn with_terminology(mut self, terminology: impl Into<Arc<[TerminologyEntry]>>) -> Self {
-        self.terminology = terminology.into();
+    pub fn new(
+        operation: Operation,
+        scope: Scope,
+        stop: StopToken,
+        terminology: Arc<[TerminologyEntry]>,
+    ) -> Self {
+        Self {
+            operation,
+            scope,
+            stop,
+            progress: None,
+            inpainting_mask: None,
+            terminology,
+        }
+    }
+
+    #[must_use]
+    pub fn with_progress(mut self, progress: ProgressSink) -> Self {
+        self.progress = Some(progress);
         self
+    }
+
+    #[must_use]
+    pub fn with_inpainting_mask(mut self, inpainting_mask: InpaintingMask) -> Self {
+        self.inpainting_mask = Some(inpainting_mask);
+        self
+    }
+
+    pub(crate) fn into_parts(self) -> RequestParts {
+        RequestParts {
+            operation: self.operation,
+            scope: self.scope,
+            stop: self.stop,
+            progress: self.progress,
+            inpainting_mask: self.inpainting_mask,
+            terminology: self.terminology,
+        }
     }
 }
 
@@ -156,7 +186,8 @@ mod tests {
     };
     use koharu_translator::{TerminologyEntry, TerminologyKind};
 
-    use super::{Request, terminology_from_glossary};
+    use super::{Operation, Request, StopToken, terminology_from_glossary};
+    use crate::Scope;
 
     fn entry(
         source: &str,
@@ -339,7 +370,12 @@ mod tests {
         session.commit(setup).await.unwrap();
         let snapshot = session.snapshot();
         let glossary = snapshot.project_component::<Glossary>().unwrap().unwrap();
-        let request = Request::default().with_terminology(terminology_from_glossary(&glossary));
+        let request = Request::new(
+            Operation::Full,
+            Scope::Project,
+            StopToken::default(),
+            terminology_from_glossary(&glossary),
+        );
 
         let mut changed = glossary;
         changed.entries[0].translation = Some("Alicia".to_owned());

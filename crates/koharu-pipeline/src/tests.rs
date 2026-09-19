@@ -11,10 +11,12 @@ async fn stop_is_a_successful_partial_result() {
     let pipeline = pipeline(Default::default());
     let stop = StopToken::default();
     stop.stop();
-    let request = Request {
+    let request = Request::new(
+        Operation::Full,
+        Scope::Project,
         stop,
-        ..Request::default()
-    };
+        std::sync::Arc::from([]),
+    );
     let mut committer = RejectCommitter;
 
     let report = pipeline
@@ -61,18 +63,19 @@ async fn stop_after_a_page_keeps_completed_progress() {
     session.commit(patch).await.unwrap();
     let stop = StopToken::default();
     let progress_stop = stop.clone();
-    let request = Request {
-        operation: Operation::Only {
+    let request = Request::new(
+        Operation::Only {
             stage: Stage::Translation,
         },
+        Scope::Project,
         stop,
-        progress: Some(std::sync::Arc::new(move |event| {
-            if matches!(event, Progress::Skipped { .. }) {
-                progress_stop.stop();
-            }
-        })),
-        ..Request::default()
-    };
+        std::sync::Arc::from([]),
+    )
+    .with_progress(std::sync::Arc::new(move |event| {
+        if matches!(event, Progress::Skipped { .. }) {
+            progress_stop.stop();
+        }
+    }));
     let mut committer = RejectCommitter;
 
     let report = pipeline
