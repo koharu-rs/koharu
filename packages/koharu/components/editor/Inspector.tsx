@@ -580,7 +580,7 @@ function LayersInspector() {
   const [movingLayer, setMovingLayer] = useState<EntityId | null>(null)
   const anchor = useRef<EntityId | null>(null)
 
-  const [draggedId, setDraggedId] = useState<EntityId | null>(null)
+  const [, setDraggedId] = useState<EntityId | null>(null)
   const [dragOverId, setDragOverId] = useState<EntityId | null>(null)
   const [dropPos, setDropPos] = useState<'before' | 'after' | 'inside' | null>(null)
 
@@ -630,7 +630,7 @@ function LayersInspector() {
       return
     }
 
-    const positionY = event.operation?.position?.current?.y ?? event.operation?.position?.y ?? 0
+    const positionY = event.operation?.position?.current?.y ?? 0
     const pos = computeDropPos(overId, positionY, layerMap)
     if (!pos || !isValidDrop(layerMap, activeId, overId, pos, page.id, hasTextGroup)) {
       setDragOverId(null)
@@ -655,7 +655,7 @@ function LayersInspector() {
     const overId = event.operation?.target?.id as EntityId | undefined
     if (!activeId || !overId || activeId === overId) return
 
-    const positionY = event.operation?.position?.current?.y ?? event.operation?.position?.y ?? 0
+    const positionY = event.operation?.position?.current?.y ?? 0
     const pos = computeDropPos(overId, positionY, layerMap)
 
     if (pos && isValidDrop(layerMap, activeId, overId, pos, page.id, hasTextGroup)) {
@@ -857,7 +857,7 @@ function LayersInspector() {
             {layers.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
           </div>
         </ScrollArea>
-        <DragOverlay dropAnimation={null} />
+        <DragOverlay dropAnimation={null}>{null}</DragOverlay>
       </DragDropProvider>
     </div>
   )
@@ -887,7 +887,7 @@ function LayerRow({
   selected: boolean
   expanded: boolean
   locked: boolean
-  onSelect: (event: MouseEvent<HTMLButtonElement>) => void
+  onSelect: (event: MouseEvent<HTMLDivElement>) => void
   onToggle: () => void
   onMove: (delta: number) => void
   canMoveUp: boolean
@@ -951,7 +951,7 @@ function LayerRow({
                 : (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      onSelect()
+                      onSelect(e as unknown as MouseEvent<HTMLDivElement>)
                     }
                   }
             }
