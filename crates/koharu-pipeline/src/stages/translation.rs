@@ -50,13 +50,11 @@ impl StageProcessor for Processor {
                 }
             }
         }
-        let mut request = TranslationRequest::new(
+        let mut request = build_translation_request(
+            &self.config,
+            &input,
             targets.iter().map(|(_, source)| source.clone()),
-            self.config.target_language,
         );
-        if let Some(instructions) = self.config.instructions.as_deref() {
-            request = request.with_instructions(instructions);
-        }
         if Translator::supports_vision(&self.config.model, &self.config.generation)
             && let Some(image) = input.images.get(&input.scene, input.page, "source").await?
         {
@@ -95,5 +93,69 @@ impl StageProcessor for Processor {
             )?;
         }
         finish(edit)
+    }
+}
+
+fn build_translation_request(
+    config: &TranslationConfig,
+    input: &StageInput,
+    segments: impl IntoIterator<Item = impl Into<String>>,
+) -> TranslationRequest {
+    let mut request = TranslationRequest::new(segments, config.target_language)
+        .with_terminology(input.terminology.iter().cloned());
+    if let Some(instructions) = config.instructions.as_deref() {
+        request = request.with_instructions(instructions);
+    }
+    request
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use koharu_scene::{At, PageDraft};
+    use koharu_translator::{TerminologyEntry, TerminologyKind};
+
+    use super::{StageInput, build_translation_request};
+    use crate::{ImageCache, TranslationConfig};
+
+    #[tokio::test]
+    async fn repeated_translation_stage_requests_receive_same_terminology_snapshot() {
+        let mut session = koharu_scene::Session::memory().await.unwrap();
+        let setup = session
+            .snapshot()
+            .patch(|edit| {
+                edit.add_page(PageDraft::new("one", 1.0, 1.0), At::End)?;
+                edit.add_page(PageDraft::new("two", 1.0, 1.0), At::End)?;
+                Ok(())
+            })
+            .unwrap();
+        session.commit(setup).await.unwrap();
+        let snapshot = session.snapshot();
+        let pages = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
+        let terminology: Arc<[TerminologyEntry]> = Arc::from([TerminologyEntry {
+            source: "アリス".to_owned(),
+            translation: "Alice".to_owned(),
+            kind: TerminologyKind::Person,
+        }]);
+        let input = |page| {
+            StageInput::new(
+                snapshot.clone(),
+                page,
+                None,
+                None,
+                Arc::new(ImageCache::default()),
+                None,
+                terminology.clone(),
+            )
+        };
+        let config = TranslationConfig::default();
+
+        let first = build_translation_request(&config, &input(pages[0]), ["first"]);
+        let second = build_translation_request(&config, &input(pages[1]), ["second"]);
+
+        assert_eq!(first.terminology.as_slice(), terminology.as_ref());
+        assert_eq!(second.terminology.as_slice(), terminology.as_ref());
+        assert_eq!(first.terminology, second.terminology);
     }
 }

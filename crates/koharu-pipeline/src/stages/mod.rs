@@ -8,6 +8,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{Edit, EntityId, Generation, Patch, ProducerId, Snapshot};
+use koharu_translator::TerminologyEntry;
 
 pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
 pub use inpainting::{Flux2KleinConfig, RoremMixedConfig};
@@ -22,6 +23,7 @@ pub(crate) struct StageInput {
     region: Option<Bounds>,
     images: Arc<ImageCache>,
     inpainting_mask: Option<InpaintingMask>,
+    terminology: Arc<[TerminologyEntry]>,
 }
 
 impl StageInput {
@@ -32,6 +34,7 @@ impl StageInput {
         region: Option<Bounds>,
         images: Arc<ImageCache>,
         inpainting_mask: Option<InpaintingMask>,
+        terminology: Arc<[TerminologyEntry]>,
     ) -> Self {
         Self {
             scene,
@@ -40,11 +43,17 @@ impl StageInput {
             region,
             images,
             inpainting_mask,
+            terminology,
         }
     }
 
     pub(crate) fn page(&self) -> EntityId {
         self.page
+    }
+
+    #[cfg(test)]
+    pub(crate) fn terminology(&self) -> &Arc<[TerminologyEntry]> {
+        &self.terminology
     }
 
     fn contains_entity(&self, entity: EntityId) -> Result<bool> {

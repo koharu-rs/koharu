@@ -36,6 +36,7 @@ pub(crate) struct Execution<'a> {
     base: koharu_scene::Revision,
     started: Instant,
     inpainting_mask: Option<crate::InpaintingMask>,
+    terminology: Arc<[koharu_translator::TerminologyEntry]>,
 }
 
 impl<'a> Execution<'a> {
@@ -88,6 +89,7 @@ impl<'a> Execution<'a> {
             base,
             started,
             inpainting_mask: request.inpainting_mask,
+            terminology: request.terminology,
         })
     }
 
@@ -144,6 +146,7 @@ impl<'a> Execution<'a> {
                     .as_ref()
                     .filter(|mask| stage == Stage::Inpainting && mask.page == page)
                     .cloned(),
+                self.terminology.clone(),
             ),
             self.stop.clone(),
             self.progress.clone(),
@@ -272,4 +275,88 @@ fn validate_commit(previous: &Snapshot, next: &Snapshot) -> Result<()> {
         "committer did not advance the scene revision"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use koharu_scene::{At, PageDraft};
+    use koharu_translator::{TerminologyEntry, TerminologyKind};
+
+    use super::Execution;
+    use crate::{
+        Committer, Operation, PipelineConfig, Request, Scope, Stage, StageOutput,
+        resources::ResourceMonitor, stage_runner::StageRunner,
+    };
+
+    struct RejectCommitter;
+
+    #[async_trait::async_trait]
+    impl Committer for RejectCommitter {
+        async fn commit(&mut self, _output: StageOutput) -> anyhow::Result<koharu_scene::Snapshot> {
+            anyhow::bail!("scheduled-job test must not commit")
+        }
+    }
+
+    #[tokio::test]
+    async fn scheduled_translation_pages_share_the_request_terminology_snapshot() {
+        let mut session = koharu_scene::Session::memory().await.unwrap();
+        let setup = session
+            .snapshot()
+            .patch(|edit| {
+                edit.add_page(PageDraft::new("one", 1.0, 1.0), At::End)?;
+                edit.add_page(PageDraft::new("two", 1.0, 1.0), At::End)?;
+                Ok(())
+            })
+            .unwrap();
+        session.commit(setup).await.unwrap();
+        let snapshot = session.snapshot();
+        let pages = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
+        let terminology: Arc<[TerminologyEntry]> = Arc::from([TerminologyEntry {
+            source: "アリス".to_owned(),
+            translation: "Alice".to_owned(),
+            kind: TerminologyKind::Person,
+        }]);
+        let request = Request {
+            operation: Operation::Only {
+                stage: Stage::Translation,
+            },
+            scope: Scope::Project,
+            ..Request::default()
+        }
+        .with_terminology(terminology.clone());
+        let device = koharu_ml::Device::cpu();
+        let resources = ResourceMonitor::new(&device);
+        let translator = koharu_translator::Translator::from_config(
+            device.clone(),
+            koharu_config::Config::memory(koharu_translator::ProvidersConfig::default()),
+        )
+        .unwrap();
+        let runner = Arc::new(
+            StageRunner::new(
+                &PipelineConfig::default(),
+                translator,
+                &device,
+                resources.clone(),
+            )
+            .unwrap(),
+        );
+        let mut committer = RejectCommitter;
+        let mut execution =
+            Execution::new(runner, resources, snapshot, request, &mut committer).unwrap();
+
+        let first = execution.take_ready_job().unwrap();
+        execution.busy_stages.remove(&Stage::Translation);
+        assert!(
+            execution
+                .scheduler
+                .complete_stage(pages[0], Stage::Translation)
+        );
+        let second = execution.take_ready_job().unwrap();
+
+        assert!(Arc::ptr_eq(first.terminology(), &terminology));
+        assert!(Arc::ptr_eq(second.terminology(), &terminology));
+        assert!(Arc::ptr_eq(first.terminology(), second.terminology()));
+    }
 }

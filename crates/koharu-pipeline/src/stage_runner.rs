@@ -185,6 +185,11 @@ impl StageJob {
             progress,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn terminology(&self) -> &Arc<[koharu_translator::TerminologyEntry]> {
+        self.input.terminology()
+    }
 }
 
 pub(crate) enum StageOutcome {
