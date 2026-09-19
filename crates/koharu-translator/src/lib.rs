@@ -16,11 +16,13 @@ use koharu_ml::Device;
 use error::{Error, Result};
 use local::LocalTranslator;
 
-pub use backend::{TranslationContext, TranslationRequest};
+pub use backend::{TerminologyEntry, TerminologyKind, TranslationContext, TranslationRequest};
 pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
 pub use provider::{Provider, ProviderConfig, ProvidersConfig};
+
+pub const MAX_TERMINOLOGY_PROMPT_BYTES: usize = 64 * 1024;
 
 #[derive(Clone)]
 pub struct Translator {
@@ -123,6 +125,7 @@ impl Translator {
         );
         let provider = selection.provider;
         let provider_id: &'static str = provider.into();
+        validate_request(provider, &request)?;
         if request.segments.is_empty() {
             tracing::Span::current().record("outcome", "skipped");
             return Ok((provider_id, request.segments));
@@ -197,6 +200,15 @@ impl Translator {
     }
 }
 
+fn validate_request(provider: Provider, request: &TranslationRequest) -> Result<()> {
+    if request.requires_system_prompt() && !provider.supports_system_prompt() {
+        return Err(Error::UnsupportedSystemPrompt {
+            provider: provider.into(),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +246,43 @@ mod tests {
                 ..GenerationConfig::default()
             }
         ));
+    }
+
+    #[test]
+    fn unsupported_providers_reject_system_prompt_requests_before_dispatch() {
+        let request = TranslationRequest::new(["hello"], Language::English).with_terminology([
+            TerminologyEntry {
+                source: "name".to_owned(),
+                translation: "Name".to_owned(),
+                kind: TerminologyKind::Person,
+            },
+        ]);
+
+        let error = validate_request(Provider::DeepL, &request).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "deepl does not support translation requests that require a system prompt"
+        );
+        assert!(
+            validate_request(
+                Provider::DeepL,
+                &TranslationRequest::new(["hello"], Language::English)
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_request(
+                Provider::OpenAi,
+                &TranslationRequest::new_term_translation(["name"], Language::English)
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_request(
+                Provider::Caiyun,
+                &TranslationRequest::new_term_translation(["name"], Language::English)
+            )
+            .is_err()
+        );
     }
 }

@@ -19,6 +19,7 @@ macro_rules! define_providers {
             name: $name:literal,
             field: $field:ident,
             config: $config:ty,
+            system_prompt: $system_prompt:literal,
         }
     )+) => {
         #[derive(
@@ -50,6 +51,13 @@ macro_rules! define_providers {
             pub const fn name(self) -> &'static str {
                 match self {
                     $(Self::$variant => $name,)+
+                }
+            }
+
+            #[must_use]
+            pub const fn supports_system_prompt(self) -> bool {
+                match self {
+                    $(Self::$variant => $system_prompt,)+
                 }
             }
         }
@@ -120,83 +128,126 @@ define_providers! {
         name: "Local",
         field: local,
         config: LocalConfig,
+        system_prompt: true,
     }
     OpenAi {
         id: "openai",
         name: "OpenAI",
         field: openai,
         config: OpenAiConfig,
+        system_prompt: true,
     }
     Gemini {
         id: "gemini",
         name: "Gemini",
         field: gemini,
         config: GeminiConfig,
+        system_prompt: true,
     }
     Claude {
         id: "claude",
         name: "Claude",
         field: claude,
         config: ClaudeConfig,
+        system_prompt: true,
     }
     Grok {
         id: "grok",
         name: "Grok",
         field: grok,
         config: GrokConfig,
+        system_prompt: true,
     }
     MiniMax {
         id: "minimax",
         name: "MiniMax",
         field: minimax,
         config: MiniMaxConfig,
+        system_prompt: true,
     }
     DeepSeek {
         id: "deepseek",
         name: "DeepSeek",
         field: deepseek,
         config: DeepSeekConfig,
+        system_prompt: true,
     }
     OpenAiCompatible {
         id: "openai-compatible",
         name: "OpenAI-compatible",
         field: openai_compatible,
         config: OpenAiCompatibleConfig,
+        system_prompt: true,
     }
     OpenRouter {
         id: "openrouter",
         name: "OpenRouter",
         field: openrouter,
         config: OpenRouterConfig,
+        system_prompt: true,
     }
     LmStudio {
         id: "lm-studio",
         name: "LM Studio",
         field: lm_studio,
         config: LmStudioConfig,
+        system_prompt: true,
     }
     DeepL {
         id: "deepl",
         name: "DeepL",
         field: deepl,
         config: DeepLConfig,
+        system_prompt: false,
     }
     GoogleCloudTranslation {
         id: "google-cloud-translation",
         name: "Google Cloud Translation",
         field: google_cloud_translation,
         config: GoogleCloudConfig,
+        system_prompt: false,
     }
     Caiyun {
         id: "caiyun",
         name: "Caiyun",
         field: caiyun,
         config: CaiyunConfig,
+        system_prompt: false,
     }
 }
 
 impl ProvidersConfig {
     pub fn load() -> anyhow::Result<koharu_config::Config<Self>> {
         koharu_config::load("providers")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn system_prompt_capability_matches_provider_architecture() {
+        for provider in [
+            Provider::Local,
+            Provider::OpenAi,
+            Provider::Gemini,
+            Provider::Claude,
+            Provider::Grok,
+            Provider::MiniMax,
+            Provider::DeepSeek,
+            Provider::OpenAiCompatible,
+            Provider::OpenRouter,
+            Provider::LmStudio,
+        ] {
+            assert!(provider.supports_system_prompt(), "{provider}");
+        }
+        for provider in [
+            Provider::DeepL,
+            Provider::GoogleCloudTranslation,
+            Provider::Caiyun,
+        ] {
+            assert!(!provider.supports_system_prompt(), "{provider}");
+        }
     }
 }

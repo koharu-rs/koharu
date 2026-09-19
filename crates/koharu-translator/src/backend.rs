@@ -4,11 +4,38 @@ use anyhow::Context;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, ImageEncoder, RgbImage, codecs::jpeg::JpegEncoder};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::Language;
 
 const MAX_IMAGE_DIMENSION: u32 = 2048;
 const JPEG_QUALITY: u8 = 88;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminologyKind {
+    Person,
+    Place,
+    Organization,
+    Item,
+    Ability,
+    Term,
+    Other,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct TerminologyEntry {
+    pub source: String,
+    pub translation: String,
+    pub kind: TerminologyKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TranslationMode {
+    Text,
+    Term,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TranslationRequest {
@@ -17,7 +44,9 @@ pub struct TranslationRequest {
     pub target_language: Language,
     pub instructions: Option<String>,
     pub context: Vec<TranslationContext>,
+    pub terminology: Vec<TerminologyEntry>,
     pub image: Option<Arc<DynamicImage>>,
+    mode: TranslationMode,
 }
 
 impl TranslationRequest {
@@ -32,8 +61,20 @@ impl TranslationRequest {
             target_language,
             instructions: None,
             context: Vec::new(),
+            terminology: Vec::new(),
             image: None,
+            mode: TranslationMode::Text,
         }
+    }
+
+    #[must_use]
+    pub fn new_term_translation(
+        terms: impl IntoIterator<Item = impl Into<String>>,
+        target_language: Language,
+    ) -> Self {
+        let mut request = Self::new(terms, target_language);
+        request.mode = TranslationMode::Term;
+        request
     }
 
     #[cfg(test)]
@@ -46,6 +87,15 @@ impl TranslationRequest {
     #[must_use]
     pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_terminology(
+        mut self,
+        terminology: impl IntoIterator<Item = TerminologyEntry>,
+    ) -> Self {
+        self.terminology = terminology.into_iter().collect();
         self
     }
 
@@ -92,6 +142,14 @@ impl TranslationRequest {
 
     pub(crate) fn remove_image(&mut self) {
         self.image = None;
+    }
+
+    pub(crate) fn is_term_translation(&self) -> bool {
+        self.mode == TranslationMode::Term
+    }
+
+    pub(crate) fn requires_system_prompt(&self) -> bool {
+        self.is_term_translation() || !self.terminology.is_empty()
     }
 }
 

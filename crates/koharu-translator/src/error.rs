@@ -22,6 +22,10 @@ pub enum Error {
         expected: usize,
         actual: usize,
     },
+    #[error("{provider} does not support translation requests that require a system prompt")]
+    UnsupportedSystemPrompt { provider: &'static str },
+    #[error("serialized terminology is {actual} bytes; maximum is {max} bytes")]
+    TerminologyPromptTooLarge { actual: usize, max: usize },
     #[error("{provider} quota or rate limit was exceeded")]
     QuotaExceeded { provider: &'static str },
     #[error("{provider} API request failed with HTTP {status}: {message}")]
