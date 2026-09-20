@@ -8,7 +8,11 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use uuid::Uuid;
 
-use super::{Channel, ChannelExt as _, Error, canvas::CanvasChannel, project::CurrentProject};
+use super::{
+    Channel, ChannelExt as _, Error,
+    canvas::CanvasChannel,
+    project::{CurrentProject, ProjectIdentity},
+};
 use koharu_desktop::Desktop;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
@@ -208,6 +212,7 @@ pub(crate) struct JobChannel {
 
 pub(crate) struct ProjectCommitter {
     pub(crate) project: CurrentProject,
+    pub(crate) project_identity: ProjectIdentity,
     pub(crate) desktop: Desktop,
     pub(crate) canvas: CanvasChannel,
 }
@@ -218,6 +223,9 @@ impl Committer for ProjectCommitter {
         let (commit, page) = {
             let mut projects = self.project.project.lock().await;
             let project = projects.as_mut().context("no project is open")?;
+            if project.identity() != self.project_identity {
+                anyhow::bail!("project changed during pipeline execution");
+            }
             let Some(commit) = project.commit_rebased(output.patch).await? else {
                 return Ok(project.snapshot());
             };
@@ -255,13 +263,11 @@ pub(crate) async fn process(
     desktop: Desktop,
     canvas: CanvasChannel,
 ) -> std::result::Result<JobId, Error> {
-    let snapshot = project
-        .project
-        .lock()
-        .await
-        .as_ref()
-        .context("no project is open")?
-        .snapshot();
+    let (snapshot, project_identity) = {
+        let current = project.project.lock().await;
+        let project = current.as_ref().context("no project is open")?;
+        (project.snapshot(), project.identity())
+    };
     let terminology = terminology_snapshot(&snapshot)?;
     let (id, stop) =
         processing.start_job(JobKind::Pipeline, JobPhase::Pipeline { stage: None }, &jobs)?;
@@ -357,6 +363,7 @@ pub(crate) async fn process(
 
         let mut committer = ProjectCommitter {
             project: commit_project,
+            project_identity,
             desktop: commit_desktop,
             canvas: commit_canvas,
         };

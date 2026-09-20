@@ -135,6 +135,7 @@ trait ScanPipelineRuntime {
 struct ProductionScanPipeline {
     pipeline: crate::host::Pipeline,
     project: crate::commands::project::CurrentProject,
+    project_identity: crate::commands::project::ProjectIdentity,
     desktop: koharu_desktop::Desktop,
     canvas: crate::commands::canvas::CanvasChannel,
 }
@@ -148,6 +149,7 @@ impl ScanPipelineRuntime for ProductionScanPipeline {
     ) -> Result<koharu_pipeline::RunStatus> {
         let mut committer = crate::commands::processing::ProjectCommitter {
             project: self.project.clone(),
+            project_identity: self.project_identity,
             desktop: self.desktop.clone(),
             canvas: self.canvas.clone(),
         };
@@ -554,6 +556,7 @@ pub(crate) async fn scan_glossary(
             pipeline: ProductionScanPipeline {
                 pipeline,
                 project: project.clone(),
+                project_identity,
                 desktop,
                 canvas,
             },
@@ -610,10 +613,12 @@ mod tests {
         FailOcr,
         NoText,
         FingerprintChange,
+        ReplaceProjectBeforeOcrCommit,
     }
 
     struct RecordingPipeline {
         project: CurrentProject,
+        project_identity: crate::commands::project::ProjectIdentity,
         requests: std::sync::Arc<
             std::sync::Mutex<Vec<(koharu_pipeline::Operation, koharu_pipeline::Scope, usize)>>,
         >,
@@ -625,7 +630,7 @@ mod tests {
     impl ScanPipelineRuntime for RecordingPipeline {
         async fn execute_ocr(
             &mut self,
-            _snapshot: koharu_scene::Snapshot,
+            snapshot: koharu_scene::Snapshot,
             request: koharu_pipeline::Request,
         ) -> Result<koharu_pipeline::RunStatus> {
             self.requests.lock().unwrap().push((
@@ -635,6 +640,36 @@ mod tests {
             ));
             if matches!(self.scenario, ScanScenario::FailOcr) {
                 bail!("OCR failed");
+            }
+            if matches!(self.scenario, ScanScenario::ReplaceProjectBeforeOcrCommit) {
+                let page = snapshot.pages().next().unwrap().id();
+                let patch = snapshot.patch(|edit| {
+                    let content = edit.add_text_content(page, At::End)?;
+                    edit.set(
+                        content,
+                        &SourceText {
+                            text: Authored::user("アリス".to_owned()),
+                            language: Some(koharu_scene::LanguageTag::new("ja")?),
+                        },
+                    )
+                })?;
+                reopen_current_project(&self.project).await;
+                let mut committer = crate::commands::processing::ProjectCommitter {
+                    project: self.project.clone(),
+                    project_identity: self.project_identity,
+                    desktop: koharu_desktop::Desktop::new()?,
+                    canvas: crate::commands::canvas::CanvasChannel::default(),
+                };
+                koharu_pipeline::Committer::commit(
+                    &mut committer,
+                    koharu_pipeline::StageOutput {
+                        page,
+                        stage: koharu_pipeline::Stage::Ocr,
+                        patch,
+                    },
+                )
+                .await?;
+                return Ok(koharu_pipeline::RunStatus::Completed);
             }
             if !matches!(self.scenario, ScanScenario::NoText) {
                 set_only_source_text(&self.project, "アリス").await?;
@@ -669,6 +704,14 @@ mod tests {
                 confidence: 0.9,
             }]))
         }
+    }
+
+    async fn reopen_current_project(current: &CurrentProject) {
+        let mut current = current.project.lock().await;
+        let project = current.take().unwrap();
+        let mut replacement = Project::new(project.session, project.name);
+        replacement.active_page = None;
+        *current = Some(replacement);
     }
 
     async fn set_only_source_text(project: &CurrentProject, text: &str) -> Result<()> {
@@ -735,6 +778,7 @@ mod tests {
         let runtime = AppScanRuntime {
             pipeline: RecordingPipeline {
                 project: project.clone(),
+                project_identity,
                 requests: requests.clone(),
                 events: events.clone(),
                 scenario,
@@ -828,6 +872,35 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn app_scan_runtime_rejects_reopened_project_before_ocr_commit() {
+        let (mut runtime, project, stop, _, _) =
+            scan_fixture(ScanScenario::ReplaceProjectBeforeOcrCommit)
+                .await
+                .unwrap();
+
+        let error = run_scan_workflow(&mut runtime, &stop, |_| {})
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "project changed during pipeline execution"
+        );
+        let current = project.project.lock().await;
+        let replacement = current.as_ref().unwrap();
+        assert_eq!(replacement.revision(), koharu_scene::Revision::new(1));
+        assert_eq!(
+            replacement
+                .snapshot()
+                .subtree(replacement.snapshot().pages().next().unwrap().id())
+                .unwrap()
+                .filter_map(|entity| entity.component::<SourceText>().unwrap())
+                .collect::<Vec<_>>(),
+            []
+        );
     }
 
     #[test]
