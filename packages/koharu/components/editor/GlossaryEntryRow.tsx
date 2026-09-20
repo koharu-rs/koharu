@@ -4,7 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { glossaryKinds } from '@/lib/glossary'
+import { glossaryKinds, normalizeGlossaryTranslation } from '@/lib/glossary'
 import type { GlossaryEntryPatch, GlossaryEntryView, GlossaryKind } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Button } from '@koharu/ui/components/button'
@@ -49,7 +49,7 @@ export function GlossaryEntryRow({
 
   const patch = (overrides: Partial<GlossaryEntryPatch> = {}): GlossaryEntryPatch => ({
     source,
-    translation: translation.trim() || null,
+    translation: normalizeGlossaryTranslation(translation),
     kind: entry.kind,
     enabled: entry.enabled,
     ...overrides,
@@ -60,7 +60,7 @@ export function GlossaryEntryRow({
     if (value && value !== entry.source) onUpdate(patch({ source: value }))
   }
   const saveTranslation = () => {
-    const value = translation.trim() || null
+    const value = normalizeGlossaryTranslation(translation)
     if (value !== entry.translation) onUpdate(patch({ translation: value }))
   }
 

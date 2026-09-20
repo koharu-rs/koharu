@@ -23,6 +23,10 @@ export interface GlossaryFilters {
   state: GlossaryStateFilter
 }
 
+export function normalizeGlossaryTranslation(value: string): string | null {
+  return value.trim() || null
+}
+
 export function filterGlossaryEntries(
   entries: readonly GlossaryEntryView[],
   filters: GlossaryFilters,

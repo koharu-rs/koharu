@@ -24,6 +24,7 @@ import {
   filterGlossaryEntries,
   glossaryKinds,
   glossaryStatus,
+  normalizeGlossaryTranslation,
   parseGlossaryDocument,
   type GlossaryStateFilter,
 } from '@/lib/glossary'
@@ -600,7 +601,7 @@ function ManualEntryForm({
         if (!source.trim()) return
         onSave({
           source: source.trim(),
-          translation: translation.trim() || null,
+          translation: normalizeGlossaryTranslation(translation),
           kind,
           enabled: true,
         })

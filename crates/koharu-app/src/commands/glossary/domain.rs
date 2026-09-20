@@ -98,6 +98,22 @@ fn validate_scan_text(value: &str, max_chars: usize, allow_empty: bool, field: &
     }
 }
 
+pub(super) fn normalize_glossary_translation(translation: Option<String>) -> Option<String> {
+    translation.and_then(|translation| {
+        let translation = translation.trim();
+        (!translation.is_empty()).then(|| translation.to_owned())
+    })
+}
+
+fn normalize_glossary_translations(glossary: &mut Glossary) {
+    for entry in &mut glossary.entries {
+        entry.translation = normalize_glossary_translation(entry.translation.take());
+        if entry.translation.is_none() {
+            entry.translation_origin = None;
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
 pub(crate) struct TermTranslationResult {
     pub id: GlossaryEntryId,
@@ -426,6 +442,7 @@ impl crate::commands::project::Project {
         }
         let mut value = glossary(&snapshot)?;
         mutate(&mut value)?;
+        normalize_glossary_translations(&mut value);
         let patch = snapshot.patch(|edit| edit.set_project(&value))?;
         let commit = self.session.commit(patch).await?;
         self.record_commit(&commit);
@@ -754,6 +771,49 @@ mod tests {
         assert_view_revision(&deleted, Revision::new(4));
         assert!(deleted.entries.is_empty());
         assert_eq!(project.undo.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn glossary_mutations_store_whitespace_only_translations_as_untranslated() {
+        let mut project = Project::new(Session::memory().await.unwrap(), "test".to_owned());
+        let added = project
+            .add_glossary_entry(Revision::ZERO, entry("アリス", Some(" \u{2003} ")))
+            .await
+            .unwrap();
+        let id = added.entries[0].id;
+        assert_eq!(added.entries[0].translation, None);
+        assert_eq!(added.entries[0].translation_origin, None);
+
+        let translated = project
+            .update_glossary_entry(
+                added.revision,
+                id,
+                GlossaryEntryPatch {
+                    source: "アリス".to_owned(),
+                    translation: Some(" Alice ".to_owned()),
+                    kind: GlossaryKind::Person,
+                    enabled: true,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(translated.entries[0].translation.as_deref(), Some("Alice"));
+
+        let cleared = project
+            .update_glossary_entry(
+                translated.revision,
+                id,
+                GlossaryEntryPatch {
+                    source: "アリス".to_owned(),
+                    translation: Some(" \u{2003} ".to_owned()),
+                    kind: GlossaryKind::Person,
+                    enabled: true,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(cleared.entries[0].translation, None);
+        assert_eq!(cleared.entries[0].translation_origin, None);
     }
 
     fn stored_entry(

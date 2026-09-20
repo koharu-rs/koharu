@@ -5,6 +5,7 @@ import {
   eligibleGlossaryTranslationIds,
   filterGlossaryEntries,
   glossaryStatus,
+  normalizeGlossaryTranslation,
   parseGlossaryDocument,
 } from '@/lib/glossary'
 import type { GlossaryEntryPatch, GlossaryEntryView, GlossaryView } from '@koharu/bridge/protocol'
@@ -107,6 +108,11 @@ describe('glossary helpers', () => {
     expect(glossaryStatus({ ...view(1), savedSourceFingerprint: null })).toBe('unscanned')
     expect(glossaryStatus(view(1))).toBe('available')
     expect(glossaryStatus({ ...view(1), stale: true })).toBe('stale')
+  })
+
+  it('normalizes whitespace-only translation input to null', () => {
+    expect(normalizeGlossaryTranslation(' \u2003 ')).toBeNull()
+    expect(normalizeGlossaryTranslation('  Alice  ')).toBe('Alice')
   })
 
   it('accepts JSON import text and rejects malformed files before preview', () => {

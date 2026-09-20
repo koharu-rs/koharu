@@ -8,7 +8,7 @@ use koharu_scene::{
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{GlossaryView, glossary};
+use super::{GlossaryView, glossary, normalize_glossary_translation};
 
 const GLOSSARY_FORMAT: &str = "koharu-glossary";
 const GLOSSARY_VERSION: u32 = 1;
@@ -179,7 +179,7 @@ impl crate::commands::project::Project {
 }
 
 fn parse_exchange(json: &str) -> Result<GlossaryExchange> {
-    let exchange: GlossaryExchange =
+    let mut exchange: GlossaryExchange =
         serde_json::from_str(json).context("invalid glossary exchange JSON")?;
     if exchange.format != GLOSSARY_FORMAT {
         bail!("unsupported glossary exchange format: {}", exchange.format);
@@ -192,7 +192,8 @@ fn parse_exchange(json: &str) -> Result<GlossaryExchange> {
     }
 
     let mut keys = HashSet::with_capacity(exchange.entries.len());
-    for entry in &exchange.entries {
+    for entry in &mut exchange.entries {
+        entry.translation = normalize_glossary_translation(entry.translation.take());
         if !keys.insert((normalize_glossary_source(&entry.source), entry.kind)) {
             bail!("glossary import contains duplicate source and kind combinations");
         }
@@ -486,5 +487,48 @@ mod tests {
         assert_eq!(replaced_alice.confidence, alice.confidence);
         assert_eq!(replaced_alice.occurrence_count, alice.occurrence_count);
         assert_eq!(replaced_alice.examples, alice.examples);
+    }
+
+    #[tokio::test]
+    async fn import_treats_whitespace_only_translation_as_untranslated() {
+        let untranslated = entry("アリス", None, GlossaryKind::Person, true);
+        let mut project = project_with(Glossary {
+            enabled: true,
+            source_language: Some(LanguageTag::new("ja").unwrap()),
+            target_language: Some(LanguageTag::new("en").unwrap()),
+            source_fingerprint: None,
+            entries: vec![untranslated.clone()],
+        })
+        .await;
+        let import = json!({
+            "format": "koharu-glossary",
+            "version": 1,
+            "source_language": "ja",
+            "target_language": "en",
+            "entries": [{
+                "source": "アリス",
+                "translation": " \u{2003} ",
+                "kind": "person",
+                "enabled": true
+            }]
+        })
+        .to_string();
+
+        let preview = project.preview_glossary_import(&import).unwrap();
+        assert_eq!(preview.identical, 1);
+        assert_eq!(preview.conflicting, 0);
+
+        let view = project
+            .apply_glossary_import(
+                project.revision(),
+                &import,
+                GlossaryImportStrategy::ReplaceExisting,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(view.entries[0].translation, None);
+        assert_eq!(view.entries[0].translation_origin, None);
+        assert_eq!(view.entries[0].source_origin, untranslated.source_origin);
     }
 }

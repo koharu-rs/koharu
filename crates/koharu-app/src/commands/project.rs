@@ -14,6 +14,7 @@ use koharu_scene::{
 use serde::Serialize;
 use specta::Type;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 use super::{
     canvas::Point,
@@ -176,6 +177,15 @@ pub(crate) struct CurrentProject {
     pub(crate) project: Arc<Mutex<Option<Project>>>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ProjectIdentity(Uuid);
+
+impl ProjectIdentity {
+    pub(crate) fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct ProjectLibrary {
     root: PathBuf,
@@ -257,6 +267,7 @@ impl ProjectLibrary {
 }
 
 pub(crate) struct Project {
+    identity: ProjectIdentity,
     pub(crate) session: Session,
     pub(crate) name: String,
     pub(crate) active_page: Option<EntityId>,
@@ -282,6 +293,7 @@ impl Project {
     pub(crate) fn new(session: Session, name: String) -> Self {
         let active_page = session.snapshot().pages().next().map(|page| page.id());
         Self {
+            identity: ProjectIdentity::new(),
             session,
             name,
             active_page,
@@ -292,6 +304,10 @@ impl Project {
 
     pub(crate) fn snapshot(&self) -> Snapshot {
         self.session.snapshot()
+    }
+
+    pub(crate) fn identity(&self) -> ProjectIdentity {
+        self.identity
     }
 
     pub(crate) fn revision(&self) -> Revision {

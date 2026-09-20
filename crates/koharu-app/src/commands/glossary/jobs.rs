@@ -76,6 +76,7 @@ struct TermSource {
 }
 
 struct TermTranslationInput {
+    project_identity: crate::commands::project::ProjectIdentity,
     entries: Vec<TermSource>,
     target_language: koharu_translator::Language,
     model: koharu_translator::ModelSelection,
@@ -172,6 +173,7 @@ impl ScanPipelineRuntime for ProductionScanPipeline {
 struct AppScanRuntime<P> {
     pipeline: P,
     project: crate::commands::project::CurrentProject,
+    project_identity: crate::commands::project::ProjectIdentity,
     processing: crate::commands::processing::Processing,
     jobs: crate::commands::processing::JobChannel,
     job: crate::commands::processing::JobId,
@@ -186,14 +188,13 @@ impl<P: ScanPipelineRuntime + Send> ScanRuntime for AppScanRuntime<P> {
         use koharu_pipeline::{Operation, Progress, RunStatus, Scope, Stage};
         use parking_lot::Mutex;
 
-        let snapshot = self
-            .project
-            .project
-            .lock()
-            .await
-            .as_ref()
-            .context("no project is open")?
-            .snapshot();
+        let current = self.project.project.lock().await;
+        let project = current.as_ref().context("no project is open")?;
+        if project.identity() != self.project_identity {
+            bail!("project changed during glossary scan");
+        }
+        let snapshot = project.snapshot();
+        drop(current);
         let completed = Arc::new(Mutex::new((0_usize, 0_usize)));
         let progress_processing = self.processing.clone();
         let progress_jobs = self.jobs.clone();
@@ -242,14 +243,13 @@ impl<P: ScanPipelineRuntime + Send> ScanRuntime for AppScanRuntime<P> {
     async fn read_sources(&mut self) -> Result<ScanInput> {
         use koharu_scene::SourceText;
 
-        let snapshot = self
-            .project
-            .project
-            .lock()
-            .await
-            .as_ref()
-            .context("no project is open")?
-            .snapshot();
+        let current = self.project.project.lock().await;
+        let project = current.as_ref().context("no project is open")?;
+        if project.identity() != self.project_identity {
+            bail!("project changed during glossary scan");
+        }
+        let snapshot = project.snapshot();
+        drop(current);
         let mut texts = Vec::new();
         let mut source_language = None;
         let mut mixed_languages = false;
@@ -346,6 +346,9 @@ impl<P: ScanPipelineRuntime + Send> ScanRuntime for AppScanRuntime<P> {
         let info = {
             let mut current = self.project.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
+            if project.identity() != self.project_identity {
+                bail!("project changed during glossary scan");
+            }
             let snapshot = project.snapshot();
             if super::ocr_source_fingerprint(&snapshot)? != input.fingerprint {
                 bail!("project OCR text changed during glossary extraction; rescan the glossary");
@@ -385,7 +388,7 @@ pub(crate) async fn translate_glossary_entries(
 ) -> std::result::Result<crate::commands::processing::JobId, crate::commands::Error> {
     use std::collections::HashSet;
 
-    let (entries, target_language) = {
+    let (project_identity, entries, target_language) = {
         let current = project.project.lock().await;
         let project = current.as_ref().context("no project is open")?;
         let snapshot = project.snapshot();
@@ -423,7 +426,7 @@ pub(crate) async fn translate_glossary_entries(
                 anyhow::anyhow!("no enabled untranslated glossary entries were selected").into(),
             );
         }
-        (entries, target_language)
+        (project.identity(), entries, target_language)
     };
     let translation = crate::commands::preferences::Preferences::load()?
         .pipeline
@@ -441,6 +444,7 @@ pub(crate) async fn translate_glossary_entries(
         &jobs,
     )?;
     let input = TermTranslationInput {
+        project_identity,
         entries,
         target_language,
         model: translation.model,
@@ -499,6 +503,9 @@ impl TermTranslationRuntime for AppTermTranslationRuntime {
         let info = {
             let mut current = self.project.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
+            if project.identity() != input.project_identity {
+                bail!("project changed during glossary entry translation");
+            }
             let revision = project.revision();
             let results = input
                 .entries
@@ -529,10 +536,10 @@ pub(crate) async fn scan_glossary(
     canvas: crate::commands::canvas::CanvasChannel,
     project_channel: crate::commands::lifecycle::ProjectChannel,
 ) -> std::result::Result<crate::commands::processing::JobId, crate::commands::Error> {
-    {
+    let project_identity = {
         let current = project.project.lock().await;
-        current.as_ref().context("no project is open")?;
-    }
+        current.as_ref().context("no project is open")?.identity()
+    };
     let (id, stop) = processing.start_job(
         crate::commands::processing::JobKind::GlossaryScan,
         JobPhase::PreparingOcr,
@@ -551,6 +558,7 @@ pub(crate) async fn scan_glossary(
                 canvas,
             },
             project,
+            project_identity,
             processing,
             jobs,
             job: id,
@@ -584,7 +592,10 @@ mod tests {
     use async_trait::async_trait;
     use koharu_scene::{At, Authored, PageDraft, Session, SourceText};
 
-    use super::{AppScanRuntime, ScanOutcome, ScanPipelineRuntime, run_scan_workflow};
+    use super::{
+        AppScanRuntime, AppTermTranslationRuntime, ScanOutcome, ScanPipelineRuntime,
+        TermTranslationRuntime, run_scan_workflow,
+    };
     use crate::commands::{
         glossary::ocr_source_fingerprint,
         processing::{JobKind, JobPhase, JobState},
@@ -720,6 +731,7 @@ mod tests {
             processing.start_job(JobKind::GlossaryScan, JobPhase::PreparingOcr, &jobs)?;
         let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let project_identity = project.project.lock().await.as_ref().unwrap().identity();
         let runtime = AppScanRuntime {
             pipeline: RecordingPipeline {
                 project: project.clone(),
@@ -728,6 +740,7 @@ mod tests {
                 scenario,
             },
             project: project.clone(),
+            project_identity,
             processing,
             jobs,
             job,
@@ -858,6 +871,7 @@ mod tests {
 
     fn term_input() -> super::TermTranslationInput {
         super::TermTranslationInput {
+            project_identity: crate::commands::project::ProjectIdentity::new(),
             entries: vec![super::TermSource {
                 id: koharu_scene::GlossaryEntryId::new(),
                 source: "アリス".to_owned(),
@@ -900,5 +914,78 @@ mod tests {
             }
             assert!(!runtime.events.contains(&"commit"));
         }
+    }
+
+    #[tokio::test]
+    async fn term_translation_does_not_commit_after_project_switch() {
+        let entry = super::TermSource {
+            id: koharu_scene::GlossaryEntryId::new(),
+            source: "アリス".to_owned(),
+        };
+        let old_project = project_with_term(entry.clone()).await.unwrap();
+        let current = CurrentProject {
+            project: std::sync::Arc::new(tokio::sync::Mutex::new(Some(old_project))),
+        };
+        let input = super::TermTranslationInput {
+            project_identity: current.project.lock().await.as_ref().unwrap().identity(),
+            entries: vec![entry.clone()],
+            target_language: koharu_translator::Language::English,
+            model: koharu_translator::ModelSelection::default(),
+            generation: koharu_translator::GenerationConfig::default(),
+            stop: koharu_pipeline::StopToken::default(),
+        };
+        let replacement = project_with_term(entry).await.unwrap();
+        *current.project.lock().await = Some(replacement);
+        let mut runtime = AppTermTranslationRuntime {
+            pipeline: crate::host::Pipeline::empty(),
+            project: current.clone(),
+            project_channel: crate::commands::lifecycle::ProjectChannel::default(),
+        };
+
+        let error = runtime
+            .commit(input, vec!["Alice".to_owned()])
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "project changed during glossary entry translation"
+        );
+        let current = current.project.lock().await;
+        let project = current.as_ref().unwrap();
+        assert_eq!(project.revision(), koharu_scene::Revision::new(1));
+        let glossary = project
+            .snapshot()
+            .project_component::<koharu_scene::Glossary>()
+            .unwrap()
+            .unwrap();
+        assert_eq!(glossary.entries[0].translation, None);
+    }
+
+    async fn project_with_term(entry: super::TermSource) -> Result<Project> {
+        let mut session = Session::memory().await?;
+        let patch = session.snapshot().patch(|edit| {
+            edit.set_project(&koharu_scene::Glossary {
+                enabled: true,
+                source_language: Some(koharu_scene::LanguageTag::new("ja")?),
+                target_language: Some(koharu_scene::LanguageTag::new("en")?),
+                source_fingerprint: None,
+                entries: vec![koharu_scene::GlossaryEntry {
+                    id: entry.id,
+                    source: entry.source,
+                    translation: None,
+                    kind: koharu_scene::GlossaryKind::Person,
+                    enabled: true,
+                    confidence: None,
+                    occurrence_count: 0,
+                    examples: Vec::new(),
+                    source_origin: koharu_scene::GlossaryValueOrigin::Detected,
+                    translation_origin: None,
+                    present_in_last_scan: true,
+                }],
+            })
+        })?;
+        session.commit(patch).await?;
+        Ok(Project::new(session, "fixture".to_owned()))
     }
 }

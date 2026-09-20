@@ -481,6 +481,34 @@ describe('project glossary panel', () => {
     )
   })
 
+  it('sends null when a translation is cleared with whitespace', async () => {
+    install()
+    const update = vi.spyOn(commands, 'updateGlossaryEntry').mockResolvedValue(
+      glossary({
+        revision: 8,
+        entries: entries.map((entry) =>
+          entry.id === 'haruka'
+            ? { ...entry, revision: 8, translation: null, translationOrigin: null }
+            : { ...entry, revision: 8 },
+        ),
+      }),
+    )
+    render(<GlossaryPanel />)
+    const translation = screen.getByRole('textbox', { name: 'Translation for 春香' })
+
+    fireEvent.change(translation, { target: { value: ' \u2003 ' } })
+    fireEvent.blur(translation)
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledExactlyOnceWith(7, 'haruka', {
+        source: '春香',
+        translation: null,
+        kind: 'person',
+        enabled: true,
+      }),
+    )
+  })
+
   it('updates the global and per-entry enable switches', async () => {
     const user = userEvent.setup()
     install()

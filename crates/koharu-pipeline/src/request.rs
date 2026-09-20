@@ -151,6 +151,7 @@ pub fn terminology_from_glossary(glossary: &Glossary) -> Arc<[TerminologyEntry]>
                 .enabled
                 .then_some(entry.translation.as_ref())
                 .flatten()
+                .filter(|translation| !translation.trim().is_empty())
                 .map(|translation| {
                     let kind = terminology_kind(entry.kind);
                     (
@@ -255,6 +256,18 @@ mod tests {
             source_fingerprint: None,
             entries: vec![entry("アリス", Some("Alice"), GlossaryKind::Person, true)],
         };
+
+        assert!(terminology_from_glossary(&glossary).is_empty());
+    }
+
+    #[test]
+    fn translation_terminology_excludes_blank_targets() {
+        let glossary = glossary(vec![entry(
+            "アリス",
+            Some(" \u{2003} "),
+            GlossaryKind::Person,
+            true,
+        )]);
 
         assert!(terminology_from_glossary(&glossary).is_empty());
     }
