@@ -1,0 +1,115 @@
+---
+title: 'Build and use a project glossary'
+description: 'Scan project text, review terminology, and apply consistent names when translating pages.'
+icon: 'book-open-text'
+---
+
+A glossary keeps names and project-specific terms consistent during translation. Each glossary belongs to one Koharu project and is saved with that project.
+
+Open a project, then select **Glossary** in the right sidebar. The tab is unavailable until a project is open.
+
+## Scan the project
+
+Glossary scanning starts only when you choose **Scan glossary** or **Rescan glossary**.
+
+<Steps>
+  <Step title='Run the scan'>
+    Koharu first runs detection and OCR across the entire project. After every page has finished
+    OCR, local term recognition reads the latest source text. Progress moves from **Preparing OCR**
+    to **Extracting terms**.
+  </Step>
+  <Step title='Review the result'>
+    When the scan finishes, the panel shows **Available** and **Waiting for confirmation**. The scan
+    does not translate glossary entries or start normal page translation.
+  </Step>
+  <Step title='Rescan after source changes'>
+    Editing OCR source text, changing its language, adding or removing source text, or reordering
+    pages changes the source snapshot. The glossary then shows **Needs rescan**. Run **Rescan
+    glossary** to update detection data before relying on the list.
+  </Step>
+</Steps>
+
+A rescan updates confidence, occurrence counts, examples, and whether each term appeared in the latest scan. Existing translations and enable switches remain in place. Terms that are no longer found remain in the list with **Not present in the latest scan** so you can review or delete them yourself.
+
+<Note>
+  **Needs rescan** describes the glossary as a whole after OCR source text changes. **Not present**
+  describes one entry that was absent from the latest completed scan.
+</Note>
+
+Stopping during OCR keeps OCR work that was already committed but leaves the glossary unchanged. Stopping during local term recognition, or a scan failure, does not save a partial glossary result. Closing or switching projects also asks the active scan to stop.
+
+If OCR source text changes while local term recognition is running, Koharu discards that scan result and asks you to rescan.
+
+## Review and edit terms
+
+Search matches both source terms and translations. Combine it with a category filter or one of these state filters: **Translated**, **Untranslated**, **Disabled**, and **Not present**.
+
+Each entry can show:
+
+- the source term, translation, and category;
+- detection confidence, when available;
+- occurrence count and source or translation origin;
+- short examples from the project;
+- whether it was present in the latest scan.
+
+Edit the source, translation, or category directly in the row. Use the entry switch to include or exclude that term. You can also open **Glossary actions** and choose **Add term**, delete one entry from its row, or select several entries and delete them together. **Select visible terms** applies to the current search and filters.
+
+The switch at the top of the panel enables or disables the whole project glossary for normal translation. An entry must be enabled, have a non-empty translation, and belong to an enabled glossary before Koharu can apply it to page translation.
+
+## Translate glossary entries
+
+Koharu can fill untranslated entries with the translation model currently selected in the processing settings.
+
+- Select entries and choose **Translate selected** to translate the selected entries that are both enabled and untranslated.
+- Open **Glossary actions** and choose **Translate untranslated** to translate every enabled, untranslated entry in the project.
+
+The glossary needs a target language, and the selected provider must support that language and system prompts. If these requirements are not met, Koharu reports an error and leaves the glossary unchanged. Stopping the job or a provider failure also leaves all entries unchanged; completed term translations are committed together only after the full request succeeds.
+
+Review automatic translations before using them. You can replace any generated translation by editing the row.
+
+## Start page translation
+
+Glossary scanning and term translation are preparation steps. When the terms are ready:
+
+<Steps>
+  <Step title='Enable the glossary'>
+    Turn on **Enable glossary** at the top of the panel, then enable every entry you want to use.
+  </Step>
+  <Step title='Start translation yourself'>
+    Use the normal processing selector or **Process** menu to run translation. See [Process
+    pages](/en/guides/processing) for scopes and stage behavior.
+  </Step>
+  <Step title='Review the pages'>
+    Check names and terminology together with the rest of the translated text. See [Review text and
+    layers](/en/guides/review).
+  </Step>
+</Steps>
+
+At job start, Koharu takes one snapshot of every enabled entry with a non-empty translation. The same snapshot is used throughout that processing job, even if the glossary is edited while pages are running. Start another translation job to use later glossary changes.
+
+<Warning>
+  DeepL, Google Cloud Translation, and Caiyun cannot run page translation when an enabled glossary
+  contributes translated entries because these providers cannot accept the required system prompt.
+  Koharu shows a capability error and does not silently continue without the glossary. Select a
+  provider that supports system prompts in [provider settings](/en/models/providers), or turn off
+  **Enable glossary** if you intentionally want to translate without glossary terms.
+</Warning>
+
+## Import and export JSON
+
+Use **Glossary actions → Export glossary** to download a JSON file through the browser. Exported files contain the source and target languages plus each term's source, translation, category, and enabled state. Scan confidence, examples, occurrence counts, and project revision stay project-local.
+
+To reuse terms in another project, open that project's glossary and choose **Import glossary**. Koharu reads the selected JSON file in the browser and shows a preview with counts for additions, conflicts, and identical entries.
+
+Choose how conflicts are handled:
+
+- **Keep existing** preserves the values already in the open project.
+- **Replace existing** uses the imported values for conflicting terms.
+
+If the file's source or target language differs from the project glossary, the preview lists the mismatch and requires explicit confirmation before import. Koharu does not translate imported terms or change languages automatically.
+
+Glossaries have project-local ownership. Projects do not share a live or global glossary; exporting JSON from one project and importing it into another is the explicit reuse path. For project storage and backups, see [Projects and imports](/en/guides/projects).
+
+## When the project changes underneath an edit
+
+Glossary edits use the current project revision. If another action changes the project first, Koharu reports the conflict, refreshes the glossary from the project, and does not replay the outdated edit. Review the refreshed entry and apply your change again if it is still needed. Switching projects clears selections and pending import state so results from the previous project are not shown in the new one.

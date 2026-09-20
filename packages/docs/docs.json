@@ -102,6 +102,7 @@
             "pages": [
               "en/guides/projects",
               "en/guides/processing",
+              "en/guides/glossary",
               "en/guides/review",
               "en/guides/canvas",
               "en/guides/cleanup",
@@ -220,6 +221,7 @@
             "pages": [
               "ja/guides/projects",
               "ja/guides/processing",
+              "ja/guides/glossary",
               "ja/guides/review",
               "ja/guides/canvas",
               "ja/guides/cleanup",
@@ -338,6 +340,7 @@
             "pages": [
               "zh/guides/projects",
               "zh/guides/processing",
+              "zh/guides/glossary",
               "zh/guides/review",
               "zh/guides/canvas",
               "zh/guides/cleanup",
