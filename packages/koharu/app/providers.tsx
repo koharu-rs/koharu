@@ -38,6 +38,29 @@ export function Providers({ children }: { children: ReactNode }) {
     if (!lifecycle.bound) {
       lifecycle.bound = true
       const observedJobs = new Map<string, Job>()
+      const pendingJobs: Job[] = []
+      let jobsReady = false
+      const receiveObservedJob = (job: Job) => {
+        const previous = observedJobs.get(job.id)
+        observedJobs.set(job.id, job)
+        receiveJob(job)
+        if (job.completed > (previous?.completed ?? 0) || job.state !== 'running') {
+          void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
+        }
+        if (
+          previous?.state === 'running' &&
+          job.state !== 'running' &&
+          (job.kind === 'glossary_scan' || job.kind === 'glossary_translation')
+        ) {
+          const projectName = queryClient.getQueryData<ProjectInfo | null>(projectKey)?.name
+          if (projectName) {
+            void queryClient.invalidateQueries({
+              queryKey: glossaryKey(projectName),
+              exact: true,
+            })
+          }
+        }
+      }
       const channel = <T,>(receive: (value: T) => void) =>
         new Channel<T>((value) => {
           if (lifecycle.active) receive(value)
@@ -49,30 +72,17 @@ export function Providers({ children }: { children: ReactNode }) {
         .subscribe(
           channel<CanvasState>(receiveCanvas),
           channel<Job>((job) => {
-            const previous = observedJobs.get(job.id)
-            observedJobs.set(job.id, job)
-            receiveJob(job)
-            if (job.completed > (previous?.completed ?? 0) || job.state !== 'running') {
-              void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
-            }
-            if (
-              previous?.state === 'running' &&
-              job.state !== 'running' &&
-              (job.kind === 'glossary_scan' || job.kind === 'glossary_translation')
-            ) {
-              const projectName = queryClient.getQueryData<ProjectInfo | null>(projectKey)?.name
-              if (projectName) {
-                void queryClient.invalidateQueries({
-                  queryKey: glossaryKey(projectName),
-                  exact: true,
-                })
-              }
-            }
+            if (jobsReady) receiveObservedJob(job)
+            else pendingJobs.push(job)
           }),
           channel<Download>(receiveDownload),
           channel<ModelResources>(receiveResources),
           channel<ProjectInfo | null>((project) => {
             const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+            if (previous?.name !== project?.name) {
+              observedJobs.clear()
+              pendingJobs.splice(0)
+            }
             if (previous?.name && previous.name !== project?.name) {
               const previousKey = glossaryKey(previous.name)
               void queryClient.cancelQueries({ queryKey: previousKey, exact: true }).then(() => {
@@ -106,7 +116,12 @@ export function Providers({ children }: { children: ReactNode }) {
           }),
         )
         .then((state) => {
-          if (lifecycle.active) receiveStartupState(state)
+          observedJobs.clear()
+          for (const job of state.jobs) observedJobs.set(job.id, job)
+          jobsReady = true
+          if (!lifecycle.active) return
+          receiveStartupState(state)
+          for (const job of pendingJobs.splice(0)) receiveObservedJob(job)
         })
         .catch(() => undefined)
     }

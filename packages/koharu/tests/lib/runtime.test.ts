@@ -7,7 +7,13 @@ import { call } from '@/lib/backend'
 import { glossaryKey, queryClient, useGlossary, useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands } from '@koharu/bridge'
-import type { GlossaryView, Preferences, ProjectInfo, StartupState } from '@koharu/bridge/protocol'
+import type {
+  GlossaryView,
+  Job,
+  Preferences,
+  ProjectInfo,
+  StartupState,
+} from '@koharu/bridge/protocol'
 
 const preferences: Preferences = {
   pipeline: {
@@ -257,6 +263,102 @@ describe('application runtime', () => {
     })
     await waitFor(() => expect(getGlossary).toHaveBeenCalledTimes(2))
     expect(queryClient.getQueryData(glossaryKey(project.name))).toEqual(glossary)
+    view.unmount()
+  })
+
+  it('observes startup glossary jobs before their first terminal event', async () => {
+    let currentProject = project
+    const activeJob: Job = {
+      id: 'startup-glossary',
+      kind: 'glossary_translation',
+      phase: { kind: 'translating_terms' },
+      state: 'running',
+      completed: 1,
+      total: 3,
+      page: null,
+      error: null,
+    }
+    vi.spyOn(commands, 'getProject').mockImplementation(async () => currentProject)
+    const getGlossary = vi.spyOn(commands, 'getGlossary').mockResolvedValue(glossary)
+    const binding = vi
+      .spyOn(commands, 'subscribe')
+      .mockResolvedValue({ ...startupState(), jobs: [activeJob] })
+    const view = render(createElement(Providers, null, createElement(GlossaryProbe)))
+    expect(await screen.findByText('Glossary 3')).toBeInTheDocument()
+    expect(getGlossary).toHaveBeenCalledOnce()
+
+    const [, jobChannel, , , projectChannel] = binding.mock.calls[0]
+    act(() => {
+      jobChannel.onmessage({ ...activeJob, state: 'finished', completed: 3 })
+    })
+    await waitFor(() => expect(getGlossary).toHaveBeenCalledTimes(2))
+
+    act(() => {
+      jobChannel.onmessage({
+        id: 'pipeline-progress',
+        kind: 'pipeline',
+        phase: { kind: 'pipeline', stage: 'ocr' },
+        state: 'running',
+        completed: 1,
+        total: 3,
+        page: 'page',
+        error: null,
+      })
+      jobChannel.onmessage({
+        id: 'glossary-progress',
+        kind: 'glossary_scan',
+        phase: { kind: 'extracting_terms' },
+        state: 'running',
+        completed: 1,
+        total: 3,
+        page: null,
+        error: null,
+      })
+      jobChannel.onmessage({
+        id: 'old-project-glossary',
+        kind: 'glossary_scan',
+        phase: { kind: 'extracting_terms' },
+        state: 'running',
+        completed: 0,
+        total: 2,
+        page: null,
+        error: null,
+      })
+    })
+    await act(async () => undefined)
+    expect(getGlossary).toHaveBeenCalledTimes(2)
+
+    currentProject = { ...project, name: 'Other Book' }
+    act(() => {
+      projectChannel.onmessage(currentProject)
+    })
+    await waitFor(() => expect(getGlossary.mock.calls.length).toBeGreaterThan(2))
+    const callsAfterSwitch = getGlossary.mock.calls.length
+
+    act(() => {
+      jobChannel.onmessage({
+        id: 'old-project-glossary',
+        kind: 'glossary_scan',
+        phase: { kind: 'extracting_terms' },
+        state: 'finished',
+        completed: 2,
+        total: 2,
+        page: null,
+        error: null,
+      })
+      jobChannel.onmessage({
+        id: 'unrelated-terminal',
+        kind: 'pipeline',
+        phase: { kind: 'pipeline', stage: 'translation' },
+        state: 'finished',
+        completed: 1,
+        total: 1,
+        page: 'page',
+        error: null,
+      })
+    })
+    await act(async () => undefined)
+    expect(getGlossary).toHaveBeenCalledTimes(callsAfterSwitch)
     view.unmount()
   })
 })

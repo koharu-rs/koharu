@@ -187,6 +187,76 @@ describe('project glossary panel', () => {
     expect(await screen.findByText('Other refreshed term')).toBeInTheDocument()
   })
 
+  it('cancels a queued update owned by the previous project', async () => {
+    install(glossaryWithSource('Book term'))
+    vi.spyOn(commands, 'getProject').mockImplementation(
+      async () => queryClient.getQueryData<ProjectInfo | null>(projectKey) ?? null,
+    )
+    vi.spyOn(commands, 'getGlossary').mockImplementation(async () => {
+      const current = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+      return queryClient.getQueryData<GlossaryView>(glossaryKey(current?.name))!
+    })
+    const firstUpdate = Promise.withResolvers<GlossaryView>()
+    const otherUpdated = glossaryWithSource('Other updated term', 8)
+    const update = vi
+      .spyOn(commands, 'updateGlossaryEntry')
+      .mockReturnValueOnce(firstUpdate.promise)
+      .mockResolvedValueOnce(otherUpdated)
+    const errorToast = vi.spyOn(toast, 'add')
+    const unhandled = vi.fn()
+    window.addEventListener('unhandledrejection', unhandled)
+    render(<GlossaryPanel />)
+
+    const source = screen.getByRole('textbox', { name: 'Source term Book term' })
+    const translation = screen.getByRole('textbox', { name: 'Translation for Book term' })
+    fireEvent.change(source, { target: { value: 'Book first edit' } })
+    fireEvent.blur(source)
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    fireEvent.change(translation, { target: { value: 'Book queued edit' } })
+    fireEvent.blur(translation)
+    expect(update).toHaveBeenCalledTimes(1)
+
+    const otherView = glossaryWithSource('Other term')
+    act(() => {
+      queryClient.setQueryData(glossaryKey(otherProject.name), otherView)
+      queryClient.setQueryData(projectKey, otherProject)
+    })
+    expect(
+      await screen.findByRole('textbox', { name: 'Source term Other term' }),
+    ).toBeInTheDocument()
+
+    await act(async () => firstUpdate.resolve(glossaryWithSource('Book first edit', 8)))
+    await act(async () => undefined)
+
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(queryClient.getQueryData(glossaryKey(otherProject.name))).toEqual(otherView)
+    expect(screen.getByText('Other term')).toBeInTheDocument()
+    expect(screen.queryByText('Book first edit')).not.toBeInTheDocument()
+    expect(errorToast).not.toHaveBeenCalled()
+    expect(unhandled).not.toHaveBeenCalled()
+
+    const otherSource = screen.getByRole('textbox', { name: 'Source term Other term' })
+    fireEvent.change(otherSource, { target: { value: 'Other updated term' } })
+    fireEvent.blur(otherSource)
+    await waitFor(() =>
+      expect(update).toHaveBeenNthCalledWith(2, 7, 'haruka', {
+        source: 'Other updated term',
+        translation: 'Haruka',
+        kind: 'person',
+        enabled: true,
+      }),
+    )
+    await waitFor(() =>
+      expect(queryClient.getQueryData(glossaryKey(otherProject.name))).toEqual(otherUpdated),
+    )
+    expect(screen.getByRole('textbox', { name: 'Source term Other updated term' })).toHaveValue(
+      'Other updated term',
+    )
+    expect(errorToast).not.toHaveBeenCalled()
+    expect(unhandled).not.toHaveBeenCalled()
+    window.removeEventListener('unhandledrejection', unhandled)
+  })
+
   it('offers a first scan and changes to rescan when the glossary is stale', async () => {
     const user = userEvent.setup()
     install(glossary({ savedSourceFingerprint: null, entries: [] }))

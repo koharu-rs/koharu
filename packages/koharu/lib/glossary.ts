@@ -90,44 +90,55 @@ function entryPatch(entry: GlossaryEntryPatch): GlossaryEntryPatch {
   }
 }
 
-interface UpdateQueueOptions {
+interface UpdateQueueOptions<Owner> {
   initialRevision: number
+  owner: Owner
+  isOwnerCurrent: (owner: Owner) => boolean
   execute: (revision: number, id: string, patch: GlossaryEntryPatch) => Promise<GlossaryView>
   onResponse: (view: GlossaryView, current: boolean) => void | Promise<void>
 }
 
-interface PendingUpdate {
+interface PendingUpdate<Owner> {
   id: string
   patch: GlossaryEntryPatch
+  owner: Owner
   generation: number
-  resolve: (view: GlossaryView) => void
+  resolve: (view: GlossaryView | undefined) => void
   reject: (error: unknown) => void
 }
 
 export interface GlossaryEntryUpdateQueue {
-  enqueue: (id: string, patch: GlossaryEntryPatch) => Promise<GlossaryView>
+  enqueue: (id: string, patch: GlossaryEntryPatch) => Promise<GlossaryView | undefined>
   setRevision: (revision: number) => void
+  cancel: () => void
 }
 
-export function createGlossaryEntryUpdateQueue({
+export function createGlossaryEntryUpdateQueue<Owner>({
   initialRevision,
+  owner,
+  isOwnerCurrent,
   execute,
   onResponse,
-}: UpdateQueueOptions): GlossaryEntryUpdateQueue {
+}: UpdateQueueOptions<Owner>): GlossaryEntryUpdateQueue {
   let revision = initialRevision
   let running = false
+  let active = true
   let generation = 0
-  const pending: PendingUpdate[] = []
+  const pending: PendingUpdate<Owner>[] = []
 
   const run = async () => {
     if (running) return
     running = true
     while (pending.length > 0) {
       const update = pending.shift()!
+      if (!active || !isOwnerCurrent(update.owner)) {
+        update.resolve(undefined)
+        continue
+      }
       try {
         const response = await execute(revision, update.id, update.patch)
         revision = Math.max(revision, response.revision)
-        const current = generation === update.generation
+        const current = active && isOwnerCurrent(update.owner) && generation === update.generation
         await onResponse(response, current)
         update.resolve(response)
       } catch (error) {
@@ -142,14 +153,18 @@ export function createGlossaryEntryUpdateQueue({
   return {
     enqueue(id, patch) {
       generation += 1
-      const promise = new Promise<GlossaryView>((resolve, reject) => {
-        pending.push({ id, patch: entryPatch(patch), generation, resolve, reject })
+      const promise = new Promise<GlossaryView | undefined>((resolve, reject) => {
+        pending.push({ id, patch: entryPatch(patch), owner, generation, resolve, reject })
       })
       void run()
       return promise
     },
     setRevision(nextRevision) {
       revision = Math.max(revision, nextRevision)
+    },
+    cancel() {
+      active = false
+      for (const update of pending.splice(0)) update.resolve(undefined)
     },
   }
 }

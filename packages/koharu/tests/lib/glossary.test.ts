@@ -126,6 +126,8 @@ describe('glossary helpers', () => {
     const published: GlossaryView[] = []
     const queue = createGlossaryEntryUpdateQueue({
       initialRevision: 1,
+      owner: 'Book',
+      isOwnerCurrent: () => true,
       execute,
       onResponse: (response, current) => {
         if (current) published.push(response)
@@ -176,6 +178,8 @@ describe('glossary helpers', () => {
       .mockResolvedValueOnce(view(12, 'latest'))
     const queue = createGlossaryEntryUpdateQueue({
       initialRevision: 7,
+      owner: 'Book',
+      isOwnerCurrent: () => true,
       execute,
       onResponse: vi.fn(),
     })
@@ -202,6 +206,8 @@ describe('glossary helpers', () => {
       .mockReturnValue(conflict.promise)
     const queue = createGlossaryEntryUpdateQueue({
       initialRevision: 1,
+      owner: 'Book',
+      isOwnerCurrent: () => true,
       execute,
       onResponse: vi.fn(),
     })

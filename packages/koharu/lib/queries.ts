@@ -235,18 +235,20 @@ export function useUpdateGlossaryEntry(revision: number, projectName: string | u
     owner.current.scope.projectName !== scope.current.projectName ||
     owner.current.scope.generation !== scope.current.generation
   ) {
+    owner.current?.queue.cancel()
     const ownerScope = captureGlossaryScope(scope)
     let nextOwner!: { scope: GlossaryScope; queue: GlossaryEntryUpdateQueue }
     nextOwner = {
       scope: ownerScope,
       queue: createGlossaryEntryUpdateQueue({
         initialRevision: revision,
+        owner: ownerScope,
+        isOwnerCurrent: (captured) =>
+          owner.current === nextOwner && glossaryScopeIsCurrent(scope, captured),
         execute: (expectedRevision, id, patch) =>
           commands.updateGlossaryEntry(expectedRevision, id, patch),
         onResponse: async (view, current) => {
-          if (current && owner.current === nextOwner) {
-            await updateGlossaryCaches(scope, ownerScope, view)
-          }
+          if (current) await updateGlossaryCaches(scope, ownerScope, view)
         },
       }),
     }
