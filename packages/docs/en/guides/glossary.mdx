@@ -63,7 +63,7 @@ Koharu can fill untranslated entries with the translation model currently select
 - Select entries and choose **Translate selected** to translate the selected entries that are both enabled and untranslated.
 - Open **Glossary actions** and choose **Translate untranslated** to translate every enabled, untranslated entry in the project.
 
-The glossary needs a target language, and the selected provider must support that language and system prompts. If these requirements are not met, Koharu reports an error and leaves the glossary unchanged. Stopping the job or a provider failure also leaves all entries unchanged; completed term translations are committed together only after the full request succeeds.
+The glossary needs a target language, and the selected provider must support that language and system prompts. If these requirements are not met, Koharu reports an error and leaves the glossary unchanged. Koharu saves all returned translations together in one final update. A provider failure, or a stop request that Koharu observes before that update begins, leaves all entries unchanged. Once the update has begun, it cannot be rolled back.
 
 Review automatic translations before using them. You can replace any generated translation by editing the row.
 
@@ -106,7 +106,7 @@ Choose how conflicts are handled:
 - **Keep existing** preserves the values already in the open project.
 - **Replace existing** uses the imported values for conflicting terms.
 
-If the file's source or target language differs from the project glossary, the preview lists the mismatch and requires explicit confirmation before import. Koharu does not translate imported terms or change languages automatically.
+For each of the source and target languages, Koharu reports a mismatch and requires explicit confirmation only when both the project glossary and the imported file specify non-empty values and those values differ. If the project glossary has no value for that language, the import adopts the file's value. Imported terms are not translated or converted to another language.
 
 Glossaries have project-local ownership. Projects do not share a live or global glossary; exporting JSON from one project and importing it into another is the explicit reuse path. For project storage and backups, see [Projects and imports](/en/guides/projects).
 
