@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "Instrucciones de traducción",
     "instructionsPlaceholder": "Indicaciones opcionales sobre el tono, los nombres y el formato.",
+    "loadPreset": "Cargar preajuste",
     "targetLanguage": "Idioma de destino",
     "title": "Salida de traducción"
   },
@@ -434,9 +435,16 @@
     "title": "Ajustes",
     "translation": {
       "description": "Elige un modelo de cualquier proveedor configurado y aplica un conjunto compartido de opciones de traducción y generación.",
+      "deletePreset": "Eliminar preajuste",
       "instructionsDescription": "Indicaciones sobre nombres, tono, terminología o formato.",
       "instructionsLabel": "Instrucciones de traducción",
       "instructionsPlaceholder": "Indicaciones opcionales para todo el proyecto",
+      "noPresets": "No hay preajustes guardados",
+      "presetName": "Nombre del preajuste",
+      "presetNamePlaceholder": "Nombre para las instrucciones actuales",
+      "presetsDescription": "Guarde las instrucciones actuales con un nombre y cárguelas más tarde.",
+      "savePreset": "Guardar",
+      "savedPresets": "Preajustes guardados",
       "model": "Modelo",
       "modelDescription": "Las etiquetas de proveedor indican dónde se ejecuta cada modelo; las conexiones se configuran por separado.",
       "modelQuantization": "Cuantización del modelo",

@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -19,6 +19,8 @@ import type {
   TranslationConfig as TranslationSettings,
 } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
+import { Button } from '@koharu/ui/components/button'
+import { Input } from '@koharu/ui/components/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {
   Select,
@@ -59,6 +61,41 @@ export function TranslationPreferences({
     current.quantizations.find((quantization) => quantization.id === value.model.quantization) ??
     current.quantizations[0]
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
+  const [presetName, setPresetName] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState('')
+  const presets = value.instruction_presets ?? []
+  const selectedExists = presets.some((preset) => preset.name === selectedPreset)
+
+  const savePreset = () => {
+    const name = presetName.trim()
+    if (!name) return
+    const next = { name, instructions: value.instructions ?? '' }
+    const instruction_presets = [...presets]
+    const index = instruction_presets.findIndex((preset) => preset.name === name)
+    if (index >= 0) instruction_presets[index] = next
+    else instruction_presets.push(next)
+    setSelectedPreset(name)
+    setPresetName(name)
+    onChange({ ...value, instruction_presets })
+  }
+
+  const loadPreset = (name: string) => {
+    const preset = presets.find((candidate) => candidate.name === name)
+    if (!preset) return
+    setSelectedPreset(name)
+    setPresetName(name)
+    onChange({ ...value, instructions: preset.instructions || null })
+  }
+
+  const deletePreset = () => {
+    if (!selectedExists) return
+    onChange({
+      ...value,
+      instruction_presets: presets.filter((preset) => preset.name !== selectedPreset),
+    })
+    setSelectedPreset('')
+  }
+
   return (
     <PreferencePage
       title={t('settings.translation.title')}
@@ -158,6 +195,73 @@ export function TranslationPreferences({
               onChange({ ...value, instructions: event.currentTarget.value || null })
             }
           />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.savedPresets')}
+          description={t('settings.translation.presetsDescription')}
+          align='start'
+        >
+          <div className='grid gap-2'>
+            <div className='flex gap-2'>
+              <Input
+                value={presetName}
+                aria-label={t('settings.translation.presetName')}
+                placeholder={t('settings.translation.presetNamePlaceholder')}
+                className='h-8 min-w-0 flex-1 text-[12px]'
+                onChange={(event) => setPresetName(event.currentTarget.value)}
+              />
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='h-8'
+                disabled={!presetName.trim()}
+                onClick={savePreset}
+              >
+                {t('settings.translation.savePreset')}
+              </Button>
+            </div>
+            <div className='flex gap-2'>
+              <Select
+                value={selectedExists ? selectedPreset : ''}
+                items={Object.fromEntries(presets.map((preset) => [preset.name, preset.name]))}
+                onValueChange={(name) => name && loadPreset(name)}
+              >
+                <SelectTrigger
+                  aria-label={t('settings.translation.savedPresets')}
+                  className='h-8 min-w-0 flex-1 text-[11px]'
+                  disabled={presets.length === 0}
+                >
+                  <SelectValue
+                    placeholder={
+                      presets.length === 0
+                        ? t('settings.translation.noPresets')
+                        : t('settings.translation.savedPresets')
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.name} value={preset.name}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-sm'
+                aria-label={t('settings.translation.deletePreset')}
+                title={t('settings.translation.deletePreset')}
+                className='shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
+                disabled={!selectedExists}
+                onClick={deletePreset}
+              >
+                <Trash2 className='size-3.5' />
+              </Button>
+            </div>
+          </div>
         </PreferenceRow>
       </PreferenceSection>
     </PreferencePage>

@@ -172,12 +172,20 @@ impl Default for PipelineConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+pub struct InstructionPreset {
+    pub name: String,
+    pub instructions: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct TranslationConfig {
     pub model: koharu_translator::ModelSelection,
     pub generation: GenerationConfig,
     #[specta(type = String)]
     pub target_language: Language,
     pub instructions: Option<String>,
+    #[serde(default)]
+    pub instruction_presets: Vec<InstructionPreset>,
 }
 
 impl Default for TranslationConfig {
@@ -187,6 +195,7 @@ impl Default for TranslationConfig {
             generation: GenerationConfig::default(),
             target_language: Language::English,
             instructions: None,
+            instruction_presets: Vec::new(),
         }
     }
 }

@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "翻訳指示",
     "instructionsPlaceholder": "文体、固有名詞、書式に関する任意の指示。",
+    "loadPreset": "プリセットを読み込む",
     "targetLanguage": "対象言語",
     "title": "翻訳出力"
   },
@@ -434,9 +435,16 @@
     "title": "設定",
     "translation": {
       "description": "設定済みプロバイダーのモデルを選び、共通の翻訳・生成オプションを適用します。",
+      "deletePreset": "プリセットを削除",
       "instructionsDescription": "名前、語調、用語、書式に関する指示です。",
       "instructionsLabel": "翻訳指示",
       "instructionsPlaceholder": "プロジェクト全体への任意の指示",
+      "noPresets": "保存済みプリセットはありません",
+      "presetName": "プリセット名",
+      "presetNamePlaceholder": "現在の指示の名前",
+      "presetsDescription": "現在の指示を名前付きで保存し、後で読み込みます。",
+      "savePreset": "保存",
+      "savedPresets": "保存済みプリセット",
       "model": "モデル",
       "modelDescription": "プロバイダー名はモデルの実行場所を示します。接続は別途設定します。",
       "modelQuantization": "モデル量子化",
