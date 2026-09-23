@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { orderedLanguageChoices } from '@/lib/translation'
-import type { LanguageChoice } from '@koharu/bridge/protocol'
+import type { InstructionPreset, LanguageChoice } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   Select,
@@ -24,6 +24,7 @@ export type OutputDraft = {
 export function OutputPicker({
   targetLanguage,
   instructions,
+  presets,
   languages,
   disabled = false,
   saving = false,
@@ -32,6 +33,7 @@ export function OutputPicker({
 }: {
   targetLanguage: string
   instructions: string | null
+  presets: InstructionPreset[]
   languages: LanguageChoice[]
   disabled?: boolean
   saving?: boolean
@@ -50,6 +52,8 @@ export function OutputPicker({
   const submitted = useRef<OutputDraft | null>(null)
   latest.current = { changed, disabled, draft, onChange, saving }
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
+  const matchedPreset =
+    presets.find((preset) => preset.instructions === draft.instructions)?.name ?? ''
 
   const submit = useCallback(
     (next: OutputDraft) => {
@@ -145,6 +149,36 @@ export function OutputPicker({
             </SelectContent>
           </Select>
         </label>
+
+        {presets.length > 0 && (
+          <label className='grid gap-1 text-[9px] text-muted-foreground'>
+            {t('outputPicker.loadPreset')}
+            <Select
+              value={matchedPreset}
+              items={Object.fromEntries(presets.map((preset) => [preset.name, preset.name]))}
+              disabled={disabled}
+              onValueChange={(name) => {
+                const preset = presets.find((candidate) => candidate.name === name)
+                if (!preset) return
+                setDraft((current) => ({ ...current, instructions: preset.instructions }))
+              }}
+            >
+              <SelectTrigger
+                aria-label={t('outputPicker.loadPreset')}
+                className='h-7 w-full text-[11px]'
+              >
+                <SelectValue placeholder={t('outputPicker.loadPreset')} />
+              </SelectTrigger>
+              <SelectContent>
+                {presets.map((preset) => (
+                  <SelectItem key={preset.name} value={preset.name}>
+                    {preset.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+        )}
 
         <label className='grid gap-1 text-[9px] text-muted-foreground'>
           {t('model.instructions')}

@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "Çeviri talimatları",
     "instructionsPlaceholder": "Üslup, adlar ve biçimlendirme için isteğe bağlı yönlendirme.",
+    "loadPreset": "Hazır ayarı yükle",
     "targetLanguage": "Hedef dil",
     "title": "Çeviri çıktısı"
   },
@@ -434,9 +435,16 @@
     "title": "Ayarlar",
     "translation": {
       "description": "Yapılandırılmış bir sağlayıcı modeli seçin ve ortak çeviri ile üretim seçeneklerini uygulayın.",
+      "deletePreset": "Hazır ayarı sil",
       "instructionsDescription": "Adlar, ton, terminoloji veya biçimlendirme yönergeleri.",
       "instructionsLabel": "Çeviri talimatları",
       "instructionsPlaceholder": "Proje genelinde isteğe bağlı yönergeler",
+      "noPresets": "Kayıtlı hazır ayar yok",
+      "presetName": "Hazır ayar adı",
+      "presetNamePlaceholder": "Geçerli talimatlar için ad",
+      "presetsDescription": "Geçerli talimatları bir adla kaydedin ve sonra yükleyin.",
+      "savePreset": "Kaydet",
+      "savedPresets": "Kayıtlı hazır ayarlar",
       "model": "Model",
       "modelDescription": "Sağlayıcı etiketleri her modelin nerede çalıştığını gösterir; bağlantılar ayrı yapılandırılır.",
       "modelQuantization": "Model niceleme",

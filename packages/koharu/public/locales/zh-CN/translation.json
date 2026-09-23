@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "翻译说明",
     "instructionsPlaceholder": "关于语气、名称和格式的可选说明。",
+    "loadPreset": "加载预设",
     "targetLanguage": "目标语言",
     "title": "翻译输出"
   },
@@ -434,9 +435,16 @@
     "title": "设置",
     "translation": {
       "description": "选择任意已配置提供商的模型，然后应用一组共享的翻译和生成选项。",
+      "deletePreset": "删除预设",
       "instructionsDescription": "有关名称、语气、术语或格式的说明。",
       "instructionsLabel": "翻译说明",
       "instructionsPlaceholder": "可选的项目级说明",
+      "noPresets": "没有已保存的预设",
+      "presetName": "预设名称",
+      "presetNamePlaceholder": "为当前说明命名",
+      "presetsDescription": "将当前说明保存为命名预设，稍后可再加载。",
+      "savePreset": "保存",
+      "savedPresets": "已保存的预设",
       "model": "模型",
       "modelDescription": "提供商标签表示各模型的运行位置；连接需单独配置。",
       "modelQuantization": "模型量化",
