@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dnd-kit/react": "^0.5.0",
     "@koharu/bridge": "workspace:*",
     "@koharu/ui": "workspace:*",
     "@tanstack/react-query": "^5.102.8",
