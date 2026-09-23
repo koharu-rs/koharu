@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -82,4 +82,8 @@ pub trait Host: Send + Sync + 'static {
     fn tools(&self) -> Vec<Tool>;
 
     async fn invoke(&self, call: ToolCall, control: &Control) -> Result<Invocation>;
+
+    async fn bulk_review_pages(&self, _pages: &[String]) -> Result<Value> {
+        bail!("bulk review is not supported by this host")
+    }
 }

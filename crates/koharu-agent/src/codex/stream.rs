@@ -14,10 +14,19 @@ pub(crate) enum Delta {
     Reasoning(String),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Usage {
+    pub(crate) input_tokens: usize,
+    pub(crate) cached_input_tokens: usize,
+    pub(crate) output_tokens: usize,
+    pub(crate) reasoning_tokens: usize,
+}
+
 pub(crate) struct Turn {
     pub(crate) output: Vec<Value>,
     pub(crate) calls: Vec<ToolCall>,
     pub(crate) text: String,
+    pub(crate) usage: Option<Usage>,
 }
 
 pub(super) async fn read<F>(
@@ -32,6 +41,7 @@ where
     let mut bytes = 0_usize;
     let mut output = Vec::new();
     let mut text = String::new();
+    let mut usage = None;
     let mut completed = false;
 
     loop {
@@ -77,13 +87,16 @@ where
                 }
             }
             "response.completed" | "response.done" => {
-                if output.is_empty()
-                    && let Some(items) = value
-                        .get("response")
-                        .and_then(|response| response.get("output"))
-                        .and_then(Value::as_array)
-                {
-                    output.extend(items.iter().cloned());
+                if let Some(response) = value.get("response") {
+                    let parsed = parse_usage(response.get("usage"));
+                    if parsed.is_some() {
+                        usage = parsed;
+                    }
+                    if output.is_empty()
+                        && let Some(items) = response.get("output").and_then(Value::as_array)
+                    {
+                        output.extend(items.iter().cloned());
+                    }
                 }
                 completed = true;
                 break;
@@ -128,6 +141,33 @@ where
         output,
         calls,
         text,
+        usage,
+    })
+}
+
+fn parse_usage(value: Option<&Value>) -> Option<Usage> {
+    let usage = value?;
+    let as_usize = |key: &str, value: &Value| {
+        value
+            .get(key)
+            .and_then(Value::as_u64)
+            .and_then(|value| usize::try_from(value).ok())
+    };
+    let input_tokens = as_usize("input_tokens", usage)?;
+    let output_tokens = as_usize("output_tokens", usage).unwrap_or(0);
+    let cached_input_tokens = usage
+        .get("input_tokens_details")
+        .and_then(|details| as_usize("cached_tokens", details))
+        .unwrap_or(0);
+    let reasoning_tokens = usage
+        .get("reasoning")
+        .and_then(|reasoning| as_usize("total_tokens", reasoning))
+        .unwrap_or(0);
+    Some(Usage {
+        input_tokens,
+        cached_input_tokens,
+        output_tokens,
+        reasoning_tokens,
     })
 }
 
