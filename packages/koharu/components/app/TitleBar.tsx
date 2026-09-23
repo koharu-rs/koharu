@@ -47,6 +47,11 @@ export function TitleBar() {
   const pages = project ? (pagesQuery.data ?? []) : []
   const page = project ? (pageQuery.data ?? null) : null
   const selectedPages = useKoharuStore((state) => state.selectedPages)
+  const exportPages = selectedPages.length
+    ? selectedPages
+    : project?.active_page
+      ? [project.active_page]
+      : []
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
@@ -122,7 +127,7 @@ export function TitleBar() {
                     <MenubarItem
                       key={format}
                       disabled={exporting}
-                      onClick={() => exportProject(format)}
+                      onClick={() => exportProject(format, format === 'cbz' ? null : exportPages)}
                     >
                       {format.toUpperCase()}…
                     </MenubarItem>

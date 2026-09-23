@@ -363,7 +363,10 @@ describe('greenfield editor', () => {
       fireEvent.click(await screen.findByRole('menuitem', { name: `${format.toUpperCase()}…` }))
 
       expect(await screen.findByRole('status')).toHaveTextContent('Export Project')
-      expect(exportProject).toHaveBeenCalledExactlyOnceWith(format)
+      expect(exportProject).toHaveBeenCalledExactlyOnceWith(
+        format,
+        format === 'cbz' ? null : ['page'],
+      )
       await user.click(screen.getByRole('menuitem', { name: 'File' }))
       expect(await screen.findByRole('menuitem', { name: 'Export Project' })).toHaveAttribute(
         'aria-disabled',
@@ -378,6 +381,35 @@ describe('greenfield editor', () => {
         'aria-disabled',
         'true',
       )
+    },
+  )
+
+  it.each([
+    { format: 'png', selected: ['page-3', 'page'], expected: ['page-3', 'page'] },
+    { format: 'psd', selected: ['page-3', 'page'], expected: ['page-3', 'page'] },
+    { format: 'png', selected: [], expected: ['page'] },
+    { format: 'psd', selected: [], expected: ['page'] },
+    { format: 'cbz', selected: ['page-3'], expected: null },
+  ] as const)(
+    'exports $format with the intended page scope',
+    async ({ format, selected, expected }) => {
+      const user = userEvent.setup()
+      installProject()
+      const firstPage = queryClient.getQueryData<PageSummary[]>(pagesKey)![0]
+      queryClient.setQueryData(pagesKey, [
+        firstPage,
+        { ...firstPage, id: 'page-2', label: 'Page 2' },
+        { ...firstPage, id: 'page-3', label: 'Page 3' },
+      ])
+      useKoharuStore.setState({ selectedPages: [...selected] })
+      const exportProject = vi.spyOn(commands, 'export').mockResolvedValue(null)
+      render(<TitleBar />)
+
+      await user.click(screen.getByRole('menuitem', { name: 'File' }))
+      await user.hover(await screen.findByRole('menuitem', { name: 'Export Project' }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: `${format.toUpperCase()}…` }))
+
+      await waitFor(() => expect(exportProject).toHaveBeenCalledExactlyOnceWith(format, expected))
     },
   )
 
