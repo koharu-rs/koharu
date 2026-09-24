@@ -158,6 +158,36 @@ export function hitTestLayers(
   return null
 }
 
+export function frameInsideRect(
+  frame: Frame,
+  rect: { x: number; y: number; width: number; height: number },
+): boolean {
+  const centerX = frame.x + frame.width * 0.5
+  const centerY = frame.y + frame.height * 0.5
+  const angle = (frame.angle_degrees * Math.PI) / 180
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+
+  const corners = [
+    { x: -frame.width * 0.5, y: -frame.height * 0.5 },
+    { x: frame.width * 0.5, y: -frame.height * 0.5 },
+    { x: frame.width * 0.5, y: frame.height * 0.5 },
+    { x: -frame.width * 0.5, y: frame.height * 0.5 },
+  ]
+
+  return corners.every((corner) => {
+    const x = centerX + corner.x * cos - corner.y * sin
+    const y = centerY + corner.x * sin + corner.y * cos
+
+    return (
+      x >= rect.x &&
+      x <= rect.x + rect.width &&
+      y >= rect.y &&
+      y <= rect.y + rect.height
+    )
+  })
+}
+
 export function frameContains(frame: Frame, point: Point): boolean {
   const centerX = frame.x + frame.width * 0.5
   const centerY = frame.y + frame.height * 0.5
