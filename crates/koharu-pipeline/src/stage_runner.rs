@@ -161,6 +161,15 @@ fn is_out_of_memory(error: &anyhow::Error) -> bool {
         message.contains("out of memory")
             || message.contains("cuda_error_out_of_memory")
             || message.contains("not enough memory")
+            // llama.cpp reports an exhausted device budget through its C API as a
+            // null handle, and the MSVC STL surfaces the failed allocation as a
+            // bounds violation instead. Neither names memory, so an unrecognized
+            // failure here would skip recovery and abort a stage that a retry
+            // after unloading the other resident models would complete.
+            || message.contains("null result from llama.cpp")
+            || message.contains("invalid vector subscript")
+            || message.contains("failed to allocate")
+            || message.contains("unable to allocate")
     })
 }
 
