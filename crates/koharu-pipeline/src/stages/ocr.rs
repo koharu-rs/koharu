@@ -262,8 +262,32 @@ fn normalize_ocr_text(text: String) -> String {
     {
         "…".to_owned()
     } else {
-        text
+        normalize_ellipsis(&text)
     }
+}
+
+/// Baberu reads a manga ellipsis as a full-width colon (「あ：あなた？」) or as
+/// a run of full-width periods, and translators then render "A: Cariño" or
+/// "Favor: ve a comprarlos". Japanese dialogue has no use for a full-width
+/// colon, so both become the ellipsis they stand for.
+fn normalize_ellipsis(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut run = 0;
+    for character in text.chars() {
+        if matches!(character, '：' | '．') {
+            run += 1;
+            continue;
+        }
+        if run > 0 {
+            normalized.push('…');
+            run = 0;
+        }
+        normalized.push(character);
+    }
+    if run > 0 {
+        normalized.push('…');
+    }
+    normalized
 }
 
 fn crop(source: &DynamicImage, geometry: &Geometry) -> Result<DynamicImage> {
