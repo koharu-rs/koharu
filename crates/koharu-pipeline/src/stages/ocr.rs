@@ -318,4 +318,11 @@ mod tests {
         assert_eq!(normalize_ocr_text("待って…".to_owned()), "待って…");
         assert_eq!(normalize_ocr_text("☐".to_owned()), "☐");
     }
+
+    #[test]
+    fn full_width_colons_and_periods_are_an_ellipsis() {
+        assert_eq!(normalize_ocr_text("あ：あなた？".to_owned()), "あ…あなた？");
+        assert_eq!(normalize_ocr_text("そんな．．．".to_owned()), "そんな…");
+        assert_eq!(normalize_ocr_text("：：待って".to_owned()), "…待って");
+    }
 }
