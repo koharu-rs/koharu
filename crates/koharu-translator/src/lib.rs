@@ -8,6 +8,7 @@ mod model;
 mod prompt;
 mod provider;
 mod remote;
+mod repair;
 
 use std::{sync::Arc, time::Duration};
 
@@ -21,6 +22,9 @@ pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
 pub use provider::{Provider, ProviderConfig, ProvidersConfig};
+
+/// How many times misaligned segments are asked for again.
+const REPAIR_ATTEMPTS: u32 = 2;
 
 #[derive(Clone)]
 pub struct Translator {
@@ -136,15 +140,82 @@ impl Translator {
             request.remove_image();
         }
 
+        let mut translated = self.dispatch(selection, generation, &request).await?;
+        if matches!(
+            provider,
+            Provider::DeepL | Provider::GoogleCloudTranslation | Provider::Caiyun
+        ) {
+            // Machine translation returns one result per segment; it cannot
+            // misalign them.
+            tracing::Span::current().record("outcome", "completed");
+            return Ok((provider_id, translated));
+        }
+
+        let suspects = repair::suspects(&request.segments, &translated);
+        if !suspects.is_empty() {
+            tracing::warn!(
+                provider = provider_id,
+                segments = suspects.len(),
+                "translation looks cut off or shifted; asking again for each of those segments"
+            );
+        }
+        // Each suspect goes alone: a model that split a sentence across two ids
+        // does it again when handed the same batch, but with one segment there
+        // is no neighbour to push the rest into. The segments that came back
+        // whole, and those already repaired, travel as context to keep the
+        // scene.
+        let mut repaired = vec![false; translated.len()];
+        for &index in &suspects {
+            let mut retry = request.clone();
+            retry.segments = vec![request.segments[index].clone()];
+            retry.context.extend(
+                (0..request.segments.len())
+                    .filter(|&other| {
+                        other != index && (repaired[other] || !suspects.contains(&other))
+                    })
+                    .map(|other| TranslationContext {
+                        source: request.segments[other].clone(),
+                        translation: translated[other].clone(),
+                    }),
+            );
+            for _ in 0..REPAIR_ATTEMPTS {
+                match self.dispatch(selection, generation, &retry).await {
+                    Ok(mut retried) => {
+                        let text = retried.remove(0);
+                        if repair::acceptable(&request.segments[index], &text) {
+                            translated[index] = text;
+                            repaired[index] = true;
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(provider = provider_id, "retry failed: {error:#}");
+                        break;
+                    }
+                }
+            }
+        }
+        tracing::Span::current().record("outcome", "completed");
+        Ok((provider_id, translated))
+    }
+
+    /// One request to the selected provider, checked for a reply per segment.
+    async fn dispatch(
+        &self,
+        selection: &ModelSelection,
+        generation: GenerationConfig,
+        request: &TranslationRequest,
+    ) -> anyhow::Result<Vec<String>> {
+        let provider_id: &'static str = selection.provider.into();
         let expected = request.segments.len();
-        let translated = if provider == Provider::Local {
+        let translated = if selection.provider == Provider::Local {
             self.local(selection)
                 .await?
-                .translate(request, generation)
+                .translate(request.clone(), generation)
                 .await?
         } else {
             let providers = self.providers.read()?.clone();
-            remote::translate(&self.client, &providers, selection, &generation, &request).await?
+            remote::translate(&self.client, &providers, selection, &generation, request).await?
         };
         if translated.len() != expected {
             return Err(Error::SegmentCount {
@@ -154,8 +225,7 @@ impl Translator {
             }
             .into());
         }
-        tracing::Span::current().record("outcome", "completed");
-        Ok((provider_id, translated))
+        Ok(translated)
     }
 
     #[tracing::instrument(skip_all)]
