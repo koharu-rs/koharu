@@ -149,7 +149,7 @@ impl Model {
             }
             Self::Baberu(model) => {
                 infer_text(model.clone(), targets, |model, image| {
-                    model.inference(image)
+                    Ok(normalize_ellipsis(&model.inference(image)?))
                 })
                 .await?
             }
@@ -262,30 +262,40 @@ fn normalize_ocr_text(text: String) -> String {
     {
         "…".to_owned()
     } else {
-        normalize_ellipsis(&text)
+        text
     }
 }
 
 /// Baberu reads a manga ellipsis as a full-width colon (「あ：あなた？」) or as
 /// a run of full-width periods, and translators then render "A: Cariño" or
-/// "Favor: ve a comprarlos". Japanese dialogue has no use for a full-width
-/// colon, so both become the ellipsis they stand for.
+/// "Favor: ve a comprarlos". Only Baberu's output goes through this: other
+/// models, PaddleOCR-VL among them, read Chinese, where "：" and "．" are real
+/// punctuation. Between two digits (12：00, 3．5) they are kept as well.
 fn normalize_ellipsis(text: &str) -> String {
+    let characters = text.chars().collect::<Vec<_>>();
+    let is_digit = |index: Option<usize>| {
+        index
+            .and_then(|index| characters.get(index))
+            .is_some_and(|character| character.is_ascii_digit() || matches!(character, '０'..='９'))
+    };
     let mut normalized = String::with_capacity(text.len());
-    let mut run = 0;
-    for character in text.chars() {
-        if matches!(character, '：' | '．') {
-            run += 1;
+    let mut start = 0;
+    while start < characters.len() {
+        if !matches!(characters[start], '：' | '．') {
+            normalized.push(characters[start]);
+            start += 1;
             continue;
         }
-        if run > 0 {
+        let end = characters[start..]
+            .iter()
+            .position(|character| !matches!(character, '：' | '．'))
+            .map_or(characters.len(), |length| start + length);
+        if is_digit(start.checked_sub(1)) && is_digit(Some(end)) {
+            normalized.extend(&characters[start..end]);
+        } else {
             normalized.push('…');
-            run = 0;
         }
-        normalized.push(character);
-    }
-    if run > 0 {
-        normalized.push('…');
+        start = end;
     }
     normalized
 }
@@ -305,7 +315,7 @@ fn crop(source: &DynamicImage, geometry: &Geometry) -> Result<DynamicImage> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_ocr_text;
+    use super::{normalize_ellipsis, normalize_ocr_text};
 
     #[test]
     fn repeated_placeholder_glyphs_are_an_ellipsis() {
@@ -320,9 +330,32 @@ mod tests {
     }
 
     #[test]
-    fn full_width_colons_and_periods_are_an_ellipsis() {
-        assert_eq!(normalize_ocr_text("あ：あなた？".to_owned()), "あ…あなた？");
-        assert_eq!(normalize_ocr_text("そんな．．．".to_owned()), "そんな…");
-        assert_eq!(normalize_ocr_text("：：待って".to_owned()), "…待って");
+    fn baberu_full_width_colons_and_periods_are_an_ellipsis() {
+        assert_eq!(normalize_ellipsis("あ：あなた？"), "あ…あなた？");
+        assert_eq!(normalize_ellipsis("そんな．．．"), "そんな…");
+        assert_eq!(normalize_ellipsis("：：待って"), "…待って");
+    }
+
+    #[test]
+    fn full_width_punctuation_between_digits_is_kept() {
+        assert_eq!(normalize_ellipsis("12：00"), "12：00");
+        assert_eq!(normalize_ellipsis("３．５倍"), "３．５倍");
+        assert_eq!(normalize_ellipsis("3．5倍"), "3．5倍");
+        // Only the colon between digits is protected; the one after a word is not.
+        assert_eq!(normalize_ellipsis("时间：12：00"), "时间…12：00");
+        assert_eq!(normalize_ellipsis("12："), "12…");
+    }
+
+    #[test]
+    fn other_models_keep_full_width_punctuation() {
+        // Only Baberu's output is passed through normalize_ellipsis; every
+        // model, PaddleOCR-VL included, goes through normalize_ocr_text.
+        for text in ["老师：你好", "时间：12：00", "3．5倍"] {
+            assert_eq!(normalize_ocr_text(text.to_owned()), text);
+        }
+        assert_eq!(
+            normalize_ocr_text("あ：あなた？".to_owned()),
+            "あ：あなた？"
+        );
     }
 }
