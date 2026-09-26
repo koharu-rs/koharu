@@ -165,6 +165,7 @@ impl Translator {
         // whole, and those already repaired, travel as context to keep the
         // scene.
         let mut repaired = vec![false; translated.len()];
+        let mut retry_requests = 0_u32;
         for &index in &suspects {
             let mut retry = request.clone();
             retry.segments = vec![request.segments[index].clone()];
@@ -179,6 +180,7 @@ impl Translator {
                     }),
             );
             for _ in 0..REPAIR_ATTEMPTS {
+                retry_requests += 1;
                 match self.dispatch(selection, generation, &retry).await {
                     Ok(mut retried) => {
                         let text = retried.remove(0);
@@ -195,6 +197,16 @@ impl Translator {
                 }
             }
         }
+        // One line per request (a page), so the cost of the repair can be
+        // measured over a batch: retry_requests is the number of extra calls.
+        tracing::info!(
+            provider = provider_id,
+            segments = request.segments.len(),
+            suspects = suspects.len(),
+            retry_requests,
+            repaired = repaired.iter().filter(|&&done| done).count(),
+            "translation repair"
+        );
         tracing::Span::current().record("outcome", "completed");
         Ok((provider_id, translated))
     }
