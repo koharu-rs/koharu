@@ -23,6 +23,25 @@ pub fn media_marker() -> &'static str {
     koharu_llama::mtmd::mtmd_default_marker()
 }
 
+/// Whether `error` carries llama.cpp's null handle from loading a model or creating
+/// its context. llama.cpp reports an exhausted device budget this way, without any
+/// message that names memory. Other null results, such as a failed chat template,
+/// are not allocation failures and are not matched.
+#[must_use]
+pub fn is_allocation_failure(error: &anyhow::Error) -> bool {
+    use koharu_llama::{LlamaContextLoadError, LlamaModelLoadError};
+
+    error.chain().any(|source| {
+        matches!(
+            source.downcast_ref::<LlamaModelLoadError>(),
+            Some(LlamaModelLoadError::NullResult)
+        ) || matches!(
+            source.downcast_ref::<LlamaContextLoadError>(),
+            Some(LlamaContextLoadError::NullReturn)
+        )
+    })
+}
+
 /// A loaded GGUF language model with optional multimodal support.
 #[derive(Debug)]
 pub struct Llm {
