@@ -14,10 +14,27 @@ use crate::{
 
 const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
+/// How the endpoint is asked for structured output.
+///
+/// OpenAI-compatible servers differ here: some implement only `json_object`,
+/// and some reject `json_schema` outright, so the shape has to be selectable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum StructuredOutput {
+    /// OpenAI's `json_schema` response format.
+    #[default]
+    JsonSchema,
+    /// The `json_object` response format.
+    JsonObject,
+    /// Send no `response_format` at all.
+    Disabled,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(default)]
 pub struct OpenAiCompatibleConfig {
     pub base_url: Option<Url>,
+    pub structured_output: StructuredOutput,
 }
 
 impl Default for OpenAiCompatibleConfig {
@@ -26,6 +43,7 @@ impl Default for OpenAiCompatibleConfig {
             base_url: Some(
                 Url::parse(DEFAULT_BASE_URL).expect("default OpenAI-compatible URL is valid"),
             ),
+            structured_output: StructuredOutput::default(),
         }
     }
 }
@@ -70,14 +88,7 @@ pub(super) async fn translate(
         reasoning_effort: generation
             .reasoning
             .map(|enabled| if enabled { "medium" } else { "none" }),
-        response_format: ResponseFormat {
-            kind: "json_schema",
-            json_schema: JsonSchema {
-                name: "manga_translation",
-                strict: true,
-                schema: prompt::output_schema(request.segments.len()),
-            },
-        },
+        response_format: response_format(config, request.segments.len()),
     };
     let http = client
         .post(endpoint(config.base_url.as_ref(), "chat/completions"))
@@ -133,6 +144,23 @@ fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
     )
 }
 
+fn response_format(config: &OpenAiCompatibleConfig, segments: usize) -> Option<ResponseFormat> {
+    match config.structured_output {
+        StructuredOutput::JsonSchema => Some(ResponseFormat::JsonSchema(JsonSchemaFormat {
+            kind: "json_schema",
+            json_schema: JsonSchema {
+                name: "manga_translation",
+                strict: true,
+                schema: prompt::output_schema(segments),
+            },
+        })),
+        StructuredOutput::JsonObject => Some(ResponseFormat::JsonObject(JsonObjectFormat {
+            kind: "json_object",
+        })),
+        StructuredOutput::Disabled => None,
+    }
+}
+
 #[derive(Serialize)]
 struct ChatRequest<'a> {
     model: &'a str,
@@ -149,14 +177,28 @@ struct ChatRequest<'a> {
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
-    response_format: ResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ResponseFormat>,
 }
 
 #[derive(Serialize)]
-struct ResponseFormat {
+#[serde(untagged)]
+enum ResponseFormat {
+    JsonSchema(JsonSchemaFormat),
+    JsonObject(JsonObjectFormat),
+}
+
+#[derive(Serialize)]
+struct JsonSchemaFormat {
     #[serde(rename = "type")]
     kind: &'static str,
     json_schema: JsonSchema,
+}
+
+#[derive(Serialize)]
+struct JsonObjectFormat {
+    #[serde(rename = "type")]
+    kind: &'static str,
 }
 
 #[derive(Serialize)]
@@ -220,18 +262,8 @@ struct ListedModel {
 mod tests {
     use super::*;
 
-    #[test]
-    fn endpoint_preserves_base_path() {
-        let url = Url::parse("http://localhost:1234/v1").unwrap();
-        assert_eq!(
-            endpoint(Some(&url), "models"),
-            "http://localhost:1234/v1/models"
-        );
-    }
-
-    #[test]
-    fn serializes_compatible_request_contract() {
-        let body = ChatRequest {
+    fn chat_request(response_format: Option<ResponseFormat>) -> ChatRequest<'static> {
+        ChatRequest {
             model: "model",
             messages: [
                 Message {
@@ -249,16 +281,26 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             reasoning_effort: Some("none"),
-            response_format: ResponseFormat {
-                kind: "json_schema",
-                json_schema: JsonSchema {
-                    name: "manga_translation",
-                    strict: true,
-                    schema: prompt::output_schema(2),
-                },
-            },
-        };
-        let value = serde_json::to_value(body).unwrap();
+            response_format,
+        }
+    }
+
+    #[test]
+    fn endpoint_preserves_base_path() {
+        let url = Url::parse("http://localhost:1234/v1").unwrap();
+        assert_eq!(
+            endpoint(Some(&url), "models"),
+            "http://localhost:1234/v1/models"
+        );
+    }
+
+    #[test]
+    fn serializes_compatible_request_contract() {
+        let value = serde_json::to_value(chat_request(response_format(
+            &OpenAiCompatibleConfig::default(),
+            2,
+        )))
+        .unwrap();
 
         assert_eq!(value["max_tokens"], 1024);
         assert_eq!(value["reasoning_effort"], "none");
@@ -267,6 +309,46 @@ mod tests {
         assert_eq!(
             value["response_format"]["json_schema"]["schema"]["properties"]["translations"]["maxItems"],
             2
+        );
+    }
+
+    #[test]
+    fn serializes_json_object_response_format() {
+        let config = OpenAiCompatibleConfig {
+            structured_output: StructuredOutput::JsonObject,
+            ..OpenAiCompatibleConfig::default()
+        };
+        let value = serde_json::to_value(chat_request(response_format(&config, 2))).unwrap();
+
+        assert_eq!(
+            value["response_format"],
+            serde_json::json!({ "type": "json_object" })
+        );
+    }
+
+    #[test]
+    fn omits_response_format_when_disabled() {
+        let config = OpenAiCompatibleConfig {
+            structured_output: StructuredOutput::Disabled,
+            ..OpenAiCompatibleConfig::default()
+        };
+        let value = serde_json::to_value(chat_request(response_format(&config, 2))).unwrap();
+
+        assert!(value.get("response_format").is_none());
+    }
+
+    #[test]
+    fn existing_settings_keep_the_json_schema_default() {
+        let config: OpenAiCompatibleConfig =
+            serde_json::from_value(serde_json::json!({ "base_url": "http://localhost:11434/v1" }))
+                .unwrap();
+
+        assert_eq!(
+            config,
+            OpenAiCompatibleConfig {
+                base_url: Some(Url::parse("http://localhost:11434/v1").unwrap()),
+                structured_output: StructuredOutput::JsonSchema,
+            }
         );
     }
 

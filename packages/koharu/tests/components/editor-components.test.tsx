@@ -1516,6 +1516,43 @@ describe('greenfield editor', () => {
     })
   })
 
+  it('selects the structured output mode for a compatible endpoint', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const providers = {
+      entries: [
+        {
+          name: 'OpenAI-compatible',
+          config: {
+            provider: 'openai-compatible' as const,
+            settings: {
+              base_url: 'http://localhost:11434/v1',
+              structured_output: 'json_schema' as const,
+            },
+          },
+          credential: { configured: false, value: null, clear: false },
+        },
+      ],
+    }
+    render(<ProviderPreferences value={providers} onChange={onChange} />)
+
+    const select = screen.getByRole('combobox', { name: 'Structured output' })
+    expect(select).toHaveTextContent('JSON schema')
+
+    await user.click(select)
+    await user.click(await screen.findByRole('option', { name: 'JSON object' }))
+
+    expect(onChange).toHaveBeenCalledWith({
+      entries: [
+        expect.objectContaining({
+          config: expect.objectContaining({
+            settings: expect.objectContaining({ structured_output: 'json_object' }),
+          }),
+        }),
+      ],
+    })
+  })
+
   it('preserves a credential draft and focus when autosave finishes', async () => {
     installProject()
     const user = userEvent.setup()

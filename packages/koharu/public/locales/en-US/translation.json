@@ -415,6 +415,12 @@
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",
       "notConfigured": "Not configured",
+      "structuredOutput": "Structured output",
+      "structuredOutputModes": {
+        "json_schema": "JSON schema",
+        "json_object": "JSON object",
+        "disabled": "Disabled"
+      },
       "title": "Providers"
     },
     "shortcuts": {

@@ -415,6 +415,12 @@
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
       "notConfigured": "설정 안 됨",
+      "structuredOutput": "구조화된 출력",
+      "structuredOutputModes": {
+        "json_schema": "JSON 스키마",
+        "json_object": "JSON 객체",
+        "disabled": "사용 안 함"
+      },
       "title": "제공자"
     },
     "shortcuts": {

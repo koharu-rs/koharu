@@ -415,6 +415,12 @@
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecta proveedores de traducción y modelos de lenguaje.",
       "notConfigured": "Sin configurar",
+      "structuredOutput": "Salida estructurada",
+      "structuredOutputModes": {
+        "json_schema": "Esquema JSON",
+        "json_object": "Objeto JSON",
+        "disabled": "Desactivado"
+      },
       "title": "Proveedores"
     },
     "shortcuts": {

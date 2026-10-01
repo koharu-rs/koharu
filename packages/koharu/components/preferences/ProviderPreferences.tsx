@@ -15,9 +15,17 @@ import type {
   ProviderConfig,
   ProviderPreference,
   ProviderPreferences as ProviderSettings,
+  StructuredOutput,
 } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@koharu/ui/components/select'
 
 type ConfigWithSetting<T, Key extends PropertyKey> = T extends { settings: infer Settings }
   ? Key extends keyof Settings
@@ -28,6 +36,13 @@ type ConfigWithSetting<T, Key extends PropertyKey> = T extends { settings: infer
   : never
 
 type BaseUrlConfig = ConfigWithSetting<ProviderConfig, 'base_url'>
+type StructuredOutputConfig = ConfigWithSetting<ProviderConfig, 'structured_output'>
+
+const structuredOutputs = [
+  'json_schema',
+  'json_object',
+  'disabled',
+] as const satisfies ReadonlyArray<StructuredOutput>
 
 export function ProviderPreferences({
   value,
@@ -71,6 +86,20 @@ export function ProviderPreferences({
                       replaceEntry(value, {
                         ...entry,
                         config: withBaseUrl(entry.config, base_url),
+                      }),
+                    )
+                  }
+                />
+              )}
+              {hasStructuredOutput(entry.config) && (
+                <StructuredOutputField
+                  label={t('settings.providers.structuredOutput')}
+                  value={entry.config.settings.structured_output ?? 'json_schema'}
+                  onChange={(structured_output) =>
+                    onChange(
+                      replaceEntry(value, {
+                        ...entry,
+                        config: withStructuredOutput(entry.config, structured_output),
                       }),
                     )
                   }
@@ -148,8 +177,55 @@ function isConfigurable(entry: ProviderPreference): boolean {
   return entry.credential !== null || hasBaseUrl(entry.config)
 }
 
+function StructuredOutputField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: StructuredOutput
+  onChange: (value: StructuredOutput) => void
+}) {
+  const { t } = useTranslation()
+  const inputId = useId()
+  return (
+    <div className='grid gap-1'>
+      <label htmlFor={inputId} className='text-[10px] text-muted-foreground'>
+        {label}
+      </label>
+      <Select
+        value={value}
+        items={Object.fromEntries(
+          structuredOutputs.map((mode) => [
+            mode,
+            t(`settings.providers.structuredOutputModes.${mode}`),
+          ]),
+        )}
+        onValueChange={(mode) => {
+          if (mode) onChange(mode as StructuredOutput)
+        }}
+      >
+        <SelectTrigger id={inputId} className='h-8 w-full text-[12px]'>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {structuredOutputs.map((mode) => (
+            <SelectItem key={mode} value={mode}>
+              {t(`settings.providers.structuredOutputModes.${mode}`)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 function hasBaseUrl(config: ProviderConfig): config is BaseUrlConfig {
   return 'base_url' in config.settings
+}
+
+function hasStructuredOutput(config: ProviderConfig): config is StructuredOutputConfig {
+  return 'structured_output' in config.settings
 }
 
 function withBaseUrl(config: ProviderConfig, base_url: string): ProviderConfig {
@@ -157,6 +233,17 @@ function withBaseUrl(config: ProviderConfig, base_url: string): ProviderConfig {
   return {
     ...config,
     settings: { ...config.settings, base_url: base_url || null },
+  } as ProviderConfig
+}
+
+function withStructuredOutput(
+  config: ProviderConfig,
+  structured_output: StructuredOutput,
+): ProviderConfig {
+  if (!hasStructuredOutput(config)) return config
+  return {
+    ...config,
+    settings: { ...config.settings, structured_output },
   } as ProviderConfig
 }
 

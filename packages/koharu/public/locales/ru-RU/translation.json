@@ -415,6 +415,12 @@
       "credentialLabel": "Учётные данные {{provider}}",
       "description": "Подключите провайдеров перевода и языковых моделей.",
       "notConfigured": "Не настроено",
+      "structuredOutput": "Структурированный вывод",
+      "structuredOutputModes": {
+        "json_schema": "Схема JSON",
+        "json_object": "Объект JSON",
+        "disabled": "Отключено"
+      },
       "title": "Провайдеры"
     },
     "shortcuts": {
