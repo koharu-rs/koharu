@@ -16,7 +16,7 @@ import { TitleBar } from '@/components/app/TitleBar'
 import { WindowControls } from '@/components/app/WindowChrome'
 import { ActivityCenter } from '@/components/editor/ActivityCenter'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
-import { Inspector } from '@/components/editor/Inspector'
+import { Inspector, isDescendant, isValidDrop } from '@/components/editor/Inspector'
 import { PageRail } from '@/components/editor/PageRail'
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
 import { StatusBar } from '@/components/editor/StatusBar'
@@ -990,6 +990,92 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset to auto fit' }))
 
     await waitFor(() => expect(reset).toHaveBeenCalledWith([{ layer: 'element', points: null }]))
+  })
+
+  it('supports drag and drop reordering of layers', async () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        {
+          ...textLayer,
+          id: 'element1',
+          content: { ...textLayer.content, translation: { text: 'Layer 1', language: null } },
+        },
+        {
+          ...textLayer,
+          id: 'element2',
+          content: { ...textLayer.content, translation: { text: 'Layer 2', language: null } },
+        },
+      ],
+    }))
+
+    const moveLayer = vi.spyOn(commands, 'moveLayer').mockResolvedValue({
+      id: 'page',
+      label: 'Page 1',
+      size: { width: 1000, height: 1500 },
+      layers: [],
+      regions: [],
+    })
+
+    render(<Inspector />)
+
+    const moveDownButton = screen.getByRole('button', { name: 'Move Layer 2 down', hidden: true })
+    fireEvent.click(moveDownButton)
+
+    await waitFor(() => {
+      expect(moveLayer).toHaveBeenCalledWith('element2', 'page', 0)
+    })
+  })
+
+  it('correctly validates layer hierarchy and drop targets', () => {
+    const parentGroup: Layer = {
+      type: 'group',
+      id: 'group1',
+      parent: 'page',
+      name: 'Group 1',
+      visibility: { visible: true, opacity: 1 },
+      role: 'text',
+    }
+    const childText: Layer = {
+      ...textLayer,
+      id: 'childText',
+      parent: 'group1',
+    }
+    const grandChildText: Layer = {
+      ...textLayer,
+      id: 'grandChildText',
+      parent: 'childText',
+    }
+    const nonTextLayer: Layer = {
+      type: 'image',
+      id: 'image1',
+      parent: 'page',
+      geometry: { points: [] },
+      visibility: { visible: true, opacity: 1 },
+      image: 'image1.png',
+    }
+
+    const map = new Map<string, Layer>([
+      ['group1', parentGroup],
+      ['childText', childText],
+      ['grandChildText', grandChildText],
+      ['image1', nonTextLayer],
+    ])
+
+    // Descendant validation
+    expect(isDescendant(map, 'group1', 'grandChildText')).toBe(true)
+    expect(isDescendant(map, 'grandChildText', 'group1')).toBe(false)
+
+    // Cannot drop parent into its own descendant
+    expect(isValidDrop(map, 'group1', 'grandChildText', 'inside', 'page')).toBe(false)
+    expect(isValidDrop(map, 'group1', 'childText', 'after', 'page')).toBe(false)
+
+    // Cannot drop non-text layer into a text group
+    expect(isValidDrop(map, 'image1', 'group1', 'inside', 'page')).toBe(false)
+
+    // Can drop text layer into text group
+    expect(isValidDrop(map, 'childText', 'group1', 'inside', 'page')).toBe(true)
   })
 
   it('shows zoom before page size without a fit control', () => {
