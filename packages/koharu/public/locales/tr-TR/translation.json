@@ -415,6 +415,12 @@
       "credentialLabel": "{{provider}} kimlik bilgisi",
       "description": "Çeviri ve dil modeli sağlayıcılarını bağlayın.",
       "notConfigured": "Yapılandırılmadı",
+      "structuredOutput": "Yapılandırılmış çıktı",
+      "structuredOutputModes": {
+        "json_schema": "JSON şeması",
+        "json_object": "JSON nesnesi",
+        "disabled": "Devre dışı"
+      },
       "title": "Sağlayıcılar"
     },
     "shortcuts": {

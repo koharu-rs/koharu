@@ -415,6 +415,12 @@
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",
       "notConfigured": "未設定",
+      "structuredOutput": "構造化出力",
+      "structuredOutputModes": {
+        "json_schema": "JSON スキーマ",
+        "json_object": "JSON オブジェクト",
+        "disabled": "無効"
+      },
       "title": "プロバイダー"
     },
     "shortcuts": {

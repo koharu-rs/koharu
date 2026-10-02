@@ -415,6 +415,12 @@
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
       "notConfigured": "未設定",
+      "structuredOutput": "結構化輸出",
+      "structuredOutputModes": {
+        "json_schema": "JSON 結構描述",
+        "json_object": "JSON 物件",
+        "disabled": "停用"
+      },
       "title": "提供者"
     },
     "shortcuts": {

@@ -415,6 +415,12 @@
       "credentialLabel": "{{provider}} 凭据",
       "description": "连接翻译和语言模型提供商。",
       "notConfigured": "未配置",
+      "structuredOutput": "结构化输出",
+      "structuredOutputModes": {
+        "json_schema": "JSON 架构",
+        "json_object": "JSON 对象",
+        "disabled": "禁用"
+      },
       "title": "提供商"
     },
     "shortcuts": {

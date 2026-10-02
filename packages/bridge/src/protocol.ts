@@ -340,6 +340,7 @@ export type OcrModel = { model: "paddleocr-vl-1.6" } | { model: "manga-ocr" } | 
 
 export type OpenAiCompatibleConfig = {
 	base_url?: string | null,
+	structured_output?: StructuredOutput,
 };
 
 export type OpenAiConfig = Record<string, never>;
@@ -473,6 +474,20 @@ export type StartupState = {
 	jobs: Job[],
 	canvas: CanvasState,
 };
+
+/**
+ *  How the endpoint is asked for structured output.
+ * 
+ *  OpenAI-compatible servers differ here: some implement only `json_object`,
+ *  and some reject `json_schema` outright, so the shape has to be selectable.
+ */
+export type StructuredOutput = 
+/**  OpenAI's `json_schema` response format. */
+"json_schema" | 
+/**  The `json_object` response format. */
+"json_object" | 
+/**  Send no `response_format` at all. */
+"disabled";
 
 export type TextAlignment = "Start" | "Center" | "End" | "Justify";
 
