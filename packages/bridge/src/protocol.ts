@@ -264,6 +264,11 @@ export type InpaintingModel = { model: "lama" } | { model: "aot-inpainting" } | 
 	model: "rorem-mixed",
 } & RoremMixedConfig;
 
+export type InstructionPreset = {
+	name: string,
+	instructions: string,
+};
+
 export type Job = {
 	id: JobId,
 	state: JobState,
@@ -503,6 +508,7 @@ export type TranslationConfig = {
 	generation: GenerationConfig,
 	target_language: string,
 	instructions: string | null,
+	instruction_presets?: InstructionPreset[],
 };
 
 export type TypesettingConfig = {

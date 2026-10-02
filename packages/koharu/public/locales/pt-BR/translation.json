@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "Instruções de tradução",
     "instructionsPlaceholder": "Orientações opcionais sobre tom, nomes e formatação.",
+    "loadPreset": "Carregar predefinição",
     "targetLanguage": "Idioma de destino",
     "title": "Saída da tradução"
   },
@@ -434,9 +435,16 @@
     "title": "Configurações",
     "translation": {
       "description": "Escolha um modelo de qualquer provedor configurado e aplique um conjunto compartilhado de opções de tradução e geração.",
+      "deletePreset": "Excluir predefinição",
       "instructionsDescription": "Orientações de nomes, tom, terminologia ou formatação.",
       "instructionsLabel": "Instruções de tradução",
       "instructionsPlaceholder": "Orientações opcionais para todo o projeto",
+      "noPresets": "Nenhuma predefinição salva",
+      "presetName": "Nome da predefinição",
+      "presetNamePlaceholder": "Nome para as instruções atuais",
+      "presetsDescription": "Salve as instruções atuais com um nome e carregue-as depois.",
+      "savePreset": "Salvar",
+      "savedPresets": "Predefinições salvas",
       "model": "Modelo",
       "modelDescription": "Os rótulos de provedor indicam onde cada modelo é executado; as conexões são configuradas separadamente.",
       "modelQuantization": "Quantização do modelo",

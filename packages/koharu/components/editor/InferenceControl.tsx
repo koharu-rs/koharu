@@ -335,6 +335,7 @@ function RuntimeSelector({
           <OutputPicker
             targetLanguage={translation.target_language}
             instructions={translation.instructions}
+            presets={translation.instruction_presets ?? []}
             languages={languages}
             disabled={running}
             saving={savingOutput}

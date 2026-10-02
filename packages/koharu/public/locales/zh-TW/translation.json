@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "翻譯指示",
     "instructionsPlaceholder": "關於語氣、名稱和格式的選填說明。",
+    "loadPreset": "載入預設",
     "targetLanguage": "目標語言",
     "title": "翻譯輸出"
   },
@@ -434,9 +435,16 @@
     "title": "設定",
     "translation": {
       "description": "選擇任一已設定提供者的模型，然後套用一組共用的翻譯和產生選項。",
+      "deletePreset": "刪除預設",
       "instructionsDescription": "關於名稱、語氣、術語或格式的說明。",
       "instructionsLabel": "翻譯說明",
       "instructionsPlaceholder": "選用的專案層級說明",
+      "noPresets": "沒有已儲存的預設",
+      "presetName": "預設名稱",
+      "presetNamePlaceholder": "為目前的指示命名",
+      "presetsDescription": "將目前的指示儲存為命名預設，稍後可再載入。",
+      "savePreset": "儲存",
+      "savedPresets": "已儲存的預設",
       "model": "模型",
       "modelDescription": "提供者標籤表示各模型的執行位置；連線需另行設定。",
       "modelQuantization": "模型量化",

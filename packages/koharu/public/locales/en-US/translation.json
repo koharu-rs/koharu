@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "Translation instructions",
     "instructionsPlaceholder": "Optional guidance for tone, names, and formatting.",
+    "loadPreset": "Load preset",
     "targetLanguage": "Target language",
     "title": "Translation output"
   },
@@ -434,9 +435,16 @@
     "title": "Settings",
     "translation": {
       "description": "Choose any configured provider model, then apply one shared set of translation and generation options.",
+      "deletePreset": "Delete preset",
       "instructionsDescription": "Names, tone, terminology, or formatting guidance.",
       "instructionsLabel": "Translation instructions",
       "instructionsPlaceholder": "Optional project-wide guidance",
+      "noPresets": "No saved presets",
+      "presetName": "Preset name",
+      "presetNamePlaceholder": "Name for the current instructions",
+      "presetsDescription": "Save the current instructions under a name and load them later.",
+      "savePreset": "Save",
+      "savedPresets": "Saved presets",
       "model": "Model",
       "modelDescription": "Provider labels identify where each model runs; connections are configured separately.",
       "modelQuantization": "Model quantization",

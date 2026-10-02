@@ -303,6 +303,7 @@
   "outputPicker": {
     "instructions": "번역 지침",
     "instructionsPlaceholder": "말투, 이름, 서식에 관한 선택적 지침입니다.",
+    "loadPreset": "프리셋 불러오기",
     "targetLanguage": "대상 언어",
     "title": "번역 출력"
   },
@@ -434,9 +435,16 @@
     "title": "설정",
     "translation": {
       "description": "설정된 제공자의 모델을 선택하고 공통 번역 및 생성 옵션을 적용합니다.",
+      "deletePreset": "프리셋 삭제",
       "instructionsDescription": "이름, 어조, 용어 또는 서식 지침입니다.",
       "instructionsLabel": "번역 지침",
       "instructionsPlaceholder": "프로젝트 전체에 적용할 선택적 지침",
+      "noPresets": "저장된 프리셋이 없습니다",
+      "presetName": "프리셋 이름",
+      "presetNamePlaceholder": "현재 지침의 이름",
+      "presetsDescription": "현재 지침을 이름으로 저장하고 나중에 불러옵니다.",
+      "savePreset": "저장",
+      "savedPresets": "저장된 프리셋",
       "model": "모델",
       "modelDescription": "제공자 레이블은 각 모델의 실행 위치를 나타내며 연결은 별도로 설정합니다.",
       "modelQuantization": "모델 양자화",
