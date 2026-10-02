@@ -49,6 +49,7 @@ pub enum ExportFormat {
 pub(crate) async fn export(
     window: WebviewWindow<CefRuntime>,
     format: ExportFormat,
+    pages: Option<Vec<EntityId>>,
     project: State<'_, CurrentProject>,
     desktop: State<'_, Desktop>,
 ) -> std::result::Result<(), Error> {
@@ -57,10 +58,17 @@ pub(crate) async fn export(
         let project = project.as_ref().context("no project is open")?;
         (project.name.clone(), project.snapshot())
     };
-    let pages = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
+    let pages = match format {
+        ExportFormat::Cbz => snapshot.pages().map(|page| page.id()).collect(),
+        ExportFormat::Png | ExportFormat::Psd => pages.context("no pages to export")?,
+    };
     if pages.is_empty() {
         return Err(anyhow::anyhow!("there are no pages to export").into());
     }
+    for &page in &pages {
+        snapshot.page(page)?;
+    }
+
     let dialog = rfd::AsyncFileDialog::new().set_parent(&window);
     let destination = match format {
         ExportFormat::Png | ExportFormat::Psd => dialog.pick_folder().await,
