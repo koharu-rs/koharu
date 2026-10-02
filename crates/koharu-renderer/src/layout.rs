@@ -22,6 +22,11 @@ use crate::{
 };
 
 const HYPHENATION_MIN_WORD_LEN: usize = 5;
+/// How much larger hyphenated text must be before a balloon prefers it to
+/// text that keeps every word whole.
+const HYPHENATION_MIN_GAIN: f32 = 1.2;
+/// Texts with fewer words never trade a whole word for a larger font.
+const HYPHENATION_MIN_WORDS: usize = 4;
 const COMPACT_HYPHENATION_FRAGMENT_LEN: usize = 2;
 const LINE_BREAK_HYPHEN_PENALTY: f32 = 2_000.0;
 const LINE_BREAK_OVERFLOW_MULTIPLIER: f32 = 10_000.0;
@@ -397,24 +402,29 @@ impl<'a> TextLayout<'a> {
                     |size| unhyphenated.run_with_size(text, size),
                     fits,
                 )?;
-                // Avoiding a word break is no longer useful once it pins the text to
-                // the configured readability floor. Compare raster-size buckets so
-                // hyphenation must recover a visible pixel, not a tuned percentage.
-                if clean
-                    .as_ref()
-                    .is_some_and(|best| best.font_size.floor() > minimum.floor())
-                {
-                    return Ok(clean.unwrap());
-                }
                 let hyphenated = largest_fitting_font_size(
                     minimum,
                     maximum,
                     |size| self.run_with_size(text, size),
                     fits,
                 )?;
+                // Avoiding a word break is worth a smaller font, but not much
+                // smaller: in a narrow balloon one long word ("¿ESCUCHASTE") would
+                // otherwise set the size of the whole text and leave most of the
+                // balloon empty. A short line keeps its words whole: breaking one of
+                // two or three words reads worse than a smaller font. Once the text is
+                // pinned to the readability floor, any visible pixel recovered by
+                // hyphenating is worth it.
+                let at_floor = clean
+                    .as_ref()
+                    .is_none_or(|best| best.font_size.floor() <= minimum.floor());
+                let long_text = text.split_whitespace().count() >= HYPHENATION_MIN_WORDS;
                 match (clean, hyphenated) {
                     (Some(clean), Some(hyphenated))
-                        if hyphenated.font_size.floor() > clean.font_size.floor() =>
+                        if (at_floor && hyphenated.font_size.floor() > clean.font_size.floor())
+                            || (long_text
+                                && hyphenated.font_size
+                                    >= clean.font_size * HYPHENATION_MIN_GAIN) =>
                     {
                         return Ok(hyphenated);
                     }
@@ -2920,6 +2930,35 @@ mod tests {
             let after = text[lines[1].range.start..].chars().next();
             matches!((before, after), (Some(left), Some(right)) if left.is_alphabetic() && right.is_alphabetic())
         }));
+        Ok(())
+    }
+
+    #[test]
+    fn long_comic_text_hyphenates_when_one_word_would_shrink_it() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "¿Escuchaste lo que dijo? Hoy es un día peligrosísimo";
+        let layout = |policy| {
+            TextLayout::new(&font)
+                .with_max_font_size(80.0)
+                .with_min_font_size(8.0)
+                .with_hyphenation_language_tag("es")
+                .with_hyphenation_policy(policy)
+                .with_alignment(TextAlign::Center)
+                .with_max_width(90.0)
+                .with_max_height(400.0)
+                .with_comic_balloon(
+                    90.0,
+                    400.0,
+                    vec![(0.0, 0.0), (90.0, 0.0), (90.0, 400.0), (0.0, 400.0)],
+                    4.0,
+                )
+                .run(text)
+        };
+        let unhyphenated = layout(HyphenationPolicy::Disabled)?;
+        let hyphenated = layout(HyphenationPolicy::LastResort)?;
+
+        assert!(!hyphenated.overflowed());
+        assert!(hyphenated.font_size >= unhyphenated.font_size * HYPHENATION_MIN_GAIN);
         Ok(())
     }
 
