@@ -1698,7 +1698,9 @@ fn generate_anchors(spatial_shapes: &[(i64, i64)], device: Device, kind: Kind) -
     let finfo_max = match kind {
         Kind::Half => 65_504.0,
         Kind::Double => f64::MAX,
-        Kind::BFloat16 => 3.389_531_39e38,
+        // The exact bfloat16 maximum rounds past it on conversion and
+        // Torch refuses the fill, so stay just below.
+        Kind::BFloat16 => 3.38e38,
         _ => f32::MAX as f64,
     };
     let max = Tensor::full([1, total, 4], finfo_max, (kind, device));
