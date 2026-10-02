@@ -282,6 +282,7 @@ named_ffi_enum! {
         Flux2 = sys::FLUX2_SCHEDULER => "flux2",
         Flux = sys::FLUX_SCHEDULER => "flux",
         Beta = sys::BETA_SCHEDULER => "beta",
+        LladaImage = sys::LLADA_IMAGE_SCHEDULER => "llada_image",
         Auto = sys::SCHEDULER_COUNT => "auto"
     }
 }
@@ -303,6 +304,7 @@ named_ffi_enum! {
         FluxFlow = sys::FLUX_FLOW_PRED => "flux_flow",
         SefiFlow = sys::SEFI_FLOW_PRED => "sefi_flow",
         MiniT2iFlow = sys::MINIT2I_FLOW_PRED => "minit2i_flow",
+        SenseNovaU1Flow = sys::SENSENOVA_U1_FLOW_PRED => "sensenova_u1_flow",
         Auto = sys::PREDICTION_COUNT => "auto"
     }
 }

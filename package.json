@@ -5,7 +5,7 @@
   ],
   "scripts": {
     "tauri": "cargo tauri",
-    "postinstall": "cargo install tauri-cli --version =3.0.0-alpha.1 --locked",
+    "postinstall": "cargo install tauri-cli --git https://github.com/tauri-apps/tauri --rev a8703ee487c659efbebb27c799752d523a6d09a1 --locked",
     "predev": "kill-port 3000",
     "dev": "cargo tauri dev",
     "build": "cargo tauri build --no-bundle",
@@ -18,17 +18,16 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
-    "@types/node": "^26.5.0",
-    "git-cliff": "^2.13.1",
+    "@types/node": "^26.6.3",
+    "git-cliff": "^2.14.2",
     "kill-port": "^2.0.1",
-    "oxfmt": "^0.67.0",
+    "oxfmt": "^0.71.0",
     "playwright": "1.63.0",
     "sponsorkit": "^18.0.0",
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "@tauri-apps/api": "3.0.0-alpha.0",
     "react": "^19.3.0",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   }
 }

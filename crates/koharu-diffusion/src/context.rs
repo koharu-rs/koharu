@@ -113,6 +113,7 @@ impl Context {
         let _call = NativeCall::enter();
         let mut frames = RawImages::default();
         let mut audio = RawAudio::default();
+        let mut fps = 0;
         let succeeded = unsafe {
             sys::generate_video(
                 self.inner.pointer.as_ptr(),
@@ -120,15 +121,19 @@ impl Context {
                 &raw mut frames.pointer,
                 &raw mut frames.count,
                 &raw mut audio.pointer,
+                &raw mut fps,
             )
         };
         if !succeeded {
             return Err(Error::VideoGenerationFailed);
         }
-        let fps = u32::try_from(params.fps).map_err(|_| Error::InvalidParameter {
-            name: "fps",
-            reason: "must fit in an unsigned 32-bit integer",
-        })?;
+        let fps =
+            u32::try_from(fps)
+                .ok()
+                .filter(|fps| *fps > 0)
+                .ok_or(Error::InvalidNativeOutput {
+                    kind: "video frame rate",
+                })?;
         Ok(Video {
             frames: frames.copy("video frame")?,
             audio: audio.copy()?,
