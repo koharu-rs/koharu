@@ -156,12 +156,17 @@ struct AttemptFailure {
 }
 
 fn is_out_of_memory(error: &anyhow::Error) -> bool {
-    error.chain().any(|source| {
-        let message = source.to_string().to_ascii_lowercase();
-        message.contains("out of memory")
-            || message.contains("cuda_error_out_of_memory")
-            || message.contains("not enough memory")
-    })
+    // llama.cpp reports an exhausted device budget as a null model or context
+    // handle, which names no memory, so it is matched by type rather than text.
+    koharu_ml::llm::is_allocation_failure(error)
+        || error.chain().any(|source| {
+            let message = source.to_string().to_ascii_lowercase();
+            message.contains("out of memory")
+                || message.contains("cuda_error_out_of_memory")
+                || message.contains("not enough memory")
+                || message.contains("failed to allocate")
+                || message.contains("unable to allocate")
+        })
 }
 
 pub(crate) struct StageJob {
@@ -199,4 +204,72 @@ pub(crate) struct StageCompletion {
     pub(crate) model: String,
     pub(crate) elapsed: Duration,
     pub(crate) outcome: std::result::Result<StageOutcome, PipelineError>,
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Context;
+    use koharu_ml::llama::{
+        ApplyChatTemplateError, LlamaContextLoadError, LlamaCppError, LlamaModelLoadError,
+    };
+
+    use super::is_out_of_memory;
+
+    #[test]
+    fn model_load_null_result_is_out_of_memory() {
+        let error = anyhow::Error::new(LlamaModelLoadError::NullResult)
+            .context("failed to load GGUF model model.gguf")
+            .context("failed to load local translation model");
+        assert!(is_out_of_memory(&error));
+    }
+
+    #[test]
+    fn context_null_return_is_out_of_memory() {
+        let error: anyhow::Error = Err::<(), _>(LlamaContextLoadError::NullReturn)
+            .context("failed to create llama.cpp context")
+            .unwrap_err();
+        assert!(is_out_of_memory(&error));
+    }
+
+    #[test]
+    fn wrapped_llama_errors_are_out_of_memory() {
+        let error = anyhow::Error::new(LlamaCppError::from(LlamaContextLoadError::NullReturn));
+        assert!(is_out_of_memory(&error));
+        let error = anyhow::Error::new(LlamaCppError::from(LlamaModelLoadError::NullResult));
+        assert!(is_out_of_memory(&error));
+    }
+
+    #[test]
+    fn chat_template_null_result_is_not_out_of_memory() {
+        let error = anyhow::Error::new(ApplyChatTemplateError::NullResult)
+            .context("failed to render GGUF chat template");
+        assert!(!is_out_of_memory(&error));
+    }
+
+    #[test]
+    fn other_model_load_errors_are_not_out_of_memory() {
+        let error = anyhow::Error::new(LlamaModelLoadError::PathToStrError("model.gguf".into()));
+        assert!(!is_out_of_memory(&error));
+    }
+
+    #[test]
+    fn bounds_violation_is_not_out_of_memory() {
+        let error = anyhow::anyhow!("invalid vector subscript");
+        assert!(!is_out_of_memory(&error));
+    }
+
+    #[test]
+    fn messages_naming_memory_are_out_of_memory() {
+        for message in [
+            "CUDA error: out of memory",
+            "CUDA_ERROR_OUT_OF_MEMORY",
+            "not enough memory to complete the operation",
+            "ggml_backend: failed to allocate buffer",
+        ] {
+            assert!(
+                is_out_of_memory(&anyhow::anyhow!(message.to_owned())),
+                "{message}"
+            );
+        }
+    }
 }
