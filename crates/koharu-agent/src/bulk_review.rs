@@ -28,6 +28,20 @@ use crate::{
 /// batch together well beyond V2's fixed 5-page cap; big pages stay isolated.
 pub(crate) const BULK_INPUT_BUDGET_CHARS: usize = 20_000;
 
+/// Pages read at a time. This is the job's retention ceiling: one group of page
+/// payloads is alive at once, never the whole project, so a 200-page review does
+/// not trade context pressure for a large host-side serialization.
+const MAX_PAGES_PER_READ: usize = 24;
+
+/// Runaway guard for a single tool call from the model.
+const MAX_JOB_PAGES: usize = 500;
+
+/// The instruction is quoted back into every batch prompt, so it is capped.
+const MAX_INSTRUCTION_CHARS: usize = 4_000;
+
+/// Failed pages reported per job; the rest is only a count.
+const MAX_REPORTED_FAILURES: usize = 32;
+
 /// Per-volume overhead heuristic used when planning batches.
 const ESTIMATED_JSON_OVERHEAD_PER_ELEMENT: usize = 64;
 
@@ -316,78 +330,75 @@ pub(crate) fn estimate_text_size(summary: &PageTextSummary) -> usize {
         + summary.element_count * ESTIMATED_JSON_OVERHEAD_PER_ELEMENT
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PageTextSummary {
     pub(crate) element_count: usize,
     pub(crate) source_chars: usize,
     pub(crate) translation_chars: usize,
 }
 
-/// Extract measured page sizes from a `bulk_review_pages` result.
-pub(crate) fn summaries_from_bulk(data: &Value) -> Result<HashMap<String, PageTextSummary>> {
+/// A page read for review: measured here for planning and kept as the payload the
+/// reviewer is sent, so one read serves both and no page is fetched twice.
+#[derive(Clone, Debug)]
+pub(crate) struct MeasuredPage {
+    pub(crate) id: String,
+    pub(crate) summary: PageTextSummary,
+    pub(crate) payload: Value,
+}
+
+/// Measure the pages of one `bulk_review_pages` payload, in the order read.
+pub(crate) fn measure_pages(data: &Value) -> Result<Vec<MeasuredPage>> {
     let pages = data
         .get("pages")
         .and_then(Value::as_array)
         .context("bulk review data is missing its pages array")?;
-    let mut summaries = HashMap::new();
-    for page in pages {
-        let id = page
-            .get("id")
-            .and_then(Value::as_str)
-            .context("bulk review page is missing its id")?
-            .to_owned();
-        let mut element_count = 0_usize;
-        let mut source_chars = 0_usize;
-        let mut translation_chars = 0_usize;
-        for element in page
-            .get("elements")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            element_count = element_count.saturating_add(1);
-            source_chars = source_chars.saturating_add(
-                element
-                    .get("source")
-                    .and_then(Value::as_str)
-                    .map_or(0, |text| text.chars().count()),
-            );
-            translation_chars = translation_chars.saturating_add(
-                element
-                    .get("translation")
-                    .and_then(Value::as_str)
-                    .map_or(0, |text| text.chars().count()),
-            );
-        }
-        summaries.insert(
-            id,
-            PageTextSummary {
-                element_count,
-                source_chars,
-                translation_chars,
-            },
-        );
-    }
-    Ok(summaries)
+    pages
+        .iter()
+        .map(|page| {
+            let id = page
+                .get("id")
+                .and_then(Value::as_str)
+                .context("bulk review page is missing its id")?
+                .to_owned();
+            let mut summary = PageTextSummary::default();
+            for element in page
+                .get("elements")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                summary.element_count = summary.element_count.saturating_add(1);
+                summary.source_chars = summary.source_chars.saturating_add(
+                    element
+                        .get("source")
+                        .and_then(Value::as_str)
+                        .map_or(0, |text| text.chars().count()),
+                );
+                summary.translation_chars = summary.translation_chars.saturating_add(
+                    element
+                        .get("translation")
+                        .and_then(Value::as_str)
+                        .map_or(0, |text| text.chars().count()),
+                );
+            }
+            Ok(MeasuredPage {
+                id,
+                summary,
+                payload: page.clone(),
+            })
+        })
+        .collect()
 }
 
-/// Text-based batch planner — groups pages to stay under the input budget while
-/// preserving order and removing duplicate IDs.
-pub(crate) fn plan_text_batches(
-    pages: Vec<String>,
-    summaries: HashMap<String, PageTextSummary>,
-) -> Vec<Vec<String>> {
+/// Text-based batch planner — groups measured pages to stay under the input
+/// budget while preserving order.
+pub(crate) fn plan_text_batches(pages: Vec<MeasuredPage>) -> Vec<Vec<MeasuredPage>> {
     let mut batches = Vec::new();
     let mut current_batch = Vec::new();
     let mut current_size = 0_usize;
-    let mut seen = HashSet::new();
 
     for page in pages {
-        if !seen.insert(page.clone()) {
-            continue;
-        }
-        let summary = summaries.get(&page);
-        let page_size = summary.map_or(1000, estimate_text_size);
+        let page_size = estimate_text_size(&page.summary);
 
         if !current_batch.is_empty()
             && current_size.saturating_add(page_size) > BULK_INPUT_BUDGET_CHARS
@@ -396,8 +407,8 @@ pub(crate) fn plan_text_batches(
             current_size = 0;
         }
 
-        current_batch.push(page);
         current_size = current_size.saturating_add(page_size);
+        current_batch.push(page);
 
         // Very large single pages are isolated.
         if current_batch.len() == 1 && current_size > BULK_INPUT_BUDGET_CHARS {
@@ -546,26 +557,26 @@ impl<'a> BulkReviewer<'a> {
             !job.pages.is_empty(),
             "page job requires at least one page ID"
         );
+        anyhow::ensure!(
+            job.instruction.chars().count() <= MAX_INSTRUCTION_CHARS,
+            "the job instruction is longer than {MAX_INSTRUCTION_CHARS} characters"
+        );
+        let mut seen = HashSet::new();
+        let pages = job
+            .pages
+            .into_iter()
+            .filter(|page| seen.insert(page.clone()))
+            .collect::<Vec<_>>();
+        anyhow::ensure!(
+            pages.len() <= MAX_JOB_PAGES,
+            "a review job covers at most {MAX_JOB_PAGES} pages"
+        );
+        let total = pages.len();
 
-        // Measure the real page sizes locally for planning — never in the model loop.
-        let pages_data = self
-            .host
-            .bulk_review_pages(&job.pages)
-            .await
-            .context("failed to read project pages for review while planning batches")?;
-        let summaries = summaries_from_bulk(&pages_data)?;
-        for page in &job.pages {
-            if !summaries.contains_key(page) {
-                bail!("page job contains unknown page ID {page}");
-            }
-        }
-
-        let queue = plan_text_batches(job.pages, summaries);
-        let total = queue.iter().map(Vec::len).sum::<usize>();
-        let mut queue = queue.into_iter().collect::<VecDeque<_>>();
-        let mut completed = Vec::with_capacity(total);
+        let mut completed = 0_usize;
         let mut failed = Vec::new();
-        let mut memory = TranslationMemory::new().bounded(MAX_MEMORY_BYTES);
+        let mut failed_pages = 0_usize;
+        let mut memory = TranslationMemory::new();
         let mut changed = false;
         let mut metrics = JobMetrics::default();
         let mut sequence = 0_usize;
@@ -573,83 +584,111 @@ impl<'a> BulkReviewer<'a> {
         // identical across batches, only the pages differ.
         let session = format!("bulk-review:{call_id}");
 
-        while let Some(batch) = queue.pop_front() {
+        for group in pages.chunks(MAX_PAGES_PER_READ) {
             control.ensure_running()?;
-            sequence += 1;
-            let batch_call_id = format!("{call_id}-batch-{sequence}");
-            publish(Event::ToolStarted {
-                run,
-                call_id: batch_call_id.clone(),
-                name: "process_page_batch".to_owned(),
-            });
-            match self
-                .run_review_batch(
-                    &session,
-                    &job.instruction,
-                    &batch,
-                    &memory,
-                    model,
-                    control,
-                    sequence,
-                )
+            // One read serves measurement and payload: a page is read once per job,
+            // and only this group is ever held. Pages in different groups are disjoint,
+            // so a later group is not affected by what an earlier batch wrote.
+            let data = self
+                .host
+                .bulk_review_pages(group)
                 .await
-            {
-                Ok(result) => {
-                    changed |= result.changed;
-                    memory = result.memory;
-                    completed.extend(batch.iter().cloned());
-                    metrics.add_batch(&result.metrics);
-                    publish(Event::ToolFinished {
-                        run,
-                        call_id: batch_call_id,
-                        name: "process_page_batch".to_owned(),
-                        changed: result.changed,
-                        output: json!({
-                            "pages": batch,
-                            "summary": result.metrics.log_summary(),
-                            "completed": completed.len(),
-                            "total": total,
-                        })
-                        .to_string(),
-                    });
-                }
-                Err(error) if error.context_limit && batch.len() > 1 => {
-                    // Split a too-large batch in half and reprocess both halves
-                    // with the same V3 worker. A single page is terminal.
-                    let middle = batch.len().div_ceil(2);
-                    let left = batch[..middle].to_vec();
-                    let right = batch[middle..].to_vec();
-                    queue.push_front(right);
-                    queue.push_front(left);
-                    publish(Event::ToolFinished {
-                        run,
-                        call_id: batch_call_id,
-                        name: "process_page_batch".to_owned(),
-                        changed: false,
-                        output: json!({ "pages": batch, "status": "split" }).to_string(),
-                    });
-                }
-                Err(error) => {
-                    failed.extend(
-                        batch
-                            .iter()
-                            .map(|page| json!({ "page": page, "error": format!("{error:#}") })),
-                    );
-                    publish(Event::ToolFinished {
-                        run,
-                        call_id: batch_call_id,
-                        name: "process_page_batch".to_owned(),
-                        changed: false,
-                        output: json!({
-                            "pages": batch,
-                            "status": "failed",
-                            "completed": completed.len(),
-                            "total": total,
-                        })
-                        .to_string(),
-                    });
-                    if control.is_cancelled() {
-                        return Err(error.source);
+                .context("failed to read project pages for review")?;
+            let measured = measure_pages(&data)?;
+            anyhow::ensure!(
+                measured.len() == group.len(),
+                "reading {} pages for review returned {}",
+                group.len(),
+                measured.len()
+            );
+            let mut queue = plan_text_batches(measured)
+                .into_iter()
+                .collect::<VecDeque<_>>();
+
+            while let Some(batch) = queue.pop_front() {
+                control.ensure_running()?;
+                sequence += 1;
+                let batch_call_id = format!("{call_id}-batch-{sequence}");
+                let batch_pages = batch
+                    .iter()
+                    .map(|page| page.id.as_str())
+                    .collect::<Vec<_>>();
+                publish(Event::ToolStarted {
+                    run,
+                    call_id: batch_call_id.clone(),
+                    name: "process_page_batch".to_owned(),
+                });
+                match self
+                    .run_review_batch(
+                        &session,
+                        &job.instruction,
+                        &batch,
+                        &memory,
+                        model,
+                        control,
+                        sequence,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        changed |= result.changed;
+                        memory = result.memory;
+                        completed += batch.len();
+                        metrics.add_batch(&result.metrics);
+                        publish(Event::ToolFinished {
+                            run,
+                            call_id: batch_call_id,
+                            name: "process_page_batch".to_owned(),
+                            changed: result.changed,
+                            output: json!({
+                                "pages": batch_pages,
+                                "summary": result.metrics.log_summary(),
+                                "completed": completed,
+                                "total": total,
+                            })
+                            .to_string(),
+                        });
+                    }
+                    Err(error) if error.context_limit && batch.len() > 1 => {
+                        // Split a too-large batch in half and reprocess both halves
+                        // from the payload already read. A single page is terminal.
+                        let middle = batch.len().div_ceil(2);
+                        let left = batch[..middle].to_vec();
+                        let right = batch[middle..].to_vec();
+                        queue.push_front(right);
+                        queue.push_front(left);
+                        publish(Event::ToolFinished {
+                            run,
+                            call_id: batch_call_id,
+                            name: "process_page_batch".to_owned(),
+                            changed: false,
+                            output: json!({ "pages": batch_pages, "status": "split" }).to_string(),
+                        });
+                    }
+                    Err(error) => {
+                        failed_pages += batch.len();
+                        let room = MAX_REPORTED_FAILURES.saturating_sub(failed.len());
+                        failed.extend(
+                            batch.iter().take(room).map(
+                                |page| json!({ "page": page.id, "error": format!("{error:#}") }),
+                            ),
+                        );
+                        publish(Event::ToolFinished {
+                            run,
+                            call_id: batch_call_id,
+                            name: "process_page_batch".to_owned(),
+                            changed: false,
+                            output: json!({
+                                "pages": batch_pages,
+                                "status": "failed",
+                                "completed": completed,
+                                "total": total,
+                            })
+                            .to_string(),
+                        });
+                        if control.is_cancelled() {
+                            return Err(error.source);
+                        }
                     }
                 }
             }
@@ -658,9 +697,9 @@ impl<'a> BulkReviewer<'a> {
         metrics.log();
         let value = json!({
             "total": total,
-            "completed": completed.len(),
-            "completed_pages": completed,
+            "completed": completed,
             "failed": failed,
+            "failed_pages": failed_pages,
             "memory": memory.serialize(),
             "metrics": json!({
                 "batches": metrics.total_batches,
@@ -683,7 +722,7 @@ impl<'a> BulkReviewer<'a> {
         &self,
         session: &str,
         instruction: &str,
-        batch: &[String],
+        batch: &[MeasuredPage],
         memory: &TranslationMemory,
         model: &CodexModel,
         control: &Control,
@@ -692,39 +731,17 @@ impl<'a> BulkReviewer<'a> {
         let started = Instant::now();
         control.ensure_running().map_err(ReviewBatchError::from)?;
 
-        let pages_data = self
-            .host
-            .bulk_review_pages(batch)
-            .await
-            .context(format!(
-                "failed to read project pages for review (batch {batch_index})"
-            ))
-            .map_err(ReviewBatchError::from)?;
-        let pages_array = pages_data
-            .get("pages")
-            .and_then(Value::as_array)
-            .ok_or_else(|| {
-                ReviewBatchError::from(anyhow!(
-                    "bulk_review_pages returned invalid shape (batch {batch_index})"
-                ))
-            })?;
-
         let mut element_to_page = HashMap::new();
         let mut target_pages = HashSet::new();
-        let mut review_pages = Vec::with_capacity(pages_array.len());
+        let mut review_pages = Vec::with_capacity(batch.len());
         let mut element_count = 0_usize;
         let mut hints_count = 0_usize;
         let mut source_chars = 0_usize;
         let mut translation_chars = 0_usize;
 
-        for page in pages_array {
-            let page_id = page
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    ReviewBatchError::from(anyhow!("page missing id in bulk review data"))
-                })?
-                .to_owned();
+        for measured in batch {
+            let page = &measured.payload;
+            let page_id = measured.id.clone();
             let label = page
                 .get("label")
                 .and_then(Value::as_str)
@@ -785,8 +802,7 @@ impl<'a> BulkReviewer<'a> {
         let payload_bytes = pages_json.len();
         let memory_text = memory.serialize();
         let prompt = format!(
-            "Objective: {instruction}\nPages in this batch: {}\nTranslation memory (incremental updates only, do not repeat):\n{}\nReview the pages below and return ONLY the structured JSON response.\n\n{pages_json}",
-            batch.join(", "),
+            "Objective: {instruction}\nTranslation memory (incremental updates only, do not repeat):\n{}\nReview the pages below and return ONLY the structured JSON response.\n\n{pages_json}",
             if memory_text.is_empty() {
                 "(none)"
             } else {
@@ -1155,6 +1171,7 @@ mod tests {
     struct MockHost {
         pages: HashMap<String, Vec<Value>>,
         applied: Mutex<Vec<(String, Option<String>)>>,
+        reads: Mutex<Vec<Vec<String>>>,
     }
 
     impl MockHost {
@@ -1181,6 +1198,10 @@ mod tests {
 
         fn applied(&self) -> Vec<(String, Option<String>)> {
             self.applied.lock().unwrap().clone()
+        }
+
+        fn reads(&self) -> Vec<Vec<String>> {
+            self.reads.lock().unwrap().clone()
         }
     }
 
@@ -1220,6 +1241,7 @@ mod tests {
         }
 
         async fn bulk_review_pages(&self, pages: &[String]) -> Result<Value> {
+            self.reads.lock().unwrap().push(pages.to_vec());
             let mut result = Vec::new();
             for id in pages {
                 let elements = self.pages.get(id).context("unknown page")?.clone();
@@ -1251,6 +1273,21 @@ mod tests {
             "instruction": "review these pages",
         })
         .to_string()
+    }
+
+    fn measured(id: &str, summary: PageTextSummary) -> MeasuredPage {
+        MeasuredPage {
+            id: id.to_owned(),
+            summary,
+            payload: json!({ "id": id }),
+        }
+    }
+
+    fn batch_ids(batches: &[Vec<MeasuredPage>]) -> Vec<Vec<&str>> {
+        batches
+            .iter()
+            .map(|batch| batch.iter().map(|page| page.id.as_str()).collect())
+            .collect()
     }
 
     async fn run_job(
@@ -1339,46 +1376,58 @@ mod tests {
             source_chars: 19_000,
             translation_chars: 19_000,
         };
-        let summaries = HashMap::from([
-            ("p1".to_owned(), small.clone()),
-            ("p2".to_owned(), small),
-            ("p3".to_owned(), big),
+        let batches = plan_text_batches(vec![
+            measured("p1", small.clone()),
+            measured("p2", small),
+            measured("p3", big),
         ]);
-        let batches = plan_text_batches(
-            vec!["p1".to_owned(), "p2".to_owned(), "p3".to_owned()],
-            summaries,
-        );
         // p1+p2 batch together (~3.5k), p3 alone (~41k, exceeds the 20k budget).
-        assert_eq!(batches.len(), 2);
-        assert_eq!(batches[0], vec!["p1", "p2"]);
-        assert_eq!(batches[1], vec!["p3"]);
+        assert_eq!(batch_ids(&batches), vec![vec!["p1", "p2"], vec!["p3"]]);
+    }
+
+    #[tokio::test]
+    async fn duplicate_page_ids_are_reviewed_once() {
+        let mut host = MockHost::default();
+        host.add_page("p1", 30);
+        host.add_page("p2", 30);
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        let invocation = run_job(&client, &host, &["p1", "p1", "p2", "p1"])
+            .await
+            .unwrap();
+        assert_eq!(invocation.value["total"].as_u64(), Some(2));
+        assert_eq!(host.reads(), vec![vec!["p1".to_owned(), "p2".to_owned()]]);
+    }
+
+    #[tokio::test]
+    async fn pages_are_read_in_bounded_groups() {
+        let count = MAX_PAGES_PER_READ + 5;
+        let mut host = MockHost::default();
+        let pages = (0..count)
+            .map(|index| format!("p{index}"))
+            .collect::<Vec<_>>();
+        for page in &pages {
+            host.add_page(page, 10);
+        }
+        let client = MockClient::new();
+        for _ in 0..2 {
+            client.push(client.respond_ok(review_text(&[])));
+        }
+
+        let refs = pages.iter().map(String::as_str).collect::<Vec<_>>();
+        let invocation = run_job(&client, &host, &refs).await.unwrap();
+        assert_eq!(invocation.value["total"].as_u64(), Some(count as u64));
+        // No read is larger than the retention ceiling, and the whole job is covered.
+        let expected = [
+            pages[..MAX_PAGES_PER_READ].to_vec(),
+            pages[MAX_PAGES_PER_READ..].to_vec(),
+        ];
+        assert_eq!(host.reads(), expected.to_vec());
     }
 
     #[test]
-    fn text_planner_removes_duplicates_and_preserves_order() {
-        let summaries = HashMap::from([(
-            "p1".to_owned(),
-            PageTextSummary {
-                element_count: 5,
-                source_chars: 100,
-                translation_chars: 120,
-            },
-        )]);
-        let batches = plan_text_batches(
-            vec![
-                "p1".to_owned(),
-                "p1".to_owned(),
-                "p2".to_owned(),
-                "p1".to_owned(),
-            ],
-            summaries,
-        );
-        assert_eq!(batches.len(), 1);
-        assert_eq!(batches[0], vec!["p1", "p2"]);
-    }
-
-    #[test]
-    fn summaries_from_bulk_measure_real_text() {
+    fn measure_pages_reports_real_text_sizes_in_read_order() {
         let data = json!({
             "pages": [
                 {
@@ -1391,12 +1440,18 @@ mod tests {
                 { "id": "p2", "elements": [] },
             ]
         });
-        let summaries = summaries_from_bulk(&data).unwrap();
-        let p1 = &summaries["p1"];
-        assert_eq!(p1.element_count, 2);
-        assert_eq!(p1.source_chars, 4);
-        assert_eq!(p1.translation_chars, 8);
-        assert_eq!(summaries["p2"].element_count, 0);
+        let measured = measure_pages(&data).unwrap();
+        assert_eq!(
+            measured
+                .iter()
+                .map(|page| page.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["p1", "p2"]
+        );
+        assert_eq!(measured[0].summary.element_count, 2);
+        assert_eq!(measured[0].summary.source_chars, 4);
+        assert_eq!(measured[0].summary.translation_chars, 8);
+        assert_eq!(measured[1].summary.element_count, 0);
     }
 
     #[test]
