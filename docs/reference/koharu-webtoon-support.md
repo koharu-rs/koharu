@@ -197,7 +197,19 @@ XianScan 原本用轻量 OCR 模型建立"禁切文本区"再选切点。Koharu 
 | 无 ground truth | §3.5，无法算 precision / recall |
 | panel 置信度下降 | §3.3，letterbox 默认的已知代价 |
 | 拟声词不参与下游 | 模型可检出 `onomatopoeia`，但区域类型映射未覆盖它，会落入 unknown 被丢弃。这是**有意决策**：不 OCR、不擦除、不翻译。基线显示该类 AP 仅 0.443（对比 text 0.878、bubble 0.909、panel 0.957），是四类中最弱的 |
-| 桥接协议未重新生成 | `packages/bridge/src/protocol.ts` 需要链接 `koharu-app` 的生成器，本机缺 GTK 运行时库（`gdk_surface_get_scale_factor` 等符号缺失）。`cargo check -p koharu-app` **通过**，说明 Rust 侧类型正确，只差链接环境。拼写已用 `Stage` 的既有产物交叉验证：`stage.rs:20` 是 `#[serde(rename_all = "snake_case")]`，`protocol.ts:469` 生成的是 `"detection" \| "ocr" \| ...`，所以 specta 遵循 serde，`InputFit` 会生成 `"letter_box" \| "stretch"`。产物本身待在有 GTK 的环境重新生成 |
+| 前端未接线 | `import` 命令已接受可选的 `slicing` 参数，但 UI 没有强制按条漫导入的入口，也没有单页重新切页的操作。命令层参数是 `Option` 而非必填，正是因为 Tauri 逐字段反序列化、不看类型的 `Default`，必填会让所有现有调用失败 |
+| `split_page` 无命令入口 | 场景层能力已就绪（`Edit::split_page`），但没有 Tauri 命令暴露，所以"按条漫切页"这个补救操作无处可接 |
+| 桥接协议未重新生成 | `packages/bridge/src/protocol.ts` 需要链接 `koharu-app` 的生成器。类型检查可用 `DOCS_RS=1 cargo check -p koharu-app` 绕过 GTK 依赖（生成器需要真实链接）。重新生成后 `import` 会变成 `(source, slicing: PageImportSlicing \| null)`，前端 `lib/queries.ts` 的 `useImportPages` 需相应传 `null`，否则 typecheck 失败——**这两步必须一起做** |
+| 章节存储约 2 倍 | 导入时未切原图也作为 patch attachment 存入项目，各 band 的 `PageSlice` 共同钉住它。这是 `koharu-storage` 的 `blobs.persist()` 要求 lease 内每个 blob 已落盘的结果，不是免费的软引用。`slice-of` 关系因此是瞬时的：原页删除后关系消失，band 靠 `PageSlice` + blob 存活并可重新切分 |
+
+### 6.1 本地验证命令
+
+`DOCS_RS=1` 让 `gobject-sys` / `gio-sys` 跳过构建脚本，从而在没有 GTK 的机器上完成类型检查与单元测试（只有链接仍需要 GTK）：
+
+```bash
+DOCS_RS=1 cargo check -p koharu-app
+DOCS_RS=1 cargo test  -p koharu-app --lib
+```
 
 ---
 

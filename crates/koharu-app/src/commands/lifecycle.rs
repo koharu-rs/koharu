@@ -398,13 +398,18 @@ async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
 #[specta::specta]
 pub(crate) async fn import(
     source: PageImportSource,
-    slicing: PageImportSlicing,
+    slicing: Option<PageImportSlicing>,
     window: WebviewWindow<CefRuntime>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     processing: State<'_, Processing>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> std::result::Result<(), Error> {
+    // Tauri deserializes command arguments field by field and never consults the argument
+    // type's `Default`, so a required parameter fails every caller that omits it. No control
+    // for this exists yet, and omitting it means the automatic geometry gate, which is what an
+    // ordinary import wants regardless.
+    let slicing = slicing.unwrap_or_default();
     if !processing.stops.lock().is_empty() {
         return Err(anyhow::anyhow!("pages cannot be imported while processing is running").into());
     }
