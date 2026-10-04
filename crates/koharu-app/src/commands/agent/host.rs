@@ -294,7 +294,9 @@ impl Host for KoharuHost {
                         .map(|page| Project::page(&snapshot, page))
                         .collect::<Result<Vec<_>>>()?
                 };
-                Invocation::read(json!({ "pages": values }))
+                Invocation::read(json!({ "pages": values })).map(|invocation| {
+                    invocation.with_history(inspect_pages_history(&arguments.pages))
+                })
             }
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;
@@ -569,6 +571,17 @@ fn entities(values: &[String]) -> Result<Vec<EntityId>> {
     values.iter().map(|value| entity(value)).collect()
 }
 
+/// Page contents matter only in the turn that asked for them. Keeping every
+/// inspected page in history is what overflowed the context window on long
+/// projects, so the tool reports what it showed and drops what it showed.
+fn inspect_pages_history(pages: &[String]) -> Value {
+    json!({
+        "omitted_from_history": true,
+        "pages": pages,
+        "message": "Page contents were available in the turn that called inspect_pages; call inspect_pages again if they are needed."
+    })
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct InspectProject {}
 
@@ -777,7 +790,17 @@ impl RunPipeline {
 
 #[cfg(test)]
 mod tests {
-    use super::entity;
+    use serde_json::json;
+
+    use super::{entity, inspect_pages_history};
+
+    #[test]
+    fn page_contents_are_summarized_for_history() {
+        let history = inspect_pages_history(&["p1".to_owned(), "p2".to_owned()]);
+        assert_eq!(history["omitted_from_history"], true);
+        assert_eq!(history["pages"], json!(["p1", "p2"]));
+        assert!(history.get("contents").is_none());
+    }
 
     #[test]
     fn accepts_bare_and_quoted_entity_ids() {

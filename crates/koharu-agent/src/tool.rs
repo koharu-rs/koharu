@@ -44,25 +44,40 @@ pub struct ToolCall {
 #[derive(Clone, Debug)]
 pub struct Invocation {
     pub value: Value,
+    /// What survives in conversation history after this turn. Defaults to
+    /// `value`; a tool whose live result is too large to keep in every later
+    /// request sets its own summary, because only the current turn needs the
+    /// detail.
+    pub history: Value,
     pub changed: bool,
     pub images: Vec<ToolImage>,
 }
 
 impl Invocation {
     pub fn read(value: impl Serialize) -> Result<Self> {
+        let value = serde_json::to_value(value)?;
         Ok(Self {
-            value: serde_json::to_value(value)?,
+            history: value.clone(),
+            value,
             changed: false,
             images: Vec::new(),
         })
     }
 
     pub fn changed(value: impl Serialize) -> Result<Self> {
+        let value = serde_json::to_value(value)?;
         Ok(Self {
-            value: serde_json::to_value(value)?,
+            history: value.clone(),
+            value,
             changed: true,
             images: Vec::new(),
         })
+    }
+
+    #[must_use]
+    pub fn with_history(mut self, history: Value) -> Self {
+        self.history = history;
+        self
     }
 
     #[must_use]

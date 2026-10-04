@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     Codex, CodexModel, Config, Control, Host, ToolCall,
-    bulk_review::{BulkReviewer, page_job_tool},
+    bulk_review::{BulkReviewer, review_job_tool},
     codex::{Delta, Request, ReviewClient, function_output, message, project_context},
 };
 
@@ -17,7 +17,7 @@ const INSTRUCTIONS: &str = r#"You are Koharu Agent, operating a manga translatio
 An up-to-date project summary and page index are supplied in a koharu_project_context block on every user turn. Page contents and images are omitted.
 Call inspect_pages with the relevant page IDs to read their semantic contents. Its detailed results are available for the current turn but omitted from later conversation history, so inspect the pages again in a later turn when needed.
 Call view_page only when visual inspection is needed, and only for relevant pages.
-For a task that targets more than five pages, or whose page contents may be large, call process_pages_job once with the exact ordered page IDs and the user's complete objective. This runs every page automatically in small sequential batches; never ask the user to submit later batches.
+For a translation review spanning more than five pages, or whose page contents may be large, call review_translations_job once with the exact ordered page IDs and the user's complete objective. It revises translations in small sequential batches and applies them itself; never ask the user to submit later batches. Any other bulk edit still uses the per-element tools.
 Use the provided tools whenever the user asks to inspect or change the project. Never claim a change succeeded unless its tool result says it succeeded.
 All project changes are revisioned and reversible. Do not ask for permission. Do not produce a plan or expose internal steps; continue using tools until the request is complete or cannot be completed.
 Do not invent entity identifiers. Preserve artwork and existing authored content unless the user asks to change them."#;
@@ -216,7 +216,7 @@ where
         let mut persisted = base;
         persisted.push(clean_user);
         let mut tools = self.host.tools();
-        tools.push(page_job_tool());
+        tools.push(review_job_tool());
         let session = run.to_string();
 
         loop {
@@ -254,35 +254,45 @@ where
                     call_id: call.call_id.clone(),
                     name: call.name.clone(),
                 });
-                let invocation = if call.name == "process_pages_job" {
-                    BulkReviewer::new(&*self.review, &*self.host)
-                        .run_job(run, &call.call_id, &call.arguments, model, control, publish)
-                        .await
-                } else {
-                    self.host
-                        .invoke(
-                            ToolCall {
-                                call_id: call.call_id.clone(),
-                                name: call.name.clone(),
-                                arguments: call.arguments,
-                            },
-                            control,
-                        )
-                        .await
+                // The batch reviewer owns its tool, so this loop never names it:
+                // `None` means the call belongs to the host.
+                let reviewed = BulkReviewer::execute(
+                    &*self.review,
+                    &*self.host,
+                    run,
+                    &call,
+                    model,
+                    control,
+                    publish,
+                )
+                .await;
+                let invocation = match reviewed {
+                    Some(invocation) => invocation,
+                    None => {
+                        self.host
+                            .invoke(
+                                ToolCall {
+                                    call_id: call.call_id.clone(),
+                                    name: call.name.clone(),
+                                    arguments: call.arguments,
+                                },
+                                control,
+                            )
+                            .await
+                    }
                 };
-                let (output, changed, images) = match invocation {
+                let (output, historical_output, changed, images) = match invocation {
                     Ok(invocation) => (
                         json!({ "ok": true, "value": invocation.value }),
+                        json!({ "ok": true, "value": invocation.history }),
                         invocation.changed,
                         invocation.images,
                     ),
-                    Err(error) => (
-                        json!({ "ok": false, "error": format!("{error:#}") }),
-                        false,
-                        Vec::new(),
-                    ),
+                    Err(error) => {
+                        let output = json!({ "ok": false, "error": format!("{error:#}") });
+                        (output.clone(), output, false, Vec::new())
+                    }
                 };
-                let historical_output = historical_tool_output(&call.name, &output);
                 publish(Event::ToolFinished {
                     run,
                     call_id: call.call_id.clone(),
@@ -294,73 +304,5 @@ where
                 persisted.push(function_output(&call.call_id, &historical_output, &[])?);
             }
         }
-    }
-}
-
-fn historical_tool_output(name: &str, output: &Value) -> Value {
-    if output.get("ok").and_then(Value::as_bool) != Some(true) {
-        return output.clone();
-    }
-    match name {
-        "inspect_pages" => json!({
-            "ok": true,
-            "value": {
-                "omitted_from_history": true,
-                "message": "Page contents were available in the turn that called inspect_pages; call inspect_pages again if they are needed."
-            }
-        }),
-        "process_pages_job" => json!({
-            "ok": true,
-            "value": {
-                "total": output.pointer("/value/total"),
-                "completed": output.pointer("/value/completed"),
-                "failed_count": output.pointer("/value/failed").and_then(Value::as_array).map_or(0, Vec::len),
-                "details_omitted_from_history": true,
-            }
-        }),
-        _ => output.clone(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::historical_tool_output;
-
-    #[test]
-    fn omits_successful_page_inspection_from_history() {
-        let output = json!({ "ok": true, "value": { "pages": [{ "large": "state" }] } });
-        let historical = historical_tool_output("inspect_pages", &output);
-        assert_eq!(historical["ok"], true);
-        assert_eq!(historical["value"]["omitted_from_history"], true);
-        assert!(historical["value"].get("pages").is_none());
-    }
-
-    #[test]
-    fn retains_other_tool_outputs_and_inspection_errors() {
-        let output = json!({ "ok": true, "value": { "project": "summary" } });
-        assert_eq!(historical_tool_output("inspect_project", &output), output);
-        let error = json!({ "ok": false, "error": "invalid entity ID" });
-        assert_eq!(historical_tool_output("inspect_pages", &error), error);
-    }
-
-    #[test]
-    fn compacts_completed_page_jobs_in_history() {
-        let output = json!({
-            "ok": true,
-            "value": {
-                "total": 70,
-                "completed": 69,
-                "completed_pages": ["large list"],
-                "failed": [{ "page": "p42" }],
-                "memory": "large memory"
-            }
-        });
-        let historical = historical_tool_output("process_pages_job", &output);
-        assert_eq!(historical["value"]["total"], 70);
-        assert_eq!(historical["value"]["completed"], 69);
-        assert_eq!(historical["value"]["failed_count"], 1);
-        assert!(historical["value"].get("memory").is_none());
     }
 }

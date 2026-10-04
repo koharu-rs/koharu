@@ -569,17 +569,27 @@ pub(crate) fn is_context_error(error: &anyhow::Error) -> bool {
     message.contains("context") || message.contains("token") || message.contains("too long")
 }
 
-/// Arguments for the `process_pages_job` tool.
+/// Tool the model calls to start a review job, and the synthetic tool name the
+/// run reports per batch. This module owns both, so no other file repeats them.
+pub(crate) const REVIEW_JOB_TOOL: &str = "review_translations_job";
+const REVIEW_BATCH_TOOL: &str = "review_page_batch";
+
+/// The host tool this reviewer applies its result with. It reuses the model's own
+/// write path rather than a second one, so the name must match what the host
+/// advertises.
+const APPLY_TOOL: &str = "set_translations";
+
+/// Arguments for a review job.
 #[derive(Deserialize)]
 pub(crate) struct PageJob {
     pub(crate) pages: Vec<String>,
     pub(crate) instruction: String,
 }
 
-pub(crate) fn page_job_tool() -> Tool {
+pub(crate) fn review_job_tool() -> Tool {
     Tool::new(
-        "process_pages_job",
-        "Process a large ordered set of pages autonomously in small sequential batches. Use for tasks spanning more than five pages; the user does not need to request each batch.",
+        REVIEW_JOB_TOOL,
+        "Review and revise the translations of an ordered set of pages autonomously in small sequential batches. Use for a translation review spanning more than five pages; the user does not need to request each batch.",
         json!({
             "type": "object",
             "properties": {
@@ -592,7 +602,7 @@ pub(crate) fn page_job_tool() -> Tool {
     )
 }
 
-/// Deterministic, mockable V3 orchestrator. Each successful batch is exactly
+/// Deterministic, mockable reviewer orchestrator. Each successful batch is exactly
 /// one model request followed by local validation and a single bulk apply.
 pub(crate) struct BulkReviewer<'a> {
     client: &'a dyn ReviewClient,
@@ -600,6 +610,31 @@ pub(crate) struct BulkReviewer<'a> {
 }
 
 impl<'a> BulkReviewer<'a> {
+    /// Run `call` if it is this reviewer's tool, otherwise `None` so the caller
+    /// routes it to the host. Keeping the decision here means the tool loop never
+    /// matches on a tool name it does not own.
+    pub(crate) async fn execute<F>(
+        client: &'a dyn ReviewClient,
+        host: &'a dyn Host,
+        run: RunId,
+        call: &ToolCall,
+        model: &CodexModel,
+        control: &Control,
+        publish: &mut F,
+    ) -> Option<Result<Invocation>>
+    where
+        F: FnMut(Event),
+    {
+        if call.name != REVIEW_JOB_TOOL {
+            return None;
+        }
+        Some(
+            Self::new(client, host)
+                .run_job(run, &call.call_id, &call.arguments, model, control, publish)
+                .await,
+        )
+    }
+
     pub(crate) fn new(client: &'a dyn ReviewClient, host: &'a dyn Host) -> Self {
         Self { client, host }
     }
@@ -617,8 +652,8 @@ impl<'a> BulkReviewer<'a> {
         F: FnMut(Event),
     {
         control.ensure_running()?;
-        let job: PageJob =
-            serde_json::from_str(arguments).context("invalid arguments for process_pages_job")?;
+        let job: PageJob = serde_json::from_str(arguments)
+            .context(format!("invalid arguments for {REVIEW_JOB_TOOL}"))?;
         anyhow::ensure!(
             !job.pages.is_empty(),
             "page job requires at least one page ID"
@@ -688,7 +723,7 @@ impl<'a> BulkReviewer<'a> {
                 publish(Event::ToolStarted {
                     run,
                     call_id: batch_call_id.clone(),
-                    name: "process_page_batch".to_owned(),
+                    name: REVIEW_BATCH_TOOL.to_owned(),
                 });
                 match self
                     .run_review_batch(
@@ -711,7 +746,7 @@ impl<'a> BulkReviewer<'a> {
                         publish(Event::ToolFinished {
                             run,
                             call_id: batch_call_id,
-                            name: "process_page_batch".to_owned(),
+                            name: REVIEW_BATCH_TOOL.to_owned(),
                             changed: result.changed,
                             output: json!({
                                 "pages": batch_pages,
@@ -733,7 +768,7 @@ impl<'a> BulkReviewer<'a> {
                         publish(Event::ToolFinished {
                             run,
                             call_id: batch_call_id,
-                            name: "process_page_batch".to_owned(),
+                            name: REVIEW_BATCH_TOOL.to_owned(),
                             changed: false,
                             output: json!({ "pages": batch_pages, "status": "split" }).to_string(),
                         });
@@ -749,7 +784,7 @@ impl<'a> BulkReviewer<'a> {
                         publish(Event::ToolFinished {
                             run,
                             call_id: batch_call_id,
-                            name: "process_page_batch".to_owned(),
+                            name: REVIEW_BATCH_TOOL.to_owned(),
                             changed: false,
                             output: json!({
                                 "pages": batch_pages,
@@ -768,11 +803,22 @@ impl<'a> BulkReviewer<'a> {
         }
 
         metrics.log();
+        // Only the outcome stays in conversation history. The memory dump and the
+        // metrics are for this turn; carrying them into every later request is the
+        // context pressure this worker exists to avoid, while the failed page IDs
+        // are what the model needs in order to not redo the whole range.
+        let history = json!({
+            "total": total,
+            "completed": completed,
+            "failed_pages": failed_pages,
+            "failed": failed,
+            "omitted_from_history": ["memory", "metrics"],
+        });
         let value = json!({
             "total": total,
             "completed": completed,
-            "failed": failed,
             "failed_pages": failed_pages,
+            "failed": failed.clone(),
             "memory": memory.serialize(),
             "metrics": json!({
                 "batches": metrics.total_batches,
@@ -782,11 +828,12 @@ impl<'a> BulkReviewer<'a> {
                 "elapsed_ms": metrics.total_elapsed_ms,
             }),
         });
-        if changed {
-            Ok(Invocation::changed(value)?)
+        let invocation = if changed {
+            Invocation::changed(value)?
         } else {
-            Ok(Invocation::read(value)?)
-        }
+            Invocation::read(value)?
+        };
+        Ok(invocation.with_history(history))
     }
 
     /// One model request, local validation, local bulk apply.
@@ -972,7 +1019,7 @@ impl<'a> BulkReviewer<'a> {
                 .invoke(
                     ToolCall {
                         call_id: format!("bulk-apply-{batch_index}"),
-                        name: "set_translations".to_owned(),
+                        name: APPLY_TOOL.to_owned(),
                         arguments: serde_json::to_string(&json!({ "updates": updates }))
                             .unwrap_or_default(),
                     },
@@ -1354,7 +1401,7 @@ mod tests {
         }
 
         async fn invoke(&self, call: ToolCall, _control: &Control) -> Result<Invocation> {
-            if call.name != "set_translations" {
+            if call.name != APPLY_TOOL {
                 bail!("unexpected tool call {}", call.name);
             }
             let value: Value = serde_json::from_str(&call.arguments)?;
@@ -2100,6 +2147,29 @@ mod tests {
         assert!(host.applied().is_empty());
         assert!(!invocation.changed);
         assert_eq!(invocation.value["metrics"]["changes"].as_u64(), Some(0));
+    }
+
+    #[tokio::test]
+    async fn job_history_keeps_outcome_and_drops_details() {
+        let mut host = MockHost::default();
+        host.add_page("p1", 30);
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_response(
+            &[("p1e1", "revisado")],
+            &[("Tanaka", "Tanaka")],
+        )));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert_eq!(invocation.history["total"], 1);
+        assert_eq!(invocation.history["completed"], 1);
+        assert!(
+            invocation.history.get("memory").is_none(),
+            "the glossary dump must not ride along in every later request"
+        );
+        assert!(invocation.history.get("metrics").is_none());
+        // The turn that ran the job still sees the full result.
+        assert!(invocation.value["memory"].is_string());
+        assert!(invocation.value["metrics"].is_object());
     }
 
     #[tokio::test]
