@@ -212,6 +212,14 @@ impl Host for KoharuHost {
         Ok(json!({ "pages": result }))
     }
 
+    fn review_target_language(&self) -> Result<String> {
+        Ok(Preferences::load()?
+            .pipeline
+            .translation
+            .target_language
+            .to_string())
+    }
+
     fn tools(&self) -> Vec<Tool> {
         static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
         TOOLS

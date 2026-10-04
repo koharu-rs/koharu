@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -83,7 +83,12 @@ pub trait Host: Send + Sync + 'static {
 
     async fn invoke(&self, call: ToolCall, control: &Control) -> Result<Invocation>;
 
-    async fn bulk_review_pages(&self, _pages: &[String]) -> Result<Value> {
-        bail!("bulk review is not supported by this host")
-    }
+    /// Page text for the bulk reviewer, as `{ "pages": [...] }` with the
+    /// element set and order the page view reports.
+    async fn bulk_review_pages(&self, pages: &[String]) -> Result<Value>;
+
+    /// Display name of the language translations are being revised into. The
+    /// agent crate does not own a language model, and source language is never
+    /// a job-wide fact — it stays per element in the reviewed payload.
+    fn review_target_language(&self) -> Result<String>;
 }

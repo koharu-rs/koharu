@@ -9,10 +9,11 @@
 // - Lowest supported reasoning effort
 // - Text-based batch planner using measured page sizes
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use anyhow::{Context as _, Result, anyhow, bail};
+use icu_properties::{CodePointMapData, props::Script as IcuScript};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -42,6 +43,10 @@ const MAX_INSTRUCTION_CHARS: usize = 4_000;
 /// Failed pages reported per job; the rest is only a count.
 const MAX_REPORTED_FAILURES: usize = 32;
 
+/// A script must carry at least one in this many translated characters before it
+/// counts as a script the batch is written in.
+const MIN_TARGET_SCRIPT_SHARE: usize = 3;
+
 /// Per-volume overhead heuristic used when planning batches.
 const ESTIMATED_JSON_OVERHEAD_PER_ELEMENT: usize = 64;
 
@@ -63,10 +68,15 @@ pub(crate) struct ReviewPage {
 pub(crate) struct ReviewElement {
     /// Element entity ID
     pub(crate) id: String,
-    /// Reading order within the page
+    /// Position in the page's element list, the same order `inspect_pages` reports
     pub(crate) order: usize,
     /// Source text
     pub(crate) source: String,
+    /// Language the page records for this source text. Kept per element: one
+    /// page can mix scripts, and the reviewer must not assume otherwise. Short
+    /// on the wire because the payload budget is the whole point.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lang")]
+    pub(crate) source_language: Option<String>,
     /// Current translation (may be absent)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) translation: Option<String>,
@@ -100,10 +110,11 @@ pub(crate) struct MemoryUpdate {
     pub(crate) value: String,
 }
 
-/// Compact translation memory — local merge, structured storage.
+/// Compact translation memory, keyed in sorted order so the prompt prefix it
+/// produces is identical for the same content across batches and retries.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TranslationMemory {
-    entries: HashMap<String, String>,
+    entries: BTreeMap<String, String>,
 }
 
 impl TranslationMemory {
@@ -136,52 +147,97 @@ impl TranslationMemory {
 
     /// Enforce a size limit over whole entries so multibyte UTF-8 never splits.
     pub(crate) fn bounded(mut self, max_bytes: usize) -> Self {
-        let mut entries = self.entries.drain().collect::<Vec<_>>();
-        entries.sort_by(|(left, _), (right, _)| left.cmp(right));
         let mut size = 0_usize;
-        self.entries.clear();
-        for (key, value) in entries {
-            let entry_size = key.len() + value.len() + 2; // "; " separator + opening bracket bookkeeping
+        self.entries.retain(|key, value| {
+            let entry_size = key.len() + value.len() + 2;
             if size + entry_size > max_bytes {
-                continue;
+                return false;
             }
-            self.entries.insert(key, value);
             size += entry_size;
-        }
+            true
+        });
         self
     }
 }
 
-/// Local quality hints for a review element. They are conservative signals
-/// computed locally to guide the reviewer toward likely OCR noise or missing
-/// content. They are advisory only — this module never edits text directly.
-fn is_cjk(c: char) -> bool {
-    matches!(
-        c,
-        '\u{3000}'..='\u{303F}'
-            | '\u{3400}'..='\u{4DBF}'
-            | '\u{4E00}'..='\u{9FFF}'
-            | '\u{FF66}'..='\u{FFDC}'
-    )
+/// Scripts a text carries, ignoring punctuation and other shared code points.
+fn scripts(text: &str) -> Vec<IcuScript> {
+    let map = CodePointMapData::<IcuScript>::new();
+    let mut found = Vec::new();
+    for character in text.chars() {
+        let script = map.get(character);
+        if matches!(script, IcuScript::Common | IcuScript::Inherited) || found.contains(&script) {
+            continue;
+        }
+        found.push(script);
+    }
+    found
 }
 
-/// CJK characters left in a Portuguese translation.
-fn has_untranslated_cjk(text: &str) -> bool {
-    text.chars().any(is_cjk)
+/// Counts the script-carrying characters of a text, to estimate which scripts a
+/// whole batch is written in.
+fn count_scripts(text: &str, counts: &mut BTreeMap<IcuScript, usize>) {
+    let map = CodePointMapData::<IcuScript>::new();
+    for character in text.chars() {
+        let script = map.get(character);
+        if matches!(script, IcuScript::Common | IcuScript::Inherited) {
+            continue;
+        }
+        *counts.entry(script).or_default() += 1;
+    }
 }
 
-/// Latin and CJK glyphs mixed inside the same whitespace-separated token.
-fn has_suspicious_mixed_script(text: &str) -> bool {
-    text.split(char::is_whitespace)
-        .any(|token| token.chars().any(|c| c.is_ascii_alphabetic()) && token.chars().any(is_cjk))
+fn carries_any_script(text: &str, scripts: &[IcuScript]) -> bool {
+    let map = CodePointMapData::<IcuScript>::new();
+    text.chars()
+        .any(|character| scripts.contains(&map.get(character)))
+}
+
+/// Estimate the scripts a batch is written in from its own translations. A
+/// script must carry a share of the batch's characters, so one element still
+/// holding source text cannot declare that text to be the target's script. A
+/// translation that merely repeats its source is not evidence at all.
+pub(crate) fn batch_target_scripts(batch: &[(&str, &str)]) -> Vec<IcuScript> {
+    let mut counts: BTreeMap<IcuScript, usize> = BTreeMap::new();
+    for (source, translation) in batch {
+        if translation.trim() != source.trim() {
+            count_scripts(translation, &mut counts);
+        }
+    }
+    let scripted: usize = counts.values().sum();
+    counts
+        .into_iter()
+        .filter(|(_, count)| count.saturating_mul(MIN_TARGET_SCRIPT_SHARE) >= scripted)
+        .map(|(script, _)| script)
+        .collect()
+}
+
+/// Scripts that would be untranslated residue in a text of this source: the
+/// source's own scripts minus the ones the batch is translated into.
+pub(crate) fn residue_scripts(source: &str, target_scripts: &[IcuScript]) -> Vec<IcuScript> {
+    scripts(source)
+        .into_iter()
+        .filter(|script| !target_scripts.contains(script))
+        .collect()
+}
+
+/// Single-letter words that are ordinary in the target language. Unknown
+/// targets get no list, which turns the hint off rather than let it flag real
+/// words of a language this module does not model.
+fn single_letter_words(target: &str) -> Option<&'static [&'static str]> {
+    target
+        .to_lowercase()
+        .contains("portuguese")
+        .then_some(&["a", "e", "i", "o", "u", "á", "à", "é", "í", "ó", "ú", "ê"])
 }
 
 /// Trailing isolated ASCII letter after sentence-ending punctuation, e.g. the
-/// stray "M" in "Me dá aquilo! M". Conservative: single-letter Portuguese
-/// words, initials with a period, and attached cases ("Sim!Muito") are skipped.
-fn has_possible_orphan_character(text: &str) -> bool {
-    const PORTUGUESE_SINGLE_LETTER_WORDS: &[&str] =
-        &["a", "e", "i", "o", "u", "á", "à", "é", "í", "ó", "ú", "ê"];
+/// stray "M" in "Me dá aquilo! M". Conservative: single-letter words of the
+/// target, initials with a period, and attached cases ("Sim!Muito") are skipped.
+fn has_possible_orphan_character(text: &str, target: &str) -> bool {
+    let Some(single_letter_words) = single_letter_words(target) else {
+        return false;
+    };
     if text.chars().count() < 6 {
         return false;
     }
@@ -197,7 +253,7 @@ fn has_possible_orphan_character(text: &str) -> bool {
         return false;
     }
     let lower = last.to_lowercase();
-    if PORTUGUESE_SINGLE_LETTER_WORDS.contains(&lower.as_str()) {
+    if single_letter_words.contains(&lower.as_str()) {
         return false;
     }
     let Some(&second_to_last) = prefix.last() else {
@@ -250,21 +306,24 @@ fn has_suspicious_punctuation(text: &str) -> bool {
     })
 }
 
-/// Compute conservative local quality hints for an element's translation.
-/// Returns an empty list when the element has no translation or looks clean.
-pub(crate) fn quality_hints(_source: &str, translation: Option<&str>) -> Vec<&'static str> {
-    let Some(text) = translation else {
+/// Conservative local quality hints for one reviewed element, guiding the
+/// reviewer toward likely OCR noise or untranslated text. Advisory only — this
+/// module never edits text through them. `residue` is the element's source
+/// script that the batch's own translations do not use, so a translation still
+/// carrying it is untranslated text rather than a legitimate word.
+pub(crate) fn quality_hints(
+    residue: &[IcuScript],
+    translation: Option<&str>,
+    target: &str,
+) -> Vec<&'static str> {
+    let Some(text) = translation.map(str::trim) else {
         return Vec::new();
     };
-    let text = text.trim();
     let mut hints = Vec::new();
-    if has_untranslated_cjk(text) {
-        hints.push("untranslated_cjk");
+    if carries_any_script(text, residue) {
+        hints.push("untranslated_source_script");
     }
-    if has_suspicious_mixed_script(text) {
-        hints.push("suspicious_mixed_script");
-    }
-    if has_possible_orphan_character(text) {
+    if has_possible_orphan_character(text, target) {
         hints.push("possible_orphan_character");
     }
     if has_repeated_fragment(text) {
@@ -276,17 +335,24 @@ pub(crate) fn quality_hints(_source: &str, translation: Option<&str>) -> Vec<&'s
     hints
 }
 
-pub(crate) const BULK_REVIEW_INSTRUCTIONS: &str = r#"You are a specialized bulk translation reviewer for manga pages (source text in Japanese, translation into Portuguese).
-You receive minimal textual data: page labels, element IDs, source text, current translations, and optional local quality hints on an element.
+/// The reviewer's system prompt. The target language is a project fact the host
+/// supplies; no source language is stated here because it is an element fact.
+pub(crate) fn review_instructions(target: &str) -> String {
+    format!(
+        r#"You are a specialized bulk translation reviewer for manga pages, revising translations into {target}.
+You receive minimal textual data: page labels, element IDs, source text, that source's language tag when the page records one, current translations, and optional local quality hints on an element.
+Every element carries its own source language and a batch can mix them. Review each element against the language its own source is in; when an element has no tag, detect that language from the text. Never infer an element's source language from another element.
 Review every provided translation in this order:
 1. SOURCE FIDELITY — does the translation carry the source meaning? Check for lost or added information, wrong subject/object, inverted negation, wrong verb tense, and swapped pronouns or relationships. Accuracy failures are the most serious errors to fix.
-2. OCR/TEXT NOISE — translation pipelines leave OCR artifacts. Look for isolated single letters after sentence punctuation ("Me dá aquilo! M"), duplicated or cut fragments, misplaced punctuation (doubled marks, commas next to periods), and CJK characters left untranslated in the Portuguese text. Do not preserve a character just because it exists. Do NOT remove real initials ("K.", "J."), acronyms, units, or onomatopoeia.
+2. OCR/TEXT NOISE — translation pipelines leave OCR artifacts. Look for isolated single letters after sentence punctuation, duplicated or cut fragments, misplaced punctuation (doubled marks, commas next to periods), and source-script characters left untranslated in the {target} text. Do not preserve a character just because it exists. Do NOT remove real initials ("K.", "J."), acronyms, units, or onomatopoeia.
 3. NAMES/TERMINOLOGY — keep names and terms consistent. The provided translation memory is your canonical glossary: reuse existing keys and spellings and prefer them over new variants. If two spellings of the same name appear in one batch, normalize them to one. Add durable decisions (names, pronouns, relationships, tone) to "memory_updates" only when they are genuinely useful for later batches.
-4. NATURAL PORTUGUESE — only after steps 1–3, fix flow, register, and readability. Do not restyle translations that are already accurate.
-Local "hints" are conservative advisory flags for possible OCR noise or untranslated text. Verify each one against the source before acting; some hints are false positives and identical text is not necessarily an error.
+4. NATURAL {target} — only after steps 1–3, fix flow, register, and readability. Do not restyle translations that are already accurate.
+Local "hints" are conservative advisory flags for possible OCR noise or untranslated source script. Verify each one against the source before acting; some hints are false positives and identical text is not necessarily an error.
 Output ONLY a structured JSON response — no conversational text, no explanations outside the response object.
 In "changes" include ONLY elements that need updating. If a translation is already correct, do NOT echo it.
-In "memory_updates" provide incremental additions or replacements for terminology, names, pronouns, relationships, tone decisions — not a full memory dump."#;
+In "memory_updates" provide incremental additions or replacements for terminology, names, pronouns, relationships, tone decisions — not a full memory dump."#
+    )
+}
 
 /// JSON schema for structured output (Responses API `text.format`).
 pub(crate) fn review_response_schema() -> Value {
@@ -572,6 +638,12 @@ impl<'a> BulkReviewer<'a> {
             "a review job covers at most {MAX_JOB_PAGES} pages"
         );
         let total = pages.len();
+        // The target language is a project fact the host owns; the reviewer is not
+        // allowed to guess it, and never guesses the source.
+        let target = self
+            .host
+            .review_target_language()
+            .context("failed to read the project's target language")?;
 
         let mut completed = 0_usize;
         let mut failed = Vec::new();
@@ -625,6 +697,7 @@ impl<'a> BulkReviewer<'a> {
                         &batch,
                         &memory,
                         model,
+                        &target,
                         control,
                         sequence,
                     )
@@ -725,6 +798,7 @@ impl<'a> BulkReviewer<'a> {
         batch: &[MeasuredPage],
         memory: &TranslationMemory,
         model: &CodexModel,
+        target: &str,
         control: &Control,
         batch_index: usize,
     ) -> std::result::Result<ReviewBatchResult, ReviewBatchError> {
@@ -735,7 +809,6 @@ impl<'a> BulkReviewer<'a> {
         let mut target_pages = HashSet::new();
         let mut review_pages = Vec::with_capacity(batch.len());
         let mut element_count = 0_usize;
-        let mut hints_count = 0_usize;
         let mut source_chars = 0_usize;
         let mut translation_chars = 0_usize;
 
@@ -766,6 +839,10 @@ impl<'a> BulkReviewer<'a> {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned();
+                let source_language = element
+                    .get("lang")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned);
                 let translation = element
                     .get("translation")
                     .and_then(Value::as_str)
@@ -778,14 +855,13 @@ impl<'a> BulkReviewer<'a> {
                 );
                 element_count = element_count.saturating_add(1);
                 element_to_page.insert(id.clone(), page_id.clone());
-                let hints = quality_hints(&source, translation.as_deref());
-                hints_count = hints_count.saturating_add(hints.len());
                 elements.push(ReviewElement {
                     id,
                     order,
                     source,
+                    source_language,
                     translation,
-                    quality_hints: hints,
+                    quality_hints: Vec::new(),
                 });
             }
             review_pages.push(ReviewPage {
@@ -793,6 +869,30 @@ impl<'a> BulkReviewer<'a> {
                 label,
                 elements,
             });
+        }
+
+        // Hints compare each element's source script against the scripts this batch
+        // is written in, which is only known once every translation has been read.
+        let translated = review_pages
+            .iter()
+            .flat_map(|page| page.elements.iter())
+            .filter_map(|element| {
+                element
+                    .translation
+                    .as_deref()
+                    .map(|text| (element.source.as_str(), text))
+            })
+            .collect::<Vec<_>>();
+        let target_scripts = batch_target_scripts(&translated);
+        let mut hints_count = 0_usize;
+        for element in review_pages
+            .iter_mut()
+            .flat_map(|page| page.elements.iter_mut())
+        {
+            let residue = residue_scripts(&element.source, &target_scripts);
+            let hints = quality_hints(&residue, element.translation.as_deref(), target);
+            hints_count = hints_count.saturating_add(hints.len());
+            element.quality_hints = hints;
         }
 
         // The pages themselves are the payload: the model must see every element's
@@ -812,7 +912,7 @@ impl<'a> BulkReviewer<'a> {
         let input = vec![message("user", prompt)];
         let request = Request::new(
             model.id.clone(),
-            BULK_REVIEW_INSTRUCTIONS.to_owned(),
+            review_instructions(target),
             input,
             Vec::new(),
             lowest_reasoning(model),
@@ -1110,6 +1210,7 @@ mod tests {
         calls: AtomicUsize,
         script: Mutex<VecDeque<std::result::Result<Turn, anyhow::Error>>>,
         prompts: Mutex<Vec<String>>,
+        instructions: Mutex<Vec<String>>,
     }
 
     impl MockClient {
@@ -1118,6 +1219,7 @@ mod tests {
                 calls: AtomicUsize::new(0),
                 script: Mutex::new(VecDeque::new()),
                 prompts: Mutex::new(Vec::new()),
+                instructions: Mutex::new(Vec::new()),
             }
         }
 
@@ -1131,6 +1233,10 @@ mod tests {
 
         fn prompts(&self) -> Vec<String> {
             self.prompts.lock().unwrap().clone()
+        }
+
+        fn instructions(&self) -> Vec<String> {
+            self.instructions.lock().unwrap().clone()
         }
 
         fn respond_ok(&self, text: impl Into<String>) -> std::result::Result<Turn, anyhow::Error> {
@@ -1159,6 +1265,10 @@ mod tests {
                 .unwrap_or_default()
                 .to_owned();
             self.prompts.lock().unwrap().push(prompt);
+            self.instructions
+                .lock()
+                .unwrap()
+                .push(request.instructions.clone());
             let mut script = self.script.lock().unwrap();
             if let Some(result) = script.pop_front() {
                 return result;
@@ -1167,19 +1277,36 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
     struct MockHost {
         pages: HashMap<String, Vec<Value>>,
         applied: Mutex<Vec<(String, Option<String>)>>,
         reads: Mutex<Vec<Vec<String>>>,
+        target: String,
+    }
+
+    impl Default for MockHost {
+        fn default() -> Self {
+            Self {
+                pages: HashMap::new(),
+                applied: Mutex::new(Vec::new()),
+                reads: Mutex::new(Vec::new()),
+                target: "Portuguese".to_owned(),
+            }
+        }
     }
 
     impl MockHost {
+        fn with_target(mut self, target: &str) -> Self {
+            self.target = target.to_owned();
+            self
+        }
+
         fn add_element(
             &mut self,
             page_id: &str,
             element_id: &str,
             source: &str,
+            source_language: Option<&str>,
             translation: Option<&str>,
         ) {
             self.pages
@@ -1188,12 +1315,19 @@ mod tests {
                 .push(json!({
                     "id": element_id,
                     "source": source,
+                    "lang": source_language,
                     "translation": translation,
                 }));
         }
 
         fn add_page(&mut self, id: &str, source_chars: usize) {
-            self.add_element(id, &format!("{id}e1"), &"x".repeat(source_chars), None);
+            self.add_element(
+                id,
+                &format!("{id}e1"),
+                &"x".repeat(source_chars),
+                None,
+                None,
+            );
         }
 
         fn applied(&self) -> Vec<(String, Option<String>)> {
@@ -1213,6 +1347,10 @@ mod tests {
 
         fn tools(&self) -> Vec<Tool> {
             Vec::new()
+        }
+
+        fn review_target_language(&self) -> Result<String> {
+            Ok(self.target.clone())
         }
 
         async fn invoke(&self, call: ToolCall, _control: &Control) -> Result<Invocation> {
@@ -1577,6 +1715,21 @@ mod tests {
         assert_eq!(lowest_reasoning(&model), Reasoning::Low);
     }
 
+    /// Hints the reviewer would attach to the last element of a batch, with the
+    /// batch's target scripts estimated from every element in it.
+    fn hints(batch: &[(&str, &str)], target: &str) -> Vec<&'static str> {
+        let target_scripts = batch_target_scripts(batch);
+        let (source, translation) = batch
+            .last()
+            .copied()
+            .expect("a hinted batch has at least one element");
+        quality_hints(
+            &residue_scripts(source, &target_scripts),
+            Some(translation),
+            target,
+        )
+    }
+
     #[test]
     fn minimal_payload_excludes_geometry_and_metadata() {
         let page = ReviewPage {
@@ -1587,6 +1740,7 @@ mod tests {
                     id: "e1".to_owned(),
                     order: 0,
                     source: "Hello".to_owned(),
+                    source_language: Some("en-US".to_owned()),
                     translation: Some("Olá".to_owned()),
                     quality_hints: Vec::new(),
                 },
@@ -1594,6 +1748,7 @@ mod tests {
                     id: "e2".to_owned(),
                     order: 1,
                     source: "World".to_owned(),
+                    source_language: None,
                     translation: None,
                     quality_hints: Vec::new(),
                 },
@@ -1613,59 +1768,153 @@ mod tests {
                 "payload must not contain {forbidden}"
             );
         }
-        for required in ["Hello", "Olá", "World", "\"order\":0", "\"order\":1"] {
+        for required in [
+            "Hello",
+            "Olá",
+            "World",
+            "en-US",
+            "\"order\":0",
+            "\"order\":1",
+        ] {
             assert!(body.contains(required), "payload must contain {required}");
         }
+        // An element without a recorded source language omits the key.
+        assert_eq!(body.matches("\"lang\"").count(), 1);
     }
 
     #[test]
-    fn quality_hints_flag_ocr_and_cjk_noise() {
-        let orphan = quality_hints("src", Some("Me dá aquilo! M"));
-        assert!(orphan.contains(&"possible_orphan_character"));
-        assert_eq!(orphan.len(), 1);
+    fn quality_hints_flag_source_script_left_behind() {
+        let leak = [
+            ("ちょっと待って", "Espera aí!"),
+            ("行こう", "Vamos lá!"),
+            ("世界を見ろ", "Olá, 世界!"),
+        ];
+        assert!(
+            hints(&leak, "Portuguese").contains(&"untranslated_source_script"),
+            "Han left among Portuguese translations must be flagged"
+        );
+        // Hiragana-only and Hangul residue were invisible to the old range table.
+        let kana = [
+            ("ちょっと待って", "Espera aí!"),
+            ("行こう", "Vamos lá!"),
+            ("さようなら", "さようなら"),
+        ];
+        assert!(hints(&kana, "Portuguese").contains(&"untranslated_source_script"));
+        let hangul = [
+            ("ちょっと待って", "Espera aí!"),
+            ("행복합니다", "행복합니다"),
+        ];
+        assert!(
+            hints(&hangul, "Portuguese").contains(&"untranslated_source_script"),
+            "Hangul left in the batch must be flagged"
+        );
 
-        let cjk = quality_hints("src", Some("Olá, 世界!"));
-        assert!(cjk.contains(&"untranslated_cjk"));
-        assert!(!cjk.contains(&"possible_orphan_character"));
+        let repeated = [
+            ("ちょっと待って", "Espera aí!"),
+            ("行こう", "Vamos lá!"),
+            ("何度も言う", "Vamos ver vamos ver."),
+        ];
+        assert!(hints(&repeated, "Portuguese").contains(&"repeated_fragment"));
+        let orphan = [
+            ("ちょっと待って", "Espera aí!"),
+            ("行こう", "Vamos lá!"),
+            ("あれをちょうだい", "Me dá aquilo! M"),
+        ];
+        let flagged = hints(&orphan, "Portuguese");
+        assert!(flagged.contains(&"possible_orphan_character"));
+        assert_eq!(flagged.len(), 1);
+        assert!(
+            hints(
+                &[("ちょっと待って", "Espera aí!"), ("行こう", "Oi!!")],
+                "Portuguese"
+            )
+            .contains(&"suspicious_punctuation")
+        );
+        assert!(
+            hints(
+                &[("ちょっと待って", "Espera aí!"), ("行こう", "sério,,")],
+                "Portuguese"
+            )
+            .contains(&"suspicious_punctuation")
+        );
+    }
 
-        let mixed = quality_hints("src", Some("Brasil東京"));
-        assert!(mixed.contains(&"untranslated_cjk"));
-        assert!(mixed.contains(&"suspicious_mixed_script"));
+    #[test]
+    fn quality_hints_follow_the_target_language() {
+        let clean = [
+            ("ちょっと待って", "Espera aí!"),
+            ("行こう", "Vamos lá!"),
+            ("世界を見ろ", "Veja o mundo!"),
+        ];
+        assert!(hints(&clean, "Portuguese").is_empty());
 
-        let repeated = quality_hints("src", Some("Vamos ver vamos ver."));
-        assert!(repeated.contains(&"repeated_fragment"));
+        // A Chinese target legitimately keeps Han; only the kana it does not use
+        // would be residue there.
+        let chinese = [
+            ("ちょっと待って", "等等"),
+            ("行こう", "走吧"),
+            ("世界を見ろ", "看世界"),
+        ];
+        assert!(
+            !hints(&chinese, "Chinese").contains(&"untranslated_source_script"),
+            "Han is the Chinese target's own script"
+        );
 
-        assert!(quality_hints("src", Some("Oi!!")).contains(&"suspicious_punctuation"));
-        assert!(quality_hints("src", Some("sério,,")).contains(&"suspicious_punctuation"));
+        // A Latin source into a Latin target leaks nothing.
+        assert!(
+            hints(&[("Hello there", "Olá, forasteiro")], "Portuguese").is_empty(),
+            "sharing an alphabet is not untranslated text"
+        );
+
+        // The isolated-letter list is Portuguese-only, so a target this module does
+        // not model gets no such hint instead of a wrong one.
+        let orphan = [
+            ("ちょっと待って", "Espera aí!"),
+            ("行こう", "Vamos lá!"),
+            ("あれをちょうだい", "Me dá aquilo! M"),
+        ];
+        assert!(hints(&orphan, "Portuguese").contains(&"possible_orphan_character"));
+        assert!(
+            !hints(&orphan, "English").contains(&"possible_orphan_character"),
+            "an unknown target must not be judged by Portuguese word lists"
+        );
+    }
+
+    #[test]
+    fn residue_is_an_element_fact_not_a_batch_fact() {
+        let batch = [
+            ("ちょっと待って", "Espera aí!"),
+            ("Hello there", "Olá, forasteiro"),
+        ];
+        let target_scripts = batch_target_scripts(&batch);
+        assert!(residue_scripts("ちょっと待って", &target_scripts).contains(&IcuScript::Hiragana));
+        assert!(residue_scripts("Hello there", &target_scripts).is_empty());
     }
 
     #[test]
     fn quality_hints_do_not_flag_legitimate_portuguese() {
-        assert!(quality_hints("src", Some("Este texto está correto.")).is_empty());
-        assert!(quality_hints("src", Some("Olha essa cena! É")).is_empty());
-        assert!(quality_hints("src", Some("Permaneceu calado. Sim!Muito calado")).is_empty());
-        assert!(quality_hints("src", Some("Foi ontem à noite! K.")).is_empty());
-        assert!(quality_hints("src", Some("— J. saiu correndo.")).is_empty());
-        assert!(quality_hints("src", Some("Muito muito legal.")).is_empty());
-        assert!(quality_hints("src", Some("Cer...? E depois!")).is_empty());
-        assert!(quality_hints("src", None).is_empty());
-        assert!(quality_hints("src", Some("")).is_empty());
-    }
-
-    #[test]
-    fn quality_hints_skip_attached_cases_and_single_cjk() {
-        let attached = quality_hints("src", Some("Sim!Muito"));
-        assert!(attached.is_empty());
-
-        let cjk_end = quality_hints("src", Some("Vamos! 死"));
-        assert!(cjk_end.contains(&"untranslated_cjk"));
-        assert!(!cjk_end.contains(&"possible_orphan_character"));
-
-        let ellipsis = quality_hints("src", Some("Ela disse... né!"));
-        assert!(!ellipsis.contains(&"suspicious_punctuation"));
-
-        let interjection = quality_hints("src", Some("Foi mesmo!?"));
-        assert!(!interjection.contains(&"suspicious_punctuation"));
+        for text in [
+            "Este texto está correto.",
+            "Olha essa cena! É",
+            "Permaneceu calado. Sim!Muito calado",
+            "Foi ontem à noite! K.",
+            "— J. saiu correndo.",
+            "Muito muito legal.",
+            "Cer...? E depois!",
+            "Sim!Muito",
+            "Ela disse... né!",
+            "Foi mesmo!?",
+        ] {
+            let batch = [("ちょっと待って", "Espera aí!"), ("行こう", text)];
+            assert!(
+                hints(&batch, "Portuguese").is_empty(),
+                "{text} must not be flagged"
+            );
+        }
+        assert!(
+            quality_hints(&scripts("ちょっと待って"), None, "Portuguese").is_empty(),
+            "an element without a translation has nothing to hint about"
+        );
     }
 
     #[test]
@@ -1674,6 +1923,7 @@ mod tests {
             id: "e1".to_owned(),
             order: 0,
             source: "Hello".to_owned(),
+            source_language: None,
             translation: Some("Olá".to_owned()),
             quality_hints: Vec::new(),
         };
@@ -1684,8 +1934,12 @@ mod tests {
             id: "e2".to_owned(),
             order: 1,
             source: "ちょっと待って".to_owned(),
+            source_language: Some("ja-JP".to_owned()),
             translation: Some("Espera aí! M".to_owned()),
-            quality_hints: quality_hints("ちょっと待って", Some("Espera aí! M")),
+            quality_hints: hints(
+                &[("行こう", "Vamos lá!"), ("ちょっと待って", "Espera aí! M")],
+                "Portuguese",
+            ),
         };
         let hinted_body = serde_json::to_string(&hinted).unwrap();
         assert!(hinted_body.contains("quality_hints"));
@@ -1695,7 +1949,13 @@ mod tests {
     #[tokio::test]
     async fn payload_embeds_pages_and_quality_hints() {
         let mut host = MockHost::default();
-        host.add_element("p1", "p1e1", "ちょうどいい", Some("Perfeito! M"));
+        host.add_element(
+            "p1",
+            "p1e1",
+            "ちょうどいい",
+            Some("ja-JP"),
+            Some("Perfeito! M"),
+        );
         let client = MockClient::new();
         client.push(client.respond_ok(review_text(&[])));
 
@@ -1756,6 +2016,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_reviewer_is_told_the_projects_target_language() {
+        let mut host = MockHost::default().with_target("English");
+        host.add_element(
+            "p1",
+            "p1e1",
+            "こんにちは",
+            Some("ja-JP"),
+            Some("Hello there"),
+        );
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        run_job(&client, &host, &["p1"]).await.unwrap();
+        let instructions = client.instructions();
+        assert_eq!(instructions.len(), 1);
+        assert!(
+            instructions[0].contains("into English"),
+            "{}",
+            instructions[0]
+        );
+        for assumed in ["Portuguese", "Japanese"] {
+            assert!(
+                !instructions[0].contains(assumed),
+                "instructions must not hardcode {assumed}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn one_batch_keeps_every_elements_source_language() {
+        let mut host = MockHost::default();
+        host.add_element(
+            "p1",
+            "e1",
+            "ちょっと待って",
+            Some("ja-JP"),
+            Some("Espera aí!"),
+        );
+        host.add_element(
+            "p1",
+            "e2",
+            "Hello there",
+            Some("en-US"),
+            Some("Olá, forasteiro"),
+        );
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        run_job(&client, &host, &["p1"]).await.unwrap();
+        let prompt = client.prompts()[0].clone();
+        assert!(prompt.contains("\"lang\":\"ja-JP\""), "{prompt}");
+        assert!(prompt.contains("\"lang\":\"en-US\""), "{prompt}");
+    }
+
+    #[tokio::test]
     async fn one_successful_batch_is_one_model_request() {
         let mut host = MockHost::default();
         for page in ["p1", "p2", "p3"] {
@@ -1776,7 +2091,7 @@ mod tests {
     #[tokio::test]
     async fn an_echoed_translation_writes_nothing() {
         let mut host = MockHost::default();
-        host.add_element("p1", "p1e1", "こんにちは", Some("Olá"));
+        host.add_element("p1", "p1e1", "こんにちは", Some("ja-JP"), Some("Olá"));
         let client = MockClient::new();
         client.push(client.respond_ok(review_text(&[("p1e1", "Olá")])));
 
