@@ -1655,9 +1655,7 @@ mod tests {
             .layers
             .iter()
             .filter_map(|layer| match layer {
-                Layer::Text {
-                    id, visibility, ..
-                } => visibility.visible.then_some(*id),
+                Layer::Text { id, visibility, .. } => visibility.visible.then_some(*id),
                 _ => None,
             })
             .collect::<Vec<_>>();

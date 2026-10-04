@@ -826,19 +826,36 @@ impl<'a> BulkReviewer<'a> {
         validate_review_response(&response_json, &target_pages, &element_to_page)
             .map_err(ReviewBatchError::from)?;
 
+        // A change that repeats the current text is not a revision: applying it would
+        // mint an undo step and promote pipeline output to user authorship.
+        let current: HashMap<String, String> = review_pages
+            .iter()
+            .flat_map(|page| page.elements.iter())
+            .filter_map(|element| {
+                element
+                    .translation
+                    .clone()
+                    .map(|text| (element.id.clone(), text))
+            })
+            .collect();
+        let updates = response_json
+            .changes
+            .iter()
+            .filter(|change| {
+                current
+                    .get(&change.element)
+                    .is_none_or(|text| text.trim() != change.translation.trim())
+            })
+            .map(|change| json!({ "element": change.element, "text": change.translation }))
+            .collect::<Vec<_>>();
+        let applied = updates.len();
         let mut changed = false;
-        let mut applied = 0_usize;
-        if !response_json.changes.is_empty() {
-            let updates = response_json
-                .changes
-                .iter()
-                .map(|change| json!({ "element": change.element, "text": change.translation }))
-                .collect::<Vec<_>>();
+        if !updates.is_empty() {
             let invocation = self
                 .host
                 .invoke(
                     ToolCall {
-                        call_id: "bulk-apply".to_owned(),
+                        call_id: format!("bulk-apply-{batch_index}"),
                         name: "set_translations".to_owned(),
                         arguments: serde_json::to_string(&json!({ "updates": updates }))
                             .unwrap_or_default(),
@@ -848,7 +865,6 @@ impl<'a> BulkReviewer<'a> {
                 .await
                 .map_err(ReviewBatchError::from)?;
             changed = invocation.changed;
-            applied = updates.len();
         }
 
         let memory = memory
@@ -1700,6 +1716,20 @@ mod tests {
             host.applied(),
             vec![("p1e1".to_owned(), Some("Olá mundo".to_owned()))]
         );
+    }
+
+    #[tokio::test]
+    async fn an_echoed_translation_writes_nothing() {
+        let mut host = MockHost::default();
+        host.add_element("p1", "p1e1", "こんにちは", Some("Olá"));
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[("p1e1", "Olá")])));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert_eq!(client.calls(), 1);
+        assert!(host.applied().is_empty());
+        assert!(!invocation.changed);
+        assert_eq!(invocation.value["metrics"]["changes"].as_u64(), Some(0));
     }
 
     #[tokio::test]
