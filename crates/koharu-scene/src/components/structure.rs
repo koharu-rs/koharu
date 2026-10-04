@@ -1,16 +1,16 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    EntityId, Error, Result,
+    BlobId, EntityId, Error, Result,
     component::{Component, ValidationContext},
     id::validate_namespaced,
 };
 
-use super::{LanguageTag, Origin};
+use super::{AssetInput, LanguageTag, Origin};
 
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -90,6 +90,130 @@ impl From<PageDraft> for Page {
             label: value.label,
             width: value.width,
             height: value.height,
+        }
+    }
+}
+
+/// The uncut image a page was banded out of.
+///
+/// Provenance is anchored to the immutable source blob rather than to the page entity the
+/// image was first imported as. Slicing is a pure decomposition of pixels, so a band must stay
+/// traceable to the exact bytes it came from even after the user deletes that original page;
+/// an `EntityId` would dangle there and force the scene kernel to police referential integrity
+/// across page lifetimes. The accepted cost is that a band cannot enumerate its siblings from
+/// its own component: consumers group bands by this blob, and the `slice-of` relation links a
+/// band back to the source page for as long as that page is alive.
+///
+/// The uncut image is kept even when no page displays it, because a chapter imported as bands
+/// is otherwise impossible to re-cut; the blob stays pinned by the bands that name it.
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+pub struct SliceSource {
+    pub blob: BlobId,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl SliceSource {
+    #[must_use]
+    pub fn new(blob: BlobId, width: f64, height: f64) -> Self {
+        Self {
+            blob,
+            width,
+            height,
+        }
+    }
+}
+
+/// Marks a page as one vertical band of a taller source image.
+///
+/// Detection, OCR, translation, and typesetting consume pages without knowing that webtoons
+/// exist, so slicing happens entirely at import: this component is the only record that the
+/// page is a band, and it exists to answer "which pixels is this page cut from".
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+pub struct PageSlice {
+    pub source: SliceSource,
+    /// Distance from the top of the source image to the top of this band.
+    pub y_offset: f64,
+    pub slice_height: f64,
+}
+
+impl Component for PageSlice {
+    const KIND: &'static str = "dev.koharu.page.slice";
+
+    /// Keeps an uncut strip alive for re-banding for as long as any band still names it,
+    /// independently of whether an uncut page survives.
+    fn blob_refs(&self) -> Vec<BlobId> {
+        vec![self.source.blob]
+    }
+
+    fn validate(&self, context: &ValidationContext<'_>) -> Result<()> {
+        let source = self.source.width.is_finite()
+            && self.source.width > 0.0
+            && self.source.height.is_finite()
+            && self.source.height > 0.0;
+        // A band that leaves the source bounds would place OCR and typesetting geometry off
+        // the artwork, so the range is an invariant of the component rather than a caller duty.
+        let within_source = self.y_offset.is_finite()
+            && self.slice_height.is_finite()
+            && self.y_offset >= 0.0
+            && self.slice_height > 0.0
+            && self.y_offset + self.slice_height <= self.source.height;
+        if source && within_source && context.contains_blob(self.source.blob) {
+            Ok(())
+        } else {
+            Err(Error::invalid(
+                "page slice does not lie inside its stored source image",
+            ))
+        }
+    }
+}
+
+/// The uncut image a batch of bands is cut from.
+///
+/// The bytes travel with the batch because a project that keeps only the bands cannot be
+/// re-cut later; the blob identity is derived here so a caller cannot pair one image's
+/// geometry with another image's hash.
+pub struct SliceSourceInput {
+    pub bytes: Arc<[u8]>,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl SliceSourceInput {
+    #[must_use]
+    pub fn new(bytes: impl Into<Arc<[u8]>>, width: f64, height: f64) -> Self {
+        Self {
+            bytes: bytes.into(),
+            width,
+            height,
+        }
+    }
+}
+
+/// One band of a source image, ready to become a page.
+#[derive(Clone, Debug)]
+pub struct PageSliceDraft {
+    pub label: String,
+    pub y_offset: f64,
+    pub slice_height: f64,
+    pub image: AssetInput,
+}
+
+impl PageSliceDraft {
+    #[must_use]
+    pub fn new(
+        label: impl Into<String>,
+        y_offset: f64,
+        slice_height: f64,
+        image: AssetInput,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            y_offset,
+            slice_height,
+            image,
         }
     }
 }

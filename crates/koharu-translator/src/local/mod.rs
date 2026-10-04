@@ -80,7 +80,8 @@ impl LocalTranslator {
         )?;
         let schema = prompt::output_schema(expected);
         let llm = Arc::clone(&self.llm);
-        let generation = self.descriptor.generation.options(generation);
+        let budget = prompt::response_budget(&request.segments);
+        let generation = self.descriptor.generation.options(generation, budget);
         let output = tokio_rayon::spawn(move || {
             let input = image.as_deref().map_or_else(
                 || Input::new(&prompt),

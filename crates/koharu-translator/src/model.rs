@@ -118,26 +118,41 @@ impl QuantizationDefinition {
     }
 }
 
+/// Sampling defaults that belong to a model's weights rather than to a
+/// request.
+///
+/// The token budget is deliberately absent: how much room a response needs is
+/// a property of the page being translated, not of the model, so it is derived
+/// per call by `prompt::response_budget` instead of being pinned here to a
+/// constant that truncates dense pages.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct ModelGeneration {
     pub temperature: Option<f32>,
     pub top_k: Option<u32>,
     pub top_p: Option<f32>,
     pub min_p: Option<f32>,
-    pub max_tokens: Option<u32>,
     pub repeat_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
 }
 
 impl ModelGeneration {
-    pub(crate) fn options(self, overrides: GenerationConfig) -> GenerationOptions {
+    /// Merges caller overrides over the model defaults.
+    ///
+    /// `derived_budget` is what the request implies. An explicit
+    /// `GenerationConfig::max_tokens` replaces it rather than being combined
+    /// with it, because the caller has declared a ceiling this translation has
+    /// to live within; the derived value is already clamped, so a caller-chosen
+    /// limit is passed through rather than clamped a second time against limits
+    /// that do not describe this request.
+    pub(crate) fn options(
+        self,
+        overrides: GenerationConfig,
+        derived_budget: u32,
+    ) -> GenerationOptions {
         let defaults = GenerationOptions::default();
         GenerationOptions {
-            max_tokens: overrides
-                .max_tokens
-                .or(self.max_tokens)
-                .map_or(1000, |value| value as usize),
+            max_tokens: overrides.max_tokens.unwrap_or(derived_budget) as usize,
             temperature: overrides
                 .temperature
                 .or(self.temperature)
@@ -191,6 +206,28 @@ mod tests {
             vision,
             reasoning,
         }
+    }
+
+    #[test]
+    fn derived_budget_applies_only_without_an_explicit_limit() {
+        let model = ModelGeneration::default();
+
+        assert_eq!(
+            model.options(GenerationConfig::default(), 4096).max_tokens,
+            4096
+        );
+        assert_eq!(
+            model
+                .options(
+                    GenerationConfig {
+                        max_tokens: Some(512),
+                        ..GenerationConfig::default()
+                    },
+                    4096
+                )
+                .max_tokens,
+            512
+        );
     }
 
     #[test]

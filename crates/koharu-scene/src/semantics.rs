@@ -69,3 +69,15 @@ pub struct Inside;
 impl RelationSpec for Inside {
     const KIND: &'static str = "dev.koharu.relation.inside";
 }
+
+/// A page was banded out of a taller page that still exists in the project.
+///
+/// The relation is the navigable half of a webtoon band: it answers "which page do I belong
+/// to" while the uncut page is present, which a blob-anchored `PageSlice` cannot. It is
+/// deliberately transient — deleting the uncut page drops these links and leaves each band
+/// carrying its own `PageSlice` provenance.
+pub struct SliceOf;
+impl RelationSpec for SliceOf {
+    const KIND: &'static str = "dev.koharu.relation.slice-of";
+}
+impl FunctionalRelation for SliceOf {}

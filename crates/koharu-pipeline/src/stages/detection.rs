@@ -17,6 +17,9 @@ use imageproc::{
     geometry::{approximate_polygon_dp, arc_length, contour_area},
     morphology::{close, dilate},
 };
+// The fit strategy is defined by the model, which owns the geometry it was
+// trained for, but selected by the user, whose configuration this is.
+pub use koharu_ml::koharu_layout_rfdetr_seg_2xl::InputFit;
 use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
     KoharuLayoutDetection, KoharuLayoutDetections, KoharuLayoutMask, KoharuLayoutRFDetrSeg2XL,
     KoharuLayoutThresholds,
@@ -55,6 +58,13 @@ pub struct KoharuLayoutRFDetrSeg2XLConfig {
     pub text_threshold: Option<f32>,
     pub bubble_threshold: Option<f32>,
     pub panel_threshold: Option<f32>,
+    /// How a page is mapped onto RF-DETR's fixed square input.
+    ///
+    /// The checkpoint was trained on stretched pages, so `stretch` reproduces the
+    /// training distribution and `letter_box` trades a little of that fidelity for
+    /// undistorted panel and bubble proportions. Absent means the default, so an
+    /// existing configuration keeps loading unchanged.
+    pub input_fit: InputFit,
 }
 
 pub(super) struct Processor {
@@ -137,6 +147,7 @@ impl StageProcessor for Processor {
 struct Model {
     network: Arc<Mutex<KoharuLayoutRFDetrSeg2XL>>,
     thresholds: KoharuLayoutThresholds,
+    input_fit: InputFit,
 }
 
 impl Model {
@@ -150,6 +161,7 @@ impl Model {
         Ok(Self {
             network: Arc::new(Mutex::new(network)),
             thresholds,
+            input_fit: config.input_fit,
         })
     }
 
@@ -167,11 +179,12 @@ impl Model {
     async fn detect(&self, image: Arc<DynamicImage>) -> Result<KoharuLayoutDetections> {
         let network = self.network.clone();
         let thresholds = self.thresholds;
+        let input_fit = self.input_fit;
         tokio_rayon::spawn(move || {
             let network = network
                 .lock()
                 .map_err(|_| anyhow!("layout model lock is poisoned"))?;
-            network.inference_with_thresholds(&image, thresholds)
+            network.inference_with_thresholds(&image, thresholds, input_fit)
         })
         .await
     }
@@ -1845,10 +1858,10 @@ mod tests {
 
     use super::{
         DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, DetectionModel,
-        ImageSize, KoharuLayoutRFDetrSeg2XLConfig, MaskPixel, PageRegions, Processor, RegionOutput,
-        StageInput, StageProcessor, closed_mask_for, color_palette, generation, infer_typography,
-        layout_order, link_dialogue_regions, mask_containment, mask_for, mask_geometry,
-        non_maximum_suppression, normalize_text_color, write_region,
+        ImageSize, InputFit, KoharuLayoutRFDetrSeg2XLConfig, MaskPixel, PageRegions, Processor,
+        RegionOutput, StageInput, StageProcessor, closed_mask_for, color_palette, generation,
+        infer_typography, layout_order, link_dialogue_regions, mask_containment, mask_for,
+        mask_geometry, non_maximum_suppression, normalize_text_color, write_region,
     };
 
     #[test]
@@ -1858,6 +1871,7 @@ mod tests {
                 text_threshold: Some(15.0),
                 bubble_threshold: Some(f32::NAN),
                 panel_threshold: Some(0.55),
+                input_fit: InputFit::Stretch,
             }),
             koharu_ml::Device::cpu(),
         );
@@ -1866,6 +1880,24 @@ mod tests {
         assert_eq!(settings.text_threshold, None);
         assert_eq!(settings.bubble_threshold, None);
         assert_eq!(settings.panel_threshold, Some(0.55));
+        // Only confidence thresholds are sanitized; the fit strategy is a
+        // deliberate choice and must survive validation untouched.
+        assert_eq!(settings.input_fit, InputFit::Stretch);
+    }
+
+    #[test]
+    fn an_absent_input_fit_letterboxes() {
+        // The container-level `serde(default)` is what keeps an existing
+        // configuration file loading, and it must land on the aspect-preserving
+        // behaviour rather than on the strategy the checkpoint was trained with.
+        let config: KoharuLayoutRFDetrSeg2XLConfig = toml::from_str("").unwrap();
+        assert_eq!(config.input_fit, InputFit::LetterBox);
+        assert_eq!(
+            toml::from_str::<KoharuLayoutRFDetrSeg2XLConfig>("input_fit = \"stretch\"")
+                .unwrap()
+                .input_fit,
+            InputFit::Stretch,
+        );
     }
 
     #[tokio::test]

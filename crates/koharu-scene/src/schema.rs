@@ -6,8 +6,8 @@
 
 use crate::{
     BubbleRegion, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis,
-    Page, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText, TextContent,
-    TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
+    Page, PageSlice, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText,
+    TextContent, TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
     component::{Component, ComponentRecord, ValidationContext, decode, key},
     components::Assets,
     state::{Components, State},
@@ -60,6 +60,7 @@ component_schema! {
     DETECTION_ANALYSIS = 15 => DetectionAnalysis,
     ASSETS = 16 => Assets,
     ENTITY_ORIGIN = 17 => EntityOrigin,
+    PAGE_SLICE = 18 => PageSlice,
 }
 
 pub(crate) fn validate_components(
@@ -92,6 +93,7 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
     let has_ocr = has(OCR_ANALYSIS);
     let has_group = has(GROUP);
     let has_text_group = has(TEXT_GROUP);
+    let has_page_slice = has(PAGE_SLICE);
     let parent = state.parent_and_position(id)?.0;
     let parent_is_text_group = parent.is_some_and(|parent| {
         state.entity(parent).is_ok_and(|entity| {
@@ -102,7 +104,13 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
         })
     });
 
-    if (has_source || has_translation || has(TEXT_ROLE)) && !has_content {
+    if has_page_slice && !has(PAGE) {
+        // Banding is a page-level fact. A nested entity has neither a place in the page rail
+        // nor geometry of its own that could be a band of a taller image.
+        Err(Error::invalid(format!(
+            "entity {id} carries a page slice but is not a page"
+        )))
+    } else if (has_source || has_translation || has(TEXT_ROLE)) && !has_content {
         Err(Error::invalid(format!(
             "entity {id} carries text content data but is not text content"
         )))
@@ -278,6 +286,14 @@ fn validate_relation_endpoints(
                 && has(relation.target, Region::KIND)
                 && has(relation.source, Geometry::KIND)
                 && has(relation.target, Geometry::KIND)
+        }
+        // Crossing page boundaries is intentional: a band and the uncut page it came from are
+        // separate pages by construction, and every other relation kind stays inside one page
+        // only because its endpoints are layers and regions of that page.
+        <crate::SliceOf as crate::RelationSpec>::KIND => {
+            has(relation.source, Page::KIND)
+                && has(relation.target, Page::KIND)
+                && has(relation.source, PageSlice::KIND)
         }
         _ => true,
     };

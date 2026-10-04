@@ -127,8 +127,9 @@ async fn built_in_component_schema_revisions_are_explicit() {
             schema::<TextContent>(),
             schema::<crate::components::Assets>(),
             schema::<Relation>(),
+            schema::<PageSlice>(),
         ],
-        [1; 18]
+        [1; 19]
     );
     assert_eq!(schema::<TextLayout>(), 2);
 }
@@ -156,6 +157,7 @@ async fn built_in_component_kinds_express_domain_ownership() {
             DetectionAnalysis::KIND,
             OcrAnalysis::KIND,
             crate::components::Assets::KIND,
+            PageSlice::KIND,
         ],
         [
             "dev.koharu.project",
@@ -177,6 +179,7 @@ async fn built_in_component_kinds_express_domain_ownership() {
             "dev.koharu.analysis.detection",
             "dev.koharu.analysis.ocr",
             "dev.koharu.assets",
+            "dev.koharu.page.slice",
         ]
     );
 }
@@ -1557,4 +1560,275 @@ async fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
         rerun.remove_entity(entity, RemovePolicy::Cascade),
         Err(Error::Authorship(_))
     ));
+}
+
+const UNCUT: &[u8] = b"uncut-strip";
+
+fn strip(height: f64) -> SliceSourceInput {
+    SliceSourceInput::new(UNCUT, 720.0, height)
+}
+
+fn strip_blob() -> BlobId {
+    BlobId::for_bytes(UNCUT)
+}
+
+fn band(index: usize, y_offset: f64, height: f64) -> PageSliceDraft {
+    PageSliceDraft::new(
+        format!("panel {index}"),
+        y_offset,
+        height,
+        AssetInput::new(
+            vec![index as u8; 16],
+            "image/png",
+            AssetMetadata {
+                width: Some(720),
+                height: Some(height as u32),
+                attributes: Default::default(),
+            },
+        ),
+    )
+}
+
+#[tokio::test]
+async fn a_strip_is_imported_as_ordered_pages_carrying_their_band() {
+    let mut session = Session::memory().await.unwrap();
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            edit.add_page_slices(
+                strip(3000.0),
+                vec![
+                    band(1, 0.0, 1000.0),
+                    band(2, 1000.0, 1000.0),
+                    band(3, 2000.0, 1000.0),
+                ],
+                At::End,
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+
+    let pages = snapshot
+        .pages()
+        .map(|page| {
+            let value = page.page().unwrap();
+            let slice = snapshot.component::<PageSlice>(page.id()).unwrap().unwrap();
+            let asset = snapshot
+                .asset(page.id(), &AssetRole::new("source").unwrap())
+                .unwrap()
+                .unwrap();
+            (value, slice, asset)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(pages.len(), 3);
+    for (index, (value, slice, asset)) in pages.iter().enumerate() {
+        // Bands are cut full width and stacked in reading order.
+        assert_eq!(value.label, format!("panel {}", index + 1));
+        assert_eq!(value.width, 720.0);
+        assert_eq!(value.height, 1000.0);
+        assert_eq!(slice.source, SliceSource::new(strip_blob(), 720.0, 3000.0));
+        assert_eq!(slice.y_offset, index as f64 * 1000.0);
+        assert_eq!(slice.slice_height, 1000.0);
+        // The band is its own page artwork, so page geometry and asset metadata cannot drift.
+        assert_eq!(asset.metadata.width, Some(720));
+        assert_eq!(asset.metadata.height, Some(1000));
+    }
+}
+
+#[tokio::test]
+async fn a_band_outside_its_source_is_rejected() {
+    let session = Session::memory().await.unwrap();
+    let error = session
+        .snapshot()
+        .patch(|edit| {
+            edit.add_page_slices(strip(1500.0), vec![band(1, 1000.0, 1000.0)], At::End)?;
+            Ok(())
+        })
+        .unwrap_err();
+    assert!(matches!(error, Error::Invalid(_)), "{error:?}");
+
+    let error = session
+        .snapshot()
+        .patch(|edit| {
+            edit.add_page_slices(strip(1500.0), vec![], At::End)?;
+            Ok(())
+        })
+        .unwrap_err();
+    assert!(matches!(error, Error::Invalid(_)), "{error:?}");
+}
+
+#[tokio::test]
+async fn slicing_an_existing_page_links_every_band_to_the_strip_across_pages() {
+    let mut session = Session::memory().await.unwrap();
+    let source_asset = AssetInput::new(
+        vec![7u8; 32],
+        "image/jpeg",
+        AssetMetadata {
+            width: Some(720),
+            height: Some(3000),
+            attributes: Default::default(),
+        },
+    );
+    let strip = session
+        .snapshot()
+        .patch(|edit| {
+            let strip = edit.add_page(PageDraft::new("strip", 720.0, 3000.0), At::End)?;
+            edit.set_asset(strip, &AssetRole::new("source").unwrap(), source_asset)?;
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(strip).await.unwrap().snapshot;
+    let strip = snapshot.pages().next().unwrap().id();
+    let uncut = strip_blob();
+    let strip_blob = snapshot
+        .asset(strip, &AssetRole::new("source").unwrap())
+        .unwrap()
+        .unwrap()
+        .blob;
+    assert_ne!(strip_blob, uncut);
+
+    let bands = session
+        .snapshot()
+        .patch(|edit| {
+            edit.split_page(strip, vec![band(1, 0.0, 1500.0), band(2, 1500.0, 1500.0)])?;
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(bands).await.unwrap().snapshot;
+
+    let order = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
+    assert_eq!(order.len(), 3);
+    assert_eq!(order[0], strip);
+
+    for band in &order[1..] {
+        // A cross-page relation is the point of the link, and the kernel must accept it.
+        let relation = snapshot.relation_from::<SliceOf>(*band).unwrap().unwrap();
+        assert_eq!(relation.value().target, strip);
+        assert_eq!(snapshot.page(relation.value().target).unwrap().id(), strip);
+        assert_eq!(
+            snapshot
+                .component::<PageSlice>(*band)
+                .unwrap()
+                .unwrap()
+                .source,
+            // A re-banded page adopts the provenance of the uncut page it was cut from, so the
+            // band can be traced to bytes the project actually stores.
+            SliceSource::new(strip_blob, 720.0, 3000.0)
+        );
+    }
+}
+
+#[tokio::test]
+async fn deleting_the_strip_leaves_bands_rebandable() {
+    let mut session = Session::memory().await.unwrap();
+    let strip = session
+        .snapshot()
+        .patch(|edit| {
+            let strip = edit.add_page(PageDraft::new("strip", 720.0, 3000.0), At::End)?;
+            edit.set_asset(
+                strip,
+                &AssetRole::new("source").unwrap(),
+                AssetInput::new(
+                    vec![9u8; 32],
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(720),
+                        height: Some(3000),
+                        attributes: Default::default(),
+                    },
+                ),
+            )?;
+            edit.split_page(strip, vec![band(1, 0.0, 3000.0)])?;
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(strip).await.unwrap().snapshot;
+    let strip = snapshot.pages().next().unwrap().id();
+    let band = snapshot.pages().nth(1).unwrap().id();
+    let source = snapshot
+        .asset(strip, &AssetRole::new("source").unwrap())
+        .unwrap()
+        .unwrap()
+        .blob;
+
+    let removed = session
+        .snapshot()
+        .patch(|edit| edit.remove_entity(strip, RemovePolicy::Cascade))
+        .unwrap();
+    let snapshot = session.commit(removed).await.unwrap().snapshot;
+
+    assert!(snapshot.page(strip).is_err());
+    assert!(snapshot.relation_from::<SliceOf>(band).unwrap().is_none());
+    // Provenance is anchored to the blob, so the uncut strip stays readable for re-banding.
+    assert_eq!(
+        snapshot
+            .component::<PageSlice>(band)
+            .unwrap()
+            .unwrap()
+            .source
+            .blob,
+        source
+    );
+    assert!(snapshot.read_blob(source).await.is_ok());
+}
+
+#[tokio::test]
+async fn a_strip_batch_observes_the_whole_rail_order() {
+    let mut session = Session::memory().await.unwrap();
+    let base = session
+        .snapshot()
+        .patch(|edit| {
+            edit.add_page(page(), At::End)?;
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(base).await.unwrap().snapshot;
+
+    let batch = snapshot
+        .patch(|edit| {
+            edit.add_page_slices(
+                strip(2000.0),
+                vec![band(1, 0.0, 1000.0), band(2, 1000.0, 1000.0)],
+                At::Start,
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let concurrent = snapshot
+        .patch(|edit| {
+            edit.add_page(page(), At::Start)?;
+            Ok(())
+        })
+        .unwrap();
+    let current = session.commit(concurrent).await.unwrap().snapshot;
+
+    assert!(matches!(
+        batch.rebase_on(&current),
+        Err(Error::PatchConflict(_))
+    ));
+
+    // A batch built against the new rail survives an edit that touches page contents but not
+    // the rail, confirming the observation is scoped to the placement the batch depends on.
+    let batch = current
+        .patch(|edit| {
+            edit.add_page_slices(
+                strip(2000.0),
+                vec![band(1, 0.0, 1000.0), band(2, 1000.0, 1000.0)],
+                At::End,
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let target = current.pages().next().unwrap().id();
+    let contents = session
+        .snapshot()
+        .patch(|edit| {
+            edit.set_page(target, PageDraft::new("renamed", 1200.0, 1800.0))?;
+            Ok(())
+        })
+        .unwrap();
+    let current = session.commit(contents).await.unwrap().snapshot;
+    assert!(batch.rebase_on(&current).is_ok());
 }

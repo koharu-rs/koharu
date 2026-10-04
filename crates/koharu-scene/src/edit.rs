@@ -1,11 +1,12 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use smallvec::SmallVec;
 
 use crate::{
-    Asset, AssetInput, AssetRole, BlobId, ComponentOwner, EntityId, EntityOrigin, Error,
-    Generation, Group, Origin, Page, PageDraft, Patch, Relation, RelationId, RelationKind,
-    RelationSpec, Result, Snapshot, TextGroup, Visibility,
+    Asset, AssetInput, AssetMetadata, AssetRole, BlobId, ComponentOwner, EntityId, EntityOrigin,
+    Error, Generation, Group, Origin, Page, PageDraft, PageSlice, PageSliceDraft, Patch, Relation,
+    RelationId, RelationKind, RelationSpec, Result, SliceOf, SliceSource, SliceSourceInput,
+    Snapshot, TextGroup, Visibility,
     component::{Component, ComponentKey, ComponentRecord, ValidationContext, decode, encode, key},
     components::Assets,
     patch::{Observation, Operation},
@@ -89,6 +90,78 @@ impl Edit {
             components: stored,
         });
         Ok(id)
+    }
+
+    /// Creates every band of one tall source image as ordinary pages in a single transaction.
+    ///
+    /// Banding is a pure decomposition of the source pixels, so downstream stages never learn
+    /// that a webtoon exists: each band is a normal page with its own `source` asset. The bands
+    /// are created together because a half-imported strip is not a meaningful document, and
+    /// because their rail placement is one intent that must be observed and rebased as a unit
+    /// rather than as N independent insertions.
+    pub fn add_page_slices(
+        &mut self,
+        source: SliceSourceInput,
+        slices: Vec<PageSliceDraft>,
+        at: At,
+    ) -> Result<Vec<EntityId>> {
+        if slices.is_empty() {
+            return Err(Error::invalid(
+                "a sliced source image must produce at least one page",
+            ));
+        }
+        // Page order is the only pre-existing state this batch reads, so one observation covers
+        // all of it: a concurrent insertion anywhere in the rail must invalidate the placement
+        // of every band, not only of the first.
+        self.observe_page_order_write();
+        let uncut = bytes::Bytes::from_owner(source.bytes);
+        let blob = BlobId::for_bytes(&uncut);
+        self.attachments.push((blob, uncut));
+        let provenance = SliceSource::new(blob, source.width, source.height);
+        let position = resolve_position(&self.state.page_order, at, None)?;
+        let mut pages = Vec::with_capacity(slices.len());
+        for (offset, slice) in slices.into_iter().enumerate() {
+            pages.push(self.insert_slice_page(&provenance, slice, position + offset)?);
+        }
+        Ok(pages)
+    }
+
+    /// Re-bands an existing page that is itself a tall image, keeping the uncut page.
+    ///
+    /// The bands are inserted directly after their source and linked to it, so the rail can
+    /// present them as one strip. The uncut page is preserved because it may already carry
+    /// annotations; the user deletes it once the bands are in place, which drops the
+    /// `slice-of` links and leaves each band holding its own `PageSlice` provenance.
+    pub fn split_page(
+        &mut self,
+        page: EntityId,
+        slices: Vec<PageSliceDraft>,
+    ) -> Result<Vec<EntityId>> {
+        if slices.is_empty() {
+            return Err(Error::invalid(
+                "a sliced source image must produce at least one page",
+            ));
+        }
+        if !self.state.pages.contains_key(&page) {
+            return Err(Error::EntityNotFound(page));
+        }
+        if self.state.component(page, &key::<PageSlice>()?)?.is_some() {
+            return Err(Error::invalid("a page band cannot be banded again"));
+        }
+        let source = self.slice_source(page)?;
+        // The source page is read for its blob and geometry, so a concurrent edit to either must
+        // invalidate the batch; the relation written below additionally bumps the page epoch.
+        self.observe_component(ComponentOwner::Entity(page), key::<Assets>()?)?;
+        self.observe::<Page>(page)?;
+        self.observe_page_order_write();
+        let position = resolve_position(&self.state.page_order, At::After(page), None)?;
+        let mut pages = Vec::with_capacity(slices.len());
+        for (offset, slice) in slices.into_iter().enumerate() {
+            let band = self.insert_slice_page(&source, slice, position + offset)?;
+            self.relate::<SliceOf>(band, page)?;
+            pages.push(band);
+        }
+        Ok(pages)
     }
 
     pub fn add_entity(&mut self, parent: EntityId, at: At) -> Result<EntityId> {
@@ -559,6 +632,97 @@ impl Edit {
             None,
         )?;
         Ok(patch)
+    }
+
+    /// Inserts one band as a self-contained page: geometry, provenance, and its own cropped
+    /// `source` asset. Bands are cut full width, so the page shares the source width and takes
+    /// only the band's height.
+    fn insert_slice_page(
+        &mut self,
+        source: &SliceSource,
+        slice: PageSliceDraft,
+        position: usize,
+    ) -> Result<EntityId> {
+        let role = AssetRole::new("source")?;
+        let bytes = bytes::Bytes::from_owner(slice.image.bytes);
+        let blob = BlobId::for_bytes(&bytes);
+        self.attachments.push((blob, bytes));
+        // The band is by definition the image this page displays, so the asset geometry is
+        // stamped from the band rather than trusted from the caller: a page and its artwork
+        // disagreeing would silently misplace every downstream detection.
+        let assets = Assets {
+            values: BTreeMap::from([(
+                role,
+                Asset {
+                    origin: self.lifecycle_origin(),
+                    blob,
+                    media_type: slice.image.media_type,
+                    metadata: AssetMetadata {
+                        width: Some(source.width.round() as u32),
+                        height: Some(slice.slice_height.round() as u32),
+                        attributes: Default::default(),
+                    },
+                },
+            )]),
+        };
+        let id = EntityId::new();
+        let components = self.entity_components([
+            self.encoded(&Page::from(PageDraft::new(
+                slice.label,
+                source.width,
+                slice.slice_height,
+            )))?,
+            self.encoded(&EntityOrigin {
+                origin: self.lifecycle_origin(),
+            })?,
+            self.encoded(&PageSlice {
+                source: source.clone(),
+                y_offset: slice.y_offset,
+                slice_height: slice.slice_height,
+            })?,
+            self.encoded(&assets)?,
+        ]);
+        let stored = store_components(&components);
+        self.state.insert_page(id, position, components)?;
+        self.operations.push(Operation::InsertPage {
+            id,
+            position: position as u32,
+            components: stored,
+        });
+        Ok(id)
+    }
+
+    /// Reads the uncut image behind a page so its bands record the same provenance the page
+    /// does. Asset dimensions are required rather than assumed from `Page`, because the asset
+    /// is what later stages decode and re-read.
+    fn slice_source(&self, page: EntityId) -> Result<SliceSource> {
+        let record = self
+            .state
+            .component(page, &key::<Assets>()?)?
+            .ok_or_else(|| Error::invalid("a banded page must carry a source asset"))?;
+        let record_exists = |id| self.state.contains_entity(id);
+        let blob_exists = |id| {
+            self.attachments.iter().any(|(blob, _)| *blob == id)
+                || self.base.storage.blobs().contains(id)
+        };
+        let assets: Assets = decode(
+            &record,
+            &ValidationContext::new(&record_exists, &blob_exists),
+        )?;
+        let asset = assets
+            .values
+            .get(&AssetRole::new("source")?)
+            .ok_or_else(|| Error::invalid("a banded page must carry a source asset"))?;
+        let (width, height) = asset
+            .metadata
+            .width
+            .zip(asset.metadata.height)
+            .ok_or_else(|| Error::invalid("a banded page must record its source dimensions"))?;
+        Ok(SliceSource::new(
+            asset.blob,
+            f64::from(width),
+            f64::from(height),
+        ))
     }
 
     fn move_to_position(

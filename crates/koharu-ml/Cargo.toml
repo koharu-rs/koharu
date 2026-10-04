@@ -31,6 +31,9 @@ rayon = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# `InputFit` is re-exported into the user-facing pipeline configuration, whose
+# specta `Type` derive generates the TypeScript protocol.
+specta = { workspace = true }
 tokio = { workspace = true }
 tokio-rayon = { workspace = true }
 tokenizers = { workspace = true }

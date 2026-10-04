@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
 use anyhow::{Context as _, Result};
+use image::ImageFormat;
 use koharu_desktop::{CanvasState, Desktop};
-use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRole, At, PageDraft, PageSliceDraft, SliceSourceInput,
+};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -13,7 +18,7 @@ use super::{
     ChannelExt as _, Error,
     agent::AgentState,
     canvas::CanvasChannel,
-    import,
+    import::{self, Band, Imported, Slicing},
     preferences::Preferences,
     processing::{Job, JobChannel, Processing},
     project::{
@@ -39,6 +44,33 @@ pub struct PageSelection {
 pub enum PageImportSource {
     Files,
     Folder,
+}
+
+/// How an import treats images that are far taller than they are wide.
+///
+/// Slicing is a property of the source, not a mode of the session, so this is a parameter of
+/// the one import command rather than a second command: two commands would duplicate the file
+/// dialog, the processing guard, the commit, and the canvas synchronization, and the copies
+/// would drift.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PageImportSlicing {
+    /// Cut an image when its own geometry says it is a webtoon. The default, so ordinary
+    /// imports need no decision from the user.
+    #[default]
+    Auto,
+    /// Cut anything taller than a single page, for strips whose aspect ratio did not trip the
+    /// automatic gate.
+    Forced,
+}
+
+impl From<PageImportSlicing> for Slicing {
+    fn from(value: PageImportSlicing) -> Self {
+        match value {
+            PageImportSlicing::Auto => Self::Auto,
+            PageImportSlicing::Forced => Self::Forced,
+        }
+    }
 }
 
 pub(crate) struct Initialization {
@@ -360,12 +392,13 @@ async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
     target = "koharu_metrics",
     name = "import",
     skip_all,
-    fields(origin = "user", method = ?source),
+    fields(origin = "user", method = ?source, slicing = ?slicing),
 )]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn import(
     source: PageImportSource,
+    slicing: PageImportSlicing,
     window: WebviewWindow<CefRuntime>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -414,36 +447,55 @@ pub(crate) async fn import(
     if files.is_empty() {
         return Err(anyhow::anyhow!("no supported images were found in the selection").into());
     }
-    let pages = tokio_rayon::spawn(move || import::import(files)).await?;
-    let page_count = pages.len();
+    let imported = tokio_rayon::spawn(move || import::import(files, slicing.into())).await?;
+    let page_count: usize = imported
+        .iter()
+        .map(|entry| match entry {
+            Imported::Page(_) => 1,
+            Imported::Strip { bands, .. } => bands.len(),
+        })
+        .sum();
 
     let (commit, page) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let source = AssetRole::new("source")?;
         let patch = project.snapshot().patch(|edit| {
-            for imported in pages {
-                let page = edit.add_page(
-                    PageDraft::new(
-                        imported.name,
-                        f64::from(imported.width),
-                        f64::from(imported.height),
-                    ),
-                    At::End,
-                )?;
-                edit.set_asset(
-                    page,
-                    &source,
-                    AssetInput::new(
-                        imported.bytes,
-                        imported.format.to_mime_type(),
-                        AssetMetadata {
-                            width: Some(imported.width),
-                            height: Some(imported.height),
-                            attributes: Default::default(),
-                        },
-                    ),
-                )?;
+            for entry in imported {
+                match entry {
+                    Imported::Page(page) => {
+                        let (bytes, format, width, height) = parts(&page);
+                        let id = edit.add_page(
+                            PageDraft::new(page.name, f64::from(width), f64::from(height)),
+                            At::End,
+                        )?;
+                        edit.set_asset(
+                            id,
+                            &source,
+                            AssetInput::new(
+                                bytes,
+                                format.to_mime_type(),
+                                AssetMetadata {
+                                    width: Some(width),
+                                    height: Some(height),
+                                    attributes: Default::default(),
+                                },
+                            ),
+                        )?;
+                    }
+                    Imported::Strip {
+                        source: uncut,
+                        width,
+                        height,
+                        bands,
+                    } => {
+                        edit.add_page_slices(
+                            SliceSourceInput::new(uncut, f64::from(width), f64::from(height)),
+                            bands.into_iter().map(page_slice_draft).collect(),
+                            At::End,
+                        )?;
+                    }
+                }
             }
             Ok(())
         })?;
@@ -458,6 +510,29 @@ pub(crate) async fn import(
     canvas_channel.channel.publish(canvas);
     tracing::info!(target: "koharu_metrics", metric = "page_imported", page_count);
     Ok(())
+}
+
+/// Splits an imported page into the parts a page draft and its asset are built from.
+fn parts(page: &import::Page) -> (Arc<[u8]>, ImageFormat, u32, u32) {
+    (page.bytes.clone(), page.format, page.width, page.height)
+}
+
+fn page_slice_draft(band: Band) -> PageSliceDraft {
+    let (bytes, format, width, height) = parts(&band.page);
+    PageSliceDraft::new(
+        band.page.name,
+        f64::from(band.y_offset),
+        f64::from(height),
+        AssetInput::new(
+            bytes,
+            format.to_mime_type(),
+            AssetMetadata {
+                width: Some(width),
+                height: Some(height),
+                attributes: Default::default(),
+            },
+        ),
+    )
 }
 
 #[tracing::instrument(

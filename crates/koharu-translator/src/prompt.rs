@@ -112,6 +112,66 @@ pub(crate) fn output_schema(expected: usize) -> Value {
     })
 }
 
+/// JSON scaffolding the response spends on each translated segment:
+/// `{"id":`, the id, `,`, `"text":`, the quoted value, `}`, and a separator with
+/// indentation. Sixteen covers a model that pads the value as well.
+const RESPONSE_TOKENS_PER_SEGMENT: usize = 16;
+
+/// Worst-case response tokens per source character.
+///
+/// A CJK source already runs about one token per character, codepoints outside
+/// the vocabulary fall back to byte pieces, and translating into an
+/// alphabetic language lengthens the text before it is tokenized, so the
+/// response is not bounded by the token count of its own source. Two leaves
+/// headroom over those cases: the ceiling only has to be exceeded by a runaway
+/// generation, so paying for slack here is cheaper than paying for a truncated
+/// page, which loses every segment on that page at once.
+const RESPONSE_TOKENS_PER_SOURCE_CHAR: usize = 2;
+
+/// Floor for the derived budget.
+///
+/// Reasoning models emit a thinking preamble before the JSON and draw it from
+/// the same budget, so a page whose segments are nearly empty still has to pay
+/// for the preamble plus the response envelope.
+const MIN_RESPONSE_TOKENS: usize = 1024;
+
+/// Ceiling for the derived budget.
+///
+/// The local backend sizes its context as `prompt + max_tokens`, so this bound
+/// is a memory bound as much as a truncation bound: without it, an oversized
+/// request silently turns into an oversized context allocation. Pages are
+/// sliced before they reach the translator, so a page needing more than this is
+/// a caller that bypassed that boundary rather than a page that ran out of
+/// room, and the budget clamps instead of growing without limit.
+const MAX_RESPONSE_TOKENS: usize = 8192;
+
+/// Token budget for one translation response, derived from the input scale.
+///
+/// The response is a JSON object holding exactly one `{"id","text"}` pair per
+/// input segment (see `output_schema`), so the requirement is the translated
+/// text plus the per-segment envelope above. Deriving the budget from the same
+/// segments the schema is built from keeps the two consistent: the schema
+/// promises one entry per segment, and this promises room for that many
+/// entries. A fixed ceiling truncates a dense page into unparsable JSON, and
+/// because a truncated response fails the whole page, under-provisioning costs
+/// every segment on it.
+#[must_use]
+pub(crate) fn response_budget(source_segments: &[String]) -> u32 {
+    let source_chars = source_segments
+        .iter()
+        .map(|segment| segment.chars().count())
+        .sum::<usize>();
+    let required = MIN_RESPONSE_TOKENS
+        .saturating_add(source_chars.saturating_mul(RESPONSE_TOKENS_PER_SOURCE_CHAR))
+        .saturating_add(
+            source_segments
+                .len()
+                .saturating_mul(RESPONSE_TOKENS_PER_SEGMENT),
+        )
+        .min(MAX_RESPONSE_TOKENS);
+    u32::try_from(required).unwrap_or(u32::MAX)
+}
+
 fn translation_system_prompt(request: &TranslationRequest) -> String {
     let source = request
         .source_language
@@ -351,6 +411,52 @@ mod tests {
         assert_eq!(translations["items"]["properties"]["id"]["maximum"], 2);
         assert_eq!(translations["items"]["additionalProperties"], false);
         assert_eq!(schema["additionalProperties"], false);
+    }
+
+    #[test]
+    fn response_budget_charges_the_json_envelope_per_segment() {
+        // Same characters, different shapes: the envelope scales with the number
+        // of entries the schema admits, not with the page's character count.
+        let page = vec!["x".repeat(100); 5];
+        let characters = 500 * RESPONSE_TOKENS_PER_SOURCE_CHAR;
+
+        assert_eq!(
+            response_budget(&["x".repeat(500)]) as usize,
+            MIN_RESPONSE_TOKENS + characters + RESPONSE_TOKENS_PER_SEGMENT
+        );
+        assert_eq!(
+            response_budget(&page) as usize,
+            MIN_RESPONSE_TOKENS + characters + 5 * RESPONSE_TOKENS_PER_SEGMENT
+        );
+    }
+
+    #[test]
+    fn response_budget_keeps_room_for_a_reasoning_preamble() {
+        // A page of near-empty segments still has to cover the preamble and the
+        // array envelope, so the floor holds regardless of how little there is
+        // to translate.
+        assert_eq!(
+            response_budget(&vec![String::new(); 4]) as usize,
+            MIN_RESPONSE_TOKENS + 4 * RESPONSE_TOKENS_PER_SEGMENT
+        );
+    }
+
+    #[test]
+    fn response_budget_clamps_an_input_larger_than_a_page() {
+        assert_eq!(
+            response_budget(&vec!["x".repeat(100_000); 64]) as usize,
+            MAX_RESPONSE_TOKENS
+        );
+    }
+
+    #[test]
+    fn response_budget_counts_characters_rather_than_bytes() {
+        // CJK source is three UTF-8 bytes per character; budgeting on bytes
+        // would triple the ceiling for the same page.
+        assert_eq!(
+            response_budget(&["せ".repeat(200)]),
+            response_budget(&["x".repeat(200)])
+        );
     }
 
     #[test]
