@@ -4,9 +4,9 @@ mod protocol;
 mod stream;
 mod token_store;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use async_trait::async_trait;
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use reqwest::{Client, StatusCode, header::RETRY_AFTER};
 use serde::Serialize;
@@ -21,6 +21,95 @@ pub(crate) use stream::{Delta, Turn};
 
 const RESPONSES_URL: &str = "https://chatgpt.com/backend-api/codex/responses";
 pub(crate) const MAX_ATTEMPTS: usize = 3;
+
+/// A response the provider refused, kept as data so the retry and split decisions
+/// read it where the status and body are still known, instead of re-guessing them
+/// from formatted message text far downstream.
+#[derive(Debug)]
+pub(crate) struct ProviderRefusal {
+    status: Option<StatusCode>,
+    body: String,
+}
+
+impl fmt::Display for ProviderRefusal {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.status {
+            Some(status) => write!(formatter, "Codex returned {status}: {}", self.body),
+            None => write!(formatter, "{}", self.body),
+        }
+    }
+}
+
+impl std::error::Error for ProviderRefusal {}
+
+impl ProviderRefusal {
+    /// A non-2xx HTTP response.
+    fn http(status: StatusCode, body: String) -> anyhow::Error {
+        anyhow::Error::new(Self {
+            status: Some(status),
+            body,
+        })
+    }
+
+    /// A failure carried by the event stream, which has no status to wait on.
+    fn stream(context: &str, message: impl Into<String>) -> anyhow::Error {
+        anyhow::Error::new(Self {
+            status: None,
+            body: format!("{context}: {}", message.into()),
+        })
+    }
+
+    /// Only an HTTP status the caller can wait on is retryable; a stream failure
+    /// has already been sent and carries no `Retry-After`.
+    fn transient(&self) -> bool {
+        self.status.is_some_and(is_transient_status)
+    }
+
+    /// Only a batch split answers an overflow, so it is recognised from the narrow
+    /// phrasings that name the limit itself — never from an auth or quota message
+    /// that happens to mention a token.
+    fn context_limit(&self) -> bool {
+        self.status.is_none_or(|status| status.is_client_error())
+            && mentions_context_limit(&self.body)
+    }
+}
+
+/// An event stream that ended before its completion event. A truncated SSE body
+/// has no reqwest error kind, so it carries its own type to stay retryable.
+#[derive(Debug)]
+pub(crate) struct StreamTruncated;
+
+impl fmt::Display for StreamTruncated {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Codex response stream ended before completion")
+    }
+}
+
+impl std::error::Error for StreamTruncated {}
+
+/// The provider reports a context overflow as ordinary failure prose.
+fn mentions_context_limit(body: &str) -> bool {
+    let body = body.to_ascii_lowercase();
+    [
+        "context window",
+        "maximum context",
+        "prompt is too long",
+        "exceeds the context",
+    ]
+    .iter()
+    .any(|phrase| body.contains(phrase))
+}
+
+/// A refused HTTP response, as an error the retry loop can read.
+pub(crate) fn response_error(status: StatusCode, body: String) -> anyhow::Error {
+    ProviderRefusal::http(status, body)
+}
+
+/// A failure reported inside the stream, classified the same way as a refused HTTP
+/// status so an overflow reaches the batch splitter either way.
+pub(crate) fn provider_failure(context: &str, message: impl Into<String>) -> anyhow::Error {
+    ProviderRefusal::stream(context, message)
+}
 
 /// Single-shot model client used by the bulk review worker. Implementations
 /// must not retry internally so the caller controls attempt accounting.
@@ -93,12 +182,14 @@ impl Codex {
     where
         F: FnMut(Delta),
     {
-        for attempt in 0..MAX_ATTEMPTS {
+        let mut attempt = 0_usize;
+        loop {
             control.ensure_running()?;
             let response = match self.send_with_auth(request, control).await {
                 Ok(response) => response,
-                Err(error) if should_retry(attempt, is_transient_error(&error)) => {
+                Err(error) if should_retry(attempt, &error, false) => {
                     retry_wait(backoff(attempt), control).await?;
+                    attempt = attempt.saturating_add(1);
                     continue;
                 }
                 Err(error) => return Err(error),
@@ -108,31 +199,41 @@ impl Codex {
                 let retry_after = retry_after(&response);
                 let mut body = response.text().await.unwrap_or_default();
                 body.truncate(16 * 1024);
-                if should_retry(attempt, is_transient_status(status)) {
+                let error = response_error(status, body);
+                if should_retry(attempt, &error, false) {
                     retry_wait(retry_after.unwrap_or_else(|| backoff(attempt)), control).await?;
+                    attempt = attempt.saturating_add(1);
                     continue;
                 }
-                bail!("Codex returned {status}: {body}");
+                return Err(error);
             }
-            match stream::read(response, control, &mut publish).await {
+            let mut published = false;
+            let read = {
+                let mut emit = |delta| {
+                    published = true;
+                    publish(delta);
+                };
+                stream::read(response, control, &mut emit).await
+            };
+            match read {
                 Ok(turn) => return Ok(turn),
-                Err(error) if should_retry(attempt, is_transient_error(&error)) => {
+                Err(error) if should_retry(attempt, &error, published) => {
                     retry_wait(backoff(attempt), control).await?;
+                    attempt = attempt.saturating_add(1);
                 }
                 Err(error) => return Err(error),
             }
         }
-        unreachable!("retry loop returns on its final attempt")
     }
 
-    /// Send once with token refresh on 401; no transient/status retry.
+    /// Send once with token refresh on 401; no transient or status retry.
     pub(crate) async fn respond_once(&self, request: &Request, control: &Control) -> Result<Turn> {
         let response = self.send_with_auth(request, control).await?;
         if !response.status().is_success() {
             let status = response.status();
             let mut body = response.text().await.unwrap_or_default();
             body.truncate(16 * 1024);
-            bail!("Codex returned {status}: {body}");
+            return Err(response_error(status, body));
         }
         let mut publish = |_| {};
         stream::read(response, control, &mut publish).await
@@ -189,8 +290,11 @@ impl ReviewClient for Codex {
     }
 }
 
-pub(crate) fn should_retry(attempt: usize, transient: bool) -> bool {
-    transient && attempt + 1 < MAX_ATTEMPTS
+/// Whether another attempt is worth sending. A turn whose text already reached the
+/// user cannot be resent without showing it twice, so publication ends the budget
+/// even when the failure looks transient.
+pub(crate) fn should_retry(attempt: usize, error: &anyhow::Error, published: bool) -> bool {
+    !published && is_transient_error(error) && attempt + 1 < MAX_ATTEMPTS
 }
 
 pub(crate) fn backoff(attempt: usize) -> Duration {
@@ -213,23 +317,24 @@ pub(crate) fn is_transient_status(status: StatusCode) -> bool {
 }
 
 pub(crate) fn is_transient_error(error: &anyhow::Error) -> bool {
-    if error.chain().any(|source| {
+    error.chain().any(|source| {
         source
-            .downcast_ref::<reqwest::Error>()
-            .is_some_and(|error| error.is_timeout() || error.is_connect() || error.is_body())
-    }) {
-        return true;
-    }
-    let message = format!("{error:#}").to_ascii_lowercase();
-    [
-        "connection reset",
-        "connection error",
-        "os error 10054",
-        "timed out",
-        "response stream ended before completion",
-    ]
-    .iter()
-    .any(|needle| message.contains(needle))
+            .downcast_ref::<ProviderRefusal>()
+            .is_some_and(ProviderRefusal::transient)
+            || source.downcast_ref::<StreamTruncated>().is_some()
+            || source
+                .downcast_ref::<reqwest::Error>()
+                .is_some_and(|error| error.is_timeout() || error.is_connect() || error.is_body())
+    })
+}
+
+/// Whether this failure means the request itself must shrink.
+pub(crate) fn is_context_limit(error: &anyhow::Error) -> bool {
+    error.chain().any(|source| {
+        source
+            .downcast_ref::<ProviderRefusal>()
+            .is_some_and(ProviderRefusal::context_limit)
+    })
 }
 
 pub(crate) async fn retry_wait(duration: Duration, control: &Control) -> Result<()> {
@@ -248,16 +353,64 @@ mod tests {
 
     use super::*;
 
+    fn refusal(code: u16, body: &str) -> anyhow::Error {
+        response_error(
+            StatusCode::from_u16(code).expect("valid status"),
+            body.to_owned(),
+        )
+    }
+
     #[test]
-    fn retries_only_transient_failures_with_a_fixed_limit() {
-        assert!(is_transient_error(&anyhow!(
+    fn classifies_transient_failures_by_type_not_prose() {
+        for code in [429, 500, 502, 503, 504] {
+            assert!(is_transient_error(&refusal(code, "try again later")));
+        }
+        assert!(is_transient_error(&anyhow::Error::new(StreamTruncated)));
+        assert!(!is_transient_error(&refusal(401, "refresh token expired")));
+        assert!(!is_transient_error(&anyhow!("invalid request")));
+        // Text that used to be sniffed for is no longer a retry signal on its own.
+        assert!(!is_transient_error(&anyhow!(
             "connection reset by peer (os error 10054)"
         )));
-        assert!(!is_transient_error(&anyhow!("invalid request")));
-        assert!(should_retry(0, true));
-        assert!(should_retry(1, true));
-        assert!(!should_retry(2, true));
-        assert!(!should_retry(0, false));
+        // A stream failure has no status to wait on, so resending it would loop.
+        assert!(!is_transient_error(&provider_failure(
+            "Codex response failed",
+            "the model backend is overloaded",
+        )));
+    }
+
+    #[test]
+    fn marks_only_an_overflow_as_a_context_limit() {
+        assert!(is_context_limit(&refusal(
+            400,
+            "This model's maximum context length is 8192 tokens",
+        )));
+        assert!(is_context_limit(&provider_failure(
+            "Codex response failed",
+            "your input exceeds the context window of this model",
+        )));
+        // An auth or quota refusal that merely mentions tokens must not split every
+        // batch of a job that no smaller batch can solve.
+        for (code, body) in [
+            (429, "insufficient_quota: token budget exhausted"),
+            (401, "refresh token reuse detected"),
+            (400, "unknown field in tool schema"),
+        ] {
+            assert!(
+                !is_context_limit(&refusal(code, body)),
+                "{code} {body} is not a context limit"
+            );
+        }
+    }
+
+    #[test]
+    fn spends_its_attempts_and_never_reshows_published_text() {
+        let rate_limited = refusal(429, "try again later");
+        assert!(should_retry(0, &rate_limited, false));
+        assert!(should_retry(1, &rate_limited, false));
+        assert!(!should_retry(2, &rate_limited, false));
+        assert!(!should_retry(0, &rate_limited, true));
+        assert!(!should_retry(0, &anyhow!("invalid request"), false));
     }
 
     #[test]

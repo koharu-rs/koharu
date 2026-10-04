@@ -5,6 +5,7 @@ use eventsource_stream::Eventsource as _;
 use futures::StreamExt as _;
 use serde_json::Value;
 
+use super::{StreamTruncated, provider_failure};
 use crate::{Control, ToolCall};
 
 const MAX_STREAM_BYTES: usize = 16 * 1024 * 1024;
@@ -102,17 +103,28 @@ where
                 break;
             }
             "response.incomplete" => {
-                bail!("Codex response was incomplete: {}", provider_error(&value));
+                return Err(provider_failure(
+                    "Codex response was incomplete",
+                    provider_error(&value),
+                ));
             }
             "response.failed" => {
-                bail!("Codex response failed: {}", provider_error(&value));
+                return Err(provider_failure(
+                    "Codex response failed",
+                    provider_error(&value),
+                ));
             }
-            "error" => bail!("Codex returned an error: {}", provider_error(&value)),
+            "error" => {
+                return Err(provider_failure(
+                    "Codex returned an error",
+                    provider_error(&value),
+                ));
+            }
             _ => {}
         }
     }
     if !completed {
-        bail!("Codex response stream ended before completion");
+        return Err(anyhow::Error::new(StreamTruncated));
     }
 
     if text.is_empty() {

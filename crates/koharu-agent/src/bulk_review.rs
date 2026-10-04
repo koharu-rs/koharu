@@ -20,9 +20,7 @@ use serde_json::{Value, json};
 use crate::{
     CodexModel, Control, Host, Invocation, Reasoning, Tool, ToolCall,
     agent::{Event, RunId},
-    codex::{
-        Request, ReviewClient, backoff, is_transient_error, message, retry_wait, should_retry,
-    },
+    codex::{Request, ReviewClient, backoff, is_context_limit, message, retry_wait, should_retry},
 };
 
 /// Upper bound (in characters) for a single batch's textual payload. Small pages
@@ -563,12 +561,6 @@ fn reasoning_rank(reasoning: Reasoning) -> usize {
     }
 }
 
-/// Detect context-window failures so a batch can be split instead of aborted.
-pub(crate) fn is_context_error(error: &anyhow::Error) -> bool {
-    let message = format!("{error:#}").to_lowercase();
-    message.contains("context") || message.contains("token") || message.contains("too long")
-}
-
 /// Tool the model calls to start a review job, and the synthetic tool name the
 /// run reports per batch. This module owns both, so no other file repeats them.
 pub(crate) const REVIEW_JOB_TOOL: &str = "review_translations_job";
@@ -802,6 +794,17 @@ impl<'a> BulkReviewer<'a> {
             }
         }
 
+        if completed == 0 {
+            // A job that reviewed nothing is not a success the model should report,
+            // however tidy its per-batch failure list looks.
+            let reason = failed
+                .first()
+                .and_then(|failure| failure.get("error"))
+                .and_then(Value::as_str)
+                .unwrap_or("no batch was attempted");
+            bail!("every batch of the review job failed: {reason}");
+        }
+
         metrics.log();
         // Only the outcome stays in conversation history. The memory dump and the
         // metrics are for this turn; carrying them into every later request is the
@@ -965,22 +968,23 @@ impl<'a> BulkReviewer<'a> {
             lowest_reasoning(model),
             session.to_owned(),
         )
-        .with_json_schema(Some(review_response_schema()), "review_response");
+        .with_json_schema(review_response_schema(), "review_response");
 
-        let mut attempts = 0_usize;
+        let mut attempt = 0_usize;
         let turn = loop {
-            attempts = attempts.saturating_add(1);
             control.ensure_running().map_err(ReviewBatchError::from)?;
             match self.client.respond_once(&request, control).await {
                 Ok(turn) => break turn,
-                Err(error) if should_retry(attempts - 1, is_transient_error(&error)) => {
-                    retry_wait(backoff(attempts - 1), control)
+                Err(error) if should_retry(attempt, &error, false) => {
+                    retry_wait(backoff(attempt), control)
                         .await
                         .map_err(ReviewBatchError::from)?;
+                    attempt = attempt.saturating_add(1);
                 }
                 Err(source) => return Err(ReviewBatchError::from(source)),
             }
         };
+        let model_requests = attempt.saturating_add(1);
 
         let response_bytes = turn.text.len();
         let response_json: ReviewResponse = serde_json::from_str(&turn.text)
@@ -1043,7 +1047,7 @@ impl<'a> BulkReviewer<'a> {
             source_chars,
             translation_chars,
             payload_bytes,
-            model_requests: attempts,
+            model_requests,
             response_bytes,
             changes_applied: applied,
             elapsed_ms,
@@ -1076,7 +1080,7 @@ struct ReviewBatchError {
 
 impl From<anyhow::Error> for ReviewBatchError {
     fn from(source: anyhow::Error) -> Self {
-        let context_limit = is_context_error(&source);
+        let context_limit = is_context_limit(&source);
         Self {
             source,
             context_limit,
@@ -1217,11 +1221,12 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
+    use reqwest::StatusCode;
     use serde_json::json;
 
     use crate::{
         Invocation,
-        codex::{Turn, message},
+        codex::{Turn, message, provider_failure, response_error},
     };
 
     use super::*;
@@ -2203,8 +2208,9 @@ mod tests {
             host.add_page(page, 50);
         }
         let client = MockClient::new();
-        client.push(Err(anyhow!(
-            "your input exceeds the context window of this model"
+        client.push(Err(provider_failure(
+            "Codex response failed",
+            "your input exceeds the context window of this model",
         )));
         client.push(client.respond_ok(review_text(&[("p1e1", "a"), ("p2e1", "b")])));
         client.push(client.respond_ok(review_text(&[("p3e1", "c"), ("p4e1", "d")])));
@@ -2227,7 +2233,10 @@ mod tests {
         let mut host = MockHost::default();
         host.add_page("p1", 30);
         let client = MockClient::new();
-        client.push(Err(anyhow!("connection reset by peer (os error 10054)")));
+        client.push(Err(response_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "slow down".to_owned(),
+        )));
         client.push(client.respond_ok(review_text(&[("p1e1", "fixed")])));
 
         let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
@@ -2240,6 +2249,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_unrelated_refusal_ends_the_job_instead_of_splitting_batches() {
+        let mut host = MockHost::default();
+        host.add_page("p1", 30);
+        host.add_page("p2", 30);
+        let client = MockClient::new();
+        // A refusal about tokens that is not about the context window: guessing from
+        // message text used to halve every batch and ask again, grinding through the
+        // whole page list on a problem no smaller batch can solve.
+        client.push(Err(response_error(
+            StatusCode::UNAUTHORIZED,
+            "refresh token reuse detected".to_owned(),
+        )));
+
+        let error = run_job(&client, &host, &["p1", "p2"]).await.unwrap_err();
+        assert_eq!(client.calls(), 1);
+        assert!(host.applied().is_empty());
+        let message = format!("{error:#}");
+        assert!(message.contains("every batch"), "{message}");
+    }
+
+    #[tokio::test]
     async fn invalid_response_applies_nothing() {
         let mut host = MockHost::default();
         host.add_page("p1", 30);
@@ -2247,10 +2277,12 @@ mod tests {
         // References an element that is not part of the batch.
         client.push(client.respond_ok(review_text(&[("ghost", "nope")])));
 
-        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
-        assert!(!invocation.changed);
+        let error = run_job(&client, &host, &["p1"]).await.unwrap_err();
         assert_eq!(client.calls(), 1);
         assert!(host.applied().is_empty());
+        // Nothing was reviewed, so the job reports failure rather than a clean
+        // result the model would summarize as success.
+        assert!(format!("{error:#}").contains("every batch"), "{error:#}");
     }
 
     #[tokio::test]

@@ -74,10 +74,10 @@ impl Request {
         }
     }
 
-    /// Attach an OpenAI-compatible JSON schema structured output under
-    /// `text.format`. Pass `None` for plain text output (the default).
-    pub(crate) fn with_json_schema(mut self, schema: Option<Value>, name: &'static str) -> Self {
-        self.text.format = schema.map(|schema| TextFormat {
+    /// Attach an OpenAI-compatible JSON schema as structured output under
+    /// `text.format`. Requests without it answer in plain text.
+    pub(crate) fn with_json_schema(mut self, schema: Value, name: &'static str) -> Self {
+        self.text.format = Some(TextFormat {
             kind: "json_schema",
             name,
             strict: true,
@@ -189,7 +189,7 @@ mod tests {
             Reasoning::Low,
             "session".into(),
         )
-        .with_json_schema(Some(review_schema()), "review_response");
+        .with_json_schema(review_schema(), "review_response");
         let value = serde_json::to_value(&request).unwrap();
         let body = value.to_string();
         // Structured output must be under text.format.
