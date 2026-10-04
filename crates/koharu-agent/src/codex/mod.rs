@@ -324,7 +324,16 @@ pub(crate) fn is_transient_error(error: &anyhow::Error) -> bool {
             || source.downcast_ref::<StreamTruncated>().is_some()
             || source
                 .downcast_ref::<reqwest::Error>()
-                .is_some_and(|error| error.is_timeout() || error.is_connect() || error.is_body())
+                .is_some_and(|error| {
+                    error.is_timeout()
+                    || error.is_connect()
+                    || error.is_body()
+                    // A pooled keep-alive connection the server has already closed
+                    // surfaces here as a failed send ("connection closed before message
+                    // completed"), which reqwest reports as `Kind::Request`. Retrying
+                    // gets a fresh connection, so this is the common transient case.
+                    || error.is_request()
+                })
     })
 }
 
@@ -377,6 +386,33 @@ mod tests {
             "Codex response failed",
             "the model backend is overloaded",
         )));
+    }
+
+    #[tokio::test]
+    async fn a_send_the_peer_dropped_is_transient() {
+        // The real failure this has to classify: a pooled keep-alive connection the
+        // server had already closed, reported while the request was being sent.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("local listener");
+        let url = format!(
+            "http://{}/",
+            listener.local_addr().expect("listener address")
+        );
+        let accept = tokio::spawn(async move {
+            while let Ok((socket, _)) = listener.accept().await {
+                drop(socket);
+            }
+        });
+        let response = reqwest::Client::new()
+            .post(&url)
+            .body(vec![b'x'; 64 * 1024])
+            .send()
+            .await;
+        accept.abort();
+        let error = anyhow::Error::new(response.expect_err("a dropped peer must fail the send"));
+        assert!(is_transient_error(&error), "{error:?} must be retryable");
+        assert!(should_retry(0, &error, false));
     }
 
     #[test]
