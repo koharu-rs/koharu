@@ -193,6 +193,33 @@ src/
   stages/         detection, OCR, translation, and inpainting processors
 ```
 
+## Reference implementations
+
+`docs/reference/xianscan-webtoon-pipeline.md` records a commit-pinned investigation
+of an independent Rust and ONNX manga translation pipeline. It is advisory, not a
+specification, but two areas bear directly on decisions here.
+
+Its long-strip handling prepares pages before detection rather than detecting
+across the whole strip: candidate cuts are scored by row flatness, then rejected
+when they fall inside a detected text zone or lack blank rows above and below. A
+flat row alone does not prove a cut is safe, because the gap between two lines
+inside an undetected bubble is also flat.
+
+Its model residency approach independently reaches the same conclusion as the
+accelerator lane above, serializing per-model access to avoid contention. It also
+separates a region's tight text bounds from the box used for removal and the box
+used for typesetting, which keeps destructive cleanup independent from layout
+space.
+
+The document also lists approaches that were measured and rejected, which is the
+part most worth reading before borrowing anything from it.
+
+`docs/reference/koharu-webtoon-support.md` records what this repository adopted
+from that investigation and which choices measurement settled. Strips are sliced
+at import rather than detected whole, and the aspect-preserving input fit is the
+default over a plain stretch because it scores higher on the text and bubble
+classes that drive translation.
+
 ## Validation
 
 ```powershell

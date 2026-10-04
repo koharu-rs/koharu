@@ -60,3 +60,4 @@ Document only durable, repository-specific constraints here. Do not record curre
 
 - Comments should explain ownership, invariants, upstream mapping, or deliberate divergence; do not narrate straightforward code.
 - Keep this file focused on long-lived decision rules rather than the current implementation.
+- Investigations of external implementations belong in `docs/reference/`. Treat them as advisory input that must be re-validated against Koharu's own constraints, not as a specification to mirror.
