@@ -65,6 +65,14 @@ pub struct Page {
     pub regions: Vec<AnalysisRegion>,
 }
 
+/// One reviewable text layer, reduced to the fields a translation reviewer reads.
+pub(crate) struct ReviewText {
+    pub(crate) id: EntityId,
+    pub(crate) source: Option<String>,
+    pub(crate) source_language: Option<String>,
+    pub(crate) translation: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Layer {
@@ -1022,6 +1030,49 @@ impl Project {
         })
     }
 
+    /// The text a bulk translation reviewer may revise: the page's text layers in
+    /// the order [`Project::page`] reports them, excluding what the page does not
+    /// render. Source language stays per element — one page can mix scripts.
+    pub(crate) fn review_texts(snapshot: &Snapshot, page: EntityId) -> Result<Vec<ReviewText>> {
+        let mut texts = Vec::new();
+        Self::collect_review_texts(snapshot, page, true, &mut texts)?;
+        Ok(texts)
+    }
+
+    fn collect_review_texts(
+        snapshot: &Snapshot,
+        parent: EntityId,
+        visible: bool,
+        texts: &mut Vec<ReviewText>,
+    ) -> Result<()> {
+        for child in snapshot.children(parent)? {
+            let visible = visible && Self::layer_visibility(snapshot, child)?.visible;
+            if snapshot.component::<SceneGroup>(child)?.is_some() {
+                Self::collect_review_texts(snapshot, child, visible, texts)?;
+                continue;
+            }
+            if !visible || snapshot.component::<SceneTextLayout>(child)?.is_none() {
+                continue;
+            }
+            let content = snapshot.text_layer(child)?.content()?;
+            let source = content.source()?;
+            let translation = content.translation()?;
+            if source.is_none() && translation.is_none() {
+                continue;
+            }
+            texts.push(ReviewText {
+                id: child,
+                source_language: source
+                    .as_ref()
+                    .and_then(|source| source.language.as_ref())
+                    .map(|language| language.to_string()),
+                source: source.map(|source| source.text.value),
+                translation: translation.map(|translation| translation.text.value),
+            });
+        }
+        Ok(())
+    }
+
     fn layer_view(snapshot: &Snapshot, layer: EntityId) -> Result<Layer> {
         let parent = snapshot.parent(layer)?;
         let visibility = Self::layer_visibility(snapshot, layer)?;
@@ -1367,7 +1418,7 @@ fn rasterize_stroke(
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{Generation, ProducerId, WritingMode};
+    use koharu_scene::{Generation, LanguageTag, ProducerId, WritingMode};
 
     use super::*;
 
@@ -1540,6 +1591,80 @@ mod tests {
         };
         assert_eq!(read(first), "Olá");
         assert_eq!(read(second), "Mundo");
+    }
+
+    #[tokio::test]
+    async fn review_texts_follows_the_page_view_and_keeps_source_language_per_element() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("bulk", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let frame = |x: f32| Frame {
+            x,
+            y: 5.0,
+            width: 90.0,
+            height: 30.0,
+            angle_degrees: 0.0,
+        };
+        let (_, japanese) = project.add_text_box(page, frame(5.0)).await.unwrap();
+        let (_, english) = project.add_text_box(page, frame(40.0)).await.unwrap();
+        let (_, hidden) = project.add_text_box(page, frame(70.0)).await.unwrap();
+
+        let snapshot = project.snapshot();
+        let mut edit = snapshot.edit();
+        for (layer, (text, tag)) in [
+            (japanese, ("こんにちは", "ja-JP")),
+            (english, ("Hello there", "en-US")),
+            (hidden, ("消えた", "ja-JP")),
+        ] {
+            let content = Project::text_content(&snapshot, layer).unwrap();
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::user(text.to_owned()),
+                    language: Some(LanguageTag::new(tag).unwrap()),
+                },
+            )
+            .unwrap();
+        }
+        project.commit(edit.finish().unwrap()).await.unwrap();
+        project
+            .set_visibility(vec![hidden], Some(false), None)
+            .await
+            .unwrap();
+
+        let snapshot = project.snapshot();
+        let texts = Project::review_texts(&snapshot, page).unwrap();
+
+        // A hidden text layer is not on the page, so the reviewer must not rewrite it.
+        assert_eq!(
+            texts.iter().map(|text| text.id).collect::<Vec<_>>(),
+            vec![japanese, english]
+        );
+        // Source language is an element fact, never a batch fact.
+        assert_eq!(texts[0].source_language.as_deref(), Some("ja-JP"));
+        assert_eq!(texts[1].source_language.as_deref(), Some("en-US"));
+        assert_eq!(texts[0].source.as_deref(), Some("こんにちは"));
+        // The reviewer sees exactly the text `inspect_pages` reports, in order.
+        let reported = Project::page(&snapshot, page)
+            .unwrap()
+            .layers
+            .iter()
+            .filter_map(|layer| match layer {
+                Layer::Text {
+                    id, visibility, ..
+                } => visibility.visible.then_some(*id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            texts.iter().map(|text| text.id).collect::<Vec<_>>(),
+            reported
+        );
     }
 
     #[test]

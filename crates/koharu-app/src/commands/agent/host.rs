@@ -188,51 +188,24 @@ impl Host for KoharuHost {
         };
         let mut result = Vec::new();
         for page_id in pages {
-            let page_id_entity =
-                entity(page_id).with_context(|| format!("cannot read page {page_id}"))?;
+            let id = entity(page_id).with_context(|| format!("cannot read page {page_id}"))?;
             let page = snapshot
-                .page(page_id_entity)
+                .page(id)
                 .with_context(|| format!("page {page_id} not found for bulk review"))?;
-            let page_value = page.page()?;
-            let descendants = snapshot.descendants(page_id_entity)?;
-            let mut elements = Vec::new();
-            for entity in descendants {
-                let entity_id = entity.id();
-                if snapshot
-                    .component::<koharu_scene::TextLayout>(entity_id)?
-                    .is_none()
-                {
-                    continue;
-                }
-                let text_layer = match snapshot.text_layer(entity_id) {
-                    Ok(layer) => layer,
-                    Err(_) => continue,
-                };
-                let content = match text_layer.content() {
-                    Ok(content) => content,
-                    Err(_) => continue,
-                };
-                let source = content
-                    .source()
-                    .ok()
-                    .flatten()
-                    .map(|s| s.text.value.to_string());
-                let translation = content
-                    .translation()
-                    .ok()
-                    .flatten()
-                    .map(|t| t.text.value.to_string());
-                if source.is_some() || translation.is_some() {
-                    elements.push(json!({
-                        "id": entity_id.to_string(),
-                        "source": source,
-                        "translation": translation,
-                    }));
-                }
-            }
+            let elements = Project::review_texts(&snapshot, id)?
+                .into_iter()
+                .map(|text| {
+                    json!({
+                        "id": text.id.to_string(),
+                        "source": text.source,
+                        "lang": text.source_language,
+                        "translation": text.translation,
+                    })
+                })
+                .collect::<Vec<_>>();
             result.push(json!({
-                "id": page_id.to_string(),
-                "label": page_value.label,
+                "id": page_id,
+                "label": page.page()?.label,
                 "elements": elements,
             }));
         }
