@@ -187,10 +187,9 @@ impl Host for KoharuHost {
             project.snapshot()
         };
         let mut result = Vec::new();
-        for (index, page_id) in pages.iter().enumerate() {
-            let page_id_entity = entity_quoted_or_bare(page_id).with_context(|| {
-                format!("cannot read page {page_id} (index {index}) for bulk review")
-            })?;
+        for page_id in pages {
+            let page_id_entity =
+                entity(page_id).with_context(|| format!("cannot read page {page_id}"))?;
             let page = snapshot
                 .page(page_id_entity)
                 .with_context(|| format!("page {page_id} not found for bulk review"))?;
@@ -262,6 +261,10 @@ impl Host for KoharuHost {
                     definition::<DeletePages>("delete_pages", "Delete pages and their contents."),
                     definition::<AddTextBox>("add_text_box", "Add a paragraph text box to a page."),
                     definition::<SetText>("set_source_text", "Replace an element's source text."),
+                    definition::<SetTranslations>(
+                        "set_translations",
+                        "Set an element's translation, or pass null to remove it. Accepts multiple elements and applies them in one revision.",
+                    ),
                     definition::<SetTypography>(
                         "set_typography",
                         "Replace an element's typography settings. Font is a family name from available_fonts.",
@@ -405,21 +408,11 @@ impl Host for KoharuHost {
                 })
                 .await
             }
-            "set_translation" => {
-                let arguments: SetTranslation = arguments(&call)?;
-                let element = entity(&arguments.element)?;
-                self.mutate(|project| {
-                    Box::pin(async move {
-                        Ok((
-                            project.set_translation(element, arguments.text).await?,
-                            json!({ "element": element }),
-                        ))
-                    })
-                })
-                .await
-            }
             "set_translations" => {
                 let arguments: SetTranslations = arguments(&call)?;
+                if arguments.updates.is_empty() {
+                    bail!("set_translations requires at least one update");
+                }
                 let mut elements = Vec::with_capacity(arguments.updates.len());
                 let mut updates = Vec::with_capacity(arguments.updates.len());
                 for update in arguments.updates {
@@ -582,17 +575,13 @@ fn arguments<T: for<'de> Deserialize<'de>>(call: &ToolCall) -> Result<T> {
 }
 
 fn entity(value: &str) -> Result<EntityId> {
-    serde_json::from_value(Value::String(value.to_owned()))
-        .with_context(|| format!("invalid entity ID {value}"))
-}
-
-fn entity_quoted_or_bare(value: &str) -> Result<EntityId> {
-    if value.starts_with('"') {
+    // A model can emit an ID that still carries its JSON quotes.
+    let parsed = if value.starts_with('"') {
         serde_json::from_str::<EntityId>(value)
-            .with_context(|| format!("invalid entity ID {value}"))
     } else {
-        entity(value)
-    }
+        serde_json::from_value(Value::String(value.to_owned()))
+    };
+    parsed.with_context(|| format!("invalid entity ID {value}"))
 }
 
 fn entities(values: &[String]) -> Result<Vec<EntityId>> {
@@ -647,14 +636,14 @@ struct SetText {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct SetTranslation {
+struct TranslationUpdate {
     element: String,
     text: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct SetTranslations {
-    updates: Vec<SetTranslation>,
+    updates: Vec<TranslationUpdate>,
 }
 
 #[derive(Clone, Copy, Deserialize, JsonSchema)]
@@ -807,21 +796,20 @@ impl RunPipeline {
 
 #[cfg(test)]
 mod tests {
-    use super::{EntityId, entity_quoted_or_bare};
+    use super::entity;
 
     #[test]
-    fn bulk_review_accepts_bare_and_quoted_page_ids() {
+    fn accepts_bare_and_quoted_entity_ids() {
         let bare = "0189f0c8-0b1c-7ac0-95cd-d238b71ce20f";
-        let bare_id: EntityId = entity_quoted_or_bare(bare).expect("bare UUID must parse");
+        let bare_id = entity(bare).expect("bare UUID must parse");
         let quoted = format!("\"{bare}\"");
-        let quoted_id: EntityId =
-            entity_quoted_or_bare(&quoted).expect("JSON-quoted UUID must parse");
+        let quoted_id = entity(&quoted).expect("JSON-quoted UUID must parse");
         assert_eq!(bare_id.to_string(), quoted_id.to_string());
     }
 
     #[test]
-    fn bulk_review_reports_numeric_page_ids_clearly() {
-        let error = entity_quoted_or_bare("041").expect_err("041 must fail");
+    fn reports_numeric_page_ids_clearly() {
+        let error = entity("041").expect_err("041 must fail");
         let message = format!("{error:#}");
         assert!(message.contains("041"), "{message}");
     }
