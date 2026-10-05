@@ -63,6 +63,74 @@ fn page_index(snapshot: &Snapshot) -> Result<Vec<Value>> {
         .collect()
 }
 
+/// Pages accepted by one `inspect_pages` call. The full page view is the largest
+/// thing the agent can ask for, so it is fetched in slices rather than in one
+/// request that then rides along in every later iteration of the turn.
+pub(super) const MAX_INSPECT_PAGES: usize = 4;
+
+/// Layers reported per page before the rest is summarised away.
+const MAX_INSPECT_LAYERS: usize = 40;
+
+/// Compact the page views for the wire. Point objects become pairs and detected
+/// regions keep their identity but not their polygons: both are pure size, and
+/// the tools that take geometry still receive geometry.
+pub(super) fn inspect_pages(pages: Vec<Value>) -> Value {
+    let pages = pages
+        .into_iter()
+        .map(|mut page| {
+            let layers = page
+                .get_mut("layers")
+                .and_then(Value::as_array_mut)
+                .map(std::mem::take)
+                .unwrap_or_default();
+            let truncated = layers.len() > MAX_INSPECT_LAYERS;
+            let mut kept = if truncated {
+                layers.into_iter().take(MAX_INSPECT_LAYERS).collect()
+            } else {
+                layers
+            };
+            for layer in &mut kept {
+                compact_geometry(layer);
+            }
+            if let Some(object) = page.as_object_mut() {
+                object.insert("layers".to_owned(), Value::Array(kept));
+                if truncated {
+                    object.insert("layers_truncated".to_owned(), json!(true));
+                }
+            }
+            if let Some(regions) = page.get_mut("regions").and_then(Value::as_array_mut) {
+                for region in regions.iter_mut() {
+                    compact_geometry(region);
+                    if let Some(object) = region.as_object_mut() {
+                        object.remove("geometry");
+                    }
+                }
+            }
+            page
+        })
+        .collect::<Vec<_>>();
+    json!({ "pages": pages })
+}
+
+fn compact_geometry(value: &mut Value) {
+    let Some(points) = value
+        .get_mut("geometry")
+        .and_then(|geometry| geometry.get_mut("points"))
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    for point in points.iter_mut() {
+        let [Some(x), Some(y)] = [
+            point.get("x").and_then(Value::as_f64),
+            point.get("y").and_then(Value::as_f64),
+        ] else {
+            continue;
+        };
+        *point = json!([x, y]);
+    }
+}
+
 /// The configured pipeline, as a JSON value to select fields from.
 pub(super) fn pipeline_config() -> Result<Value> {
     let config = koharu_pipeline::PipelineConfig::load()?;
@@ -85,6 +153,46 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn page_view_compacts_geometry_without_losing_it() {
+        let page = json!({
+            "id": "p1",
+            "label": "01",
+            "layers": [{
+                "id": "l1",
+                "geometry": { "points": [{ "x": 0.0, "y": 1.0 }, { "x": 2.0, "y": 3.0 }] },
+                "content": { "source": { "text": "x" } }
+            }],
+            "regions": [{
+                "id": "r1",
+                "kind": "bubble",
+                "label": null,
+                "geometry": { "points": [{ "x": 0.0, "y": 0.0 }] }
+            }]
+        });
+        let value = inspect_pages(vec![page]);
+        let layer = &value["pages"][0]["layers"][0];
+        assert_eq!(layer["geometry"]["points"], json!([[0.0, 1.0], [2.0, 3.0]]));
+        // What the tools act on stays exactly as it was.
+        assert_eq!(layer["id"], "l1");
+        assert_eq!(layer["content"]["source"]["text"], "x");
+        // A detected region is not editable, so it keeps identity without polygon.
+        assert_eq!(value["pages"][0]["regions"][0]["kind"], "bubble");
+        assert!(value["pages"][0]["regions"][0].get("geometry").is_none());
+        assert!(value["pages"][0].get("layers_truncated").is_none());
+    }
+
+    #[test]
+    fn oversized_pages_say_what_was_left_out() {
+        let layers = (0..=MAX_INSPECT_LAYERS)
+            .map(|index| json!({ "id": format!("l{index}") }))
+            .collect::<Vec<_>>();
+        let value = inspect_pages(vec![json!({ "layers": layers })]);
+        let page = &value["pages"][0];
+        assert_eq!(page["layers"].as_array().unwrap().len(), MAX_INSPECT_LAYERS);
+        assert_eq!(page["layers_truncated"], true);
+    }
 
     #[tokio::test]
     async fn context_carries_no_ui_only_payload() {

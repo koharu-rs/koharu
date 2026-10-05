@@ -9,6 +9,10 @@ use crate::Control;
 pub struct ToolImage {
     pub label: String,
     pub data_url: String,
+    /// How the provider should read this image: `"high"` tiles it and bills per
+    /// tile, `"low"` is one cheap fixed view, `"auto"` lets the provider decide
+    /// from the encoded size.
+    pub detail: &'static str,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -81,10 +85,16 @@ impl Invocation {
     }
 
     #[must_use]
-    pub fn with_image(mut self, label: impl Into<String>, data_url: impl Into<String>) -> Self {
+    pub fn with_image(
+        mut self,
+        label: impl Into<String>,
+        data_url: impl Into<String>,
+        detail: &'static str,
+    ) -> Self {
         self.images.push(ToolImage {
             label: label.into(),
             data_url: data_url.into(),
+            detail,
         });
         self
     }

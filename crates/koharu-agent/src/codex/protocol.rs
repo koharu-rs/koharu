@@ -147,7 +147,9 @@ pub(crate) fn function_output(
             content.push(json!({
                 "type": "input_image",
                 "image_url": image.data_url,
-                "detail": "high",
+                // The producer chooses: a page the model must proofread is read at
+                // a different level than one sent only for layout context.
+                "detail": image.detail,
             }));
         }
         Value::Array(content)

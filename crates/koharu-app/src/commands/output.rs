@@ -20,6 +20,11 @@ use koharu_desktop::Desktop;
 
 const THUMBNAIL_EDGE: u32 = 128;
 
+/// Longest edge of the page image the agent is shown. Raising it would raise the
+/// provider's image tiling, and therefore the cost of every later request of the
+/// turn, without making balloon text more legible at this scale.
+const AGENT_PREVIEW_EDGE: u32 = 1024;
+
 #[derive(Type)]
 #[specta(transparent)]
 pub(crate) struct ThumbnailBytes(#[specta(type = Vec<u8>)] Vec<u8>);
@@ -201,10 +206,14 @@ pub(crate) async fn rendered_preview(
         .image;
     tokio_rayon::spawn(move || {
         let image = image::DynamicImage::ImageRgba8(image)
-            .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
+            .resize(
+                AGENT_PREVIEW_EDGE,
+                AGENT_PREVIEW_EDGE,
+                image::imageops::FilterType::Lanczos3,
+            )
             .to_rgba8();
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
-        Ok::<_, anyhow::Error>(encoder.encode(85.0).to_vec())
+        Ok::<_, anyhow::Error>(encoder.encode(80.0).to_vec())
     })
     .await
 }

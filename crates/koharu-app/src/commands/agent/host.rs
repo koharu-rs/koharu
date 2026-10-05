@@ -195,7 +195,7 @@ impl Host for KoharuHost {
                     ),
                     definition::<InspectPages>(
                         "inspect_pages",
-                        "Read the latest semantic state of the specified pages. Accepts multiple page IDs and does not include rendered images.",
+                        "Read the latest semantic state of up to four pages. Accepts multiple page IDs and does not include rendered images.",
                     ),
                     definition::<ViewPage>(
                         "view_page",
@@ -251,6 +251,11 @@ impl Host for KoharuHost {
                 if arguments.pages.is_empty() {
                     bail!("inspect_pages requires at least one page ID");
                 }
+                anyhow::ensure!(
+                    arguments.pages.len() <= context::MAX_INSPECT_PAGES,
+                    "inspect_pages reads at most {} pages at a time",
+                    context::MAX_INSPECT_PAGES
+                );
                 let pages = entities(&arguments.pages)?;
                 let values = {
                     let current = self.handle.state::<CurrentProject>();
@@ -262,9 +267,13 @@ impl Host for KoharuHost {
                         .map(|page| Project::page(&snapshot, page))
                         .collect::<Result<Vec<_>>>()?
                 };
-                Invocation::read(json!({ "pages": values })).map(|invocation| {
-                    invocation.with_history(inspect_pages_history(&arguments.pages))
-                })
+                Invocation::read(context::inspect_pages(
+                    values
+                        .into_iter()
+                        .map(serde_json::to_value)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+                .map(|invocation| invocation.with_history(inspect_pages_history(&arguments.pages)))
             }
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;
@@ -286,6 +295,10 @@ impl Host for KoharuHost {
                     Invocation::read(json!({ "page": page, "label": label }))?.with_image(
                         format!("Rendered page {label} ({page})"),
                         format!("data:image/webp;base64,{}", STANDARD.encode(bytes)),
+                        // Deliberately the expensive level: this tool exists for
+                        // proofreading rendered text, and the instructions tell the
+                        // model to call it only when that matters.
+                        "high",
                     ),
                 )
             }
