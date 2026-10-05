@@ -13,12 +13,12 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager as _};
 use tauri_runtime_cef::CefRuntime;
 
+use super::context;
 use crate::commands::{
     ChannelExt as _,
     canvas::{CanvasChannel, Point},
     editing::{GeometryUpdate, TypographyUpdate},
     output,
-    preferences::Preferences,
     processing::{JobId, Processing},
     project::{CurrentProject, Project, Typography},
 };
@@ -34,46 +34,14 @@ impl KoharuHost {
     }
 
     async fn project_context(&self) -> Result<Value> {
-        let (project, pages) = {
+        let (info, snapshot) = {
             let current = self.handle.state::<CurrentProject>();
             let current = current.project.lock().await;
             let project = current.as_ref().context("no project is open")?;
-            let snapshot = project.snapshot();
-            let pages = Project::pages(&snapshot)?;
-            (project.info(), pages)
+            (project.info(), project.snapshot())
         };
-        let preferences = Preferences::load()?;
-        let fonts = self
-            .handle
-            .state::<Desktop>()
-            .renderer()
-            .available_fonts()
-            .await?;
-        let providers = preferences
-            .providers
-            .entries
-            .iter()
-            .map(|provider| {
-                json!({
-                    "name": provider.name,
-                    "config": provider.config,
-                    "credential_configured": provider
-                        .credential
-                        .as_ref()
-                        .is_some_and(|credential| credential.configured),
-                })
-            })
-            .collect::<Vec<_>>();
-        Ok(json!({
-            "project": project,
-            "pages": pages,
-            "configuration": {
-                "pipeline": preferences.pipeline,
-                "providers": providers,
-                "typesetting": preferences.typesetting,
-                "available_fonts": fonts.into_iter().map(|font| font.name).collect::<Vec<_>>(),
-            },
-        }))
+        let pipeline = context::pipeline_config()?;
+        context::build(&info, &snapshot, &pipeline)
     }
 
     async fn mutate<T>(
@@ -213,11 +181,7 @@ impl Host for KoharuHost {
     }
 
     fn review_target_language(&self) -> Result<String> {
-        Ok(Preferences::load()?
-            .pipeline
-            .translation
-            .target_language
-            .to_string())
+        context::target_language()
     }
 
     fn tools(&self) -> Vec<Tool> {
@@ -248,7 +212,7 @@ impl Host for KoharuHost {
                     ),
                     definition::<SetTypography>(
                         "set_typography",
-                        "Replace an element's typography settings. Font is a family name from available_fonts.",
+                        "Replace an element's typography settings. Font is a family name from list_fonts.",
                     ),
                     definition::<SetGeometry>(
                         "set_geometry",
@@ -266,6 +230,10 @@ impl Host for KoharuHost {
                     definition::<RunPipeline>(
                         "run_pipeline",
                         "Run Koharu's configured processing pipeline for the whole project, selected pages, or selected text elements.",
+                    ),
+                    definition::<ListFonts>(
+                        "list_fonts",
+                        "List the font family names set_typography accepts. Only needed when choosing a font.",
                     ),
                 ]
             })
@@ -516,6 +484,18 @@ impl Host for KoharuHost {
                 .await
             }
             "run_pipeline" => self.run_pipeline(arguments(&call)?, control).await,
+            "list_fonts" => {
+                let _: ListFonts = arguments(&call)?;
+                let fonts = self
+                    .handle
+                    .state::<Desktop>()
+                    .renderer()
+                    .available_fonts()
+                    .await?;
+                Invocation::read(json!({
+                    "fonts": fonts.into_iter().map(|font| font.name).collect::<Vec<_>>(),
+                }))
+            }
             name => bail!("unknown Koharu tool {name}"),
         }
     }
@@ -584,6 +564,9 @@ fn inspect_pages_history(pages: &[String]) -> Value {
 
 #[derive(Deserialize, JsonSchema)]
 struct InspectProject {}
+
+#[derive(Deserialize, JsonSchema)]
+struct ListFonts {}
 
 #[derive(Deserialize, JsonSchema)]
 struct InspectPages {
