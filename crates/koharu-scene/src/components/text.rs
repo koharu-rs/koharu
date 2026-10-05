@@ -203,6 +203,14 @@ pub struct TextRole {
     pub role: String,
 }
 
+impl TextRole {
+    /// A bubble holds the text: someone in the scene is saying it.
+    pub const DIALOGUE: &'static str = "dev.koharu.text.dialogue";
+
+    /// No bubble holds the text: narration boxes, signs, and lettering drawn as art.
+    pub const FREE_TEXT: &'static str = "dev.koharu.text.free-text";
+}
+
 impl Component for TextRole {
     const KIND: &'static str = "dev.koharu.text.role";
 

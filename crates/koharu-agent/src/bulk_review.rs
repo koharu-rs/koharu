@@ -46,8 +46,19 @@ const MAX_REPORTED_FAILURES: usize = 32;
 /// counts as a script the batch is written in.
 const MIN_TARGET_SCRIPT_SHARE: usize = 3;
 
-/// Per-volume overhead heuristic used when planning batches.
-const ESTIMATED_JSON_OVERHEAD_PER_ELEMENT: usize = 64;
+/// Per-volume overhead heuristic used when planning batches. Covers the key names
+/// and quoting of one element, including the evidence keys that a page can record
+/// for it (`origin`, `role`, `region`, `score`).
+const ESTIMATED_JSON_OVERHEAD_PER_ELEMENT: usize = 96;
+
+/// Wire values the host uses to describe where an element came from.
+const MACHINE_ORIGIN: &str = "gen";
+const FREE_TEXT_ROLE: &str = "free";
+const ONOMATOPOEIA_REGION: &str = "onomatopoeia";
+
+/// A non-text region the detector was at least this sure about corroborates that
+/// the text in it is lettering rather than story.
+const SFX_DETECTOR_SCORE: f32 = 0.85;
 
 /// Structured translation memory is bounded to keep the per-batch prompt tiny.
 pub(crate) const MAX_MEMORY_BYTES: usize = 4 * 1024;
@@ -63,7 +74,7 @@ pub(crate) struct ReviewPage {
     pub(crate) elements: Vec<ReviewElement>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct ReviewElement {
     /// Element entity ID
     pub(crate) id: String,
@@ -79,6 +90,19 @@ pub(crate) struct ReviewElement {
     /// Current translation (may be absent)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) translation: Option<String>,
+    /// `gen` when the pipeline wrote the current translation, `user` when a person did
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) origin: Option<String>,
+    /// `dialogue` when the scene puts this text in a balloon, `free` when it does not
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) role: Option<String>,
+    /// The label of the region this source was recognized in, when that region is
+    /// not an ordinary text region — `onomatopoeia` being the interesting case
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) region: Option<String>,
+    /// The detector's own score for that region
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) score: Option<f32>,
     /// Conservative local quality hints (advisory signals only — never applied
     /// as edits by this module), serialized only when non-empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -334,12 +358,114 @@ pub(crate) fn quality_hints(
     hints
 }
 
+/// Why a local heuristic thinks an element may be lettering — a sound effect or a
+/// vocalization — rather than story text.
+///
+/// The strong signals are read from three different places in the scene: the class
+/// the region was detected as, whether a balloon holds the text, and the detector's
+/// own score for that region. None of them is derived from another, so two of them
+/// agreeing is real corroboration. The weak ones describe only the shape of the
+/// source text, and one-word dialogue ("NO!", "STOP!", "HELP!") has that shape too,
+/// so they can never justify destroying a translation on their own.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum SfxSignal {
+    DetectorScore,
+    NotDialogue,
+    PunctuationOnly,
+    RegionOnomatopoeia,
+    RepeatedChar,
+    SingleToken,
+}
+
+impl SfxSignal {
+    fn strong(self) -> bool {
+        matches!(
+            self,
+            Self::DetectorScore | Self::NotDialogue | Self::RegionOnomatopoeia
+        )
+    }
+}
+
+/// The evidence one element carries, reduced to named signals plus who wrote the
+/// translation currently in the project.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SfxEvidence {
+    /// The translation now in the project came from the pipeline, so erasing it
+    /// undoes a machine decision rather than a person's work.
+    machine: bool,
+    signals: Vec<SfxSignal>,
+}
+
+impl SfxEvidence {
+    pub(crate) fn of(element: &ReviewElement) -> Self {
+        let mut signals = Vec::new();
+        if element.region.as_deref() == Some(ONOMATOPOEIA_REGION) {
+            signals.push(SfxSignal::RegionOnomatopoeia);
+        }
+        if element.role.as_deref() == Some(FREE_TEXT_ROLE) {
+            signals.push(SfxSignal::NotDialogue);
+        }
+        if element.region.is_some()
+            && element
+                .score
+                .is_some_and(|score| score >= SFX_DETECTOR_SCORE)
+        {
+            signals.push(SfxSignal::DetectorScore);
+        }
+        if !element.source.chars().any(char::is_alphanumeric) {
+            signals.push(SfxSignal::PunctuationOnly);
+        }
+        if !element.source.is_empty() && !element.source.chars().any(char::is_whitespace) {
+            signals.push(SfxSignal::SingleToken);
+        }
+        if has_repeated_char(&element.source) {
+            signals.push(SfxSignal::RepeatedChar);
+        }
+        signals.sort_unstable();
+        signals.dedup();
+        Self {
+            machine: element.origin.as_deref() == Some(MACHINE_ORIGIN),
+            signals,
+        }
+    }
+
+    pub(crate) fn has(&self, signal: SfxSignal) -> bool {
+        self.signals.contains(&signal)
+    }
+
+    pub(crate) fn strong(&self) -> impl Iterator<Item = SfxSignal> + '_ {
+        self.signals
+            .iter()
+            .copied()
+            .filter(|signal| SfxSignal::strong(*signal))
+    }
+
+    /// Worth a closer look, never worth acting on: either the scene says so, or a
+    /// machine translation of a single token that carries no word in it at all.
+    pub(crate) fn suspicious(&self) -> bool {
+        self.strong().next().is_some()
+            || (self.machine
+                && self.has(SfxSignal::SingleToken)
+                && (self.has(SfxSignal::PunctuationOnly) || self.has(SfxSignal::RepeatedChar)))
+    }
+}
+
+/// The same character written twice or more in a row: `!!`, `アアア`, `ゴゴゴ`.
+fn has_repeated_char(text: &str) -> bool {
+    let characters = text
+        .chars()
+        .map(|character| character.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    characters.windows(2).any(|pair| pair[0] == pair[1])
+}
+
 /// The reviewer's system prompt. The target language is a project fact the host
 /// supplies; no source language is stated here because it is an element fact.
 pub(crate) fn review_instructions(target: &str) -> String {
     format!(
         r#"You are a specialized bulk translation reviewer for manga pages, revising translations into {target}.
 You receive minimal textual data: page labels, element IDs, source text, that source's language tag when the page records one, current translations, and optional local quality hints on an element.
+An element can also carry scene evidence about where its text came from: "origin" (`gen` = the pipeline wrote the current translation, `user` = a person did), "role" (`dialogue` = a balloon holds the text, `free` = nothing does), and "region" with "score" (the detector read the text out of an area classified as something other than ordinary text, with that confidence). Use it to judge what kind of text you are looking at, never as permission to translate less: story text stays translated whatever its origin, and a short exclamation in a balloon is still dialogue.
 Every element carries its own source language and a batch can mix them. Review each element against the language its own source is in; when an element has no tag, detect that language from the text. Never infer an element's source language from another element.
 Review every provided translation in this order:
 1. SOURCE FIDELITY — does the translation carry the source meaning? Check for lost or added information, wrong subject/object, inverted negation, wrong verb tense, and swapped pronouns or relationships. Accuracy failures are the most serious errors to fix.
@@ -845,6 +971,7 @@ impl<'a> BulkReviewer<'a> {
                 "batches": metrics.total_batches,
                 "changes": metrics.total_changes,
                 "hints": metrics.total_hints,
+                "lettering_candidates": metrics.total_lettering_candidates,
                 "model_requests": metrics.total_model_requests,
                 "elapsed_ms": metrics.total_elapsed_ms,
             }),
@@ -915,6 +1042,22 @@ impl<'a> BulkReviewer<'a> {
                     .get("translation")
                     .and_then(Value::as_str)
                     .map(ToOwned::to_owned);
+                let origin = element
+                    .get("origin")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned);
+                let role = element
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned);
+                let region = element
+                    .get("region")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned);
+                let score = element
+                    .get("score")
+                    .and_then(Value::as_f64)
+                    .map(|score| score as f32);
                 source_chars = source_chars.saturating_add(source.chars().count());
                 translation_chars = translation_chars.saturating_add(
                     translation
@@ -929,6 +1072,10 @@ impl<'a> BulkReviewer<'a> {
                     source,
                     source_language,
                     translation,
+                    origin,
+                    role,
+                    region,
+                    score,
                     quality_hints: Vec::new(),
                 });
             }
@@ -962,6 +1109,14 @@ impl<'a> BulkReviewer<'a> {
             hints_count = hints_count.saturating_add(hints.len());
             element.quality_hints = hints;
         }
+
+        // Elements the scene itself points at as possible lettering. Reported so a
+        // slow or expensive job can be read against what it actually looked at.
+        let sfx_candidates = review_pages
+            .iter()
+            .flat_map(|page| page.elements.iter())
+            .filter(|element| SfxEvidence::of(element).suspicious())
+            .count();
 
         // The pages themselves are the payload: the model must see every element's
         // source and current translation, not just the page IDs.
@@ -1062,6 +1217,7 @@ impl<'a> BulkReviewer<'a> {
             page_count: batch.len(),
             element_count,
             hints_count,
+            lettering_candidates: sfx_candidates,
             source_chars,
             translation_chars,
             payload_bytes,
@@ -1121,6 +1277,7 @@ pub(crate) struct BatchMetrics {
     pub(crate) page_count: usize,
     pub(crate) element_count: usize,
     pub(crate) hints_count: usize,
+    pub(crate) lettering_candidates: usize,
     pub(crate) source_chars: usize,
     pub(crate) translation_chars: usize,
     pub(crate) payload_bytes: usize,
@@ -1143,6 +1300,7 @@ impl BatchMetrics {
             pages = self.page_count,
             elements = self.element_count,
             hints = self.hints_count,
+            lettering_candidates = self.lettering_candidates,
             source_chars = self.source_chars,
             translation_chars = self.translation_chars,
             payload_bytes = self.payload_bytes,
@@ -1160,12 +1318,14 @@ impl BatchMetrics {
 
     pub(crate) fn log_summary(&self) -> String {
         format!(
-            "batch {}: {} pages, {} elements, {} changes, {} hints, {} request(s), {} ms",
+            "batch {}: {} pages, {} elements, {} changes, {} hints, {} lettering candidate(s), \
+             {} request(s), {} ms",
             self.batch_index,
             self.page_count,
             self.element_count,
             self.changes_applied,
             self.hints_count,
+            self.lettering_candidates,
             self.model_requests,
             self.elapsed_ms
         )
@@ -1179,6 +1339,7 @@ pub(crate) struct JobMetrics {
     pub(crate) total_pages: usize,
     pub(crate) total_elements: usize,
     pub(crate) total_hints: usize,
+    pub(crate) total_lettering_candidates: usize,
     pub(crate) total_changes: usize,
     pub(crate) total_model_requests: usize,
     pub(crate) total_elapsed_ms: u64,
@@ -1194,6 +1355,9 @@ impl JobMetrics {
         self.total_pages = self.total_pages.saturating_add(batch.page_count);
         self.total_elements = self.total_elements.saturating_add(batch.element_count);
         self.total_hints = self.total_hints.saturating_add(batch.hints_count);
+        self.total_lettering_candidates = self
+            .total_lettering_candidates
+            .saturating_add(batch.lettering_candidates);
         self.total_changes = self.total_changes.saturating_add(batch.changes_applied);
         self.total_model_requests = self
             .total_model_requests
@@ -1220,6 +1384,7 @@ impl JobMetrics {
             pages = self.total_pages,
             elements = self.total_elements,
             hints = self.total_hints,
+            lettering_candidates = self.total_lettering_candidates,
             changes = self.total_changes,
             model_requests = self.total_model_requests,
             elapsed_ms = self.total_elapsed_ms,
@@ -1400,6 +1565,30 @@ mod tests {
                     "lang": source_language,
                     "translation": translation,
                 }));
+        }
+
+        /// Like [`Self::add_element`], with the scene evidence keys the host would
+        /// record beside the text.
+        fn add_element_with_evidence(
+            &mut self,
+            page_id: &str,
+            element_id: &str,
+            source: &str,
+            translation: Option<&str>,
+            evidence: Value,
+        ) {
+            let mut element = json!({
+                "id": element_id,
+                "source": source,
+                "translation": translation,
+            });
+            if let (Some(object), Some(extra)) = (element.as_object_mut(), evidence.as_object()) {
+                object.extend(extra.clone());
+            }
+            self.pages
+                .entry(page_id.to_owned())
+                .or_default()
+                .push(element);
         }
 
         fn add_page(&mut self, id: &str, source_chars: usize) {
@@ -1831,15 +2020,14 @@ mod tests {
                     source: "Hello".to_owned(),
                     source_language: Some("en-US".to_owned()),
                     translation: Some("Olá".to_owned()),
-                    quality_hints: Vec::new(),
+                    ..ReviewElement::default()
                 },
                 ReviewElement {
                     id: "e2".to_owned(),
                     order: 1,
                     source: "World".to_owned(),
-                    source_language: None,
                     translation: None,
-                    quality_hints: Vec::new(),
+                    ..ReviewElement::default()
                 },
             ],
         };
@@ -1851,6 +2039,11 @@ mod tests {
             "provider",
             "pipeline",
             "image",
+            // Evidence keys stay off the wire until the scene records something.
+            "origin",
+            "role",
+            "region",
+            "score",
         ] {
             assert!(
                 !body.contains(forbidden),
@@ -2014,7 +2207,7 @@ mod tests {
             source: "Hello".to_owned(),
             source_language: None,
             translation: Some("Olá".to_owned()),
-            quality_hints: Vec::new(),
+            ..ReviewElement::default()
         };
         let plain_body = serde_json::to_string(&plain).unwrap();
         assert!(!plain_body.contains("quality_hints"));
@@ -2029,6 +2222,7 @@ mod tests {
                 &[("行こう", "Vamos lá!"), ("ちょっと待って", "Espera aí! M")],
                 "Portuguese",
             ),
+            ..ReviewElement::default()
         };
         let hinted_body = serde_json::to_string(&hinted).unwrap();
         assert!(hinted_body.contains("quality_hints"));
@@ -2057,6 +2251,136 @@ mod tests {
         assert!(prompts[0].contains("Perfeito! M"));
         assert!(prompts[0].contains("possible_orphan_character"));
         assert!(invocation.value["metrics"]["hints"].as_u64() == Some(1));
+    }
+
+    #[tokio::test]
+    async fn scene_evidence_reaches_the_reviewer() {
+        let mut host = MockHost::default();
+        host.add_element_with_evidence(
+            "p1",
+            "p1e1",
+            "ドン",
+            Some("ドドン"),
+            json!({
+                "origin": "gen",
+                "role": "free",
+                "region": "onomatopoeia",
+                "score": 0.91,
+            }),
+        );
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        let prompt = &client.prompts()[0];
+        for key in [
+            "\"origin\":\"gen\"",
+            "\"role\":\"free\"",
+            "\"region\":\"onomatopoeia\"",
+            "\"score\":0.91",
+        ] {
+            assert!(prompt.contains(key), "payload must carry {key}: {prompt}");
+        }
+        assert_eq!(
+            invocation.value["metrics"]["lettering_candidates"].as_u64(),
+            Some(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_page_without_scene_evidence_reports_no_candidate() {
+        let mut host = MockHost::default();
+        host.add_element_with_evidence(
+            "p1",
+            "p1e1",
+            "NO!",
+            Some("Não!"),
+            json!({ "origin": "gen", "role": "dialogue" }),
+        );
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert!(
+            !client.prompts()[0].contains("\"region\""),
+            "an element with no lettering evidence keeps the payload bare"
+        );
+        assert_eq!(
+            invocation.value["metrics"]["lettering_candidates"].as_u64(),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn lettering_evidence_separates_scene_facts_from_text_shape() {
+        let element = |source: &str,
+                       origin: Option<&str>,
+                       role: Option<&str>,
+                       region: Option<&str>,
+                       score: Option<f32>| {
+            ReviewElement {
+                id: "e".to_owned(),
+                source: source.to_owned(),
+                origin: origin.map(ToOwned::to_owned),
+                role: role.map(ToOwned::to_owned),
+                region: region.map(ToOwned::to_owned),
+                score,
+                ..ReviewElement::default()
+            }
+        };
+
+        // A one-word line inside a balloon is someone speaking, not lettering.
+        for line in ["NO!", "STOP!", "HELP!", "RUN!"] {
+            let evidence =
+                SfxEvidence::of(&element(line, Some("gen"), Some("dialogue"), None, None));
+            assert_eq!(evidence.strong().count(), 0, "{line} is story text");
+            assert!(
+                !evidence.suspicious(),
+                "{line} must not look like lettering"
+            );
+        }
+
+        // Repetition earns a closer look and nothing more.
+        let vocalization = SfxEvidence::of(&element(
+            "アアア",
+            Some("gen"),
+            Some("dialogue"),
+            None,
+            None,
+        ));
+        assert!(vocalization.has(SfxSignal::SingleToken));
+        assert!(vocalization.has(SfxSignal::RepeatedChar));
+        assert_eq!(vocalization.strong().count(), 0);
+        assert!(vocalization.suspicious());
+
+        // The scene classifying the region is what makes evidence strong.
+        let lettering = SfxEvidence::of(&element(
+            "ドン",
+            Some("gen"),
+            Some("free"),
+            Some("onomatopoeia"),
+            Some(0.91),
+        ));
+        assert!(lettering.has(SfxSignal::RegionOnomatopoeia));
+        assert!(lettering.has(SfxSignal::DetectorScore));
+        assert!(lettering.has(SfxSignal::NotDialogue));
+        assert_eq!(lettering.strong().count(), 3);
+
+        // The detector doubting a text region tells the model to look harder; it is
+        // not evidence that the text is lettering.
+        let unsure = SfxEvidence::of(&element(
+            "行こう",
+            Some("gen"),
+            Some("dialogue"),
+            None,
+            Some(0.62),
+        ));
+        assert!(!unsure.has(SfxSignal::DetectorScore));
+        assert_eq!(unsure.strong().count(), 0);
+
+        // Text a person wrote never looks suspicious to a shape heuristic.
+        let authored = SfxEvidence::of(&element("!!!", Some("user"), Some("dialogue"), None, None));
+        assert!(!authored.suspicious());
     }
 
     #[tokio::test]

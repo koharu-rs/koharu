@@ -6,10 +6,11 @@ use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
     Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
-    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion,
-    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText,
-    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
-    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
+    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RegionSpec,
+    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText, TextContentRef,
+    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind, TextRegion,
+    TextRole, Translation as SceneTranslation, Typography as SceneTypography,
+    Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -65,12 +66,44 @@ pub struct Page {
     pub regions: Vec<AnalysisRegion>,
 }
 
+/// Below this, the detector's own score for a text region is worth telling the
+/// reviewer: the region may be lettering the model mistook for story text.
+const REVIEW_REGION_CERTAINTY: f32 = 0.90;
+
 /// One reviewable text layer, reduced to the fields a translation reviewer reads.
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct ReviewText {
     pub(crate) id: EntityId,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lang")]
     pub(crate) source_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) translation: Option<String>,
+    #[serde(flatten)]
+    pub(crate) evidence: ReviewEvidence,
+}
+
+/// Scene facts about how a text layer got here. The reviewer needs them to tell
+/// story text from lettering, and they cost bytes per element, so each key is
+/// recorded only when it actually says something.
+#[derive(Clone, Debug, Default, Serialize)]
+pub(crate) struct ReviewEvidence {
+    /// Who wrote the translation now in the project: `user` or `gen`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) origin: Option<&'static str>,
+    /// `dialogue` when a bubble holds the text, `free` when nothing does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) role: Option<&'static str>,
+    /// The region label the source was recognized in, recorded only when that
+    /// region is not an ordinary text region (an `onomatopoeia` region, say).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) region: Option<String>,
+    /// How sure the detector was about that region. With `region` it is the score
+    /// for the non-text class; alone it means the detector doubted the region was
+    /// even text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) score: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -1060,6 +1093,7 @@ impl Project {
             if source.is_none() && translation.is_none() {
                 continue;
             }
+            let evidence = Self::review_evidence(&content, translation.as_ref())?;
             texts.push(ReviewText {
                 id: child,
                 source_language: source
@@ -1068,9 +1102,55 @@ impl Project {
                     .map(|language| language.to_string()),
                 source: source.map(|source| source.text.value),
                 translation: translation.map(|translation| translation.text.value),
+                evidence,
             });
         }
         Ok(())
+    }
+
+    /// Where this text came from, as far as the scene records it: who wrote the
+    /// current translation, whether a bubble holds it, and what the detector
+    /// thought of the region its source was recognized in.
+    fn review_evidence(
+        content: &TextContentRef<'_>,
+        translation: Option<&SceneTranslation>,
+    ) -> Result<ReviewEvidence> {
+        let mut evidence = ReviewEvidence {
+            origin: translation.map(|translation| match translation.text.origin {
+                Origin::User => "user",
+                Origin::Generated(_) => "gen",
+            }),
+            role: content.role()?.map(|role| {
+                if role.role == TextRole::DIALOGUE {
+                    "dialogue"
+                } else {
+                    "free"
+                }
+            }),
+            ..ReviewEvidence::default()
+        };
+        let Some(region) = content.source_region()? else {
+            return Ok(evidence);
+        };
+        let region_value = region.region()?;
+        let score = region
+            .detection()?
+            .and_then(|analysis| {
+                analysis
+                    .labels
+                    .into_iter()
+                    .find(|label| label.kind.as_str() == region_value.kind.as_str())
+            })
+            .map(|label| (label.confidence * 100.0).round() / 100.0);
+        if region_value.kind.as_str() == TextRegion::KIND {
+            // Doubt about the text classification is worth reporting; certainty is
+            // the common case and says nothing.
+            evidence.score = score.filter(|score| *score < REVIEW_REGION_CERTAINTY);
+        } else {
+            evidence.region = region_value.label.filter(|label| !label.is_empty());
+            evidence.score = score;
+        }
+        Ok(evidence)
     }
 
     fn layer_view(snapshot: &Snapshot, layer: EntityId) -> Result<Layer> {
@@ -1418,7 +1498,10 @@ fn rasterize_stroke(
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{Generation, LanguageTag, ProducerId, WritingMode};
+    use koharu_scene::{
+        DetectionAnalysis, DetectionLabel, Generation, LanguageTag, ProducerId, RecognizedFrom,
+        RegionKind, WritingMode,
+    };
 
     use super::*;
 
@@ -1663,6 +1746,116 @@ mod tests {
             texts.iter().map(|text| text.id).collect::<Vec<_>>(),
             reported
         );
+        // Nothing in the scene marks these as lettering, so the payload stays bare.
+        let body = serde_json::to_string(&texts).unwrap();
+        for absent in ["origin", "role", "region", "score"] {
+            assert!(!body.contains(absent), "payload must not carry {absent}");
+        }
+    }
+
+    #[tokio::test]
+    async fn review_texts_reports_the_evidence_the_scene_records() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("sfx", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        // What the layout model called the region a source was read out of, and the
+        // evidence keys the reviewer should be left with.
+        let cases = [
+            (
+                "dev.koharu.region.unknown",
+                "onomatopoeia",
+                0.9123,
+                Some("onomatopoeia"),
+                Some(0.91),
+            ),
+            (TextRegion::KIND, "text", 0.97, None, None),
+            (TextRegion::KIND, "text", 0.618, None, Some(0.62)),
+        ];
+        let generation = Generation::new(
+            ProducerId::new("dev.koharu.pipeline.detection").expect("valid producer"),
+        );
+        // Machine authorship only comes from the pipeline's own edit path: a manual
+        // edit would promote every component written here to a person's work.
+        let mut edit = project.snapshot().edit_as(generation.clone());
+        for (kind, label, confidence, _, _) in &cases {
+            let content = edit.add_text_content(page, At::End).unwrap();
+            edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &SceneTextLayout {
+                    origin: Origin::Generated(generation.clone()),
+                    kind: TextLayoutKind::Paragraph,
+                    angle_degrees: None,
+                },
+            )
+            .unwrap();
+            let class = RegionKind::new(*kind).unwrap();
+            let region = edit.add_entity(page, At::End).unwrap();
+            edit.set(region, &SceneGeometry::rectangle(5.0, 5.0, 15.0, 10.0))
+                .unwrap();
+            edit.set(
+                region,
+                &SceneRegion {
+                    origin: Origin::Generated(generation.clone()),
+                    kind: class.clone(),
+                    label: Some((*label).to_owned()),
+                },
+            )
+            .unwrap();
+            edit.set(
+                region,
+                &DetectionAnalysis {
+                    origin: Origin::Generated(generation.clone()),
+                    labels: vec![DetectionLabel {
+                        kind: class,
+                        confidence: *confidence,
+                    }],
+                },
+            )
+            .unwrap();
+            edit.relate::<RecognizedFrom>(content, region).unwrap();
+            edit.set(
+                content,
+                &TextRole {
+                    origin: Origin::Generated(generation.clone()),
+                    role: TextRole::FREE_TEXT.to_owned(),
+                },
+            )
+            .unwrap();
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::generated("ドン".to_owned(), generation.clone()),
+                    language: Some(LanguageTag::new("ja-JP").unwrap()),
+                },
+            )
+            .unwrap();
+            edit.set(
+                content,
+                &SceneTranslation {
+                    text: Authored::generated("ドドドン".to_owned(), generation.clone()),
+                    language: Some(LanguageTag::new("pt-BR").unwrap()),
+                },
+            )
+            .unwrap();
+        }
+        project.commit(edit.finish().unwrap()).await.unwrap();
+
+        let texts = Project::review_texts(&project.snapshot(), page).unwrap();
+        assert_eq!(texts.len(), cases.len());
+        for (text, (_, _, _, region, score)) in texts.iter().zip(&cases) {
+            assert_eq!(text.evidence.origin, Some("gen"), "the pipeline wrote this");
+            assert_eq!(text.evidence.role, Some("free"), "no balloon holds this");
+            assert_eq!(text.evidence.region.as_deref(), *region);
+            // The score reaches the reviewer at two decimals, not as raw model noise.
+            assert_eq!(text.evidence.score, *score);
+        }
     }
 
     #[test]

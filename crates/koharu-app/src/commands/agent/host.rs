@@ -163,14 +163,10 @@ impl Host for KoharuHost {
             let elements = Project::review_texts(&snapshot, id)?
                 .into_iter()
                 .map(|text| {
-                    json!({
-                        "id": text.id.to_string(),
-                        "source": text.source,
-                        "lang": text.source_language,
-                        "translation": text.translation,
-                    })
+                    serde_json::to_value(text)
+                        .with_context(|| format!("cannot encode the review text of page {page_id}"))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             result.push(json!({
                 "id": page_id,
                 "label": page.page()?.label,
