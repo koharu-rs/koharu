@@ -7,6 +7,7 @@ use koharu_rasterizer::{
     PreparedLayer, PreparedRaster, PreparedRasterTile, PreparedResource, Presentation,
     RasterOptions, Rasterizer, Revision,
 };
+use vello::Scene;
 
 #[test]
 fn linear_filtering_does_not_add_borders_to_any_raster_layer() {
@@ -125,4 +126,23 @@ fn linear_filtering_does_not_add_borders_to_any_raster_layer() {
     assert!((126..=129).contains(&edge[1]));
     assert!((126..=129).contains(&edge[2]));
     assert_eq!(edge[3], u8::MAX);
+}
+
+#[test]
+fn rasterizes_surfaces_beyond_the_default_wgpu_texture_limit() {
+    // WGPU's default limits cap textures at 8192 px, far below what desktop
+    // GPUs support, and tall scans or spreads exceed it.
+    let image = Rasterizer::new()
+        .unwrap()
+        .rasterize_scene(
+            &Scene::new(),
+            4,
+            9000,
+            [10, 20, 30, 255],
+            RasterOptions::default(),
+        )
+        .unwrap();
+
+    assert_eq!(image.dimensions(), (4, 9000));
+    assert_eq!(image.get_pixel(3, 8999).0, [10, 20, 30, 255]);
 }
