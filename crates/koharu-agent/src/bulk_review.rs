@@ -84,17 +84,17 @@ const MAX_CHANGE_CHARS: usize = 8192;
 /// Minimal page data for bulk text review — source and current translation only.
 #[derive(Serialize)]
 pub(crate) struct ReviewPage {
-    pub(crate) id: String,
     pub(crate) label: String,
     pub(crate) elements: Vec<ReviewElement>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct ReviewElement {
-    /// Element entity ID
+    /// Batch-short alias, the only handle the reviewer has on this element. Real
+    /// entity IDs stay local: asking a model to return a 36-character identifier
+    /// byte-perfect, for every element it touches, is how a whole batch used to be
+    /// lost to one mistyped character.
     pub(crate) id: String,
-    /// Position in the page's element list, the same order `inspect_pages` reports
-    pub(crate) order: usize,
     /// Source text
     pub(crate) source: String,
     /// Language the page records for this source text. Kept per element: one
@@ -140,14 +140,24 @@ pub(crate) struct ReviewResponse {
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct TranslationChange {
-    /// Element entity ID to update
+    /// Element alias as the reviewer received it
     pub(crate) element: String,
     /// New translation text, or `null` asking for the translation to be removed
     pub(crate) translation: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct TranslationFlag {
+    /// Element alias as the reviewer received it
+    pub(crate) element: String,
+    pub(crate) reason: String,
+    pub(crate) kind: SfxKind,
+}
+
+/// One finding about a real project element, after the reviewer's alias was resolved.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct Finding {
+    pub(crate) page: String,
     pub(crate) element: String,
     pub(crate) reason: String,
     pub(crate) kind: SfxKind,
@@ -544,7 +554,8 @@ fn has_repeated_char(text: &str) -> bool {
 pub(crate) fn review_instructions(target: &str) -> String {
     format!(
         r#"You are a specialized bulk translation reviewer for manga pages, revising translations into {target}.
-You receive minimal textual data: page labels, element IDs, source text, that source's language tag when the page records one, current translations, and optional local quality hints on an element.
+You receive minimal textual data: page labels, short element aliases, source text, that source's language tag when the page records one, current translations, and optional local quality hints on an element.
+Address an element only by the exact "id" you were given for it, and never invent, renumber, or reuse one: a reference that does not match an element of this batch is discarded, and the text it concerned stays as it is.
 An element can also carry scene evidence about where its text came from: "origin" (`gen` = the pipeline wrote the current translation, `user` = a person did), "role" (`dialogue` = a balloon holds the text, `free` = nothing does), and "region" with "score" (the detector read the text out of an area classified as something other than ordinary text, with that confidence). Use it to judge what kind of text you are looking at, never as permission to translate less: story text stays translated whatever its origin, and a short exclamation in a balloon is still dialogue.
 When the scene marks some of a batch's text as possible lettering, the affected pages also arrive as imported artwork after the text. Use it to tell drawn lettering from a short line of dialogue; the text list remains the authority on what to change.
 Every element carries its own source language and a batch can mix them. Review each element against the language its own source is in; when an element has no tag, detect that language from the text. Never infer an element's source language from another element.
@@ -711,12 +722,20 @@ pub(crate) fn plan_text_batches(pages: Vec<MeasuredPage>) -> Vec<Vec<MeasuredPag
     batches
 }
 
+/// Where one wire alias came from, so the reviewer's answer can be turned back into
+/// objects the project actually has.
+#[derive(Clone, Debug)]
+pub(crate) struct Located {
+    pub(crate) page: String,
+    pub(crate) element: String,
+}
+
 /// What local code knows about the elements one batch sent to the reviewer: which
-/// pages it held, the translation each element carried, and the evidence behind it.
+/// project object each alias stands for, the translation each element carried, and
+/// the evidence behind it.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct BatchContext {
-    pages: HashSet<String>,
-    page_of: HashMap<String, String>,
+    located: HashMap<String, Located>,
     current: HashMap<String, String>,
     /// Sorted so the pages worth a closer look come out in element order, and a retry
     /// of a batch sends exactly the same payload it sent the first time.
@@ -724,9 +743,14 @@ pub(crate) struct BatchContext {
 }
 
 impl BatchContext {
-    fn record(&mut self, page_id: &str, element: &ReviewElement) {
-        self.pages.insert(page_id.to_owned());
-        self.page_of.insert(element.id.clone(), page_id.to_owned());
+    fn record(&mut self, page_id: &str, element_id: &str, element: &ReviewElement) {
+        self.located.insert(
+            element.id.clone(),
+            Located {
+                page: page_id.to_owned(),
+                element: element_id.to_owned(),
+            },
+        );
         if let Some(text) = element.translation.as_deref() {
             self.current.insert(element.id.clone(), text.to_owned());
         }
@@ -734,15 +758,8 @@ impl BatchContext {
             .insert(element.id.clone(), SfxEvidence::of(element));
     }
 
-    fn page(&self, element: &str) -> Result<&String> {
-        let page = self
-            .page_of
-            .get(element)
-            .with_context(|| format!("unknown element ID: {element}"))?;
-        if !self.pages.contains(page) {
-            bail!("element {element} belongs to page {page}, which is not in the target batch");
-        }
-        Ok(page)
+    fn locate(&self, alias: &str) -> Option<&Located> {
+        self.located.get(alias)
     }
 
     /// How many elements the scene alone marks as possible lettering.
@@ -758,16 +775,15 @@ impl BatchContext {
     /// ones worth looking at as imported artwork.
     pub(crate) fn suspicious_pages(&self) -> Vec<String> {
         let mut pages: Vec<String> = Vec::new();
-        for (element, evidence) in &self.evidence {
+        for (alias, evidence) in &self.evidence {
             if !evidence.suspicious() {
                 continue;
             }
-            if let Some(page) = self
-                .page_of
-                .get(element)
-                .filter(|page| !pages.iter().any(|seen| seen == *page))
-            {
-                pages.push(page.clone());
+            let Some(located) = self.locate(alias) else {
+                continue;
+            };
+            if !pages.iter().any(|seen| seen == &located.page) {
+                pages.push(located.page.clone());
             }
         }
         pages
@@ -798,80 +814,104 @@ impl PageImages {
 /// One reviewer response turned into what local evidence authorizes.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReviewDecision {
-    /// Writes to apply: text to set, or `None` to remove the translation.
+    /// Writes to apply, addressed by real element ID: text to set, or `None` to
+    /// remove the translation.
     pub(crate) updates: Vec<(String, Option<String>)>,
     /// Translations this code erased, carrying the argument the reviewer gave.
-    pub(crate) cleared: Vec<TranslationFlag>,
+    pub(crate) cleared: Vec<Finding>,
     /// Text that probably should not have been translated and that this code left
     /// alone: the reviewer's own flags, plus every erasure it refused.
-    pub(crate) flags: Vec<TranslationFlag>,
+    pub(crate) flags: Vec<Finding>,
+    /// References this batch cannot locate: a mistyped alias, or a second change for
+    /// an element already answered. Dropped and counted rather than guessed at, and
+    /// not fatal — one unreadable alias must not cost the whole job.
+    pub(crate) unresolved: Vec<String>,
 }
 
 impl ReviewDecision {
-    /// Records a refused erasure. A flag the reviewer already raised for the element
-    /// is rewritten in place, so the report says once per element what was asked and
-    /// why it was not done, in payload order.
-    fn hold_back(&mut self, element: String, kind: SfxKind, reason: String) {
-        let flag = TranslationFlag {
-            element,
+    /// Records a refused erasure. The finding the reviewer already raised for the
+    /// element is rewritten in place, so the report says once per element what was
+    /// asked and why it was not done, in payload order.
+    fn hold_back(&mut self, located: &Located, kind: SfxKind, reason: String) {
+        let finding = Finding {
+            page: located.page.clone(),
+            element: located.element.clone(),
             reason,
             kind,
         };
         match self
             .flags
             .iter()
-            .position(|existing| existing.element == flag.element)
+            .position(|existing| existing.element == located.element)
         {
-            Some(index) => self.flags[index] = flag,
-            None => self.flags.push(flag),
+            Some(index) => self.flags[index] = finding,
+            None => self.flags.push(finding),
         }
+    }
+
+    fn finding(&self, located: &Located) -> Option<&Finding> {
+        self.flags
+            .iter()
+            .find(|flag| flag.element == located.element)
     }
 }
 
-/// Validate one structured response, then gate every erasure on local evidence. A
-/// malformed change fails the whole response, so nothing partial is ever applied. A
-/// `null` that fails the gate is downgraded to a flag: the reviewer's proposal never
-/// becomes a write on its own, and never disappears silently either.
+/// Turn one structured response into writes and findings, gating every erasure on
+/// local evidence.
+///
+/// A reference that does not name an element of this batch is dropped and counted,
+/// never resolved by guessing: text is only ever written to the element its alias
+/// resolves to. A response that breaks the shape of the contract — empty or absurdly
+/// long text, more changes than elements — still fails whole, so nothing half-read is
+/// applied. A `null` that fails the evidence gate is downgraded to a flag: the
+/// reviewer's proposal never becomes a write on its own, and never disappears
+/// silently either.
 pub(crate) fn resolve_review_response(
     response: &ReviewResponse,
     context: &BatchContext,
 ) -> Result<ReviewDecision> {
-    if response.changes.len() > context.page_of.len() {
-        bail!("more changes than available elements");
-    }
-    let mut flagged = HashSet::new();
+    let mut decision = ReviewDecision::default();
+
     for flag in &response.flags {
-        if flag.element.trim().is_empty() {
-            bail!("flag element IDs cannot be empty");
-        }
-        context.page(&flag.element)?;
+        let Some(located) = context.locate(&flag.element) else {
+            decision.unresolved.push(flag.element.clone());
+            continue;
+        };
         if flag.reason.trim().is_empty() {
             bail!("flag for element {} needs a reason", flag.element);
         }
-        if !flagged.insert(flag.element.clone()) {
-            bail!("duplicate flag for element {}", flag.element);
+        if decision
+            .flags
+            .iter()
+            .any(|seen| seen.element == located.element)
+        {
+            decision.unresolved.push(flag.element.clone());
+            continue;
         }
+        decision.flags.push(Finding {
+            page: located.page.clone(),
+            element: located.element.clone(),
+            reason: flag.reason.clone(),
+            kind: flag.kind,
+        });
     }
-    let mut decision = ReviewDecision {
-        flags: response.flags.clone(),
-        ..ReviewDecision::default()
-    };
 
     let mut seen = HashSet::new();
     for change in &response.changes {
-        if change.element.trim().is_empty() {
-            bail!("change element IDs cannot be empty");
-        }
-        context.page(&change.element)?;
-        if !seen.insert(change.element.clone()) {
-            bail!("duplicate change for element {}", change.element);
+        let Some(located) = context.locate(&change.element) else {
+            decision.unresolved.push(change.element.clone());
+            continue;
+        };
+        if !seen.insert(located.element.clone()) {
+            decision.unresolved.push(change.element.clone());
+            continue;
         }
         match change.translation.as_deref() {
             None => {
                 // Nothing in the project to erase is not a finding worth reporting: an
                 // element without a translation is already what the reviewer wanted.
                 if context.current.contains_key(&change.element) {
-                    decision.refuse_or_apply(response, context, change);
+                    decision.refuse_or_apply(context, &change.element, located);
                 }
             }
             Some(text) => {
@@ -898,9 +938,18 @@ pub(crate) fn resolve_review_response(
                 }
                 decision
                     .updates
-                    .push((change.element.clone(), Some(text.to_owned())));
+                    .push((located.element.clone(), Some(text.to_owned())));
             }
         }
+    }
+    if !response.changes.is_empty() && seen.is_empty() {
+        // A few unreadable aliases are dropped; none resolving at all means the answer
+        // is not about this batch, and reporting that as a clean review would let the
+        // conversation claim work that never happened.
+        bail!(
+            "none of the reviewer's {} reference(s) named an element of this batch",
+            response.changes.len()
+        );
     }
     if response.memory_updates.len() > MAX_MEMORY_UPDATES {
         bail!("too many memory updates");
@@ -916,25 +965,19 @@ pub(crate) fn resolve_review_response(
 impl ReviewDecision {
     /// One erasure request, decided by the reviewer's argument and the scene's
     /// evidence together. Either half missing keeps the text exactly where it is.
-    fn refuse_or_apply(
-        &mut self,
-        response: &ReviewResponse,
-        context: &BatchContext,
-        change: &TranslationChange,
-    ) {
-        let argument = response
-            .flags
-            .iter()
-            .find(|flag| flag.element == change.element);
+    fn refuse_or_apply(&mut self, context: &BatchContext, alias: &str, located: &Located) {
+        let argument = self.finding(located);
+        let kind = argument.map_or(SfxKind::Ambiguous, |flag| flag.kind);
+        let reviewer_reason = argument.map(|flag| flag.reason.clone());
         let mut why: Vec<&'static str> = Vec::new();
-        match argument {
+        match &reviewer_reason {
             None => why.push("asked to remove a translation without flagging the element"),
-            Some(flag) if !flag.kind.clears() => {
+            Some(_) if !kind.clears() => {
                 why.push("the reviewer did not call it a vocalization or decorative lettering")
             }
             Some(_) => {}
         }
-        match context.evidence.get(&change.element) {
+        match context.evidence.get(alias) {
             None => why.push("the page records no evidence about this element"),
             Some(evidence) if !evidence.machine => {
                 why.push("the translation in the project is not machine-written")
@@ -945,28 +988,32 @@ impl ReviewDecision {
             Some(_) => {}
         }
         if why.is_empty() {
-            if let Some(flag) = argument {
-                self.cleared.push(flag.clone());
-                // The flag was the argument for the erasure, so it belongs with what
-                // was done, not with what this code left alone.
+            if let Some(reason) = reviewer_reason {
+                self.cleared.push(Finding {
+                    page: located.page.clone(),
+                    element: located.element.clone(),
+                    reason,
+                    kind,
+                });
+                // The finding was the argument for the erasure, so it belongs with
+                // what was done, not with what this code left alone.
                 self.flags
-                    .retain(|existing| existing.element != change.element);
+                    .retain(|existing| existing.element != located.element);
             }
-            self.updates.push((change.element.clone(), None));
+            self.updates.push((located.element.clone(), None));
             return;
         }
-        let kind = argument.map_or(SfxKind::Ambiguous, |flag| flag.kind);
-        let reason = match argument {
-            Some(flag) => format!("{} — not removed: {}", flag.reason, why.join("; ")),
+        let reason = match reviewer_reason {
+            Some(text) => format!("{text} — not removed: {}", why.join("; ")),
             None => format!("not removed: {}", why.join("; ")),
         };
-        self.hold_back(change.element.clone(), kind, reason);
+        self.hold_back(located, kind, reason);
     }
 }
 
 /// Keeps a job's report bounded: every entry is counted, only the first few are
 /// carried, so a 500-page job cannot turn its own findings into context pressure.
-fn collect_report(entries: Vec<Value>, total: &mut usize, reported: &mut Vec<Value>) {
+fn collect_report<T>(entries: Vec<T>, total: &mut usize, reported: &mut Vec<T>) {
     *total = total.saturating_add(entries.len());
     let room = MAX_REPORTED_FLAGS.saturating_sub(reported.len());
     reported.extend(entries.into_iter().take(room));
@@ -1275,7 +1322,7 @@ impl<'a> BulkReviewer<'a> {
         }
 
         metrics.log();
-        let findings = |total: usize, reported: Vec<Value>| {
+        let findings = |total: usize, reported: Vec<Finding>| {
             json!({
                 "total": total,
                 "reported": reported,
@@ -1309,6 +1356,7 @@ impl<'a> BulkReviewer<'a> {
                 "hints": metrics.total_hints,
                 "lettering_candidates": metrics.total_lettering_candidates,
                 "source_images": metrics.total_images,
+                "unresolved_references": metrics.total_unresolved,
                 "model_requests": metrics.total_model_requests,
                 "elapsed_ms": metrics.total_elapsed_ms,
             }),
@@ -1339,6 +1387,7 @@ impl<'a> BulkReviewer<'a> {
 
         let mut context = BatchContext::default();
         let mut review_pages = Vec::with_capacity(batch.len());
+        let mut alias_count = 0_usize;
         let mut element_count = 0_usize;
         let mut source_chars = 0_usize;
         let mut translation_chars = 0_usize;
@@ -1352,18 +1401,19 @@ impl<'a> BulkReviewer<'a> {
                 .unwrap_or_default()
                 .to_owned();
             let mut elements = Vec::new();
-            for (order, element) in page
+            for element in page
                 .get("elements")
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
-                .enumerate()
             {
-                let id = element
+                let entity = element
                     .get("id")
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned();
+                alias_count = alias_count.saturating_add(1);
+                let alias = format!("e{alias_count}");
                 let source = element
                     .get("source")
                     .and_then(Value::as_str)
@@ -1401,8 +1451,7 @@ impl<'a> BulkReviewer<'a> {
                 );
                 element_count = element_count.saturating_add(1);
                 let element = ReviewElement {
-                    id,
-                    order,
+                    id: alias,
                     source,
                     source_language,
                     translation,
@@ -1412,14 +1461,10 @@ impl<'a> BulkReviewer<'a> {
                     score,
                     quality_hints: Vec::new(),
                 };
-                context.record(&page_id, &element);
+                context.record(&page_id, &entity, &element);
                 elements.push(element);
             }
-            review_pages.push(ReviewPage {
-                id: page_id,
-                label,
-                elements,
-            });
+            review_pages.push(ReviewPage { label, elements });
         }
 
         // Hints compare each element's source script against the scripts this batch
@@ -1533,29 +1578,27 @@ impl<'a> BulkReviewer<'a> {
             resolve_review_response(&response_json, &context).map_err(ReviewBatchError::from)?;
         let cleared = decision.cleared.len();
         let flags = decision.flags.len();
+        let unresolved = decision.unresolved.len();
+        // A reference that names nothing in this batch is dropped rather than fatal,
+        // so it has to be said out loud where failures are actually looked for.
+        if unresolved > 0 {
+            tracing::warn!(
+                target: "koharu_agent::bulk_review",
+                batch = batch_index,
+                references = ?decision.unresolved,
+                "{unresolved} reviewer reference(s) did not name an element of this batch"
+            );
+        }
 
         let updates = decision
             .updates
             .iter()
             .map(|(element, text)| json!({ "element": element, "text": text }))
             .collect::<Vec<_>>();
-        // Both lists are reported with the page they belong to, so the conversation
-        // can point at the text instead of at an opaque entity ID.
-        let reported = |entries: &[TranslationFlag]| {
-            entries
-                .iter()
-                .map(|flag| {
-                    json!({
-                        "page": context.page_of.get(&flag.element),
-                        "element": flag.element,
-                        "reason": flag.reason,
-                        "kind": flag.kind,
-                    })
-                })
-                .collect::<Vec<_>>()
-        };
-        let reported_flags = reported(&decision.flags);
-        let reported_cleared = reported(&decision.cleared);
+        // Findings already carry the page and element they concern, so the
+        // conversation can point at the text instead of at an opaque alias.
+        let reported_flags = decision.flags;
+        let reported_cleared = decision.cleared;
         let applied = updates.len();
         let mut changed = false;
         if !updates.is_empty() {
@@ -1595,6 +1638,7 @@ impl<'a> BulkReviewer<'a> {
             changes_applied: applied,
             flags,
             cleared,
+            unresolved,
             elapsed_ms,
             input_tokens: turn.usage.map(|usage| usage.input_tokens),
             cached_input_tokens: turn.usage.map(|usage| usage.cached_input_tokens),
@@ -1618,9 +1662,9 @@ struct ReviewBatchResult {
     memory: TranslationMemory,
     metrics: BatchMetrics,
     /// Text the reviewer says should not have been translated, none of it touched.
-    flags: Vec<Value>,
+    flags: Vec<Finding>,
     /// Translations this code erased, with the argument each was erased on.
-    cleared: Vec<Value>,
+    cleared: Vec<Finding>,
 }
 
 #[derive(Debug)]
@@ -1664,6 +1708,7 @@ pub(crate) struct BatchMetrics {
     pub(crate) changes_applied: usize,
     pub(crate) flags: usize,
     pub(crate) cleared: usize,
+    pub(crate) unresolved: usize,
     pub(crate) elapsed_ms: u64,
     // Opt-in usage data only when the backend reports it.
     pub(crate) input_tokens: Option<usize>,
@@ -1690,6 +1735,7 @@ impl BatchMetrics {
             changes = self.changes_applied,
             flags = self.flags,
             cleared = self.cleared,
+            unresolved_references = self.unresolved,
             elapsed_ms = self.elapsed_ms,
             input_tokens = self.input_tokens,
             cached_input_tokens = self.cached_input_tokens,
@@ -1729,6 +1775,7 @@ pub(crate) struct JobMetrics {
     pub(crate) total_changes: usize,
     pub(crate) total_flags: usize,
     pub(crate) total_cleared: usize,
+    pub(crate) total_unresolved: usize,
     pub(crate) total_model_requests: usize,
     pub(crate) total_elapsed_ms: u64,
     pub(crate) total_input_tokens: usize,
@@ -1750,6 +1797,7 @@ impl JobMetrics {
         self.total_changes = self.total_changes.saturating_add(batch.changes_applied);
         self.total_flags = self.total_flags.saturating_add(batch.flags);
         self.total_cleared = self.total_cleared.saturating_add(batch.cleared);
+        self.total_unresolved = self.total_unresolved.saturating_add(batch.unresolved);
         self.total_model_requests = self
             .total_model_requests
             .saturating_add(batch.model_requests);
@@ -1780,6 +1828,7 @@ impl JobMetrics {
             changes = self.total_changes,
             flags = self.total_flags,
             cleared = self.total_cleared,
+            unresolved_references = self.total_unresolved,
             model_requests = self.total_model_requests,
             elapsed_ms = self.total_elapsed_ms,
             input_tokens = self.total_input_tokens,
@@ -2332,11 +2381,13 @@ mod tests {
         }
     }
 
-    /// A batch of elements, all of them on page `p1`.
+    /// A batch of elements, all of them on page `p1`. These tests read the decision,
+    /// so the alias stands for itself; the mapping back to project objects is what
+    /// [`a_batch_answers_in_aliases_and_writes_by_entity_id`] proves.
     fn batch(elements: &[ReviewElement]) -> BatchContext {
         let mut context = BatchContext::default();
         for element in elements {
-            context.record("p1", element);
+            context.record("p1", &element.id, element);
         }
         context
     }
@@ -2399,37 +2450,49 @@ mod tests {
     }
 
     #[test]
-    fn rejects_element_outside_batch() {
-        // A page this batch never sent is not something the reviewer may answer about.
-        let context = BatchContext {
-            pages: ["p1".to_owned()].into_iter().collect(),
-            page_of: HashMap::from([("e_other".to_owned(), "p99".to_owned())]),
-            ..BatchContext::default()
-        };
-        assert!(
-            resolve_review_response(&response(vec![revise("e_other", "bad")], vec![]), &context,)
-                .is_err()
+    fn an_unreadable_reference_is_dropped_and_counted_never_fatal() {
+        let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
+        let context = batch(&elements);
+        // One invented alias, one repeated answer, and one flag for an element this
+        // batch never sent. The change that does resolve still applies: twenty pages of
+        // work must not be thrown away because one alias came back wrong.
+        let decision = resolve_review_response(
+            &response(
+                vec![
+                    revise("e9", "não existe"),
+                    revise("e1", "olá novo"),
+                    revise("e1", "segunda resposta"),
+                ],
+                vec![
+                    flag("e1", SfxKind::Vocalization),
+                    flag("e7", SfxKind::Vocalization),
+                    flag("e1", SfxKind::Ambiguous),
+                ],
+            ),
+            &context,
+        )
+        .unwrap();
+        assert_eq!(
+            decision.updates,
+            vec![("e1".to_owned(), Some("olá novo".to_owned()))]
         );
+        assert_eq!(decision.flags.len(), 1, "the first answer for e1 wins");
+        let unresolved = decision
+            .unresolved
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        assert_eq!(unresolved, vec!["e7", "e1", "e9", "e1"]);
     }
 
     #[test]
-    fn rejects_unknown_or_duplicate_or_empty_entries() {
+    fn a_response_that_breaks_the_shape_still_fails_whole() {
         let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
         let context = batch(&elements);
         assert!(
-            resolve_review_response(&response(vec![revise("ghost", "x")], vec![]), &context)
-                .is_err()
-        );
-        assert!(
-            resolve_review_response(
-                &response(vec![revise("e1", "first"), revise("e1", "second")], vec![]),
-                &context
-            )
-            .is_err()
-        );
-        assert!(
             resolve_review_response(&response(vec![revise("e1", "   ")], vec![]), &context)
-                .is_err()
+                .is_err(),
+            "an empty translation is not a revision"
         );
         assert!(
             resolve_review_response(
@@ -2449,29 +2512,28 @@ mod tests {
         assert!(
             resolve_review_response(
                 &response(
+                    vec![revise("e1", &"x".repeat(MAX_CHANGE_CHARS + 1))],
                     vec![],
-                    vec![
-                        flag("e1", SfxKind::Vocalization),
-                        flag("e1", SfxKind::Ambiguous)
-                    ],
                 ),
                 &context
             )
-            .is_err()
+            .is_err(),
+            "text longer than the contract is not a revision"
+        );
+        assert!(
+            resolve_review_response(
+                &response(vec![revise("e9", "a"), revise("e8", "b")], vec![]),
+                &context
+            )
+            .is_err(),
+            "a batch none of the answer refers to has not been reviewed"
         );
     }
 
     #[test]
-    fn rejects_excessive_changes_and_bad_memory() {
+    fn rejects_bad_memory_updates() {
         let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
         let context = batch(&elements);
-        assert!(
-            resolve_review_response(
-                &response(vec![revise("e1", "a"), revise("e2", "b")], vec![]),
-                &context
-            )
-            .is_err()
-        );
         let bad_memory = ReviewResponse {
             memory_updates: vec![MemoryUpdate {
                 key: "k".to_owned(),
@@ -2673,12 +2735,10 @@ mod tests {
     #[test]
     fn minimal_payload_excludes_geometry_and_metadata() {
         let page = ReviewPage {
-            id: "p1".to_owned(),
             label: "Page 1".to_owned(),
             elements: vec![
                 ReviewElement {
                     id: "e1".to_owned(),
-                    order: 0,
                     source: "Hello".to_owned(),
                     source_language: Some("en-US".to_owned()),
                     translation: Some("Olá".to_owned()),
@@ -2686,7 +2746,6 @@ mod tests {
                 },
                 ReviewElement {
                     id: "e2".to_owned(),
-                    order: 1,
                     source: "World".to_owned(),
                     translation: None,
                     ..ReviewElement::default()
@@ -2717,8 +2776,11 @@ mod tests {
             "Olá",
             "World",
             "en-US",
-            "\"order\":0",
-            "\"order\":1",
+            // The short alias is the only handle the reviewer gets, and array order is
+            // the only position it gets: both are enough to answer about an element.
+            "\"id\":\"e1\"",
+            "\"id\":\"e2\"",
+            "Page 1",
         ] {
             assert!(body.contains(required), "payload must contain {required}");
         }
@@ -2865,7 +2927,6 @@ mod tests {
     fn quality_hints_serialize_only_when_present() {
         let plain = ReviewElement {
             id: "e1".to_owned(),
-            order: 0,
             source: "Hello".to_owned(),
             source_language: None,
             translation: Some("Olá".to_owned()),
@@ -2876,7 +2937,6 @@ mod tests {
 
         let hinted = ReviewElement {
             id: "e2".to_owned(),
-            order: 1,
             source: "ちょっと待って".to_owned(),
             source_language: Some("ja-JP".to_owned()),
             translation: Some("Espera aí! M".to_owned()),
@@ -2909,7 +2969,16 @@ mod tests {
         assert_eq!(client.calls(), 1);
         let prompts = client.prompts();
         assert_eq!(prompts.len(), 1);
-        assert!(prompts[0].contains("\"id\":\"p1e1\""));
+        assert!(
+            prompts[0].contains("\"id\":\"e1\""),
+            "the reviewer addresses an element by its batch alias: {}",
+            prompts[0]
+        );
+        assert!(
+            !prompts[0].contains("p1e1"),
+            "the project's own element ID stays local, so nothing has to echo it: {}",
+            prompts[0]
+        );
         assert!(prompts[0].contains("Perfeito! M"));
         assert!(prompts[0].contains("possible_orphan_character"));
         assert!(invocation.value["metrics"]["hints"].as_u64() == Some(1));
@@ -3048,7 +3117,7 @@ mod tests {
         let mut host = MockHost::default();
         host.add_element_with_evidence("p1", "p1e1", "ドン", Some("ドドン"), lettering_evidence());
         let client = MockClient::new();
-        client.push(client.respond_ok(review_erasure("p1e1", "decorative_sfx")));
+        client.push(client.respond_ok(review_erasure("e1", "decorative_sfx")));
 
         let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
         assert_eq!(host.applied(), vec![("p1e1".to_owned(), None)]);
@@ -3059,6 +3128,11 @@ mod tests {
             invocation.value["cleared"]["reported"][0]["page"].as_str(),
             Some("p1"),
             "the report has to say where the text was"
+        );
+        assert_eq!(
+            invocation.value["cleared"]["reported"][0]["element"].as_str(),
+            Some("p1e1"),
+            "the report names the project element, never the batch alias"
         );
     }
 
@@ -3073,7 +3147,7 @@ mod tests {
             json!({ "origin": "gen", "role": "dialogue" }),
         );
         let client = MockClient::new();
-        client.push(client.respond_ok(review_erasure("p1e1", "vocalization")));
+        client.push(client.respond_ok(review_erasure("e1", "vocalization")));
 
         let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
         assert!(host.applied().is_empty(), "nothing may be written");
@@ -3198,8 +3272,7 @@ mod tests {
             host.add_page(page, 8_900);
         }
         let client = MockClient::new();
-        client
-            .push(client.respond_ok(review_response(&[("p1e1", "mudou")], &[("Terra", "Terra")])));
+        client.push(client.respond_ok(review_response(&[("e1", "mudou")], &[("Terra", "Terra")])));
         client.push(client.respond_ok(review_text(&[])));
 
         let invocation = run_job(&client, &host, &["p1", "p2", "p3"]).await.unwrap();
@@ -3308,7 +3381,7 @@ mod tests {
             host.add_page(page, 30);
         }
         let client = MockClient::new();
-        client.push(client.respond_ok(review_text(&[("p1e1", "Olá mundo")])));
+        client.push(client.respond_ok(review_text(&[("e1", "Olá mundo")])));
 
         let invocation = run_job(&client, &host, &["p1", "p2", "p3"]).await.unwrap();
         assert!(invocation.changed);
@@ -3346,7 +3419,7 @@ mod tests {
         let mut host = MockHost::default();
         host.add_element("p1", "p1e1", "こんにちは", Some("ja-JP"), Some("Olá"));
         let client = MockClient::new();
-        client.push(client.respond_ok(review_text(&[("p1e1", "Olá")])));
+        client.push(client.respond_ok(review_text(&[("e1", "Olá")])));
 
         let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
         assert_eq!(client.calls(), 1);
@@ -3361,7 +3434,7 @@ mod tests {
         host.add_page("p1", 30);
         let client = MockClient::new();
         client.push(client.respond_ok(review_response(
-            &[("p1e1", "revisado")],
+            &[("e1", "revisado")],
             &[("Tanaka", "Tanaka")],
         )));
 
@@ -3386,8 +3459,11 @@ mod tests {
             host.add_page(page, 8_900);
         }
         let client = MockClient::new();
-        for (page, text) in [("p1e1", "one"), ("p3e1", "two"), ("p6e1", "three")] {
-            client.push(client.respond_ok(review_text(&[(page, text)])));
+        // Each batch numbers its own aliases from e1, so answering "e2" in the batch of
+        // p5 and p6 means the second element of that batch — and the write lands on the
+        // real entity ID behind it.
+        for (alias, text) in [("e1", "one"), ("e1", "two"), ("e2", "three")] {
+            client.push(client.respond_ok(review_text(&[(alias, text)])));
         }
 
         let invocation = run_job(&client, &host, &["p1", "p2", "p3", "p4", "p5", "p6"])
@@ -3413,8 +3489,8 @@ mod tests {
             "Codex response failed",
             "your input exceeds the context window of this model",
         )));
-        client.push(client.respond_ok(review_text(&[("p1e1", "a"), ("p2e1", "b")])));
-        client.push(client.respond_ok(review_text(&[("p3e1", "c"), ("p4e1", "d")])));
+        client.push(client.respond_ok(review_text(&[("e1", "a"), ("e2", "b")])));
+        client.push(client.respond_ok(review_text(&[("e1", "c"), ("e2", "d")])));
 
         let invocation = run_job(&client, &host, &["p1", "p2", "p3", "p4"])
             .await
@@ -3438,7 +3514,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS,
             "slow down".to_owned(),
         )));
-        client.push(client.respond_ok(review_text(&[("p1e1", "fixed")])));
+        client.push(client.respond_ok(review_text(&[("e1", "fixed")])));
 
         let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
         assert!(invocation.changed);
