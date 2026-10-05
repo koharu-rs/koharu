@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     "./canvas": "./src/canvas.ts",
-    "./protocol": "./src/protocol.ts"
+    "./protocol": "./src/protocol.ts",
+    "./runtime": "./src/runtime.ts"
   },
   "scripts": {
     "lint": "oxlint src --ignore-pattern src/protocol.ts --ignore-pattern src/wasm",

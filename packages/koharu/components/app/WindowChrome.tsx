@@ -5,6 +5,8 @@ import { Copy, Minus, Square, X } from 'lucide-react'
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { isTauriRuntime } from '@koharu/bridge/runtime'
+
 const resizeHandles = [
   { direction: 'North', className: 'top-0 right-2 left-2 h-1 cursor-n-resize' },
   { direction: 'South', className: 'right-2 bottom-0 left-2 h-1 cursor-s-resize' },
@@ -31,9 +33,12 @@ export function useMacOS() {
 
 export function WindowControls() {
   const { t } = useTranslation()
+  const native = isTauriRuntime()
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
+    if (!native) return
+
     const window = getCurrentWindow()
     let disposed = false
     let unlisten: (() => void) | undefined
@@ -54,9 +59,10 @@ export function WindowControls() {
       disposed = true
       if (unlisten) void Promise.resolve(unlisten()).catch(() => undefined)
     }
-  }, [])
+  }, [native])
 
   const toggleMaximize = async () => {
+    if (!native) return
     const window = getCurrentWindow()
     await window.toggleMaximize()
     setMaximized(await window.isMaximized())
@@ -64,11 +70,13 @@ export function WindowControls() {
 
   return (
     <>
-      {!maximized && <WindowResizeHandles />}
+      {!maximized && native && <WindowResizeHandles />}
       <div className='flex h-full shrink-0'>
         <WindowButton
           label={t('window.minimize')}
-          onClick={() => void getCurrentWindow().minimize()}
+          onClick={() => {
+            if (native) void getCurrentWindow().minimize()
+          }}
         >
           <Minus />
         </WindowButton>
@@ -81,7 +89,9 @@ export function WindowControls() {
         <WindowButton
           label={t('window.close')}
           className='hover:text-destructive-foreground hover:bg-destructive'
-          onClick={() => void getCurrentWindow().close()}
+          onClick={() => {
+            if (native) void getCurrentWindow().close()
+          }}
         >
           <X />
         </WindowButton>

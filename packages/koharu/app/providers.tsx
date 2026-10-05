@@ -27,6 +27,7 @@ import {
   type ModelResources,
   type ProjectInfo,
 } from '@koharu/bridge/protocol'
+import { isTauriRuntime } from '@koharu/bridge/runtime'
 import { Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     const lifecycle = runtime.current
     lifecycle.active = true
+    if (!isTauriRuntime()) return
     if (!lifecycle.bound) {
       lifecycle.bound = true
       const completed = new Map<string, number>()
