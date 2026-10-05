@@ -1237,6 +1237,8 @@ mod tests {
             calls: Vec::new(),
             text: r#"{"changes":[],"memory_updates":[]}"#.to_owned(),
             usage: None,
+            payload_bytes: 0,
+            first_delta_ms: 0,
         }
     }
 

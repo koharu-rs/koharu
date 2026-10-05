@@ -84,6 +84,19 @@ pub enum Event {
         changed: bool,
         output: String,
     },
+    /// Cost and latency of one model request within this run. Emitted whether or
+    /// not the backend reported usage, so a missing usage report is visible.
+    /// Counts are `u32` because Specta refuses to export `usize` to TypeScript.
+    Usage {
+        run: RunId,
+        request: u32,
+        input_tokens: u32,
+        cached_input_tokens: u32,
+        output_tokens: u32,
+        reasoning_tokens: u32,
+        payload_bytes: u32,
+        first_delta_ms: u32,
+    },
     Completed {
         run: RunId,
         message: String,
@@ -101,6 +114,11 @@ pub enum Event {
 pub struct RunResult {
     pub run: RunId,
     pub message: String,
+}
+
+/// Reported counts are `u32` because Specta refuses to export `usize` to TypeScript.
+fn count(value: usize) -> u32 {
+    value.try_into().unwrap_or(u32::MAX)
 }
 
 pub struct Agent<H> {
@@ -219,6 +237,7 @@ where
         tools.push(review_job_tool());
         let session = run.to_string();
 
+        let mut request_index = 0_usize;
         loop {
             control.ensure_running()?;
             let request = Request::new(
@@ -236,6 +255,18 @@ where
                     Delta::Reasoning(delta) => publish(Event::ReasoningDelta { run, delta }),
                 })
                 .await?;
+            request_index = request_index.saturating_add(1);
+            let usage = turn.usage.unwrap_or_default();
+            publish(Event::Usage {
+                run,
+                request: count(request_index),
+                input_tokens: count(usage.input_tokens),
+                cached_input_tokens: count(usage.cached_input_tokens),
+                output_tokens: count(usage.output_tokens),
+                reasoning_tokens: count(usage.reasoning_tokens),
+                payload_bytes: count(turn.payload_bytes),
+                first_delta_ms: turn.first_delta_ms,
+            });
             input.extend(turn.output.iter().cloned());
             persisted.extend(turn.output.iter().cloned());
 

@@ -4,11 +4,17 @@ mod protocol;
 mod stream;
 mod token_store;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use async_trait::async_trait;
-use std::{fmt, time::Duration};
+use std::{
+    fmt,
+    time::{Duration, Instant},
+};
 
-use reqwest::{Client, StatusCode, header::RETRY_AFTER};
+use reqwest::{
+    Client, StatusCode,
+    header::{CONTENT_TYPE, RETRY_AFTER},
+};
 use serde::Serialize;
 use specta::Type;
 
@@ -185,8 +191,8 @@ impl Codex {
         let mut attempt = 0_usize;
         loop {
             control.ensure_running()?;
-            let response = match self.send_with_auth(request, control).await {
-                Ok(response) => response,
+            let (response, payload_bytes) = match self.send_with_auth(request, control).await {
+                Ok(sent) => sent,
                 Err(error) if should_retry(attempt, &error, false) => {
                     retry_wait(backoff(attempt), control).await?;
                     attempt = attempt.saturating_add(1);
@@ -207,16 +213,30 @@ impl Codex {
                 }
                 return Err(error);
             }
+            let sent_at = Instant::now();
             let mut published = false;
+            let mut first_delta = None;
             let read = {
                 let mut emit = |delta| {
                     published = true;
+                    if first_delta.is_none() {
+                        first_delta = Some(sent_at.elapsed());
+                    }
                     publish(delta);
                 };
                 stream::read(response, control, &mut emit).await
             };
             match read {
-                Ok(turn) => return Ok(turn),
+                Ok(mut turn) => {
+                    turn.payload_bytes = payload_bytes;
+                    turn.first_delta_ms = first_delta
+                        .unwrap_or_else(|| sent_at.elapsed())
+                        .as_millis()
+                        .try_into()
+                        .unwrap_or(u32::MAX);
+                    log_response(request, attempt, &turn);
+                    return Ok(turn);
+                }
                 Err(error) if should_retry(attempt, &error, published) => {
                     retry_wait(backoff(attempt), control).await?;
                     attempt = attempt.saturating_add(1);
@@ -228,15 +248,20 @@ impl Codex {
 
     /// Send once with token refresh on 401; no transient or status retry.
     pub(crate) async fn respond_once(&self, request: &Request, control: &Control) -> Result<Turn> {
-        let response = self.send_with_auth(request, control).await?;
+        let (response, payload_bytes) = self.send_with_auth(request, control).await?;
         if !response.status().is_success() {
             let status = response.status();
             let mut body = response.text().await.unwrap_or_default();
             body.truncate(16 * 1024);
             return Err(response_error(status, body));
         }
+        let sent_at = Instant::now();
         let mut publish = |_| {};
-        stream::read(response, control, &mut publish).await
+        let mut turn = stream::read(response, control, &mut publish).await?;
+        turn.payload_bytes = payload_bytes;
+        turn.first_delta_ms = sent_at.elapsed().as_millis().try_into().unwrap_or(u32::MAX);
+        log_response(request, 0, &turn);
+        Ok(turn)
     }
 
     /// Authorized single attempt with a single 401 refresh.
@@ -244,14 +269,14 @@ impl Codex {
         &self,
         request: &Request,
         control: &Control,
-    ) -> Result<reqwest::Response> {
+    ) -> Result<(reqwest::Response, usize)> {
         let mut session = self.auth.session().await?;
-        let response = self.send(request, &session, control).await?;
+        let (response, payload_bytes) = self.send(request, &session, control).await?;
         if response.status() == StatusCode::UNAUTHORIZED {
             session = self.auth.force_refresh().await?;
             return self.send(request, &session, control).await;
         }
-        Ok(response)
+        Ok((response, payload_bytes))
     }
 
     async fn send(
@@ -259,7 +284,11 @@ impl Codex {
         request: &Request,
         session: &auth::Session,
         control: &Control,
-    ) -> Result<reqwest::Response> {
+    ) -> Result<(reqwest::Response, usize)> {
+        // Encoded here once so the exact wire size can be reported; `.json()`
+        // would perform the same encode and throw the length away.
+        let body = serde_json::to_vec(request).context("agent request must serialize")?;
+        let payload_bytes = body.len();
         let request_id = request.prompt_cache_key.clone();
         let send = self
             .client
@@ -271,16 +300,35 @@ impl Codex {
             .header("accept", "text/event-stream")
             .header("session_id", &request_id)
             .header("x-client-request-id", request_id)
-            .json(request)
+            .header(CONTENT_TYPE, "application/json")
+            .body(body)
             .send();
         tokio::select! {
-            response = send => Ok(response?),
+            response = send => Ok((response?, payload_bytes)),
             () = control.cancelled() => {
                 control.ensure_running()?;
                 unreachable!("cancelled control must fail ensure_running")
             }
         }
     }
+}
+
+/// One structured record per Codex response, so cost and latency are measured on
+/// the chat loop and not only inside the review worker.
+fn log_response(request: &Request, attempt: usize, turn: &Turn) {
+    let usage = turn.usage.unwrap_or_default();
+    tracing::info!(
+        target: "koharu_agent::codex",
+        model = %request.model,
+        attempt = attempt,
+        payload_bytes = turn.payload_bytes,
+        first_delta_ms = turn.first_delta_ms,
+        input_tokens = usage.input_tokens,
+        cached_input_tokens = usage.cached_input_tokens,
+        output_tokens = usage.output_tokens,
+        reasoning_tokens = usage.reasoning_tokens,
+        "codex response completed"
+    );
 }
 
 #[async_trait]

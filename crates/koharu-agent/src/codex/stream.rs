@@ -28,6 +28,10 @@ pub(crate) struct Turn {
     pub(crate) calls: Vec<ToolCall>,
     pub(crate) text: String,
     pub(crate) usage: Option<Usage>,
+    /// Bytes actually put on the wire by the request that produced this turn.
+    pub(crate) payload_bytes: usize,
+    /// Milliseconds from sending until the first streamed delta reached the user.
+    pub(crate) first_delta_ms: u32,
 }
 
 pub(super) async fn read<F>(
@@ -154,6 +158,8 @@ where
         calls,
         text,
         usage,
+        payload_bytes: 0,
+        first_delta_ms: 0,
     })
 }
 

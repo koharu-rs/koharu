@@ -157,7 +157,13 @@ export type EntityId = string;
 
 export type Error = string;
 
-export type Event = { type: "started"; run: RunId } | { type: "text_delta"; run: RunId; delta: string } | { type: "reasoning_delta"; run: RunId; delta: string } | { type: "tool_started"; run: RunId; call_id: string; name: string } | { type: "tool_finished"; run: RunId; call_id: string; name: string; changed: boolean; output: string } | { type: "completed"; run: RunId; message: string } | { type: "failed"; run: RunId; message: string } | { type: "cancelled"; run: RunId };
+export type Event = { type: "started"; run: RunId } | { type: "text_delta"; run: RunId; delta: string } | { type: "reasoning_delta"; run: RunId; delta: string } | { type: "tool_started"; run: RunId; call_id: string; name: string } | { type: "tool_finished"; run: RunId; call_id: string; name: string; changed: boolean; output: string } | 
+/**
+ *  Cost and latency of one model request within this run. Emitted whether or
+ *  not the backend reported usage, so a missing usage report is visible.
+ *  Counts are `u32` because Specta refuses to export `usize` to TypeScript.
+ */
+{ type: "usage"; run: RunId; request: number; input_tokens: number; cached_input_tokens: number; output_tokens: number; reasoning_tokens: number; payload_bytes: number; first_delta_ms: number } | { type: "completed"; run: RunId; message: string } | { type: "failed"; run: RunId; message: string } | { type: "cancelled"; run: RunId };
 
 export type ExportFormat = "png" | "psd" | "cbz";
 
