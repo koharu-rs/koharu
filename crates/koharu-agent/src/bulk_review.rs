@@ -16,6 +16,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use icu_properties::{CodePointMapData, props::Script as IcuScript};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 use crate::{
     CodexModel, Control, Host, Invocation, Reasoning, Tool, ToolCall,
@@ -594,6 +595,29 @@ pub(crate) fn review_job_tool() -> Tool {
     )
 }
 
+/// Which run a job belongs to, and therefore which prompt-cache prefix it may
+/// reuse. Grouped because a job needs all three together at every step.
+pub(crate) struct JobContext {
+    pub(crate) run: RunId,
+    pub(crate) conversation: Uuid,
+    pub(crate) call_id: String,
+}
+
+impl JobContext {
+    /// Stable for the whole job: the instructions and schema prefix are identical
+    /// across batches, only the pages differ.
+    fn cache_key(&self) -> String {
+        format!("review:{}:{}", self.conversation, self.call_id)
+    }
+}
+
+/// What every batch of one job shares, so the per-batch request stays small.
+struct ReviewJob<'a> {
+    instruction: &'a str,
+    target: &'a str,
+    session: &'a str,
+}
+
 /// Deterministic, mockable reviewer orchestrator. Each successful batch is exactly
 /// one model request followed by local validation and a single bulk apply.
 pub(crate) struct BulkReviewer<'a> {
@@ -608,7 +632,7 @@ impl<'a> BulkReviewer<'a> {
     pub(crate) async fn execute<F>(
         client: &'a dyn ReviewClient,
         host: &'a dyn Host,
-        run: RunId,
+        context: JobContext,
         call: &ToolCall,
         model: &CodexModel,
         control: &Control,
@@ -622,7 +646,7 @@ impl<'a> BulkReviewer<'a> {
         }
         Some(
             Self::new(client, host)
-                .run_job(run, &call.call_id, &call.arguments, model, control, publish)
+                .run_job(context, &call.arguments, model, control, publish)
                 .await,
         )
     }
@@ -633,8 +657,7 @@ impl<'a> BulkReviewer<'a> {
 
     pub(crate) async fn run_job<F>(
         &self,
-        run: RunId,
-        call_id: &str,
+        context: JobContext,
         arguments: &str,
         model: &CodexModel,
         control: &Control,
@@ -643,6 +666,7 @@ impl<'a> BulkReviewer<'a> {
     where
         F: FnMut(Event),
     {
+        let run = context.run;
         control.ensure_running()?;
         let job: PageJob = serde_json::from_str(arguments)
             .context(format!("invalid arguments for {REVIEW_JOB_TOOL}"))?;
@@ -679,9 +703,12 @@ impl<'a> BulkReviewer<'a> {
         let mut changed = false;
         let mut metrics = JobMetrics::default();
         let mut sequence = 0_usize;
-        // Stable per-job cache key: the instructions and schema prefix are
-        // identical across batches, only the pages differ.
-        let session = format!("bulk-review:{call_id}");
+        let session = context.cache_key();
+        let review = ReviewJob {
+            instruction: &job.instruction,
+            target: &target,
+            session: &session,
+        };
 
         for group in pages.chunks(MAX_PAGES_PER_READ) {
             control.ensure_running()?;
@@ -707,7 +734,7 @@ impl<'a> BulkReviewer<'a> {
             while let Some(batch) = queue.pop_front() {
                 control.ensure_running()?;
                 sequence += 1;
-                let batch_call_id = format!("{call_id}-batch-{sequence}");
+                let batch_call_id = format!("{}-batch-{sequence}", context.call_id);
                 let batch_pages = batch
                     .iter()
                     .map(|page| page.id.as_str())
@@ -718,16 +745,7 @@ impl<'a> BulkReviewer<'a> {
                     name: REVIEW_BATCH_TOOL.to_owned(),
                 });
                 match self
-                    .run_review_batch(
-                        &session,
-                        &job.instruction,
-                        &batch,
-                        &memory,
-                        model,
-                        &target,
-                        control,
-                        sequence,
-                    )
+                    .run_review_batch(&review, &batch, &memory, model, control, sequence)
                     .await
                 {
                     Ok(result) => {
@@ -840,18 +858,18 @@ impl<'a> BulkReviewer<'a> {
     }
 
     /// One model request, local validation, local bulk apply.
-    #[allow(clippy::too_many_arguments)]
     async fn run_review_batch(
         &self,
-        session: &str,
-        instruction: &str,
+        job: &ReviewJob<'_>,
         batch: &[MeasuredPage],
         memory: &TranslationMemory,
         model: &CodexModel,
-        target: &str,
         control: &Control,
         batch_index: usize,
     ) -> std::result::Result<ReviewBatchResult, ReviewBatchError> {
+        let instruction = job.instruction;
+        let target = job.target;
+        let session = job.session;
         let started = Instant::now();
         control.ensure_running().map_err(ReviewBatchError::from)?;
 
@@ -1265,6 +1283,7 @@ mod tests {
         script: Mutex<VecDeque<std::result::Result<Turn, anyhow::Error>>>,
         prompts: Mutex<Vec<String>>,
         instructions: Mutex<Vec<String>>,
+        cache_keys: Mutex<Vec<String>>,
     }
 
     impl MockClient {
@@ -1274,6 +1293,7 @@ mod tests {
                 script: Mutex::new(VecDeque::new()),
                 prompts: Mutex::new(Vec::new()),
                 instructions: Mutex::new(Vec::new()),
+                cache_keys: Mutex::new(Vec::new()),
             }
         }
 
@@ -1291,6 +1311,10 @@ mod tests {
 
         fn instructions(&self) -> Vec<String> {
             self.instructions.lock().unwrap().clone()
+        }
+
+        fn cache_keys(&self) -> Vec<String> {
+            self.cache_keys.lock().unwrap().clone()
         }
 
         fn respond_ok(&self, text: impl Into<String>) -> std::result::Result<Turn, anyhow::Error> {
@@ -1323,6 +1347,10 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(request.instructions.clone());
+            self.cache_keys
+                .lock()
+                .unwrap()
+                .push(request.prompt_cache_key.clone());
             let mut script = self.script.lock().unwrap();
             if let Some(result) = script.pop_front() {
                 return result;
@@ -1482,6 +1510,14 @@ mod tests {
             .collect()
     }
 
+    fn job_context() -> JobContext {
+        JobContext {
+            run: RunId::default(),
+            conversation: Uuid::nil(),
+            call_id: "job-1".to_owned(),
+        }
+    }
+
     async fn run_job(
         client: &MockClient,
         host: &MockHost,
@@ -1491,8 +1527,7 @@ mod tests {
         let reviewer = BulkReviewer::new(client, host);
         reviewer
             .run_job(
-                RunId::default(),
-                "job-1",
+                job_context(),
                 &job_arguments(pages),
                 &model(),
                 &control,
@@ -2143,6 +2178,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn every_batch_of_a_job_shares_one_cache_key() {
+        let mut host = MockHost::default();
+        for page in ["p1", "p2", "p3", "p4"] {
+            host.add_page(page, 8_900);
+        }
+        let client = MockClient::new();
+        for _ in 0..2 {
+            client.push(client.respond_ok(review_text(&[])));
+        }
+
+        run_job(&client, &host, &["p1", "p2", "p3", "p4"])
+            .await
+            .unwrap();
+        let keys = client.cache_keys();
+        assert_eq!(keys.len(), 2);
+        // Distinct batches, one cached prefix: the instructions and schema are
+        // identical, only the pages differ.
+        assert_eq!(keys[0], keys[1]);
+        assert!(keys[0].starts_with("review:"), "{}", keys[0]);
+    }
+
+    #[tokio::test]
     async fn an_echoed_translation_writes_nothing() {
         let mut host = MockHost::default();
         host.add_element("p1", "p1e1", "こんにちは", Some("ja-JP"), Some("Olá"));
@@ -2297,8 +2354,7 @@ mod tests {
         let reviewer = BulkReviewer::new(&client, &host);
         let result = reviewer
             .run_job(
-                RunId::default(),
-                "job-1",
+                job_context(),
                 &job_arguments(&["p1"]),
                 &model(),
                 &control,

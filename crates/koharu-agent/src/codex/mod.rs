@@ -17,6 +17,7 @@ use reqwest::{
 };
 use serde::Serialize;
 use specta::Type;
+use uuid::Uuid;
 
 use crate::{Control, Reasoning};
 
@@ -289,7 +290,10 @@ impl Codex {
         // would perform the same encode and throw the length away.
         let body = serde_json::to_vec(request).context("agent request must serialize")?;
         let payload_bytes = body.len();
-        let request_id = request.prompt_cache_key.clone();
+        // The cache key names the conversation, which is what `session_id` groups
+        // on. The client request id has to stay unique per attempt — it used to
+        // reuse the conversation key, making every request look identical.
+        let request_id = Uuid::new_v4().to_string();
         let send = self
             .client
             .post(RESPONSES_URL)
@@ -298,7 +302,7 @@ impl Codex {
             .header("originator", "koharu")
             .header("OpenAI-Beta", "responses=experimental")
             .header("accept", "text/event-stream")
-            .header("session_id", &request_id)
+            .header("session_id", &request.prompt_cache_key)
             .header("x-client-request-id", request_id)
             .header(CONTENT_TYPE, "application/json")
             .body(body)

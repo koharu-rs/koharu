@@ -50,7 +50,7 @@ impl Request {
         input: Vec<Value>,
         tools: Vec<Tool>,
         reasoning: Reasoning,
-        session: String,
+        cache_key: String,
     ) -> Self {
         Self {
             model,
@@ -70,7 +70,7 @@ impl Request {
             include: ["reasoning.encrypted_content"],
             stream: true,
             store: false,
-            prompt_cache_key: session,
+            prompt_cache_key: cache_key,
         }
     }
 

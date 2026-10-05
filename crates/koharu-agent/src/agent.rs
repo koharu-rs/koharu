@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     Codex, CodexModel, Config, Control, Host, ToolCall,
-    bulk_review::{BulkReviewer, review_job_tool},
+    bulk_review::{BulkReviewer, JobContext, review_job_tool},
     codex::{Delta, Request, ReviewClient, function_output, message, project_context},
 };
 
@@ -127,6 +127,10 @@ pub struct Agent<H> {
     host: Arc<H>,
     config: koharu_config::Config<Config>,
     history: Mutex<Vec<Value>>,
+    /// Identifies the stretch of conversation currently held in `history`. The
+    /// prompt cache key is derived from it, so repeated turns reuse the cached
+    /// prefix instead of re-billing the whole transcript every message.
+    conversation: Mutex<Uuid>,
     serial: Mutex<()>,
 }
 
@@ -141,6 +145,7 @@ where
             host: Arc::new(host),
             config: Config::load()?,
             history: Mutex::new(Vec::new()),
+            conversation: Mutex::new(Uuid::new_v4()),
             serial: Mutex::new(()),
         })
     }
@@ -166,6 +171,9 @@ where
 
     pub async fn clear(&self) {
         self.history.lock().await.clear();
+        // The next conversation must not inherit this one's cached prefix, which
+        // may describe a different project.
+        *self.conversation.lock().await = Uuid::new_v4();
     }
 
     #[tracing::instrument(skip_all)]
@@ -235,7 +243,8 @@ where
         persisted.push(clean_user);
         let mut tools = self.host.tools();
         tools.push(review_job_tool());
-        let session = run.to_string();
+        let conversation = *self.conversation.lock().await;
+        let cache_key = format!("chat:{conversation}");
 
         let mut request_index = 0_usize;
         loop {
@@ -246,7 +255,7 @@ where
                 input.clone(),
                 tools.clone(),
                 reasoning,
-                session.clone(),
+                cache_key.clone(),
             );
             let turn = self
                 .codex
@@ -290,7 +299,11 @@ where
                 let reviewed = BulkReviewer::execute(
                     &*self.review,
                     &*self.host,
-                    run,
+                    JobContext {
+                        run,
+                        conversation,
+                        call_id: call.call_id.clone(),
+                    },
                     &call,
                     model,
                     control,
