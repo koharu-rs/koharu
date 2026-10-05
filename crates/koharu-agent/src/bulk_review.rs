@@ -60,6 +60,13 @@ const ONOMATOPOEIA_REGION: &str = "onomatopoeia";
 /// the text in it is lettering rather than story.
 const SFX_DETECTOR_SCORE: f32 = 0.85;
 
+/// Strong signals from different places in the scene required before a translation
+/// may be erased. One is never enough, and the shape of the text does not count.
+const MIN_CLEARANCE_SIGNALS: usize = 2;
+
+/// Flags reported per job; the rest is only a count.
+const MAX_REPORTED_FLAGS: usize = 64;
+
 /// Structured translation memory is bounded to keep the per-batch prompt tiny.
 pub(crate) const MAX_MEMORY_BYTES: usize = 4 * 1024;
 
@@ -110,24 +117,64 @@ pub(crate) struct ReviewElement {
 }
 
 /// Structured response from the bulk reviewer.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub(crate) struct ReviewResponse {
     /// Changes to apply — only elements that need updating.
+    #[serde(default)]
     pub(crate) changes: Vec<TranslationChange>,
+    /// Text the reviewer judged should not have been translated at all.
+    #[serde(default)]
+    pub(crate) flags: Vec<TranslationFlag>,
     /// Memory updates (incremental: add/replace, not full rewrite).
     #[serde(default)]
     pub(crate) memory_updates: Vec<MemoryUpdate>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct TranslationChange {
     /// Element entity ID to update
     pub(crate) element: String,
-    /// New translation text
-    pub(crate) translation: String,
+    /// New translation text, or `null` asking for the translation to be removed
+    pub(crate) translation: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct TranslationFlag {
+    pub(crate) element: String,
+    pub(crate) reason: String,
+    pub(crate) kind: SfxKind,
+}
+
+/// What a reviewer believes a piece of lettered text is. `meaningful_sfx` is where
+/// an `onomatopoeia` label is evidence rather than a verdict: a sign, a letter, or
+/// a shouted real word carries content and belongs translated.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SfxKind {
+    Vocalization,
+    DecorativeSfx,
+    MeaningfulSfx,
+    Ambiguous,
+}
+
+impl SfxKind {
+    /// The kinds that say this text is not story text at all. `meaningful_sfx` and
+    /// `ambiguous` deliberately do not: content stays translated, and doubt gets
+    /// reported rather than acted on.
+    fn clears(self) -> bool {
+        matches!(self, Self::Vocalization | Self::DecorativeSfx)
+    }
+}
+
+/// The same four kinds, for the response schema.
+const SFX_KIND_NAMES: [&str; 4] = [
+    "vocalization",
+    "decorative_sfx",
+    "meaningful_sfx",
+    "ambiguous",
+];
+
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct MemoryUpdate {
     pub(crate) key: String,
     pub(crate) value: String,
@@ -440,6 +487,10 @@ impl SfxEvidence {
             .filter(|signal| SfxSignal::strong(*signal))
     }
 
+    pub(crate) fn strong_count(&self) -> usize {
+        self.strong().count()
+    }
+
     /// Worth a closer look, never worth acting on: either the scene says so, or a
     /// machine translation of a single token that carries no word in it at all.
     pub(crate) fn suspicious(&self) -> bool {
@@ -447,6 +498,20 @@ impl SfxEvidence {
             || (self.machine
                 && self.has(SfxSignal::SingleToken)
                 && (self.has(SfxSignal::PunctuationOnly) || self.has(SfxSignal::RepeatedChar)))
+    }
+
+    /// The gate an erasure has to pass: the pipeline wrote the text now in the
+    /// project, and at least two strong signals corroborate each other.
+    ///
+    /// Two rules were meant to live here — an onomatopoeia region plus one more
+    /// strong signal, or any two independent strong signals — and they collapse into
+    /// this one because every strong signal except `not_dialogue` already requires
+    /// the region to be classified as something other than text. What is left out on
+    /// purpose is the shape of the source: a one-word line in a balloon ("NO!",
+    /// "STOP!", "HELP!", "RUN!") is dialogue however short it is, so it can reach at
+    /// most one strong signal and therefore only ever earns a flag.
+    pub(crate) fn may_clear(&self) -> bool {
+        self.machine && self.strong_count() >= MIN_CLEARANCE_SIGNALS
     }
 }
 
@@ -475,6 +540,8 @@ Review every provided translation in this order:
 Local "hints" are conservative advisory flags for possible OCR noise or untranslated source script. Verify each one against the source before acting; some hints are false positives and identical text is not necessarily an error.
 Output ONLY a structured JSON response — no conversational text, no explanations outside the response object.
 In "changes" include ONLY elements that need updating. If a translation is already correct, do NOT echo it.
+Text that should never have been translated — a vocalization, a laugh, lettering drawn as art — goes in "flags" as {{element, reason, kind}}, with kind one of "vocalization", "decorative_sfx", "meaningful_sfx", "ambiguous". A sound effect carrying real content (a sign, a letter, a shouted word) is "meaningful_sfx" and stays translated: an onomatopoeia label is evidence, not a verdict.
+To clear such text, set its "translation" to null in "changes" and flag the same element. The decision is made locally, from the scene evidence beside the text; anything not corroborated is reported to the user as a flag and left untouched. Never null a `user` translation, never null story text, and never null on shortness alone — "NO!" and "STOP!" are dialogue.
 In "memory_updates" provide incremental additions or replacements for terminology, names, pronouns, relationships, tone decisions — not a full memory dump."#
     )
 }
@@ -490,9 +557,22 @@ pub(crate) fn review_response_schema() -> Value {
                     "type": "object",
                     "properties": {
                         "element": { "type": "string" },
-                        "translation": { "type": "string" }
+                        "translation": { "type": ["string", "null"] }
                     },
                     "required": ["element", "translation"],
+                    "additionalProperties": false
+                }
+            },
+            "flags": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "element": { "type": "string" },
+                        "reason": { "type": "string" },
+                        "kind": { "type": "string", "enum": SFX_KIND_NAMES }
+                    },
+                    "required": ["element", "reason", "kind"],
                     "additionalProperties": false
                 }
             },
@@ -509,7 +589,7 @@ pub(crate) fn review_response_schema() -> Value {
                 }
             }
         },
-        "required": ["changes", "memory_updates"],
+        "required": ["changes", "flags", "memory_updates"],
         "additionalProperties": false
     })
 }
@@ -615,44 +695,152 @@ pub(crate) fn plan_text_batches(pages: Vec<MeasuredPage>) -> Vec<Vec<MeasuredPag
     batches
 }
 
-/// Validate a full structured response before applying anything. If any change
-/// is invalid, zero mutations are applied.
-pub(crate) fn validate_review_response(
+/// What local code knows about the elements one batch sent to the reviewer: which
+/// pages it held, the translation each element carried, and the evidence behind it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BatchContext {
+    pages: HashSet<String>,
+    page_of: HashMap<String, String>,
+    current: HashMap<String, String>,
+    evidence: HashMap<String, SfxEvidence>,
+}
+
+impl BatchContext {
+    fn record(&mut self, page_id: &str, element: &ReviewElement) {
+        self.pages.insert(page_id.to_owned());
+        self.page_of.insert(element.id.clone(), page_id.to_owned());
+        if let Some(text) = element.translation.as_deref() {
+            self.current.insert(element.id.clone(), text.to_owned());
+        }
+        self.evidence
+            .insert(element.id.clone(), SfxEvidence::of(element));
+    }
+
+    fn page(&self, element: &str) -> Result<&String> {
+        let page = self
+            .page_of
+            .get(element)
+            .with_context(|| format!("unknown element ID: {element}"))?;
+        if !self.pages.contains(page) {
+            bail!("element {element} belongs to page {page}, which is not in the target batch");
+        }
+        Ok(page)
+    }
+
+    /// How many elements the scene alone marks as possible lettering.
+    pub(crate) fn suspicious(&self) -> usize {
+        self.evidence
+            .values()
+            .filter(|evidence| evidence.suspicious())
+            .count()
+    }
+}
+
+/// One reviewer response turned into what local evidence authorizes.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ReviewDecision {
+    /// Writes to apply: text to set, or `None` to remove the translation.
+    pub(crate) updates: Vec<(String, Option<String>)>,
+    /// Translations this code erased, carrying the argument the reviewer gave.
+    pub(crate) cleared: Vec<TranslationFlag>,
+    /// Text that probably should not have been translated and that this code left
+    /// alone: the reviewer's own flags, plus every erasure it refused.
+    pub(crate) flags: Vec<TranslationFlag>,
+}
+
+impl ReviewDecision {
+    /// Records a refused erasure. A flag the reviewer already raised for the element
+    /// is rewritten in place, so the report says once per element what was asked and
+    /// why it was not done, in payload order.
+    fn hold_back(&mut self, element: String, kind: SfxKind, reason: String) {
+        let flag = TranslationFlag {
+            element,
+            reason,
+            kind,
+        };
+        match self
+            .flags
+            .iter()
+            .position(|existing| existing.element == flag.element)
+        {
+            Some(index) => self.flags[index] = flag,
+            None => self.flags.push(flag),
+        }
+    }
+}
+
+/// Validate one structured response, then gate every erasure on local evidence. A
+/// malformed change fails the whole response, so nothing partial is ever applied. A
+/// `null` that fails the gate is downgraded to a flag: the reviewer's proposal never
+/// becomes a write on its own, and never disappears silently either.
+pub(crate) fn resolve_review_response(
     response: &ReviewResponse,
-    target_pages: &HashSet<String>,
-    element_to_page: &HashMap<String, String>,
-) -> Result<()> {
-    if response.changes.len() > element_to_page.len() {
+    context: &BatchContext,
+) -> Result<ReviewDecision> {
+    if response.changes.len() > context.page_of.len() {
         bail!("more changes than available elements");
     }
+    let mut flagged = HashSet::new();
+    for flag in &response.flags {
+        if flag.element.trim().is_empty() {
+            bail!("flag element IDs cannot be empty");
+        }
+        context.page(&flag.element)?;
+        if flag.reason.trim().is_empty() {
+            bail!("flag for element {} needs a reason", flag.element);
+        }
+        if !flagged.insert(flag.element.clone()) {
+            bail!("duplicate flag for element {}", flag.element);
+        }
+    }
+    let mut decision = ReviewDecision {
+        flags: response.flags.clone(),
+        ..ReviewDecision::default()
+    };
+
     let mut seen = HashSet::new();
     for change in &response.changes {
         if change.element.trim().is_empty() {
             bail!("change element IDs cannot be empty");
         }
-        let page = element_to_page
-            .get(&change.element)
-            .with_context(|| format!("unknown element ID: {}", change.element))?;
-        if !target_pages.contains(page) {
-            bail!(
-                "element {} belongs to page {}, which is not in the target batch",
-                change.element,
-                page
-            );
-        }
+        context.page(&change.element)?;
         if !seen.insert(change.element.clone()) {
             bail!("duplicate change for element {}", change.element);
         }
-        let translation_chars = change.translation.chars().count();
-        if translation_chars == 0 || change.translation.trim().is_empty() {
-            bail!("translation for element {} cannot be empty", change.element);
-        }
-        if translation_chars > MAX_CHANGE_CHARS {
-            bail!(
-                "translation for element {} exceeds {} characters",
-                change.element,
-                MAX_CHANGE_CHARS
-            );
+        match change.translation.as_deref() {
+            None => {
+                // Nothing in the project to erase is not a finding worth reporting: an
+                // element without a translation is already what the reviewer wanted.
+                if context.current.contains_key(&change.element) {
+                    decision.refuse_or_apply(response, context, change);
+                }
+            }
+            Some(text) => {
+                let translation_chars = text.chars().count();
+                if translation_chars == 0 || text.trim().is_empty() {
+                    bail!("translation for element {} cannot be empty", change.element);
+                }
+                if translation_chars > MAX_CHANGE_CHARS {
+                    bail!(
+                        "translation for element {} exceeds {} characters",
+                        change.element,
+                        MAX_CHANGE_CHARS
+                    );
+                }
+                // A change that repeats the current text is not a revision: applying
+                // it would mint an undo step and promote pipeline output to user
+                // authorship. Removing a translation is a revision, not an echo.
+                if context
+                    .current
+                    .get(&change.element)
+                    .is_some_and(|current| current.trim() == text.trim())
+                {
+                    continue;
+                }
+                decision
+                    .updates
+                    .push((change.element.clone(), Some(text.to_owned())));
+            }
         }
     }
     if response.memory_updates.len() > MAX_MEMORY_UPDATES {
@@ -663,7 +851,66 @@ pub(crate) fn validate_review_response(
             bail!("memory updates require non-empty key and value");
         }
     }
-    Ok(())
+    Ok(decision)
+}
+
+impl ReviewDecision {
+    /// One erasure request, decided by the reviewer's argument and the scene's
+    /// evidence together. Either half missing keeps the text exactly where it is.
+    fn refuse_or_apply(
+        &mut self,
+        response: &ReviewResponse,
+        context: &BatchContext,
+        change: &TranslationChange,
+    ) {
+        let argument = response
+            .flags
+            .iter()
+            .find(|flag| flag.element == change.element);
+        let mut why: Vec<&'static str> = Vec::new();
+        match argument {
+            None => why.push("asked to remove a translation without flagging the element"),
+            Some(flag) if !flag.kind.clears() => {
+                why.push("the reviewer did not call it a vocalization or decorative lettering")
+            }
+            Some(_) => {}
+        }
+        match context.evidence.get(&change.element) {
+            None => why.push("the page records no evidence about this element"),
+            Some(evidence) if !evidence.machine => {
+                why.push("the translation in the project is not machine-written")
+            }
+            Some(evidence) if !evidence.may_clear() => {
+                why.push("the scene corroborates it with fewer than two strong signals")
+            }
+            Some(_) => {}
+        }
+        if why.is_empty() {
+            if let Some(flag) = argument {
+                self.cleared.push(flag.clone());
+                // The flag was the argument for the erasure, so it belongs with what
+                // was done, not with what this code left alone.
+                self.flags
+                    .retain(|existing| existing.element != change.element);
+            }
+            self.updates.push((change.element.clone(), None));
+            return;
+        }
+        let kind = argument.map_or(SfxKind::Ambiguous, |flag| flag.kind);
+        let reason = match argument {
+            Some(flag) => format!("{} — not removed: {}", flag.reason, why.join("; ")),
+            None => format!("not removed: {}", why.join("; ")),
+        };
+        self.hold_back(change.element.clone(), kind, reason);
+    }
+}
+
+/// Keeps a job's report bounded: every entry is counted, only the first few are
+/// carried, so a 500-page job cannot turn its own findings into context pressure.
+fn collect_report(entries: Vec<Value>, total: &mut usize, reported: &mut Vec<Value>) {
+    *total = total.saturating_add(entries.len());
+    let room = MAX_REPORTED_FLAGS.saturating_sub(reported.len());
+    reported.extend(entries.into_iter().take(room));
 }
 
 /// Bulk reviews always use the lowest reasoning effort the model supports so
@@ -708,7 +955,7 @@ pub(crate) struct PageJob {
 pub(crate) fn review_job_tool() -> Tool {
     Tool::new(
         REVIEW_JOB_TOOL,
-        "Review and revise the translations of an ordered set of pages autonomously in small sequential batches. Use for a translation review spanning more than five pages; the user does not need to request each batch.",
+        "Review and revise the translations of an ordered set of pages autonomously in small sequential batches. Use for a translation review spanning more than five pages; the user does not need to request each batch. The result also lists text flagged as lettering that should not have been translated, and any translation it cleared: report both to the user.",
         json!({
             "type": "object",
             "properties": {
@@ -825,6 +1072,10 @@ impl<'a> BulkReviewer<'a> {
         let mut completed = 0_usize;
         let mut failed = Vec::new();
         let mut failed_pages = 0_usize;
+        let mut flags = Vec::new();
+        let mut flag_total = 0_usize;
+        let mut cleared = Vec::new();
+        let mut cleared_total = 0_usize;
         let mut memory = TranslationMemory::new();
         let mut changed = false;
         let mut metrics = JobMetrics::default();
@@ -892,6 +1143,8 @@ impl<'a> BulkReviewer<'a> {
                             })
                             .to_string(),
                         });
+                        collect_report(result.flags, &mut flag_total, &mut flags);
+                        collect_report(result.cleared, &mut cleared_total, &mut cleared);
                     }
                     Err(error) if error.context_limit && batch.len() > 1 => {
                         // Split a too-large batch in half and reprocess both halves
@@ -950,22 +1203,33 @@ impl<'a> BulkReviewer<'a> {
         }
 
         metrics.log();
-        // Only the outcome stays in conversation history. The memory dump and the
-        // metrics are for this turn; carrying them into every later request is the
-        // context pressure this worker exists to avoid, while the failed page IDs
-        // are what the model needs in order to not redo the whole range.
+        let findings = |total: usize, reported: Vec<Value>| {
+            json!({
+                "total": total,
+                "reported": reported,
+            })
+        };
+        // Only the outcome stays in conversation history. The memory dump, the
+        // metrics and the findings themselves are for this turn; carrying them into
+        // every later request is the context pressure this worker exists to avoid,
+        // while the failed page IDs are what the model needs in order to not redo
+        // the whole range.
         let history = json!({
             "total": total,
             "completed": completed,
             "failed_pages": failed_pages,
             "failed": failed,
-            "omitted_from_history": ["memory", "metrics"],
+            "flagged": flag_total,
+            "cleared": cleared_total,
+            "omitted_from_history": ["memory", "metrics", "flags", "cleared"],
         });
         let value = json!({
             "total": total,
             "completed": completed,
             "failed_pages": failed_pages,
             "failed": failed.clone(),
+            "flags": findings(flag_total, flags),
+            "cleared": findings(cleared_total, cleared),
             "memory": memory.serialize(),
             "metrics": json!({
                 "batches": metrics.total_batches,
@@ -1000,8 +1264,7 @@ impl<'a> BulkReviewer<'a> {
         let started = Instant::now();
         control.ensure_running().map_err(ReviewBatchError::from)?;
 
-        let mut element_to_page = HashMap::new();
-        let mut target_pages = HashSet::new();
+        let mut context = BatchContext::default();
         let mut review_pages = Vec::with_capacity(batch.len());
         let mut element_count = 0_usize;
         let mut source_chars = 0_usize;
@@ -1015,7 +1278,6 @@ impl<'a> BulkReviewer<'a> {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            target_pages.insert(page_id.clone());
             let mut elements = Vec::new();
             for (order, element) in page
                 .get("elements")
@@ -1065,8 +1327,7 @@ impl<'a> BulkReviewer<'a> {
                         .map_or(0, |text| text.chars().count()),
                 );
                 element_count = element_count.saturating_add(1);
-                element_to_page.insert(id.clone(), page_id.clone());
-                elements.push(ReviewElement {
+                let element = ReviewElement {
                     id,
                     order,
                     source,
@@ -1077,7 +1338,9 @@ impl<'a> BulkReviewer<'a> {
                     region,
                     score,
                     quality_hints: Vec::new(),
-                });
+                };
+                context.record(&page_id, &element);
+                elements.push(element);
             }
             review_pages.push(ReviewPage {
                 id: page_id,
@@ -1112,11 +1375,7 @@ impl<'a> BulkReviewer<'a> {
 
         // Elements the scene itself points at as possible lettering. Reported so a
         // slow or expensive job can be read against what it actually looked at.
-        let sfx_candidates = review_pages
-            .iter()
-            .flat_map(|page| page.elements.iter())
-            .filter(|element| SfxEvidence::of(element).suspicious())
-            .count();
+        let sfx_candidates = context.suspicious();
 
         // The pages themselves are the payload: the model must see every element's
         // source and current translation, not just the page IDs.
@@ -1163,31 +1422,33 @@ impl<'a> BulkReviewer<'a> {
         let response_json: ReviewResponse = serde_json::from_str(&turn.text)
             .with_context(|| format!("invalid structured review response (batch {batch_index})"))
             .map_err(ReviewBatchError::from)?;
-        validate_review_response(&response_json, &target_pages, &element_to_page)
-            .map_err(ReviewBatchError::from)?;
+        let decision =
+            resolve_review_response(&response_json, &context).map_err(ReviewBatchError::from)?;
+        let cleared = decision.cleared.len();
+        let flags = decision.flags.len();
 
-        // A change that repeats the current text is not a revision: applying it would
-        // mint an undo step and promote pipeline output to user authorship.
-        let current: HashMap<String, String> = review_pages
+        let updates = decision
+            .updates
             .iter()
-            .flat_map(|page| page.elements.iter())
-            .filter_map(|element| {
-                element
-                    .translation
-                    .clone()
-                    .map(|text| (element.id.clone(), text))
-            })
-            .collect();
-        let updates = response_json
-            .changes
-            .iter()
-            .filter(|change| {
-                current
-                    .get(&change.element)
-                    .is_none_or(|text| text.trim() != change.translation.trim())
-            })
-            .map(|change| json!({ "element": change.element, "text": change.translation }))
+            .map(|(element, text)| json!({ "element": element, "text": text }))
             .collect::<Vec<_>>();
+        // Both lists are reported with the page they belong to, so the conversation
+        // can point at the text instead of at an opaque entity ID.
+        let reported = |entries: &[TranslationFlag]| {
+            entries
+                .iter()
+                .map(|flag| {
+                    json!({
+                        "page": context.page_of.get(&flag.element),
+                        "element": flag.element,
+                        "reason": flag.reason,
+                        "kind": flag.kind,
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+        let reported_flags = reported(&decision.flags);
+        let reported_cleared = reported(&decision.cleared);
         let applied = updates.len();
         let mut changed = false;
         if !updates.is_empty() {
@@ -1224,6 +1485,8 @@ impl<'a> BulkReviewer<'a> {
             model_requests,
             response_bytes,
             changes_applied: applied,
+            flags,
+            cleared,
             elapsed_ms,
             input_tokens: turn.usage.map(|usage| usage.input_tokens),
             cached_input_tokens: turn.usage.map(|usage| usage.cached_input_tokens),
@@ -1236,6 +1499,8 @@ impl<'a> BulkReviewer<'a> {
             changed,
             memory,
             metrics,
+            flags: reported_flags,
+            cleared: reported_cleared,
         })
     }
 }
@@ -1244,6 +1509,10 @@ struct ReviewBatchResult {
     changed: bool,
     memory: TranslationMemory,
     metrics: BatchMetrics,
+    /// Text the reviewer says should not have been translated, none of it touched.
+    flags: Vec<Value>,
+    /// Translations this code erased, with the argument each was erased on.
+    cleared: Vec<Value>,
 }
 
 #[derive(Debug)]
@@ -1284,6 +1553,8 @@ pub(crate) struct BatchMetrics {
     pub(crate) model_requests: usize,
     pub(crate) response_bytes: usize,
     pub(crate) changes_applied: usize,
+    pub(crate) flags: usize,
+    pub(crate) cleared: usize,
     pub(crate) elapsed_ms: u64,
     // Opt-in usage data only when the backend reports it.
     pub(crate) input_tokens: Option<usize>,
@@ -1307,6 +1578,8 @@ impl BatchMetrics {
             model_requests = self.model_requests,
             response_bytes = self.response_bytes,
             changes = self.changes_applied,
+            flags = self.flags,
+            cleared = self.cleared,
             elapsed_ms = self.elapsed_ms,
             input_tokens = self.input_tokens,
             cached_input_tokens = self.cached_input_tokens,
@@ -1318,13 +1591,15 @@ impl BatchMetrics {
 
     pub(crate) fn log_summary(&self) -> String {
         format!(
-            "batch {}: {} pages, {} elements, {} changes, {} hints, {} lettering candidate(s), \
-             {} request(s), {} ms",
+            "batch {}: {} pages, {} elements, {} changes ({} cleared), {} hints, \
+             {} flagged, {} lettering candidate(s), {} request(s), {} ms",
             self.batch_index,
             self.page_count,
             self.element_count,
             self.changes_applied,
+            self.cleared,
             self.hints_count,
+            self.flags,
             self.lettering_candidates,
             self.model_requests,
             self.elapsed_ms
@@ -1341,6 +1616,8 @@ pub(crate) struct JobMetrics {
     pub(crate) total_hints: usize,
     pub(crate) total_lettering_candidates: usize,
     pub(crate) total_changes: usize,
+    pub(crate) total_flags: usize,
+    pub(crate) total_cleared: usize,
     pub(crate) total_model_requests: usize,
     pub(crate) total_elapsed_ms: u64,
     pub(crate) total_input_tokens: usize,
@@ -1359,6 +1636,8 @@ impl JobMetrics {
             .total_lettering_candidates
             .saturating_add(batch.lettering_candidates);
         self.total_changes = self.total_changes.saturating_add(batch.changes_applied);
+        self.total_flags = self.total_flags.saturating_add(batch.flags);
+        self.total_cleared = self.total_cleared.saturating_add(batch.cleared);
         self.total_model_requests = self
             .total_model_requests
             .saturating_add(batch.model_requests);
@@ -1386,6 +1665,8 @@ impl JobMetrics {
             hints = self.total_hints,
             lettering_candidates = self.total_lettering_candidates,
             changes = self.total_changes,
+            flags = self.total_flags,
+            cleared = self.total_cleared,
             model_requests = self.total_model_requests,
             elapsed_ms = self.total_elapsed_ms,
             input_tokens = self.total_input_tokens,
@@ -1870,105 +2151,336 @@ mod tests {
         assert_eq!(measured[1].summary.element_count, 0);
     }
 
+    /// An element as the reviewer's payload carries it, evidence keys included.
+    fn element(
+        id: &str,
+        source: &str,
+        translation: Option<&str>,
+        evidence: Value,
+    ) -> ReviewElement {
+        ReviewElement {
+            id: id.to_owned(),
+            source: source.to_owned(),
+            translation: translation.map(ToOwned::to_owned),
+            origin: evidence
+                .get("origin")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            role: evidence
+                .get("role")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            region: evidence
+                .get("region")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            score: evidence
+                .get("score")
+                .and_then(Value::as_f64)
+                .map(|score| score as f32),
+            ..ReviewElement::default()
+        }
+    }
+
+    /// A batch of elements, all of them on page `p1`.
+    fn batch(elements: &[ReviewElement]) -> BatchContext {
+        let mut context = BatchContext::default();
+        for element in elements {
+            context.record("p1", element);
+        }
+        context
+    }
+
+    fn revise(element: &str, text: &str) -> TranslationChange {
+        TranslationChange {
+            element: element.to_owned(),
+            translation: Some(text.to_owned()),
+        }
+    }
+
+    fn erase(element: &str) -> TranslationChange {
+        TranslationChange {
+            element: element.to_owned(),
+            translation: None,
+        }
+    }
+
+    fn flag(element: &str, kind: SfxKind) -> TranslationFlag {
+        TranslationFlag {
+            element: element.to_owned(),
+            reason: "lettering, not story text".to_owned(),
+            kind,
+        }
+    }
+
+    fn response(changes: Vec<TranslationChange>, flags: Vec<TranslationFlag>) -> ReviewResponse {
+        ReviewResponse {
+            changes,
+            flags,
+            ..ReviewResponse::default()
+        }
+    }
+
+    /// Machine text outside any balloon, in a region the detector called lettering
+    /// and was sure about: the evidence an erasure needs.
+    fn lettering_evidence() -> Value {
+        json!({
+            "origin": "gen",
+            "role": "free",
+            "region": "onomatopoeia",
+            "score": 0.91,
+        })
+    }
+
     #[test]
-    fn validates_response_structure() {
-        let response = ReviewResponse {
-            changes: vec![
-                TranslationChange {
-                    element: "e1".to_owned(),
-                    translation: "revised".to_owned(),
-                },
-                TranslationChange {
-                    element: "e2".to_owned(),
-                    translation: "fixed".to_owned(),
-                },
-            ],
-            memory_updates: vec![],
-        };
-        let target_pages = ["p1".to_owned()].into_iter().collect();
-        let element_to_page = HashMap::from([
-            ("e1".to_owned(), "p1".to_owned()),
-            ("e2".to_owned(), "p1".to_owned()),
-        ]);
-        assert!(validate_review_response(&response, &target_pages, &element_to_page).is_ok());
+    fn resolves_a_wellformed_response() {
+        let elements = [
+            element("e1", "Hello", Some("Olá"), json!({})),
+            element("e2", "World", Some("Mundo"), json!({})),
+        ];
+        let decision = resolve_review_response(
+            &response(vec![revise("e1", "revised"), revise("e2", "fixed")], vec![]),
+            &batch(&elements),
+        )
+        .unwrap();
+        assert_eq!(decision.updates.len(), 2);
+        assert!(decision.cleared.is_empty());
+        assert!(decision.flags.is_empty());
     }
 
     #[test]
     fn rejects_element_outside_batch() {
-        let response = ReviewResponse {
-            changes: vec![TranslationChange {
-                element: "e_other".to_owned(),
-                translation: "bad".to_owned(),
-            }],
-            memory_updates: vec![],
+        // A page this batch never sent is not something the reviewer may answer about.
+        let context = BatchContext {
+            pages: ["p1".to_owned()].into_iter().collect(),
+            page_of: HashMap::from([("e_other".to_owned(), "p99".to_owned())]),
+            ..BatchContext::default()
         };
-        let target_pages = ["p1".to_owned()].into_iter().collect();
-        let element_to_page = HashMap::from([("e_other".to_owned(), "p99".to_owned())]);
-        assert!(validate_review_response(&response, &target_pages, &element_to_page).is_err());
+        assert!(
+            resolve_review_response(&response(vec![revise("e_other", "bad")], vec![]), &context,)
+                .is_err()
+        );
     }
 
     #[test]
-    fn rejects_unknown_or_duplicate_or_empty_changes() {
-        let target_pages = ["p1".to_owned()].into_iter().collect();
-        let element_to_page = HashMap::from([("e1".to_owned(), "p1".to_owned())]);
-        let unknown = ReviewResponse {
-            changes: vec![TranslationChange {
-                element: "ghost".to_owned(),
-                translation: "x".to_owned(),
-            }],
-            memory_updates: vec![],
-        };
-        assert!(validate_review_response(&unknown, &target_pages, &element_to_page).is_err());
-        let duplicate = ReviewResponse {
-            changes: vec![
-                TranslationChange {
-                    element: "e1".to_owned(),
-                    translation: "first".to_owned(),
-                },
-                TranslationChange {
-                    element: "e1".to_owned(),
-                    translation: "second".to_owned(),
-                },
-            ],
-            memory_updates: vec![],
-        };
-        assert!(validate_review_response(&duplicate, &target_pages, &element_to_page).is_err());
-        let empty = ReviewResponse {
-            changes: vec![TranslationChange {
-                element: "e1".to_owned(),
-                translation: "   ".to_owned(),
-            }],
-            memory_updates: vec![],
-        };
-        assert!(validate_review_response(&empty, &target_pages, &element_to_page).is_err());
+    fn rejects_unknown_or_duplicate_or_empty_entries() {
+        let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
+        let context = batch(&elements);
+        assert!(
+            resolve_review_response(&response(vec![revise("ghost", "x")], vec![]), &context)
+                .is_err()
+        );
+        assert!(
+            resolve_review_response(
+                &response(vec![revise("e1", "first"), revise("e1", "second")], vec![]),
+                &context
+            )
+            .is_err()
+        );
+        assert!(
+            resolve_review_response(&response(vec![revise("e1", "   ")], vec![]), &context)
+                .is_err()
+        );
+        assert!(
+            resolve_review_response(
+                &response(
+                    vec![],
+                    vec![TranslationFlag {
+                        element: "e1".to_owned(),
+                        reason: "  ".to_owned(),
+                        kind: SfxKind::Vocalization,
+                    }],
+                ),
+                &context
+            )
+            .is_err(),
+            "a flag without a reason is not a finding"
+        );
+        assert!(
+            resolve_review_response(
+                &response(
+                    vec![],
+                    vec![
+                        flag("e1", SfxKind::Vocalization),
+                        flag("e1", SfxKind::Ambiguous)
+                    ],
+                ),
+                &context
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn rejects_excessive_changes_and_bad_memory() {
-        let target_pages = ["p1".to_owned()].into_iter().collect();
-        let element_to_page = HashMap::from([("e1".to_owned(), "p1".to_owned())]);
-        let too_many = ReviewResponse {
-            changes: vec![
-                TranslationChange {
-                    element: "e1".to_owned(),
-                    translation: "a".to_owned(),
-                },
-                TranslationChange {
-                    element: "e2".to_owned(),
-                    translation: "b".to_owned(),
-                },
-            ],
-            memory_updates: vec![],
-        };
-        assert!(validate_review_response(&too_many, &target_pages, &element_to_page).is_err());
+        let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
+        let context = batch(&elements);
+        assert!(
+            resolve_review_response(
+                &response(vec![revise("e1", "a"), revise("e2", "b")], vec![]),
+                &context
+            )
+            .is_err()
+        );
         let bad_memory = ReviewResponse {
-            changes: vec![],
             memory_updates: vec![MemoryUpdate {
                 key: "k".to_owned(),
-                value: "".to_owned(),
+                value: String::new(),
             }],
+            ..ReviewResponse::default()
         };
-        assert!(validate_review_response(&bad_memory, &target_pages, &element_to_page).is_err());
+        assert!(resolve_review_response(&bad_memory, &context).is_err());
+    }
+
+    #[test]
+    fn a_repeated_translation_is_not_a_change() {
+        let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
+        let decision = resolve_review_response(
+            &response(vec![revise("e1", " Olá ")], vec![]),
+            &batch(&elements),
+        )
+        .unwrap();
+        assert!(
+            decision.updates.is_empty(),
+            "echoing text must not mint a revision"
+        );
+    }
+
+    #[test]
+    fn corroborated_lettering_is_erased_when_the_reviewer_names_it() {
+        let elements = [element("e1", "ドン", Some("ドドン"), lettering_evidence())];
+        let decision = resolve_review_response(
+            &response(vec![erase("e1")], vec![flag("e1", SfxKind::DecorativeSfx)]),
+            &batch(&elements),
+        )
+        .unwrap();
+        assert_eq!(decision.updates, vec![("e1".to_owned(), None)]);
+        assert_eq!(decision.cleared.len(), 1);
+        assert!(
+            decision.flags.is_empty(),
+            "the flag was the argument for a change that happened"
+        );
+    }
+
+    #[test]
+    fn short_dialogue_survives_a_request_to_erase_it() {
+        // Machine origin plus a short one-word source is exactly the shape the gate
+        // must never act on: these lines are someone speaking.
+        for line in ["NO!", "STOP!", "HELP!", "RUN!"] {
+            let elements = [element(
+                "e1",
+                line,
+                Some(line),
+                json!({ "origin": "gen", "role": "dialogue" }),
+            )];
+            let decision = resolve_review_response(
+                &response(vec![erase("e1")], vec![flag("e1", SfxKind::Vocalization)]),
+                &batch(&elements),
+            )
+            .unwrap();
+            assert!(decision.updates.is_empty(), "{line} must keep its text");
+            assert!(decision.cleared.is_empty());
+            assert_eq!(decision.flags.len(), 1, "{line} is reported instead");
+            assert!(
+                decision.flags[0]
+                    .reason
+                    .contains("fewer than two strong signals"),
+                "{}",
+                decision.flags[0].reason
+            );
+        }
+    }
+
+    #[test]
+    fn a_persons_translation_is_never_erased_here() {
+        let mut evidence = lettering_evidence();
+        evidence["origin"] = json!("user");
+        let elements = [element("e1", "ドン", Some("ドドン"), evidence)];
+        let decision = resolve_review_response(
+            &response(vec![erase("e1")], vec![flag("e1", SfxKind::Vocalization)]),
+            &batch(&elements),
+        )
+        .unwrap();
+        assert!(decision.updates.is_empty());
+        assert!(
+            decision.flags[0].reason.contains("not machine-written"),
+            "{}",
+            decision.flags[0].reason
+        );
+    }
+
+    #[test]
+    fn one_strong_signal_is_not_corroboration() {
+        // No balloon holds it, and that is all the scene says.
+        let elements = [element(
+            "e1",
+            "ゴゴゴ",
+            Some("Gogogo"),
+            json!({ "origin": "gen", "role": "free" }),
+        )];
+        let decision = resolve_review_response(
+            &response(vec![erase("e1")], vec![flag("e1", SfxKind::Vocalization)]),
+            &batch(&elements),
+        )
+        .unwrap();
+        assert!(decision.updates.is_empty());
+        assert_eq!(decision.flags.len(), 1);
+    }
+
+    #[test]
+    fn an_unnamed_erasure_is_reported_instead_of_applied() {
+        let elements = [element("e1", "ドン", Some("ドドン"), lettering_evidence())];
+        let decision =
+            resolve_review_response(&response(vec![erase("e1")], vec![]), &batch(&elements))
+                .unwrap();
+        assert!(decision.updates.is_empty());
+        assert_eq!(decision.flags[0].kind, SfxKind::Ambiguous);
+        assert!(
+            decision.flags[0]
+                .reason
+                .contains("without flagging the element"),
+            "{}",
+            decision.flags[0].reason
+        );
+    }
+
+    #[test]
+    fn lettering_with_content_stays_translated() {
+        // The reviewer itself called it meaningful: that is an argument for keeping it.
+        let elements = [element(
+            "e1",
+            "「助けて」",
+            Some("Help!"),
+            lettering_evidence(),
+        )];
+        let decision = resolve_review_response(
+            &response(vec![erase("e1")], vec![flag("e1", SfxKind::MeaningfulSfx)]),
+            &batch(&elements),
+        )
+        .unwrap();
+        assert!(decision.updates.is_empty());
+        assert!(
+            decision.flags[0]
+                .reason
+                .contains("did not call it a vocalization"),
+            "{}",
+            decision.flags[0].reason
+        );
+    }
+
+    #[test]
+    fn erasing_text_that_was_never_translated_does_nothing() {
+        let elements = [element("e1", "ドン", None, lettering_evidence())];
+        let decision = resolve_review_response(
+            &response(vec![erase("e1")], vec![flag("e1", SfxKind::Vocalization)]),
+            &batch(&elements),
+        )
+        .unwrap();
+        // There is nothing to remove, so no write is minted — but the finding that
+        // this text should stay untranslated is still worth reporting.
+        assert!(decision.updates.is_empty());
+        assert!(decision.cleared.is_empty());
+        assert_eq!(decision.flags.len(), 1);
     }
 
     #[test]
@@ -2313,26 +2825,12 @@ mod tests {
 
     #[test]
     fn lettering_evidence_separates_scene_facts_from_text_shape() {
-        let element = |source: &str,
-                       origin: Option<&str>,
-                       role: Option<&str>,
-                       region: Option<&str>,
-                       score: Option<f32>| {
-            ReviewElement {
-                id: "e".to_owned(),
-                source: source.to_owned(),
-                origin: origin.map(ToOwned::to_owned),
-                role: role.map(ToOwned::to_owned),
-                region: region.map(ToOwned::to_owned),
-                score,
-                ..ReviewElement::default()
-            }
-        };
+        let evidence_of =
+            |source: &str, evidence: Value| SfxEvidence::of(&element("e", source, None, evidence));
 
         // A one-word line inside a balloon is someone speaking, not lettering.
         for line in ["NO!", "STOP!", "HELP!", "RUN!"] {
-            let evidence =
-                SfxEvidence::of(&element(line, Some("gen"), Some("dialogue"), None, None));
+            let evidence = evidence_of(line, json!({ "origin": "gen", "role": "dialogue" }));
             assert_eq!(evidence.strong().count(), 0, "{line} is story text");
             assert!(
                 !evidence.suspicious(),
@@ -2341,46 +2839,92 @@ mod tests {
         }
 
         // Repetition earns a closer look and nothing more.
-        let vocalization = SfxEvidence::of(&element(
-            "アアア",
-            Some("gen"),
-            Some("dialogue"),
-            None,
-            None,
-        ));
+        let vocalization = evidence_of("アアア", json!({ "origin": "gen", "role": "dialogue" }));
         assert!(vocalization.has(SfxSignal::SingleToken));
         assert!(vocalization.has(SfxSignal::RepeatedChar));
         assert_eq!(vocalization.strong().count(), 0);
         assert!(vocalization.suspicious());
 
         // The scene classifying the region is what makes evidence strong.
-        let lettering = SfxEvidence::of(&element(
-            "ドン",
-            Some("gen"),
-            Some("free"),
-            Some("onomatopoeia"),
-            Some(0.91),
-        ));
+        let lettering = evidence_of("ドン", lettering_evidence());
         assert!(lettering.has(SfxSignal::RegionOnomatopoeia));
         assert!(lettering.has(SfxSignal::DetectorScore));
         assert!(lettering.has(SfxSignal::NotDialogue));
         assert_eq!(lettering.strong().count(), 3);
+        assert!(lettering.may_clear());
 
         // The detector doubting a text region tells the model to look harder; it is
         // not evidence that the text is lettering.
-        let unsure = SfxEvidence::of(&element(
+        let unsure = evidence_of(
             "行こう",
-            Some("gen"),
-            Some("dialogue"),
-            None,
-            Some(0.62),
-        ));
+            json!({ "origin": "gen", "role": "dialogue", "score": 0.62 }),
+        );
         assert!(!unsure.has(SfxSignal::DetectorScore));
         assert_eq!(unsure.strong().count(), 0);
+        assert!(!unsure.may_clear());
 
         // Text a person wrote never looks suspicious to a shape heuristic.
-        let authored = SfxEvidence::of(&element("!!!", Some("user"), Some("dialogue"), None, None));
-        assert!(!authored.suspicious());
+        assert!(!evidence_of("!!!", json!({ "origin": "user", "role": "dialogue" })).suspicious());
+    }
+
+    /// A response that erases one element, arguing it is a given kind of lettering.
+    fn review_erasure(element: &str, kind: &str) -> String {
+        json!({
+            "changes": [{ "element": element, "translation": null }],
+            "flags": [{
+                "element": element,
+                "reason": "a drawn sound effect, not speech",
+                "kind": kind,
+            }],
+            "memory_updates": [],
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn a_corroborated_erasure_reaches_the_host_as_removal() {
+        let mut host = MockHost::default();
+        host.add_element_with_evidence("p1", "p1e1", "ドン", Some("ドドン"), lettering_evidence());
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_erasure("p1e1", "decorative_sfx")));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert_eq!(host.applied(), vec![("p1e1".to_owned(), None)]);
+        assert!(invocation.changed);
+        assert_eq!(invocation.value["cleared"]["total"].as_u64(), Some(1));
+        assert_eq!(invocation.value["flags"]["total"].as_u64(), Some(0));
+        assert_eq!(
+            invocation.value["cleared"]["reported"][0]["page"].as_str(),
+            Some("p1"),
+            "the report has to say where the text was"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_uncorroborated_erasure_is_reported_and_the_text_stays() {
+        let mut host = MockHost::default();
+        host.add_element_with_evidence(
+            "p1",
+            "p1e1",
+            "NO!",
+            Some("Não!"),
+            json!({ "origin": "gen", "role": "dialogue" }),
+        );
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_erasure("p1e1", "vocalization")));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert!(host.applied().is_empty(), "nothing may be written");
+        assert!(!invocation.changed);
+        assert_eq!(invocation.value["flags"]["total"].as_u64(), Some(1));
+        assert_eq!(invocation.value["cleared"]["total"].as_u64(), Some(0));
+        assert!(
+            invocation.value["flags"]["reported"][0]["reason"]
+                .as_str()
+                .unwrap()
+                .contains("not removed"),
+            "the report has to say why the text stayed"
+        );
     }
 
     #[tokio::test]
@@ -2419,13 +2963,23 @@ mod tests {
             .iter()
             .filter_map(Value::as_str)
             .collect::<Vec<_>>();
-        assert_eq!(names, vec!["changes", "memory_updates"]);
+        assert_eq!(names, vec!["changes", "flags", "memory_updates"]);
         assert_eq!(schema["additionalProperties"], false);
         for property in schema["properties"].as_object().unwrap().values() {
             if let Some(items) = property.get("items") {
                 assert_eq!(items["additionalProperties"], false);
             }
         }
+        // Removing a translation must be expressible, and every kind the gate reads
+        // has to be named for the reviewer to choose.
+        assert_eq!(
+            schema["properties"]["changes"]["items"]["properties"]["translation"]["type"],
+            json!(["string", "null"])
+        );
+        assert_eq!(
+            schema["properties"]["flags"]["items"]["properties"]["kind"]["enum"],
+            json!(SFX_KIND_NAMES)
+        );
     }
 
     #[tokio::test]
