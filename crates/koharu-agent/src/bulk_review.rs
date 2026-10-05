@@ -499,13 +499,20 @@ impl SfxEvidence {
         self.strong().count()
     }
 
-    /// Worth a closer look, never worth acting on: either the scene says so, or a
-    /// machine translation of a single token that carries no word in it at all.
+    /// Worth a closer look, never worth acting on.
+    ///
+    /// Two strong signals is one case, since the scene then says so from two
+    /// different places. The other is a single token with no word in it — and only
+    /// with machine text or one more strong signal behind it. That qualifier matters:
+    /// a caption box is free text too, so treating "not in a balloon" as enough would
+    /// attach a page image to nearly every batch and make the cheap path expensive.
     pub(crate) fn suspicious(&self) -> bool {
-        self.strong().next().is_some()
-            || (self.machine
-                && self.has(SfxSignal::SingleToken)
-                && (self.has(SfxSignal::PunctuationOnly) || self.has(SfxSignal::RepeatedChar)))
+        if self.strong_count() >= MIN_CLEARANCE_SIGNALS {
+            return true;
+        }
+        let token_without_word = self.has(SfxSignal::SingleToken)
+            && (self.has(SfxSignal::PunctuationOnly) || self.has(SfxSignal::RepeatedChar));
+        token_without_word && (self.machine || self.strong_count() >= 1)
     }
 
     /// The gate an erasure has to pass: the pipeline wrote the text now in the
@@ -2988,6 +2995,18 @@ mod tests {
         assert_eq!(vocalization.strong().count(), 0);
         assert!(vocalization.suspicious());
 
+        // A caption is free text too, and it is not lettering: one strong signal with
+        // a real word in it does not ask for the artwork.
+        let caption = evidence_of(
+            "O dia estava bonito",
+            json!({ "origin": "gen", "role": "free" }),
+        );
+        assert_eq!(caption.strong().count(), 1);
+        assert!(!caption.suspicious());
+        assert!(!evidence_of("BONITO!", json!({ "origin": "gen", "role": "free" })).suspicious());
+        // The same shape outside a balloon, with no word in it, does.
+        assert!(evidence_of("ゴゴゴ", json!({ "origin": "gen", "role": "free" })).suspicious());
+
         // The scene classifying the region is what makes evidence strong.
         let lettering = evidence_of("ドン", lettering_evidence());
         assert!(lettering.has(SfxSignal::RegionOnomatopoeia));
@@ -3079,6 +3098,14 @@ mod tests {
             "こんにちは",
             Some("Olá"),
             json!({ "origin": "gen", "role": "dialogue" }),
+        );
+        // A caption is free text with no balloon, which is ordinary story text.
+        host.add_element_with_evidence(
+            "p1",
+            "p1e2",
+            "数日後",
+            Some("Alguns dias depois"),
+            json!({ "origin": "gen", "role": "free" }),
         );
         let client = MockClient::new();
         client.push(client.respond_ok(review_text(&[])));
