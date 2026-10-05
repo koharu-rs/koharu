@@ -8,6 +8,7 @@ use anyhow::{Context as _, Result};
 use async_trait::async_trait;
 use std::{
     fmt,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -81,18 +82,20 @@ impl ProviderRefusal {
     }
 }
 
-/// An event stream that ended before its completion event. A truncated SSE body
-/// has no reqwest error kind, so it carries its own type to stay retryable.
+/// An event stream that did not finish normally — it either ended before its
+/// completion event or stopped producing events altogether. A truncated or
+/// stalled SSE body has no reqwest error kind, so it carries its own type to stay
+/// retryable.
 #[derive(Debug)]
-pub(crate) struct StreamTruncated;
+pub(crate) struct StreamInterrupted(pub(crate) &'static str);
 
-impl fmt::Display for StreamTruncated {
+impl fmt::Display for StreamInterrupted {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Codex response stream ended before completion")
+        write!(formatter, "Codex response stream {}", self.0)
     }
 }
 
-impl std::error::Error for StreamTruncated {}
+impl std::error::Error for StreamInterrupted {}
 
 /// The provider reports a context overflow as ordinary failure prose.
 fn mentions_context_limit(body: &str) -> bool {
@@ -148,7 +151,20 @@ pub enum LoginEvent {
 pub struct Codex {
     client: Client,
     auth: Auth,
+    /// Shared across clones so a conversation does not refetch the model catalog
+    /// before every single request.
+    models: Arc<Mutex<Option<CachedModels>>>,
 }
+
+#[derive(Clone, Debug)]
+struct CachedModels {
+    fetched_at: Instant,
+    models: Vec<CodexModel>,
+}
+
+/// The catalog changes when the account or upstream release does, not between two
+/// messages of one conversation.
+const MODELS_TTL: Duration = Duration::from_secs(15 * 60);
 
 impl Codex {
     pub fn new() -> Result<Self> {
@@ -156,6 +172,7 @@ impl Codex {
         Ok(Self {
             auth: Auth::new(client.clone()),
             client,
+            models: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -168,16 +185,39 @@ impl Codex {
     where
         F: FnMut(LoginEvent),
     {
-        self.auth.login_device(control, publish).await
+        let account = self.auth.login_device(control, publish).await?;
+        // The catalog is scoped to the signed-in account.
+        self.clear_models();
+        Ok(account)
     }
 
     pub fn logout(&self) -> Result<()> {
-        self.auth.logout()
+        self.auth.logout()?;
+        self.clear_models();
+        Ok(())
+    }
+
+    fn clear_models(&self) {
+        *self.models.lock().unwrap() = None;
     }
 
     #[tracing::instrument(skip_all)]
     pub async fn models(&self) -> Result<Vec<CodexModel>> {
-        catalog::models(&self.client, &self.auth).await
+        if let Some(cached) = self.cached_models() {
+            return Ok(cached);
+        }
+        let models = catalog::models(&self.client, &self.auth).await?;
+        *self.models.lock().unwrap() = Some(CachedModels {
+            fetched_at: Instant::now(),
+            models: models.clone(),
+        });
+        Ok(models)
+    }
+
+    fn cached_models(&self) -> Option<Vec<CodexModel>> {
+        let cache = self.models.lock().unwrap();
+        let cached = cache.as_ref()?;
+        (cached.fetched_at.elapsed() < MODELS_TTL).then(|| cached.models.clone())
     }
 
     pub(crate) async fn respond<F>(
@@ -373,7 +413,7 @@ pub(crate) fn is_transient_error(error: &anyhow::Error) -> bool {
         source
             .downcast_ref::<ProviderRefusal>()
             .is_some_and(ProviderRefusal::transient)
-            || source.downcast_ref::<StreamTruncated>().is_some()
+            || source.downcast_ref::<StreamInterrupted>().is_some()
             || source
                 .downcast_ref::<reqwest::Error>()
                 .is_some_and(|error| {
@@ -426,7 +466,12 @@ mod tests {
         for code in [429, 500, 502, 503, 504] {
             assert!(is_transient_error(&refusal(code, "try again later")));
         }
-        assert!(is_transient_error(&anyhow::Error::new(StreamTruncated)));
+        assert!(is_transient_error(&anyhow::Error::new(StreamInterrupted(
+            "ended before completion"
+        ))));
+        assert!(is_transient_error(&anyhow::Error::new(StreamInterrupted(
+            "stalled without a new event"
+        ))));
         assert!(!is_transient_error(&refusal(401, "refresh token expired")));
         assert!(!is_transient_error(&anyhow!("invalid request")));
         // Text that used to be sniffed for is no longer a retry signal on its own.

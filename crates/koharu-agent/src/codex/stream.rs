@@ -1,14 +1,20 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use eventsource_stream::Eventsource as _;
 use futures::StreamExt as _;
 use serde_json::Value;
 
-use super::{StreamTruncated, provider_failure};
+use super::{StreamInterrupted, provider_failure};
 use crate::{Control, ToolCall};
 
 const MAX_STREAM_BYTES: usize = 16 * 1024 * 1024;
+
+/// Reasoning and text arrive continuously, so a connection that produces nothing
+/// for this long is dead rather than thinking. Without a deadline the run waits
+/// forever: the shared HTTP client sets no request timeout on purpose, because a
+/// long generation is legitimate.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub(crate) enum Delta {
     Text(String),
@@ -63,6 +69,11 @@ where
     loop {
         let event = tokio::select! {
             event = stream.next() => event,
+            () = tokio::time::sleep(STREAM_IDLE_TIMEOUT) => {
+                return Err(anyhow::Error::new(StreamInterrupted(
+                    "stalled without a new event",
+                )));
+            }
             () = control.cancelled() => {
                 control.ensure_running()?;
                 unreachable!("cancelled control must fail ensure_running")
@@ -139,7 +150,9 @@ where
         }
     }
     if !completed {
-        return Err(anyhow::Error::new(StreamTruncated));
+        return Err(anyhow::Error::new(StreamInterrupted(
+            "ended before completion",
+        )));
     }
 
     if text.is_empty() {
