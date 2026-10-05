@@ -1004,10 +1004,18 @@ pub(crate) struct PageJob {
     pub(crate) instruction: String,
 }
 
+/// The reviewer's own tool. Every translation review goes through it, however small,
+/// because it reads and releases pages in bounded groups and applies its results
+/// locally instead of carrying page text through the conversation.
+///
+/// The performance target is the happy path: a clean review of one page is this call
+/// plus the model's answer to it. A transient retry, a split for the context window,
+/// or an attached original page each add a request on purpose — that is the work
+/// happening, not a regression.
 pub(crate) fn review_job_tool() -> Tool {
     Tool::new(
         REVIEW_JOB_TOOL,
-        "Review and revise the translations of an ordered set of pages autonomously in small sequential batches. Use for a translation review spanning more than five pages; the user does not need to request each batch. The result also lists text flagged as lettering that should not have been translated, and any translation it cleared: report both to the user.",
+        "Review or revise the translations of an ordered set of pages, one page or a hundred: it reads the pages itself, works through them in small sequential batches, and applies the changes. Call it instead of reading the pages first. Put the user's complete objective in instruction, and never ask the user to submit later batches. Its result also lists text it judged should not have been translated, and every translation it removed: report both.",
         json!({
             "type": "object",
             "properties": {

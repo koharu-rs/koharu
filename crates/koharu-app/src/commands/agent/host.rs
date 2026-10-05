@@ -208,7 +208,7 @@ impl Host for KoharuHost {
                     ),
                     definition::<InspectPages>(
                         "inspect_pages",
-                        "Read the latest semantic state of up to four pages. Accepts multiple page IDs and does not include rendered images.",
+                        "Read the latest layout and presentation state of up to four pages: layers, geometry, typography, visibility. No rendered images. A translation review does not need it — review_translations_job reads the text of the pages itself.",
                     ),
                     definition::<ViewPage>(
                         "view_page",
