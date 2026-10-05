@@ -116,4 +116,9 @@ pub trait Host: Send + Sync + 'static {
     /// agent crate does not own a language model, and source language is never
     /// a job-wide fact — it stays per element in the reviewed payload.
     fn review_target_language(&self) -> Result<String>;
+
+    /// The page as imported, already encoded, as a `data:` URL — `None` when the
+    /// page has no source image. Only the bulk reviewer asks for it, to compare
+    /// lettering against the artwork, and it decides how the provider reads it.
+    async fn review_page_image(&self, page: &str) -> Result<Option<String>>;
 }

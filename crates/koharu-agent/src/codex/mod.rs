@@ -24,7 +24,9 @@ use crate::{Control, Reasoning};
 
 pub use auth::Account;
 use auth::Auth;
-pub(crate) use protocol::{Request, function_output, message, project_context};
+pub(crate) use protocol::{
+    Request, function_output, message, message_with_images, project_context,
+};
 pub(crate) use stream::{Delta, Turn};
 
 const RESPONSES_URL: &str = "https://chatgpt.com/backend-api/codex/responses";

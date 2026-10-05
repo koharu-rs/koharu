@@ -102,14 +102,39 @@ impl Request {
 }
 
 pub(crate) fn message(role: &str, text: impl Into<String>) -> Value {
+    message_with_images(role, text.into(), &[])
+}
+
+/// A message whose text is followed by each image, labelled, so the model can tell
+/// which page or element it is looking at.
+pub(crate) fn message_with_images(role: &str, text: String, images: &[crate::ToolImage]) -> Value {
     json!({
         "type": "message",
         "role": role,
-        "content": [{
-            "type": "input_text",
-            "text": text.into(),
-        }],
+        "content": input_parts(text, images),
     })
+}
+
+/// Text first, then one labelled part per image. The producer of an image chooses how
+/// the provider reads it: a page the model must proofread is tiled differently than
+/// one sent only for visual context.
+fn input_parts(text: String, images: &[crate::ToolImage]) -> Vec<Value> {
+    let mut parts = vec![json!({
+        "type": "input_text",
+        "text": text,
+    })];
+    for image in images {
+        parts.push(json!({
+            "type": "input_text",
+            "text": image.label,
+        }));
+        parts.push(json!({
+            "type": "input_image",
+            "image_url": image.data_url,
+            "detail": image.detail,
+        }));
+    }
+    parts
 }
 
 pub(crate) fn project_context(data: &Value) -> Result<Value, serde_json::Error> {
@@ -132,27 +157,11 @@ pub(crate) fn function_output(
     output: &Value,
     images: &[crate::ToolImage],
 ) -> Result<Value, serde_json::Error> {
+    let text = serde_json::to_string(output)?;
     let output = if images.is_empty() {
-        Value::String(serde_json::to_string(output)?)
+        Value::String(text)
     } else {
-        let mut content = vec![json!({
-            "type": "input_text",
-            "text": serde_json::to_string(output)?,
-        })];
-        for image in images {
-            content.push(json!({
-                "type": "input_text",
-                "text": image.label,
-            }));
-            content.push(json!({
-                "type": "input_image",
-                "image_url": image.data_url,
-                // The producer chooses: a page the model must proofread is read at
-                // a different level than one sent only for layout context.
-                "detail": image.detail,
-            }));
-        }
-        Value::Array(content)
+        Value::Array(input_parts(text, images))
     };
     Ok(json!({
         "type": "function_call_output",
@@ -166,6 +175,25 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn images_follow_the_text_and_carry_their_own_detail() {
+        let images = [crate::ToolImage {
+            label: "Original artwork of page 3".to_owned(),
+            data_url: "data:image/webp;base64,AAA".to_owned(),
+            detail: "low",
+        }];
+        let with_image = message_with_images("user", "review this".to_owned(), &images);
+        let content = with_image["content"].as_array().unwrap();
+        assert_eq!(content[0]["text"], json!("review this"));
+        assert_eq!(content[1]["text"], json!("Original artwork of page 3"));
+        assert_eq!(content[2]["detail"], json!("low"));
+        // Without images the message is exactly what `message` has always built.
+        assert_eq!(
+            message("user", "review this"),
+            message_with_images("user", "review this".to_owned(), &[]),
+        );
+    }
 
     fn review_schema() -> Value {
         json!({

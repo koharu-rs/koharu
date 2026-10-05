@@ -180,6 +180,23 @@ impl Host for KoharuHost {
         context::target_language()
     }
 
+    async fn review_page_image(&self, page: &str) -> Result<Option<String>> {
+        let id = entity(page).with_context(|| format!("cannot read page {page}"))?;
+        let snapshot = {
+            let current = self.handle.state::<CurrentProject>();
+            let current = current.project.lock().await;
+            let project = current.as_ref().context("no project is open")?;
+            project.snapshot()
+        };
+        let Some(bytes) = output::source_preview(&snapshot, id).await? else {
+            return Ok(None);
+        };
+        Ok(Some(format!(
+            "data:image/webp;base64,{}",
+            STANDARD.encode(bytes)
+        )))
+    }
+
     fn tools(&self) -> Vec<Tool> {
         static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
         TOOLS

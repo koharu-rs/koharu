@@ -19,9 +19,12 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    CodexModel, Control, Host, Invocation, Reasoning, Tool, ToolCall,
+    CodexModel, Control, Host, Invocation, Reasoning, Tool, ToolCall, ToolImage,
     agent::{Event, RunId},
-    codex::{Request, ReviewClient, backoff, is_context_limit, message, retry_wait, should_retry},
+    codex::{
+        Request, ReviewClient, backoff, is_context_limit, message_with_images, retry_wait,
+        should_retry,
+    },
 };
 
 /// Upper bound (in characters) for a single batch's textual payload. Small pages
@@ -66,6 +69,11 @@ const MIN_CLEARANCE_SIGNALS: usize = 2;
 
 /// Flags reported per job; the rest is only a count.
 const MAX_REPORTED_FLAGS: usize = 64;
+
+/// Original pages attached to one batch request. An image is cheap to read but not
+/// free to send, and a batch that spans many suspicious pages has already told the
+/// reviewer which elements to look at.
+const MAX_IMAGES_PER_BATCH: usize = 4;
 
 /// Structured translation memory is bounded to keep the per-batch prompt tiny.
 pub(crate) const MAX_MEMORY_BYTES: usize = 4 * 1024;
@@ -531,6 +539,7 @@ pub(crate) fn review_instructions(target: &str) -> String {
         r#"You are a specialized bulk translation reviewer for manga pages, revising translations into {target}.
 You receive minimal textual data: page labels, element IDs, source text, that source's language tag when the page records one, current translations, and optional local quality hints on an element.
 An element can also carry scene evidence about where its text came from: "origin" (`gen` = the pipeline wrote the current translation, `user` = a person did), "role" (`dialogue` = a balloon holds the text, `free` = nothing does), and "region" with "score" (the detector read the text out of an area classified as something other than ordinary text, with that confidence). Use it to judge what kind of text you are looking at, never as permission to translate less: story text stays translated whatever its origin, and a short exclamation in a balloon is still dialogue.
+When the scene marks some of a batch's text as possible lettering, the affected pages also arrive as imported artwork after the text. Use it to tell drawn lettering from a short line of dialogue; the text list remains the authority on what to change.
 Every element carries its own source language and a batch can mix them. Review each element against the language its own source is in; when an element has no tag, detect that language from the text. Never infer an element's source language from another element.
 Review every provided translation in this order:
 1. SOURCE FIDELITY — does the translation carry the source meaning? Check for lost or added information, wrong subject/object, inverted negation, wrong verb tense, and swapped pronouns or relationships. Accuracy failures are the most serious errors to fix.
@@ -702,7 +711,9 @@ pub(crate) struct BatchContext {
     pages: HashSet<String>,
     page_of: HashMap<String, String>,
     current: HashMap<String, String>,
-    evidence: HashMap<String, SfxEvidence>,
+    /// Sorted so the pages worth a closer look come out in element order, and a retry
+    /// of a batch sends exactly the same payload it sent the first time.
+    evidence: BTreeMap<String, SfxEvidence>,
 }
 
 impl BatchContext {
@@ -733,6 +744,47 @@ impl BatchContext {
             .values()
             .filter(|evidence| evidence.suspicious())
             .count()
+    }
+
+    /// The pages holding such an element, in element order: text alone cannot tell a
+    /// drawn sound effect from a one-word line of dialogue, so those pages are the
+    /// ones worth looking at as imported artwork.
+    pub(crate) fn suspicious_pages(&self) -> Vec<String> {
+        let mut pages: Vec<String> = Vec::new();
+        for (element, evidence) in &self.evidence {
+            if !evidence.suspicious() {
+                continue;
+            }
+            if let Some(page) = self
+                .page_of
+                .get(element)
+                .filter(|page| !pages.iter().any(|seen| seen == *page))
+            {
+                pages.push(page.clone());
+            }
+        }
+        pages
+    }
+}
+
+/// The originals one job has already fetched, so a retry or a split of a batch never
+/// decodes, encodes, or uploads the same page artwork twice.
+#[derive(Default)]
+pub(crate) struct PageImages {
+    fetched: HashMap<String, Option<String>>,
+}
+
+impl PageImages {
+    async fn fetch(&mut self, host: &dyn Host, page: &str) -> Result<Option<String>> {
+        if let Some(fetched) = self.fetched.get(page) {
+            return Ok(fetched.clone());
+        }
+        let image = host
+            .review_page_image(page)
+            .await
+            .with_context(|| format!("failed to read the original of page {page}"))?;
+        self.fetched.insert(page.to_owned(), image.clone());
+        Ok(image)
     }
 }
 
@@ -989,6 +1041,9 @@ struct ReviewJob<'a> {
     instruction: &'a str,
     target: &'a str,
     session: &'a str,
+    /// The originals this job has already produced, so a retry or a split of a batch
+    /// never decodes, encodes, or uploads the same page twice.
+    images: &'a mut PageImages,
 }
 
 /// Deterministic, mockable reviewer orchestrator. Each successful batch is exactly
@@ -1077,14 +1132,16 @@ impl<'a> BulkReviewer<'a> {
         let mut cleared = Vec::new();
         let mut cleared_total = 0_usize;
         let mut memory = TranslationMemory::new();
+        let mut images = PageImages::default();
         let mut changed = false;
         let mut metrics = JobMetrics::default();
         let mut sequence = 0_usize;
         let session = context.cache_key();
-        let review = ReviewJob {
+        let mut review = ReviewJob {
             instruction: &job.instruction,
             target: &target,
             session: &session,
+            images: &mut images,
         };
 
         for group in pages.chunks(MAX_PAGES_PER_READ) {
@@ -1122,7 +1179,7 @@ impl<'a> BulkReviewer<'a> {
                     name: REVIEW_BATCH_TOOL.to_owned(),
                 });
                 match self
-                    .run_review_batch(&review, &batch, &memory, model, control, sequence)
+                    .run_review_batch(&mut review, &batch, &memory, model, control, sequence)
                     .await
                 {
                     Ok(result) => {
@@ -1236,6 +1293,7 @@ impl<'a> BulkReviewer<'a> {
                 "changes": metrics.total_changes,
                 "hints": metrics.total_hints,
                 "lettering_candidates": metrics.total_lettering_candidates,
+                "source_images": metrics.total_images,
                 "model_requests": metrics.total_model_requests,
                 "elapsed_ms": metrics.total_elapsed_ms,
             }),
@@ -1251,7 +1309,7 @@ impl<'a> BulkReviewer<'a> {
     /// One model request, local validation, local bulk apply.
     async fn run_review_batch(
         &self,
-        job: &ReviewJob<'_>,
+        job: &mut ReviewJob<'_>,
         batch: &[MeasuredPage],
         memory: &TranslationMemory,
         model: &CodexModel,
@@ -1377,21 +1435,55 @@ impl<'a> BulkReviewer<'a> {
         // slow or expensive job can be read against what it actually looked at.
         let sfx_candidates = context.suspicious();
 
+        // Text alone cannot tell drawn lettering from a one-word line of dialogue, so
+        // a batch with any suspicious element also gets the page as imported — at the
+        // cheap detail level, once per page for the whole job, and never for a batch
+        // the scene gave no reason to look at.
+        let mut attached_images = Vec::new();
+        for page in context.suspicious_pages() {
+            if attached_images.len() >= MAX_IMAGES_PER_BATCH {
+                break;
+            }
+            if let Some(data_url) = job
+                .images
+                .fetch(self.host, &page)
+                .await
+                .map_err(ReviewBatchError::from)?
+            {
+                attached_images.push(ToolImage {
+                    label: format!("Original artwork of page {page}, sent for comparison"),
+                    data_url,
+                    detail: "low",
+                });
+            }
+        }
+
         // The pages themselves are the payload: the model must see every element's
         // source and current translation, not just the page IDs.
         let pages_json = serde_json::to_string(&review_pages)
             .map_err(|error| ReviewBatchError::from(anyhow!(error)))?;
         let payload_bytes = pages_json.len();
         let memory_text = memory.serialize();
+        let comparison = if attached_images.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\nAttached after the pages: the original artwork of {} page(s) in this \
+                 batch, because local evidence marks some of their text as possible \
+                 lettering. Judge that text against the artwork. The element list above \
+                 stays the authority on what to change.",
+                attached_images.len()
+            )
+        };
         let prompt = format!(
-            "Objective: {instruction}\nTranslation memory (incremental updates only, do not repeat):\n{}\nReview the pages below and return ONLY the structured JSON response.\n\n{pages_json}",
+            "Objective: {instruction}\nTranslation memory (incremental updates only, do not repeat):\n{}\nReview the pages below and return ONLY the structured JSON response.\n\n{pages_json}{comparison}",
             if memory_text.is_empty() {
                 "(none)"
             } else {
                 &memory_text
             },
         );
-        let input = vec![message("user", prompt)];
+        let input = vec![message_with_images("user", prompt, &attached_images)];
         let request = Request::new(
             model.id.clone(),
             review_instructions(target),
@@ -1479,6 +1571,7 @@ impl<'a> BulkReviewer<'a> {
             element_count,
             hints_count,
             lettering_candidates: sfx_candidates,
+            images_attached: attached_images.len(),
             source_chars,
             translation_chars,
             payload_bytes,
@@ -1547,6 +1640,7 @@ pub(crate) struct BatchMetrics {
     pub(crate) element_count: usize,
     pub(crate) hints_count: usize,
     pub(crate) lettering_candidates: usize,
+    pub(crate) images_attached: usize,
     pub(crate) source_chars: usize,
     pub(crate) translation_chars: usize,
     pub(crate) payload_bytes: usize,
@@ -1572,6 +1666,7 @@ impl BatchMetrics {
             elements = self.element_count,
             hints = self.hints_count,
             lettering_candidates = self.lettering_candidates,
+            images_attached = self.images_attached,
             source_chars = self.source_chars,
             translation_chars = self.translation_chars,
             payload_bytes = self.payload_bytes,
@@ -1615,6 +1710,7 @@ pub(crate) struct JobMetrics {
     pub(crate) total_elements: usize,
     pub(crate) total_hints: usize,
     pub(crate) total_lettering_candidates: usize,
+    pub(crate) total_images: usize,
     pub(crate) total_changes: usize,
     pub(crate) total_flags: usize,
     pub(crate) total_cleared: usize,
@@ -1635,6 +1731,7 @@ impl JobMetrics {
         self.total_lettering_candidates = self
             .total_lettering_candidates
             .saturating_add(batch.lettering_candidates);
+        self.total_images = self.total_images.saturating_add(batch.images_attached);
         self.total_changes = self.total_changes.saturating_add(batch.changes_applied);
         self.total_flags = self.total_flags.saturating_add(batch.flags);
         self.total_cleared = self.total_cleared.saturating_add(batch.cleared);
@@ -1664,6 +1761,7 @@ impl JobMetrics {
             elements = self.total_elements,
             hints = self.total_hints,
             lettering_candidates = self.total_lettering_candidates,
+            images_attached = self.total_images,
             changes = self.total_changes,
             flags = self.total_flags,
             cleared = self.total_cleared,
@@ -1730,6 +1828,8 @@ mod tests {
         prompts: Mutex<Vec<String>>,
         instructions: Mutex<Vec<String>>,
         cache_keys: Mutex<Vec<String>>,
+        /// The detail level of every image each request sent, per request.
+        images: Mutex<Vec<Vec<String>>>,
     }
 
     impl MockClient {
@@ -1740,6 +1840,7 @@ mod tests {
                 prompts: Mutex::new(Vec::new()),
                 instructions: Mutex::new(Vec::new()),
                 cache_keys: Mutex::new(Vec::new()),
+                images: Mutex::new(Vec::new()),
             }
         }
 
@@ -1761,6 +1862,10 @@ mod tests {
 
         fn cache_keys(&self) -> Vec<String> {
             self.cache_keys.lock().unwrap().clone()
+        }
+
+        fn images(&self) -> Vec<Vec<String>> {
+            self.images.lock().unwrap().clone()
         }
 
         fn respond_ok(&self, text: impl Into<String>) -> std::result::Result<Turn, anyhow::Error> {
@@ -1797,6 +1902,16 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(request.prompt_cache_key.clone());
+            let details = request
+                .input
+                .iter()
+                .filter_map(|item| item.get("content").and_then(Value::as_array))
+                .flatten()
+                .filter(|part| part.get("type").and_then(Value::as_str) == Some("input_image"))
+                .filter_map(|part| part.get("detail").and_then(Value::as_str))
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            self.images.lock().unwrap().push(details);
             let mut script = self.script.lock().unwrap();
             if let Some(result) = script.pop_front() {
                 return result;
@@ -1807,8 +1922,10 @@ mod tests {
 
     struct MockHost {
         pages: HashMap<String, Vec<Value>>,
+        sources: HashMap<String, String>,
         applied: Mutex<Vec<(String, Option<String>)>>,
         reads: Mutex<Vec<Vec<String>>>,
+        image_reads: Mutex<Vec<String>>,
         target: String,
     }
 
@@ -1816,8 +1933,10 @@ mod tests {
         fn default() -> Self {
             Self {
                 pages: HashMap::new(),
+                sources: HashMap::new(),
                 applied: Mutex::new(Vec::new()),
                 reads: Mutex::new(Vec::new()),
+                image_reads: Mutex::new(Vec::new()),
                 target: "Portuguese".to_owned(),
             }
         }
@@ -1827,6 +1946,17 @@ mod tests {
         fn with_target(mut self, target: &str) -> Self {
             self.target = target.to_owned();
             self
+        }
+
+        /// The page has imported artwork the reviewer may ask for.
+        fn with_source(mut self, page: &str) -> Self {
+            self.sources
+                .insert(page.to_owned(), format!("data:image/webp;base64,{page}"));
+            self
+        }
+
+        fn image_reads(&self) -> Vec<String> {
+            self.image_reads.lock().unwrap().clone()
         }
 
         fn add_element(
@@ -1903,6 +2033,11 @@ mod tests {
 
         fn review_target_language(&self) -> Result<String> {
             Ok(self.target.clone())
+        }
+
+        async fn review_page_image(&self, page: &str) -> Result<Option<String>> {
+            self.image_reads.lock().unwrap().push(page.to_owned());
+            Ok(self.sources.get(page).cloned())
         }
 
         async fn invoke(&self, call: ToolCall, _control: &Control) -> Result<Invocation> {
@@ -2924,6 +3059,100 @@ mod tests {
                 .unwrap()
                 .contains("not removed"),
             "the report has to say why the text stayed"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_clean_batch_is_reviewed_without_any_image() {
+        let mut host = MockHost::default().with_source("p1");
+        host.add_element_with_evidence(
+            "p1",
+            "p1e1",
+            "こんにちは",
+            Some("Olá"),
+            json!({ "origin": "gen", "role": "dialogue" }),
+        );
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert!(
+            host.image_reads().is_empty(),
+            "nothing in the scene asked for a look at the artwork"
+        );
+        assert!(
+            client.images().iter().all(Vec::is_empty),
+            "no request of a clean batch carries an image"
+        );
+        assert_eq!(
+            invocation.value["metrics"]["source_images"].as_u64(),
+            Some(0)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_suspicious_batch_comes_with_its_original_page() {
+        let mut host = MockHost::default().with_source("p1");
+        host.add_element_with_evidence("p1", "p1e1", "ドン", Some("ドドン"), lettering_evidence());
+        let client = MockClient::new();
+        client.push(client.respond_ok(review_text(&[])));
+
+        let invocation = run_job(&client, &host, &["p1"]).await.unwrap();
+        assert_eq!(host.image_reads(), vec!["p1".to_owned()]);
+        assert_eq!(
+            client.images(),
+            vec![vec!["low".to_owned()]],
+            "the comparison image is sent at the cheap detail level"
+        );
+        assert!(
+            client.prompts()[0].contains("original artwork"),
+            "the reviewer has to be told what arrived and why: {}",
+            client.prompts()[0]
+        );
+        assert_eq!(
+            invocation.value["metrics"]["source_images"].as_u64(),
+            Some(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_split_never_produces_the_same_original_twice() {
+        // One batch over two suspicious pages, rejected for context, then halved. Each
+        // half still needs its own artwork, and neither may make the host decode and
+        // encode the page again.
+        let mut host = MockHost::default().with_source("p1").with_source("p2");
+        host.add_element_with_evidence("p1", "p1e1", "ドン", Some("ドドン"), lettering_evidence());
+        host.add_element_with_evidence(
+            "p2",
+            "p2e1",
+            "アアア",
+            Some("あああ"),
+            lettering_evidence(),
+        );
+        let client = MockClient::new();
+        client.push(Err(provider_failure(
+            "Codex response failed",
+            "your input exceeds the context window of this model",
+        )));
+        client.push(client.respond_ok(review_text(&[])));
+        client.push(client.respond_ok(review_text(&[])));
+
+        let refs = ["p1", "p2"];
+        run_job(&client, &host, &refs).await.unwrap();
+        assert_eq!(client.calls(), 3);
+        assert_eq!(
+            host.image_reads(),
+            vec!["p1".to_owned(), "p2".to_owned()],
+            "each original is produced once for the whole job"
+        );
+        assert_eq!(
+            client.images(),
+            vec![
+                vec!["low".to_owned(), "low".to_owned()],
+                vec!["low".to_owned()],
+                vec!["low".to_owned()],
+            ],
+            "a half that needs the artwork still gets it"
         );
     }
 
