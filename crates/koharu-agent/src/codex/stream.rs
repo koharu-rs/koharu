@@ -34,6 +34,17 @@ pub(crate) struct Turn {
     pub(crate) first_delta_ms: u32,
 }
 
+impl Turn {
+    /// Output items worth keeping for later turns. A reasoning item exists so the
+    /// next request of *this* turn can continue the same chain of thought;
+    /// persisting it re-sends an encrypted blob in every future request.
+    pub(crate) fn history_items(&self) -> impl Iterator<Item = &Value> {
+        self.output
+            .iter()
+            .filter(|item| item.get("type").and_then(Value::as_str) != Some("reasoning"))
+    }
+}
+
 pub(super) async fn read<F>(
     response: reqwest::Response,
     control: &Control,
@@ -207,4 +218,32 @@ fn provider_error(value: &Value) -> String {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn reasoning_items_stay_out_of_history() {
+        let turn = Turn {
+            output: vec![
+                json!({"type": "reasoning", "encrypted_content": "blob"}),
+                json!({"type": "message", "content": []}),
+            ],
+            calls: Vec::new(),
+            text: String::new(),
+            usage: None,
+            payload_bytes: 0,
+            first_delta_ms: 0,
+        };
+        assert_eq!(
+            turn.history_items().cloned().collect::<Vec<_>>(),
+            vec![json!({"type": "message", "content": []})]
+        );
+        // The live turn keeps everything it needs to continue.
+        assert_eq!(turn.output.len(), 2);
+    }
 }

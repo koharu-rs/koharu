@@ -13,7 +13,8 @@ pub(crate) struct Request {
     pub(crate) parallel_tool_calls: bool,
     pub(crate) reasoning: ReasoningOptions,
     pub(crate) text: TextOptions,
-    pub(crate) include: [&'static str; 1],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) include: Vec<&'static str>,
     pub(crate) stream: bool,
     pub(crate) store: bool,
     pub(crate) prompt_cache_key: String,
@@ -22,7 +23,8 @@ pub(crate) struct Request {
 #[derive(Debug, Serialize)]
 pub(crate) struct ReasoningOptions {
     pub(crate) effort: &'static str,
-    pub(crate) summary: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) summary: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -61,17 +63,29 @@ impl Request {
             parallel_tool_calls: false,
             reasoning: ReasoningOptions {
                 effort: reasoning.as_str(),
-                summary: "auto",
+                summary: None,
             },
             text: TextOptions {
                 verbosity: "low",
                 format: None,
             },
-            include: ["reasoning.encrypted_content"],
+            include: Vec::new(),
             stream: true,
             store: false,
             prompt_cache_key: cache_key,
         }
+    }
+
+    /// Ask for the reasoning that lets the *next* request of this turn continue
+    /// the same chain of thought, plus a summary to stream to the user.
+    ///
+    /// Only the interactive tool loop needs this: with `store: false` the
+    /// encrypted reasoning items are how function-call continuity survives
+    /// between requests of one turn. A single-shot request must not pay for them.
+    pub(crate) fn with_reasoning_continuity(mut self) -> Self {
+        self.include = vec!["reasoning.encrypted_content"];
+        self.reasoning.summary = Some("auto");
+        self
     }
 
     /// Attach an OpenAI-compatible JSON schema as structured output under
@@ -205,6 +219,40 @@ mod tests {
         assert_eq!(value["instructions"], "instructions");
         assert_eq!(value["reasoning"]["effort"], "low");
         assert_eq!(value["tools"], json!([]));
+        // A single-shot review request carries no reasoning continuity: it never
+        // makes a follow-up call, so encrypted blobs would be pure overhead.
+        assert!(value.get("include").is_none());
+        assert!(value["reasoning"].get("summary").is_none());
+    }
+
+    #[test]
+    fn only_the_tool_loop_asks_for_reasoning_continuity() {
+        let plain = serde_json::to_value(Request::new(
+            "m".into(),
+            "i".into(),
+            Vec::new(),
+            Vec::new(),
+            Reasoning::Low,
+            "c".into(),
+        ))
+        .unwrap();
+        assert!(plain.get("include").is_none());
+        assert!(plain["reasoning"].get("summary").is_none());
+
+        let chat = serde_json::to_value(
+            Request::new(
+                "m".into(),
+                "i".into(),
+                Vec::new(),
+                Vec::new(),
+                Reasoning::Low,
+                "c".into(),
+            )
+            .with_reasoning_continuity(),
+        )
+        .unwrap();
+        assert_eq!(chat["include"], json!(["reasoning.encrypted_content"]));
+        assert_eq!(chat["reasoning"]["summary"], "auto");
     }
 
     #[test]

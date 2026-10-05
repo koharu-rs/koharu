@@ -256,7 +256,8 @@ where
                 tools.clone(),
                 reasoning,
                 cache_key.clone(),
-            );
+            )
+            .with_reasoning_continuity();
             let turn = self
                 .codex
                 .respond(&request, control, |event| match event {
@@ -277,7 +278,7 @@ where
                 first_delta_ms: turn.first_delta_ms,
             });
             input.extend(turn.output.iter().cloned());
-            persisted.extend(turn.output.iter().cloned());
+            persisted.extend(turn.history_items().cloned());
 
             if turn.calls.is_empty() {
                 *self.history.lock().await = persisted;
