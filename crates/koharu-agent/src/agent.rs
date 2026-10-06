@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,9 @@ use uuid::Uuid;
 use crate::{
     Codex, CodexModel, Config, Control, Host, ToolCall,
     bulk_review::{BulkReviewer, JobContext, review_job_tool},
-    codex::{Delta, Request, ReviewClient, function_output, message, project_context},
+    codex::{
+        Delta, Request, ReviewClient, function_output, is_context_limit, message, project_context,
+    },
 };
 
 const INSTRUCTIONS: &str = r#"You are Koharu Agent, operating a manga translation project inside Koharu.
@@ -199,7 +201,15 @@ where
             Err(_) if control.is_cancelled() => publish(Event::Cancelled { run }),
             Err(error) => publish(Event::Failed {
                 run,
-                message: format!("{error:#}"),
+                message: if is_context_limit(error) {
+                    // The provider says the input is too long; only the user can make
+                    // the conversation shorter, so say what actually resets it.
+                    format!(
+                        "{error:#}\nThe conversation outgrew the model's context window. Start a new chat to keep working on this project."
+                    )
+                } else {
+                    format!("{error:#}")
+                },
             }),
         }
         result
@@ -248,8 +258,26 @@ where
         let cache_key = format!("chat:{conversation}");
 
         let mut request_index = 0_usize;
+        // Image-bearing tool output, remembered so it can be replaced by the tool's own
+        // image-free form once a response has answered on top of it. A page render is
+        // evidence for the next answer, not for every later one: left in the live turn it
+        // is re-uploaded on each request of the run, growing the body quadratically and
+        // showing the model pictures of pages it already looked at. Only images are
+        // trimmed; tool text stays, because a later step of the same turn may still be
+        // acting on the coordinates or IDs it reported.
+        let mut spent: HashMap<String, Value> = HashMap::new();
         loop {
             control.ensure_running()?;
+            if !spent.is_empty() {
+                for item in &mut input {
+                    let Some(call_id) = item.get("call_id").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    if let Some(image_free) = spent.get(call_id) {
+                        *item = image_free.clone();
+                    }
+                }
+            }
             let request = Request::new(
                 model.id.clone(),
                 INSTRUCTIONS.to_owned(),
@@ -347,7 +375,11 @@ where
                     output: output.to_string(),
                 });
                 input.push(function_output(&call.call_id, &output, &images)?);
-                persisted.push(function_output(&call.call_id, &historical_output, &[])?);
+                let image_free = function_output(&call.call_id, &historical_output, &[])?;
+                if !images.is_empty() {
+                    spent.insert(call.call_id.clone(), image_free.clone());
+                }
+                persisted.push(image_free);
             }
         }
     }
