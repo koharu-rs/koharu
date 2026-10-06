@@ -3,7 +3,9 @@
 // V3 architecture:
 // - One model request per batch on the happy path (no tool loop)
 // - Structured output under text.format with local validation and application
-// - Minimal textual payload (no geometry, images, provider config, etc.)
+// - Textual payload: source, current translation, and the scene evidence beside each
+//   element. Geometry, typography and provider config are never sent. The original
+//   page image is attached only when that evidence suspects lettering.
 // - Structured memory (local merge, bounded, not a full rewrite per batch)
 // - Conservative local quality hints (advisory only; never edits text directly)
 // - Lowest supported reasoning effort
@@ -69,6 +71,13 @@ const MIN_CLEARANCE_SIGNALS: usize = 2;
 
 /// Flags reported per job; the rest is only a count.
 const MAX_REPORTED_FLAGS: usize = 64;
+
+/// Pages named in a job report; the rest is only a count.
+const MAX_REPORTED_PAGES: usize = 32;
+
+/// What this worker decides, stated in its own result so the conversation cannot
+/// report a presentation review that nothing in the job performed.
+const JOB_SCOPE: &str = "translation text only; layout, typography and artwork were not evaluated";
 
 /// Original pages attached to one batch request. An image is cheap to read but not
 /// free to send, and a batch that spans many suspicious pages has already told the
@@ -811,12 +820,22 @@ impl PageImages {
     }
 }
 
+/// One write this code decided to make. The page travels with it because the document
+/// moving and the screen moving are different facts: only the page the user is looking
+/// at is repainted, so a report has to say where the change lives.
+#[derive(Clone, Debug)]
+pub(crate) struct Applied {
+    pub(crate) page: String,
+    pub(crate) element: String,
+    pub(crate) text: Option<String>,
+}
+
 /// One reviewer response turned into what local evidence authorizes.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReviewDecision {
     /// Writes to apply, addressed by real element ID: text to set, or `None` to
     /// remove the translation.
-    pub(crate) updates: Vec<(String, Option<String>)>,
+    pub(crate) updates: Vec<Applied>,
     /// Translations this code erased, carrying the argument the reviewer gave.
     pub(crate) cleared: Vec<Finding>,
     /// Text that probably should not have been translated and that this code left
@@ -854,6 +873,17 @@ impl ReviewDecision {
             .iter()
             .find(|flag| flag.element == located.element)
     }
+}
+
+/// How many elements of each page a set of writes touched. The screen shows one page
+/// at a time, so a job that edited seven has to name them or the user cannot find the
+/// work it asked for.
+fn count_per_page(updates: &[Applied]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for update in updates {
+        *counts.entry(update.page.clone()).or_default() += 1;
+    }
+    counts
 }
 
 /// Turn one structured response into writes and findings, gating every erasure on
@@ -936,9 +966,11 @@ pub(crate) fn resolve_review_response(
                 {
                     continue;
                 }
-                decision
-                    .updates
-                    .push((located.element.clone(), Some(text.to_owned())));
+                decision.updates.push(Applied {
+                    page: located.page.clone(),
+                    element: located.element.clone(),
+                    text: Some(text.to_owned()),
+                });
             }
         }
     }
@@ -1000,7 +1032,11 @@ impl ReviewDecision {
                 self.flags
                     .retain(|existing| existing.element != located.element);
             }
-            self.updates.push((located.element.clone(), None));
+            self.updates.push(Applied {
+                page: located.page.clone(),
+                element: located.element.clone(),
+                text: None,
+            });
             return;
         }
         let reason = match reviewer_reason {
@@ -1069,7 +1105,7 @@ pub(crate) struct PageJob {
 pub(crate) fn review_job_tool() -> Tool {
     Tool::new(
         REVIEW_JOB_TOOL,
-        "Review or revise the translations of an ordered set of pages, one page or a hundred: it reads the pages itself, works through them in small sequential batches, and applies the changes. Call it instead of reading the pages first. Put the user's complete objective in instruction, and never ask the user to submit later batches. Its result also lists text it judged should not have been translated, and every translation it removed: report both.",
+        "Review or revise the translations of an ordered set of pages, one page or a hundred: it reads the pages itself, works through them in small sequential batches, and applies the changes. Call it instead of reading the pages first. Put the user's complete objective in instruction, and never ask the user to submit later batches. It changes translation text only — placement, lettering art, balloon borders and typography are not evaluated here and belong to the per-element tools. Its result names the pages it changed, the text it flagged as lettering that should not have been translated, and every translation it removed: report all three.",
         json!({
             "type": "object",
             "properties": {
@@ -1193,6 +1229,7 @@ impl<'a> BulkReviewer<'a> {
         let mut flag_total = 0_usize;
         let mut cleared = Vec::new();
         let mut cleared_total = 0_usize;
+        let mut page_writes: BTreeMap<String, usize> = BTreeMap::new();
         let mut memory = TranslationMemory::new();
         let mut images = PageImages::default();
         let mut changed = false;
@@ -1264,6 +1301,9 @@ impl<'a> BulkReviewer<'a> {
                         });
                         collect_report(result.flags, &mut flag_total, &mut flags);
                         collect_report(result.cleared, &mut cleared_total, &mut cleared);
+                        for (page, count) in result.page_writes {
+                            *page_writes.entry(page).or_default() += count;
+                        }
                     }
                     Err(error) if error.context_limit && batch.len() > 1 => {
                         // Split a too-large batch in half and reprocess both halves
@@ -1328,11 +1368,17 @@ impl<'a> BulkReviewer<'a> {
                 "reported": reported,
             })
         };
+        let changed_pages = page_writes
+            .iter()
+            .take(MAX_REPORTED_PAGES)
+            .map(|(page, count)| json!({ "page": page, "changes": count }))
+            .collect::<Vec<_>>();
         // Only the outcome stays in conversation history. The memory dump, the
         // metrics and the findings themselves are for this turn; carrying them into
         // every later request is the context pressure this worker exists to avoid,
         // while the failed page IDs are what the model needs in order to not redo
-        // the whole range.
+        // the whole range. The pages it changed stay, because "which pages did you
+        // touch?" is the question the user asks next.
         let history = json!({
             "total": total,
             "completed": completed,
@@ -1340,6 +1386,9 @@ impl<'a> BulkReviewer<'a> {
             "failed": failed,
             "flagged": flag_total,
             "cleared": cleared_total,
+            "scope": JOB_SCOPE,
+            "changed_pages": changed_pages.clone(),
+            "changed_page_total": page_writes.len(),
             "omitted_from_history": ["memory", "metrics", "flags", "cleared"],
         });
         let value = json!({
@@ -1349,6 +1398,9 @@ impl<'a> BulkReviewer<'a> {
             "failed": failed.clone(),
             "flags": findings(flag_total, flags),
             "cleared": findings(cleared_total, cleared),
+            "scope": JOB_SCOPE,
+            "changed_pages": changed_pages,
+            "changed_page_total": page_writes.len(),
             "memory": memory.serialize(),
             "metrics": json!({
                 "batches": metrics.total_batches,
@@ -1590,10 +1642,11 @@ impl<'a> BulkReviewer<'a> {
             );
         }
 
+        let page_writes = count_per_page(&decision.updates);
         let updates = decision
             .updates
             .iter()
-            .map(|(element, text)| json!({ "element": element, "text": text }))
+            .map(|update| json!({ "element": update.element, "text": update.text }))
             .collect::<Vec<_>>();
         // Findings already carry the page and element they concern, so the
         // conversation can point at the text instead of at an opaque alias.
@@ -1653,6 +1706,7 @@ impl<'a> BulkReviewer<'a> {
             metrics,
             flags: reported_flags,
             cleared: reported_cleared,
+            page_writes,
         })
     }
 }
@@ -1665,6 +1719,8 @@ struct ReviewBatchResult {
     flags: Vec<Finding>,
     /// Translations this code erased, with the argument each was erased on.
     cleared: Vec<Finding>,
+    /// Pages this batch wrote, and how many elements on each.
+    page_writes: BTreeMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -2473,9 +2529,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            decision.updates,
-            vec![("e1".to_owned(), Some("olá novo".to_owned()))]
+            decision.updates.len(),
+            1,
+            "the readable alias still applies"
         );
+        assert_eq!(decision.updates[0].element, "e1");
+        assert_eq!(decision.updates[0].text.as_deref(), Some("olá novo"));
         assert_eq!(decision.flags.len(), 1, "the first answer for e1 wins");
         let unresolved = decision
             .unresolved
@@ -2531,6 +2590,21 @@ mod tests {
     }
 
     #[test]
+    fn writes_are_counted_per_page_so_the_report_can_name_them() {
+        let write = |page: &str, element: &str| Applied {
+            page: page.to_owned(),
+            element: element.to_owned(),
+            text: Some("x".to_owned()),
+        };
+        let counts = count_per_page(&[write("p2", "e1"), write("p1", "e2"), write("p2", "e3")]);
+        assert_eq!(
+            counts.into_iter().collect::<Vec<_>>(),
+            vec![("p1".to_owned(), 1), ("p2".to_owned(), 2)],
+            "sorted by page, so the same job reports the same list twice"
+        );
+    }
+
+    #[test]
     fn rejects_bad_memory_updates() {
         let elements = [element("e1", "Oi", Some("Olá"), json!({}))];
         let context = batch(&elements);
@@ -2566,7 +2640,12 @@ mod tests {
             &batch(&elements),
         )
         .unwrap();
-        assert_eq!(decision.updates, vec![("e1".to_owned(), None)]);
+        assert_eq!(decision.updates.len(), 1);
+        assert_eq!(
+            decision.updates[0].page, "p1",
+            "the write names the page to open"
+        );
+        assert_eq!(decision.updates[0].text, None);
         assert_eq!(decision.cleared.len(), 1);
         assert!(
             decision.flags.is_empty(),
@@ -3133,6 +3212,23 @@ mod tests {
             invocation.value["cleared"]["reported"][0]["element"].as_str(),
             Some("p1e1"),
             "the report names the project element, never the batch alias"
+        );
+        assert_eq!(invocation.value["changed_page_total"].as_u64(), Some(1));
+        assert_eq!(
+            invocation.value["changed_pages"][0]["changes"].as_u64(),
+            Some(1),
+            "the report says which page to open"
+        );
+        assert_eq!(
+            invocation.history["changed_pages"][0]["page"].as_str(),
+            Some("p1"),
+            "the pages survive into later turns, the findings do not"
+        );
+        assert!(
+            invocation.value["scope"]
+                .as_str()
+                .is_some_and(|scope| scope.starts_with("translation text only")),
+            "the job has to say what it did not look at"
         );
     }
 
