@@ -4,13 +4,13 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
-    Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
-    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RegionSpec,
-    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText, TextContentRef,
-    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind, TextRegion,
-    TextRole, Translation as SceneTranslation, Typography as SceneTypography,
-    Visibility as SceneVisibility,
+    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, ComponentOwner, EntityChange,
+    EntityId, EntityOrigin, Geometry as SceneGeometry, Group as SceneGroup, Origin,
+    Page as ScenePage, PageDraft, Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer,
+    RasterLayerKind, Region as SceneRegion, RegionSpec, RemovePolicy, Revision, Session, Snapshot,
+    SourceText as SceneSourceText, TextContentRef, TextGroup as SceneTextGroup,
+    TextLayout as SceneTextLayout, TextLayoutKind, TextRegion, TextRole,
+    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -1002,6 +1002,47 @@ impl Project {
         Ok(self.session.commit(patch).await?)
     }
 
+    /// The pages a commit actually touched. The document can move without the screen
+    /// moving — only the active page is ever presented — so a write that lands on
+    /// another page has to come back with its page or the agent cannot tell the user
+    /// where to look.
+    pub(crate) fn touched_pages(commit: &Commit) -> Result<Vec<EntityId>> {
+        let snapshot = &commit.snapshot;
+        let changed = commit
+            .changes
+            .entities
+            .iter()
+            .map(|change| match change {
+                EntityChange::Inserted(entity) | EntityChange::Removed(entity) => *entity,
+            })
+            .chain(commit.changes.hierarchy.iter().copied())
+            .chain(
+                commit
+                    .changes
+                    .components
+                    .iter()
+                    .filter_map(|change| match change.owner {
+                        ComponentOwner::Entity(entity) => Some(entity),
+                        ComponentOwner::Project | ComponentOwner::Relation(_) => None,
+                    }),
+            );
+        let mut pages = Vec::new();
+        for entity in changed {
+            let mut current = Some(entity);
+            while let Some(id) = current {
+                if snapshot.component::<ScenePage>(id)?.is_some() {
+                    if !pages.contains(&id) {
+                        pages.push(id);
+                    }
+                    break;
+                }
+                current = snapshot.parent(id)?;
+            }
+        }
+        pages.sort_unstable();
+        Ok(pages)
+    }
+
     pub(crate) fn page(snapshot: &Snapshot, page: EntityId) -> Result<Page> {
         let value = snapshot.page(page)?.page()?;
         let source = Self::asset_id(snapshot, page, "source")?;
@@ -1856,6 +1897,49 @@ mod tests {
             // The score reaches the reviewer at two decimals, not as raw model noise.
             assert_eq!(text.evidence.score, *score);
         }
+    }
+
+    #[tokio::test]
+    async fn touched_pages_names_the_page_a_commit_changed() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let first = setup
+            .add_page(PageDraft::new("first", 100.0, 100.0), At::End)
+            .unwrap();
+        let second = setup
+            .add_page(PageDraft::new("second", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+        let frame = Frame {
+            x: 5.0,
+            y: 5.0,
+            width: 40.0,
+            height: 20.0,
+            angle_degrees: 0.0,
+        };
+        let (_, on_first) = project.add_text_box(first, frame).await.unwrap();
+        let (_, on_second) = project.add_text_box(second, frame).await.unwrap();
+
+        // A layer is not what the user navigates to: the report has to name its page.
+        let commit = project
+            .set_translations(vec![(on_second, Some("Olá".to_owned()))])
+            .await
+            .unwrap();
+        assert_eq!(Project::touched_pages(&commit).unwrap(), vec![second]);
+
+        let commit = project
+            .set_translations(vec![
+                (on_second, Some("Tchau".to_owned())),
+                (on_first, Some("Oi".to_owned())),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(
+            Project::touched_pages(&commit).unwrap(),
+            vec![first, second],
+            "every page the commit moved is reported, in a stable order"
+        );
     }
 
     #[test]

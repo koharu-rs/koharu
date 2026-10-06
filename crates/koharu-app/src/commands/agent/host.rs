@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use koharu_agent::{Control, Host, Invocation, Tool, ToolCall};
-use koharu_desktop::{Desktop, Frame};
+use koharu_desktop::{Desktop, Frame, Presentation};
 use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput, StopToken};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
@@ -65,20 +65,26 @@ impl KoharuHost {
             (commit, value, project.active_page(), project.info())
         };
         let revision = commit.revision;
-        self.synchronize(commit, page).await?;
+        // The document moving and the screen moving are different facts: only the
+        // active page is ever presented, so a write elsewhere has to name its page and
+        // say whether the screen took the change at all.
+        let pages = Project::touched_pages(&commit)?;
+        let presentation = self.synchronize(commit, page).await?;
         Invocation::changed(json!({
             "revision": revision,
             "project": project,
+            "pages": pages,
+            "presented": presentation,
             "result": value,
         }))
     }
 
-    async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<()> {
+    async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<Presentation> {
         let desktop = self.handle.state::<Desktop>();
-        desktop.synchronize(&commit.snapshot, page, &commit).await?;
+        let presentation = desktop.synchronize(&commit.snapshot, page, &commit).await?;
         let canvas = desktop.canvas_state();
         self.handle.state::<CanvasChannel>().channel.publish(canvas);
-        Ok(())
+        Ok(presentation)
     }
 
     async fn run_pipeline(&self, arguments: RunPipeline, control: &Control) -> Result<Invocation> {
@@ -216,6 +222,10 @@ impl Host for KoharuHost {
                     ),
                     definition::<RenamePage>("rename_page", "Rename a project page."),
                     definition::<MovePage>("move_page", "Move a page to a zero-based project index."),
+                    definition::<SelectPage>(
+                        "select_page",
+                        "Show one page in the editor. Moves the user's view without changing the document: use it to bring a page you just changed on screen, or to look at one page at a time.",
+                    ),
                     definition::<DeletePages>("delete_pages", "Delete pages and their contents."),
                     definition::<AddTextBox>("add_text_box", "Add a paragraph text box to a page."),
                     definition::<SetText>("set_source_text", "Replace an element's source text."),
@@ -314,6 +324,32 @@ impl Host for KoharuHost {
                         "high",
                     ),
                 )
+            }
+            "select_page" => {
+                let arguments: SelectPage = arguments(&call)?;
+                let page = entity(&arguments.page)?;
+                let (label, snapshot) = {
+                    let current = self.handle.state::<CurrentProject>();
+                    let mut current = current.project.lock().await;
+                    let project = current.as_mut().context("no project is open")?;
+                    project.select_page(page)?;
+                    let snapshot = project.snapshot();
+                    (snapshot.page(page)?.page()?.label, snapshot)
+                };
+                // A view move, not a document change: no commit, no undo step, and the
+                // revision the canvas gestures are checked against stays the frame's
+                // own. `presented` says whether the screen actually took it.
+                let desktop = self.handle.state::<Desktop>();
+                let presentation = desktop.show_page(&snapshot, Some(page)).await?;
+                if presentation.presented() {
+                    let canvas = desktop.canvas_state();
+                    self.handle.state::<CanvasChannel>().channel.publish(canvas);
+                }
+                Invocation::read(json!({
+                    "page": page,
+                    "label": label,
+                    "presented": presentation,
+                }))
             }
             "rename_page" => {
                 let arguments: RenamePage = arguments(&call)?;
@@ -597,6 +633,11 @@ struct ListFonts {}
 #[derive(Deserialize, JsonSchema)]
 struct InspectPages {
     pages: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct SelectPage {
+    page: String,
 }
 
 #[derive(Deserialize, JsonSchema)]

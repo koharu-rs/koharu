@@ -19,6 +19,7 @@ Any review or revision of translations goes to review_translations_job — one p
 Use inspect_pages for layout and presentation — geometry, typography, layers, visibility — and view_page only when rendered artwork must be read. Their detailed results stay in the current turn; read them again in a later turn if you still need them.
 Any other bulk edit still uses the per-element tools.
 Use the provided tools whenever the user asks to inspect or change the project. Never claim a change succeeded unless its tool result says it succeeded.
+A write result names the pages it changed and whether the screen shows them. Only the page the user is looking at can be repainted: bring the edited page on screen with select_page when the result is what the user asked to see, and otherwise say which page to open instead of implying the screen changed.
 All project changes are revisioned and reversible. Do not ask for permission. Do not produce a plan or expose internal steps; continue using tools until the request is complete or cannot be completed.
 Do not invent entity identifiers. Preserve artwork and existing authored content unless the user asks to change them."#;
 
