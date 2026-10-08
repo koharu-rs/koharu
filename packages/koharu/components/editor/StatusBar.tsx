@@ -13,8 +13,8 @@ interface StatusBarProps {
 export function StatusBar({ onZoomChange }: StatusBarProps) {
   const { t } = useTranslation()
   const page = usePage().data
-  const camera = useKoharuStore((state) => state.camera)
-  const zoom = Math.round(camera.zoom * 100)
+  // Selects the displayed percentage so translation-only camera changes do not re-render the bar.
+  const zoom = useKoharuStore((state) => Math.round(state.camera.zoom * 100))
 
   return (
     <footer className='flex h-7 shrink-0 items-center gap-3 border-t border-border/80 bg-[var(--surface-toolbar)] px-2.5 text-[10px] text-muted-foreground'>
