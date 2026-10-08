@@ -62,6 +62,8 @@
   "colorPicker": {
     "brushColor": "Color del pincel",
     "hexCode": "Código de color hexadecimal",
+    "recent": "Colores recientes",
+    "recentColor": "Color reciente {{color}}",
     "sampleCanvas": "Elegir un color del lienzo",
     "transparent": "Transparente"
   },

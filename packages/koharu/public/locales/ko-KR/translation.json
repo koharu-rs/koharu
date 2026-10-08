@@ -62,6 +62,8 @@
   "colorPicker": {
     "brushColor": "브러시 색상",
     "hexCode": "16진수 색상 코드",
+    "recent": "최근 색상",
+    "recentColor": "최근 색상 {{color}}",
     "sampleCanvas": "캔버스에서 색상 선택",
     "transparent": "투명"
   },

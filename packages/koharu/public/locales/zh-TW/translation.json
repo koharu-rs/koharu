@@ -62,6 +62,8 @@
   "colorPicker": {
     "brushColor": "筆刷顏色",
     "hexCode": "十六進位色彩代碼",
+    "recent": "最近使用的色彩",
+    "recentColor": "最近使用的色彩 {{color}}",
     "sampleCanvas": "從畫布選取色彩",
     "transparent": "透明"
   },
