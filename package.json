@@ -21,7 +21,7 @@
     "@types/node": "^26.6.3",
     "git-cliff": "^2.14.2",
     "kill-port": "^2.0.1",
-    "oxfmt": "^0.71.0",
+    "oxfmt": "^0.72.0",
     "playwright": "1.63.0",
     "sponsorkit": "^18.0.0",
     "typescript": "^7.0.2"
