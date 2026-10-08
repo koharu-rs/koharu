@@ -77,7 +77,7 @@ tokenizers = { version = "0.23.2", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
 sys-locale = "0.3.2"
 sysinfo = { version = "0.39.6", features = ["system"] }
-rars = "0.9.4"
+rars = "0.10.0"
 zip = { version = "8.6.0", features = ["deflate"] }
 dirs = "7.0.0"
 futures = "0.3.34"
