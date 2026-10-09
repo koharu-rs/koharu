@@ -7,10 +7,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, mpsc};
 
 use async_trait::async_trait;
-use koharu_pipeline::{Operation, Pipeline, Request, RunStatus, Stage};
+use koharu_pipeline::{Operation, Pipeline, PipelineConfig, Request, RunStatus, Stage};
 use koharu_rasterizer::{RasterOptions, Rasterizer};
 use koharu_renderer::Renderer;
 use koharu_scene::{AssetInput, AssetMetadata, AssetRole, PageDraft, Session};
+use koharu_translator::{Language, Model, ProvidersConfig, Translator};
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "action", content = "payload")]
@@ -28,9 +29,11 @@ enum ExtensionRequest {
         #[serde(rename = "transferId")]
         transfer_id: String,
         stages: Vec<Stage>,
-        #[serde(rename = "targetLanguage")]
-        target_language: Option<String>,
     },
+    #[serde(rename = "GetSettings")]
+    GetSettings,
+    #[serde(rename = "UpdateSettings")]
+    UpdateSettings { pipeline: PipelineConfig },
 }
 
 #[derive(Serialize, Debug)]
@@ -61,11 +64,24 @@ enum ExtensionResponse {
         inpainted_image: Option<String>, // Base64 png
         texts: Vec<TextOverlay>,
     },
+    Settings {
+        pipeline: PipelineConfig,
+        #[serde(rename = "translationModels")]
+        translation_models: Vec<Model>,
+        providers: Vec<Choice>,
+        languages: Vec<Choice>,
+    },
     Error {
         #[serde(rename = "transferId")]
         transfer_id: Option<String>,
         message: String,
     },
+}
+
+#[derive(Serialize, Debug)]
+struct Choice {
+    id: String,
+    name: String,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -89,7 +105,8 @@ struct AppState {
     pipeline: Pipeline,
     renderer: Renderer,
     rasterizer: Rasterizer,
-    config_handle: koharu_config::Config<koharu_pipeline::PipelineConfig>,
+    config_handle: koharu_config::Config<PipelineConfig>,
+    translation_models: tokio::sync::OnceCell<Vec<Model>>,
     uploads: Mutex<HashMap<String, UploadSession>>,
 }
 
@@ -117,7 +134,7 @@ async fn main() -> Result<()> {
     let device = koharu_ml::device(false);
     tracing::info!(?device, "Initialized compute device");
 
-    let active_config = koharu_pipeline::PipelineConfig::load()?;
+    let active_config = PipelineConfig::load()?;
     let mut config = {
         let config_read = active_config.read()?;
         tracing::info!(
@@ -144,11 +161,7 @@ async fn main() -> Result<()> {
 
     let config_handle = koharu_config::Config::memory(config);
 
-    let pipeline = Pipeline::from_config(
-        config_handle.clone(),
-        koharu_translator::ProvidersConfig::load()?,
-        device,
-    )?;
+    let pipeline = Pipeline::from_config(config_handle.clone(), ProvidersConfig::load()?, device)?;
 
     let renderer = Renderer::new()?;
     let rasterizer = Rasterizer::new()?;
@@ -158,6 +171,7 @@ async fn main() -> Result<()> {
         renderer,
         rasterizer,
         config_handle,
+        translation_models: tokio::sync::OnceCell::new(),
         uploads: Mutex::new(HashMap::new()),
     });
 
@@ -250,7 +264,6 @@ async fn handle_request(state: Arc<AppState>, request: ExtensionRequest, respons
         ExtensionRequest::Process {
             transfer_id,
             stages,
-            target_language,
         } => {
             let image_bytes = {
                 let mut uploads = state.uploads.lock().await;
@@ -286,15 +299,8 @@ async fn handle_request(state: Arc<AppState>, request: ExtensionRequest, respons
                 }
             };
 
-            if let Err(e) = run_pipeline(
-                state.clone(),
-                &transfer_id,
-                image_bytes,
-                stages,
-                target_language,
-                responses,
-            )
-            .await
+            if let Err(e) =
+                run_pipeline(state.clone(), &transfer_id, image_bytes, stages, responses).await
             {
                 let _ = responses.send(ExtensionResponse::Error {
                     transfer_id: Some(transfer_id),
@@ -302,7 +308,63 @@ async fn handle_request(state: Arc<AppState>, request: ExtensionRequest, respons
                 });
             }
         }
+        ExtensionRequest::GetSettings => send_settings(&state, responses).await,
+        ExtensionRequest::UpdateSettings { pipeline } => match apply_settings(&state, pipeline) {
+            Ok(()) => send_settings(&state, responses).await,
+            Err(e) => {
+                let _ = responses.send(ExtensionResponse::Error {
+                    transfer_id: None,
+                    message: format!("Failed to apply settings: {e:#}"),
+                });
+            }
+        },
     }
+}
+
+fn apply_settings(state: &AppState, pipeline: PipelineConfig) -> Result<()> {
+    pipeline.validate()?;
+    *state.config_handle.write()? = pipeline;
+    Ok(())
+}
+
+// Sends the current settings to the extension. Used in extension to configure the engine
+async fn send_settings(state: &AppState, responses: &Responses) {
+    let settings = async {
+        let pipeline = state.config_handle.read()?.clone();
+        let providers = ProvidersConfig::default()
+            .entries()
+            .into_iter()
+            .map(|config| {
+                let provider = config.provider();
+                Choice {
+                    id: provider.to_string(),
+                    name: provider.name().to_owned(),
+                }
+            })
+            .collect();
+        let languages = Language::ALL
+            .iter()
+            .map(|language| Choice {
+                id: language.tag().to_owned(),
+                name: language.to_string(),
+            })
+            .collect();
+        anyhow::Ok(ExtensionResponse::Settings {
+            pipeline,
+            translation_models: state
+                .translation_models
+                .get_or_try_init(Translator::models)
+                .await?
+                .clone(),
+            providers,
+            languages,
+        })
+    }
+    .await;
+    let _ = responses.send(settings.unwrap_or_else(|e| ExtensionResponse::Error {
+        transfer_id: None,
+        message: format!("Failed to read settings: {e:#}"),
+    }));
 }
 
 fn progress_response(transfer_id: &str, progress: koharu_pipeline::Progress) -> ExtensionResponse {
@@ -334,7 +396,6 @@ async fn run_pipeline(
     transfer_id: &str,
     image_bytes: Vec<u8>,
     stages: Vec<Stage>,
-    target_language: Option<String>,
     responses: &Responses,
 ) -> Result<()> {
     // 1. Create a scene session
@@ -372,16 +433,6 @@ async fn run_pipeline(
 
     let patch = edit.finish()?;
     session.commit(patch).await?;
-
-    // Update target language in the live configuration if requested
-    if let Some(ref lang_str) = target_language {
-        if let Ok(lang) = koharu_translator::Language::try_from(lang_str.as_str()) {
-            let mut write_guard = state.config_handle.write()?;
-            if write_guard.translation.target_language != lang {
-                write_guard.translation.target_language = lang;
-            }
-        }
-    }
 
     // 3. Prepare execution request
     let progress_sink: koharu_pipeline::ProgressSink = {
