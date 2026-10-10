@@ -148,6 +148,7 @@ impl StageProcessor for Processor {
 struct Model {
     network: Arc<Mutex<KoharuLayoutRFDetrSeg2XL>>,
     thresholds: KoharuLayoutThresholds,
+    text_region_scale: f32,
 }
 
 impl Model {
@@ -161,6 +162,7 @@ impl Model {
         Ok(Self {
             network: Arc::new(Mutex::new(network)),
             thresholds,
+            text_region_scale: config.text_region_scale.unwrap_or(100.0) / 100.0,
         })
     }
 
@@ -172,9 +174,14 @@ impl Model {
             .await?
             .ok_or_else(|| anyhow!("page {page} has no source image"))?;
         let output = self.detect(image.clone()).await?;
-        let DetectionModel::KoharuLayoutRFDetrSeg2XL(config) = &self.config;
-        let scale = config.text_region_scale.unwrap_or(100.0) / 100.0;
-        build_patch(&input, &image, output, &generation(PRODUCER, MODEL_ID)?, scale).await
+        build_patch(
+            &input,
+            &image,
+            output,
+            &generation(PRODUCER, MODEL_ID)?,
+            self.text_region_scale,
+        )
+        .await
     }
 
     async fn detect(&self, image: Arc<DynamicImage>) -> Result<KoharuLayoutDetections> {
