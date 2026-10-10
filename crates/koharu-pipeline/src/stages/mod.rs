@@ -12,7 +12,7 @@ use koharu_scene::{Edit, EntityId, Generation, Patch, ProducerId, Snapshot};
 pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
 pub use inpainting::{Flux2KleinConfig, RoremMixedConfig};
 
-use crate::{Bounds, ImageCache, InpaintingMask, PipelineConfig, Stage};
+use crate::{Bounds, DetectionModel, ImageCache, InpaintingMask, PipelineConfig, Stage};
 
 #[derive(Clone)]
 pub(crate) struct StageInput {
@@ -82,10 +82,21 @@ impl Stages {
         translator: koharu_translator::Translator,
         device: &koharu_ml::Device,
     ) -> Result<Self> {
+        let detection_config = config.detection()?;
+        let text_region_scale = match &detection_config {
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) => settings
+                .text_region_scale
+                .filter(|scale| scale.is_finite() && (50.0..=200.0).contains(scale))
+                .unwrap_or(100.0),
+        };
         Ok(Self {
-            detection: detection::Processor::new(config.detection()?, device.clone()),
+            detection: detection::Processor::new(detection_config, device.clone()),
             ocr: ocr::Processor::new(config.ocr.clone(), device.clone()),
-            translation: translation::Processor::new(config.translation.clone(), translator),
+            translation: translation::Processor::new(
+                config.translation.clone(),
+                translator,
+                text_region_scale / 100.0,
+            ),
             inpainting: inpainting::Processor::new(config.inpainting()?, device.clone())?,
         })
     }

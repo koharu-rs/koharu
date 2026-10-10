@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use koharu_scene::{Authored, LanguageTag, Origin, SourceText, Translation};
+use koharu_scene::{Authored, FitsTo, FlowsIn, Geometry, LanguageTag, Origin, Point, SourceText, Translation};
 use koharu_translator::{TranslationRequest, Translator};
 
 use crate::TranslationConfig;
@@ -12,11 +12,20 @@ const PRODUCER: &str = "dev.koharu.pipeline.translation";
 pub(super) struct Processor {
     config: TranslationConfig,
     translator: Translator,
+    text_region_scale: f64,
 }
 
 impl Processor {
-    pub(super) fn new(config: TranslationConfig, translator: Translator) -> Self {
-        Self { config, translator }
+    pub(super) fn new(
+        config: TranslationConfig,
+        translator: Translator,
+        text_region_scale: f32,
+    ) -> Self {
+        Self {
+            config,
+            translator,
+            text_region_scale: f64::from(text_region_scale),
+        }
     }
 }
 
@@ -46,12 +55,12 @@ impl StageProcessor for Processor {
                     continue;
                 };
                 if !source.text.value.trim().is_empty() {
-                    targets.push((content.id(), source.text.value));
+                    targets.push((content.id(), source.text.value, layer.id()));
                 }
             }
         }
         let mut request = TranslationRequest::new(
-            targets.iter().map(|(_, source)| source.clone()),
+            targets.iter().map(|(_, source, _)| source.clone()),
             self.config.target_language,
         );
         if let Some(instructions) = self.config.instructions.as_deref() {
@@ -69,11 +78,25 @@ impl StageProcessor for Processor {
         let language = LanguageTag::new(self.config.target_language.tag())?;
         let generated = generation(PRODUCER, provider)?;
         let mut edit = input.scene.edit_as(generated.clone());
-        for (entity, _) in &targets {
+        for (entity, _, layer) in &targets {
             edit.observe::<SourceText>(*entity)?;
             edit.observe::<Translation>(*entity)?;
+            let target = if let Some(relation) = input.scene.relation_from::<FlowsIn>(*layer)? {
+                Some(relation.value().target)
+            } else if let Some(relation) = input.scene.relation_from::<FitsTo>(*layer)? {
+                Some(relation.value().target)
+            } else {
+                None
+            };
+            if let Some(target) = target
+                && let Some(geometry) = input.scene.component::<Geometry>(target)?
+            {
+                edit.observe::<Geometry>(target)?;
+                edit.observe::<Geometry>(*layer)?;
+                edit.set(*layer, &scale_geometry(&geometry, self.text_region_scale))?;
+            }
         }
-        for ((entity, source), text) in targets.into_iter().zip(translated) {
+        for ((entity, source, _layer), text) in targets.into_iter().zip(translated) {
             if input
                 .scene
                 .component::<Translation>(entity)?
@@ -95,5 +118,32 @@ impl StageProcessor for Processor {
             )?;
         }
         finish(edit)
+    }
+}
+
+fn scale_geometry(geometry: &Geometry, scale: f64) -> Geometry {
+    let (min_x, max_x, min_y, max_y) = geometry.points.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+        |(min_x, max_x, min_y, max_y), point| {
+            (
+                min_x.min(point.x),
+                max_x.max(point.x),
+                min_y.min(point.y),
+                max_y.max(point.y),
+            )
+        },
+    );
+    let center_x = (min_x + max_x) * 0.5;
+    let center_y = (min_y + max_y) * 0.5;
+    Geometry {
+        origin: geometry.origin.clone(),
+        points: geometry
+            .points
+            .iter()
+            .map(|point| Point {
+                x: center_x + (point.x - center_x) * scale,
+                y: center_y + (point.y - center_y) * scale,
+            })
+            .collect(),
     }
 }

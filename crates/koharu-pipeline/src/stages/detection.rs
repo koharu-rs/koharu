@@ -146,7 +146,6 @@ impl StageProcessor for Processor {
 struct Model {
     network: Arc<Mutex<KoharuLayoutRFDetrSeg2XL>>,
     thresholds: KoharuLayoutThresholds,
-    text_region_scale: f32,
 }
 
 impl Model {
@@ -160,7 +159,6 @@ impl Model {
         Ok(Self {
             network: Arc::new(Mutex::new(network)),
             thresholds,
-            text_region_scale: config.text_region_scale.unwrap_or(100.0) / 100.0,
         })
     }
 
@@ -177,7 +175,6 @@ impl Model {
             &image,
             output,
             &generation(PRODUCER, MODEL_ID)?,
-            self.text_region_scale,
         )
         .await
     }
@@ -199,7 +196,6 @@ struct DetectedRegion<'a> {
     entity: EntityId,
     mask: &'a KoharuLayoutMask,
     area: u32,
-    geometry: Geometry,
 }
 
 struct DetectedText<'a> {
@@ -233,14 +229,13 @@ async fn build_patch(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
-    text_region_scale: f32,
 ) -> Result<koharu_scene::Patch> {
     let page = input.page;
     let mut edit = input.scene.edit_as(generation.clone());
     edit.observe_subtree(page)?;
     remove_previous_regions(input, &mut edit, generation)
         .context("failed to replace the previous detection regions")?;
-    write_page(input, &mut edit, page, image, output, generation, text_region_scale)
+    write_page(input, &mut edit, page, image, output, generation)
         .await
         .context("failed to write detection output")?;
     finish(edit)
@@ -282,7 +277,6 @@ async fn write_page(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
-    text_region_scale: f32,
 ) -> Result<()> {
     let KoharuLayoutDetections {
         mut detections,
@@ -300,9 +294,9 @@ async fn write_page(
     sort_by_layout(&mut detections);
 
     let image = image.to_rgb8();
-    let regions = write_regions(&input.scene, edit, page, &image, &detections, generation, text_region_scale)
+    let regions = write_regions(&input.scene, edit, page, &image, &detections, generation)
         .context("failed to write detected regions")?;
-    link_dialogue_regions(edit, &regions, generation, text_region_scale)
+    link_dialogue_regions(edit, &regions, generation)
         .context("failed to associate detected text with dialogue regions")?;
     write_masks(input, edit, page, &detections, size)
         .await
@@ -316,7 +310,6 @@ fn write_regions<'a>(
     image: &RgbImage,
     detections: &'a [KoharuLayoutDetection],
     generation: &Generation,
-    text_region_scale: f32,
 ) -> Result<PageRegions<'a>> {
     let mut regions = PageRegions::default();
     let inferred = detections
@@ -337,7 +330,7 @@ fn write_regions<'a>(
         None
     };
     for (index, (detection, inferred)) in detections.iter().zip(inferred).enumerate() {
-        match write_region(edit, page, detection, inferred, generation, text_region_scale)
+        match write_region(edit, page, detection, inferred, generation)
             .with_context(|| format!("failed to write {} detection {index}", detection.label))?
         {
             RegionOutput::Bubble(bubble) => regions.bubbles.push(bubble),
@@ -360,7 +353,6 @@ fn write_region<'a>(
     detection: &'a KoharuLayoutDetection,
     inferred: Option<InferredTypography>,
     generation: &Generation,
-    text_region_scale: f32,
 ) -> Result<RegionOutput<'a>> {
     let entity = edit
         .add_entity(page, At::End)
@@ -404,7 +396,6 @@ fn write_region<'a>(
                 entity,
                 mask: &detection.mask,
                 area: detection.area,
-                geometry,
             })
         } else {
             RegionOutput::Other
@@ -422,14 +413,6 @@ fn write_region<'a>(
             angle_degrees: None,
         },
     )?;
-    // Scale the final translated-text layout box, not the detected region itself.
-    let text_bbox = scale_bbox(detection.bbox, text_region_scale);
-    let text_geometry = inferred.map_or_else(
-        || rectangle_geometry(text_bbox),
-        |typography| rotated_rectangle_geometry(text_bbox, typography.angle_degrees),
-    );
-    edit.set(layer, &text_geometry)
-        .context("failed to set detected text box geometry")?;
     write_text_role(edit, content, "dev.koharu.text.free-text", generation)
         .context("failed to set the detected text role")?;
     edit.set(
@@ -468,14 +451,10 @@ fn link_dialogue_regions(
     edit: &mut koharu_scene::Edit,
     regions: &PageRegions<'_>,
     generation: &Generation,
-    text_region_scale: f32,
 ) -> Result<()> {
     for text in &regions.texts {
         let bubble = containing_bubble(&regions.bubbles, text);
         if let Some(bubble) = bubble {
-            let text_box_geometry = scale_geometry(&bubble.geometry, text_region_scale);
-            edit.set(text.layer, &text_box_geometry)
-                .context("failed to set dialogue text box geometry")?;
             edit.relate::<Inside>(text.entity, bubble.entity)?;
             edit.relate::<FlowsIn>(text.layer, bubble.entity)?;
             write_text_role(edit, text.content, "dev.koharu.text.dialogue", generation)?;
@@ -1324,47 +1303,6 @@ fn color_luminance(color: [u8; 3]) -> u32 {
     u32::from(color[0]) * 54 + u32::from(color[1]) * 183 + u32::from(color[2]) * 19
 }
 
-fn scale_geometry(geometry: &Geometry, scale: f32) -> Geometry {
-    let (min_x, max_x, min_y, max_y) = geometry.points.iter().fold(
-        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
-        |(min_x, max_x, min_y, max_y), point| {
-            (
-                min_x.min(point.x),
-                max_x.max(point.x),
-                min_y.min(point.y),
-                max_y.max(point.y),
-            )
-        },
-    );
-    let center_x = (min_x + max_x) * 0.5;
-    let center_y = (min_y + max_y) * 0.5;
-    let scale = f64::from(scale);
-    Geometry {
-        origin: geometry.origin.clone(),
-        points: geometry
-            .points
-            .iter()
-            .map(|point| Point {
-                x: center_x + (point.x - center_x) * scale,
-                y: center_y + (point.y - center_y) * scale,
-            })
-            .collect(),
-    }
-}
-
-fn scale_bbox([left, top, right, bottom]: [f32; 4], scale: f32) -> [f32; 4] {
-    let center_x = (left + right) / 2.0;
-    let center_y = (top + bottom) / 2.0;
-    let half_width = (right - left).max(0.0) * scale / 2.0;
-    let half_height = (bottom - top).max(0.0) * scale / 2.0;
-    [
-        (center_x - half_width).max(0.0),
-        (center_y - half_height).max(0.0),
-        (center_x + half_width),
-        (center_y + half_height),
-    ]
-}
-
 fn rectangle_geometry([left, top, right, bottom]: [f32; 4]) -> Geometry {
     Geometry::rectangle(
         f64::from(left),
@@ -2028,7 +1966,6 @@ mod tests {
                             entity: bubble,
                             mask: &bubble_mask,
                             area: 1,
-                            geometry: Geometry::rectangle(10.0, 10.0, 80.0, 80.0),
                         }],
                         texts: vec![DetectedText {
                             entity: region,
@@ -2039,7 +1976,6 @@ mod tests {
                         }],
                     },
                     &generation,
-                    1.0,
                 )
                 .unwrap();
                 ids = Some((bubble, region, layer));
@@ -2325,7 +2261,7 @@ mod tests {
         let mut layer = None;
         let patch = snapshot
             .patch(|edit| {
-                let output = write_region(edit, page, &detection, inferred, &generation, 1.0).unwrap();
+                let output = write_region(edit, page, &detection, inferred, &generation).unwrap();
                 let RegionOutput::Text(text) = output else {
                     panic!("expected a text region");
                 };
