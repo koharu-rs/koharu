@@ -137,6 +137,14 @@ function ModelOptions({
             step={0.05}
             onChange={(panel_threshold) => onChange({ ...model, panel_threshold })}
           />
+          <NumberField
+            label="Text region size (%)"
+            value={model.text_region_scale ?? 100}
+            min={50}
+            max={200}
+            step={5}
+            onChange={(text_region_scale) => onChange({ ...model, text_region_scale })}
+          />
         </div>
       )
     case 'flux2-klein':
