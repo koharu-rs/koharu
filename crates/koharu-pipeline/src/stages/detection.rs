@@ -2277,7 +2277,7 @@ mod tests {
         let mut layer = None;
         let patch = snapshot
             .patch(|edit| {
-                let output = write_region(edit, page, &detection, inferred, &generation).unwrap();
+                let output = write_region(edit, page, &detection, inferred, &generation, 1.0).unwrap();
                 let RegionOutput::Text(text) = output else {
                     panic!("expected a text region");
                 };
