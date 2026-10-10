@@ -228,7 +228,7 @@ async fn infer_text<M: Send + 'static>(
     targets: Vec<OcrTarget>,
     inference: impl Fn(&M, &DynamicImage) -> Result<String> + Send + Sync + 'static,
 ) -> Result<Vec<OcrResult>> {
-    tokio::task::spawn_blocking(move || {
+    tokio_rayon::spawn(move || {
         let model = model
             .lock()
             .map_err(|_| anyhow!("OCR model lock is poisoned"))?;
@@ -246,7 +246,6 @@ async fn infer_text<M: Send + 'static>(
             .collect()
     })
     .await
-    .context("OCR task panicked")?
 }
 
 // Manga OCR can emit replacement-box glyphs for an isolated Japanese ellipsis.

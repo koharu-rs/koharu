@@ -28,6 +28,7 @@ icu_segmenter = { workspace = true, features = ["compiled_data"] }
 jieba-rs = { workspace = true }
 unicode-bidi = { workspace = true }
 fontique = { workspace = true }
+futures = { workspace = true }
 parking_lot = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
@@ -35,6 +36,7 @@ serde_json = { workspace = true }
 specta = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-rayon = { workspace = true }
 tracing = { workspace = true }
 vello = { workspace = true }
 webp = { workspace = true }

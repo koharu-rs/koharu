@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use koharu_runtime::HuggingFaceFile;
+
 use crate::{ModelGeneration, ModelSelection, QuantizationDefinition};
 
 pub(crate) const DEFAULT_MODEL: &str = "gemma4-12b-it";
@@ -1049,25 +1051,19 @@ pub(crate) struct ResolvedLocalModel {
 }
 
 impl LocalModelDescriptor {
+    pub(crate) fn file(self, filename: &'static str) -> HuggingFaceFile<'static> {
+        HuggingFaceFile::pinned(self.repository, self.revision, filename)
+    }
+
     pub(crate) async fn resolve(
         self,
         selection: &ModelSelection,
     ) -> anyhow::Result<ResolvedLocalModel> {
         let filename = self.filename(selection.quantization.as_deref())?;
-        let model =
-            koharu_runtime::HuggingFaceFile::pinned(self.repository, self.revision, filename)
-                .resolve();
+        let model = self.file(filename).resolve();
         let projector = async {
             match self.projector {
-                Some(filename) => Ok(Some(
-                    koharu_runtime::HuggingFaceFile::pinned(
-                        self.repository,
-                        self.revision,
-                        filename,
-                    )
-                    .resolve()
-                    .await?,
-                )),
+                Some(filename) => Ok(Some(self.file(filename).resolve().await?)),
                 None => Ok(None),
             }
         };

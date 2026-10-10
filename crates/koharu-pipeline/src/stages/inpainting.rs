@@ -188,7 +188,7 @@ impl Model {
                 let model = model.clone();
                 (
                     "lama",
-                    tokio::task::spawn_blocking(move || -> Result<DynamicImage> {
+                    tokio_rayon::spawn(move || -> Result<DynamicImage> {
                         let model = model
                             .lock()
                             .map_err(|_| anyhow!("LaMa model lock is poisoned"))?;
@@ -206,15 +206,14 @@ impl Model {
                             },
                         )
                     })
-                    .await
-                    .context("LaMa task panicked")??,
+                    .await?,
                 )
             }
             Self::Aot(model) => {
                 let model = model.clone();
                 (
                     "aot-inpainting",
-                    tokio::task::spawn_blocking(move || -> Result<DynamicImage> {
+                    tokio_rayon::spawn(move || -> Result<DynamicImage> {
                         let model = model
                             .lock()
                             .map_err(|_| anyhow!("AOT model lock is poisoned"))?;
@@ -228,8 +227,7 @@ impl Model {
                             },
                         )
                     })
-                    .await
-                    .context("AOT task panicked")??,
+                    .await?,
                 )
             }
             Self::Flux { model, config } => {
@@ -237,7 +235,7 @@ impl Model {
                 let config = config.clone();
                 (
                     "flux2-klein",
-                    tokio::task::spawn_blocking(move || -> Result<DynamicImage> {
+                    tokio_rayon::spawn(move || -> Result<DynamicImage> {
                         let model = model
                             .lock()
                             .map_err(|_| anyhow!("FLUX model lock is poisoned"))?;
@@ -257,8 +255,7 @@ impl Model {
                             },
                         )
                     })
-                    .await
-                    .context("FLUX task panicked")??,
+                    .await?,
                 )
             }
             Self::Rorem { model, config } => {
@@ -266,7 +263,7 @@ impl Model {
                 let config = config.clone();
                 (
                     "rorem-mixed",
-                    tokio::task::spawn_blocking(move || -> Result<DynamicImage> {
+                    tokio_rayon::spawn(move || -> Result<DynamicImage> {
                         let model = model
                             .lock()
                             .map_err(|_| anyhow!("RORem model lock is poisoned"))?;
@@ -286,8 +283,7 @@ impl Model {
                             },
                         )
                     })
-                    .await
-                    .context("RORem task panicked")??,
+                    .await?,
                 )
             }
         };

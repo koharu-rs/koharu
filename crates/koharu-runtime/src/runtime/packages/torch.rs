@@ -12,7 +12,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "v2.13.0.6";
+const RELEASE: &str = "v2.13.0.7";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub enum Torch {
@@ -154,7 +154,7 @@ impl RuntimePackage for Torch {
                     Cuda::Rand10,
                     Cuda::Sparse12,
                     Cuda::Solver12,
-                    Cuda::Dnn920,
+                    Cuda::Dnn925,
                 ];
                 Ok(packages.into_iter().map(Component::Cuda).collect())
             }

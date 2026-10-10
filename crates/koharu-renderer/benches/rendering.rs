@@ -83,6 +83,42 @@ async fn fixture() -> Fixture {
     }
 }
 
+async fn page_frame(width: u32, height: u32) -> koharu_renderer::Frame {
+    let mut session = Session::memory().await.unwrap();
+    let source = AssetRole::new("source").unwrap();
+    let mut page = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let id = edit.add_page(
+                PageDraft::new("bench", f64::from(width), f64::from(height)),
+                At::End,
+            )?;
+            edit.set_asset(
+                id,
+                &source,
+                AssetInput::new(
+                    png(width, height, [240, 240, 240, 255]),
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(width),
+                        height: Some(height),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            page = Some(id);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(create).await.unwrap().snapshot;
+    Renderer::new()
+        .unwrap()
+        .render(&snapshot, page.unwrap())
+        .await
+        .unwrap()
+}
+
 fn rendering_benchmark(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let fixture = runtime.block_on(fixture());
@@ -139,7 +175,29 @@ fn rendering_benchmark(c: &mut Criterion) {
                 black_box(rasterizer.rasterize(&raster_frame, RasterOptions::default())).unwrap();
             });
         });
+
+        let mut group = c.benchmark_group("renderer");
+        group.sample_size(20);
+        for (width, height) in [(4096, 6144), (8192, 8192)] {
+            let page = runtime
+                .block_on(page_frame(width, height))
+                .raster_frame()
+                .unwrap();
+            group.bench_function(format!("rasterize_warm_{width}x{height}_1_layer"), |b| {
+                b.iter(|| {
+                    black_box(rasterizer.rasterize(&page, RasterOptions::default())).unwrap();
+                });
+            });
+        }
+        group.finish();
     }
+
+    let mut group = c.benchmark_group("rasterizer");
+    group.sample_size(10);
+    group.bench_function("new", |b| {
+        b.iter(|| black_box(Rasterizer::new()).unwrap());
+    });
+    group.finish();
 }
 
 criterion_group!(benches, rendering_benchmark);

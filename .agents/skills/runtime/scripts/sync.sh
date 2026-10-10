@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 source_tag() {
     local repository=$1
     local release=$2
@@ -11,13 +13,13 @@ source_tag() {
     printf '%s' "$source"
 }
 
-llama_release=$(gh api 'repos/koharu-rs/llama/releases?per_page=1' --jq '.[0].tag_name')
-diffusion_release=$(gh api 'repos/koharu-rs/diffusion/releases?per_page=1' --jq '.[0].tag_name')
+llama_release=$(gh api 'repos/koharu-rs/llama/releases/latest' --jq '.tag_name')
+diffusion_release=$(gh api 'repos/koharu-rs/diffusion/releases/latest' --jq '.tag_name')
 llama=$(source_tag koharu-rs/llama "$llama_release")
 diffusion=$(source_tag koharu-rs/diffusion "$diffusion_release")
 
 while read -r source target; do
-    curl -sL "https://raw.githubusercontent.com/ggml-org/llama.cpp/$llama/$source" -o "$target"
+    curl -fsSL "https://raw.githubusercontent.com/ggml-org/llama.cpp/$llama/$source" -o "$target"
 done <<'EOF'
 include/llama.h crates/koharu-llama-sys/include/llama.h
 ggml/include/gguf.h crates/koharu-llama-sys/include/gguf.h
@@ -30,7 +32,7 @@ tools/mtmd/mtmd.h crates/koharu-llama-sys/include/mtmd.h
 tools/mtmd/mtmd-helper.h crates/koharu-llama-sys/include/mtmd-helper.h
 EOF
 
-curl -sL \
+curl -fsSL \
     "https://raw.githubusercontent.com/leejet/stable-diffusion.cpp/$diffusion/include/stable-diffusion.h" \
     -o crates/koharu-diffusion-sys/include/stable-diffusion.h
 

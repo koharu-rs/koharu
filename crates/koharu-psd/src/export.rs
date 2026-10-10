@@ -41,9 +41,7 @@ pub async fn export_page(
         options,
     )
     .await?;
-    tokio::task::spawn_blocking(move || serialize(&document))
-        .await
-        .map_err(|error| PsdExportError::Task(error.to_string()))?
+    tokio_rayon::spawn(move || serialize(&document)).await
 }
 
 fn serialize(document: &Document) -> Result<Vec<u8>, PsdExportError> {

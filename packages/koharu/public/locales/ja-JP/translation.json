@@ -12,6 +12,7 @@
     "downloadingFiles_one": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_other": "{{count}}件のファイルをダウンロード中",
     "modelDownload": "モデルのダウンロード",
+    "pageLabel": "{{number}}ページ目: {{label}}",
     "processing": "処理中",
     "processingFailed": "処理に失敗しました。",
     "stop": "停止",
@@ -245,13 +246,12 @@
     "delete": "選択項目を削除",
     "discord": "Discord",
     "edit": "編集",
-    "exportPng": "PNGを書き出す…",
-    "exportPsd": "PSDを書き出す…",
+    "export": "プロジェクトを書き出す",
     "file": "ファイル",
     "fit": "ウィンドウに合わせる",
     "github": "GitHub",
     "help": "ヘルプ",
-    "importPages": "ページを読み込む…",
+    "import": "ページを読み込む",
     "process": "処理",
     "processLayers": "選択したレイヤーを処理",
     "processPages": "選択ページを処理",
@@ -297,7 +297,8 @@
     "pages": "ページ",
     "rename": "名前を変更",
     "renameDescription": "このページの新しい名前を入力します。",
-    "renameTitle": "ページ名を変更"
+    "renameTitle": "ページ名を変更",
+    "selected": "{{count}}件選択中"
   },
   "outputPicker": {
     "instructions": "翻訳指示",
@@ -318,7 +319,6 @@
     "translation": "原文を対象言語に翻訳します。"
   },
   "providerDescriptions": {
-    "atlas-cloud": "Atlas でホストされる言語モデル。",
     "caiyun": "Caiyun 翻訳 API。",
     "claude": "Anthropic Claude モデル。",
     "deepl": "DeepL 翻訳 API。",

@@ -26,8 +26,8 @@ pub enum Error {
         current: Revision,
         proposed: Revision,
     },
-    #[error("background storage task failed: {0}")]
-    Task(String),
+    #[error(transparent)]
+    Task(#[from] anyhow::Error),
     #[error("invalid storage data: {0}")]
     Invalid(String),
 }

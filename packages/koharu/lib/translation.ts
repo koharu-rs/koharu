@@ -14,11 +14,11 @@ export function modelKey(model: Model | ModelSelection): string {
   return `${model.provider}:${model.model ?? ''}`
 }
 
-export function modelSelection(model: Model): ModelSelection {
+export function modelSelection(model: Model, quantization: string | null): ModelSelection {
   return {
     provider: model.provider,
     model: model.model,
-    quantization: model.quantizations[0]?.id ?? null,
+    quantization,
     vision: model.vision,
     reasoning: model.reasoning,
   }

@@ -1,22 +1,28 @@
-import { defineConfig } from 'sponsorkit'
+import { defaultTiers, defineConfig, tierPresets } from 'sponsorkit'
 
-const atlasCloud = {
-  name: 'direct',
+const specialTier = {
+  title: 'Special Sponsors',
+  // Non-cash support sorts between backers (0) and past sponsors (-1).
+  monthlyDollars: -0.5,
+  preset: tierPresets.large,
+}
+
+/** @type {import('sponsorkit').Provider} */
+const specialSponsors = {
+  name: 'special-sponsors',
   async fetchSponsors() {
     return [
-      {
-        sponsor: {
-          type: 'Organization',
-          login: 'atlas-cloud',
-          name: 'Atlas Cloud',
-          avatarUrl: 'https://github.com/AtlasCloudAI.png?size=180',
-          websiteUrl: 'https://www.atlascloud.ai/',
-          linkUrl: 'https://www.atlascloud.ai/',
-        },
-        monthlyDollars: 150,
-        provider: 'direct',
+      { login: 'getsentry', name: 'Sentry', websiteUrl: 'https://sentry.io/' },
+      { login: 'mintlify', name: 'Mintlify', websiteUrl: 'https://www.mintlify.com/' },
+      { login: 'openai', name: 'OpenAI', websiteUrl: 'https://openai.com/' },
+    ].map((sponsor) => ({
+      sponsor: {
+        ...sponsor,
+        type: 'Organization',
+        avatarUrl: `https://github.com/${sponsor.login}.png`,
       },
-    ]
+      monthlyDollars: specialTier.monthlyDollars,
+    }))
   },
 }
 
@@ -27,8 +33,13 @@ export default defineConfig({
   },
   outputDir: '.',
   formats: ['svg'],
-  providers: [atlasCloud, 'github', 'patreon'],
+  providers: ['github', 'patreon', specialSponsors],
   width: 800,
+  includePastSponsors: true,
+  tiers: [...defaultTiers, specialTier],
+  onSvgGenerated(svg) {
+    return svg.replace(/[\t ]+$/gm, '')
+  },
   onSponsorsAllFetched(sponsors) {
     let anonymousCount = 0
 
@@ -43,7 +54,7 @@ export default defineConfig({
           ...sponsorship.sponsor,
           login: `anonymous-${anonymousCount}`,
           name: 'Anonymous',
-          avatarUrl: undefined,
+          avatarUrl: '',
           websiteUrl: undefined,
           linkUrl: undefined,
         },

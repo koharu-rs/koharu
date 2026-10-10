@@ -8,8 +8,6 @@ body:
       value: |
         Thank you for reporting an issue. Please search existing issues before submitting a new report.
 
-        If AI helped substantially with this report, briefly mention how.
-
   - type: textarea
     id: description
     attributes:
@@ -33,7 +31,7 @@ body:
   - type: textarea
     id: environment
     attributes:
-      label: Your environment
+      label: Environment
       description: Include your Koharu version and operating system. Add GPU and driver details if relevant and available.
       placeholder: |
         Koharu:

@@ -12,6 +12,7 @@
     "downloadingFiles_one": "{{count}}개 파일 다운로드 중",
     "downloadingFiles_other": "{{count}}개 파일 다운로드 중",
     "modelDownload": "모델 다운로드",
+    "pageLabel": "{{number}}페이지: {{label}}",
     "processing": "처리 중",
     "processingFailed": "처리에 실패했습니다.",
     "stop": "중지",
@@ -245,13 +246,12 @@
     "delete": "선택 항목 삭제",
     "discord": "Discord",
     "edit": "편집",
-    "exportPng": "PNG 내보내기…",
-    "exportPsd": "PSD 내보내기…",
+    "export": "프로젝트 내보내기",
     "file": "파일",
     "fit": "창에 맞춤",
     "github": "GitHub",
     "help": "도움말",
-    "importPages": "페이지 가져오기…",
+    "import": "페이지 가져오기",
     "process": "처리",
     "processLayers": "선택한 레이어 처리",
     "processPages": "선택한 페이지 처리",
@@ -297,7 +297,8 @@
     "pages": "페이지",
     "rename": "이름 바꾸기",
     "renameDescription": "이 페이지의 새 이름을 정하세요.",
-    "renameTitle": "페이지 이름 바꾸기"
+    "renameTitle": "페이지 이름 바꾸기",
+    "selected": "{{count}}개 선택됨"
   },
   "outputPicker": {
     "instructions": "번역 지침",
@@ -318,7 +319,6 @@
     "translation": "원문을 대상 언어로 번역합니다."
   },
   "providerDescriptions": {
-    "atlas-cloud": "Atlas에서 호스팅되는 언어 모델입니다.",
     "caiyun": "Caiyun 번역 API입니다.",
     "claude": "Anthropic Claude 모델입니다.",
     "deepl": "DeepL 번역 API입니다.",

@@ -12,6 +12,7 @@
     "downloadingFiles_one": "Скачивание файлов: {{count}}",
     "downloadingFiles_other": "Скачивание файлов: {{count}}",
     "modelDownload": "Скачивание модели",
+    "pageLabel": "Страница {{number}}: {{label}}",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
     "stop": "Остановить",
@@ -245,13 +246,12 @@
     "delete": "Удалить выбранное",
     "discord": "Discord",
     "edit": "Правка",
-    "exportPng": "Экспорт PNG…",
-    "exportPsd": "Экспорт PSD…",
+    "export": "Экспорт проекта",
     "file": "Файл",
     "fit": "Вписать в окно",
     "github": "GitHub",
     "help": "Справка",
-    "importPages": "Импортировать страницы…",
+    "import": "Импортировать страницы",
     "process": "Обработка",
     "processLayers": "Обработать выбранные слои",
     "processPages": "Обработать выбранные страницы",
@@ -297,7 +297,8 @@
     "pages": "Страницы",
     "rename": "Переименовать",
     "renameDescription": "Выберите новое имя для страницы.",
-    "renameTitle": "Переименовать страницу"
+    "renameTitle": "Переименовать страницу",
+    "selected": "Выбрано: {{count}}"
   },
   "outputPicker": {
     "instructions": "Инструкции по переводу",
@@ -318,7 +319,6 @@
     "translation": "Переводит исходный текст на целевой язык."
   },
   "providerDescriptions": {
-    "atlas-cloud": "Языковые модели, размещённые в Atlas.",
     "caiyun": "API перевода Caiyun.",
     "claude": "Модели Anthropic Claude.",
     "deepl": "API перевода DeepL.",

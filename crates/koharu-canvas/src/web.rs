@@ -31,7 +31,6 @@ use web_sys::{
 
 use crate::{cache::ResourceUsage, surface::SurfaceBlitter};
 
-const MAX_BRUSH_DIAMETER: f32 = 128.0;
 const RESOURCE_CACHE_BUDGET: u64 = 512 * 1024 * 1024;
 const MAX_CACHED_RESOURCES: usize = 1_024;
 const SAMPLE_ROW_BYTES: u64 = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u64;
@@ -1932,12 +1931,10 @@ fn validate_page_point(point: Point, size: (u32, u32)) -> Result<(), JsValue> {
 }
 
 fn validate_brush(diameter: f32) -> Result<(), JsValue> {
-    if diameter.is_finite() && diameter > 0.0 && diameter <= MAX_BRUSH_DIAMETER {
+    if diameter.is_finite() && diameter > 0.0 {
         Ok(())
     } else {
-        Err(js_message(format!(
-            "brush diameter must be in (0, {MAX_BRUSH_DIAMETER}]"
-        )))
+        Err(js_message(format!("brush diameter must be in (0, INF)")))
     }
 }
 

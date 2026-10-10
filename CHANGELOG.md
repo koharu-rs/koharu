@@ -1,3 +1,82 @@
+## [0.83.5](https://github.com/koharu-rs/koharu/compare/0.83.4..0.83.5) - 2026-09-22
+
+### 🐛 Bug Fixes
+
+- *(ci)* Recover incomplete release asset uploads - ([19430a0](https://github.com/koharu-rs/koharu/commit/19430a0810f83b0eb2f85045968301557c27ea8b))
+
+
+## [0.83.4](https://github.com/koharu-rs/koharu/compare/0.83.3..0.83.4) - 2026-09-17
+
+### 🐛 Bug Fixes
+
+- *(deps)* Align gpu-allocator Windows bindings - ([19197a7](https://github.com/koharu-rs/koharu/commit/19197a77481d4a36e2091dec163014886ff6743f))
+
+
+## [0.83.3](https://github.com/koharu-rs/koharu/compare/0.83.2..0.83.3) - 2026-09-16
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Force X11 ozone platform for Linux CEF ([#1110](https://github.com/koharu-rs/koharu/issues/1110)) - ([c1e9d23](https://github.com/koharu-rs/koharu/commit/c1e9d23e25e6568f53b827a82a91994467adede9))
+
+
+## [0.83.2](https://github.com/koharu-rs/koharu/compare/0.83.1..0.83.2) - 2026-09-15
+
+### 🐛 Bug Fixes
+
+- *(app)* Skip Windows store configuration in debug builds - ([3cb9791](https://github.com/koharu-rs/koharu/commit/3cb979116485d9a7deb59ee54f0fae6b48bb4274))
+- *(canvas)* Preserve authored text rotation - ([6d53328](https://github.com/koharu-rs/koharu/commit/6d5332817c96e493b14c6d6915881e078d968ea9))
+- *(renderer)* Preserve joined balloon text placement - ([b5f3c41](https://github.com/koharu-rs/koharu/commit/b5f3c41c589431a34c9c148074a057f7c176746f))
+- *(translator)* Cache model-listing client with five-second timeout ([#1103](https://github.com/koharu-rs/koharu/issues/1103)) - ([bc1a51b](https://github.com/koharu-rs/koharu/commit/bc1a51b67e50612a8dcbe00827ce22746c988d11))
+
+
+## [0.83.1](https://github.com/koharu-rs/koharu/compare/0.83.0..0.83.1) - 2026-09-15
+
+### 🐛 Bug Fixes
+
+- *(ci)* Install GTK 4 for Tauri v3 - ([7c34594](https://github.com/koharu-rs/koharu/commit/7c34594560f406098372f8a1867a700db6a2d938))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove Atlas Cloud provider and sponsorship - ([9e8698b](https://github.com/koharu-rs/koharu/commit/9e8698be9c85a4446cc99a3c310a24ec0a720ea7))
+
+
+## [0.83.0](https://github.com/koharu-rs/koharu/compare/0.82.1..0.83.0) - 2026-09-14
+
+### ⛰️  Features
+
+- *(activity)* Name the page a pipeline run is working on ([#1041](https://github.com/koharu-rs/koharu/issues/1041)) - ([1a65f3e](https://github.com/koharu-rs/koharu/commit/1a65f3e7ab1263c795a342e5614014faafb6a4b3))
+- *(navigator)* Say how many pages a selection covers ([#1096](https://github.com/koharu-rs/koharu/issues/1096)) - ([5ab47ee](https://github.com/koharu-rs/koharu/commit/5ab47ee738c9faa1e03f764bf93e850dcaa1149e))
+- *(ui)* Show download state for local translation models ([#1039](https://github.com/koharu-rs/koharu/issues/1039)) - ([d8a68ba](https://github.com/koharu-rs/koharu/commit/d8a68ba2f380a18199a68bf40c6633f9db1ae7fb))
+- Export a project as a CBZ archive ([#1095](https://github.com/koharu-rs/koharu/issues/1095)) - ([69e67f9](https://github.com/koharu-rs/koharu/commit/69e67f96337151b03890a774f4983acc207ff145))
+
+### 🐛 Bug Fixes
+
+- *(app)* Support ctrl and shift multi-select in the layer panel ([#1089](https://github.com/koharu-rs/koharu/issues/1089)) - ([eaa42f2](https://github.com/koharu-rs/koharu/commit/eaa42f240824796e3a0422ddd9c880c2cd2f2bd2))
+- *(ui)* Long project names pushing the delete button off screen ([#1093](https://github.com/koharu-rs/koharu/issues/1093)) - ([0704f7f](https://github.com/koharu-rs/koharu/commit/0704f7f81ad7a992b62eab642a4b6706f782af77))
+
+
+## [0.82.1](https://github.com/koharu-rs/koharu/compare/0.82.0..0.82.1) - 2026-09-11
+
+### 🐛 Bug Fixes
+
+- *(ci)* Pin AppImage helper source URL - ([a7431c5](https://github.com/koharu-rs/koharu/commit/a7431c5a5e7517cb7413309e4e4da5679efa20b1))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(app)* Default the processing scope to the selection ([#1088](https://github.com/koharu-rs/koharu/issues/1088)) - ([767e4d0](https://github.com/koharu-rs/koharu/commit/767e4d0441f986c18e55fc4e1af42f3dddfd860e))
+
+
+## [0.82.0](https://github.com/koharu-rs/koharu/compare/0.81.10..0.82.0) - 2026-09-11
+
+### ⛰️  Features
+
+- *(runtime)* Update native runtimes and CUDA 13.3 - ([67d507b](https://github.com/koharu-rs/koharu/commit/67d507b4cf3959208e87201f62b03ba771d3f372))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(scripts)* Add Kindle JP downloader - ([8ccfe9f](https://github.com/koharu-rs/koharu/commit/8ccfe9ffafd8037e06c8999213dd55a78a6f7b37))
+
+
 ## [0.81.9](https://github.com/koharu-rs/koharu/compare/0.81.8..0.81.9) - 2026-09-08
 
 ### 🐛 Bug Fixes

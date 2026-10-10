@@ -79,6 +79,7 @@ pub enum Layer {
         id: EntityId,
         parent: Option<EntityId>,
         geometry: Option<Geometry>,
+        angle_degrees: Option<f32>,
         visibility: LayerVisibility,
         content: Box<TextContent>,
         typography: Option<Typography>,
@@ -438,6 +439,7 @@ impl Project {
                 &SceneTextLayout {
                     origin: Origin::User,
                     kind,
+                    angle_degrees: Some(frame.angle_degrees),
                 },
             )?;
             layer = Some(added_layer);
@@ -565,12 +567,9 @@ impl Project {
         let updates = updates
             .into_iter()
             .map(|update| {
-                if snapshot
+                let layout = snapshot
                     .component::<SceneTextLayout>(update.layer)?
-                    .is_none()
-                {
-                    bail!("only text layers can change geometry");
-                }
+                    .context("only text layers can change geometry")?;
                 let content = Self::text_content(&snapshot, update.layer)?;
                 if update.points.is_none()
                     && snapshot
@@ -580,13 +579,16 @@ impl Project {
                 {
                     bail!("only automatically placed text can reset its geometry");
                 }
-                Ok((update, content))
+                Ok((update, content, layout))
             })
             .collect::<Result<Vec<_>>>()?;
         let patch = snapshot.patch(|edit| {
-            for (update, content) in updates {
+            for (update, content, mut layout) in updates {
                 edit.promote_entity_to_user(update.layer)?;
                 edit.promote_entity_to_user(content)?;
+                layout.origin = Origin::User;
+                layout.angle_degrees = None;
+                edit.set(update.layer, &layout)?;
                 match update.points {
                     Some(points) => edit.set(
                         update.layer,
@@ -708,25 +710,28 @@ impl Project {
 
     pub(crate) async fn set_geometries(
         &mut self,
-        geometries: impl IntoIterator<Item = (EntityId, SceneGeometry)>,
+        geometries: impl IntoIterator<Item = (EntityId, SceneGeometry, f32)>,
     ) -> Result<Commit> {
         let snapshot = self.snapshot();
         let geometries = geometries
             .into_iter()
-            .map(|(element, geometry)| {
-                if snapshot.component::<SceneTextLayout>(element)?.is_none() {
-                    bail!("only text layers can change geometry");
-                }
+            .map(|(element, geometry, angle_degrees)| {
+                let mut layout = snapshot
+                    .component::<SceneTextLayout>(element)?
+                    .context("only text layers can change geometry")?;
+                layout.origin = Origin::User;
+                layout.angle_degrees = Some(angle_degrees);
                 let content = Self::text_content(&snapshot, element)?;
-                Ok((element, geometry, content))
+                Ok((element, geometry, content, layout))
             })
             .collect::<Result<Vec<_>>>()?;
         let patch = snapshot.patch(|edit| {
-            for (element, mut geometry, content) in geometries {
+            for (element, mut geometry, content, layout) in geometries {
                 edit.promote_entity_to_user(element)?;
                 edit.promote_entity_to_user(content)?;
                 geometry.origin = Origin::User;
                 edit.set(element, &geometry)?;
+                edit.set(element, &layout)?;
             }
             Ok(())
         })?;
@@ -1017,6 +1022,7 @@ impl Project {
                 geometry: snapshot
                     .component::<SceneGeometry>(layer)?
                     .map(Self::geometry_view),
+                angle_degrees: layout.angle_degrees,
                 visibility,
                 content: Box::new(TextContent {
                     id: content.id(),

@@ -637,13 +637,11 @@ impl Fonts {
     }
 
     pub(crate) async fn families(&self) -> Result<Vec<FontFamily>> {
-        let system = self.ensure_system().await?;
+        let system = self.ensure_system().await;
         let catalog = self.catalog().await?;
         let mut families = BTreeMap::<String, FontFamily>::new();
 
-        let faces = tokio::task::spawn_blocking(move || system.lock().system_faces())
-            .await
-            .context("system font discovery worker stopped unexpectedly")?;
+        let faces = tokio_rayon::spawn(move || system.lock().system_faces()).await;
         for face in faces {
             let key = normalize(&face.family_name);
             let family = families.entry(key).or_insert_with(|| FontFamily {
@@ -771,7 +769,7 @@ impl Fonts {
     }
 
     pub(crate) async fn preview(&self, family_name: &str) -> Result<FontPreview> {
-        let system = self.ensure_system().await?;
+        let system = self.ensure_system().await;
         let catalog = self.catalog().await?;
         if let Some(face) = catalog.select(family_name, Attributes::default()) {
             let path =
@@ -783,7 +781,7 @@ impl Fonts {
                 .with_context(|| format!("failed to read {}", path.display()))
                 .map(FontPreview::Webp);
         }
-        tokio::task::spawn_blocking({
+        tokio_rayon::spawn({
             let family_name = family_name.to_owned();
             move || {
                 system
@@ -794,14 +792,13 @@ impl Fonts {
             }
         })
         .await
-        .context("font preview worker stopped unexpectedly")?
     }
 
     pub(crate) async fn prepare(&self, requests: &[FontRequest]) -> Result<()> {
         if requests.is_empty() {
             return Ok(());
         }
-        let system = self.ensure_system().await?;
+        let system = self.ensure_system().await;
         let missing = {
             let mut system = system.lock();
             requests
@@ -832,15 +829,11 @@ impl Fonts {
         Ok(())
     }
 
-    async fn ensure_system(&self) -> Result<Arc<Mutex<FontSystem>>> {
+    async fn ensure_system(&self) -> Arc<Mutex<FontSystem>> {
         self.system
-            .get_or_try_init(|| async {
-                tokio::task::spawn_blocking(|| Arc::new(Mutex::new(FontSystem::new())))
-                    .await
-                    .context("font-system worker stopped unexpectedly")
-            })
+            .get_or_init(|| tokio_rayon::spawn(|| Arc::new(Mutex::new(FontSystem::new()))))
             .await
-            .cloned()
+            .clone()
     }
 
     async fn catalog(&self) -> Result<&Arc<FontCatalog>> {
@@ -853,7 +846,7 @@ impl Fonts {
                 let bytes = tokio::fs::read(&path)
                     .await
                     .with_context(|| format!("failed to read {}", path.display()))?;
-                tokio::task::spawn_blocking(move || {
+                tokio_rayon::spawn(move || {
                     let index: CatalogIndex =
                         serde_json::from_slice(&bytes).context("invalid bundled font index")?;
                     if index.schema_version != FONT_INDEX_SCHEMA {
@@ -865,7 +858,6 @@ impl Fonts {
                     Ok(Arc::new(FontCatalog::from_index(index)))
                 })
                 .await
-                .context("font catalog worker stopped unexpectedly")?
             })
             .await
     }
@@ -885,7 +877,7 @@ impl Fonts {
             .await
             .with_context(|| format!("failed to read {}", path.display()))?;
         let face_for_worker = face.clone();
-        let font = tokio::task::spawn_blocking(move || {
+        let font = tokio_rayon::spawn(move || {
             font_from_blob(
                 Blob::from(data),
                 &face_for_worker,
@@ -896,8 +888,7 @@ impl Fonts {
                 },
             )
         })
-        .await
-        .context("font decode worker stopped unexpectedly")??;
+        .await?;
         self.cache
             .lock()
             .insert(face.post_script_name.clone(), font.clone());

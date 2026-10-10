@@ -166,14 +166,8 @@ struct LineBreakResult {
 struct ComicBalloon {
     width: f32,
     height: f32,
-    contours: Vec<ContourConstraint>,
+    contour: Vec<(f32, f32)>,
     minimum_air: f32,
-}
-
-#[derive(Clone, Debug)]
-struct ContourConstraint {
-    points: Vec<(f32, f32)>,
-    air_scale: f32,
 }
 
 #[derive(Clone)]
@@ -319,35 +313,7 @@ impl<'a> TextLayout<'a> {
         self.comic_balloon = Some(ComicBalloon {
             width,
             height,
-            contours: vec![ContourConstraint {
-                points: contour,
-                air_scale: 1.0,
-            }],
-            minimum_air: minimum_air.max(0.0),
-        });
-        self
-    }
-
-    pub(crate) fn with_comic_balloon_constraints(
-        mut self,
-        width: f32,
-        height: f32,
-        contours: Vec<Vec<(f32, f32)>>,
-        minimum_air: f32,
-    ) -> Self {
-        self.comic_balloon = Some(ComicBalloon {
-            width,
-            height,
-            contours: contours
-                .into_iter()
-                .enumerate()
-                .map(|(index, points)| ContourConstraint {
-                    points,
-                    // The physical wall owns one em of air. A partition is shared by
-                    // two flows, so each side contributes half for one em total.
-                    air_scale: if index == 0 { 1.0 } else { 0.5 },
-                })
-                .collect(),
+            contour,
             minimum_air: minimum_air.max(0.0),
         });
         self
@@ -1937,21 +1903,16 @@ impl ComicBalloon {
     ) -> Option<f32> {
         let mut first = block_air;
         let mut last = block_extent - block_air;
-        for contour in self
-            .contours
-            .iter()
-            .filter(|contour| contour.points.len() >= 3)
-        {
-            let air = block_air * contour.air_scale;
-            let (minimum, maximum) = contour.points.iter().fold(
+        if self.contour.len() >= 3 {
+            let (minimum, maximum) = self.contour.iter().fold(
                 (f32::INFINITY, f32::NEG_INFINITY),
                 |(minimum, maximum), &(x, y)| {
                     let block = if writing_mode.is_vertical() { x } else { y };
                     (minimum.min(block), maximum.max(block))
                 },
             );
-            first = first.max(minimum + air);
-            last = last.min(maximum - air);
+            first = first.max(minimum + block_air);
+            last = last.min(maximum - block_air);
         }
         ((last - first) + f32::EPSILON >= block_size)
             .then_some(first + (last - first - block_size) * 0.5)
@@ -1967,11 +1928,7 @@ impl ComicBalloon {
         block_air: f32,
         inline_air: f32,
     ) -> Option<(f32, f32)> {
-        if self
-            .contours
-            .iter()
-            .any(|contour| contour.points.len() >= 3)
-        {
+        if self.contour.len() >= 3 {
             return self.contour_inline_span(writing_mode, block, inline_air);
         }
 
@@ -1991,39 +1948,12 @@ impl ComicBalloon {
         block: f32,
         inline_air: f32,
     ) -> Option<(f32, f32)> {
-        let mut constraints = self
-            .contours
-            .iter()
-            .filter(|contour| contour.points.len() >= 3)
-            .map(|contour| {
-                let air = inline_air * contour.air_scale;
-                polygon_inline_spans(&contour.points, writing_mode, block)
-                    .into_iter()
-                    .filter_map(|(left, right)| {
-                        let span = (left + air, right - air);
-                        (span.1 > span.0).then_some(span)
-                    })
-                    .collect::<Vec<_>>()
-            });
-        let mut spans = constraints.next()?;
-        for constraint in constraints {
-            spans = spans
-                .iter()
-                .flat_map(|&(left, right)| {
-                    constraint
-                        .iter()
-                        .filter_map(move |&(other_left, other_right)| {
-                            let intersection = (left.max(other_left), right.min(other_right));
-                            (intersection.1 > intersection.0).then_some(intersection)
-                        })
-                })
-                .collect();
-            if spans.is_empty() {
-                return None;
-            }
-        }
-        spans
+        polygon_inline_spans(&self.contour, writing_mode, block)
             .into_iter()
+            .filter_map(|(left, right)| {
+                let span = (left + inline_air, right - inline_air);
+                (span.1 > span.0).then_some(span)
+            })
             .max_by(|left, right| (left.1 - left.0).total_cmp(&(right.1 - right.0)))
     }
 }
@@ -2232,10 +2162,7 @@ mod tests {
         ComicBalloon {
             width,
             height,
-            contours: vec![ContourConstraint {
-                points: contour,
-                air_scale: 1.0,
-            }],
+            contour,
             minimum_air,
         }
     }
@@ -2625,16 +2552,7 @@ mod tests {
         let balloon = ComicBalloon {
             width: 100.0,
             height: 200.0,
-            contours: vec![
-                ContourConstraint {
-                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 200.0), (0.0, 200.0)],
-                    air_scale: 1.0,
-                },
-                ContourConstraint {
-                    points: vec![(0.0, 40.0), (100.0, 40.0), (100.0, 160.0), (0.0, 160.0)],
-                    air_scale: 0.5,
-                },
-            ],
+            contour: vec![(0.0, 40.0), (100.0, 40.0), (100.0, 160.0), (0.0, 160.0)],
             minimum_air: 0.0,
         };
 
@@ -2661,16 +2579,7 @@ mod tests {
         let balloon = ComicBalloon {
             width: 100.0,
             height: 160.0,
-            contours: vec![
-                ContourConstraint {
-                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 160.0), (0.0, 160.0)],
-                    air_scale: 1.0,
-                },
-                ContourConstraint {
-                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 160.0), (48.0, 160.0)],
-                    air_scale: 0.5,
-                },
-            ],
+            contour: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 160.0), (48.0, 160.0)],
             minimum_air: 0.0,
         };
         let line_ink = InkBand {
@@ -2685,59 +2594,41 @@ mod tests {
     }
 
     #[test]
-    fn comic_constraints_intersect_before_selecting_a_concave_lobe() {
+    fn comic_contour_selects_the_widest_concave_span() {
         let balloon = ComicBalloon {
             width: 100.0,
             height: 100.0,
-            contours: vec![
-                ContourConstraint {
-                    points: vec![
-                        (0.0, 0.0),
-                        (100.0, 0.0),
-                        (100.0, 100.0),
-                        (70.0, 100.0),
-                        (70.0, 20.0),
-                        (40.0, 20.0),
-                        (40.0, 100.0),
-                        (0.0, 100.0),
-                    ],
-                    air_scale: 1.0,
-                },
-                ContourConstraint {
-                    points: vec![(60.0, 0.0), (100.0, 0.0), (100.0, 100.0), (60.0, 100.0)],
-                    air_scale: 0.5,
-                },
+            contour: vec![
+                (0.0, 0.0),
+                (100.0, 0.0),
+                (100.0, 100.0),
+                (70.0, 100.0),
+                (70.0, 20.0),
+                (40.0, 20.0),
+                (40.0, 100.0),
+                (0.0, 100.0),
             ],
             minimum_air: 0.0,
         };
 
         assert_eq!(
             balloon.contour_inline_span(WritingMode::Horizontal, 50.0, 0.0),
-            Some((70.0, 100.0))
+            Some((0.0, 40.0))
         );
     }
 
     #[test]
-    fn comic_flow_boundaries_share_the_inter_phrase_air() {
+    fn comic_contour_keeps_air_at_both_edges() {
         let balloon = ComicBalloon {
             width: 100.0,
             height: 100.0,
-            contours: vec![
-                ContourConstraint {
-                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)],
-                    air_scale: 1.0,
-                },
-                ContourConstraint {
-                    points: vec![(50.0, 0.0), (100.0, 0.0), (100.0, 100.0), (50.0, 100.0)],
-                    air_scale: 0.5,
-                },
-            ],
+            contour: vec![(50.0, 0.0), (100.0, 0.0), (100.0, 100.0), (50.0, 100.0)],
             minimum_air: 0.0,
         };
 
         assert_eq!(
             balloon.contour_inline_span(WritingMode::Horizontal, 50.0, 10.0),
-            Some((55.0, 90.0))
+            Some((60.0, 90.0))
         );
     }
 

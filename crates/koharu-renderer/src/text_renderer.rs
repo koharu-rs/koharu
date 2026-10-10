@@ -25,7 +25,6 @@ pub(crate) struct TextNodeDescriptor {
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) balloon_contour: Option<Vec<(f32, f32)>>,
-    pub(crate) flow_contour: Option<Vec<(f32, f32)>>,
     pub(crate) preferred_font: Option<String>,
     pub(crate) font_families: Vec<String>,
     pub(crate) font_weight: Option<u16>,
@@ -213,27 +212,12 @@ impl TextRenderer {
         if let Some(contour) = &descriptor.balloon_contour {
             let [top, _, _, left] = descriptor.text_inset;
             let contour = contour.iter().map(|&(x, y)| (x - left, y - top)).collect();
-            if let Some(flow_contour) = &descriptor.flow_contour {
-                layout = layout.with_comic_balloon_constraints(
-                    bounds.width,
-                    bounds.height,
-                    vec![
-                        contour,
-                        flow_contour
-                            .iter()
-                            .map(|&(x, y)| (x - left, y - top))
-                            .collect(),
-                    ],
-                    descriptor.text_inset.into_iter().fold(0.0, f32::max),
-                );
-            } else {
-                layout = layout.with_comic_balloon(
-                    bounds.width,
-                    bounds.height,
-                    contour,
-                    descriptor.text_inset.into_iter().fold(0.0, f32::max),
-                );
-            }
+            layout = layout.with_comic_balloon(
+                bounds.width,
+                bounds.height,
+                contour,
+                descriptor.text_inset.into_iter().fold(0.0, f32::max),
+            );
         }
         if let Some(language) = &descriptor.language {
             layout = layout.with_hyphenation_language_tag(language.as_str());
@@ -469,7 +453,6 @@ mod tests {
             width: 240.0,
             height: 120.0,
             balloon_contour: None,
-            flow_contour: None,
             preferred_font: Some("Arial".to_owned()),
             font_families: vec!["Arial".to_owned()],
             font_weight: None,

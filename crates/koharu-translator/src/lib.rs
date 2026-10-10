@@ -9,7 +9,7 @@ mod prompt;
 mod provider;
 mod remote;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use koharu_ml::Device;
 
@@ -160,11 +160,19 @@ impl Translator {
 
     #[tracing::instrument(skip_all)]
     pub async fn models() -> anyhow::Result<Vec<Model>> {
+        static CLIENT: tokio::sync::OnceCell<reqwest::Client> = tokio::sync::OnceCell::const_new();
+
         let providers = ProvidersConfig::load()?;
         let providers = providers.read()?.clone();
-        let client = koharu_runtime::http_client()?;
+        let client = CLIENT
+            .get_or_try_init(|| async {
+                reqwest::Client::builder()
+                    .timeout(Duration::from_secs(5))
+                    .build()
+            })
+            .await?;
         let mut models = local::models();
-        models.extend(remote::models(&client, &providers).await);
+        models.extend(remote::models(client, &providers).await);
         Ok(models)
     }
 

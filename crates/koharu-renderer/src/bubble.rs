@@ -78,7 +78,7 @@ pub(crate) fn flow_cells(
         .map(|(x, y)| (x.clamp(0.0, width), y.clamp(0.0, height)))
         .collect::<Vec<_>>();
     topological_flow_cells(contour, &anchors)
-        .unwrap_or_else(|| anchor_flow_cells(width, height, &anchors))
+        .unwrap_or_else(|| anchor_flow_cells(width, height, contour, &anchors))
 }
 
 fn topological_flow_cells(
@@ -370,7 +370,12 @@ fn split_polygon(polygon: &[(f32, f32)], first: usize, second: usize) -> (Polygo
     (first_part, second_part)
 }
 
-fn anchor_flow_cells(width: f32, height: f32, anchors: &[(f32, f32)]) -> Vec<Vec<(f32, f32)>> {
+fn anchor_flow_cells(
+    width: f32,
+    height: f32,
+    contour: &[(f32, f32)],
+    anchors: &[(f32, f32)],
+) -> Vec<Vec<(f32, f32)>> {
     let scale = width.min(height).max(1.0);
     let coincidence_distance_squared = (scale * 0.0025).powi(2);
     let mut clusters = Vec::<((f32, f32), Vec<usize>)>::new();
@@ -391,7 +396,13 @@ fn anchor_flow_cells(width: f32, height: f32, anchors: &[(f32, f32)]) -> Vec<Vec
 
     let mut cells = vec![Vec::new(); anchors.len()];
     for (cluster_index, &((x, y), ref indices)) in clusters.iter().enumerate() {
-        let mut cell = vec![(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)];
+        // The cell is the editable balloon shape, so fallback bisectors must
+        // clip the physical contour rather than just its bounding rectangle.
+        let mut cell = if contour.len() >= 3 {
+            contour.to_vec()
+        } else {
+            vec![(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
+        };
         for (other_index, &((other_x, other_y), _)) in clusters.iter().enumerate() {
             if cluster_index == other_index {
                 continue;
@@ -629,7 +640,50 @@ pub(crate) fn geometry_bounds(geometry: &Geometry) -> Option<LayoutBox> {
     })
 }
 
-pub(crate) fn geometry_frame(geometry: &Geometry) -> Option<GeometryFrame> {
+pub(crate) fn geometry_frame(
+    geometry: &Geometry,
+    angle_degrees: Option<f32>,
+) -> Option<GeometryFrame> {
+    if let Some(angle_degrees) = angle_degrees {
+        if !angle_degrees.is_finite() || geometry.points.is_empty() {
+            return None;
+        }
+        // Measure the contour in the authored text axes. A polygon alone cannot
+        // recover those axes after a rotation, even when its bounds are square.
+        let (sin, cos) = f64::from(angle_degrees).to_radians().sin_cos();
+        let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
+        let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for point in &geometry.points {
+            if !point.x.is_finite() || !point.y.is_finite() {
+                return None;
+            }
+            let x = point.x * cos + point.y * sin;
+            let y = -point.x * sin + point.y * cos;
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+        let width = max_x - min_x;
+        let height = max_y - min_y;
+        let center_x = (min_x + max_x) * 0.5;
+        let center_y = (min_y + max_y) * 0.5;
+        let bounds = LayoutBox {
+            x: (center_x * cos - center_y * sin - width * 0.5) as f32,
+            y: (center_x * sin + center_y * cos - height * 0.5) as f32,
+            width: width as f32,
+            height: height as f32,
+        };
+        return ([bounds.x, bounds.y, bounds.width, bounds.height]
+            .into_iter()
+            .all(f32::is_finite)
+            && bounds.width > 0.0
+            && bounds.height > 0.0)
+            .then_some(GeometryFrame {
+                bounds,
+                angle_degrees,
+            });
+    }
     let [top_left, top_right, bottom_right, bottom_left] = geometry.points.as_slice() else {
         return geometry_bounds(geometry).map(|bounds| GeometryFrame {
             bounds,
@@ -721,12 +775,22 @@ mod tests {
                 .into(),
         };
 
-        let frame = geometry_frame(&geometry).unwrap();
+        let frame = geometry_frame(&geometry, None).unwrap();
         assert!((frame.bounds.x - 60.0).abs() < 1e-4);
         assert!((frame.bounds.y - 65.0).abs() < 1e-4);
         assert!((frame.bounds.width - 80.0).abs() < 1e-4);
         assert!((frame.bounds.height - 30.0).abs() < 1e-4);
         assert!((frame.angle_degrees - 27.0).abs() < 1e-4);
+
+        let mut contour = geometry;
+        contour.points.insert(1, Point { x: 100.0, y: 80.0 });
+        assert_eq!(geometry_frame(&contour, None).unwrap().angle_degrees, 0.0);
+        let authored = geometry_frame(&contour, Some(27.0)).unwrap();
+        assert!((authored.bounds.x - frame.bounds.x).abs() < 1e-4);
+        assert!((authored.bounds.y - frame.bounds.y).abs() < 1e-4);
+        assert!((authored.bounds.width - frame.bounds.width).abs() < 1e-4);
+        assert!((authored.bounds.height - frame.bounds.height).abs() < 1e-4);
+        assert_eq!(authored.angle_degrees, 27.0);
     }
 
     #[test]
@@ -753,6 +817,31 @@ mod tests {
             .fold(f32::INFINITY, f32::min);
         assert!((first_right - 50.0).abs() < 2.0);
         assert!((first_right - second_left).abs() < 1e-4);
+    }
+
+    #[test]
+    fn flow_cells_fallback_preserves_the_physical_contour() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = [(0.0, 0.0), (100.0, 0.0), (50.0, 100.0)];
+        let cells = flow_cells(frame, &contour, &[(25.0, 25.0), (75.0, 25.0)]);
+        assert_eq!(cells.len(), 2);
+        for cell in &cells {
+            assert!(
+                cell.iter()
+                    .all(|&point| point_in_polygon(&contour, point, 1e-4))
+            );
+            assert!((polygon_area(cell).abs() - 2_500.0).abs() < 1e-4);
+        }
+        assert!(cells[0].iter().all(|&(x, _)| x <= 50.0));
+        assert!(cells[1].iter().all(|&(x, _)| x >= 50.0));
     }
 
     #[test]

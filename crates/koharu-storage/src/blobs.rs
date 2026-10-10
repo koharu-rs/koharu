@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
+use anyhow::Context as _;
 use bytes::Bytes;
 use memmap2::Mmap;
 use parking_lot::Mutex;
@@ -192,7 +193,7 @@ impl Blobs {
         let lease = self.inner.lease.clone();
         tokio::task::spawn_blocking(move || map_or_read(&path, lease))
             .await
-            .map_err(|error| Error::Task(error.to_string()))?
+            .context("blob read task failed")?
     }
 
     pub(crate) fn derive(

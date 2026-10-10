@@ -384,9 +384,7 @@ pub(crate) async fn commit_inpaint(
         )
     };
     let (png, bounds) =
-        tokio::task::spawn_blocking(move || encode_mask(width, height, &points, diameter))
-            .await
-            .context("inpaint mask worker stopped unexpectedly")??;
+        tokio_rayon::spawn(move || encode_mask(width, height, &points, diameter)).await?;
     *handle.state::<Processing>().inpainting_mask.lock() = Some(koharu_pipeline::InpaintingMask {
         page,
         png: Arc::from(png),

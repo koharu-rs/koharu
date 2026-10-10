@@ -52,7 +52,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install --no-install-recommends \
-            libgtk-3-dev \
+            libgtk-4-dev \
             build-essential \
             curl \
             wget \
@@ -116,6 +116,8 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v1
         env:
+          # Tauri's quick-sharun fork still needs anylinux.c, removed from upstream main.
+          ANYLINUX_LIB_SOURCE: https://raw.githubusercontent.com/FabianLars/Anylinux-AppImages/3e280d1b2270fecfcb2c2c823b490c782ecf1277/useful-tools/lib/anylinux.c
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}

@@ -8,8 +8,6 @@ body:
       value: |
         Thank you for contributing. Please search existing issues before submitting a new task.
 
-        If AI helped substantially with this task description, briefly mention how.
-
   - type: textarea
     id: description
     attributes:

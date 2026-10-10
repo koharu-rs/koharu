@@ -17,5 +17,5 @@ koharu-renderer = { workspace = true }
 koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-scene = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio-rayon = { workspace = true }
 tracing = { workspace = true }

@@ -282,6 +282,7 @@ describe('canvas interaction adapter', () => {
           id: 'element',
           parent: 'page',
           geometry: layer.geometry,
+          angle_degrees: 0,
           visibility: { visible: true, opacity: 1 },
           content: {
             id: 'content',
@@ -383,6 +384,7 @@ describe('canvas interaction adapter', () => {
           id: 'element',
           parent: 'page',
           geometry: null,
+          angle_degrees: null,
           visibility: { visible: true, opacity: 1 },
           content: {
             id: 'content',

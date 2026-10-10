@@ -85,6 +85,7 @@ pub struct ContextParams {
     pub embeddings_connectors_path: Option<PathBuf>,
     pub vae_path: Option<PathBuf>,
     pub audio_vae_path: Option<PathBuf>,
+    pub audio_encoder_path: Option<PathBuf>,
     pub taesd_path: Option<PathBuf>,
     pub control_net_path: Option<PathBuf>,
     pub ip_adapter_path: Option<PathBuf>,
@@ -108,7 +109,7 @@ pub struct ContextParams {
     pub force_sdxl_vae_conv_scale: bool,
     pub vae_format: VaeFormat,
     pub max_vram: Option<String>,
-    pub stream_layers: bool,
+    pub disable_prefetch: bool,
     pub eager_load: bool,
     pub backend: Option<String>,
     pub params_backend: Option<String>,
@@ -116,6 +117,12 @@ pub struct ContextParams {
     pub auto_fit: bool,
     pub rpc_servers: Option<String>,
     pub model_args: Option<String>,
+    pub disable_segmented_compute: bool,
+    pub linear_scale: f32,
+    pub attention_scale: f32,
+    pub tokenizer: Option<String>,
+    pub sage_attention: bool,
+    pub conditioning_cache_size: i32,
 }
 
 impl Default for ContextParams {
@@ -134,6 +141,7 @@ impl Default for ContextParams {
             embeddings_connectors_path: None,
             vae_path: None,
             audio_vae_path: None,
+            audio_encoder_path: None,
             taesd_path: None,
             control_net_path: None,
             ip_adapter_path: None,
@@ -157,7 +165,7 @@ impl Default for ContextParams {
             force_sdxl_vae_conv_scale: false,
             vae_format: VaeFormat::Auto,
             max_vram: None,
-            stream_layers: false,
+            disable_prefetch: false,
             eager_load: false,
             backend: None,
             params_backend: None,
@@ -165,6 +173,12 @@ impl Default for ContextParams {
             auto_fit: false,
             rpc_servers: None,
             model_args: None,
+            disable_segmented_compute: false,
+            linear_scale: 0.0,
+            attention_scale: 0.0,
+            tokenizer: None,
+            sage_attention: false,
+            conditioning_cache_size: 4,
         }
     }
 }
@@ -210,6 +224,8 @@ impl ContextParams {
         let vae_path = strings.add_optional_path(self.vae_path.as_deref(), "vae_path")?;
         let audio_vae_path =
             strings.add_optional_path(self.audio_vae_path.as_deref(), "audio_vae_path")?;
+        let audio_encoder_path =
+            strings.add_optional_path(self.audio_encoder_path.as_deref(), "audio_encoder_path")?;
         let taesd_path = strings.add_optional_path(self.taesd_path.as_deref(), "taesd_path")?;
         let control_net_path =
             strings.add_optional_path(self.control_net_path.as_deref(), "control_net_path")?;
@@ -240,6 +256,7 @@ impl ContextParams {
         let split_mode = strings.add_optional(self.split_mode.as_deref(), "split_mode")?;
         let rpc_servers = strings.add_optional(self.rpc_servers.as_deref(), "rpc_servers")?;
         let model_args = strings.add_optional(self.model_args.as_deref(), "model_args")?;
+        let tokenizer = strings.add_optional(self.tokenizer.as_deref(), "tokenizer")?;
 
         let raw = sys::sd_ctx_params_t {
             model_path,
@@ -255,6 +272,7 @@ impl ContextParams {
             embeddings_connectors_path,
             vae_path,
             audio_vae_path,
+            audio_encoder_path,
             taesd_path,
             control_net_path,
             ip_adapter_path,
@@ -279,7 +297,7 @@ impl ContextParams {
             force_sdxl_vae_conv_scale: self.force_sdxl_vae_conv_scale,
             vae_format: self.vae_format.as_raw(),
             max_vram,
-            stream_layers: self.stream_layers,
+            disable_prefetch: self.disable_prefetch,
             eager_load: self.eager_load,
             backend,
             params_backend,
@@ -287,6 +305,12 @@ impl ContextParams {
             auto_fit: self.auto_fit,
             rpc_servers,
             model_args,
+            disable_segmented_compute: self.disable_segmented_compute,
+            linear_scale: self.linear_scale,
+            attn_scale: self.attention_scale,
+            tokenizer,
+            sage_attn: self.sage_attention,
+            conditioning_cache_size: self.conditioning_cache_size,
         };
         Ok(NativeContextParams {
             raw,
@@ -463,11 +487,13 @@ impl fmt::Display for SampleParams {
 pub struct TilingParams {
     pub enabled: bool,
     pub temporal_tiling: bool,
-    pub tile_size_x: i32,
-    pub tile_size_y: i32,
+    /// Spatial tile width in image pixels; zero uses the native default of 256.
+    pub tile_size_w: i32,
+    /// Spatial tile height in image pixels; zero uses the native default of 256.
+    pub tile_size_h: i32,
     pub target_overlap: f32,
-    pub relative_size_x: f32,
-    pub relative_size_y: f32,
+    pub relative_size_w: f32,
+    pub relative_size_h: f32,
     pub extra_args: Option<String>,
 }
 
@@ -476,11 +502,11 @@ impl Default for TilingParams {
         Self {
             enabled: false,
             temporal_tiling: false,
-            tile_size_x: 0,
-            tile_size_y: 0,
+            tile_size_w: 0,
+            tile_size_h: 0,
             target_overlap: 0.5,
-            relative_size_x: 0.0,
-            relative_size_y: 0.0,
+            relative_size_w: 0.0,
+            relative_size_h: 0.0,
             extra_args: None,
         }
     }
@@ -491,11 +517,11 @@ impl TilingParams {
         Ok(sys::sd_tiling_params_t {
             enabled: self.enabled,
             temporal_tiling: self.temporal_tiling,
-            tile_size_x: self.tile_size_x,
-            tile_size_y: self.tile_size_y,
+            tile_size_w: self.tile_size_w,
+            tile_size_h: self.tile_size_h,
             target_overlap: self.target_overlap,
-            rel_size_x: self.relative_size_x,
-            rel_size_y: self.relative_size_y,
+            rel_size_w: self.relative_size_w,
+            rel_size_h: self.relative_size_h,
             extra_tiling_args: strings
                 .add_optional(self.extra_args.as_deref(), "extra_tiling_args")?,
         })
@@ -725,6 +751,8 @@ pub struct ImageGenerationParams {
     pub qwen_image_layers: i32,
     pub circular_x: bool,
     pub circular_y: bool,
+    /// Semicolon-separated native image preprocessing rules; `None` preserves model defaults.
+    pub image_preprocess_rules: Option<String>,
 }
 
 impl Default for ImageGenerationParams {
@@ -756,6 +784,7 @@ impl Default for ImageGenerationParams {
             qwen_image_layers: 3,
             circular_x: false,
             circular_y: false,
+            image_preprocess_rules: None,
         }
     }
 }
@@ -860,6 +889,12 @@ impl ImageGenerationParams {
             qwen_image_layers: self.qwen_image_layers,
             circular_x: self.circular_x,
             circular_y: self.circular_y,
+            image_preprocess: sys::sd_image_preprocess_params_t {
+                rules: strings.add_optional(
+                    self.image_preprocess_rules.as_deref(),
+                    "image preprocessing rules",
+                )?,
+            },
         };
         Ok(NativeImageGenerationParams {
             raw,
@@ -932,6 +967,8 @@ pub struct VideoGenerationParams {
     pub hires: HiresParams,
     pub circular_x: bool,
     pub circular_y: bool,
+    /// Semicolon-separated native image preprocessing rules; `None` preserves model defaults.
+    pub image_preprocess_rules: Option<String>,
 }
 
 impl Default for VideoGenerationParams {
@@ -966,6 +1003,7 @@ impl Default for VideoGenerationParams {
             hires: HiresParams::default(),
             circular_x: false,
             circular_y: false,
+            image_preprocess_rules: None,
         }
     }
 }
@@ -1102,6 +1140,12 @@ impl VideoGenerationParams {
             hires: hires.raw,
             circular_x: self.circular_x,
             circular_y: self.circular_y,
+            image_preprocess: sys::sd_image_preprocess_params_t {
+                rules: strings.add_optional(
+                    self.image_preprocess_rules.as_deref(),
+                    "image preprocessing rules",
+                )?,
+            },
         };
         Ok(NativeVideoGenerationParams {
             raw,
@@ -1139,10 +1183,14 @@ mod tests {
             (image.width, image.height, image.batch_count),
             (512, 512, 1)
         );
+        let native_image = image.to_native().unwrap();
+        assert!(native_image.raw.image_preprocess.rules.is_null());
 
         let video = VideoGenerationParams::default();
         assert_eq!((video.video_frames, video.fps), (6, 16));
         assert_eq!(video.high_noise_sample.sample_steps, -1);
+        let native_video = video.to_native().unwrap();
+        assert!(native_video.raw.image_preprocess.rules.is_null());
     }
 
     #[test]

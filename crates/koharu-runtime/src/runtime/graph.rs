@@ -159,7 +159,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shared_dependencies_are_deduplicated() {
+    fn cuda_dependencies_are_shared_and_ordered() {
         let hardware = Hardware {
             devices: vec![crate::Device {
                 index: 0,
@@ -182,12 +182,26 @@ mod tests {
             .unwrap();
         plan.sequence(llama, diffusion);
 
-        assert_eq!(
-            plan.graph
-                .node_weights()
-                .filter(|node| **node == Component::Cuda(Cuda::Runtime13))
-                .count(),
-            1
-        );
+        for package in [Cuda::Runtime13, Cuda::Rtc13, Cuda::Blas13] {
+            assert_eq!(
+                plan.graph
+                    .node_weights()
+                    .filter(|node| **node == Component::Cuda(package))
+                    .count(),
+                1
+            );
+        }
+
+        let torch = plan.insert(Torch::Cuda.into(), &hardware).unwrap();
+        plan.sequence(diffusion, torch);
+        let order = toposort(&plan.graph, None).unwrap();
+        let position = |component| {
+            order
+                .iter()
+                .position(|node| plan.graph[*node] == component)
+                .unwrap()
+        };
+        assert!(position(Cuda::Rtc13.into()) < position(Cuda::Blas13.into()));
+        assert!(position(Cuda::Blas13.into()) < position(Llama::WindowsCuda.into()));
     }
 }
