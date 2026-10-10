@@ -5,7 +5,8 @@
   "description": "Translate manga on any page using local Koharu pipeline via Native Messaging.",
   "permissions": [
     "nativeMessaging",
-    "activeTab"
+    "activeTab",
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"

@@ -95,8 +95,23 @@ let hoveredImage = null;
 let hideTimer = null;
 let trackingFrame = null;
 
-// Hover handler to spawn the Translate button
+let siteDisabled = false;
+
+function applyDisabledSites(sites = []) {
+  siteDisabled = sites.includes(location.hostname);
+  if (siteDisabled) hideTranslateButton();
+}
+
+chrome.storage.local
+  .get("disabledSites")
+  .then(({ disabledSites }) => applyDisabledSites(disabledSites));
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.disabledSites) applyDisabledSites(changes.disabledSites.newValue);
+});
+
 document.addEventListener("mouseover", (e) => {
+  if (siteDisabled) return;
+
   if (translateButton && translateButton.contains(e.target)) {
     cancelHide();
     return;

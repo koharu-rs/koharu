@@ -80,13 +80,22 @@ Communication between the Chrome extension and host uses standard Native Messagi
 ### Extension Requests
 - **`UploadChunk`**: Transfers image data chunks encoded in Base64.
 - **`Process`**: Triggers execution for specified pipeline stages (`Detection`, `Ocr`, `Translation`, `Inpainting`).
+- **`GetSettings`**: Requests the engine configuration currently in effect.
+- **`UpdateSettings`**: Replaces the engine configuration (`pipeline`) for the running host.
 
 ### Extension Responses
+- **`Settings`**: The engine configuration in effect, plus the translation models, providers, and languages the host offers. Sent in reply to `GetSettings` and `UpdateSettings`.
 - **`ChunkReceived`**: Acknowledges chunk receipt.
 - **`Progress`**: Streams active model loading and execution stage status.
 - **`DownloadChunk`**: Streams processed canvas result chunks back to extension.
 - **`Success`**: Signifies pipeline completion with text overlay coordinates.
 - **`Error`**: Reports execution or payload parsing errors.
+
+---
+
+## Engine Settings
+
+The extension popup selects the detection, OCR, and inpainting models, the translation provider, model, and quantization, and the target language. The host starts from Koharu's own configuration; choices made in the popup are stored in the extension (`chrome.storage.local`) and sent with `UpdateSettings` each time the host starts. They never modify Koharu's settings file, and provider credentials are still the ones configured in the Koharu app.
 
 ---
 
