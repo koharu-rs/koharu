@@ -55,6 +55,8 @@ pub struct KoharuLayoutRFDetrSeg2XLConfig {
     pub text_threshold: Option<f32>,
     pub bubble_threshold: Option<f32>,
     pub panel_threshold: Option<f32>,
+    /// Scale applied to detected text-region geometry; 100 means unchanged.
+    pub text_region_scale: Option<f32>,
 }
 
 pub(super) struct Processor {
@@ -82,6 +84,15 @@ impl Processor {
                     "confidence threshold is not between zero and one; using the model default"
                 );
                 *value = None;
+            }
+        }
+
+        if let DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) = &mut config {
+            if let Some(scale) = settings.text_region_scale
+                && !(scale.is_finite() && (50.0..=200.0).contains(&scale))
+            {
+                tracing::warn!(scale, "text region scale must be between 50 and 200 percent; using 100");
+                settings.text_region_scale = None;
             }
         }
 
@@ -161,7 +172,9 @@ impl Model {
             .await?
             .ok_or_else(|| anyhow!("page {page} has no source image"))?;
         let output = self.detect(image.clone()).await?;
-        build_patch(&input, &image, output, &generation(PRODUCER, MODEL_ID)?).await
+        let DetectionModel::KoharuLayoutRFDetrSeg2XL(config) = &self.config;
+        let scale = config.text_region_scale.unwrap_or(100.0) / 100.0;
+        build_patch(&input, &image, output, &generation(PRODUCER, MODEL_ID)?, scale).await
     }
 
     async fn detect(&self, image: Arc<DynamicImage>) -> Result<KoharuLayoutDetections> {
@@ -214,13 +227,14 @@ async fn build_patch(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
+    text_region_scale: f32,
 ) -> Result<koharu_scene::Patch> {
     let page = input.page;
     let mut edit = input.scene.edit_as(generation.clone());
     edit.observe_subtree(page)?;
     remove_previous_regions(input, &mut edit, generation)
         .context("failed to replace the previous detection regions")?;
-    write_page(input, &mut edit, page, image, output, generation)
+    write_page(input, &mut edit, page, image, output, generation, text_region_scale)
         .await
         .context("failed to write detection output")?;
     finish(edit)
@@ -262,6 +276,7 @@ async fn write_page(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
+    text_region_scale: f32,
 ) -> Result<()> {
     let KoharuLayoutDetections {
         mut detections,
@@ -279,7 +294,7 @@ async fn write_page(
     sort_by_layout(&mut detections);
 
     let image = image.to_rgb8();
-    let regions = write_regions(&input.scene, edit, page, &image, &detections, generation)
+    let regions = write_regions(&input.scene, edit, page, &image, &detections, generation, text_region_scale)
         .context("failed to write detected regions")?;
     link_dialogue_regions(edit, &regions, generation)
         .context("failed to associate detected text with dialogue regions")?;
@@ -295,6 +310,7 @@ fn write_regions<'a>(
     image: &RgbImage,
     detections: &'a [KoharuLayoutDetection],
     generation: &Generation,
+    text_region_scale: f32,
 ) -> Result<PageRegions<'a>> {
     let mut regions = PageRegions::default();
     let inferred = detections
@@ -315,7 +331,7 @@ fn write_regions<'a>(
         None
     };
     for (index, (detection, inferred)) in detections.iter().zip(inferred).enumerate() {
-        match write_region(edit, page, detection, inferred, generation)
+        match write_region(edit, page, detection, inferred, generation, text_region_scale)
             .with_context(|| format!("failed to write {} detection {index}", detection.label))?
         {
             RegionOutput::Bubble(bubble) => regions.bubbles.push(bubble),
@@ -338,6 +354,7 @@ fn write_region<'a>(
     detection: &'a KoharuLayoutDetection,
     inferred: Option<InferredTypography>,
     generation: &Generation,
+    text_region_scale: f32,
 ) -> Result<RegionOutput<'a>> {
     let entity = edit
         .add_entity(page, At::End)
@@ -346,9 +363,10 @@ fn write_region<'a>(
     let geometry = if detection.label == "bubble" {
         mask_geometry(&detection.mask).unwrap_or_else(|| rectangle_geometry(detection.bbox))
     } else if detection.label == "text" {
+        let bbox = scale_bbox(detection.bbox, text_region_scale);
         inferred.map_or_else(
-            || rectangle_geometry(detection.bbox),
-            |typography| rotated_rectangle_geometry(detection.bbox, typography.angle_degrees),
+            || rectangle_geometry(bbox),
+            |typography| rotated_rectangle_geometry(bbox, typography.angle_degrees),
         )
     } else {
         rectangle_geometry(detection.bbox)
@@ -1286,6 +1304,19 @@ fn normalize_text_color(color: [u8; 3]) -> [u8; 3] {
 
 fn color_luminance(color: [u8; 3]) -> u32 {
     u32::from(color[0]) * 54 + u32::from(color[1]) * 183 + u32::from(color[2]) * 19
+}
+
+fn scale_bbox([left, top, right, bottom]: [f32; 4], scale: f32) -> [f32; 4] {
+    let center_x = (left + right) / 2.0;
+    let center_y = (top + bottom) / 2.0;
+    let half_width = (right - left).max(0.0) * scale / 2.0;
+    let half_height = (bottom - top).max(0.0) * scale / 2.0;
+    [
+        (center_x - half_width).max(0.0),
+        (center_y - half_height).max(0.0),
+        (center_x + half_width),
+        (center_y + half_height),
+    ]
 }
 
 fn rectangle_geometry([left, top, right, bottom]: [f32; 4]) -> Geometry {
