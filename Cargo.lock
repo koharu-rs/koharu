@@ -4903,6 +4903,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-native-messaging"
+version = "0.81.10"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.23.1",
+ "image",
+ "koharu-config",
+ "koharu-ml",
+ "koharu-pipeline",
+ "koharu-rasterizer",
+ "koharu-renderer",
+ "koharu-scene",
+ "koharu-translator",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "koharu-pipeline"
 version = "0.83.5"
 dependencies = [
