@@ -74,6 +74,7 @@ export function replaceStage(
                   text_threshold: model.text_threshold ?? null,
                   bubble_threshold: model.bubble_threshold ?? null,
                   panel_threshold: model.panel_threshold ?? null,
+                  text_region_scale: model.text_region_scale ?? 100,
                 }
               : (config.processor?.['koharu-layout-rfdetr-seg-2xl'] ?? null),
         },
