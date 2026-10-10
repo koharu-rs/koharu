@@ -752,8 +752,18 @@ impl Traversal<'_> {
             };
             let balloon = placement
                 .as_ref()
-                .and_then(|placement| placement.balloon_contour.as_ref())
-                .map(|_| contour(&geometry, frame));
+                .and_then(|placement| {
+                    placement.balloon_contour.as_ref().map(|_| {
+                        let mut contour = contour(&placement.geometry, placement.frame);
+                        let scale_x = frame.bounds.width / placement.frame.bounds.width.max(1.0);
+                        let scale_y = frame.bounds.height / placement.frame.bounds.height.max(1.0);
+                        for (x, y) in &mut contour {
+                            *x *= scale_x;
+                            *y *= scale_y;
+                        }
+                        contour
+                    })
+                });
             (geometry, frame, balloon)
         } else {
             let Some(placement) = placement else {

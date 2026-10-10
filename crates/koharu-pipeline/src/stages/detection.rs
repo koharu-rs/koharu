@@ -55,7 +55,7 @@ pub struct KoharuLayoutRFDetrSeg2XLConfig {
     pub text_threshold: Option<f32>,
     pub bubble_threshold: Option<f32>,
     pub panel_threshold: Option<f32>,
-    /// Scale applied to detected text-region geometry; 100 means unchanged.
+    /// Scale applied to generated translated-text box geometry; 100 means unchanged.
     pub text_region_scale: Option<f32>,
 }
 
@@ -199,6 +199,7 @@ struct DetectedRegion<'a> {
     entity: EntityId,
     mask: &'a KoharuLayoutMask,
     area: u32,
+    geometry: Geometry,
 }
 
 struct DetectedText<'a> {
@@ -301,7 +302,7 @@ async fn write_page(
     let image = image.to_rgb8();
     let regions = write_regions(&input.scene, edit, page, &image, &detections, generation, text_region_scale)
         .context("failed to write detected regions")?;
-    link_dialogue_regions(edit, &regions, generation)
+    link_dialogue_regions(edit, &regions, generation, text_region_scale)
         .context("failed to associate detected text with dialogue regions")?;
     write_masks(input, edit, page, &detections, size)
         .await
@@ -368,10 +369,9 @@ fn write_region<'a>(
     let geometry = if detection.label == "bubble" {
         mask_geometry(&detection.mask).unwrap_or_else(|| rectangle_geometry(detection.bbox))
     } else if detection.label == "text" {
-        let bbox = scale_bbox(detection.bbox, text_region_scale);
         inferred.map_or_else(
-            || rectangle_geometry(bbox),
-            |typography| rotated_rectangle_geometry(bbox, typography.angle_degrees),
+            || rectangle_geometry(detection.bbox),
+            |typography| rotated_rectangle_geometry(detection.bbox, typography.angle_degrees),
         )
     } else {
         rectangle_geometry(detection.bbox)
@@ -404,6 +404,7 @@ fn write_region<'a>(
                 entity,
                 mask: &detection.mask,
                 area: detection.area,
+                geometry,
             })
         } else {
             RegionOutput::Other
@@ -421,6 +422,14 @@ fn write_region<'a>(
             angle_degrees: None,
         },
     )?;
+    // Scale the final translated-text layout box, not the detected region itself.
+    let text_bbox = scale_bbox(detection.bbox, text_region_scale);
+    let text_geometry = inferred.map_or_else(
+        || rectangle_geometry(text_bbox),
+        |typography| rotated_rectangle_geometry(text_bbox, typography.angle_degrees),
+    );
+    edit.set(layer, &text_geometry)
+        .context("failed to set detected text box geometry")?;
     write_text_role(edit, content, "dev.koharu.text.free-text", generation)
         .context("failed to set the detected text role")?;
     edit.set(
@@ -459,10 +468,14 @@ fn link_dialogue_regions(
     edit: &mut koharu_scene::Edit,
     regions: &PageRegions<'_>,
     generation: &Generation,
+    text_region_scale: f32,
 ) -> Result<()> {
     for text in &regions.texts {
         let bubble = containing_bubble(&regions.bubbles, text);
         if let Some(bubble) = bubble {
+            let text_box_geometry = scale_geometry(&bubble.geometry, text_region_scale);
+            edit.set(text.layer, &text_box_geometry)
+                .context("failed to set dialogue text box geometry")?;
             edit.relate::<Inside>(text.entity, bubble.entity)?;
             edit.relate::<FlowsIn>(text.layer, bubble.entity)?;
             write_text_role(edit, text.content, "dev.koharu.text.dialogue", generation)?;
@@ -1311,6 +1324,34 @@ fn color_luminance(color: [u8; 3]) -> u32 {
     u32::from(color[0]) * 54 + u32::from(color[1]) * 183 + u32::from(color[2]) * 19
 }
 
+fn scale_geometry(geometry: &Geometry, scale: f32) -> Geometry {
+    let (min_x, max_x, min_y, max_y) = geometry.points.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+        |(min_x, max_x, min_y, max_y), point| {
+            (
+                min_x.min(point.x),
+                max_x.max(point.x),
+                min_y.min(point.y),
+                max_y.max(point.y),
+            )
+        },
+    );
+    let center_x = (min_x + max_x) * 0.5;
+    let center_y = (min_y + max_y) * 0.5;
+    let scale = f64::from(scale);
+    Geometry {
+        origin: geometry.origin.clone(),
+        points: geometry
+            .points
+            .iter()
+            .map(|point| Point {
+                x: center_x + (point.x - center_x) * scale,
+                y: center_y + (point.y - center_y) * scale,
+            })
+            .collect(),
+    }
+}
+
 fn scale_bbox([left, top, right, bottom]: [f32; 4], scale: f32) -> [f32; 4] {
     let center_x = (left + right) / 2.0;
     let center_y = (top + bottom) / 2.0;
@@ -1987,6 +2028,7 @@ mod tests {
                             entity: bubble,
                             mask: &bubble_mask,
                             area: 1,
+                            geometry: Geometry::rectangle(10.0, 10.0, 80.0, 80.0),
                         }],
                         texts: vec![DetectedText {
                             entity: region,
@@ -1997,6 +2039,7 @@ mod tests {
                         }],
                     },
                     &generation,
+                    1.0,
                 )
                 .unwrap();
                 ids = Some((bubble, region, layer));

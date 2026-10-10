@@ -138,7 +138,7 @@ function ModelOptions({
             onChange={(panel_threshold) => onChange({ ...model, panel_threshold })}
           />
           <NumberField
-            label="Text region size (%)"
+            label="Text box size (%)"
             value={model.text_region_scale ?? 100}
             min={50}
             max={200}
