@@ -2,6 +2,17 @@ let port = null;
 let activeRequests = new Map(); // maps transferId -> { port, contentTabId }
 let downloadSessions = new Map(); // maps transferId -> { chunks: Map, total: number }
 let lastError = null;
+let settingsError = null;
+
+// Get and sync the engine settings with the native host.
+async function syncSettings(nativePort) {
+  const { pipeline } = await chrome.storage.local.get("pipeline");
+  nativePort.postMessage(
+    pipeline
+      ? { action: "UpdateSettings", payload: { pipeline } }
+      : { action: "GetSettings" },
+  );
+}
 
 function getNativePort() {
   if (port) return port;
@@ -9,8 +20,21 @@ function getNativePort() {
   console.log("Connecting to Koharu Native Host...");
   lastError = null;
   port = chrome.runtime.connectNative("com.koharu.native_host");
+  syncSettings(port);
 
   port.onMessage.addListener((response) => {
+    if (response.status === "settings") {
+      const { status, ...catalog } = response;
+      settingsError = null;
+      chrome.storage.local.set({ catalog });
+      return;
+    }
+    if (response.status === "error" && !response.transferId) {
+      console.error("Native host error:", response.message);
+      settingsError = response.message;
+      return;
+    }
+
     console.log(
       "Received native response status:",
       response.status,
@@ -162,6 +186,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       connected: port !== null,
       active: activeRequests.size,
       lastError,
+      settingsError,
     });
   } else if (message.action === "Connect") {
     getNativePort();
@@ -170,6 +195,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === "Disconnect") {
     stopNativeHost();
     sendResponse({ connected: port !== null });
+  } else if (message.action === "SaveSettings") {
+    const { pipeline } = message.payload;
+    chrome.storage.local.set({ pipeline }).then(() => {
+      if (port) port.postMessage({ action: "UpdateSettings", payload: { pipeline } });
+      sendResponse({ saved: true });
+    });
   }
   return true;
 });
@@ -237,7 +268,6 @@ async function uploadAndProcess(transferId, base64Data) {
       payload: {
         transferId,
         stages: ["detection", "ocr", "translation", "inpainting"],
-        targetLanguage: "en",
       },
     });
   } catch (err) {
