@@ -87,13 +87,11 @@ impl Processor {
             }
         }
 
-        if let DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) = &mut config {
-            if let Some(scale) = settings.text_region_scale
-                && !(scale.is_finite() && (50.0..=200.0).contains(&scale))
-            {
-                tracing::warn!(scale, "text region scale must be between 50 and 200 percent; using 100");
-                settings.text_region_scale = None;
-            }
+        if let Some(scale) = settings.text_region_scale
+            && !(scale.is_finite() && (50.0..=200.0).contains(&scale))
+        {
+            tracing::warn!(scale, "text region scale must be between 50 and 200 percent; using 100");
+            settings.text_region_scale = None;
         }
 
         Self {
