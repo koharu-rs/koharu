@@ -257,6 +257,10 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(target_os = "linux")]
+            if let WindowEvent::Focused(focused) = event {
+                crate::linux_focus::synchronize(window, *focused);
+            }
             if matches!(
                 event,
                 WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
