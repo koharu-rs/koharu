@@ -43,6 +43,9 @@ koharu-desktop = { path = "crates/koharu-desktop" }
 koharu-secrets = { path = "crates/koharu-secrets" }
 
 # external dependencies
+# Must match the version pinned by tauri-runtime-cef.
+cef = "=152.3.0"
+x11-dl = "2.21.0"
 alphanumeric-sort = "1.5.8"
 arc-swap = "1.9.2"
 hayro = "0.7.1"

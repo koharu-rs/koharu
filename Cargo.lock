@@ -4701,6 +4701,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.23.1",
+ "cef",
  "dirs 7.0.0",
  "futures",
  "hayro",
@@ -4744,6 +4745,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "webp",
+ "x11-dl",
  "zip 8.6.0",
 ]
 

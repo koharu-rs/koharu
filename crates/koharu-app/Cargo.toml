@@ -59,3 +59,7 @@ uuid = { workspace = true }
 walkdir = { workspace = true }
 webp = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cef = { workspace = true }
+x11-dl = { workspace = true }
