@@ -25,6 +25,7 @@
     "kill-port": "^2.0.1",
     "oxfmt": "^0.71.0",
     "playwright": "1.63.0",
+    "release-please": "17.11.2",
     "sponsorkit": "^18.0.0",
     "typescript": "^7.0.2"
   },

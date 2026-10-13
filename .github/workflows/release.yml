@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - '*'
@@ -16,6 +17,7 @@ env:
 
 jobs:
   release:
+    if: github.ref_type == 'tag'
     strategy:
       fail-fast: false
       matrix:
