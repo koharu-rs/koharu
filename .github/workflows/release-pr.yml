@@ -32,7 +32,7 @@ jobs:
         with:
           tool: cargo-edit@0.13.13
 
-      - uses: actions/github-script@v8
+      - uses: actions/github-script@v9
         id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
