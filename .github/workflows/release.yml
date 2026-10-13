@@ -6,6 +6,7 @@ on:
       - '*'
 
 permissions:
+  actions: read
   contents: write
   id-token: write
   packages: write
@@ -26,7 +27,8 @@ jobs:
           - platform: 'ubuntu-24.04-arm'
             args: ''
           - platform: 'windows-latest'
-            args: ''
+            args: >-
+              --config '{"bundle":{"windows":{"signCommand":{"cmd":"bun","args":["../../.github/signpath.ts","%1"]}}}}'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -119,6 +121,11 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SIGNPATH_API_TOKEN: ${{ runner.os == 'Windows' && secrets.SIGNPATH_API_TOKEN || '' }}
+          SIGNPATH_APPROVER_API_TOKEN: ${{ runner.os == 'Windows' && secrets.SIGNPATH_APPROVER_API_TOKEN || '' }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
