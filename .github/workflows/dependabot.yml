@@ -17,8 +17,10 @@ jobs:
       pull-requests: write
     steps:
       # This privileged workflow must never check out or execute pull request code.
-      - name: Enable auto-merge
+      - name: Approve and enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
