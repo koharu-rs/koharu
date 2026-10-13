@@ -2,6 +2,8 @@
 
 Thank you for helping improve Koharu. Bug fixes, documentation, translations, model-port corrections, and focused product improvements are all welcome.
 
+Everyone participating in the Koharu community is expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Getting started
 
 - Browse the [good first issues](https://github.com/koharu-rs/koharu/contribute) or search existing [issues](https://github.com/koharu-rs/koharu/issues) and pull requests.
