@@ -31,7 +31,6 @@ class Koharu extends BaseStrategy {
     // The virtual tag renders the next release without creating a tag before review.
     const { stdout } = await runGitCliff(
       [
-        '--offline',
         '--unreleased',
         '--tag',
         tag.toString(),

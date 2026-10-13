@@ -35,11 +35,11 @@ jobs:
       - uses: actions/github-script@v8
         id: release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             const releasePlease = require('./.github/release-please/index.cjs')
-            const tag = await releasePlease({ ...context.repo, token: process.env.GH_TOKEN })
+            const tag = await releasePlease({ ...context.repo, token: process.env.GITHUB_TOKEN })
             core.setOutput('tag', tag)
 
       # Tag pushes made with GITHUB_TOKEN do not trigger another workflow.
