@@ -27,8 +27,7 @@ jobs:
           - platform: 'ubuntu-24.04-arm'
             args: ''
           - platform: 'windows-latest'
-            args: >-
-              --config '{"bundle":{"windows":{"signCommand":{"cmd":"bun","args":["../../.github/signpath.ts","%1"]}}}}'
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:

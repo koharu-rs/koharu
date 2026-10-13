@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "windows": {
+      "signCommand": {
+        "cmd": "bun",
+        "args": ["../../.github/signpath.ts", "%1"]
+      }
+    }
+  }
+}

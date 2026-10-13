@@ -81,6 +81,7 @@ export async function signFile(input: string) {
         { method: 'POST' },
       )
       approved = true
+      console.log(`SignPath request ${requestId} approved via API`)
     }
     if (!status.isFinalStatus) await sleep(10_000)
   } while (!status.isFinalStatus)

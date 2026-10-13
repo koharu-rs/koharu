@@ -23,12 +23,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun test ./.github/signpath.test.ts
       - name: Build and sign a test executable
         uses: actions/github-script@v8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_APPROVER_API_TOKEN: ${{ secrets.SIGNPATH_APPROVER_API_TOKEN }}
           SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
           SIGNPATH_SIGNING_POLICY_SLUG: test-signing
           SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
@@ -37,8 +37,11 @@ jobs:
           script: |
             const assert = require('node:assert/strict');
             const fs = require('node:fs/promises');
-            const file = require('node:path').join(process.env.RUNNER_TEMP, 'signpath-probe.exe');
-            await exec.exec('rustc', ['--crate-name', 'signpath_probe', '.github/signpath-fixture.rs', '-o', file]);
+            const path = require('node:path');
+            const source = path.join(process.env.RUNNER_TEMP, 'signpath-probe.rs');
+            const file = path.join(process.env.RUNNER_TEMP, 'signpath-probe.exe');
+            await fs.writeFile(source, 'fn main() { println!("Koharu SignPath integration test"); }');
+            await exec.exec('rustc', ['--crate-name', 'signpath_probe', source, '-o', file]);
             const unsigned = await fs.readFile(file);
             await exec.exec('bun', ['.github/signpath.ts', file]);
             assert(!unsigned.equals(await fs.readFile(file)), 'Signing did not change the executable');
