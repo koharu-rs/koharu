@@ -111,7 +111,7 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
 ] }
-skrifa = "0.47.0"
+skrifa = "0.48.0"
 harfrust = "0.13.3"
 hypher = "0.1.8"
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
