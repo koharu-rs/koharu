@@ -33,7 +33,6 @@ koharu-torch = { path = "crates/koharu-torch" }
 koharu-torch-sys = { path = "crates/koharu-torch-sys" }
 koharu-agent = { path = "crates/koharu-agent" }
 koharu-ml = { path = "crates/koharu-ml" }
-koharu-metrics = { path = "crates/koharu-metrics" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }
@@ -75,7 +74,6 @@ rayon = "1.12.0"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23.2", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
-sys-locale = "0.3.2"
 sysinfo = { version = "0.39.6", features = ["system"] }
 rars = "0.10.0"
 zip = { version = "8.6.0", features = ["deflate"] }

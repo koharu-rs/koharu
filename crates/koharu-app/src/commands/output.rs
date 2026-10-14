@@ -38,12 +38,6 @@ pub enum ExportFormat {
     Cbz,
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "export",
-    skip_all,
-    fields(origin = "user", format = ?format),
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn export(
@@ -152,11 +146,6 @@ pub(crate) async fn export(
             } else {
                 std::fs::write(destination.join(name), bytes)?;
             }
-            tracing::info!(
-                target: "koharu_metrics",
-                metric = "page_exported",
-                format = ?format,
-            );
         }
         if let Some(archive) = archive {
             archive.finish()?.persist(destination)?;

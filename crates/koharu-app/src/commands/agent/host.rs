@@ -230,12 +230,6 @@ impl Host for KoharuHost {
             .clone()
     }
 
-    #[tracing::instrument(
-        target = "koharu_metrics",
-        name = "agent_tool",
-        skip_all,
-        fields(tool = call.name.as_str()),
-    )]
     async fn invoke(&self, call: ToolCall, control: &Control) -> Result<Invocation> {
         match call.name.as_str() {
             "inspect_project" => {

@@ -256,12 +256,6 @@ pub(crate) async fn list_projects(
     Ok(library.list()?)
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "project_created",
-    skip_all,
-    fields(origin = "user")
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn create_project(
@@ -274,12 +268,6 @@ pub(crate) async fn create_project(
     Ok(())
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "project_opened",
-    skip_all,
-    fields(origin = "user")
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn open_project(
@@ -292,12 +280,6 @@ pub(crate) async fn open_project(
     Ok(())
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "project_closed",
-    skip_all,
-    fields(origin = "user")
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn close_project(handle: AppHandle<CefRuntime>) -> std::result::Result<(), Error> {
@@ -305,12 +287,6 @@ pub(crate) async fn close_project(handle: AppHandle<CefRuntime>) -> std::result:
     Ok(())
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "project_deleted",
-    skip_all,
-    fields(origin = "user")
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn delete_project(
@@ -356,12 +332,6 @@ async fn close_current_project(handle: &AppHandle<CefRuntime>) -> Result<()> {
     Ok(())
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "import",
-    skip_all,
-    fields(origin = "user", method = ?source),
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn import(
@@ -415,7 +385,6 @@ pub(crate) async fn import(
         return Err(anyhow::anyhow!("no supported images were found in the selection").into());
     }
     let pages = tokio_rayon::spawn(move || import::import(files)).await?;
-    let page_count = pages.len();
 
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -456,16 +425,9 @@ pub(crate) async fn import(
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
-    tracing::info!(target: "koharu_metrics", metric = "page_imported", page_count);
     Ok(())
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "page_selected",
-    skip_all,
-    fields(origin = "user")
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn select_page(

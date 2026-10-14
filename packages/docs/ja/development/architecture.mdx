@@ -56,7 +56,7 @@ flowchart TB
 
 安全な `koharu-torch`、`koharu-llama`、`koharu-diffusion` は unsafe な `-sys` 動的ロード crate から分離します。`koharu-runtime` がパッケージの検出、取得、検証、ロードを担当します。
 
-図には載せていない共通の crate が 3 つあります。`koharu-config` は `config.toml` の型付きセクションを所有し、`koharu-secrets` は OS の資格情報ストアをラップし、`koharu-metrics` はテレメトリーを収集します。
+図には載せていない共通の crate が 2 つあります。`koharu-config` は `config.toml` の型付きセクションを所有し、`koharu-secrets` は OS の資格情報ストアをラップします。
 
 <CardGroup cols={2}>
   <Card title="シーンと保存" icon="database" href="/ja/development/scene">

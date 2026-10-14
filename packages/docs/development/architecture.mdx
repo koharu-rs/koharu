@@ -56,7 +56,7 @@ Independent typed channels carry project, canvas, job, download, and resource up
 
 Safe wrappers `koharu-torch`, `koharu-llama`, and `koharu-diffusion` are separate from unsafe `-sys` dynamic-loading crates. `koharu-runtime` discovers, downloads, validates, and loads their packages.
 
-Three crates are shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml`, `koharu-secrets` wraps the operating system credential store, and `koharu-metrics` collects telemetry.
+Two crates are shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml`, and `koharu-secrets` wraps the operating system credential store.
 
 <CardGroup cols={2}>
   <Card title="Scene and storage" icon="database" href="/development/scene">
