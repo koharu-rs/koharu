@@ -75,7 +75,7 @@ jobs:
         run: bun install
 
       - name: Setup Sentry CLI
-        uses: matbour/setup-sentry-cli@v2
+        uses: matbour/setup-sentry-cli@v3
         with:
           token: ${{ secrets.SENTRY_AUTH_TOKEN }}
           organization: ${{ vars.SENTRY_ORG }}
