@@ -74,6 +74,10 @@
                 {
                   "label": "Contribute",
                   "href": "/en/development/contributing"
+                },
+                {
+                  "label": "Privacy",
+                  "href": "/en/privacy"
                 }
               ]
             },
@@ -134,7 +138,8 @@
               "en/reference/settings",
               "en/reference/shortcuts",
               "en/reference/data",
-              "en/reference/troubleshooting"
+              "en/reference/troubleshooting",
+              "en/privacy"
             ]
           }
         ]
@@ -192,6 +197,10 @@
                 {
                   "label": "開発に参加",
                   "href": "/ja/development/contributing"
+                },
+                {
+                  "label": "プライバシー",
+                  "href": "/ja/privacy"
                 }
               ]
             },
@@ -252,7 +261,8 @@
               "ja/reference/settings",
               "ja/reference/shortcuts",
               "ja/reference/data",
-              "ja/reference/troubleshooting"
+              "ja/reference/troubleshooting",
+              "ja/privacy"
             ]
           }
         ]
@@ -310,6 +320,10 @@
                 {
                   "label": "参与贡献",
                   "href": "/zh/development/contributing"
+                },
+                {
+                  "label": "隐私",
+                  "href": "/zh/privacy"
                 }
               ]
             },
@@ -370,7 +384,8 @@
               "zh/reference/settings",
               "zh/reference/shortcuts",
               "zh/reference/data",
-              "zh/reference/troubleshooting"
+              "zh/reference/troubleshooting",
+              "zh/privacy"
             ]
           }
         ]
