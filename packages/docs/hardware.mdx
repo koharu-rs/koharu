@@ -51,7 +51,7 @@ Startup chooses a shared ML device from the available backends: Metal on Apple s
 | Pinned or versioned model weights                         | On first use of the selected processor  |
 | Local GGUF quantizations                                  | When you choose and use that model file |
 
-On macOS and Linux, packages live under the operating system cache directory in `koharu/packages`. On Windows, they live in the `store` directory inside Koharu's installation directory. Projects live under `Documents/Koharu`; settings live in `~/.koharu/config.toml`. See [data locations](/en/reference/data).
+On macOS and Linux, packages live under the operating system cache directory in `koharu/packages`. On Windows, they live in the `store` directory inside Koharu's installation directory. Projects live under `Documents/Koharu`; settings live in `~/.koharu/config.toml`. See [data locations](/reference/data).
 
 Downloads are staged before being published to the cache. Retry an interrupted download on the next launch or model use.
 
@@ -61,4 +61,4 @@ The resource monitor in the page rail footer reports process and system memory, 
 
 Start with a moderate local quantization. Smaller files usually need less memory, with a possible quality trade-off. A model that fits on disk can still exceed device memory.
 
-If startup fails, check network access to the package repositories, update the driver, and retry once. Capture the full error if it repeats and follow [troubleshooting](/en/reference/troubleshooting).
+If startup fails, check network access to the package repositories, update the driver, and retry once. Capture the full error if it repeats and follow [troubleshooting](/reference/troubleshooting).

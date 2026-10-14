@@ -35,7 +35,7 @@ Independent typed channels carry project, canvas, job, download, and resource up
 
 <Note>
   Rust signatures generate `packages/bridge/src/protocol.ts`. Change the Rust source and [regenerate
-  bindings](/en/development/setup#regenerate-ipc-bindings).
+  bindings](/development/setup#regenerate-ipc-bindings).
 </Note>
 
 ## Scene and processing
@@ -59,11 +59,11 @@ Safe wrappers `koharu-torch`, `koharu-llama`, and `koharu-diffusion` are separat
 Three crates are shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml`, `koharu-secrets` wraps the operating system credential store, and `koharu-metrics` collects telemetry.
 
 <CardGroup cols={2}>
-  <Card title="Scene and storage" icon="database" href="/en/development/scene">
+  <Card title="Scene and storage" icon="database" href="/development/scene">
     Trace edits, revisions, publication, and recovery.
   </Card>
 
-  <Card title="Processing and rendering" icon="layer-group" href="/en/development/rendering">
+  <Card title="Processing and rendering" icon="layer-group" href="/development/rendering">
     Follow stage commits through browser presentation.
   </Card>
 </CardGroup>

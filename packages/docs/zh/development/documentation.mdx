@@ -35,9 +35,9 @@ icon: 'book'
 
 ## 保持翻译一致
 
-英语、日语、简体中文分别位于 `en/`、`ja/`、`zh/`。保持页面路径、操作步骤、示例与技术覆盖一致。正文之外，标题、描述、组件标签、导航和图片说明也要翻译。
+英语是默认语言，直接位于 `packages/docs/`。日语和简体中文分别位于 `ja/`、`zh/`，使用与英语相同的文件名和目录结构。保持页面路径、操作步骤、示例与技术覆盖一致。正文之外，标题、描述、组件标签、导航和图片说明也要翻译。
 
-`packages/docs/docs.json` 管理主题和导航。新增页面时应加入所有语言的导航。站点使用 Mintlify 原生语言切换，不保留旧 Zensical 路由或重定向。
+`packages/docs/docs.json` 管理主题和导航。在 `navigation.languages` 中定义各语言的 `groups`，并保留英语的 `default: true`。新增页面时应加入所有语言的导航，英语路径不加语言前缀，翻译路径加上对应语言前缀。每个页面路径只能属于一种语言。具体结构见 Mintlify 的[国际化指南](https://www.mintlify.com/docs/guides/internationalization)。站点使用 Mintlify 原生语言切换，不保留旧 Zensical 路由或重定向。
 
 ## 连接发布
 

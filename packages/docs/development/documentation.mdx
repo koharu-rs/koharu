@@ -31,13 +31,13 @@ Every page needs a `title` and `description` in frontmatter. Mintlify renders ar
 
 Use **Steps** for ordered tasks, **Tabs** for platform or model choices, **Note**, **Tip**, and **Warning** for relevant callouts, **Cards** for next actions, and **Accordions** for symptom-specific help. Keep reference tables and fenced Mermaid diagrams readable without custom scripts or CSS.
 
-Use root-relative internal links with no file extension, such as `/en/guides/export`. Shared images live outside the locale folders and need descriptive alt text.
+Use root-relative internal links with no file extension, such as `/guides/export`. Shared images live outside the locale folders and need descriptive alt text.
 
 ## Keep translations aligned
 
-English, Japanese, and Simplified Chinese live in `en/`, `ja/`, and `zh/`. Maintain matching page slugs, instructions, examples, and technical coverage in all three languages. Translate headings, descriptions, component labels, navigation, and image descriptions as well as prose.
+English is the default language and lives directly in `packages/docs/`. Japanese and Simplified Chinese live in `ja/` and `zh/`, with the same filenames and directory structure as English. Maintain matching page slugs, instructions, examples, and technical coverage in all three languages. Translate headings, descriptions, component labels, navigation, and image descriptions as well as prose.
 
-`packages/docs/docs.json` owns themes and navigation. Add a page to every language's navigation when it is introduced. The site uses Mintlify's language switcher and does not keep old Zensical routes or redirects.
+`packages/docs/docs.json` owns themes and navigation. Define each language's `groups` under `navigation.languages`, and keep English marked with `default: true`. Add a page to every language's navigation when it is introduced, using unprefixed paths for English and language-prefixed paths for translations. Each page path must belong to only one language. See Mintlify's [internationalization guide](https://www.mintlify.com/docs/guides/internationalization) for the structure. The site uses Mintlify's language switcher and does not keep old Zensical routes or redirects.
 
 ## Connect publishing
 
