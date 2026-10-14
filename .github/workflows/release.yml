@@ -57,6 +57,7 @@ jobs:
           sudo apt install --no-install-recommends \
             libgtk-4-dev \
             build-essential \
+            llvm \
             curl \
             wget \
             file \
@@ -72,6 +73,13 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Setup Sentry CLI
+        uses: matbour/setup-sentry-cli@v2
+        with:
+          token: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          organization: ${{ vars.SENTRY_ORG }}
+          project: rust
 
       - name: Generate release changelog
         id: release_notes
@@ -135,7 +143,9 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.release_body }}
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          args: >-
+            ${{ matrix.args }}
+            --config '{"build":{"beforeBundleCommand":"bash .github/sentry.sh"}}'
 
   winget:
     needs: release

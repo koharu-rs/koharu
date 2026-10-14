@@ -177,6 +177,10 @@ tauri = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbe
 tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
 tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
 
+[profile.release]
+# Keep debug information for Sentry's native stack traces and source context.
+debug = true
+
 [profile.dev]
 debug = 1
 
