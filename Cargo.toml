@@ -164,7 +164,7 @@ serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4.79"
 web-sys = "0.3.106"
-bindgen = "0.73.2"
+bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 quote = "1.0.47"

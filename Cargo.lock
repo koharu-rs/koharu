@@ -787,7 +787,6 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "log",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",

@@ -50,6 +50,8 @@ impl Generator {
     pub fn generate(self) -> Result<String> {
         let bindings = self
             .builder
+            // The rewrite pass owns formatting with its matching syn/prettyplease pair.
+            .formatter(bindgen::Formatter::None)
             .generate()
             .map_err(|error| anyhow::anyhow!("{error}"))
             .context("failed to run bindgen")?;
