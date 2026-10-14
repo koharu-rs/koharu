@@ -37,7 +37,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "oxlint": "^1.86.0",
+    "oxlint": "^1.87.0",
     "shadcn": "^4.21.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
