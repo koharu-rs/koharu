@@ -118,7 +118,7 @@ icu_normalizer = { version = "2.3.0", default-features = false, features = ["com
 icu_properties = "2.3.0"
 icu_segmenter = "2.3.0"
 jieba-rs = "0.11.0"
-fontique = "0.11.1"
+fontique = "0.12.0"
 pollster = "1.0.1"
 vello = "0.11.0"
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1", default-features = false, features = [
