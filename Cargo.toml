@@ -126,12 +126,12 @@ tauri = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa6877
 ] }
 tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
 tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
-tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1aa81bd267cb7b1cc78fb3f0f78cee7866e4a9cd" }
-tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1aa81bd267cb7b1cc78fb3f0f78cee7866e4a9cd" }
-tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1aa81bd267cb7b1cc78fb3f0f78cee7866e4a9cd" }
-tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1aa81bd267cb7b1cc78fb3f0f78cee7866e4a9cd" }
-tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1aa81bd267cb7b1cc78fb3f0f78cee7866e4a9cd" }
-tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1aa81bd267cb7b1cc78fb3f0f78cee7866e4a9cd" }
+tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-specta = { git = "https://github.com/koharu-rs/tauri-specta", tag = "v2.0.0-rc.25-koharu.1", features = ["derive", "typescript"] }
 schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.26.1", features = ["v4", "v7", "serde"] }

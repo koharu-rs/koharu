@@ -15,7 +15,7 @@
     "build": "bun x wasm-pack@0.15.0 build $(npm prefix)/crates/koharu-canvas --release --target web --out-dir $(npm prefix)/packages/bridge/src/wasm --out-name koharu_canvas --no-pack"
   },
   "dependencies": {
-    "@tauri-apps/api": "3.0.0-alpha.2"
+    "@tauri-apps/api": "3.0.0-alpha.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
