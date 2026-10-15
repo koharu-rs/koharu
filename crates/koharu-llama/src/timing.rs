@@ -11,7 +11,7 @@ impl LlamaTimings {
     /// Create a new `LlamaTimings`.
     /// ```
     /// # use koharu_llama::timing::LlamaTimings;
-    /// let timings = LlamaTimings::new(1.0, 2.0, 3.0, 4.0, 5, 6, 1);
+    /// let timings = LlamaTimings::new(1.0, 2.0, 3.0, 4.0, 5, 6, 1, 0, 0);
     /// let timings_str = "load time = 2.00 ms
     /// prompt eval time = 3.00 ms / 5 tokens (0.60 ms per token, 1666.67 tokens per second)
     /// eval time = 4.00 ms / 6 runs (0.67 ms per token, 1500.00 tokens per second)\n";
@@ -27,6 +27,8 @@ impl LlamaTimings {
         n_p_eval: i32,
         n_eval: i32,
         n_reused: i32,
+        n_reallocs_same: i32,
+        n_reallocs_diff: i32,
     ) -> Self {
         Self {
             timings: koharu_llama_sys::llama_perf_context_data {
@@ -37,6 +39,8 @@ impl LlamaTimings {
                 n_p_eval,
                 n_eval,
                 n_reused,
+                n_reallocs_same,
+                n_reallocs_diff,
             },
         }
     }

@@ -118,11 +118,14 @@ pub struct ContextParams {
     pub rpc_servers: Option<String>,
     pub model_args: Option<String>,
     pub disable_segmented_compute: bool,
+    pub batched_cfg: bool,
     pub linear_scale: f32,
     pub attention_scale: f32,
     pub tokenizer: Option<String>,
     pub sage_attention: bool,
     pub conditioning_cache_size: i32,
+    pub flash_attention_mode: Option<String>,
+    pub conv_direct_mode: Option<String>,
 }
 
 impl Default for ContextParams {
@@ -174,11 +177,14 @@ impl Default for ContextParams {
             rpc_servers: None,
             model_args: None,
             disable_segmented_compute: false,
+            batched_cfg: true,
             linear_scale: 0.0,
             attention_scale: 0.0,
             tokenizer: None,
             sage_attention: false,
             conditioning_cache_size: 4,
+            flash_attention_mode: None,
+            conv_direct_mode: None,
         }
     }
 }
@@ -257,6 +263,10 @@ impl ContextParams {
         let rpc_servers = strings.add_optional(self.rpc_servers.as_deref(), "rpc_servers")?;
         let model_args = strings.add_optional(self.model_args.as_deref(), "model_args")?;
         let tokenizer = strings.add_optional(self.tokenizer.as_deref(), "tokenizer")?;
+        let flash_attn_mode =
+            strings.add_optional(self.flash_attention_mode.as_deref(), "flash_attention_mode")?;
+        let conv_direct_mode =
+            strings.add_optional(self.conv_direct_mode.as_deref(), "conv_direct_mode")?;
 
         let raw = sys::sd_ctx_params_t {
             model_path,
@@ -306,11 +316,14 @@ impl ContextParams {
             rpc_servers,
             model_args,
             disable_segmented_compute: self.disable_segmented_compute,
+            batched_cfg: self.batched_cfg,
             linear_scale: self.linear_scale,
             attn_scale: self.attention_scale,
             tokenizer,
             sage_attn: self.sage_attention,
             conditioning_cache_size: self.conditioning_cache_size,
+            flash_attn_mode,
+            conv_direct_mode,
         };
         Ok(NativeContextParams {
             raw,
