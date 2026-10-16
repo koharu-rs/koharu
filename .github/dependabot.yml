@@ -9,6 +9,11 @@ updates:
   directory: "/" # Location of package manifests
   schedule:
     interval: "daily"
+  groups:
+    minijinja:
+      patterns:
+        - "minijinja"
+        - "minijinja-contrib"
 
 - package-ecosystem: "bun"
   directory: "/"
