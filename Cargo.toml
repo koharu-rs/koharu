@@ -76,7 +76,7 @@ tokenizers = { version = "0.23.2", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
 sysinfo = { version = "0.39.6", features = ["system"] }
 rars = "0.10.0"
-zip = { version = "8.6.0", features = ["deflate"] }
+zip = { version = "9.0.2", features = ["deflate"] }
 dirs = "7.0.0"
 futures = "0.3.34"
 futures-channel = "0.3.34"
@@ -100,8 +100,8 @@ flate2 = "1.1.10"
 tempfile = "3.27.0"
 libloading = "0.9.0"
 nvml-wrapper = "0.13.0"
-minijinja = "2.24.0"
-minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
+minijinja = "3.0.0"
+minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
 indoc = "2.0.7"
 windows = { version = "0.62.2", features = [
     "Win32",
@@ -110,7 +110,7 @@ windows = { version = "0.62.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 skrifa = "0.48.0"
-harfrust = "0.13.3"
+harfrust = "0.14.0"
 hypher = "0.1.8"
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 icu_properties = "2.3.0"

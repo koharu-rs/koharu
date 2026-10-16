@@ -11,9 +11,7 @@ use fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
     GenericFamily, Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
-use harfrust::{
-    ShapeOptions, ShapePlan, ShapePlanKey, ShaperData, ShaperInstance, UnicodeBuffer, Variation,
-};
+use harfrust::{Buffer, ShapeOptions, ShapePlan, ShapePlanKey, ShaperFont, font::Variation};
 use koharu_runtime::HuggingFaceFile;
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -71,8 +69,7 @@ pub struct Font {
     font_name: String,
     post_script_name: String,
     synthesis: fontique::Synthesis,
-    shaper_data: Arc<ShaperData>,
-    shaper_instance: ShaperInstance,
+    shaper_font: harfrust::Font,
     shape_plans: Arc<Mutex<VecDeque<Arc<ShapePlan>>>>,
     normalized_coords: Vec<skrifa::instance::NormalizedCoord>,
     vello_coords: Vec<vello::NormalizedCoord>,
@@ -102,10 +99,11 @@ impl Font {
                 value: *value,
             })
             .collect::<Vec<_>>();
-        let harfrust_font = harfrust::FontRef::from_index(font.blob.as_ref(), font.index)
-            .context("failed to create HarfRust font reference")?;
-        let shaper_data = Arc::new(ShaperData::new(&harfrust_font));
-        let shaper_instance = ShaperInstance::from_variations(&harfrust_font, &variations);
+        let shaper_font = harfrust::Font::new(font.blob.clone().into_raw_parts().0, font.index)
+            .context("failed to create HarfRust font")?
+            .instance_builder()
+            .variations(&variations)
+            .build();
         let skrifa_font = skrifa::FontRef::from_index(font.blob.as_ref(), font.index)
             .context("failed to create Skrifa font reference")?;
         let location = skrifa_font
@@ -142,8 +140,7 @@ impl Font {
             font_name,
             post_script_name,
             synthesis: font.synthesis,
-            shaper_data,
-            shaper_instance,
+            shaper_font,
             shape_plans: Arc::new(Mutex::new(VecDeque::new())),
             normalized_coords,
             vello_coords,
@@ -172,25 +169,19 @@ impl Font {
         LocationRef::new(&self.normalized_coords)
     }
 
-    pub(crate) fn shaper_instance(&self) -> &ShaperInstance {
-        &self.shaper_instance
-    }
-
-    pub(crate) fn shaper_data(&self) -> &ShaperData {
-        &self.shaper_data
+    pub(crate) fn shaper_font(&self) -> &harfrust::Font {
+        &self.shaper_font
     }
 
     pub(crate) fn shape_plan(
         &self,
-        font: &harfrust::FontRef<'_>,
         direction: harfrust::Direction,
         script: Option<harfrust::Script>,
         language: Option<&harfrust::Language>,
         features: &[harfrust::Feature],
     ) -> Arc<ShapePlan> {
-        let key = ShapePlanKey::new(script, direction)
+        let key = ShapePlanKey::new(&self.shaper_font, script, direction)
             .language(language)
-            .instance(Some(&self.shaper_instance))
             .features(features);
         let mut plans = self.shape_plans.lock();
         if let Some(index) = plans.iter().position(|plan| key.matches(plan)) {
@@ -199,13 +190,12 @@ impl Font {
             return plan;
         }
 
-        let shaper = self
-            .shaper_data
-            .shaper(font)
-            .instance(Some(&self.shaper_instance))
-            .build();
         let plan = Arc::new(ShapePlan::new(
-            &shaper, direction, script, language, features,
+            &self.shaper_font,
+            direction,
+            script,
+            language,
+            features,
         ));
         if plans.len() == SHAPE_PLAN_CACHE_CAPACITY {
             plans.pop_front();
@@ -225,11 +215,6 @@ impl Font {
     pub(crate) fn skrifa_ref(&self) -> Result<skrifa::FontRef<'_>> {
         skrifa::FontRef::from_index(self.data.as_ref(), self.index)
             .context("failed to create Skrifa font reference")
-    }
-
-    pub(crate) fn harfrust_ref(&self) -> Result<harfrust::FontRef<'_>> {
-        harfrust::FontRef::from_index(self.data.as_ref(), self.index)
-            .context("failed to create HarfRust font reference")
     }
 
     #[cfg(test)]
@@ -258,24 +243,24 @@ impl Font {
         if font.charmap().is_symbol() {
             return false;
         }
-        let Ok(harfrust_font) = self.harfrust_ref() else {
-            return false;
-        };
-        let mut buffer = UnicodeBuffer::new();
+        let mut buffer = Buffer::new();
         buffer.push_str(text);
         buffer.guess_segment_properties();
-        let shaped = self
-            .shaper_data
-            .shaper(&harfrust_font)
-            .instance(Some(&self.shaper_instance))
-            .build()
-            .shape(buffer, ShapeOptions::new());
+        if harfrust::shape(
+            &ShaperFont::new(&self.shaper_font),
+            &mut buffer,
+            ShapeOptions::new(),
+        )
+        .is_err()
+        {
+            return false;
+        }
         let outlines = font.outline_glyphs();
         let size = Size::new(font_size);
         let metrics = font.glyph_metrics(size, self.location());
         let mut rendered = false;
 
-        for glyph in shaped.glyph_infos() {
+        for glyph in buffer.glyph_infos() {
             let character = text
                 .get(glyph.cluster as usize..)
                 .and_then(|tail| tail.chars().next());
