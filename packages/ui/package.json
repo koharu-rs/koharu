@@ -16,7 +16,7 @@
     "shadcn": "shadcn add --all --overwrite --yes"
   },
   "dependencies": {
-    "@base-ui/react": "^1.8.0",
+    "@base-ui/react": "^1.9.0",
     "@shadcn/react": "^0.3.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
