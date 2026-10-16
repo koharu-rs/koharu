@@ -1,0 +1,4 @@
+interface:
+  display_name: "Conventions"
+  short_description: "Ownership, style, and review rules"
+  default_prompt: "Use $conventions before changing Koharu ownership, UI, pipeline, or contributor-facing behavior."
