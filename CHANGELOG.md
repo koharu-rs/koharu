@@ -1,3 +1,58 @@
+## [0.84.0](https://github.com/koharu-rs/koharu/compare/0.83.5..0.84.0) - 2026-10-16
+
+### ⛰️  Features
+
+- *(i18n)* Add Wu Chinese locale ([#1237](https://github.com/koharu-rs/koharu/issues/1237)) - ([302e4b0](https://github.com/koharu-rs/koharu/commit/302e4b0e2a986d19ab3344aa9b30f4fd6dc08f6b))
+- Add frontend Sentry and upload release debug files ([#1208](https://github.com/koharu-rs/koharu/issues/1208)) - ([b5ee124](https://github.com/koharu-rs/koharu/commit/b5ee1242fee05dbb6f8fb164eabfac3ab3c949b3))
+- Scale pen size with image resolution ([#1134](https://github.com/koharu-rs/koharu/issues/1134)) - ([32d62d2](https://github.com/koharu-rs/koharu/commit/32d62d2d7dbcad6b5bc2dc856ac9068dc390bccb))
+
+### 🐛 Bug Fixes
+
+- *(ci)* Use Tauri macOS certificate handling - ([701ecf8](https://github.com/koharu-rs/koharu/commit/701ecf8b1177d774d557b42eb4efce7711e18a95))
+- *(deps)* Pin patched updater for macOS - ([2482e40](https://github.com/koharu-rs/koharu/commit/2482e408967be0a7c9a72e8a331e37975127644c))
+- *(rasterizer)* Request the adapter's texture and buffer limits ([#1168](https://github.com/koharu-rs/koharu/issues/1168)) - ([bcac8a8](https://github.com/koharu-rs/koharu/commit/bcac8a891c91d08baf375b3f91831c59e82f58f7))
+- *(torch)* Replace deprecated float constants - ([57e9b65](https://github.com/koharu-rs/koharu/commit/57e9b65ff116ac334ddfcee3cdd1ecb6ef727c29))
+
+### 📚 Documentation
+
+- Keep agent rules in AGENTS.md ([#1238](https://github.com/koharu-rs/koharu/issues/1238)) - ([57484e8](https://github.com/koharu-rs/koharu/commit/57484e80e261bf5c213c5d7bfa24d338ba826b8d))
+- Serve English documentation from root ([#1211](https://github.com/koharu-rs/koharu/issues/1211)) - ([39636de](https://github.com/koharu-rs/koharu/commit/39636debf950df37cc9efa988c6c59ddfbd57ddb))
+- Add localized privacy notice ([#1210](https://github.com/koharu-rs/koharu/issues/1210)) - ([288c528](https://github.com/koharu-rs/koharu/commit/288c528fd6010d950100853d1c0f67ee6eff7a1a))
+- Add code of conduct ([#1190](https://github.com/koharu-rs/koharu/issues/1190)) - ([6fface4](https://github.com/koharu-rs/koharu/commit/6fface427bc39d85baad3cc61b99e4636799cc27))
+- Update issue template and contributing guide - ([6db0546](https://github.com/koharu-rs/koharu/commit/6db054650839a17599ca4e1a79f1bb7cf33abf08))
+
+### ⚡ Performance
+
+- *(canvas)* Present camera changes every frame and batch compositor draws ([#1230](https://github.com/koharu-rs/koharu/issues/1230)) - ([168aa43](https://github.com/koharu-rs/koharu/commit/168aa434c67da16b313adcd9dac40f8c314f49c4))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dev)* Allow githubusercontent domain for jsonschema - ([2c78c0c](https://github.com/koharu-rs/koharu/commit/2c78c0cd6eeec4dbf607f0a22e3a7e1f932b6ff3))
+- Remove AGENTS.md and CLAUDE.md files - ([72d24fc](https://github.com/koharu-rs/koharu/commit/72d24fc0e86c050bc5118ae062bb3219d10875b8))
+- Add TypeScript no-check directive to signpath.ts - ([9f447ff](https://github.com/koharu-rs/koharu/commit/9f447ff4a878c4fc6738fafcffc8ad123aec2a5c))
+- Remove koharu-metrics telemetry ([#1214](https://github.com/koharu-rs/koharu/issues/1214)) - ([ac2172b](https://github.com/koharu-rs/koharu/commit/ac2172b49eb350615111e092e06c713e4fde018d))
+- Update sponsors ([#1212](https://github.com/koharu-rs/koharu/issues/1212)) - ([4df6a4f](https://github.com/koharu-rs/koharu/commit/4df6a4f785e8c2056e25e112eb7b89ccf2f040cc))
+- Remove first-time contributor welcome workflow ([#1207](https://github.com/koharu-rs/koharu/issues/1207)) - ([b7eb1d6](https://github.com/koharu-rs/koharu/commit/b7eb1d634a542e1126881012c39078f610a27b8c))
+- Use pull_request for Dependabot automation ([#1206](https://github.com/koharu-rs/koharu/issues/1206)) - ([8127e36](https://github.com/koharu-rs/koharu/commit/8127e3660a4dd0e710db7522d359f2eb6d8c3f3c))
+- Auto-approve Dependabot pull requests ([#1204](https://github.com/koharu-rs/koharu/issues/1204)) - ([979a4c9](https://github.com/koharu-rs/koharu/commit/979a4c955dc8c84e87558b534f336b11d6f13640))
+- Check Dependabot updates daily ([#1199](https://github.com/koharu-rs/koharu/issues/1199)) - ([48956a4](https://github.com/koharu-rs/koharu/commit/48956a4b4126d7bba08f2dc6d060d2744471504e))
+- Enable auto-merge for Dependabot pull requests ([#1198](https://github.com/koharu-rs/koharu/issues/1198)) - ([5e321fd](https://github.com/koharu-rs/koharu/commit/5e321fdc100b0b223774ca7e933ae1ce9293887f))
+- Update sponsors ([#1197](https://github.com/koharu-rs/koharu/issues/1197)) - ([96a8af0](https://github.com/koharu-rs/koharu/commit/96a8af046bb89bf73ab2da01b58d80faf439aa1c))
+- Add SignPath as a special sponsor ([#1196](https://github.com/koharu-rs/koharu/issues/1196)) - ([851961b](https://github.com/koharu-rs/koharu/commit/851961b9a8e3a56bd9de2c61eae15f4f4ab4fde4))
+- Run git-cliff online with GitHub authentication ([#1195](https://github.com/koharu-rs/koharu/issues/1195)) - ([deedb17](https://github.com/koharu-rs/koharu/commit/deedb17d42b1087f178d10c305a87efe9d429145))
+- Automate release PRs with Release Please ([#1193](https://github.com/koharu-rs/koharu/issues/1193)) - ([b05d9ac](https://github.com/koharu-rs/koharu/commit/b05d9ac86fd791a4eb301ae5f0a6e26f1306fa5d))
+- Remove AppImage packaging and AnyLinux workaround ([#1192](https://github.com/koharu-rs/koharu/issues/1192)) - ([521e20c](https://github.com/koharu-rs/koharu/commit/521e20ca965eec7fe2498f4ddc25babd4d77f167))
+- Add inline SignPath signing for Windows ([#1191](https://github.com/koharu-rs/koharu/issues/1191)) - ([dac1bd2](https://github.com/koharu-rs/koharu/commit/dac1bd2566fc52edfdd3eee7d90d32ee391dc9e1))
+- Remove Windows code signing ([#1189](https://github.com/koharu-rs/koharu/issues/1189)) - ([06c8b84](https://github.com/koharu-rs/koharu/commit/06c8b84c4349c4df3fef96559bcc4177ff62b626))
+- Fix warning on macos - ([e2ea5e5](https://github.com/koharu-rs/koharu/commit/e2ea5e588875cd4019b9c9e0641e95f76aa05790))
+- Update sponsors ([#1026](https://github.com/koharu-rs/koharu/issues/1026)) - ([ca8b7fb](https://github.com/koharu-rs/koharu/commit/ca8b7fbcb55ff5afd9ef5939f8d5ac18371c6699))
+- Show special sponsors before past sponsors - ([45b4cae](https://github.com/koharu-rs/koharu/commit/45b4cae150dcf280c0ccdf87d750af76f0811c7d))
+- Add special and past sponsors - ([8ed1a1f](https://github.com/koharu-rs/koharu/commit/8ed1a1fb2f128ffb0b5a75085fbde30ef8040527))
+
+## New Contributors ❤️
+
+* @SevenIndirecto made their first contribution in [#1168](https://github.com/koharu-rs/koharu/pull/1168)
+
 ## [0.83.5](https://github.com/koharu-rs/koharu/compare/0.83.4..0.83.5) - 2026-09-22
 
 ### 🐛 Bug Fixes
