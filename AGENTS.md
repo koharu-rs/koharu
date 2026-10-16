@@ -2,16 +2,6 @@
 
 Document only durable, repository-specific constraints here. Do not record current file layouts, temporary paths, model inventories, helper names, or other implementation details that may change during a refactor. Normal Rust, TypeScript, testing, formatting, and Git practices are assumed.
 
-## Skills
-
-Read the skill for the feature being changed. The rules in this file apply to every change. Do not treat an unmerged experiment as the current architecture.
-
-- [`app`](.agents/skills/app/SKILL.md) — desktop entry, React shell, typed commands, generated protocol
-- [`scene`](.agents/skills/scene/SKILL.md) — project meaning, patches, revisions, storage publication
-- [`pipeline`](.agents/skills/pipeline/SKILL.md) — page-stage scheduling, model residency, incremental commits
-- [`rendering`](.agents/skills/rendering/SKILL.md) — prepared frames, raster transport, WebGPU presentation
-- [`runtime`](.agents/skills/runtime/SKILL.md) — llama.cpp and stable-diffusion.cpp sync
-
 ## Change Policy
 
 - Never add backward compatibility. When an API, schema, configuration, or ownership boundary changes, update every in-repository consumer and remove the replaced form.
@@ -24,6 +14,16 @@ Read the skill for the feature being changed. The rules in this file apply to ev
 - For editor behavior that is not already specified, match Photoshop or Clip Studio Paint. Prefer an in-app edit over an export/import round trip when the task is ordinary editing.
 - Desktop API keys go through the OS credential store. Do not add a project environment-file fallback for the desktop app.
 - Once a subsystem is removed, delete its calls and dependency together. Do not leave a stub, alias, or disabled flag behind.
+
+## Ownership
+
+- The UI invokes typed commands. Native code owns durable project state and processing. Do not add an HTTP client or a generic event envelope.
+- Scene owns what a project means. Storage owns opaque payloads and immutable blobs. Analysis, content, and presentation stay separate: detection geometry is not a visible layer, translation does not drop OCR provenance, and typography does not rewrite semantic text.
+- A patch binds to a project and a base revision, records preconditions, and carries inverses. Reject a stale patch. Derived work rebases explicitly and fails if anything it observed has changed.
+- Publish missing blobs first, write the inactive state slot, then publish atomically. Opening uses the newest valid slot and can fall back. Renderer, pipeline, and Agent consume snapshots and submit patches. They do not write storage files.
+- A pipeline stage runs on one page: detection, then OCR and translation, or detection, then inpainting. Pages enter in project order. Completed detection makes that page's later stages eligible immediately. At most one job per stage runs at a time. Each committed result is its own undo step. Do not add a second translation prompt path.
+- Accelerator inference uses one admission lane, including remote translation. On out-of-memory, release the lane, unload the other models, wait for a fresh resource sample, and retry once. Any other failure unloads the failing stage. Stopping is cooperative and discards an uncommitted result.
+- One prepared frame feeds presentation, PNG, layer crops, and PSD. Translation is the only visible text. Incremental reuse must match a full render. The previous page stays visible until the staged generation is ready. An obsolete preparation cannot replace a newer generation. Transient camera, transform, stroke, and sampling stay in the browser. Completed edits cross commands.
 
 ## Interface
 
@@ -92,7 +92,6 @@ Read the skill for the feature being changed. The rules in this file apply to ev
 ## Desktop Rendering
 
 - Koharu presents canvas pixels through the `koharu-canvas` WASM module and WebGPU inside the standard Tauri webview. Keep durable scene preparation and export native, keep transient canvas interaction in the browser, and validate WebGPU presentation through the final desktop window.
-- Preparation, transport, and export rules are in the rendering skill.
 
 ## Documentation
 

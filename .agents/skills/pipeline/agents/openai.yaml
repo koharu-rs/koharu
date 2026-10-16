@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pipeline"
-  short_description: "Stage scheduling and model residency"
-  default_prompt: "Use $pipeline before changing Koharu detection, OCR, translation, inpainting, or cancellation."

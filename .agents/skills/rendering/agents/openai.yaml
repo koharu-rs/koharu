@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rendering"
-  short_description: "Prepared frames and WebGPU presentation"
-  default_prompt: "Use $rendering before changing Koharu frame preparation, the canvas, PSD export, or desktop preview."
