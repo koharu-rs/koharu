@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scene"
+  short_description: "Project meaning, patches, and storage"
+  default_prompt: "Use $scene before changing Koharu project structure, undo, revisions, or persistence."

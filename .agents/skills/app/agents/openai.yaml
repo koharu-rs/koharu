@@ -1,0 +1,4 @@
+interface:
+  display_name: "App"
+  short_description: "Desktop entry and typed commands"
+  default_prompt: "Use $app before changing Koharu startup, the React shell, bridge bindings, or command channels."
