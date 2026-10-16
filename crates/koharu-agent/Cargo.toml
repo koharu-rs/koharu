@@ -19,6 +19,7 @@ eventsource-stream = { workspace = true }
 futures = { workspace = true }
 koharu-config = { workspace = true }
 koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
 koharu-secrets = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
