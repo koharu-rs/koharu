@@ -14,7 +14,7 @@
   "dependencies": {
     "@koharu/bridge": "workspace:*",
     "@koharu/ui": "workspace:*",
-    "@sentry/nextjs": "^11.6.0",
+    "@sentry/nextjs": "^11.7.0",
     "@tanstack/react-query": "^5.104.2",
     "@tanstack/react-virtual": "^3.14.15",
     "@tauri-apps/api": "3.0.0-alpha.3",
