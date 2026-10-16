@@ -28,7 +28,6 @@ use koharu_llama::{
 };
 use llguidance::{Matcher, ParserFactory, api::TopLevelGrammar};
 use minijinja::{Environment, Error as TemplateError, ErrorKind as TemplateErrorKind, context};
-use serde::Serialize;
 
 use super::{
     Capabilities, ChatMessage, ChatTemplateOptions, FinishReason, Generation, GenerationControl,
@@ -65,12 +64,6 @@ struct ChatTemplate {
     eos_token: String,
 }
 
-#[derive(Serialize)]
-struct TemplateMessage<'a> {
-    role: &'a str,
-    content: &'a str,
-}
-
 impl ChatTemplate {
     fn from_model(model: &LlamaModel, eos_token: LlamaToken) -> Result<Self> {
         let template = model
@@ -100,9 +93,11 @@ impl ChatTemplate {
     fn render(&self, messages: &[ChatMessage], options: ChatTemplateOptions) -> Result<String> {
         let messages = messages
             .iter()
-            .map(|message| TemplateMessage {
-                role: message.role.as_str(),
-                content: &message.content,
+            .map(|message| {
+                context! {
+                    role => message.role.as_str(),
+                    content => message.content.as_str(),
+                }
             })
             .collect::<Vec<_>>();
         let template = self
@@ -801,6 +796,48 @@ fn available_threads() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chat_template_preserves_messages_and_options() {
+        let mut environment = Environment::new();
+        minijinja_contrib::add_to_environment(&mut environment);
+        environment
+            .set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
+        environment
+            .add_template(
+                CHAT_TEMPLATE_NAME,
+                "{{ bos_token }}{% for message in messages %}{{ message.role.upper() }}:{{ message.content.strip() }};{% endfor %}{{ eos_token }}|{{ add_generation_prompt }}|{{ enable_thinking }}|{{ tools|length }}|{{ documents|length }}",
+            )
+            .unwrap();
+        let template = ChatTemplate {
+            environment,
+            bos_token: "<s>".to_owned(),
+            eos_token: "</s>".to_owned(),
+        };
+        let messages = [
+            ChatMessage::system(" Translate "),
+            ChatMessage::user("こんにちは"),
+        ];
+
+        assert_eq!(
+            template
+                .render(&messages, ChatTemplateOptions::default())
+                .unwrap(),
+            "<s>SYSTEM:Translate;USER:こんにちは;</s>|True|False|0|0"
+        );
+        assert_eq!(
+            template
+                .render(
+                    &[],
+                    ChatTemplateOptions {
+                        add_generation_prompt: false,
+                        enable_thinking: true,
+                    },
+                )
+                .unwrap(),
+            "<s></s>|False|True|0|0"
+        );
+    }
 
     fn prepared(tokens: usize, non_causal: bool) -> PreparedPrompt {
         PreparedPrompt {
