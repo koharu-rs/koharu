@@ -1,0 +1,375 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --radius: 0.625rem;
+        --background: oklch(1 0 0);
+        --foreground: oklch(0.145 0 0);
+        --card: oklch(1 0 0);
+        --muted: oklch(0.97 0 0);
+        --muted-foreground: oklch(0.556 0 0);
+        --primary: oklch(0.645 0.246 16.439);
+        --primary-hover: oklch(0.586 0.253 17.585);
+        --primary-foreground: oklch(0.985 0 0);
+        --accent: oklch(0.941 0.03 12.58);
+        --accent-foreground: oklch(0.514 0.222 16.935);
+        --border: oklch(0.922 0 0);
+        --destructive: oklch(0.577 0.245 27.325);
+        --online: oklch(0.723 0.192 149.579);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: oklch(0.145 0 0);
+          --foreground: oklch(0.985 0 0);
+          --card: oklch(0.205 0 0);
+          --muted: oklch(0.269 0 0);
+          --muted-foreground: oklch(0.708 0 0);
+          --primary: oklch(0.712 0.194 13.428);
+          --primary-hover: oklch(0.645 0.246 16.439);
+          --primary-foreground: oklch(0.145 0 0);
+          --accent: oklch(0.271 0.105 12.094);
+          --accent-foreground: oklch(0.941 0.03 12.58);
+          --border: oklch(1 0 0 / 10%);
+          --destructive: oklch(0.704 0.191 22.216);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 12px;
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .header {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .title {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--primary);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 8px 12px;
+        margin-bottom: 8px;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted-foreground);
+        flex-shrink: 0;
+      }
+
+      .dot.online {
+        background: var(--online);
+      }
+
+      .dot.error {
+        background: var(--destructive);
+      }
+
+      .status-label {
+        font-weight: 500;
+      }
+
+      .status-note {
+        margin-top: 4px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        word-break: break-word;
+      }
+
+      .status-note.error {
+        color: var(--destructive);
+      }
+
+      button {
+        width: 100%;
+        padding: 7px 12px;
+        border: none;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      button.stop {
+        background: transparent;
+        color: var(--destructive);
+        border: 1px solid var(--border);
+      }
+
+      button.stop:hover:not(:disabled) {
+        background: var(--muted);
+      }
+
+      .site {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .site[hidden] {
+        display: none;
+      }
+
+      .site-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        flex-shrink: 0;
+      }
+
+      .site-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .site-name {
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .site-note {
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .site-note strong {
+        color: var(--foreground);
+      }
+
+      .switch {
+        appearance: none;
+        position: relative;
+        width: 34px;
+        height: 20px;
+        margin: 0;
+        border-radius: 10px;
+        background: var(--muted-foreground);
+        flex-shrink: 0;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--background);
+        transition: transform 0.2s;
+      }
+
+      .switch:checked {
+        background: var(--primary);
+      }
+
+      .switch:checked::after {
+        transform: translateX(14px);
+      }
+
+      .settings {
+        margin-top: 8px;
+        margin-bottom: 0;
+      }
+
+      button.settings-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0;
+        background: none;
+        color: inherit;
+        font-size: inherit;
+        text-align: left;
+      }
+
+      button.settings-toggle:hover:not(:disabled) {
+        background: none;
+      }
+
+      .settings-toggle svg {
+        width: 14px;
+        height: 14px;
+        color: var(--muted-foreground);
+        transition: transform 0.2s;
+      }
+
+      .settings-toggle[aria-expanded="false"] svg {
+        transform: rotate(-90deg);
+      }
+
+      #settings-body {
+        margin-top: 6px;
+      }
+
+      .field {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .field[hidden] {
+        display: none;
+      }
+
+      select {
+        width: 100%;
+        min-width: 0;
+        padding: 4px 6px;
+        border: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--background);
+        color: var(--foreground);
+        font-family: inherit;
+        font-size: 11px;
+      }
+
+      .group-title {
+        margin: 6px 0 4px;
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+
+      .hint {
+        margin: 8px 0 0;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .hint strong {
+        color: var(--accent-foreground);
+        background: var(--accent);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <span class="title">Koharu</span>
+    </div>
+
+    <div class="card site" id="site" hidden>
+      <img class="site-icon" id="site-icon" alt="" />
+      <div class="site-text">
+        <div class="site-name" id="site-name"></div>
+        <div class="site-note">
+          Translate button <strong id="site-state"></strong> for this site
+        </div>
+      </div>
+      <input class="switch" id="site-switch" type="checkbox" />
+    </div>
+
+    <div class="card">
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span class="status-label" id="status-label">Checking…</span>
+      </div>
+      <div class="status-note" id="status-note"></div>
+    </div>
+
+    <button id="power" disabled>Start engine</button>
+
+    <div class="card settings">
+      <button
+        class="settings-toggle"
+        id="settings-toggle"
+        aria-expanded="false"
+        aria-controls="settings-body"
+      >
+        Engine settings
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      <div id="settings-body" hidden>
+        <div id="settings-fields" hidden>
+          <label class="field">Detection <select id="detection"></select></label>
+          <label class="field">OCR <select id="ocr"></select></label>
+          <label class="field">Inpainting <select id="inpainting"></select></label>
+          <div class="group-title">Translation</div>
+          <label class="field">Provider <select id="provider"></select></label>
+          <label class="field">Model <select id="model"></select></label>
+          <label class="field" id="quantization-field">
+            Quantization <select id="quantization"></select>
+          </label>
+          <label class="field">Language <select id="language"></select></label>
+        </div>
+        <div class="status-note" id="settings-note"></div>
+      </div>
+    </div>
+
+    <p class="hint">
+      Hover any manga image and click <strong>Translate</strong> to process it.
+    </p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
