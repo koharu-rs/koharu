@@ -62,6 +62,8 @@
   "colorPicker": {
     "brushColor": "Brush color",
     "hexCode": "Hex color code",
+    "recent": "Recent colors",
+    "recentColor": "Recent color {{color}}",
     "sampleCanvas": "Pick color from canvas",
     "transparent": "Transparent"
   },
