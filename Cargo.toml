@@ -33,7 +33,6 @@ koharu-torch = { path = "crates/koharu-torch" }
 koharu-torch-sys = { path = "crates/koharu-torch-sys" }
 koharu-agent = { path = "crates/koharu-agent" }
 koharu-ml = { path = "crates/koharu-ml" }
-koharu-metrics = { path = "crates/koharu-metrics" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }
@@ -45,7 +44,7 @@ koharu-secrets = { path = "crates/koharu-secrets" }
 # external dependencies
 alphanumeric-sort = "1.5.8"
 arc-swap = "1.9.2"
-hayro = "0.7.1"
+hayro = "0.8.0"
 image = "0.25.10"
 webp = { version = "0.3.1" }
 fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
@@ -75,10 +74,9 @@ rayon = "1.12.0"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23.2", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
-sys-locale = "0.3.2"
 sysinfo = { version = "0.39.6", features = ["system"] }
-rars = "0.9.4"
-zip = { version = "8.6.0", features = ["deflate"] }
+rars = "0.10.0"
+zip = { version = "9.0.2", features = ["deflate"] }
 dirs = "7.0.0"
 futures = "0.3.34"
 futures-channel = "0.3.34"
@@ -102,8 +100,8 @@ flate2 = "1.1.10"
 tempfile = "3.27.0"
 libloading = "0.9.0"
 nvml-wrapper = "0.13.0"
-minijinja = "2.24.0"
-minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
+minijinja = "3.0.0"
+minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
 indoc = "2.0.7"
 windows = { version = "0.62.2", features = [
     "Win32",
@@ -111,29 +109,29 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
 ] }
-skrifa = "0.47.0"
-harfrust = "0.13.3"
+skrifa = "0.48.0"
+harfrust = "0.14.0"
 hypher = "0.1.8"
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 icu_properties = "2.3.0"
 icu_segmenter = "2.3.0"
 jieba-rs = "0.11.0"
-fontique = "0.11.1"
+fontique = "0.12.0"
 pollster = "1.0.1"
-vello = "0.10.0"
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1", default-features = false, features = [
+vello = "0.11.0"
+tauri = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f", default-features = false, features = [
     "compression",
     "dynamic-acl",
     "specta",
 ] }
-tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
-tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
-tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "d9be6d0492fb6746637ba64497237b2116aaec90" }
-tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "d9be6d0492fb6746637ba64497237b2116aaec90" }
-tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "d9be6d0492fb6746637ba64497237b2116aaec90" }
-tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "d9be6d0492fb6746637ba64497237b2116aaec90" }
-tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "d9be6d0492fb6746637ba64497237b2116aaec90" }
-tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "d9be6d0492fb6746637ba64497237b2116aaec90" }
+tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
+tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
+tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-specta = { git = "https://github.com/koharu-rs/tauri-specta", tag = "v2.0.0-rc.25-koharu.1", features = ["derive", "typescript"] }
 schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.26.1", features = ["v4", "v7", "serde"] }
@@ -164,7 +162,7 @@ serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4.79"
 web-sys = "0.3.106"
-bindgen = "0.73.2"
+bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 quote = "1.0.47"
@@ -173,9 +171,13 @@ libc = "0.2.189"
 memmap2 = "0.9.11"
 
 [patch.crates-io]
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
-tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
-tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "a8703ee487c659efbebb27c799752d523a6d09a1" }
+tauri = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
+tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "1991873f5e2baa68773f21465f61baa93077498f" }
+
+[profile.release]
+# Keep debug information for Sentry's native stack traces and source context.
+debug = true
 
 [profile.dev]
 debug = 1

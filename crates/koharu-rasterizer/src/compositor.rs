@@ -5,12 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use vello::{
-    AaConfig, RenderParams, Scene,
-    kurbo::Affine,
-    peniko::Color,
-    wgpu::{self, util::DeviceExt as _},
-};
+use vello::{AaConfig, RenderParams, Scene, kurbo::Affine, peniko::Color, wgpu};
 
 #[cfg(target_arch = "wasm32")]
 use crate::PreparedRasterTile;
@@ -36,7 +31,7 @@ struct VertexOutput {
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
 @group(0) @binding(1) var erase_texture: texture_2d<f32>;
 @group(0) @binding(2) var texture_sampler: sampler;
-@group(0) @binding(3) var<uniform> uniforms: DrawUniforms;
+@group(1) @binding(0) var<uniform> uniforms: DrawUniforms;
 
 @vertex
 fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
@@ -102,6 +97,9 @@ struct CachedTexture {
     source: Option<ResourceId>,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
+    /// Samples this texture without an erase mask; built on first draw and valid for the
+    /// texture's lifetime because the sampler and the empty mask outlive every cached texture.
+    bind_group: Option<wgpu::BindGroup>,
     byte_len: u64,
     last_used: u64,
 }
@@ -110,6 +108,58 @@ struct ScratchTarget {
     size: (u32, u32),
     _texture: wgpu::Texture,
     view: wgpu::TextureView,
+    bind_group: Option<wgpu::BindGroup>,
+}
+
+const UNIFORM_FLOATS: usize = 20;
+const UNIFORM_BYTES: u64 = (UNIFORM_FLOATS * size_of::<f32>()) as u64;
+
+/// One textured quad of a composition pass.
+struct Draw {
+    textures: wgpu::BindGroup,
+    uniforms: [f32; UNIFORM_FLOATS],
+}
+
+/// Per-draw uniforms for a whole pass, bound once with a dynamic offset per draw.
+struct UniformArena {
+    buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    capacity: usize,
+    stride: usize,
+    bytes: Vec<u8>,
+}
+
+impl UniformArena {
+    fn new(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, capacity: usize) -> Self {
+        let stride = UNIFORM_BYTES.next_multiple_of(u64::from(
+            device.limits().min_uniform_buffer_offset_alignment,
+        )) as usize;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("koharu raster compositor uniforms"),
+            size: (capacity * stride) as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("koharu raster compositor uniform bind group"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &buffer,
+                    offset: 0,
+                    size: wgpu::BufferSize::new(UNIFORM_BYTES),
+                }),
+            }],
+        });
+        Self {
+            buffer,
+            bind_group,
+            capacity,
+            stride,
+            bytes: Vec::new(),
+        }
+    }
 }
 
 impl ScratchTarget {
@@ -133,13 +183,17 @@ impl ScratchTarget {
             size,
             _texture: texture,
             view,
+            bind_group: None,
         }
     }
 }
 
 pub struct GpuCompositor {
     pipeline: wgpu::RenderPipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
+    texture_layout: wgpu::BindGroupLayout,
+    uniform_layout: wgpu::BindGroupLayout,
+    uniforms: UniformArena,
+    draws: Vec<Draw>,
     sampler: wgpu::Sampler,
     empty_mask: CachedTexture,
     overlay: Option<ScratchTarget>,
@@ -167,8 +221,8 @@ impl GpuCompositor {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("koharu raster compositor bind group layout"),
+        let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("koharu raster compositor texture bind group layout"),
             entries: &[
                 texture_layout(0),
                 texture_layout(1),
@@ -178,21 +232,24 @@ impl GpuCompositor {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
             ],
+        });
+        let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("koharu raster compositor uniform bind group layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(UNIFORM_BYTES),
+                },
+                count: None,
+            }],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("koharu raster compositor pipeline layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
+            bind_group_layouts: &[Some(&texture_layout), Some(&uniform_layout)],
             immediate_size: 0,
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -226,7 +283,10 @@ impl GpuCompositor {
         });
         Self {
             pipeline,
-            bind_group_layout,
+            uniforms: UniformArena::new(device, &uniform_layout, 64),
+            texture_layout,
+            uniform_layout,
+            draws: Vec::new(),
             sampler,
             empty_mask: create_texture(device, "koharu empty erase mask", 1, 1, None),
             overlay: None,
@@ -445,76 +505,184 @@ impl GpuCompositor {
                 size,
             )?;
         }
-        clear_target(device, queue, target, background);
         let clip = clipped_rect(clip, size);
+        let mut clear = Some(background);
+        self.draws.clear();
         if clip[2] == 0 || clip[3] == 0 {
+            self.flush(device, queue, target, &mut clear, clip);
             self.trim_cache_protected(&active);
             return Ok(());
         }
+        let mut overlay_pending = false;
         for command in commands {
             match command {
                 CompositionCommand::Raster(draw) => {
-                    let erase = if draw.erase && erase_mask.is_some() {
-                        &self
-                            .erase
-                            .as_ref()
-                            .expect("erase target created above")
-                            .view
-                    } else {
-                        &self.empty_mask.view
-                    };
+                    let erased = draw.erase && erase_mask.is_some();
                     for tile in draw.image.tiles() {
-                        let source = &self.images[&tile.id()].view;
+                        let cached = self
+                            .images
+                            .get_mut(&tile.id())
+                            .expect("raster tile uploaded above");
+                        let textures = if erased {
+                            texture_bind_group(
+                                device,
+                                &self.texture_layout,
+                                &self.sampler,
+                                &cached.view,
+                                &self
+                                    .erase
+                                    .as_ref()
+                                    .expect("erase target created above")
+                                    .view,
+                            )
+                        } else {
+                            cached
+                                .bind_group
+                                .get_or_insert_with(|| {
+                                    texture_bind_group(
+                                        device,
+                                        &self.texture_layout,
+                                        &self.sampler,
+                                        &cached.view,
+                                        &self.empty_mask.view,
+                                    )
+                                })
+                                .clone()
+                        };
                         let origin = tile.origin();
                         let gutter = tile.gutter();
-                        self.draw(
-                            device,
-                            queue,
-                            source,
-                            erase,
-                            target,
-                            draw.transform
-                                * Affine::translate((f64::from(origin.0), f64::from(origin.1))),
-                            tile.size(),
-                            (gutter[0], gutter[1]),
-                            tile.resource_size(),
-                            size,
-                            draw.opacity.clamp(0.0, 1.0),
-                            draw.erase && erase_mask.is_some(),
-                            clip,
-                        );
+                        self.draws.push(Draw {
+                            textures,
+                            uniforms: draw_uniforms(
+                                draw.transform
+                                    * Affine::translate((f64::from(origin.0), f64::from(origin.1))),
+                                tile.size(),
+                                (gutter[0], gutter[1]),
+                                tile.resource_size(),
+                                size,
+                                draw.opacity.clamp(0.0, 1.0),
+                                erased,
+                            ),
+                        });
                     }
                 }
                 CompositionCommand::Vector(scene) => {
-                    let overlay = &self
-                        .overlay
-                        .as_ref()
-                        .expect("vector target created above")
-                        .view;
-                    render_vello(vello, device, queue, scene, overlay, size)?;
-                    self.draw(
-                        device,
-                        queue,
-                        overlay,
-                        &self.empty_mask.view,
-                        target,
-                        Affine::IDENTITY,
-                        size,
-                        (0, 0),
-                        size,
-                        size,
-                        1.0,
-                        false,
-                        clip,
-                    );
+                    // Every vector batch renders into the same overlay texture, so a queued
+                    // draw of its previous contents must reach the GPU before Vello replaces
+                    // them.
+                    if overlay_pending {
+                        self.flush(device, queue, target, &mut clear, clip);
+                    }
+                    let overlay = self.overlay.as_mut().expect("vector target created above");
+                    render_vello(vello, device, queue, scene, &overlay.view, size)?;
+                    let textures = overlay
+                        .bind_group
+                        .get_or_insert_with(|| {
+                            texture_bind_group(
+                                device,
+                                &self.texture_layout,
+                                &self.sampler,
+                                &overlay.view,
+                                &self.empty_mask.view,
+                            )
+                        })
+                        .clone();
+                    self.draws.push(Draw {
+                        textures,
+                        uniforms: draw_uniforms(
+                            Affine::IDENTITY,
+                            size,
+                            (0, 0),
+                            size,
+                            size,
+                            1.0,
+                            false,
+                        ),
+                    });
+                    overlay_pending = true;
                 }
             }
         }
+        self.flush(device, queue, target, &mut clear, clip);
         // The budget is soft for the current frame: inactive least-recently-used
         // textures are victims, while every texture referenced by this render
         // remains resident even when the active working set exceeds the budget.
         self.trim_cache_protected(&active);
         Ok(())
+    }
+
+    /// Encodes the queued draws as one render pass and submits it. The first pass of a frame
+    /// also clears the target, which is why it runs even without draws.
+    fn flush(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: &wgpu::TextureView,
+        clear: &mut Option<[u8; 4]>,
+        clip: [u32; 4],
+    ) {
+        if self.draws.is_empty() && clear.is_none() {
+            return;
+        }
+        if self.draws.len() > self.uniforms.capacity {
+            self.uniforms = UniformArena::new(
+                device,
+                &self.uniform_layout,
+                self.draws.len().next_power_of_two(),
+            );
+        }
+        let stride = self.uniforms.stride;
+        if !self.draws.is_empty() {
+            let bytes = &mut self.uniforms.bytes;
+            bytes.clear();
+            bytes.resize(self.draws.len() * stride, 0);
+            for (draw, slot) in self.draws.iter().zip(bytes.chunks_exact_mut(stride)) {
+                for (value, bytes) in draw.uniforms.iter().zip(slot.as_chunks_mut::<4>().0) {
+                    *bytes = value.to_ne_bytes();
+                }
+            }
+            queue.write_buffer(&self.uniforms.buffer, 0, bytes);
+        }
+        let load = clear.take().map_or(wgpu::LoadOp::Load, |[r, g, b, a]| {
+            wgpu::LoadOp::Clear(wgpu::Color {
+                r: f64::from(r) / 255.0,
+                g: f64::from(g) / 255.0,
+                b: f64::from(b) / 255.0,
+                a: f64::from(a) / 255.0,
+            })
+        });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("koharu raster compositor encoder"),
+        });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("koharu raster compositor pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if !self.draws.is_empty() {
+                pass.set_scissor_rect(clip[0], clip[1], clip[2], clip[3]);
+                pass.set_pipeline(&self.pipeline);
+                for (index, draw) in self.draws.iter().enumerate() {
+                    pass.set_bind_group(0, &draw.textures, &[]);
+                    pass.set_bind_group(1, &self.uniforms.bind_group, &[(index * stride) as u32]);
+                    pass.draw(0..6, 0..1);
+                }
+            }
+        }
+        queue.submit([encoder.finish()]);
+        self.draws.clear();
     }
 
     fn upload(
@@ -611,107 +779,69 @@ impl GpuCompositor {
             .saturating_add(u64::try_from(expected).unwrap_or(u64::MAX));
         Ok(())
     }
+}
 
-    #[allow(clippy::too_many_arguments)]
-    fn draw(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        source: &wgpu::TextureView,
-        erase: &wgpu::TextureView,
-        target: &wgpu::TextureView,
-        transform: Affine,
-        source_size: (u32, u32),
-        sample_origin: (u32, u32),
-        resource_size: (u32, u32),
-        target_size: (u32, u32),
-        opacity: f32,
-        use_erase: bool,
-        clip: [u32; 4],
-    ) {
-        let [a, b, c, d, e, f] = transform.as_coeffs();
-        let pixel_aligned =
-            a == 1.0 && b == 0.0 && c == 0.0 && d == 1.0 && e.fract() == 0.0 && f.fract() == 0.0;
-        let values = [
-            a as f32,
-            b as f32,
-            c as f32,
-            d as f32,
-            e as f32,
-            f as f32,
-            source_size.0 as f32,
-            source_size.1 as f32,
-            target_size.0 as f32,
-            target_size.1 as f32,
-            opacity,
-            f32::from(use_erase),
-            0.0,
-            f32::from(pixel_aligned),
-            0.0,
-            0.0,
-            sample_origin.0 as f32,
-            sample_origin.1 as f32,
-            resource_size.0 as f32,
-            resource_size.1 as f32,
-        ];
-        let bytes = values
-            .iter()
-            .flat_map(|value| value.to_ne_bytes())
-            .collect::<Vec<_>>();
-        let uniforms = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("koharu raster compositor uniforms"),
-            contents: &bytes,
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("koharu raster compositor bind group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(source),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(erase),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: uniforms.as_entire_binding(),
-                },
-            ],
-        });
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("koharu raster compositor encoder"),
-        });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("koharu raster compositor pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_scissor_rect(clip[0], clip[1], clip[2], clip[3]);
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
-            pass.draw(0..6, 0..1);
-        }
-        queue.submit([encoder.finish()]);
-    }
+fn draw_uniforms(
+    transform: Affine,
+    source_size: (u32, u32),
+    sample_origin: (u32, u32),
+    resource_size: (u32, u32),
+    target_size: (u32, u32),
+    opacity: f32,
+    use_erase: bool,
+) -> [f32; UNIFORM_FLOATS] {
+    let [a, b, c, d, e, f] = transform.as_coeffs();
+    let pixel_aligned =
+        a == 1.0 && b == 0.0 && c == 0.0 && d == 1.0 && e.fract() == 0.0 && f.fract() == 0.0;
+    [
+        a as f32,
+        b as f32,
+        c as f32,
+        d as f32,
+        e as f32,
+        f as f32,
+        source_size.0 as f32,
+        source_size.1 as f32,
+        target_size.0 as f32,
+        target_size.1 as f32,
+        opacity,
+        f32::from(use_erase),
+        0.0,
+        f32::from(pixel_aligned),
+        0.0,
+        0.0,
+        sample_origin.0 as f32,
+        sample_origin.1 as f32,
+        resource_size.0 as f32,
+        resource_size.1 as f32,
+    ]
+}
+
+fn texture_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    source: &wgpu::TextureView,
+    erase: &wgpu::TextureView,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("koharu raster compositor texture bind group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(source),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(erase),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
 }
 
 fn texture_layout(binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -755,6 +885,7 @@ fn create_texture(
         source,
         texture,
         view,
+        bind_group: None,
         byte_len: u64::from(width) * u64::from(height) * 4,
         last_used: 0,
     }
@@ -840,41 +971,6 @@ fn render_vello(
             },
         )
         .map_err(Error::backend)
-}
-
-fn clear_target(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    target: &wgpu::TextureView,
-    [r, g, b, a]: [u8; 4],
-) {
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("koharu raster compositor clear encoder"),
-    });
-    {
-        let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("koharu raster compositor clear pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: f64::from(r) / 255.0,
-                        g: f64::from(g) / 255.0,
-                        b: f64::from(b) / 255.0,
-                        a: f64::from(a) / 255.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-    }
-    queue.submit([encoder.finish()]);
 }
 
 fn clipped_rect([x, y, width, height]: [u32; 4], size: (u32, u32)) -> [u32; 4] {

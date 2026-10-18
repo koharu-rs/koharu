@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, bail};
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::vello_cpu::color::palette::css::WHITE;
-use hayro::{RenderCache, RenderSettings, render as render_page};
+use hayro::{PixmapSettings, RenderCache, RenderSettings, render as render_page};
 
 use super::EncodedPage;
 
@@ -32,11 +32,11 @@ pub(super) fn render(path: &Path) -> Result<Vec<EncodedPage>> {
         .unwrap_or_else(|| "page".to_owned());
     let page_number_width = page_count.to_string().len().max(3);
     let interpreter_settings = InterpreterSettings::default();
-    let render_settings = RenderSettings {
+    let render_settings = RenderSettings::default();
+    let pixmap_settings = PixmapSettings {
         x_scale: PDF_SCALE,
         y_scale: PDF_SCALE,
         bg_color: WHITE,
-        ..Default::default()
     };
     let cache = RenderCache::new();
 
@@ -45,14 +45,20 @@ pub(super) fn render(path: &Path) -> Result<Vec<EncodedPage>> {
         .enumerate()
         .map(|(index, page)| {
             let page_number = index + 1;
-            let bytes = render_page(page, &cache, &interpreter_settings, &render_settings)
-                .into_png()
-                .with_context(|| {
-                    format!(
-                        "failed to encode PDF page {page_number} of {} as PNG",
-                        path.display()
-                    )
-                })?;
+            let bytes = render_page(
+                page,
+                &cache,
+                &interpreter_settings,
+                &render_settings,
+                &pixmap_settings,
+            )
+            .into_png()
+            .with_context(|| {
+                format!(
+                    "failed to encode PDF page {page_number} of {} as PNG",
+                    path.display()
+                )
+            })?;
 
             Ok(EncodedPage {
                 name: format!(
@@ -77,7 +83,7 @@ mod tests {
     use super::*;
 
     fn single_page_pdf() -> Vec<u8> {
-        let content = b"0 0 0 rg\n0 0 72 72 re f\n";
+        let content = b"0 0 0 rg\n0 0 36 72 re f\n";
         let objects = [
             "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
@@ -129,5 +135,7 @@ mod tests {
         let image = image::load_from_memory_with_format(&pages[0].bytes, image::ImageFormat::Png)
             .expect("decode rendered page");
         assert_eq!(image.dimensions(), (300, 300));
+        assert_eq!(image.get_pixel(10, 10), image::Rgba([0, 0, 0, 255]));
+        assert_eq!(image.get_pixel(290, 10), image::Rgba([255, 255, 255, 255]));
     }
 }

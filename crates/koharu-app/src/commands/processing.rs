@@ -127,64 +127,27 @@ pub(crate) async fn process(
         request.progress = Some(Arc::new(move |event| {
             let update = match event {
                 Progress::Started { pages, stages } => {
-                    tracing::info!(
-                        target: "koharu_metrics",
-                        metric = "pipeline_start",
-                        page_count = pages.len(),
-                        stage_count = stages.len(),
-                    );
                     let mut progress = progress.lock();
                     *progress = (0, pages.len().saturating_mul(stages.len()));
                     Some((0, progress.1, None, None, None))
                 }
                 Progress::Loading { page, stage, model } => {
-                    tracing::info!(
-                        target: "koharu_metrics",
-                        metric = "stage_loading",
-                        stage = %stage,
-                        model,
-                    );
                     let progress = progress.lock();
                     Some((progress.0, progress.1, Some(page), Some(stage), Some(model)))
                 }
                 Progress::Finished {
-                    page,
-                    stage,
-                    model,
-                    elapsed,
+                    page, stage, model, ..
                 } => {
-                    if stage != koharu_pipeline::Stage::Translation {
-                        tracing::info!(
-                            target: "koharu_metrics",
-                            metric = "model_run",
-                            stage = %stage,
-                            model,
-                            duration_ms = elapsed.as_secs_f64() * 1000.0,
-                        );
-                    }
                     let mut progress = progress.lock();
                     progress.0 = progress.0.saturating_add(1).min(progress.1);
                     Some((progress.0, progress.1, Some(page), Some(stage), Some(model)))
                 }
                 Progress::Skipped { page, stage } => {
-                    tracing::info!(
-                        target: "koharu_metrics",
-                        metric = "stage_skip",
-                        stage = %stage,
-                    );
                     let mut progress = progress.lock();
                     progress.0 = progress.0.saturating_add(1).min(progress.1);
                     Some((progress.0, progress.1, Some(page), Some(stage), None))
                 }
-                Progress::Running { stage, model, .. } => {
-                    tracing::info!(
-                        target: "koharu_metrics",
-                        metric = "stage_running",
-                        stage = %stage,
-                        model,
-                    );
-                    None
-                }
+                Progress::Running { .. } => None,
             };
             if let Some((completed, total, page, stage, model)) = update {
                 let job = {
@@ -243,17 +206,6 @@ pub(crate) async fn process(
                 (false, Some(format!("{error:#}")))
             }
         };
-        tracing::info!(
-            target: "koharu_metrics",
-            metric = "pipeline_result",
-            outcome = if stopped {
-                "stopped"
-            } else if error.is_some() {
-                "failed"
-            } else {
-                "completed"
-            },
-        );
         task_handle.state::<Processing>().stops.lock().remove(&id);
         let job = task_handle
             .state::<Processing>()
@@ -278,12 +230,6 @@ pub(crate) async fn process(
     Ok(id)
 }
 
-#[tracing::instrument(
-    target = "koharu_metrics",
-    name = "pipeline_stop",
-    skip_all,
-    fields(state = "requested")
-)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn stop_job(

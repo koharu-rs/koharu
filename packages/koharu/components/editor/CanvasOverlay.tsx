@@ -5,6 +5,7 @@ import { useMemo, useRef } from 'react'
 import { SelectionControls } from '@/components/editor/SelectionControls'
 import { effectiveLayerVisibility, expandLayerSelection, isTextLayer } from '@/lib/document'
 import { controlFrame, cssFrame, selectableLayer, type Camera } from '@/lib/geometry'
+import { useKoharuStore } from '@/lib/store'
 import type {
   EntityId,
   Frame,
@@ -16,7 +17,6 @@ import type {
 
 interface CanvasOverlayProps {
   page: Page
-  camera: Camera
   selected: EntityId[]
   hovered: EntityId | null
   frames: Readonly<Record<EntityId, Frame>>
@@ -32,7 +32,6 @@ interface CanvasOverlayProps {
 
 export function CanvasOverlay({
   page,
-  camera,
   selected,
   hovered,
   frames,
@@ -46,6 +45,8 @@ export function CanvasOverlay({
   onTransformEnd,
 }: CanvasOverlayProps) {
   const root = useRef<HTMLDivElement>(null)
+  // Subscribed here so a camera change re-renders the overlay alone, not the whole workspace.
+  const camera = useKoharuStore((state) => state.camera)
   const expandedSelection = useMemo(
     () => expandLayerSelection(page.layers, selected),
     [page.layers, selected],

@@ -15,6 +15,7 @@ const specialSponsors = {
       { login: 'getsentry', name: 'Sentry', websiteUrl: 'https://sentry.io/' },
       { login: 'mintlify', name: 'Mintlify', websiteUrl: 'https://www.mintlify.com/' },
       { login: 'openai', name: 'OpenAI', websiteUrl: 'https://openai.com/' },
+      { login: 'signpath', name: 'SignPath', websiteUrl: 'https://signpath.io/' },
     ].map((sponsor) => ({
       sponsor: {
         ...sponsor,

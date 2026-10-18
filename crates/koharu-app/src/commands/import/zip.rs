@@ -21,7 +21,15 @@ pub(super) fn extract(path: &Path) -> Result<Vec<EncodedPage>> {
         if member.is_dir() {
             continue;
         }
-        let name = member.name().to_owned();
+        let name = member
+            .name()
+            .with_context(|| {
+                format!(
+                    "failed to decode member {index} name in ZIP/CBZ container {}",
+                    path.display()
+                )
+            })?
+            .into_owned();
         let member_path = Path::new(&name);
         let supported = member_path
             .extension()
@@ -128,6 +136,17 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["pages/page2.png", "pages/page10.png"]
         );
+    }
+
+    #[test]
+    fn preserves_unicode_member_names() {
+        let png = sample_png();
+        let path = write_archive(&[("漫画/ページ.png", &png)]);
+        let images = extract(&path).expect("read archive");
+        std::fs::remove_file(&path).expect("remove archive");
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].name, "漫画/ページ.png");
+        assert_eq!(images[0].bytes, png);
     }
 
     #[test]

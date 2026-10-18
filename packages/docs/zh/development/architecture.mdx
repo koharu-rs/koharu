@@ -56,7 +56,7 @@ flowchart TB
 
 安全包装层 `koharu-torch`、`koharu-llama`、`koharu-diffusion` 与 unsafe `-sys` 动态加载 crate 分离。`koharu-runtime` 负责发现、下载、验证和加载软件包。
 
-有三个 crate 被图中各组件共用，因此未在图中标出：`koharu-config` 拥有 `config.toml` 的类型化配置节，`koharu-secrets` 封装操作系统凭据存储，`koharu-metrics` 收集遥测数据。
+有两个 crate 被图中各组件共用，因此未在图中标出：`koharu-config` 拥有 `config.toml` 的类型化配置节，`koharu-secrets` 封装操作系统凭据存储。
 
 <CardGroup cols={2}>
   <Card title="场景与存储" icon="database" href="/zh/development/scene">

@@ -16,7 +16,6 @@ license.workspace = true
 clap = { workspace = true }
 console = { workspace = true }
 koharu-app = { workspace = true }
-koharu-metrics = { workspace = true }
 log = { workspace = true }
 rfd = { workspace = true }
 sentry = { workspace = true }

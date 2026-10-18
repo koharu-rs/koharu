@@ -391,7 +391,9 @@ impl Rasterizer {
             .recv()
             .context("WGPU closed the readback channel")?
             .context("failed to map WGPU readback buffer")?;
-        let mapped = slice.get_mapped_range();
+        let mapped = slice
+            .get_mapped_range()
+            .context("failed to read mapped WGPU readback buffer")?;
         let row_len = (width * 4) as usize;
         let mut pixels = Vec::with_capacity(row_len * height as usize);
         for row in mapped

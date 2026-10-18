@@ -129,6 +129,8 @@ pub fn convert_with_components(params: &ComponentConversion) -> Result<()> {
             pointer(&rules),
             params.convert_tensor_names,
             params.n_threads,
+            std::ptr::null(),
+            0,
         )
     };
     if succeeded {

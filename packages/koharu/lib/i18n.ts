@@ -13,6 +13,7 @@ import koKR from '@/public/locales/ko-KR/translation.json'
 import ptBR from '@/public/locales/pt-BR/translation.json'
 import ruRU from '@/public/locales/ru-RU/translation.json'
 import trTR from '@/public/locales/tr-TR/translation.json'
+import wuu from '@/public/locales/wuu/translation.json'
 import zhCN from '@/public/locales/zh-CN/translation.json'
 import zhTW from '@/public/locales/zh-TW/translation.json'
 
@@ -26,6 +27,7 @@ export const resources = {
   'tr-TR': { translation: trTR },
   'ko-KR': { translation: koKR },
   'pt-BR': { translation: ptBR },
+  wuu: { translation: wuu },
   'fr-FR': { translation: frFR },
 } satisfies Resource
 

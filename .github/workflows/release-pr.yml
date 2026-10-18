@@ -1,0 +1,51 @@
+name: Release PR
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['main']
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit@0.13.13
+
+      - uses: actions/github-script@v9
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          script: |
+            const releasePlease = require('./.github/release-please/index.cjs')
+            const tag = await releasePlease({ ...context.repo, token: process.env.GITHUB_TOKEN })
+            core.setOutput('tag', tag)
+
+      # Tag pushes made with GITHUB_TOKEN do not trigger another workflow.
+      - name: Start release build
+        if: steps.release.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: gh workflow run release.yml --ref "$TAG"

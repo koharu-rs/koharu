@@ -48,15 +48,15 @@
               "items": [
                 {
                   "label": "Installation",
-                  "href": "/en/installation"
+                  "href": "/installation"
                 },
                 {
                   "label": "First translation",
-                  "href": "/en/quickstart"
+                  "href": "/quickstart"
                 },
                 {
                   "label": "Workflow",
-                  "href": "/en/guides/processing"
+                  "href": "/guides/processing"
                 }
               ]
             },
@@ -73,7 +73,11 @@
                 },
                 {
                   "label": "Contribute",
-                  "href": "/en/development/contributing"
+                  "href": "/development/contributing"
+                },
+                {
+                  "label": "Privacy",
+                  "href": "/privacy"
                 }
               ]
             },
@@ -82,7 +86,7 @@
               "items": [
                 {
                   "label": "Troubleshooting",
-                  "href": "/en/reference/troubleshooting"
+                  "href": "/reference/troubleshooting"
                 },
                 {
                   "label": "Community",
@@ -92,49 +96,50 @@
             }
           ]
         },
-        "pages": [
+        "groups": [
           {
             "group": "Start here",
-            "pages": ["en/index", "en/installation", "en/quickstart", "en/hardware"]
+            "pages": ["index", "installation", "quickstart", "hardware"]
           },
           {
             "group": "Translate a project",
             "pages": [
-              "en/guides/projects",
-              "en/guides/processing",
-              "en/guides/review",
-              "en/guides/canvas",
-              "en/guides/cleanup",
-              "en/guides/typesetting",
-              "en/guides/export"
+              "guides/projects",
+              "guides/processing",
+              "guides/review",
+              "guides/canvas",
+              "guides/cleanup",
+              "guides/typesetting",
+              "guides/export"
             ]
           },
           {
             "group": "Models and providers",
-            "pages": ["en/models/vision", "en/models/providers", "en/models/translation"]
+            "pages": ["models/vision", "models/providers", "models/translation"]
           },
           {
             "group": "Koharu Agent",
-            "pages": ["en/agent/setup", "en/agent/projects"]
+            "pages": ["agent/setup", "agent/projects"]
           },
           {
             "group": "Development",
             "pages": [
-              "en/development/contributing",
-              "en/development/setup",
-              "en/development/architecture",
-              "en/development/scene",
-              "en/development/rendering",
-              "en/development/documentation"
+              "development/contributing",
+              "development/setup",
+              "development/architecture",
+              "development/scene",
+              "development/rendering",
+              "development/documentation"
             ]
           },
           {
             "group": "Reference",
             "pages": [
-              "en/reference/settings",
-              "en/reference/shortcuts",
-              "en/reference/data",
-              "en/reference/troubleshooting"
+              "reference/settings",
+              "reference/shortcuts",
+              "reference/data",
+              "reference/troubleshooting",
+              "privacy"
             ]
           }
         ]
@@ -192,6 +197,10 @@
                 {
                   "label": "開発に参加",
                   "href": "/ja/development/contributing"
+                },
+                {
+                  "label": "プライバシー",
+                  "href": "/ja/privacy"
                 }
               ]
             },
@@ -210,7 +219,7 @@
             }
           ]
         },
-        "pages": [
+        "groups": [
           {
             "group": "はじめに",
             "pages": ["ja/index", "ja/installation", "ja/quickstart", "ja/hardware"]
@@ -252,7 +261,8 @@
               "ja/reference/settings",
               "ja/reference/shortcuts",
               "ja/reference/data",
-              "ja/reference/troubleshooting"
+              "ja/reference/troubleshooting",
+              "ja/privacy"
             ]
           }
         ]
@@ -310,6 +320,10 @@
                 {
                   "label": "参与贡献",
                   "href": "/zh/development/contributing"
+                },
+                {
+                  "label": "隐私",
+                  "href": "/zh/privacy"
                 }
               ]
             },
@@ -328,7 +342,7 @@
             }
           ]
         },
-        "pages": [
+        "groups": [
           {
             "group": "开始使用",
             "pages": ["zh/index", "zh/installation", "zh/quickstart", "zh/hardware"]
@@ -370,7 +384,8 @@
               "zh/reference/settings",
               "zh/reference/shortcuts",
               "zh/reference/data",
-              "zh/reference/troubleshooting"
+              "zh/reference/troubleshooting",
+              "zh/privacy"
             ]
           }
         ]
