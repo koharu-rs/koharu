@@ -15,7 +15,7 @@
     "@koharu/bridge": "workspace:*",
     "@koharu/ui": "workspace:*",
     "@sentry/nextjs": "^11.7.0",
-    "@tanstack/react-query": "^5.104.2",
+    "@tanstack/react-query": "^5.104.4",
     "@tanstack/react-virtual": "^3.14.21",
     "@tauri-apps/api": "3.0.0-alpha.3",
     "@tauri-apps/plugin-opener": "3.0.0-alpha.3",
