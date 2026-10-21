@@ -1,926 +1,471 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
-use smallvec::SmallVec;
+use loro::{LoroDoc, LoroMap, LoroTree, TreeID};
 
 use crate::{
-    Asset, AssetInput, AssetRole, BlobId, ComponentOwner, EntityId, EntityOrigin, Error,
-    Generation, Group, Origin, Page, PageDraft, Patch, Relation, RelationId, RelationKind,
-    RelationSpec, Result, Snapshot, TextGroup, Visibility,
-    component::{Component, ComponentKey, ComponentRecord, ValidationContext, decode, encode, key},
-    components::Assets,
-    patch::{Observation, Operation},
-    schema,
-    state::{Components, State, store_components},
+    Error, Id, Image, Layer, LayerContent, LayerNode, Origin, Page, PageSummary, PageView, Region,
+    Result, Text,
+    document::{self, ID, PageMap},
 };
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum At {
-    Start,
-    End,
-    Before(EntityId),
-    After(EntityId),
+/// The writes of one undoable edit.
+///
+/// Every operation checks its inputs before it writes. Loro has no rollback,
+/// so an edit that fails after a write poisons the session instead of
+/// committing half of itself.
+pub struct Edit<'a> {
+    doc: &'a LoroDoc,
+    author: Origin,
+    pub(crate) wrote: bool,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum RemovePolicy {
-    RejectNonEmpty,
-    Cascade,
-    PromoteChildren,
-}
-
-pub struct Edit {
-    base: Snapshot,
-    state: State,
-    observations: BTreeSet<Observation>,
-    operations: Vec<Operation>,
-    attachments: Vec<(BlobId, bytes::Bytes)>,
-    validate_entities: HashSet<EntityId>,
-    generation: Option<Generation>,
-}
-
-impl Edit {
-    pub(crate) fn new(base: Snapshot, generation: Option<Generation>) -> Self {
+impl<'a> Edit<'a> {
+    pub(crate) fn new(doc: &'a LoroDoc, author: Origin) -> Self {
         Self {
-            state: (*base.state).clone(),
-            base,
-            observations: BTreeSet::new(),
-            operations: Vec::new(),
-            attachments: Vec::new(),
-            validate_entities: HashSet::new(),
-            generation,
+            doc,
+            author,
+            wrote: false,
         }
     }
 
-    /// Observes the page that owns this subtree. Page epochs include hierarchy,
-    /// component, and incident-relation changes, making the check constant-time.
-    pub fn observe_subtree(&mut self, root: EntityId) -> Result<()> {
-        let page = self.state.page_for(root)?;
-        self.observations.insert(Observation::Page {
-            page,
-            epoch: self.state.pages.get(&page).map(|page| page.epoch),
-        });
-        Ok(())
+    #[must_use]
+    pub const fn author(&self) -> &Origin {
+        &self.author
     }
 
-    pub fn observe<T: Component>(&mut self, entity: EntityId) -> Result<()> {
-        self.observe_component(ComponentOwner::Entity(entity), key::<T>()?)
+    /// Fails with [`Error::Stale`] unless `holds`. Work prepared from an
+    /// earlier view checks here that what it relied on is unchanged.
+    pub fn expect(&self, holds: bool) -> Result<()> {
+        holds.then_some(()).ok_or(Error::Stale)
     }
 
-    /// Observes the complete typed asset collection owned by an entity.
-    pub fn observe_assets(&mut self, entity: EntityId) -> Result<()> {
-        self.observe_component(ComponentOwner::Entity(entity), key::<Assets>()?)
+    pub fn pages(&self) -> Result<Vec<PageSummary>> {
+        document::summaries(self.doc)
     }
 
-    pub fn add_page(&mut self, page: PageDraft, at: At) -> Result<EntityId> {
-        self.observe_page_order_write();
-        let id = EntityId::new();
-        let position = resolve_position(&self.state.page_order, at, None)?;
-        let components = self.entity_components([
-            self.encoded(&Page::from(page))?,
-            self.encoded(&EntityOrigin {
-                origin: self.lifecycle_origin(),
-            })?,
-        ]);
-        let stored = store_components(&components);
-        self.state.insert_page(id, position, components)?;
-        self.operations.push(Operation::InsertPage {
-            id,
-            position: position as u32,
-            components: stored,
-        });
+    pub fn page(&self, id: Id) -> Result<PageView> {
+        PageMap::find(self.doc, id)?.1.view()
+    }
+
+    pub fn image(&self, page: Id, image: Id) -> Result<Image> {
+        document::read_image(&PageMap::find(self.doc, page)?.1.images()?, image)
+    }
+
+    /// Adds a page whose size and artwork come from `source`, at `index` in
+    /// project order (last when `None`).
+    pub fn add_page(&mut self, index: Option<usize>, name: String, source: Image) -> Result<Id> {
+        check_image(&source)?;
+        let pages = document::page_list(self.doc);
+        let index = index.map_or(pages.len(), |index| index.min(pages.len()));
+        let (id, source_id) = (Id::new(), Id::new());
+        let record = Page {
+            name,
+            width: f64::from(source.width),
+            height: f64::from(source.height),
+            source: source_id,
+            text_mask: None,
+            bubble_mask: None,
+        };
+        self.wrote = true;
+        let page = PageMap::insert(&pages, index, id)?;
+        document::insert_image(&page.images()?, source_id, &source)?;
+        document::write(&page.meta()?, &record)?;
         Ok(id)
     }
 
-    pub fn add_entity(&mut self, parent: EntityId, at: At) -> Result<EntityId> {
-        let page = self.state.page_for(parent)?;
-        self.observe_children_write(parent)?;
-        let siblings = self
-            .state
-            .page(page)?
-            .entity(parent)?
-            .children
-            .iter()
-            .map(|key| self.state.pages[&page].entities[*key].id)
-            .collect::<Vec<_>>();
-        let position = resolve_position(&siblings, at, None)?;
-        let id = EntityId::new();
-        let components = self.entity_components([self.encoded(&EntityOrigin {
-            origin: self.lifecycle_origin(),
-        })?]);
-        let stored = store_components(&components);
-        self.state
-            .insert_entity(page, id, parent, position, components)?;
-        self.operations.push(Operation::InsertEntity {
-            page,
-            id,
-            parent,
-            position: position as u32,
-            components: stored,
-        });
-        Ok(id)
-    }
-
-    pub fn set_page(&mut self, entity: EntityId, page: PageDraft) -> Result<()> {
-        if !self.state.pages.contains_key(&entity) {
-            return Err(Error::EntityNotFound(entity));
-        }
-        self.replace_component(
-            ComponentOwner::Entity(entity),
-            key::<Page>()?,
-            Some(self.encode_value(&Page::from(page))?),
-        )
-    }
-
-    pub fn move_entity(
-        &mut self,
-        entity: EntityId,
-        parent: Option<EntityId>,
-        at: At,
-    ) -> Result<()> {
-        let page = self.state.page_for(entity)?;
-        if entity == page {
-            if parent.is_some() {
-                return Err(Error::invalid("pages must remain at the project root"));
-            }
-            let before = self.state.parent_and_position(entity)?.1;
-            let position = resolve_position(&self.state.page_order, at, Some(entity))?;
-            if before == position {
-                return Ok(());
-            }
-            self.observe_page_order_write();
-            self.state.move_page(entity, position)?;
-            self.operations.push(Operation::MovePage {
-                id: entity,
-                before: before as u32,
-                after: position as u32,
-            });
+    pub fn update_page(&mut self, id: Id, update: impl FnOnce(&mut Page)) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, id)?;
+        let meta = page.meta()?;
+        let mut record: Page = document::read(&meta, &[])?;
+        let before = record.clone();
+        update(&mut record);
+        if record == before {
             return Ok(());
         }
-
-        let parent = parent.ok_or_else(|| Error::invalid("only pages may use the project root"))?;
-        let target_page = self.state.page_for(parent)?;
-        if target_page == page
-            && self
-                .state
-                .page(page)?
-                .descendants(entity)?
-                .contains(&parent)
-        {
-            return Err(Error::HierarchyCycle);
-        }
-        let (before_parent, before_position) = self.state.parent_and_position(entity)?;
-        let before_parent = before_parent.expect("non-page entity has a parent");
-        let siblings = self
-            .state
-            .page(target_page)?
-            .entity(parent)?
-            .children
-            .iter()
-            .map(|key| self.state.pages[&target_page].entities[*key].id)
-            .collect::<Vec<_>>();
-        let position = resolve_position(&siblings, at, Some(entity))?;
-        if before_parent == parent && before_position == position {
-            return Ok(());
-        }
-        self.observe_children_write(before_parent)?;
-        self.observe_children_write(parent)?;
-        self.state.move_entity(entity, parent, position)?;
-        self.validate_entities
-            .extend([entity, before_parent, parent]);
-        self.operations.push(Operation::MoveEntity {
-            id: entity,
-            before_page: page,
-            before_parent,
-            before_position: before_position as u32,
-            after_page: target_page,
-            after_parent: parent,
-            after_position: position as u32,
-        });
-        Ok(())
-    }
-
-    pub fn remove_entity(&mut self, entity: EntityId, policy: RemovePolicy) -> Result<()> {
-        let page = self.state.page_for(entity)?;
-        if entity != page
-            && self
-                .state
-                .component(entity, &key::<TextGroup>()?)?
-                .is_some()
-        {
-            return Err(Error::invalid("the page text group cannot be removed"));
-        }
-        self.observe_page_write(page);
-        if entity == page {
-            self.observe_page_order_write();
-        }
-        let subtree = self.state.page(page)?.descendants(entity)?;
-        for id in &subtree {
-            self.validate_lifecycle_removal(*id)?;
-        }
-        let children = self
-            .state
-            .page(page)?
-            .entity(entity)?
-            .children
-            .iter()
-            .map(|key| self.state.pages[&page].entities[*key].id)
-            .collect::<Vec<_>>();
-        if policy == RemovePolicy::RejectNonEmpty && !children.is_empty() {
-            return Err(Error::NonEmptyEntity(entity));
-        }
-        if policy == RemovePolicy::PromoteChildren && entity == page && !children.is_empty() {
-            return Err(Error::invalid("page children cannot be promoted"));
-        }
-        let incident = subtree
-            .iter()
-            .flat_map(|id| self.incident_relations(*id))
-            .collect::<BTreeSet<_>>();
-        if policy != RemovePolicy::Cascade && !incident.is_empty() {
-            return Err(Error::IncidentRelations(entity));
-        }
-        if policy == RemovePolicy::Cascade {
-            for id in &subtree {
-                self.validate_entities.remove(id);
-            }
-        } else {
-            self.validate_entities.remove(&entity);
-        }
-
-        match policy {
-            RemovePolicy::RejectNonEmpty => self.remove_leaf(entity),
-            RemovePolicy::PromoteChildren => {
-                let (parent, position) = self.state.parent_and_position(entity)?;
-                let parent = parent.ok_or_else(|| Error::invalid("page cannot be promoted"))?;
-                for (offset, child) in children.into_iter().enumerate() {
-                    self.move_to_position(child, parent, position + offset)?;
-                }
-                self.remove_leaf(entity)
-            }
-            RemovePolicy::Cascade => {
-                for relation in incident {
-                    self.remove_relation(relation)?;
-                }
-                for id in subtree.into_iter().rev() {
-                    self.remove_leaf(id)?;
-                }
-                Ok(())
-            }
-        }
-    }
-
-    pub fn promote_entity_to_user(&mut self, entity: EntityId) -> Result<()> {
-        if self.generation.is_some() {
-            return Err(Error::Authorship(
-                "pipeline edits cannot claim user entity ownership".to_owned(),
-            ));
-        }
-        self.replace_component(
-            ComponentOwner::Entity(entity),
-            key::<EntityOrigin>()?,
-            Some(self.encode_value(&EntityOrigin {
-                origin: Origin::User,
-            })?),
-        )
-    }
-
-    pub fn set<T: Component>(&mut self, entity: EntityId, value: &T) -> Result<()> {
-        if !self.state.contains_entity(entity) {
-            return Err(Error::EntityNotFound(entity));
-        }
-        if matches!(
-            T::KIND,
-            Relation::KIND | Page::KIND | EntityOrigin::KIND | TextGroup::KIND
-        ) {
-            return Err(Error::invalid(
-                "structural components use dedicated scene methods",
-            ));
-        }
-        let value = self.prepare_value(ComponentOwner::Entity(entity), value)?;
-        self.replace_component(
-            ComponentOwner::Entity(entity),
-            key::<T>()?,
-            Some(self.encode_value(&value)?),
-        )?;
-        self.validate_entities.insert(entity);
-        Ok(())
-    }
-
-    pub fn set_project<T: Component>(&mut self, value: &T) -> Result<()> {
-        if matches!(
-            T::KIND,
-            Relation::KIND | Page::KIND | EntityOrigin::KIND | Group::KIND | TextGroup::KIND
-        ) {
-            return Err(Error::invalid("project cannot carry structural components"));
-        }
-        let value = self.prepare_value(ComponentOwner::Project, value)?;
-        self.replace_component(
-            ComponentOwner::Project,
-            key::<T>()?,
-            Some(self.encode_value(&value)?),
-        )
-    }
-
-    pub fn remove_project<T: Component>(&mut self) -> Result<()> {
-        self.validate_removal_authorship::<T>(ComponentOwner::Project)?;
-        self.replace_component(ComponentOwner::Project, key::<T>()?, None)
-    }
-
-    pub fn remove<T: Component>(&mut self, entity: EntityId) -> Result<()> {
-        if matches!(
-            T::KIND,
-            Relation::KIND | Page::KIND | EntityOrigin::KIND | TextGroup::KIND
-        ) {
-            return Err(Error::invalid(
-                "required structural component cannot be removed",
-            ));
-        }
-        self.validate_removal_authorship::<T>(ComponentOwner::Entity(entity))?;
-        self.replace_component(ComponentOwner::Entity(entity), key::<T>()?, None)?;
-        self.validate_entities.insert(entity);
-        Ok(())
-    }
-
-    pub fn set_asset(
-        &mut self,
-        entity: EntityId,
-        role: &AssetRole,
-        value: AssetInput,
-    ) -> Result<()> {
-        let bytes = bytes::Bytes::from_owner(value.bytes);
-        let blob = BlobId::for_bytes(&bytes);
-        self.attachments.push((blob, bytes));
-        let owner = ComponentOwner::Entity(entity);
-        let key = key::<Assets>()?;
-        let previous = self.component(owner, &key)?;
-        let mut assets = previous
-            .map(|value| {
-                let record_exists = |id| self.state.contains_entity(id);
-                let blob_exists = |_id| true;
-                decode::<Assets>(value, &ValidationContext::new(&record_exists, &blob_exists))
-            })
-            .transpose()?
-            .unwrap_or_default();
-        if let Some(existing) = assets.values.get(role) {
-            self.validate_origin_removal(Some(&existing.origin))?;
-        }
-        self.observe_component(owner, key.clone())?;
-        assets.values.insert(
-            role.clone(),
-            Asset {
-                origin: self.lifecycle_origin(),
-                blob,
-                media_type: value.media_type,
-                metadata: value.metadata,
-            },
-        );
-        let record = self.encode_value(&assets)?;
-        self.replace_component(owner, key, Some(record))
-    }
-
-    pub fn remove_asset(&mut self, entity: EntityId, role: &AssetRole) -> Result<()> {
-        let owner = ComponentOwner::Entity(entity);
-        let key = key::<Assets>()?;
-        let previous = self.component(owner, &key)?;
-        let Some(mut assets) = previous
-            .map(|value| {
-                let record_exists = |id| self.state.contains_entity(id);
-                let blob_exists = |_id| true;
-                decode::<Assets>(value, &ValidationContext::new(&record_exists, &blob_exists))
-            })
-            .transpose()?
-        else {
-            return Ok(());
-        };
-        let Some(existing) = assets.values.get(role) else {
-            return Ok(());
-        };
-        self.validate_origin_removal(Some(&existing.origin))?;
-        self.observe_component(owner, key.clone())?;
-        assets.values.remove(role);
-        if assets.values.is_empty() {
-            self.replace_component(owner, key, None)
-        } else {
-            let record = self.encode_value(&assets)?;
-            self.replace_component(owner, key, Some(record))
-        }
-    }
-
-    pub fn add_relation(
-        &mut self,
-        kind: RelationKind,
-        source: EntityId,
-        target: EntityId,
-    ) -> Result<RelationId> {
-        if !self.state.contains_entity(source) {
-            return Err(Error::EntityNotFound(source));
-        }
-        if !self.state.contains_entity(target) {
-            return Err(Error::EntityNotFound(target));
-        }
-        let id = RelationId::new();
-        let value = Relation {
-            origin: self.lifecycle_origin(),
-            kind,
-            source,
-            target,
-        };
-        let record_exists = |id| self.state.contains_entity(id);
-        let blob_exists = |id| {
-            self.attachments.iter().any(|(blob, _)| *blob == id)
-                || self.base.storage.blobs().contains(id)
-        };
-        schema::validate_new_relation(
-            &self.state,
-            &value,
-            &ValidationContext::new(&record_exists, &blob_exists),
-        )?;
-        self.state.insert_relation(id, value.clone())?;
-        self.operations.push(Operation::InsertRelation {
-            id,
-            value,
-            components: Vec::new(),
-        });
-        Ok(id)
-    }
-
-    pub fn relate<R: RelationSpec>(
-        &mut self,
-        source: EntityId,
-        target: EntityId,
-    ) -> Result<RelationId> {
-        self.add_relation(R::kind(), source, target)
-    }
-
-    pub fn remove_relation(&mut self, id: RelationId) -> Result<()> {
-        let relation = self
-            .state
-            .relations
-            .get(&id)
-            .cloned()
-            .ok_or(Error::RelationNotFound(id))?;
-        self.validate_origin_removal(Some(&relation.value.origin))?;
-        let components = store_components(&relation.components);
-        let value = relation.value.clone();
-        self.state.remove_relation(id)?;
-        self.operations.push(Operation::RemoveRelation {
-            id,
-            value,
-            components,
-        });
-        Ok(())
-    }
-
-    pub fn promote_relation_to_user(&mut self, id: RelationId) -> Result<()> {
-        if self.generation.is_some() {
-            return Err(Error::Authorship(
-                "pipeline edits cannot claim user relation ownership".to_owned(),
-            ));
-        }
-        let before = self
-            .state
-            .relations
-            .get(&id)
-            .ok_or(Error::RelationNotFound(id))?
-            .value
-            .clone();
-        let after = Relation {
-            origin: Origin::User,
-            ..before.clone()
-        };
-        self.state.set_relation_value(id, after.clone())?;
-        self.operations
-            .push(Operation::ReplaceRelation { id, before, after });
-        Ok(())
-    }
-
-    pub fn set_relation<T: Component>(&mut self, relation: RelationId, value: &T) -> Result<()> {
-        if !self.state.relations.contains_key(&relation) {
-            return Err(Error::RelationNotFound(relation));
-        }
-        if matches!(
-            T::KIND,
-            Relation::KIND | Page::KIND | EntityOrigin::KIND | Group::KIND | TextGroup::KIND
-        ) {
-            return Err(Error::invalid(
-                "relation structural component is managed directly",
-            ));
-        }
-        let owner = ComponentOwner::Relation(relation);
-        let value = self.prepare_value(owner, value)?;
-        self.replace_component(owner, key::<T>()?, Some(self.encode_value(&value)?))
-    }
-
-    pub fn remove_relation_component<T: Component>(&mut self, relation: RelationId) -> Result<()> {
-        let owner = ComponentOwner::Relation(relation);
-        self.validate_removal_authorship::<T>(owner)?;
-        self.replace_component(owner, key::<T>()?, None)
-    }
-
-    pub fn finish(self) -> Result<Patch> {
-        for entity in &self.validate_entities {
-            schema::validate_entity(&self.state, *entity)?;
-        }
-        let relations = self
-            .validate_entities
-            .iter()
-            .flat_map(|entity| {
-                self.state
-                    .outgoing
-                    .get(entity)
-                    .into_iter()
-                    .chain(self.state.incoming.get(entity))
-                    .flat_map(|relations| relations.iter().copied())
-            })
-            .collect::<HashSet<_>>();
-        let record_exists = |id| self.state.contains_entity(id);
-        let blob_exists = |id| {
-            self.attachments.iter().any(|(blob, _)| *blob == id)
-                || self.base.storage.blobs().contains(id)
-        };
-        let context = ValidationContext::new(&record_exists, &blob_exists);
-        for relation in relations {
-            schema::validate_relation(
-                &self.state,
-                &self
-                    .state
-                    .relations
-                    .get(&relation)
-                    .ok_or(Error::RelationNotFound(relation))?
-                    .value,
-                &context,
-            )?;
-        }
-        let patch = Patch::new(
-            &self.base,
-            self.state,
-            self.observations.into_iter().collect(),
-            self.operations,
-            self.attachments,
-            None,
-        )?;
-        Ok(patch)
-    }
-
-    fn move_to_position(
-        &mut self,
-        entity: EntityId,
-        parent: EntityId,
-        position: usize,
-    ) -> Result<()> {
-        let (before_parent, before_position) = self.state.parent_and_position(entity)?;
-        let before_parent = before_parent.expect("promoted child is not a page");
-        self.state.move_entity(entity, parent, position)?;
-        self.operations.push(Operation::MoveEntity {
-            id: entity,
-            before_page: self.state.page_for(parent)?,
-            before_parent,
-            before_position: before_position as u32,
-            after_page: self.state.page_for(parent)?,
-            after_parent: parent,
-            after_position: position as u32,
-        });
-        Ok(())
-    }
-
-    fn remove_leaf(&mut self, entity: EntityId) -> Result<()> {
-        let page = self.state.page_for(entity)?;
-        let (parent, position) = self.state.parent_and_position(entity)?;
-        if entity == page {
-            let page_state = self.state.page(page)?;
-            let components = store_components(&page_state.entities[page_state.root].components);
-            self.state.remove_page(entity)?;
-            self.operations.push(Operation::RemovePage {
-                id: entity,
-                position: position as u32,
-                components,
-            });
-        } else {
-            let parent = parent.expect("non-page entity has a parent");
-            let components = store_components(&self.state.entity(entity)?.components);
-            self.state.remove_leaf(entity)?;
-            self.operations.push(Operation::RemoveEntity {
-                page,
-                id: entity,
-                parent,
-                position: position as u32,
-                components,
-            });
-        }
-        Ok(())
-    }
-
-    fn replace_component(
-        &mut self,
-        owner: ComponentOwner,
-        key: ComponentKey,
-        after: Option<ComponentRecord>,
-    ) -> Result<()> {
-        let before = self.component(owner, &key)?.cloned();
-        if before == after {
-            return Ok(());
-        }
-        match (owner, after.clone()) {
-            (ComponentOwner::Project, Some(value)) => {
-                self.state.set_project_component(key.clone(), value);
-            }
-            (ComponentOwner::Project, None) => {
-                self.state.remove_project_component(&key);
-            }
-            (ComponentOwner::Entity(id), Some(value)) => {
-                self.state.set_entity_component(id, key.clone(), value)?;
-            }
-            (ComponentOwner::Entity(id), None) => {
-                self.state.remove_entity_component(id, &key)?;
-            }
-            (ComponentOwner::Relation(id), Some(value)) => {
-                self.state.set_relation_component(id, key.clone(), value)?;
-            }
-            (ComponentOwner::Relation(id), None) => {
-                self.state.remove_relation_component(id, &key)?;
-            }
-        }
-        self.operations.push(Operation::ReplaceComponent {
-            owner,
-            key,
-            before: before.map(|value| value.to_stored()),
-            after: after.map(|value| value.to_stored()),
-        });
-        Ok(())
-    }
-
-    fn component(
-        &self,
-        owner: ComponentOwner,
-        key: &ComponentKey,
-    ) -> Result<Option<&ComponentRecord>> {
-        match owner {
-            ComponentOwner::Project => Ok(self.state.project_component(key)),
-            ComponentOwner::Entity(id) => self.state.component(id, key),
-            ComponentOwner::Relation(id) => self.state.relation_component(id, key),
-        }
-    }
-
-    /// Observations describe dependencies on the edit's base snapshot. Changes made earlier in
-    /// this edit are already ordered by `operations` and must not become competing observations.
-    fn observe_component(&mut self, owner: ComponentOwner, key: ComponentKey) -> Result<()> {
-        let fingerprint = match owner {
-            ComponentOwner::Project => self
-                .base
-                .state
-                .project_component(&key)
-                .map(ComponentRecord::fingerprint),
-            ComponentOwner::Entity(id) if self.base.state.contains_entity(id) => self
-                .base
-                .state
-                .component(id, &key)?
-                .map(ComponentRecord::fingerprint),
-            ComponentOwner::Relation(id) if self.base.state.relations.contains_key(&id) => self
-                .base
-                .state
-                .relation_component(id, &key)?
-                .map(ComponentRecord::fingerprint),
-            ComponentOwner::Entity(_) | ComponentOwner::Relation(_) => return Ok(()),
-        };
-        self.observations.insert(Observation::Component {
-            owner,
-            key,
-            fingerprint,
-        });
-        Ok(())
-    }
-
-    fn encoded<T: Component>(&self, value: &T) -> Result<(ComponentKey, ComponentRecord)> {
-        Ok((key::<T>()?, self.encode_value(value)?))
-    }
-
-    pub(crate) fn ensure_text_group(&mut self, page: EntityId) -> Result<EntityId> {
-        self.state.page(page)?;
-        let marker = key::<TextGroup>()?;
-        let children = self
-            .state
-            .page(page)?
-            .entity(page)?
-            .children
-            .iter()
-            .map(|child| self.state.pages[&page].entities[*child].id)
-            .collect::<Vec<_>>();
-        let mut groups = Vec::new();
-        for child in children {
-            if self.state.component(child, &marker)?.is_some() {
-                groups.push(child);
-            }
-        }
-        match groups.as_slice() {
-            [group] => {
-                if self.generation.is_none() {
-                    self.promote_entity_to_user(*group)?;
-                }
-                return Ok(*group);
-            }
-            [] => {}
-            _ => return Err(Error::invalid("page contains multiple text groups")),
-        }
-
-        let group = self.add_entity(page, At::End)?;
-        self.set(
-            group,
-            &Group {
-                origin: self.lifecycle_origin(),
-                name: "Text".to_owned(),
-            },
-        )?;
-        self.set(
-            group,
-            &Visibility {
-                origin: self.lifecycle_origin(),
-                visible: true,
-                opacity: 1.0,
-            },
-        )?;
-        self.replace_component(
-            ComponentOwner::Entity(group),
-            marker,
-            Some(self.encode_value(&TextGroup {})?),
-        )?;
-        self.validate_entities.insert(group);
-        Ok(group)
-    }
-
-    fn encode_value<T: Component>(&self, value: &T) -> Result<ComponentRecord> {
-        let record_exists = |id| self.state.contains_entity(id);
-        let blob_exists = |id| {
-            self.attachments.iter().any(|(blob, _)| *blob == id)
-                || self.base.storage.blobs().contains(id)
-        };
-        encode(value, &ValidationContext::new(&record_exists, &blob_exists))
-    }
-
-    fn entity_components(
-        &self,
-        values: impl IntoIterator<Item = (ComponentKey, ComponentRecord)>,
-    ) -> Components {
-        let mut result = values.into_iter().collect::<SmallVec<[_; 8]>>();
-        result.sort_by(|left, right| left.0.cmp(&right.0));
-        result
-    }
-
-    fn prepare_value<T: Component>(&mut self, owner: ComponentOwner, value: &T) -> Result<T> {
-        self.validate_removal_authorship::<T>(owner)?;
-        let mut value = value.clone();
-        match &self.generation {
-            Some(generation) => {
-                if !value.set_origin(Origin::Generated(generation.clone())) {
-                    return Err(Error::Authorship(format!(
-                        "pipeline cannot write unmanaged component {}",
-                        T::KIND
-                    )));
-                }
-            }
-            None if value.origin().is_some() && !value.set_origin(Origin::User) => {
-                return Err(Error::Authorship(format!(
-                    "component {} reports ownership but cannot be stamped",
-                    T::KIND
-                )));
-            }
-            None => {}
-        }
-        Ok(value)
-    }
-
-    fn validate_removal_authorship<T: Component>(&mut self, owner: ComponentOwner) -> Result<()> {
-        let key = key::<T>()?;
-        let existing = self
-            .component(owner, &key)?
-            .map(|value| {
-                let record_exists = |id| self.state.contains_entity(id);
-                let blob_exists = |_id| true;
-                decode::<T>(value, &ValidationContext::new(&record_exists, &blob_exists))
-            })
-            .transpose()?;
-        self.observe_component(owner, key)?;
-        match existing {
-            None => Ok(()),
-            Some(value) => {
-                if self.generation.is_some() && value.origin().is_none() {
-                    return Err(Error::Authorship(format!(
-                        "pipeline cannot remove unmanaged component {}",
-                        T::KIND
-                    )));
-                }
-                self.validate_origin_removal(value.origin())
-            }
-        }
-    }
-
-    fn validate_origin_removal(&self, existing: Option<&Origin>) -> Result<()> {
-        let Some(expected) = &self.generation else {
-            return Ok(());
-        };
-        let Some(existing) = existing else {
-            return Ok(());
-        };
-        match existing {
-            Origin::User => Err(Error::Authorship(
-                "pipeline cannot overwrite or remove a user-owned component".to_owned(),
-            )),
-            Origin::Generated(actual) if expected.producer != actual.producer => {
-                Err(Error::Authorship(format!(
-                    "producer {} owns this component, not {}",
-                    actual.producer, expected.producer
-                )))
-            }
-            Origin::Generated(_) => Ok(()),
-        }
-    }
-
-    fn lifecycle_origin(&self) -> Origin {
-        self.generation
-            .clone()
-            .map_or(Origin::User, Origin::Generated)
-    }
-
-    fn validate_lifecycle_removal(&self, entity: EntityId) -> Result<()> {
-        let Some(producer) = self
-            .generation
-            .as_ref()
-            .map(|generation| generation.producer.clone())
-        else {
-            return Ok(());
-        };
-        let key = key::<EntityOrigin>()?;
-        let value = self
-            .state
-            .component(entity, &key)?
-            .ok_or_else(|| Error::invalid("entity lifecycle origin is missing"))?;
-        let record_exists = |id| self.state.contains_entity(id);
-        let blob_exists = |_id| true;
-        let lifecycle: EntityOrigin =
-            decode(value, &ValidationContext::new(&record_exists, &blob_exists))?;
-        match lifecycle.origin {
-            Origin::Generated(owner) if owner.producer == producer => Ok(()),
-            Origin::Generated(owner) => Err(Error::Authorship(format!(
-                "producer {} owns entity {entity}, not {}",
-                owner.producer, producer
-            ))),
-            Origin::User => Err(Error::Authorship(format!(
-                "pipeline cannot remove user-owned entity {entity}"
-            ))),
-        }
-    }
-
-    fn incident_relations(&self, entity: EntityId) -> Vec<RelationId> {
-        self.state
-            .outgoing
-            .get(&entity)
+        let images = page.image_ids()?;
+        for image in [Some(record.source), record.text_mask, record.bubble_mask]
             .into_iter()
-            .chain(self.state.incoming.get(&entity))
-            .flat_map(|ids| ids.iter().copied())
-            .collect()
-    }
-
-    fn observe_page_order_write(&mut self) {
-        self.observations.insert(Observation::ProjectHierarchy {
-            epoch: self.base.state.page_order_epoch,
-        });
-    }
-
-    fn observe_page_write(&mut self, page: EntityId) {
-        if let Some(page) = self.base.state.pages.get(&page) {
-            self.observations.insert(Observation::Page {
-                page: page.entities[page.root].id,
-                epoch: Some(page.epoch),
-            });
+            .flatten()
+        {
+            exists("image", image, images.contains(&image))?;
         }
+        self.wrote = true;
+        document::write(&meta, &record)
     }
 
-    fn observe_children_write(&mut self, parent: EntityId) -> Result<()> {
-        if self.base.state.contains_entity(parent) {
-            self.observations.insert(Observation::Children {
-                parent,
-                children: self.base.state.child_ids(parent)?,
+    pub fn move_page(&mut self, id: Id, index: usize) -> Result<()> {
+        let pages = document::page_list(self.doc);
+        let (from, _) = PageMap::find(self.doc, id)?;
+        let to = index.min(pages.len() - 1);
+        if from != to {
+            self.wrote = true;
+            pages.mov(from, to)?;
+        }
+        Ok(())
+    }
+
+    pub fn remove_page(&mut self, id: Id) -> Result<()> {
+        let (index, _) = PageMap::find(self.doc, id)?;
+        self.wrote = true;
+        document::page_list(self.doc).delete(index, 1)?;
+        Ok(())
+    }
+
+    pub fn add_image(&mut self, page: Id, image: Image) -> Result<Id> {
+        check_image(&image)?;
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let id = Id::new();
+        self.wrote = true;
+        document::insert_image(&page.images()?, id, &image)?;
+        Ok(id)
+    }
+
+    /// Removes an image nothing refers to any more.
+    pub fn remove_image(&mut self, page: Id, image: Id) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        exists("image", image, page.image_ids()?.contains(&image))?;
+        let view = page.view()?;
+        let in_use = [
+            Some(view.page.source),
+            view.page.text_mask,
+            view.page.bubble_mask,
+        ]
+        .contains(&Some(image))
+            || any_layer(
+                &view.layers,
+                |content| matches!(content, LayerContent::Raster { image: used, .. } if *used == image),
+            );
+        unreferenced("image", image, in_use)?;
+        self.wrote = true;
+        page.images()?.delete(&image.to_string())?;
+        Ok(())
+    }
+
+    pub fn add_region(&mut self, page: Id, mut region: Region) -> Result<Id> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let regions = page.regions()?;
+        for inside in &region.inside {
+            exists("region", *inside, has(&regions, *inside))?;
+        }
+        region.origin = self.author.clone();
+        let id = Id::new();
+        self.wrote = true;
+        let map = regions.insert_container(&id.to_string(), LoroMap::new())?;
+        document::write(&map, &region)?;
+        Ok(id)
+    }
+
+    pub fn update_region(
+        &mut self,
+        page: Id,
+        id: Id,
+        update: impl FnOnce(&mut Region),
+    ) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let regions = page.regions()?;
+        let map = record_map(&regions, "region", id)?;
+        let mut region: Region = document::read(&map, &[])?;
+        self.owner_check(&region.origin, "region", id)?;
+        let before = region.clone();
+        update(&mut region);
+        if region == before {
+            return Ok(());
+        }
+        for inside in &region.inside {
+            exists("region", *inside, *inside != id && has(&regions, *inside))?;
+        }
+        region.origin = self.author.clone();
+        self.wrote = true;
+        document::write(&map, &region)
+    }
+
+    /// Removes a region no text, layer, or other region refers to.
+    pub fn remove_region(&mut self, page: Id, id: Id) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let view = page.view()?;
+        let region = view
+            .regions
+            .get(&id)
+            .ok_or(Error::NotFound { kind: "region", id })?;
+        self.owner_check(&region.origin, "region", id)?;
+        let in_use = view
+            .regions
+            .values()
+            .any(|other| other.inside.contains(&id))
+            || view.texts.values().any(|text| text.region == Some(id))
+            || any_layer(&view.layers, |content| {
+                matches!(
+                    content,
+                    LayerContent::Text { fit_to, flows_in, .. }
+                        if *fit_to == Some(id) || *flows_in == Some(id)
+                )
             });
+        unreferenced("region", id, in_use)?;
+        self.wrote = true;
+        page.regions()?.delete(&id.to_string())?;
+        Ok(())
+    }
+
+    pub fn add_text(&mut self, page: Id, mut text: Text) -> Result<Id> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        if let Some(region) = text.region {
+            exists("region", region, has(&page.regions()?, region))?;
+        }
+        text.origin = self.author.clone();
+        text.source_origin = self.author.clone();
+        text.translation_origin = self.author.clone();
+        let id = Id::new();
+        self.wrote = true;
+        let map = page
+            .texts()?
+            .insert_container(&id.to_string(), LoroMap::new())?;
+        document::write(&map, &text)?;
+        Ok(id)
+    }
+
+    /// Updates a text. The source and the translation each keep who wrote
+    /// them: a generation may fill or replace a generated value, never the
+    /// user's. Every other change follows the text's owner, and any change by
+    /// the user makes the text the user's.
+    pub fn update_text(&mut self, page: Id, id: Id, update: impl FnOnce(&mut Text)) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let map = record_map(&page.texts()?, "text", id)?;
+        let before: Text = document::read(&map, &[])?;
+        let mut text = before.clone();
+        update(&mut text);
+        if text == before {
+            return Ok(());
+        }
+        if text.source != before.source {
+            self.owner_check(&before.source_origin, "text", id)?;
+            text.source_origin = self.author.clone();
+        }
+        if text.translation != before.translation {
+            self.owner_check(&before.translation_origin, "text", id)?;
+            text.translation_origin = self.author.clone();
+        }
+        if (
+            &text.region,
+            &text.role,
+            &text.source_language,
+            &text.translation_language,
+        ) != (
+            &before.region,
+            &before.role,
+            &before.source_language,
+            &before.translation_language,
+        ) {
+            self.owner_check(&before.origin, "text", id)?;
+            if let Some(region) = text.region {
+                exists("region", region, has(&page.regions()?, region))?;
+            }
+        }
+        if self.author.is_user() {
+            text.origin = Origin::User;
+        }
+        self.wrote = true;
+        document::write(&map, &text)
+    }
+
+    /// Removes a text no layer presents.
+    pub fn remove_text(&mut self, page: Id, id: Id) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let view = page.view()?;
+        let text = view
+            .texts
+            .get(&id)
+            .ok_or(Error::NotFound { kind: "text", id })?;
+        self.owner_check(&text.origin, "text", id)?;
+        let in_use = any_layer(
+            &view.layers,
+            |content| matches!(content, LayerContent::Text { text, .. } if *text == id),
+        );
+        unreferenced("text", id, in_use)?;
+        self.wrote = true;
+        page.texts()?.delete(&id.to_string())?;
+        Ok(())
+    }
+
+    /// Adds a layer under `parent` (the page's top level when `None`) at
+    /// `index` among its siblings (last when `None`).
+    pub fn add_layer(
+        &mut self,
+        page: Id,
+        parent: Option<Id>,
+        index: Option<usize>,
+        mut layer: Layer,
+    ) -> Result<Id> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let view = page.view()?;
+        check_content(&layer.content, &view, &page.image_ids()?)?;
+        let tree = page.layers()?;
+        let parent = parent
+            .map(|parent| group_node(&tree, &view.layers, parent))
+            .transpose()?;
+        let siblings = tree.children(parent).map_or(0, |children| children.len());
+        layer.origin = self.author.clone();
+        let id = Id::new();
+        self.wrote = true;
+        let node = tree.create_at(parent, index.map_or(siblings, |index| index.min(siblings)))?;
+        let meta = tree.get_meta(node)?;
+        meta.insert(ID, id.to_string())?;
+        document::write(&meta, &layer)?;
+        Ok(id)
+    }
+
+    pub fn update_layer(
+        &mut self,
+        page: Id,
+        id: Id,
+        update: impl FnOnce(&mut Layer),
+    ) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let tree = page.layers()?;
+        let meta = tree.get_meta(document::find_node(&tree, id)?)?;
+        let mut layer: Layer = document::read(&meta, &[ID])?;
+        self.owner_check(&layer.origin, "layer", id)?;
+        let before = layer.clone();
+        update(&mut layer);
+        if layer == before {
+            return Ok(());
+        }
+        if layer.content != before.content {
+            check_content(&layer.content, &page.view()?, &page.image_ids()?)?;
+        }
+        layer.origin = self.author.clone();
+        self.wrote = true;
+        document::write(&meta, &layer)
+    }
+
+    /// Moves a layer under `parent` (the page's top level when `None`) to
+    /// `index` among its new siblings.
+    pub fn move_layer(&mut self, page: Id, id: Id, parent: Option<Id>, index: usize) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let view = page.view()?;
+        let node = find_layer(&view.layers, id).ok_or(Error::NotFound { kind: "layer", id })?;
+        self.owner_check(&node.layer.origin, "layer", id)?;
+        if parent.is_some_and(|parent| parent == id || find_layer(&node.children, parent).is_some())
+        {
+            return Err(Error::Invalid(format!(
+                "layer {id} cannot move inside itself"
+            )));
+        }
+        let tree = page.layers()?;
+        let target = document::find_node(&tree, id)?;
+        let parent = parent
+            .map(|parent| group_node(&tree, &view.layers, parent))
+            .transpose()?;
+        let siblings = tree
+            .children(parent)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|sibling| *sibling != target)
+            .count();
+        self.wrote = true;
+        tree.mov_to(target, parent, index.min(siblings))?;
+        Ok(())
+    }
+
+    /// Removes a layer and every layer inside it.
+    pub fn remove_layer(&mut self, page: Id, id: Id) -> Result<()> {
+        let (_, page) = PageMap::find(self.doc, page)?;
+        let view = page.view()?;
+        let node = find_layer(&view.layers, id).ok_or(Error::NotFound { kind: "layer", id })?;
+        let mut stack = vec![node];
+        while let Some(node) = stack.pop() {
+            self.owner_check(&node.layer.origin, "layer", node.id)?;
+            stack.extend(&node.children);
+        }
+        let tree = page.layers()?;
+        let target = document::find_node(&tree, id)?;
+        self.wrote = true;
+        tree.delete(target)?;
+        Ok(())
+    }
+
+    /// A generation may change only what a generation produced.
+    fn owner_check(&self, owner: &Origin, kind: &'static str, id: Id) -> Result<()> {
+        if owner.is_user() && !self.author.is_user() {
+            return Err(Error::Authorship { kind, id });
         }
         Ok(())
     }
 }
 
-fn resolve_position(values: &[EntityId], at: At, moving: Option<EntityId>) -> Result<usize> {
-    let filtered = values
-        .iter()
-        .copied()
-        .filter(|value| Some(*value) != moving)
-        .collect::<Vec<_>>();
-    match at {
-        At::Start => Ok(0),
-        At::End => Ok(filtered.len()),
-        At::Before(anchor) => filtered
-            .iter()
-            .position(|id| *id == anchor)
-            .ok_or_else(|| Error::invalid("before anchor is not a sibling")),
-        At::After(anchor) => filtered
-            .iter()
-            .position(|id| *id == anchor)
-            .map(|position| position + 1)
-            .ok_or_else(|| Error::invalid("after anchor is not a sibling")),
+fn check_image(image: &Image) -> Result<()> {
+    if image.width == 0 || image.height == 0 || image.media_type.is_empty() {
+        return Err(Error::Invalid(
+            "an image needs a size and a media type".into(),
+        ));
     }
+    Ok(())
+}
+
+fn check_content(content: &LayerContent, view: &PageView, images: &BTreeSet<Id>) -> Result<()> {
+    match content {
+        LayerContent::Group | LayerContent::TextGroup => Ok(()),
+        LayerContent::Text {
+            text,
+            fit_to,
+            flows_in,
+            ..
+        } => {
+            exists("text", *text, view.texts.contains_key(text))?;
+            for region in [fit_to, flows_in].into_iter().flatten() {
+                exists("region", *region, view.regions.contains_key(region))?;
+            }
+            Ok(())
+        }
+        LayerContent::Raster { image, .. } => exists("image", *image, images.contains(image)),
+    }
+}
+
+/// The tree node of `parent`, which must be a group.
+fn group_node(tree: &LoroTree, layers: &[LayerNode], parent: Id) -> Result<TreeID> {
+    let node = find_layer(layers, parent).ok_or(Error::NotFound {
+        kind: "layer",
+        id: parent,
+    })?;
+    if !matches!(
+        node.layer.content,
+        LayerContent::Group | LayerContent::TextGroup
+    ) {
+        return Err(Error::Invalid(format!("layer {parent} is not a group")));
+    }
+    document::find_node(tree, parent)
+}
+
+fn find_layer(layers: &[LayerNode], id: Id) -> Option<&LayerNode> {
+    layers.iter().find_map(|node| {
+        if node.id == id {
+            Some(node)
+        } else {
+            find_layer(&node.children, id)
+        }
+    })
+}
+
+fn any_layer(layers: &[LayerNode], matches: impl Fn(&LayerContent) -> bool + Copy) -> bool {
+    layers
+        .iter()
+        .any(|node| matches(&node.layer.content) || any_layer(&node.children, matches))
+}
+
+fn record_map(records: &LoroMap, kind: &'static str, id: Id) -> Result<LoroMap> {
+    document::child_map(records, &id.to_string()).map_err(|_| Error::NotFound { kind, id })
+}
+
+fn has(records: &LoroMap, id: Id) -> bool {
+    records.get(&id.to_string()).is_some()
+}
+
+fn exists(kind: &'static str, id: Id, exists: bool) -> Result<()> {
+    exists.then_some(()).ok_or(Error::NotFound { kind, id })
+}
+
+fn unreferenced(kind: &'static str, id: Id, in_use: bool) -> Result<()> {
+    if in_use {
+        return Err(Error::Referenced { kind, id });
+    }
+    Ok(())
 }
