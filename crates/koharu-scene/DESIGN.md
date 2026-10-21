@@ -21,14 +21,77 @@ The schema has three parts:
 
 A new workflow adds producers and attributes. It does not change the schema.
 
+```mermaid
+flowchart TD
+  subgraph workflow["Workflow: changes over time"]
+    direction LR
+    detect["detect"] ~~~ ocr["OCR"] ~~~ translate["translate"] ~~~ inpaint["inpaint"] ~~~ typeset["typeset"]
+  end
+  subgraph schema["Schema: stays the same"]
+    direction LR
+    layers["1. layered document"] ~~~ overrides["2. provenance and overrides"] ~~~ attributes["3. attributes"]
+  end
+  workflow -->|"model output and attributes"| schema
+  person(["user edits"]) --> schema
+  schema -->|"attributes never change rendering"| output["renderer and PSD export"]
+```
+
 ## 1. Layered document
 
-```text
-project  LoroMap   { schema: 1 }
-scene    LoroTree  ordered children; TreeID is a node's identity
-└─ page   { size }                                  a page of the project
-   └─ group | raster | shape | text                 drawn in child order
-        └─ mask                                     limits its parent's visibility
+```mermaid
+classDiagram
+  direction TB
+  class Project {
+    <<LoroMap>>
+    schema
+  }
+  class Scene {
+    <<LoroTree>>
+    TreeID is a node's identity
+  }
+  class Node {
+    <<every kind>>
+    name
+    visible
+    locked
+    opacity
+    blend
+    transform
+    attributes
+  }
+  class Page {
+    size
+  }
+  class Group
+  class Raster {
+    pixels
+  }
+  class Shape {
+    path
+    fill?
+    stroke?
+  }
+  class Text {
+    content
+    language
+    frame?
+    style
+  }
+  class Mask {
+    pixels? or path?
+    combine
+  }
+  Scene o-- Page : pages
+  Node <|-- Page
+  Node <|-- Group
+  Node <|-- Raster
+  Node <|-- Shape
+  Node <|-- Text
+  Node <|-- Mask
+  Shape o-- Text : flows inside a closed shape
+  note for Page "children: group, raster,<br/>shape, text, drawn in order"
+  note for Group "children: group, raster,<br/>shape, text, drawn in order"
+  note for Mask "a child of any node;<br/>limits its parent's visibility"
 ```
 
 | Kind | Properties | Drawn as | PSD |
@@ -79,6 +142,21 @@ user     LoroMap   properties written by the user
 against  LoroMap   for each user value over a base value, the base it replaced
 ```
 
+```mermaid
+flowchart LR
+  model(["model run"]) -->|"writes"| base
+  person(["user edit"]) -->|"writes"| user
+  person -->|"records the base value it replaced"| against
+  subgraph node["every node"]
+    origin["origin"]
+    base["base"]
+    user["user"]
+    against["against"]
+  end
+  user -->|"if set"| value(["property value"])
+  base -->|"otherwise"| value
+```
+
 - **Reading.** A property's value is `user[path]` if the user set it,
   otherwise `base[path]`. The path reaches inside maps, so it covers
   `content.en` and individual attributes too.
@@ -96,6 +174,35 @@ against  LoroMap   for each user value over a base value, the base it replaced
 - **Regenerating.** A model run replaces the `base` of the nodes it produced,
   and creates or removes nodes whose `origin` is that producer, but never a
   node the user created or edited.
+
+One property through its life:
+
+```mermaid
+sequenceDiagram
+  participant M as model run
+  participant N as node
+  participant P as user
+  M->>N: base.frame = A
+  Note over N: frame reads A
+  P->>N: user.frame = B, against.frame = A
+  Note over N: frame reads B
+  M->>N: rerun: base.frame = C
+  Note over N: against.frame A ≠ base.frame C, a conflict<br/>frame still reads B
+  P->>N: reset: delete user.frame and against.frame
+  Note over N: frame reads C
+```
+
+What a model run does to each node:
+
+```mermaid
+flowchart TD
+  run(["model run of producer P"]) --> origin{"node's origin"}
+  origin -->|"user, or another producer"| untouched["never touched"]
+  origin -->|"model P"| edited{"edited by the user?"}
+  edited -->|"yes"| kept["base replaced, never removed;<br/>user values keep winning"]
+  edited -->|"no"| replaced["base replaced, or the node removed<br/>if the run no longer produces it"]
+  run --> created["new outputs become new nodes<br/>with origin: model P"]
+```
 
 This is Blender's library overrides and Figma's instance overrides, applied to
 one document instead of linked files.
@@ -127,6 +234,25 @@ This section is an example, not schema:
 | retouching | `raster` layers above, `origin: user` |
 | layout from typesetting | the text's `base.frame` and `base.style`; the user's adjustments go in `user` |
 
+One page as a tree. Children are drawn left to right; dashed nodes are not
+drawn.
+
+```mermaid
+flowchart TD
+  page["page"]
+  page --> scan["raster<br/>imported page<br/>origin: user"]
+  page --> cleanup["raster<br/>inpainting<br/>origin: model<br/>koharu.inpaint"]
+  cleanup --> detected["mask, add<br/>detector's<br/>component"]
+  cleanup --> strokes["mask, add<br/>or subtract<br/>user's strokes"]
+  page --> retouch["raster<br/>retouching<br/>origin: user"]
+  page --> region["shape, hidden<br/>koharu.role =<br/>text-region"]
+  region --> ocr["text, hidden<br/>content.ja:<br/>OCR result"]
+  page --> balloon["shape, hidden<br/>koharu.role =<br/>balloon"]
+  balloon --> translation["text<br/>language = en<br/>content.en: translation<br/>base.frame, base.style:<br/>typesetting"]
+  classDef notDrawn stroke-dasharray: 5 5
+  class detected,strokes,region,ocr,balloon notDrawn
+```
+
 Changing the workflow changes only this table. Examples:
 
 - A new detector emits extra attributes.
@@ -155,6 +281,28 @@ The document and its schema stay the same.
   - A failure after a write poisons the session.
 - **Change** names the pages an edit touched. It is built from Loro events by
   walking each event's node up to its page.
+
+```mermaid
+sequenceDiagram
+  participant C as caller
+  participant S as Session
+  participant D as LoroDoc
+  C->>S: edit(author, label, closure)
+  loop each operation in the closure
+    S->>S: check its arguments
+    S->>D: write base (model author) or user (the user)
+  end
+  alt failed before any write
+    S-->>C: error, document unchanged
+  else failed after a write
+    S-->>C: error, the session is poisoned
+  else succeeded
+    S->>D: commit, which is one undo step
+    D-->>S: events
+    S->>S: walk each event's node up to its page
+    S-->>C: Change, naming the pages the edit touched
+  end
+```
 - **Versioning.** `project.schema` changes only when the core does: a new node
   kind or core property. Unknown core data fails to open; unknown attributes
   never do.
