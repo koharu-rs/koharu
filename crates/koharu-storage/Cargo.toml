@@ -2,7 +2,7 @@
 name = "koharu-storage"
 version.workspace = true
 edition.workspace = true
-description = "Filesystem-native snapshot and blob storage for Koharu."
+description = "Loro document files for Koharu."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
@@ -13,23 +13,8 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-blake3 = { workspace = true }
-bytes = { workspace = true }
+atomicwrites = { workspace = true }
 fs4 = { workspace = true }
+loro = { workspace = true }
 memmap2 = { workspace = true }
-parking_lot = { workspace = true }
-revision = { workspace = true }
-serde = { workspace = true }
-specta = { workspace = true }
-tempfile = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true }
-
-[dev-dependencies]
-criterion = { workspace = true }
-
-[[bench]]
-name = "storage"
-harness = false
