@@ -1,331 +1,321 @@
-//! Koharu document schema and cross-component invariants.
-//!
-//! The state kernel owns storage, hierarchy, indexing, and relations as data.
-//! This module owns the meaning of Koharu's component combinations and typed
-//! relation endpoints.
+//! The project schema. Each record is stored as a Loro map with one key per
+//! field, so edits and undo work field by field. The same types are the views
+//! readers receive and the payloads the interface is sent.
 
-use crate::{
-    BubbleRegion, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis,
-    Page, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText, TextContent,
-    TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
-    component::{Component, ComponentRecord, ValidationContext, decode, key},
-    components::Assets,
-    state::{Components, State},
-};
+use std::{collections::BTreeMap, fmt, str::FromStr};
 
-macro_rules! component_schema {
-    ($($mask:ident = $bit:literal => $component:ty),+ $(,)?) => {
-        $(const $mask: u32 = 1 << $bit;)+
+use loro::LoroBinaryValue;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use specta::Type;
+use uuid::Uuid;
 
-        fn component_mask(kind: &str) -> u32 {
-            $(if kind == <$component as Component>::KIND {
-                return $mask;
-            })+
-            0
-        }
-
-        fn validate_component(
-            kind: &str,
-            raw: &ComponentRecord,
-            context: &ValidationContext<'_>,
-        ) -> Result<()> {
-            $(if kind == <$component as Component>::KIND {
-                decode::<$component>(raw, context)?;
-                return Ok(());
-            })+
-            // Extension components remain open-ended. Their owning crate is
-            // responsible for decoding them; the kernel still preserves their
-            // revision, references, and fingerprints.
-            Ok(())
-        }
-    };
+pub(crate) trait Record: Serialize + DeserializeOwned {
+    const KIND: &'static str;
+    /// Fields stored as Loro text instead of a plain value.
+    const TEXT_FIELDS: &'static [&'static str] = &[];
 }
 
-component_schema! {
-    PROJECT = 0 => Project,
-    PAGE = 1 => Page,
-    GROUP = 2 => Group,
-    TEXT_GROUP = 3 => TextGroup,
-    GEOMETRY = 4 => Geometry,
-    RASTER_LAYER = 5 => RasterLayer,
-    VISIBILITY = 6 => Visibility,
-    SOURCE_TEXT = 7 => SourceText,
-    TEXT_CONTENT = 8 => TextContent,
-    TEXT_LAYOUT = 9 => TextLayout,
-    OCR_ANALYSIS = 10 => OcrAnalysis,
-    TRANSLATION = 11 => Translation,
-    TEXT_ROLE = 12 => TextRole,
-    TYPOGRAPHY = 13 => Typography,
-    REGION = 14 => Region,
-    DETECTION_ANALYSIS = 15 => DetectionAnalysis,
-    ASSETS = 16 => Assets,
-    ENTITY_ORIGIN = 17 => EntityOrigin,
+/// Who produced a value. A generated value may be replaced by any later
+/// generation; a user's value only by the user.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum Origin {
+    User,
+    Generated(Generation),
 }
 
-pub(crate) fn validate_components(
-    components: &Components,
-    context: &ValidationContext<'_>,
-) -> Result<()> {
-    for (key, raw) in components {
-        validate_component(&key.kind, raw, context)?;
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
-    let entity = state.entity(id)?;
-    let kinds = entity
-        .components
-        .iter()
-        .fold(0, |kinds, (key, _)| kinds | component_mask(&key.kind));
-    let has = |component| kinds & component != 0;
-    let has_source = has(SOURCE_TEXT);
-    let has_content = has(TEXT_CONTENT);
-    let has_translation = has(TRANSLATION);
-    let has_region = has(REGION);
-    let has_geometry = has(GEOMETRY);
-    let has_raster = has(RASTER_LAYER);
-    let has_assets = has(ASSETS);
-    let has_layout = has(TEXT_LAYOUT);
-    let has_typography = has(TYPOGRAPHY);
-    let has_detection = has(DETECTION_ANALYSIS);
-    let has_ocr = has(OCR_ANALYSIS);
-    let has_group = has(GROUP);
-    let has_text_group = has(TEXT_GROUP);
-    let parent = state.parent_and_position(id)?.0;
-    let parent_is_text_group = parent.is_some_and(|parent| {
-        state.entity(parent).is_ok_and(|entity| {
-            entity
-                .components
-                .iter()
-                .any(|(key, _)| component_mask(&key.kind) == TEXT_GROUP)
-        })
-    });
-
-    if (has_source || has_translation || has(TEXT_ROLE)) && !has_content {
-        Err(Error::invalid(format!(
-            "entity {id} carries text content data but is not text content"
-        )))
-    } else if has_translation && !has_source {
-        Err(Error::invalid(format!(
-            "entity {id} has a translation but no source text"
-        )))
-    } else if has_text_group && !has_group {
-        Err(Error::invalid(format!(
-            "text group {id} does not carry the group component"
-        )))
-    } else if has_group
-        && (has(PAGE)
-            || has_content
-            || has_region
-            || has_geometry
-            || has_raster
-            || has_assets
-            || has_layout
-            || has_typography
-            || has_detection
-            || has_ocr)
-    {
-        Err(Error::invalid(format!(
-            "group {id} also carries content, analysis, or layer components"
-        )))
-    } else if has_text_group {
-        let page = state.page_for(id)?;
-        if parent != Some(page) {
-            return Err(Error::invalid(format!(
-                "text group {id} is not a direct child of its page"
-            )));
-        }
-        let groups = state.page(page)?.entities_with(&key::<TextGroup>()?);
-        if groups.len() != 1 {
-            return Err(Error::invalid(format!(
-                "page {page} must not contain multiple text groups"
-            )));
-        }
-        Ok(())
-    } else if parent_is_text_group && !has_layout {
-        Err(Error::invalid(format!(
-            "text group child {id} is not a text layer"
-        )))
-    } else if has_layout && !parent_is_text_group {
-        Err(Error::invalid(format!(
-            "text layer {id} is not contained by the page text group"
-        )))
-    } else if has_content
-        && (has_region || has_geometry || has_layout || has_typography || has_detection || has_ocr)
-    {
-        Err(Error::invalid(format!(
-            "text content entity {id} also carries analysis or presentation components"
-        )))
-    } else if has_region && (has_layout || has_typography || has_source || has_translation) {
-        Err(Error::invalid(format!(
-            "analysis region {id} also carries text presentation or content components"
-        )))
-    } else if has_region && !has_geometry {
-        Err(Error::invalid(format!(
-            "analysis region {id} has no geometry"
-        )))
-    } else if has_layout
-        && (has_source || has_translation || has_region || has_detection || has_ocr)
-    {
-        Err(Error::invalid(format!(
-            "text layer {id} also carries content or analysis components"
-        )))
-    } else if has_typography && !has_layout {
-        Err(Error::invalid(format!(
-            "entity {id} has typography but is not a text layer"
-        )))
-    } else if (has_detection || has_ocr) && !has_region {
-        Err(Error::invalid(format!(
-            "entity {id} has analysis results but is not a region"
-        )))
-    } else {
-        Ok(())
+impl Origin {
+    #[must_use]
+    pub const fn is_user(&self) -> bool {
+        matches!(self, Self::User)
     }
 }
 
-pub(crate) fn validate_relation(
-    state: &State,
-    relation: &Relation,
-    context: &ValidationContext<'_>,
-) -> Result<()> {
-    validate_relation_endpoints(state, relation, context)?;
-    validate_automatic_placement(state, relation)?;
-    if is_functional(&relation.kind)
-        && state
-            .outgoing
-            .get(&relation.source)
-            .into_iter()
-            .flat_map(|relations| relations.iter())
-            .filter(|relation_id| state.relations[*relation_id].value.kind == relation.kind)
-            .count()
-            > 1
-    {
-        return Err(Error::invalid(format!(
-            "entity {} has multiple {} relations",
-            relation.source,
-            relation.kind.as_str()
-        )));
-    }
-    Ok(())
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Generation {
+    /// Namespaced producer, such as `dev.koharu.pipeline.ocr`.
+    pub producer: String,
+    pub model: Option<String>,
+    pub confidence: Option<f64>,
 }
 
-pub(crate) fn validate_new_relation(
-    state: &State,
-    relation: &Relation,
-    context: &ValidationContext<'_>,
-) -> Result<()> {
-    validate_relation_endpoints(state, relation, context)?;
-    validate_automatic_placement(state, relation)?;
-    if is_functional(&relation.kind)
-        && state
-            .outgoing
-            .get(&relation.source)
-            .into_iter()
-            .flat_map(|relations| relations.iter())
-            .any(|relation_id| state.relations[relation_id].value.kind == relation.kind)
-    {
-        return Err(Error::invalid(format!(
-            "entity {} already has a {} relation",
-            relation.source,
-            relation.kind.as_str()
-        )));
-    }
-    Ok(())
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 
-fn validate_relation_endpoints(
-    state: &State,
-    relation: &Relation,
-    context: &ValidationContext<'_>,
-) -> Result<()> {
-    relation.validate(context)?;
-    let has = |entity, kind: &str| {
-        state
-            .entity(entity)
-            .is_ok_and(|entity| entity.components.iter().any(|(key, _)| key.kind == kind))
-    };
-    let region_kind = |entity| -> Result<Option<_>> {
-        let raw = state
-            .entity(entity)?
-            .components
-            .iter()
-            .find_map(|(key, raw)| (key.kind == Region::KIND).then_some(raw));
-        raw.map(|raw| decode::<Region>(raw, context).map(|region| region.kind))
-            .transpose()
-    };
-    let valid = match relation.kind.as_str() {
-        <crate::Presents as crate::RelationSpec>::KIND => {
-            has(relation.source, TextLayout::KIND) && has(relation.target, TextContent::KIND)
-        }
-        <crate::RecognizedFrom as crate::RelationSpec>::KIND => {
-            has(relation.source, TextContent::KIND) && has(relation.target, Region::KIND)
-        }
-        <crate::FitsTo as crate::RelationSpec>::KIND => {
-            has(relation.source, TextLayout::KIND)
-                && has(relation.target, Region::KIND)
-                && has(relation.target, Geometry::KIND)
-                && region_kind(relation.target)?.is_some_and(|kind| kind == TextRegion::kind())
-        }
-        <crate::FlowsIn as crate::RelationSpec>::KIND => {
-            has(relation.source, TextLayout::KIND)
-                && has(relation.target, Region::KIND)
-                && has(relation.target, Geometry::KIND)
-                && region_kind(relation.target)?.is_some_and(|kind| kind == BubbleRegion::kind())
-        }
-        <crate::Inside as crate::RelationSpec>::KIND => {
-            has(relation.source, Region::KIND)
-                && has(relation.target, Region::KIND)
-                && has(relation.source, Geometry::KIND)
-                && has(relation.target, Geometry::KIND)
-        }
-        _ => true,
-    };
-    if !valid {
-        Err(Error::invalid(format!(
-            "relation {} has incompatible endpoints",
-            relation.kind.as_str()
-        )))
-    } else {
-        Ok(())
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Page {
+    pub name: String,
+    pub width: f64,
+    pub height: f64,
+    /// The page's own artwork, an image of this page.
+    pub source: Id,
+    pub text_mask: Option<Id>,
+    pub bubble_mask: Option<Id>,
+}
+
+impl Record for Page {
+    const KIND: &'static str = "page";
+}
+
+/// A detected area of a page. Analysis only: it is never drawn.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Region {
+    pub kind: RegionKind,
+    pub polygon: Vec<Point>,
+    pub label: Option<String>,
+    pub detection: Vec<DetectionLabel>,
+    pub ocr: Option<Ocr>,
+    /// Regions this one lies inside, such as the bubble around a text region.
+    pub inside: Vec<Id>,
+    pub origin: Origin,
+}
+
+impl Record for Region {
+    const KIND: &'static str = "region";
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum RegionKind {
+    Text,
+    Bubble,
+    Panel,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct DetectionLabel {
+    pub label: String,
+    pub confidence: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Ocr {
+    pub direction: TextDirection,
+    pub confidence: Option<f64>,
+    pub lines: Vec<[Point; 4]>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TextDirection {
+    Auto,
+    Horizontal,
+    Vertical,
+}
+
+/// The words of one text block. Translation never replaces the recognized
+/// source, and each keeps who produced it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Text {
+    /// The region the source was recognized from.
+    pub region: Option<Id>,
+    pub source: String,
+    pub source_origin: Origin,
+    pub source_language: Option<String>,
+    pub translation: String,
+    pub translation_origin: Origin,
+    pub translation_language: Option<String>,
+    pub role: Option<String>,
+    pub origin: Origin,
+}
+
+impl Record for Text {
+    const KIND: &'static str = "text";
+    const TEXT_FIELDS: &'static [&'static str] = &["source", "translation"];
+}
+
+/// One entry of a page's visible layer stack.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Layer {
+    pub name: String,
+    pub visible: bool,
+    pub opacity: f64,
+    pub content: LayerContent,
+    pub origin: Origin,
+}
+
+impl Record for Layer {
+    const KIND: &'static str = "layer";
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum LayerContent {
+    Group,
+    /// The group that holds a page's text layers.
+    TextGroup,
+    Text {
+        /// The text this layer presents.
+        text: Id,
+        layout: TextLayout,
+        angle: Option<f64>,
+        /// The authored frame; without one the layer follows `flows_in`, then
+        /// `fit_to`.
+        frame: Option<Vec<Point>>,
+        fit_to: Option<Id>,
+        flows_in: Option<Id>,
+        typography: Typography,
+    },
+    Raster {
+        role: RasterRole,
+        image: Id,
+    },
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TextLayout {
+    Point,
+    Paragraph,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum RasterRole {
+    Cleanup,
+    Paint,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct Typography {
+    pub font: Option<String>,
+    pub weight: Option<u16>,
+    pub style: Option<FontStyle>,
+    pub size: Option<f64>,
+    pub auto_fit: bool,
+    pub color: Option<[u8; 4]>,
+    pub stroke_color: Option<[u8; 4]>,
+    pub stroke_width: Option<f64>,
+    pub alignment: Option<TextAlignment>,
+    pub writing_mode: Option<WritingMode>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum FontStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TextAlignment {
+    Start,
+    Center,
+    End,
+    Justify,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WritingMode {
+    Horizontal,
+    Vertical,
+}
+
+/// Stable identity of a page, layer, text, region, or image. It is stored in
+/// the document, so it survives undo re-creating the Loro containers behind
+/// it.
+#[derive(
+    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(transparent)]
+pub struct Id(Uuid);
+
+impl Id {
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Uuid::now_v7())
     }
 }
 
-fn is_functional(kind: &crate::RelationKind) -> bool {
-    matches!(
-        kind.as_str(),
-        <crate::Presents as crate::RelationSpec>::KIND
-            | <crate::RecognizedFrom as crate::RelationSpec>::KIND
-            | <crate::FitsTo as crate::RelationSpec>::KIND
-            | <crate::FlowsIn as crate::RelationSpec>::KIND
-    )
+impl Default for Id {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-fn validate_automatic_placement(state: &State, relation: &Relation) -> Result<()> {
-    let other = match relation.kind.as_str() {
-        <crate::FitsTo as crate::RelationSpec>::KIND => {
-            Some(<crate::FlowsIn as crate::RelationSpec>::KIND)
-        }
-        <crate::FlowsIn as crate::RelationSpec>::KIND => {
-            Some(<crate::FitsTo as crate::RelationSpec>::KIND)
-        }
-        _ => None,
-    };
-    let Some(other) = other else {
-        return Ok(());
-    };
-    let conflicts = state
-        .outgoing
-        .get(&relation.source)
-        .into_iter()
-        .flat_map(|relations| relations.iter())
-        .any(|id| state.relations[id].value.kind.as_str() == other);
-    if conflicts {
-        Err(Error::invalid(format!(
-            "text layer {} has conflicting automatic placement relations",
-            relation.source
-        )))
-    } else {
-        Ok(())
+impl FromStr for Id {
+    type Err = uuid::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value.parse().map(Self)
     }
+}
+
+impl fmt::Display for Id {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+/// Version of the project document: the number of operations it holds. It
+/// only grows, including across reopening.
+#[derive(
+    Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(transparent)]
+pub struct Revision(#[specta(type = f64)] u64);
+
+impl Revision {
+    pub(crate) fn of(doc: &loro::LoroDoc) -> Self {
+        Self(
+            doc.oplog_vv()
+                .values()
+                .map(|counter| u64::try_from(*counter).unwrap_or_default())
+                .sum(),
+        )
+    }
+}
+
+impl fmt::Display for Revision {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+/// One page as readers see it: an owned copy, safe to use away from the
+/// session. Images are read separately, so a view never decodes them.
+#[derive(Clone, Debug, PartialEq, Serialize, Type)]
+pub struct PageView {
+    pub id: Id,
+    pub page: Page,
+    pub layers: Vec<LayerNode>,
+    pub texts: BTreeMap<Id, Text>,
+    pub regions: BTreeMap<Id, Region>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Type)]
+pub struct LayerNode {
+    pub id: Id,
+    pub layer: Layer,
+    pub children: Vec<LayerNode>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Type)]
+pub struct PageSummary {
+    pub id: Id,
+    pub page: Page,
+}
+
+/// An encoded image. Cloning shares the bytes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Image {
+    pub media_type: String,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: LoroBinaryValue,
 }
