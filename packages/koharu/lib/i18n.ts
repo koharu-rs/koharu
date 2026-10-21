@@ -5,6 +5,7 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 import LocalStorageBackend from 'i18next-localstorage-backend'
 import { initReactI18next } from 'react-i18next'
 
+import ar from '@/public/locales/ar/translation.json'
 import enUS from '@/public/locales/en-US/translation.json'
 import esES from '@/public/locales/es-ES/translation.json'
 import frFR from '@/public/locales/fr-FR/translation.json'
@@ -29,6 +30,7 @@ export const resources = {
   'pt-BR': { translation: ptBR },
   wuu: { translation: wuu },
   'fr-FR': { translation: frFR },
+  ar: { translation: ar },
 } satisfies Resource
 
 export type SupportedLanguage = keyof typeof resources
