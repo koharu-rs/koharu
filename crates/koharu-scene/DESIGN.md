@@ -38,60 +38,24 @@ flowchart TD
 
 ## 1. Layered document
 
+A project file, opened as a tree. Siblings are drawn left to right, so the
+rightmost sits on top. Dashed nodes are not drawn.
+
 ```mermaid
-classDiagram
-  direction TB
-  class Project {
-    <<LoroMap>>
-    schema
-  }
-  class Scene {
-    <<LoroTree>>
-    TreeID is a node's identity
-  }
-  class Node {
-    <<every kind>>
-    name
-    visible
-    locked
-    opacity
-    blend
-    transform
-    attributes
-  }
-  class Page {
-    size
-  }
-  class Group
-  class Raster {
-    pixels
-  }
-  class Shape {
-    path
-    fill?
-    stroke?
-  }
-  class Text {
-    content
-    language
-    frame?
-    style
-  }
-  class Mask {
-    pixels? or path?
-    combine
-  }
-  Scene o-- Page : pages
-  Node <|-- Page
-  Node <|-- Group
-  Node <|-- Raster
-  Node <|-- Shape
-  Node <|-- Text
-  Node <|-- Mask
-  Shape o-- Text : flows inside a closed shape
-  note for Page "children: group, raster,<br/>shape, text, drawn in order"
-  note for Group "children: group, raster,<br/>shape, text, drawn in order"
-  note for Mask "a child of any node;<br/>limits its parent's visibility"
+flowchart TD
+  file["project file"] --> settings["project settings<br/>schema version"]
+  file --> scene["scene: one tree of nodes"]
+  scene --> page1["page 1"]
+  scene --> page2["page 2, page 3, ..."]
+  page1 --> group["group<br/>a folder of layers"]
+  page1 --> raster["raster<br/>pixels"]
+  page1 --> shape["shape<br/>a vector path"]
+  page1 --> text["text<br/>in its own frame,<br/>or point text"]
+  group --> inner["more layers"]
+  raster --> mask["mask<br/>hides part of the raster;<br/>any layer can have masks"]
+  shape --> flowing["text<br/>flows inside the shape"]
+  classDef notDrawn stroke-dasharray: 5 5
+  class mask notDrawn
 ```
 
 | Kind | Properties | Drawn as | PSD |
@@ -178,18 +142,11 @@ flowchart LR
 One property through its life:
 
 ```mermaid
-sequenceDiagram
-  participant M as model run
-  participant N as node
-  participant P as user
-  M->>N: base.frame = A
-  Note over N: frame reads A
-  P->>N: user.frame = B, against.frame = A
-  Note over N: frame reads B
-  M->>N: rerun: base.frame = C
-  Note over N: against.frame A ≠ base.frame C, a conflict<br/>frame still reads B
-  P->>N: reset: delete user.frame and against.frame
-  Note over N: frame reads C
+flowchart TD
+  start(["new text node"]) -->|"model run writes frame A"| s1["shows A<br/>base: A"]
+  s1 -->|"user moves it to B"| s2["shows B<br/>base: A, user: B, against: A"]
+  s2 -->|"model reruns and writes C"| s3["shows B, marked as a conflict<br/>base: C, user: B, against: A"]
+  s3 -->|"user resets"| s4["shows C<br/>base: C"]
 ```
 
 What a model run does to each node:
@@ -283,25 +240,19 @@ The document and its schema stay the same.
   walking each event's node up to its page.
 
 ```mermaid
-sequenceDiagram
-  participant C as caller
-  participant S as Session
-  participant D as LoroDoc
-  C->>S: edit(author, label, closure)
-  loop each operation in the closure
-    S->>S: check its arguments
-    S->>D: write base (model author) or user (the user)
-  end
-  alt failed before any write
-    S-->>C: error, document unchanged
-  else failed after a write
-    S-->>C: error, the session is poisoned
-  else succeeded
-    S->>D: commit, which is one undo step
-    D-->>S: events
-    S->>S: walk each event's node up to its page
-    S-->>C: Change, naming the pages the edit touched
-  end
+flowchart TD
+  call(["Session::edit(author, label, closure)"]) --> op["next operation in the closure"]
+  op --> check{"arguments valid?"}
+  check -->|"yes"| write["write base for a model,<br/>user for the user"]
+  write --> more{"more operations?"}
+  more -->|"yes"| op
+  more -->|"no"| commit["commit: one undo step"]
+  commit --> pages["walk each changed node up to its page"]
+  pages --> done(["return Change: the pages touched"])
+  check -->|"no"| wrote{"anything written yet?"}
+  wrote -->|"no"| unchanged(["error, document unchanged"])
+  wrote -->|"yes"| poisoned(["error, session poisoned"])
+  write -->|"fails"| poisoned
 ```
 - **Versioning.** `project.schema` changes only when the core does: a new node
   kind or core property. Unknown core data fails to open; unknown attributes
