@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13">
+  <style>
+    text { fill: #1f2933; }
+    .s { font-size: 11.5px; fill: #52606d; }
+    .b { font-weight: 600; }
+    .c { text-anchor: middle; }
+    .step { fill: #eef3fb; stroke: #4a6fa5; stroke-width: 1.5; }
+    .fail { fill: #fdecea; stroke: #c0392b; stroke-width: 1.5; }
+  </style>
+  <defs>
+    <marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#4a6fa5"/></marker>
+    <marker id="red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#c0392b"/></marker>
+  </defs>
+  <rect width="760" height="300" fill="#ffffff"/>
+
+  <rect x="20" y="40" width="160" height="80" rx="10" class="step"/>
+  <text x="100" y="72" class="b c">Session::edit</text>
+  <text x="100" y="92" class="s c">author, label, operations</text>
+
+  <rect x="215" y="40" width="140" height="80" rx="10" class="step"/>
+  <text x="285" y="68" class="b c">Check</text>
+  <text x="285" y="88" class="s c">the next operation's</text>
+  <text x="285" y="103" class="s c">arguments</text>
+
+  <rect x="400" y="40" width="150" height="80" rx="10" class="step"/>
+  <text x="475" y="64" class="b c">Write it</text>
+  <text x="475" y="83" class="s c">generated values for a</text>
+  <text x="475" y="98" class="s c">model, overrides or plain</text>
+  <text x="475" y="113" class="s c">values for you</text>
+
+  <rect x="595" y="40" width="145" height="80" rx="10" class="step"/>
+  <text x="667.5" y="68" class="b c">Commit</text>
+  <text x="667.5" y="88" class="s c">one undo step; report</text>
+  <text x="667.5" y="103" class="s c">the pages it touched</text>
+
+  <path d="M180,80 H211" stroke="#4a6fa5" stroke-width="2" marker-end="url(#blue)"/>
+  <path d="M355,80 H396" stroke="#4a6fa5" stroke-width="2" marker-end="url(#blue)"/>
+  <text x="376" y="72" class="s c">valid</text>
+  <path d="M550,80 H591" stroke="#4a6fa5" stroke-width="2" marker-end="url(#blue)"/>
+  <text x="571" y="72" class="s c">done</text>
+  <path d="M475,40 C475,12 285,12 285,36" fill="none" stroke="#4a6fa5" stroke-width="2" marker-end="url(#blue)"/>
+  <text x="380" y="34" class="s c">next operation</text>
+
+  <path d="M285,120 L340,156" stroke="#c0392b" stroke-width="2" marker-end="url(#red)"/>
+  <text x="312" y="148" class="s" text-anchor="end">invalid</text>
+  <path d="M475,120 L420,156" stroke="#c0392b" stroke-width="2" marker-end="url(#red)"/>
+  <text x="456" y="146" class="s">fails</text>
+
+  <rect x="300" y="160" width="160" height="40" rx="10" fill="#ffffff" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="380" y="185" class="b c">Something failed</text>
+
+  <path d="M340,200 L290,234" stroke="#c0392b" stroke-width="2" marker-end="url(#red)"/>
+  <path d="M420,200 L470,234" stroke="#c0392b" stroke-width="2" marker-end="url(#red)"/>
+
+  <rect x="180" y="238" width="190" height="50" rx="10" class="fail"/>
+  <text x="275" y="259" class="b c">Nothing written yet</text>
+  <text x="275" y="277" class="s c">error; document unchanged</text>
+  <rect x="390" y="238" width="190" height="50" rx="10" class="fail"/>
+  <text x="485" y="259" class="b c">Something written</text>
+  <text x="485" y="277" class="s c">error; session poisoned</text>
+</svg>

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="290" viewBox="0 0 760 290" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13">
+  <style>
+    text { fill: #1f2933; }
+    .s { font-size: 11.5px; fill: #52606d; }
+    .b { font-weight: 600; }
+    .c { text-anchor: middle; }
+    .e { text-anchor: end; }
+    .card { fill: #f8fafc; stroke: #cbd2d9; }
+    .balloon { fill: #ffffff; stroke: #9aa5b1; stroke-width: 1.2; }
+    .gen { fill: #fff4e5; stroke: #d9822b; stroke-width: 1.5; }
+    .genGhost { fill: none; stroke: #d9822b; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .ovr { fill: #e9f7ef; stroke: #2f9e5b; stroke-width: 1.5; }
+    .genText { fill: #b5651d; font-weight: 600; }
+    .ovrText { fill: #2f7a4b; font-weight: 600; }
+    .rule { stroke: #e4e7eb; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#52606d"/></marker>
+    <g id="balloon"><ellipse cx="0" cy="104" rx="66" ry="42" class="balloon"/></g>
+  </defs>
+  <rect width="760" height="290" fill="#ffffff"/>
+
+  <!-- 1. Model typesets -->
+  <rect x="20" y="14" width="165" height="262" rx="12" class="card"/>
+  <text x="102.5" y="40" class="b c">1. Model typesets</text>
+  <use href="#balloon" x="102.5"/>
+  <rect x="73.5" y="89" width="58" height="30" rx="3" class="gen"/>
+  <text x="102.5" y="109" class="c genText">A</text>
+  <text x="36" y="182" class="s genText">generated</text>
+  <text x="168" y="182" class="e genText">A</text>
+  <text x="36" y="204" class="s ovrText">override</text>
+  <text x="168" y="204" class="e">—</text>
+  <line x1="36" y1="214" x2="168" y2="214" class="rule"/>
+  <text x="36" y="232" class="b">shows</text>
+  <text x="168" y="232" class="e b">A</text>
+  <text x="102.5" y="258" class="s c">the model's value</text>
+
+  <path d="M188,104 H202" stroke="#52606d" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 2. You move it -->
+  <rect x="205" y="14" width="165" height="262" rx="12" class="card"/>
+  <text x="287.5" y="40" class="b c">2. You move it</text>
+  <use href="#balloon" x="287.5"/>
+  <rect x="258.5" y="89" width="58" height="30" rx="3" class="genGhost"/>
+  <rect x="281.5" y="98" width="58" height="30" rx="3" class="ovr"/>
+  <text x="310.5" y="118" class="c ovrText">B</text>
+  <text x="221" y="182" class="s genText">generated</text>
+  <text x="353" y="182" class="e genText">A</text>
+  <text x="221" y="204" class="s ovrText">override</text>
+  <text x="353" y="204" class="e ovrText">B</text>
+  <line x1="221" y1="214" x2="353" y2="214" class="rule"/>
+  <text x="221" y="232" class="b">shows</text>
+  <text x="353" y="232" class="e b">B</text>
+  <text x="287.5" y="258" class="s c">your value wins</text>
+
+  <path d="M373,104 H387" stroke="#52606d" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 3. Model reruns -->
+  <rect x="390" y="14" width="165" height="262" rx="12" class="card"/>
+  <text x="472.5" y="40" class="b c">3. Model reruns</text>
+  <use href="#balloon" x="472.5"/>
+  <rect x="426.5" y="82" width="58" height="30" rx="3" class="genGhost"/>
+  <text x="455.5" y="102" class="c genText">C</text>
+  <rect x="466.5" y="98" width="58" height="30" rx="3" class="ovr"/>
+  <text x="495.5" y="118" class="c ovrText">B</text>
+  <text x="406" y="182" class="s genText">generated</text>
+  <text x="538" y="182" class="e genText">C</text>
+  <text x="406" y="204" class="s ovrText">override</text>
+  <text x="538" y="204" class="e ovrText">B</text>
+  <line x1="406" y1="214" x2="538" y2="214" class="rule"/>
+  <text x="406" y="232" class="b">shows</text>
+  <text x="538" y="232" class="e b">B</text>
+  <text x="472.5" y="258" class="s c">your value still wins</text>
+
+  <path d="M558,104 H572" stroke="#52606d" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 4. You reset -->
+  <rect x="575" y="14" width="165" height="262" rx="12" class="card"/>
+  <text x="657.5" y="40" class="b c">4. You reset</text>
+  <use href="#balloon" x="657.5"/>
+  <rect x="611.5" y="82" width="58" height="30" rx="3" class="gen"/>
+  <text x="640.5" y="102" class="c genText">C</text>
+  <text x="591" y="182" class="s genText">generated</text>
+  <text x="723" y="182" class="e genText">C</text>
+  <text x="591" y="204" class="s ovrText">override</text>
+  <text x="723" y="204" class="e">—</text>
+  <line x1="591" y1="214" x2="723" y2="214" class="rule"/>
+  <text x="591" y="232" class="b">shows</text>
+  <text x="723" y="232" class="e b">C</text>
+  <text x="657.5" y="258" class="s c">back to the model's value</text>
+</svg>
