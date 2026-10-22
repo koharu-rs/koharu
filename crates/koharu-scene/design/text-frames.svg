@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="228" viewBox="0 0 760 228" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13">
+  <style>
+    text { fill: #1f2933; }
+    .s { font-size: 11.5px; fill: #52606d; }
+    .b { font-weight: 600; }
+    .c { text-anchor: middle; }
+    .frame { fill: #ffffff; stroke: #4a6fa5; stroke-width: 1.5; stroke-dasharray: 5 4; }
+  </style>
+  <rect width="760" height="228" fill="#ffffff"/>
+
+  <rect x="20" y="14" width="220" height="200" rx="12" fill="#f8fafc" stroke="#cbd2d9"/>
+  <text x="130" y="40" class="b c">Point text</text>
+  <line x1="58" y1="110" x2="204" y2="110" stroke="#9aa5b1" stroke-dasharray="2 3"/>
+  <rect x="52" y="104" width="6" height="6" fill="#ffffff" stroke="#4a6fa5"/>
+  <text x="64" y="106" font-size="20">Hello there!</text>
+  <text x="130" y="172" class="c">no frame; the line grows</text>
+  <text x="130" y="194" class="s c">Photoshop · Figma · Clip Studio Paint</text>
+
+  <rect x="270" y="14" width="220" height="200" rx="12" fill="#f8fafc" stroke="#cbd2d9"/>
+  <text x="380" y="40" class="b c">Text box</text>
+  <rect x="300" y="62" width="160" height="80" class="frame"/>
+  <text x="312" y="88" font-size="15">Text in a box</text>
+  <text x="312" y="108" font-size="15">wraps at its</text>
+  <text x="312" y="128" font-size="15">edges.</text>
+  <text x="380" y="172" class="c">a box; text wraps inside it</text>
+  <text x="380" y="194" class="s c">Photoshop · Figma · Clip Studio Paint</text>
+
+  <rect x="520" y="14" width="220" height="200" rx="12" fill="#f8fafc" stroke="#cbd2d9"/>
+  <text x="630" y="40" class="b c">Text in a closed shape</text>
+  <path d="M606,140 L597,154 L621,143" class="frame"/>
+  <ellipse cx="630" cy="100" rx="88" ry="44" class="frame"/>
+  <path d="M608,139.5 L619,142" stroke="#ffffff" stroke-width="3"/>
+  <text x="630" y="96" font-size="15" class="c">Text fills</text>
+  <text x="630" y="116" font-size="15" class="c">the shape</text>
+  <text x="630" y="172" class="c">a closed path; text fills it</text>
+  <text x="630" y="194" class="s c">Photoshop · Clip Studio Paint</text>
+</svg>
