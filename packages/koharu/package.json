@@ -21,7 +21,7 @@
     "@tauri-apps/plugin-opener": "3.0.0-alpha.3",
     "@tauri-apps/plugin-process": "3.0.0-alpha.3",
     "@tauri-apps/plugin-updater": "3.0.0-alpha.3",
-    "i18next": "^26.4.2",
+    "i18next": "^26.5.3",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-localstorage-backend": "^4.3.2",
     "lucide-react": "^1.59.0",
