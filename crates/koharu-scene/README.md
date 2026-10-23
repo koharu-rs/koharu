@@ -112,7 +112,7 @@ Masks take `name` and `visible` from the common properties.
 | where pixels live | in the page, under the layer's id, apart from the layer's own properties | an OpenRaster layer names its pixel file in `src` [OpenRaster]; a Krita layer names its pixel data file [Krita file] |
 | mask pixels | 8-bit grey, tiled and kept like raster pixels | a PSD user mask is one 8-bit channel [PSD spec] |
 | path | SVG path data | SVG [SVG paths] |
-| colour | Koharu's existing RGBA colour | Figma `Color` is r, g, b, a [Figma property types] |
+| colour | sRGB r, g, b, and a, each a float from 0 to 1 (`color::AlphaColor<Srgb>`) | Figma `Color` has r, g, b, and a, each "between 0 and 1" [Figma property types] |
 
 ## 2. Generated values and overrides
 
@@ -121,7 +121,7 @@ Masks take `name` and `visible` from the common properties.
   C2PA's `action` (such as `c2pa.created` or `c2pa.translated`),
   `softwareAgent` (a name and version), `digitalSourceType`, `parameters`, and
   `ingredients`, plus `writes`, the property paths it wrote, which C2PA does
-  not have. A layer the user made has an empty origin.
+  not have. A layer no model has written has an empty origin.
   - Each path belongs to the latest action that wrote it. A rerun, or another
     model writing the same path, takes the path over, and an action left with
     no paths is dropped.
@@ -152,23 +152,24 @@ Masks take `name` and `visible` from the common properties.
   date once any of its ingredients changes or its ingredient layer is gone, and
   rerunning the model is the workflow's choice.
 - **Values.** Every layer holds the values that show, whoever wrote them, so
-  reading is direct and the same on every layer. A layer the user made holds
-  nothing else.
+  reading is direct and the same on every layer. A layer no model has written
+  holds nothing else.
   - A Blender library override likewise holds its data locally and "only
     stores override operations, not override operands" [Blender overrides
     design].
-  - A model never writes into a layer the user made; it adds a layer of its
-    own, as Generative Fill adds a Generative Layer [Photoshop Generative
-    Fill].
-- **Replaced model values.** A model layer also keeps `generated`: for each
-  property the user changed, the value the model wrote there. Each entry is
-  keyed by a property path, a JSON Pointer such as `/frame` or `/style/size`
+  - A model may write into a layer the user made. Its value replaces the
+    user's at the paths it writes, and its action takes those paths over, as
+    Photoshop's Content-Aware Fill can send its result to the "Current Layer"
+    instead of a new one [Photoshop Content-Aware Fill].
+- **Replaced model values.** A layer a model wrote also keeps `generated`: for
+  each property the user changed, the value the model wrote there. Each entry
+  is keyed by a property path, a JSON Pointer such as `/frame` or `/style/size`
   [JSON Pointer]. A path in `generated` is an override.
   - Blender override properties are likewise named by RNA path [Blender
     override API] [Blender overrides].
   - Figma instances likewise record which fields of each node are overridden
     [Figma instances].
-- **Your edits.** Changing a property on a model layer first moves the model's
+- **Your edits.** Changing a property a model wrote first moves the model's
   value into `generated`, unless that path is already there, then writes the
   new value.
 - **Overriding text.** Your first edit of a generated text, including styling
@@ -248,8 +249,8 @@ This section is implementation, not schema.
   step.
 - **Edits.** `Session::edit(author, label, closure)` runs one edit as the user
   or as a model.
-  - The user's write to a model layer first moves the model's value into
-    `generated`, unless that path is already there.
+  - The user's write to a property a model wrote first moves the model's value
+    into `generated`, unless that path is already there.
   - A model's write goes onto the layer, or into `generated` at a path the user
     changed, and appends its action to the layer's origin, taking over the
     paths it writes. It first hashes each ingredient's current value and fails
@@ -275,7 +276,7 @@ Read in October 2026.
 
 - Adobe: [PSD spec], [Photoshop type], [Photoshop characters], [Photoshop text
   in shapes], [Photoshop smart objects], [Photoshop artboards], [Photoshop
-  Generative Fill], [Lightroom masking]
+  Generative Fill], [Photoshop Content-Aware Fill], [Lightroom masking]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP text], [CSP text
   editing], [CSP vertical text], [CSP balloons]
 - Figma: [Figma nodes], [Figma node properties], [Figma property types],
@@ -295,6 +296,7 @@ Read in October 2026.
 [Photoshop smart objects]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/smart-objects/export-the-contents-of-an-embedded-smart-object.html
 [Photoshop artboards]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/layout-design-tools/get-started-artboards.html
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
+[Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Lightroom masking]: https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html
 [CSP pages]: https://help.clip-studio.com/en-us/manual_en/570_pages/Management_Files_and_Page_Files.htm
 [CSP page size]: https://help.clip-studio.com/en-us/manual_en/210_file/Change_canvas_size_and_settings.htm
