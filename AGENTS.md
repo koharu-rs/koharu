@@ -1,100 +1,72 @@
-# Koharu Project Rules
+# Working on Koharu
 
-Document only durable, repository-specific constraints here. Do not record current file layouts, temporary paths, model inventories, helper names, or other implementation details that may change during a refactor. Normal Rust, TypeScript, testing, formatting, and Git practices are assumed.
+Koharu is a local-first manga translator: a Rust workspace with a TypeScript interface, shipped as a desktop app. This file holds durable decision rules only. Architecture, file layouts, crate and helper names, model inventories, commands, and anything else a refactor can change belong in crate READMEs and the docs. Normal Rust, TypeScript, testing, formatting, and Git practices are assumed.
 
-## Change Policy
+## Product
 
-- Never add backward compatibility. When an API, schema, configuration, or ownership boundary changes, update every in-repository consumer and remove the replaced form.
-- Prefer a coherent ownership redesign over aliases, forwarding layers, compatibility parsers, or cosmetic renaming.
-- Keep responsibilities self-contained. Defaults and provider-specific behavior belong to the component that owns them rather than a central list of special cases.
-- Remove dead abstractions and one-use helpers when direct code is clearer.
-- Make the smallest change that solves the problem. Do not edit unrelated configuration, documentation, generated files, or workflows in the same change. A feature does not land beside drive-by cleanup.
-- If the current owner has moved, rebase onto that owner. Do not port a patch onto a deleted tree.
-- When two changes implement the same workflow, keep one and extend the existing command or configuration. Do not land both.
-- For editor behavior that is not already specified, match Photoshop or Clip Studio Paint. Prefer an in-app edit over an export/import round trip when the task is ordinary editing.
-- Desktop API keys go through the OS credential store. Do not add a project environment-file fallback for the desktop app.
-- Once a subsystem is removed, delete its calls and dependency together. Do not leave a stub, alias, or disabled flag behind.
+- Models run on the user's machine. Pages and text leave it only through a hosted provider the user chose.
+- Editor behavior that is not already specified matches Photoshop or Clip Studio Paint. Ordinary editing happens in the app, not through an export and re-import round trip.
+- Desktop API keys live in the OS credential store. Do not fall back to a project environment file.
 
-## Ownership
+## Changes
 
-- The UI invokes typed commands. Native code owns durable project state and processing. Do not add an HTTP client or a generic event envelope.
-- Scene owns what a project means. Storage owns opaque payloads and immutable blobs. Analysis, content, and presentation stay separate: detection geometry is not a visible layer, translation does not drop OCR provenance, and typography does not rewrite semantic text.
-- A patch binds to a project and a base revision, records preconditions, and carries inverses. Reject a stale patch. Derived work rebases explicitly and fails if anything it observed has changed.
-- Publish missing blobs first, write the inactive state slot, then publish atomically. Opening uses the newest valid slot and can fall back. Renderer, pipeline, and Agent consume snapshots and submit patches. They do not write storage files.
-- A pipeline stage runs on one page: detection, then OCR and translation, or detection, then inpainting. Pages enter in project order. Completed detection makes that page's later stages eligible immediately. At most one job per stage runs at a time. Each committed result is its own undo step. Do not add a second translation prompt path.
-- Accelerator inference uses one admission lane, including remote translation. On out-of-memory, release the lane, unload the other models, wait for a fresh resource sample, and retry once. Any other failure unloads the failing stage. Stopping is cooperative and discards an uncommitted result.
-- One prepared frame feeds presentation, PNG, layer crops, and PSD. Translation is the only visible text. Incremental reuse must match a full render. The previous page stays visible until the staged generation is ready. An obsolete preparation cannot replace a newer generation. Transient camera, transform, stroke, and sampling stay in the browser. Completed edits cross commands.
+- Never add backward compatibility. When an API, schema, file format, configuration, or ownership boundary changes, update every in-repository consumer and delete the replaced form: no alias, forwarding layer, compatibility parser, upgrade decoder, stub, or disabled flag.
+- Removing a subsystem removes its calls and dependencies in the same change.
+- Prefer a coherent ownership redesign over cosmetic renaming. Defaults and provider-specific behavior belong to the component that owns them, not to a central list of special cases.
+- Make the smallest change that solves the problem. Leave unrelated configuration, documentation, generated files, and workflows alone. A feature does not land beside drive-by cleanup.
+- When two changes implement the same workflow, keep one and extend the existing command or configuration.
+- If the code you are changing has moved, rebase onto its new owner. Do not port a patch onto a deleted tree.
+- Invalid input fails closed, whether it is a project file, configuration, or model output. Do not add a repair or defaulting layer that can change meaning.
+
+## Code
+
+- Write the smallest code that does the job. Inline a helper with one caller, keep a small module in its parent, and do not wrap a type without adding a responsibility.
+- Reach for a crate before writing code: a well-known external crate first, then one in this repository. Hand-write only what no crate covers, and prefer a cross-platform crate to per-platform branches.
+- Keep safe public APIs apart from unsafe FFI, dynamic loading, and build integration.
+- Do not hand-edit generated or derived source. Change its input and rerun the generator.
+- Comments explain ownership, invariants, upstream mapping, or a deliberate divergence. Do not narrate straightforward code.
+- Do not commit credentials, model weights, datasets, generated outputs, or machine-specific files.
 
 ## Interface
 
 - User-visible strings go through the translation function and the locale files. Hardcoded English in a translated surface is incomplete.
-- An interface language's display name is that language's own name in every locale. Do not translate it into the surrounding locale.
+- An interface language's display name is that language's own name in every locale.
 - The translation-target language list stays in the active UI language. Drop a country name unless the entry is a real variant.
-- Do not duplicate status the current selection already implies. Do not add a second job kind, cancel path, or counter for an operation the existing command already covers.
-- Use the existing control library for standard interaction. Commit on selection or an uncanceled drop, not on focus or hover. Ignore a canceled drag. Do not let a shortcut steal keys from a focused control.
-- Reuse the existing numeric color and typography representation. Do not introduce a parallel string format.
-- A page switch uses the existing selection and optimistic cache update. Do not add a second navigation path that leaves the rail, layer selection, or query data behind.
+- Do not show status the current selection already implies. Do not add a second job kind, cancel path, or counter for an operation an existing command covers.
+- Use the existing control library for standard interaction. Commit on selection or an uncanceled drop, never on focus or hover. Ignore a canceled drag. A shortcut never steals keys from a focused control.
 
-## Source Boundaries
+## Models
 
-- Keep safe public APIs separate from unsafe FFI, dynamic loading, and build integration.
-- Do not hand-edit generated or derived source. Change its authoritative input and run the generator.
-- Do not commit credentials, model weights, datasets, generated outputs, or machine-specific artifacts.
-- Native llama.cpp and diffusion runtimes come from prebuilt packages. Do not compile those CUDA trees inside the app build. Release and publish jobs do a fresh build.
-- Hardware discovery stays separate from managed runtime package activation. Do not load a cached accelerator runtime during the probe.
-- Error sampling is off in debug builds and on in release builds.
-
-## ML Architecture
-
-- Keep a consistent public lifecycle across models while allowing model-specific inputs and outputs.
-- Separate network ownership and weight loading from preprocessing, postprocessing, slicing, and public result types.
-- Avoid pass-through types and layers that do not own a real responsibility.
-- Accept a device abstraction at the model boundary, convert it once, and avoid unnecessary transfers or synchronization.
-- Use the established runtime and variable-store loading paths unless they are proven insufficient.
+- A port stays structurally traceable to a commit-pinned upstream implementation. Preserve checkpoint-affecting names, construction order, parameter paths, tensor layouts, execution order, and postprocessing semantics. Explain each intentional divergence next to the affected code.
+- Missing or unexpected weights mean an architecture or parameter-name mismatch. Fix that before changing the loader.
+- Every model has the same public lifecycle, with model-specific inputs and outputs. Network and weight loading stay apart from preprocessing, postprocessing, slicing, and result types. Do not add pass-through types or layers.
+- Accept a device at the model boundary and convert it once. Create token IDs and index tensors on the model device; a CPU tensor used against accelerator embeddings is a defect.
+- Use the established loading paths unless they are proven insufficient.
 - Disable gradient tracking during inference.
-- Create generated token IDs and index tensors on the model device. A CPU tensor used against accelerator embeddings is a defect, not a later optimization.
-- Invalid model JSON fails closed. Do not add a silent repair layer that can change meaning.
-- Enforce a translation output schema through each provider's native structured-output API. A bounded retry belongs only to a provider that already has one. Hosted machine-translation providers fail immediately.
-
-## Upstream Alignment
-
-- Keep ports structurally traceable to a commit-pinned authoritative implementation.
-- Preserve checkpoint-affecting names, construction order, parameter paths, tensor layouts, execution order, and postprocessing semantics.
-- Treat missing or unexpected weights as an architecture or parameter-name mismatch before changing the loader.
-- Explain intentional divergences next to the affected code.
-- Compare ports on identical inputs using structured outputs such as shapes, ranges, boxes, scores, masks, and ordering.
 
 ## Performance
 
-- Optimize and benchmark the actual target device with representative inputs.
+- Optimize and benchmark on the actual target device with representative inputs. Load assets and warm models outside the measured region, and account for asynchronous accelerator execution.
 - Remove redundant transfers, synchronization, allocations, and per-pixel host loops before adding concurrency or caching.
-- Account for asynchronous accelerator execution when timing work.
-- Load assets and warm models outside measured regions.
 - Report the device, input size, baseline, result, and correctness difference.
 
 ## Verification
 
-- Optimize for fast development and iteration. By default, run the smallest relevant check or focused test once using the debug profile.
-- Do not run full test suites, repeatedly rerun unchanged tests or builds, or build and test profiles other than debug unless the user explicitly requests it.
-- Run end-to-end tests only when the user explicitly asks for them.
-- Add a test when it protects a real regression boundary. Do not lock a translated phrase, a language display name, a registration string, or a one-line behavior the owner can read directly. Do not add a second harness for behavior the crate's existing tests already cover. Do not assert a compatibility shim.
-- A UI change needs a screenshot of the affected state. If the bug is truncation, include a long-label case.
-- A model port needs a structured comparison on identical inputs. A green build is not that comparison.
-- A green check is not acceptance. Small bug fixes, documentation, translations, and tests can be opened directly. A new product feature, significant UI change, model or provider integration, platform integration, dependency, public API, schema change, or architectural refactor needs an issue discussion first.
-- Keep the pull-request text short: problem, change, and verification. A human reviews the whole diff and can explain every change. Do not submit an unreviewed autonomous patch.
-- Never add an AI assistant as a co-author of a git commit, such as through a `Co-Authored-By` trailer.
+- Run the smallest relevant check or focused test once, in the debug profile. Run full suites, other profiles, or end-to-end tests only when asked.
+- Add a test only where it protects a real regression boundary. Do not lock a translated phrase, a language display name, a registration string, or a one-line behavior the owner can read. Do not add a second harness for behavior existing tests cover, a test of a compatibility shim, or a benchmark nobody asked for.
+- A model port needs a structured comparison with upstream on identical inputs: shapes, ranges, boxes, scores, masks, and ordering. A green build is not that comparison.
+- A UI change needs a screenshot of the affected state. For truncation, include a long label.
+- A green check is not acceptance.
 
-## Desktop UI Debugging
+## Testing
 
-- Debug builds must expose the CEF remote debugging endpoint at `http://127.0.0.1:4000` through CEF's command-line arguments.
-- Connect `chrome-devtools-mcp` with `--browser-url=http://127.0.0.1:4000` and prefer its tools for WebView inspection and automation. Use semantic targets and observable conditions instead of coordinate-only actions or fixed delays.
-- Use a lower-level CDP client only when `chrome-devtools-mcp` does not expose a required protocol operation. Use native window capture when CDP cannot observe the final WebGPU output.
+- Automate the UI through a Chrome DevTools Protocol MCP server connected to `http://127.0.0.1:4000`, the debug build's remote debugging endpoint.
+- Capture the canvas with the harness's built-in screenshot tool.
+- Do not use computer use on Windows.
 
-## Desktop Rendering
+## Contributing
 
-- Koharu presents canvas pixels through the `koharu-canvas` WASM module and WebGPU inside the standard Tauri webview. Keep durable scene preparation and export native, keep transient canvas interaction in the browser, and validate WebGPU presentation through the final desktop window.
-
-## Documentation
-
-- Comments should explain ownership, invariants, upstream mapping, or deliberate divergence; do not narrate straightforward code.
-- Keep this file focused on long-lived decision rules rather than the current implementation.
+- A new product feature, significant UI change, model or provider integration, platform integration, public API, schema change, or architectural refactor needs an issue discussion first. Small fixes, documentation, translations, and tests can go straight to a pull request.
+- A human reviews the whole diff and can explain every change. Do not submit an unreviewed autonomous patch.
+- Keep pull-request text short: problem, change, and verification.
+- Never add an AI assistant as a commit co-author, for example through a `Co-Authored-By` trailer.
