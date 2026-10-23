@@ -13,7 +13,7 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
 };
 
-use loro::{CommitOptions, Index, LoroDoc, Subscription, UndoManager};
+use loro::{CommitOptions, ExportMode, Index, LoroDoc, Subscription, UndoManager};
 use serde::Serialize;
 use specta::Type;
 
@@ -63,7 +63,7 @@ impl Session {
         project.insert(SCHEMA_KEY, SCHEMA)?;
         project.insert(ID, Id::new().to_string())?;
         doc.commit();
-        let file = koharu_storage::Document::create(path, &doc)?;
+        let file = koharu_storage::Document::create(path, &doc.export(ExportMode::Snapshot)?)?;
         Ok(Self::assemble(file, doc))
     }
 
@@ -167,15 +167,22 @@ impl Session {
         Ok(redone.then(|| self.change()))
     }
 
+    /// Saves with history. Containers that were never read are exported from
+    /// their loaded bytes, so this does not decode images.
     pub fn save(&self) -> Result<()> {
         self.usable()?;
-        Ok(self.file.save(&self.doc)?)
+        Ok(self.file.save(&self.doc.export(ExportMode::Snapshot)?)?)
     }
 
-    /// Saves without history; see [`koharu_storage::Document::compact`].
+    /// Saves without history, dropping every image an edit has replaced. Loro
+    /// decodes every container to do this, so it is meant for rare moments
+    /// such as closing a project.
     pub fn compact(&self) -> Result<()> {
         self.usable()?;
-        Ok(self.file.compact(&self.doc)?)
+        let frontiers = self.doc.oplog_frontiers();
+        Ok(self
+            .file
+            .save(&self.doc.export(ExportMode::shallow_snapshot(&frontiers))?)?)
     }
 
     fn usable(&self) -> Result<()> {

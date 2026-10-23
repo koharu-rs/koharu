@@ -12,9 +12,8 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 atomicwrites = { workspace = true }
-fs4 = { workspace = true }
 loro = { workspace = true }
 memmap2 = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
