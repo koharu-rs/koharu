@@ -28,8 +28,8 @@ The schema has three parts:
 
 | Element | Model | Evidence |
 |---|---|---|
-| project | ordered pages and a `version` | a Clip Studio Paint EX work is one management file over its pages [CSP pages]; an OpenRaster image must carry a `version` [OpenRaster] |
-| page | a stored id, a `size`, and its layers | each Clip Studio Paint page has its own canvas size [CSP page size]; a PSD document has a width and height [PSD spec]; each Photoshop artboard has its own size [Photoshop artboards]; a Figma page is a node with an `id` [Figma nodes] |
+| project | ordered pages, imported files, and a `version` | a Clip Studio Paint EX work is one management file over its pages [CSP pages]; a Figma file keeps each image once, fetched by hash with `getImageByHash` [Figma image paint]; an OpenRaster image must carry a `version` [OpenRaster] |
+| page | a stored id, a `size`, its layers, and their pixels | each Clip Studio Paint page has its own canvas size [CSP page size]; a PSD document has a width and height [PSD spec]; each Photoshop artboard has its own size [Photoshop artboards]; a Figma page is a node with an `id` [Figma nodes] |
 
 ### Every layer
 
@@ -51,7 +51,7 @@ document order [SVG rendering].
 | Kind | Holds | Evidence |
 |---|---|---|
 | `group` | child layers | PSD layer groups (`lsct`) [PSD spec]; SVG `g` [SVG structure]; OpenRaster nested `stack` [OpenRaster]; Krita group layers [Krita layers] |
-| `image` | an imported file, kept byte for byte, and its media type | Photoshop exports an embedded smart object "in its original format" [Photoshop smart objects]; SVG `image` [SVG image] |
+| `image` | the content hash of an imported file, which the project keeps byte for byte with its media type | Photoshop exports an embedded smart object "in its original format" [Photoshop smart objects], and a PSD placed layer names its embedded file by unique ID [PSD spec]; a Figma image paint names its image by "the hash (id) of the image" [Figma image paint]; SVG `image` [SVG image] |
 | `raster` | editable pixels | PSD pixel layers [PSD spec]; GIMP layers [GIMP XCF]; Krita paint layers [Krita layers] |
 | `shape` | a path of open or closed subpaths, a fill rule, an optional fill, and an optional stroke | PSD shape layers: vector path, fill (`SoCo`), stroke (`vstk`), and fill rule [PSD spec]; SVG `path` [SVG paths]; Figma `VECTOR` [Figma nodes] |
 | `text` | styled text in a frame | [below](#text) |
@@ -109,7 +109,8 @@ Masks take `name` and `visible` from the common properties.
 | Value | Model | Evidence |
 |---|---|---|
 | raster pixels | 8-bit RGBA in 64×64 tiles keyed by tile position, each compressed with zlib on its own; only tiles holding pixels are stored | GIMP stores 64-pixel tiles, each compressed on its own, zlib being one option [GIMP XCF]; Krita stores 64×64 tiles, each recorded with its x and y [Krita tiles] |
-| mask pixels | 8-bit grey, tiled like raster pixels | a PSD user mask is one 8-bit channel [PSD spec] |
+| where pixels live | in the page, under the layer's id, apart from the layer's own properties | an OpenRaster layer names its pixel file in `src` [OpenRaster]; a Krita layer names its pixel data file [Krita file] |
+| mask pixels | 8-bit grey, tiled and kept like raster pixels | a PSD user mask is one 8-bit channel [PSD spec] |
 | path | SVG path data | SVG [SVG paths] |
 | colour | Koharu's existing RGBA colour | Figma `Color` is r, g, b, a [Figma property types] |
 
@@ -220,7 +221,7 @@ This section is implementation, not schema.
 - **Identity** is a stored id in each page's and layer's map. Loro's `TreeID`s
   and container ids stay internal.
   - Undo of a delete, redo of a create, and `revert_to` re-create a node under a
-    new `TreeID` (`loro-internal` 1.16.2, `handler.rs`). The restored map
+    new `TreeID` (`loro-internal` 1.17.1, `handler.rs`). The restored map
     brings the stored id back.
   - Selection, caches, and jobs outside the document key on stored ids, so they
     survive undo.
@@ -232,8 +233,17 @@ This section is implementation, not schema.
   model's value; `/content` holds a `LoroText` copied with `apply_delta`. The
   text on the layer stays one `LoroText` across your edits, so cursors into it
   stay valid, and Reset rewrites it in place.
-- **Rasters.** Each raster's tiles are their own container, so Loro decodes
-  them only when they are read.
+- **Large data** never sits in a layer's map. Loro keeps the map of a deleted
+  tree node, and everything it reaches, through compaction, because another
+  peer can revive the node; entries deleted from an ordinary map or list are
+  dropped (`loro-internal` 1.17.1, `state.rs`).
+  - Imported files live in a project map keyed by content hash, and pixel tiles
+    in a page map keyed by layer id.
+  - The edit that deletes a layer deletes its tiles, and the edit that removes
+    the last layer naming a file deletes the file, so undo restores them
+    together.
+  - Each layer's tiles are their own container, so Loro decodes them only when
+    they are read.
 - **Undo** is Loro's `UndoManager`: one edit is one commit, which is one undo
   step.
 - **Edits.** `Session::edit(author, label, closure)` runs one edit as the user
@@ -269,8 +279,8 @@ Read in October 2026.
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP text], [CSP text
   editing], [CSP vertical text], [CSP balloons]
 - Figma: [Figma nodes], [Figma node properties], [Figma property types],
-  [Figma text resize], [Figma plugin data], [Figma instances], [Figma reset
-  overrides]
+  [Figma image paint], [Figma text resize], [Figma plugin data], [Figma
+  instances], [Figma reset overrides]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
   inside shapes dropped], [CSS masking]
 - Others: [OpenRaster], [Krita layers], [Krita file], [Krita tiles], [GIMP
@@ -295,6 +305,7 @@ Read in October 2026.
 [Figma nodes]: https://developers.figma.com/docs/rest-api/file-node-types/
 [Figma node properties]: https://developers.figma.com/docs/plugins/api/node-properties/
 [Figma property types]: https://developers.figma.com/docs/rest-api/file-property-types/
+[Figma image paint]: https://developers.figma.com/docs/plugins/api/Paint/
 [Figma text resize]: https://developers.figma.com/docs/plugins/api/properties/TextNode-textautoresize/
 [Figma plugin data]: https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata/
 [Figma instances]: https://developers.figma.com/docs/plugins/api/InstanceNode/
