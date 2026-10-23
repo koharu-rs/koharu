@@ -8,7 +8,7 @@ Everyone participating in the Koharu community is expected to follow our [Code o
 
 - Browse the [good first issues](https://github.com/koharu-rs/koharu/contribute) or search existing [issues](https://github.com/koharu-rs/koharu/issues) and pull requests.
 - Small bug fixes, documentation improvements, tests, and other focused changes can usually be submitted directly.
-- Before starting a new product feature, significant UI change, model or provider integration, platform integration, dependency, public API, schema change, or architectural refactor, open an issue and discuss the problem and direction with the maintainers.
+- Before starting a new product feature, significant UI change, model or provider integration, platform integration, public API, schema change, or architectural refactor, open an issue and discuss the problem and direction with the maintainers.
 - Ask for guidance on [Discord](https://discord.gg/mHvHkxGnUY) if you are unsure where to begin.
 
 Keep your change focused, review the complete diff, and run the relevant checks before opening a pull request. Explain what changed and include the verification results so reviewers can help efficiently.
