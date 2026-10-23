@@ -12,7 +12,6 @@
     .ovr { fill: #e9f7ef; stroke: #2f9e5b; stroke-width: 1.5; }
     .genText { fill: #b5651d; font-weight: 600; }
     .ovrText { fill: #2f7a4b; font-weight: 600; }
-    .rule { stroke: #e4e7eb; }
   </style>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#52606d"/></marker>
@@ -26,13 +25,10 @@
   <use href="#balloon" x="102.5"/>
   <rect x="73.5" y="89" width="58" height="30" rx="3" class="gen"/>
   <text x="102.5" y="109" class="c genText">A</text>
-  <text x="36" y="182" class="s genText">generated</text>
-  <text x="168" y="182" class="e genText">A</text>
-  <text x="36" y="204" class="s ovrText">override</text>
-  <text x="168" y="204" class="e">—</text>
-  <line x1="36" y1="214" x2="168" y2="214" class="rule"/>
-  <text x="36" y="232" class="b">shows</text>
-  <text x="168" y="232" class="e b">A</text>
+  <text x="36" y="196" class="b">on the layer</text>
+  <text x="168" y="196" class="e genText">A</text>
+  <text x="36" y="222" class="s genText">generated</text>
+  <text x="168" y="222" class="e">—</text>
   <text x="102.5" y="258" class="s c">the model's value</text>
 
   <path d="M188,104 H202" stroke="#52606d" stroke-width="1.5" marker-end="url(#arrow)"/>
@@ -44,14 +40,11 @@
   <rect x="258.5" y="89" width="58" height="30" rx="3" class="genGhost"/>
   <rect x="281.5" y="98" width="58" height="30" rx="3" class="ovr"/>
   <text x="310.5" y="118" class="c ovrText">B</text>
-  <text x="221" y="182" class="s genText">generated</text>
-  <text x="353" y="182" class="e genText">A</text>
-  <text x="221" y="204" class="s ovrText">override</text>
-  <text x="353" y="204" class="e ovrText">B</text>
-  <line x1="221" y1="214" x2="353" y2="214" class="rule"/>
-  <text x="221" y="232" class="b">shows</text>
-  <text x="353" y="232" class="e b">B</text>
-  <text x="287.5" y="258" class="s c">your value wins</text>
+  <text x="221" y="196" class="b">on the layer</text>
+  <text x="353" y="196" class="e ovrText">B</text>
+  <text x="221" y="222" class="s genText">generated</text>
+  <text x="353" y="222" class="e genText">A</text>
+  <text x="287.5" y="258" class="s c">yours shows; A is kept</text>
 
   <path d="M373,104 H387" stroke="#52606d" stroke-width="1.5" marker-end="url(#arrow)"/>
 
@@ -63,14 +56,11 @@
   <text x="455.5" y="102" class="c genText">C</text>
   <rect x="466.5" y="98" width="58" height="30" rx="3" class="ovr"/>
   <text x="495.5" y="118" class="c ovrText">B</text>
-  <text x="406" y="182" class="s genText">generated</text>
-  <text x="538" y="182" class="e genText">C</text>
-  <text x="406" y="204" class="s ovrText">override</text>
-  <text x="538" y="204" class="e ovrText">B</text>
-  <line x1="406" y1="214" x2="538" y2="214" class="rule"/>
-  <text x="406" y="232" class="b">shows</text>
-  <text x="538" y="232" class="e b">B</text>
-  <text x="472.5" y="258" class="s c">your value still wins</text>
+  <text x="406" y="196" class="b">on the layer</text>
+  <text x="538" y="196" class="e ovrText">B</text>
+  <text x="406" y="222" class="s genText">generated</text>
+  <text x="538" y="222" class="e genText">C</text>
+  <text x="472.5" y="258" class="s c">C waits in generated</text>
 
   <path d="M558,104 H572" stroke="#52606d" stroke-width="1.5" marker-end="url(#arrow)"/>
 
@@ -80,12 +70,9 @@
   <use href="#balloon" x="657.5"/>
   <rect x="611.5" y="82" width="58" height="30" rx="3" class="gen"/>
   <text x="640.5" y="102" class="c genText">C</text>
-  <text x="591" y="182" class="s genText">generated</text>
-  <text x="723" y="182" class="e genText">C</text>
-  <text x="591" y="204" class="s ovrText">override</text>
-  <text x="723" y="204" class="e">—</text>
-  <line x1="591" y1="214" x2="723" y2="214" class="rule"/>
-  <text x="591" y="232" class="b">shows</text>
-  <text x="723" y="232" class="e b">C</text>
+  <text x="591" y="196" class="b">on the layer</text>
+  <text x="723" y="196" class="e genText">C</text>
+  <text x="591" y="222" class="s genText">generated</text>
+  <text x="723" y="222" class="e">—</text>
   <text x="657.5" y="258" class="s c">back to the model's value</text>
 </svg>

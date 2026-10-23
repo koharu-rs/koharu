@@ -20,8 +20,8 @@ The schema has three parts:
 
 1. **Layers**: pages, each holding a tree of groups, images, rasters, shapes,
    text, and masks.
-2. **Generated values and overrides**: what a model wrote stays apart from what
-   the user changed.
+2. **Generated values and overrides**: a layer records what a model wrote and
+   read, so a rerun never undoes what the user changed.
 3. **Attributes**: namespaced data for tools, which the renderer never reads.
 
 ## 1. Layers
@@ -33,19 +33,18 @@ The schema has three parts:
 | Element | Model | Evidence |
 |---|---|---|
 | project | ordered pages and a `version` | a Clip Studio Paint EX work is one management file over its pages [CSP pages]; an OpenRaster image must carry a `version` [OpenRaster] |
-| page | a `size` and its layers | each Clip Studio Paint page has its own canvas size [CSP page size]; a PSD document has a width and height [PSD spec]; each Photoshop artboard has its own size [Photoshop artboards] |
+| page | a stored id, a `size`, and its layers | each Clip Studio Paint page has its own canvas size [CSP page size]; a PSD document has a width and height [PSD spec]; each Photoshop artboard has its own size [Photoshop artboards]; a Figma page is a node with an `id` [Figma nodes] |
 
 ### Every layer
 
 | Property | Model | Evidence |
 |---|---|---|
-| identity | stable for the layer's life | PSD `lyid` [PSD spec]; Figma node `id` [Figma nodes]; Krita layer `uuid` [Krita file] |
+| identity | a stored id that never changes, through undo and redo | PSD `lyid` [PSD spec]; Figma node `id` [Figma nodes]; Krita layer `uuid` [Krita file] |
 | `name` | string | PSD layer name [PSD spec]; Figma `name` [Figma nodes]; OpenRaster `name` [OpenRaster] |
 | `visible` | bool; hiding a group hides everything in it | PSD visible flag [PSD spec]; Figma `visible` [Figma nodes]; SVG `display: none` hides descendants [SVG rendering] |
 | `locked` | bool | Figma `locked` [Figma node properties]; PSD lock settings [PSD spec] |
 | `opacity` | 0 to 1 | Figma `opacity` [Figma node properties]; OpenRaster `opacity` [OpenRaster] |
 | `blend` | normal, multiply, screen, and the other standard modes; pass-through for groups | PSD blend keys [PSD spec]; Figma `BlendMode`, including `PASS_THROUGH` [Figma property types]; OpenRaster `composite-op` [OpenRaster] |
-| `transform` | 2D affine `[[a, b, c], [d, e, f]]` | Figma `relativeTransform` [Figma node properties]; the PSD type layer transform `xx, xy, yx, yy, tx, ty` [PSD spec] |
 | `attributes` | see [section 3](#3-attributes) | |
 
 Children are drawn first to last, so the last child is on top, as SVG paints in
@@ -62,15 +61,35 @@ document order [SVG rendering].
 | `text` | styled text in a frame | [below](#text) |
 | `mask` | a mask component | [below](#masks) |
 
+Each kind is placed the way its PSD record places it [PSD spec]:
+
+- Text and image layers carry a `transform`, a 2D affine
+  `[[a, b, c], [d, e, f]]`, like the PSD type layer transform
+  `xx, xy, yx, yy, tx, ty`, a placed smart object's transform, and Figma
+  `relativeTransform` [Figma node properties].
+- Rasters and pixel masks sit at an integer `offset`, as a PSD layer record
+  stores its bounds and Krita stores each layer's `x` and `y` [Krita file].
+  Moving one changes its offset and never resamples its pixels.
+- Shapes and path masks are drawn in page coordinates, as PSD stores path points
+  against the document size.
+- Groups have no placement of their own, as PSD groups have none.
+
 ### Text
 
 | Property | Model | Evidence |
 |---|---|---|
-| `content` | a string whose runs carry character styles over the layer's `style` | Photoshop formats "selected characters or an entire type layer" [Photoshop characters]; Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
-| `style` | Koharu's existing typography values | Figma `TypeStyle` [Figma property types]; Photoshop character formatting [Photoshop characters] |
+| `content` | rich text: a string whose runs carry character marks | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
+| `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
 | `frame` | none (point text), a box (paragraph text), or a closed path that the text fills | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
 | `direction` | horizontal or vertical | Clip Studio Paint Text Direction [CSP vertical text] |
-| `language` | one BCP 47 tag | SVG `systemLanguage` [SVG structure]; C2PA `sourceLanguage` and `targetLanguage` [C2PA actions] |
+| `language` | one BCP 47 tag; `und` when undetermined | SVG `systemLanguage` [SVG structure]; C2PA `sourceLanguage` and `targetLanguage` [C2PA actions] |
+
+The character keys are font family, weight, italic, size, fill colour, stroke
+colour, and stroke width. Each is both a `style` key and a mark key, and a mark
+wins over `style` for its run. Alignment is a paragraph key that lives only in
+`style` and applies to the whole text, like `textAlignHorizontal` in a Figma
+node's `TypeStyle` [Figma property types]. Styling with no characters selected
+writes `style`; styling selected characters writes marks.
 
 ![Point text, a text box, and text filling a closed shape](design/text-frames.svg)
 
@@ -84,6 +103,8 @@ Clip Studio Paint.
 |---|---|---|
 | place | a child of the layer it limits; a layer can have several | Krita masks are child nodes of a layer [Krita layers]; a Lightroom mask is made of several components [Lightroom masking] |
 | `mode` | add, subtract, or intersect, applied in order | Lightroom's Add, Subtract, and Intersect [Lightroom masking]; CSS `mask-composite` [CSS masking] |
+| start | a layer without masks shows whole; components apply to an empty mask when the first one adds, and to a full mask otherwise | a Lightroom mask starts from its first component [Lightroom masking]; a PSD layer mask has a default colour of 0 or 255 [PSD spec] |
+| drawing | never drawn and outside the draw order; a group's masks limit the group's composite | Krita masks filter their parent [Krita layers]; a PSD group carries a layer mask like any layer [PSD spec] |
 | content | pixels or a closed path | the PSD layer mask and vector mask [PSD spec] |
 | PSD export | the components merge into the layer's one mask | a PSD layer has one user mask and one vector mask [PSD spec]; a GIMP layer has one mask [GIMP XCF] |
 
@@ -95,7 +116,8 @@ Masks take `name` and `visible` from the common properties.
 
 | Value | Model | Evidence |
 |---|---|---|
-| raster pixels | 64×64 tiles keyed by tile position, each compressed with zlib on its own; only tiles holding pixels are stored | GIMP stores 64-pixel tiles, each compressed on its own, zlib being one option [GIMP XCF]; Krita stores 64×64 tiles, each recorded with its x and y [Krita tiles] |
+| raster pixels | 8-bit RGBA in 64×64 tiles keyed by tile position, each compressed with zlib on its own; only tiles holding pixels are stored | GIMP stores 64-pixel tiles, each compressed on its own, zlib being one option [GIMP XCF]; Krita stores 64×64 tiles, each recorded with its x and y [Krita tiles] |
+| mask pixels | 8-bit grey, tiled like raster pixels | a PSD user mask is one 8-bit channel [PSD spec] |
 | path | SVG path data | SVG [SVG paths] |
 | colour | Koharu's existing RGBA colour | Figma `Color` is r, g, b, a [Figma property types] |
 
@@ -103,38 +125,85 @@ Masks take `name` and `visible` from the common properties.
 
 ![A model typesets a text frame, you move it, the model reruns, and you reset it](design/overrides.svg)
 
-- **Origin.** A layer a model made records how, as a C2PA action: `action`
-  (such as `c2pa.created` or `c2pa.translated`), `softwareAgent`, and
-  `digitalSourceType` [C2PA actions]. A layer the user made has no origin.
+- **Origin.** A layer records, in order, each model action that wrote to it,
+  as C2PA lists the actions taken on an asset [C2PA actions]. Each action has
+  C2PA's `action` (such as `c2pa.created` or `c2pa.translated`),
+  `softwareAgent` (a name and version), `digitalSourceType`, `parameters`, and
+  `ingredients`, plus `writes`, the property paths it wrote, which C2PA does
+  not have. A layer the user made has an empty origin.
+  - Each path belongs to the latest action that wrote it. A rerun, or another
+    model writing the same path, takes the path over, and an action left with
+    no paths is dropped.
+  - A `c2pa.translated` action carries `sourceLanguage` and `targetLanguage`
+    in its parameters, as C2PA requires [C2PA actions]. An undetermined source
+    language is `und`, BCP 47's tag for one.
   - Photoshop likewise keeps each Generative Fill result as its own Generative
     Layer [Photoshop Generative Fill].
   - Lightroom keeps its AI components, such as Subject or Sky, apart from Brush
     components [Lightroom masking].
-- **Two sets of values.** A generated layer keeps the values its models wrote
-  (`generated`) apart from the user's `overrides`. Each override is keyed by a
-  property path such as `frame` or `style.size`.
-  - Blender library overrides store override properties by RNA path over the
-    linked data [Blender override API] [Blender overrides].
-  - Figma instances store their overridden fields over the main component
+- **Ingredients** are what an action read. Each names a layer by id, a property
+  path, a hash of the value read, and a `relationship`, as C2PA actions
+  reference their ingredients by hash and every C2PA ingredient carries a
+  relationship [C2PA actions]. Every ingredient counts for staleness, whatever
+  its relationship.
+  - `parentOf` marks the one source the action derives from, such as the OCR
+    text a translation translates. An action has at most one, as a C2PA
+    manifest does.
+  - `inputTo` marks context the action also read, such as the other texts on
+    the page sent to a translator.
+  - `componentOf` marks a part placed into the result, as C2PA requires for
+    `c2pa.placed`.
+  - Ingredients are the only references between layers. A translation lists the
+    OCR text it read, so moving either layer keeps the link. Nesting is layout
+    only.
+- **Stale results.** A result is rejected if any of its ingredients changed
+  before it commits. After it commits, the paths an action wrote are out of
+  date once any of its ingredients changes or its ingredient layer is gone, and
+  rerunning the model is the workflow's choice.
+- **Values.** Every layer holds the values that show, whoever wrote them, so
+  reading is direct and the same on every layer. A layer the user made holds
+  nothing else.
+  - A Blender library override likewise holds its data locally and "only
+    stores override operations, not override operands" [Blender overrides
+    design].
+  - A model never writes into a layer the user made; it adds a layer of its
+    own, as Generative Fill adds a Generative Layer [Photoshop Generative
+    Fill].
+- **Replaced model values.** A model layer also keeps `generated`: for each
+  property the user changed, the value the model wrote there. Each entry is
+  keyed by a property path, a JSON Pointer such as `/frame` or `/style/size`
+  [JSON Pointer]. A path in `generated` is an override.
+  - Blender override properties are likewise named by RNA path [Blender
+    override API] [Blender overrides].
+  - Figma instances likewise record which fields of each node are overridden
     [Figma instances].
-  - A layer the user made holds one set of values, like local data in Blender.
-- **Reading.** An override wins; otherwise the generated value shows.
-- **Rerunning a model** replaces the generated values that model writes and
-  nothing else, so overridden properties keep the user's value.
+- **Your edits.** Changing a property on a model layer first moves the model's
+  value into `generated`, unless that path is already there, then writes the
+  new value.
+- **Overriding text.** Your first edit of a generated text, including styling
+  part of it, moves a copy of the text and its marks into `generated` at
+  `/content`; you keep editing the text on the layer. Later regenerations then
+  go to that copy and stay hidden until Reset. Styling the whole layer
+  overrides `/style` keys only, so regenerated text still shows.
+- **Rerunning a model** writes each value it produces onto the layer, except at
+  a path in `generated`, where it replaces the stored model value and the
+  user's value keeps showing. Which existing layer a new output replaces is an
+  [open question](#open-questions).
   - In Blender, when the library changes, "unmodified properties" of the
     override are updated [Blender overrides].
   - Lightroom recomputes AI masks with Update [Lightroom masking].
 - **Removed outputs.** When a rerun no longer produces a layer, the layer goes
-  unless the user overrode something on it. Blender's resync likewise leaves
-  user overrides unchanged unless the hierarchy is enforced [Blender overrides
-  design].
-- **Reset** deletes an override, so the generated value shows again: Figma's
-  "Reset [property]" and "Reset all changes" [Figma reset overrides], and
-  Blender's Reset and Remove Override [Blender overrides].
-- **No conflict tracking.** Blender "only stores override operations, not
-  override operands" [Blender overrides design], and neither Blender nor Figma
-  reports when the value under an override changes. This design records
-  nothing about the value an override replaced.
+  unless it or a layer inside it has an entry in `generated`, or the user added
+  a layer inside it. Blender's resync likewise keeps a user-edited override
+  that diverges from the linked hierarchy, unless a manual resync enforces the
+  hierarchy [Blender overrides design].
+- **Reset** writes the stored model value back onto the layer and deletes it
+  from `generated`, so the model's value shows again: Figma's "Reset
+  [property]" and "Reset all changes" [Figma reset overrides], and Blender's
+  Reset and Remove Override [Blender overrides].
+- **No conflict tracking.** Neither Blender nor Figma reports when the value
+  under an override changes. A rerun replaces a stored model value silently,
+  and nothing records what it was when the user made the change.
 
 ## 3. Attributes
 
@@ -144,8 +213,9 @@ Masks take `name` and `visible` from the common properties.
   parasites].
 - **Values** are strings, numbers, arrays, or nested maps, as in Blender custom
   properties [Blender custom properties].
-- **Overrides.** Attributes take overrides like any other property; Blender
-  custom properties can be "Library Overridable" [Blender custom properties].
+- **Overrides.** Attributes take overrides like any other property, at paths
+  such as `/attributes/koharu/role`; Blender custom properties can be "Library
+  Overridable" [Blender custom properties].
 - **Rendering.** The renderer never reads attributes, so two documents that
   differ only in attributes look the same. They are data for tools, like
   Figma plugin data [Figma plugin data] and SVG `data-*` attributes [SVG
@@ -153,68 +223,64 @@ Masks take `name` and `visible` from the common properties.
 - **Unknown namespaces** are kept as they are, as GIMP saves persistent
   parasites [GIMP parasites]. Only core properties fail closed.
 
-## Today's workflow, as data
-
-This section is an example, not schema.
-
-![One page as a stack of layers](design/page-example.svg)
-
-| Today | In the document |
-|---|---|
-| imported page | an `image` the user added |
-| detected text block | a `group`, origin `c2pa.created` by the detector |
-| balloon outline | a hidden `shape` in that group, with `koharu.role = "balloon"` |
-| OCR result | a hidden `text` in that group, `language = "ja"`, its frame the detected box |
-| translation | a visible `text` in that group, `language = "en"`, its frame the balloon outline, origin `c2pa.translated` |
-| typesetting | the translation's generated `frame` and `style`; the user's adjustments are overrides |
-| text mask | a `mask` on the inpainting raster from the detector, plus the user's own add and subtract masks |
-| inpainting | a `raster` drawn inside its masks, origin `c2pa.created` by the inpainter |
-| retouching | `raster` layers above it, added by the user |
-
-The translation is the only visible text. The OCR text stays beside it in the
-same group as its source.
-
-Changing the workflow changes only this table. A new detector adds attributes;
-a layout model writes generated `frame` values. The schema stays the same.
-
 ## Loro specifics
 
 This section is implementation, not schema.
 
-- **Identity** is `TreeID`.
-  - Relations are nesting or attribute values, so layers never refer to each
-    other by id.
-  - Undo of a delete may therefore re-create a subtree under new `TreeID`s
-    without breaking anything. Holders outside the document re-read their
-    targets, and a pipeline result for a layer that no longer exists is
-    rejected as stale.
-- **Text** is `LoroText`. Style runs are Loro rich-text marks, whose keys and
-  expand rules are registered on every load.
+- **Identity** is a stored id in each page's and layer's map. Loro's `TreeID`s
+  and container ids stay internal.
+  - Undo of a delete, redo of a create, and `revert_to` re-create a node under a
+    new `TreeID` (`loro-internal` 1.16.2, `handler.rs`). The restored map
+    brings the stored id back.
+  - Selection, caches, and jobs outside the document key on stored ids, so they
+    survive undo.
+- **Text** is `LoroText`. Character keys are Loro rich-text marks that expand
+  after their run, so typing at the end of a run continues its style. Loro does
+  not store mark configuration, so the keys and expand rules are registered on
+  every load.
+- **Replaced model values.** `generated` is a `LoroMap` from JSON Pointer to the
+  model's value; `/content` holds a `LoroText` copied with `apply_delta`. The
+  text on the layer stays one `LoroText` across your edits, so cursors into it
+  stay valid, and Reset rewrites it in place.
 - **Rasters.** Each raster's tiles are their own container, so Loro decodes
   them only when they are read.
 - **Undo** is Loro's `UndoManager`: one edit is one commit, which is one undo
   step.
-- **Edits.** `Session::edit(author, label, closure)` writes generated values
-  for a model author, and overrides or a user layer's values for the user.
+- **Edits.** `Session::edit(author, label, closure)` runs one edit as the user
+  or as a model.
+  - The user's write to a model layer first moves the model's value into
+    `generated`, unless that path is already there.
+  - A model's write goes onto the layer, or into `generated` at a path the user
+    changed, and appends its action to the layer's origin, taking over the
+    paths it writes. It first hashes each ingredient's current value and fails
+    as stale on a mismatch.
   - Every operation checks its arguments before its first write, because Loro
     has no rollback.
   - A failure after a write poisons the session.
-- **Change** names the pages an edit touched. It is built from Loro events by
-  walking each event's layer up to its page.
+- **Change** names, by id, the pages an edit touched. It is built from Loro
+  events by walking each event's layer up to its page.
+- **Saving.** The session saves when edits pause and when the project closes,
+  not after every edit. Each save rewrites the whole file with its history, so
+  save time grows with raster history until compaction drops it.
 - **Versioning.** The project `version` changes only when the core does: a new
-  layer kind or core property. Unknown core data fails to open; unknown
-  attributes never do.
+  layer kind or core property. A reader opens any version up to its own, since
+  an added kind or property needs no decoder. A newer version or unknown core
+  data fails to open; unknown attributes never do. A change that removes or
+  redefines core data leaves older files unopenable, because no upgrade decoder
+  is written.
 
 ![How one edit runs](design/edit.svg)
 
 ## To prove in a spike before building
 
-1. Undo of a deleted subtree restores its generated values, overrides, text
-   marks, and raster tiles.
+1. Undo of a deleted subtree and redo of a created layer restore its stored
+   ids, values, replaced model values, origins, text marks, and raster tiles.
 2. Reading a page view decodes no raster tile container.
 3. Event paths inside a layer's maps, text, or tiles resolve to the layer and
    from there to its page.
 4. Rich-text marks survive save and reopen.
+5. Save time and file growth stay acceptable for a realistic project after
+   repeated painting and inpainting reruns.
 
 ## Open questions
 
@@ -239,6 +305,12 @@ This section is implementation, not schema.
    its own? Or adopt Clip Studio Paint's balloon layer, where the text and
    balloon share one layer and resizing the balloon re-places the text [CSP
    balloons]?
+5. **Rerun matching.** When a model that produces a set, like the detector,
+   reruns, which existing layer does each new output replace?
+   - Replace only layers the user has not touched, and drop a new output that
+     overlaps a kept one.
+   - Match outputs to layers by overlap and update them in place, as
+     Lightroom's Update recomputes an existing AI mask [Lightroom masking].
 
 ## Sources
 
@@ -257,7 +329,8 @@ Read in October 2026.
   inside shapes dropped], [CSS masking]
 - Others: [OpenRaster], [Krita layers], [Krita file], [Krita tiles], [GIMP
   XCF], [GIMP parasites], [Blender overrides], [Blender overrides design],
-  [Blender override API], [Blender custom properties], [C2PA actions]
+  [Blender override API], [Blender custom properties], [C2PA actions], [JSON
+  Pointer]
 
 [PSD spec]: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
 [Photoshop type]: https://helpx.adobe.com/photoshop/desktop/text-typography/type-layers-creation/type-layers-in-photoshop.html
@@ -300,3 +373,4 @@ Read in October 2026.
 [Blender override API]: https://docs.blender.org/api/current/bpy.types.IDOverrideLibraryProperty.html
 [Blender custom properties]: https://docs.blender.org/manual/en/latest/files/custom_properties.html
 [C2PA actions]: https://spec.c2pa.org/specifications/specifications/2.2/specs/C2PA_Specification.html#_actions
+[JSON Pointer]: https://www.rfc-editor.org/rfc/rfc6901
