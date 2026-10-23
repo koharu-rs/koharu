@@ -5,9 +5,11 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Storage(#[from] anyhow::Error),
+    Storage(#[from] koharu_storage::Error),
     #[error(transparent)]
     Loro(#[from] loro::LoroError),
+    #[error(transparent)]
+    Export(#[from] loro::LoroEncodeError),
     #[error("{kind} record is invalid: {source}")]
     Record {
         kind: &'static str,

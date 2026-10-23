@@ -2,30 +2,29 @@
 
 `koharu-storage` owns Koharu's document: one `.loro` file holding the Loro
 snapshot of a project, page images included. Storage owns locking, loading, and
-atomic saves. What the document means, and when to save or compact it, belong
-to `koharu-scene`.
+atomic writes. What the document means, what to save, and when belong to
+`koharu-scene`.
 
 ## Loading
 
 `Document::open` locks the document, maps the file, and imports it with
-`LoroDoc::from_snapshot`. Loro copies the encoded snapshot into memory but
-decodes each container when it is first read, so a page's images are decoded
-only when that page is used. A file that is not a Loro snapshot fails to open.
+`LoroDoc::from_snapshot`. Loro copies the whole file into memory, history
+included, and keeps that copy while the document is open. It decodes each
+container only when it is first read, so a page's images are decoded only when
+that page is used. A file that is not a Loro snapshot fails to open.
 
 ## Saving
 
-Every save exports the whole document to a synced temporary file and renames it
-over the document, so the file is never written in place.
-
-- `save` exports a full snapshot. Containers that were never read are written
-  from their loaded bytes, so saving does not decode images. The snapshot keeps
-  history, including every image an edit replaced.
-- `compact` exports a shallow snapshot that drops that history. Loro decodes
-  every container to build it, so it is meant for rare moments such as closing
-  a document.
+`save` writes a snapshot the scene exported to a synced temporary file and
+renames it over the document, so the file is never written in place. Exporting
+happens before the call, so the scene can release the document while the file
+is written. Loro exports containers that were never read from their loaded
+bytes, so exporting does not decode images.
 
 ## Locking
 
-`Book.loro` is locked through `Book.loro.lock`, so every save can replace the
-document without unlocking it. `Document::remove` deletes a closed document and
-its lock file.
+`Book.loro` is locked through the hidden `.Book.loro.lock` beside it, so every
+save can replace the document without unlocking it. Opening a document that
+another Koharu window holds fails with `Error::Locked`. The lock is advisory, so
+it keeps out other Koharu windows, not other programs. `Document::remove`
+deletes a closed document, then its lock file.
