@@ -5107,7 +5107,6 @@ dependencies = [
 name = "koharu-scene"
 version = "0.83.5"
 dependencies = [
- "anyhow",
  "koharu-storage",
  "loro",
  "serde",
@@ -5133,11 +5132,10 @@ dependencies = [
 name = "koharu-storage"
 version = "0.83.5"
 dependencies = [
- "anyhow",
  "atomicwrites",
- "fs4",
  "loro",
  "memmap2",
+ "thiserror 2.0.21",
  "tracing",
 ]
 
