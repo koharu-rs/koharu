@@ -208,6 +208,54 @@ describe('canvas interaction adapter', () => {
     input.remove()
   })
 
+  it('allows bare tool shortcuts from a slider while leaving control keys alone', () => {
+    installProject()
+    renderWorkspace()
+    const input = document.createElement('input')
+    input.type = 'range'
+    document.body.append(input)
+    input.focus()
+    const undo = vi.spyOn(commands, 'undo').mockResolvedValue(null)
+    const remove = vi.spyOn(commands, 'deleteLayers').mockResolvedValue(null)
+    act(() => useKoharuStore.setState({ selectedLayers: ['element'] }))
+
+    for (const options of [
+      { key: ' ', code: 'Space' },
+      { key: 'ArrowLeft' },
+      { key: 'Delete' },
+      { key: 'z', ctrlKey: true },
+    ]) {
+      const event = new KeyboardEvent('keydown', { ...options, bubbles: true, cancelable: true })
+      fireEvent(input, event)
+      expect(event.defaultPrevented).toBe(false)
+    }
+    expect(undo).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+    expect(useKoharuStore.getState().selectedLayers).toEqual(['element'])
+
+    fireEvent.keyDown(input, { key: 't' })
+    expect(useKoharuStore.getState().tool).toBe('text')
+    input.remove()
+  })
+
+  it('keeps text entry, composition and handled keys out of tool shortcuts', () => {
+    installProject()
+    renderWorkspace()
+    for (const tag of ['input', 'textarea', 'select']) {
+      const control = document.createElement(tag)
+      document.body.append(control)
+      fireEvent.keyDown(control, { key: 't' })
+      expect(useKoharuStore.getState().tool).toBe('select')
+      control.remove()
+    }
+    fireEvent.keyDown(window, { key: 't', isComposing: true })
+    expect(useKoharuStore.getState().tool).toBe('select')
+    const handled = new KeyboardEvent('keydown', { key: 't', cancelable: true })
+    handled.preventDefault()
+    fireEvent(window, handled)
+    expect(useKoharuStore.getState().tool).toBe('select')
+  })
+
   it('announces WebGPU startup failures and offers recovery', () => {
     installProject()
     canvasState.status = 'error'
