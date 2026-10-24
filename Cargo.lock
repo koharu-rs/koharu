@@ -4642,6 +4642,7 @@ dependencies = [
  "futures",
  "koharu-config",
  "koharu-runtime",
+ "koharu-scene",
  "koharu-secrets",
  "reqwest",
  "serde",
