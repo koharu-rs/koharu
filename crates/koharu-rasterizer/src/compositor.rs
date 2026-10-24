@@ -73,6 +73,10 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
     } else {
         color = textureSample(source_texture, texture_sampler, input.uv);
     }
+    // Vello stores straight (unpremultiplied) colour; the blend state expects premultiplied.
+    if uniforms.format_options.x > 0.0 {
+        color = vec4<f32>(color.rgb * color.a, color.a);
+    }
     var erase = 0.0;
     if uniforms.target_options.w > 0.0 {
         erase = textureSample(erase_texture, texture_sampler, input.screen_uv).a;
@@ -562,6 +566,7 @@ impl GpuCompositor {
                                 size,
                                 draw.opacity.clamp(0.0, 1.0),
                                 erased,
+                                false,
                             ),
                         });
                     }
@@ -597,6 +602,8 @@ impl GpuCompositor {
                             size,
                             1.0,
                             false,
+                            // Vello's fine stage un-premultiplies before storing its target.
+                            true,
                         ),
                     });
                     overlay_pending = true;
@@ -781,6 +788,7 @@ impl GpuCompositor {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_uniforms(
     transform: Affine,
     source_size: (u32, u32),
@@ -789,6 +797,7 @@ fn draw_uniforms(
     target_size: (u32, u32),
     opacity: f32,
     use_erase: bool,
+    straight_alpha: bool,
 ) -> [f32; UNIFORM_FLOATS] {
     let [a, b, c, d, e, f] = transform.as_coeffs();
     let pixel_aligned =
@@ -806,7 +815,7 @@ fn draw_uniforms(
         target_size.1 as f32,
         opacity,
         f32::from(use_erase),
-        0.0,
+        f32::from(straight_alpha),
         f32::from(pixel_aligned),
         0.0,
         0.0,
