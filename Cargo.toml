@@ -56,7 +56,7 @@ ab_glyph = "0.2.32"
 clap = { version = "4.6.7", features = ["derive"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-specta = { version = "=2.0.0-rc.26", features = ["derive", "url", "uuid"] }
+specta = { version = "=2.0.0-rc.26", features = ["derive", "serde_json", "url", "uuid"] }
 specta-typescript = "=0.0.13"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-rayon = "2.1.0"
@@ -100,6 +100,13 @@ flate2 = "1.1.10"
 tempfile = "3.27.0"
 libloading = "0.9.0"
 loro = "1.17.1"
+json-patch = { version = "4.2.0", default-features = false }
+jsonptr = "0.7.1"
+kurbo = "0.13.1"
+color = "0.3.3"
+icu_locale_core = { version = "2.3.0", features = ["alloc"] }
+semver = "1.0.28"
+serde_json_canonicalizer = "0.3.2"
 nvml-wrapper = "0.13.0"
 minijinja = "3.0.0"
 minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }

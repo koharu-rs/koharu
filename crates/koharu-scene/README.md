@@ -84,7 +84,10 @@ The character keys are font family, weight, italic, size, fill colour, stroke
 colour, and stroke width. Each is both a `style` key and a mark key, and a mark
 wins over `style` for its run. Alignment is a paragraph key that lives only in
 `style` and applies to the whole text, like `textAlignHorizontal` in a Figma
-node's `TypeStyle` [Figma property types]. Styling with no characters selected
+node's `TypeStyle` [Figma property types]. Its values are `start`, `center`,
+`end`, and `justify`, as in CSS `text-align`, where start and end follow the
+writing direction [CSS text], so one value serves horizontal and vertical
+text. Styling with no characters selected
 writes `style`; styling selected characters writes marks.
 
 SVG 2 dropped text inside shapes in 2026 because no renderer implemented it
@@ -177,6 +180,8 @@ Masks take `name` and `visible` from the common properties.
   `/content`; you keep editing the text on the layer. Later regenerations then
   go to that copy and stay hidden until Reset. Styling the whole layer
   overrides `/style` keys only, so regenerated text still shows.
+- **Painting.** Pixels take no override: painting over pixels a model wrote
+  replaces them, a rerun replaces your painting, and undo is the only way back.
 - **Rerunning a model** writes each value it produces onto the layer, except at
   a path in `generated`, where it replaces the stored model value and the
   user's value keeps showing. Which existing layer a new output replaces is the
@@ -193,6 +198,23 @@ Masks take `name` and `visible` from the common properties.
   from `generated`, so the model's value shows again: Figma's "Reset
   [property]" and "Reset all changes" [Figma reset overrides], and Blender's
   Reset and Remove Override [Blender overrides].
+- **Duplicates.** A duplicate copies the layer with everything inside it, its
+  pixels, and its text, and keeps its origin and `generated`. The copy is still
+  the model's output with the user's changes: Reset restores the model's values
+  on it, and it goes stale with the same ingredients.
+  - Blender duplicates a library override as a new override of the same linked
+    data [Blender 2.90 overrides].
+  - Figma duplicates an instance as an instance of the same main component
+    [Figma instances] [Figma insert instances].
+  - Clip Studio Paint keeps duplicated file object layers linked to the same
+    file [CSP file objects]. Photoshop advises duplicating a layer before
+    rasterizing it, which removes its generated and Smart Object data
+    [Photoshop rasterize].
+  - An image copy names the same file, which is never edited, so its bytes are
+    kept once.
+  - The copy keeps its name. Photoshop and Clip Studio Paint add "copy"
+    [Photoshop Smart Object copies] [CSP layers]; the app does that in the same
+    edit, because the word is translated.
 - **No conflict tracking.** Neither Blender nor Figma reports when the value
   under an override changes. A rerun replaces a stored model value silently,
   and nothing records what it was when the user made the change.
@@ -228,8 +250,8 @@ This section is implementation, not schema.
     survive undo.
 - **Text** is `LoroText`. Character keys are Loro rich-text marks that expand
   after their run, so typing at the end of a run continues its style. Loro does
-  not store mark configuration, so the keys and expand rules are registered on
-  every load.
+  not store mark configuration, so that expand rule is set as the default for
+  every key on every load.
 - **Replaced model values.** `generated` is a `LoroMap` from JSON Pointer to the
   model's value; `/content` holds a `LoroText` copied with `apply_delta`. The
   text on the layer stays one `LoroText` across your edits, so cursors into it
@@ -247,8 +269,8 @@ This section is implementation, not schema.
     they are read.
 - **Undo** is Loro's `UndoManager`: one edit is one commit, which is one undo
   step.
-- **Edits.** `Session::edit(author, label, closure)` runs one edit as the user
-  or as a model.
+- **Edits.** `Session::apply` runs one `Edit`: its author, the user or a
+  model, its undo label, what it read, and its ops.
   - The user's write to a property a model wrote first moves the model's value
     into `generated`, unless that path is already there.
   - A model's write goes onto the layer, or into `generated` at a path the user
@@ -263,43 +285,50 @@ This section is implementation, not schema.
 - **Saving.** The session saves when edits pause and when the project closes,
   not after every edit. Each save rewrites the whole file with its history, so
   save time grows with raster history until compaction drops it.
-- **Versioning.** The project `version` changes only when the core does: a new
-  layer kind or core property. A reader opens any version up to its own, since
-  an added kind or property needs no decoder. A newer version or unknown core
-  data fails to open; unknown attributes never do. A change that removes or
-  redefines core data leaves older files unopenable, because no upgrade decoder
-  is written.
+- **Versioning.** The project `version` is a SemVer version [SemVer] and
+  changes only when the core does. A new layer kind or core property raises the
+  minor version, and a reader opens any version up to its own with the same
+  major version, since an addition needs no decoder. A change that removes or
+  redefines core data raises the major version, and a reader opens only its own
+  major version, because no upgrade decoder is written. The patch stays 0,
+  since stored data has no bug fixes. A newer version, a pre-release, or
+  unknown core data fails to open; unknown attributes never do.
 
 ## Sources
 
 Read in October 2026.
 
 - Adobe: [PSD spec], [Photoshop type], [Photoshop characters], [Photoshop text
-  in shapes], [Photoshop smart objects], [Photoshop artboards], [Photoshop
-  Generative Fill], [Photoshop Content-Aware Fill], [Lightroom masking]
-- Clip Studio Paint: [CSP pages], [CSP page size], [CSP text], [CSP text
-  editing], [CSP vertical text], [CSP balloons]
+  in shapes], [Photoshop smart objects], [Photoshop Smart Object copies],
+  [Photoshop rasterize], [Photoshop artboards], [Photoshop Generative Fill],
+  [Photoshop Content-Aware Fill], [Lightroom masking]
+- Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP file
+  objects], [CSP text], [CSP text editing], [CSP vertical text], [CSP balloons]
 - Figma: [Figma nodes], [Figma node properties], [Figma property types],
   [Figma image paint], [Figma text resize], [Figma plugin data], [Figma
-  instances], [Figma reset overrides]
+  instances], [Figma insert instances], [Figma reset overrides]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
-  inside shapes dropped], [CSS masking]
+  inside shapes dropped], [CSS masking], [CSS text]
 - Others: [OpenRaster], [Krita layers], [Krita file], [Krita tiles], [GIMP
   XCF], [GIMP parasites], [Blender overrides], [Blender overrides design],
-  [Blender override API], [Blender custom properties], [C2PA actions], [JSON
-  Pointer]
+  [Blender override API], [Blender 2.90 overrides], [Blender custom
+  properties], [C2PA actions], [JSON Pointer], [SemVer]
 
 [PSD spec]: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
 [Photoshop type]: https://helpx.adobe.com/photoshop/desktop/text-typography/type-layers-creation/type-layers-in-photoshop.html
 [Photoshop characters]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/format-characters.html
 [Photoshop text in shapes]: https://helpx.adobe.com/photoshop/desktop/text-typography/text-on-paths-shapes/add-text-along-paths-or-inside-shapes.html
 [Photoshop smart objects]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/smart-objects/export-the-contents-of-an-embedded-smart-object.html
+[Photoshop Smart Object copies]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/smart-objects/duplicate-an-embedded-smart-object.html
+[Photoshop rasterize]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/get-started-layers/rasterize-layers.html
 [Photoshop artboards]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/layout-design-tools/get-started-artboards.html
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Lightroom masking]: https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html
 [CSP pages]: https://help.clip-studio.com/en-us/manual_en/570_pages/Management_Files_and_Page_Files.htm
 [CSP page size]: https://help.clip-studio.com/en-us/manual_en/210_file/Change_canvas_size_and_settings.htm
+[CSP layers]: https://help.clip-studio.com/en-us/manual_en/180_layers/Basic_operations.htm
+[CSP file objects]: https://tips.clip-studio.com/en-us/articles/1564
 [CSP text]: https://help.clip-studio.com/en-us/manual_en/480_text/Adding_text.htm
 [CSP text editing]: https://help.clip-studio.com/en-us/manual_en/480_text/Editing_text.htm
 [CSP vertical text]: https://help.clip-studio.com/en-us/manual_en/480_text/Vertical_text_and_readings.htm
@@ -311,6 +340,7 @@ Read in October 2026.
 [Figma text resize]: https://developers.figma.com/docs/plugins/api/properties/TextNode-textautoresize/
 [Figma plugin data]: https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata/
 [Figma instances]: https://developers.figma.com/docs/plugins/api/InstanceNode/
+[Figma insert instances]: https://help.figma.com/hc/en-us/articles/360039150173-Create-and-insert-component-instances
 [Figma reset overrides]: https://help.figma.com/hc/en-us/articles/360039150733
 [SVG structure]: https://www.w3.org/TR/SVG2/struct.html
 [SVG rendering]: https://www.w3.org/TR/SVG2/render.html
@@ -318,6 +348,7 @@ Read in October 2026.
 [SVG image]: https://www.w3.org/TR/SVG2/embedded.html#ImageElement
 [SVG text inside shapes dropped]: https://github.com/w3c/svgwg/issues/1067
 [CSS masking]: https://www.w3.org/TR/css-masking-1/#the-mask-composite
+[CSS text]: https://www.w3.org/TR/css-text-3/#text-align-property
 [OpenRaster]: https://www.openraster.org/baseline/layer-stack-spec.html
 [Krita layers]: https://docs.krita.org/en/reference_manual/layers_and_masks.html
 [Krita file]: https://invent.kde.org/graphics/krita/-/blob/master/plugins/impex/libkra/kis_kra_savexml_visitor.cpp
@@ -327,6 +358,8 @@ Read in October 2026.
 [Blender overrides]: https://docs.blender.org/manual/en/latest/files/linked_libraries/library_overrides.html
 [Blender overrides design]: https://developer.blender.org/docs/features/core/overrides/library/
 [Blender override API]: https://docs.blender.org/api/current/bpy.types.IDOverrideLibraryProperty.html
+[Blender 2.90 overrides]: https://developer.blender.org/docs/release_notes/2.90/animation_rigging/
 [Blender custom properties]: https://docs.blender.org/manual/en/latest/files/custom_properties.html
 [C2PA actions]: https://spec.c2pa.org/specifications/specifications/2.2/specs/C2PA_Specification.html#_actions
 [JSON Pointer]: https://www.rfc-editor.org/rfc/rfc6901
+[SemVer]: https://semver.org/spec/v2.0.0.html
