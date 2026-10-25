@@ -5107,11 +5107,22 @@ dependencies = [
 name = "koharu-scene"
 version = "0.83.5"
 dependencies = [
+ "blake3",
+ "color",
+ "flate2",
+ "icu_locale_core",
+ "json-patch",
+ "jsonptr",
  "koharu-storage",
+ "kurbo",
  "loro",
+ "schemars 1.2.3",
+ "semver",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
  "specta",
+ "strum",
  "thiserror 2.0.21",
  "uuid",
 ]
@@ -8371,6 +8382,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "ryu-js"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
+
+[[package]]
 name = "safe-transmute"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8807,6 +8824,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_json_canonicalizer"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe52319a927259afbfa5180c5157cd8167edfd3e8c254f9558c7fef44c5649f2"
+dependencies = [
+ "ryu-js",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "serde_repr"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9170,6 +9198,7 @@ checksum = "ed155e448f42fc4be7a5cbc12bd43f6c549981f7c32fcba429ff6bc57cc4f30c"
 dependencies = [
  "paste",
  "rustc_version",
+ "serde_json",
  "specta-macros",
  "url",
  "uuid",
