@@ -21,6 +21,7 @@ jsonptr = { workspace = true }
 koharu-storage = { workspace = true }
 kurbo = { workspace = true }
 loro = { workspace = true }
+rayon = { workspace = true }
 schemars = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
@@ -30,3 +31,11 @@ specta = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+tempfile = { workspace = true }
+
+[[bench]]
+name = "scene"
+harness = false

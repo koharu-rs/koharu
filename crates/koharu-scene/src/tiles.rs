@@ -9,8 +9,9 @@ use std::{
 
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use loro::LoroBinaryValue;
+use rayon::prelude::*;
 
-use crate::{Error, Hash, PixelFormat, Rect, Result, Tile};
+use crate::{Error, PixelFormat, Rect, Result, Tile};
 
 const SIZE: i32 = 64;
 
@@ -53,7 +54,8 @@ fn decompress(bytes: &[u8], format: PixelFormat) -> Result<Vec<u8>> {
 }
 
 /// Writes `pixels` over `rect`, replacing what was there, and returns the
-/// tiles that changed.
+/// tiles that changed. Each tile is decoded, written, and encoded on its own,
+/// so tiles run in parallel; the map changes afterwards.
 pub(crate) fn write(
     tiles: &mut TileMap,
     format: PixelFormat,
@@ -68,10 +70,17 @@ pub(crate) fn write(
     if rect.width == 0 || rect.height == 0 {
         return Ok(changed);
     }
-    for ty in top.div_euclid(size)..=(bottom - 1).div_euclid(size) {
-        for tx in left.div_euclid(size)..=(right - 1).div_euclid(size) {
+    let positions: Vec<(i64, i64)> = (top.div_euclid(size)..=(bottom - 1).div_euclid(size))
+        .flat_map(|ty| {
+            (left.div_euclid(size)..=(right - 1).div_euclid(size)).map(move |tx| (tx, ty))
+        })
+        .collect();
+    let current: &TileMap = tiles;
+    let written: Vec<((i32, i32), Option<LoroBinaryValue>)> = positions
+        .into_par_iter()
+        .map(|(tx, ty)| {
             let position = (tx as i32, ty as i32);
-            let mut raw = match tiles.get(&position) {
+            let mut raw = match current.get(&position) {
                 Some(bytes) => decompress(bytes, format)?,
                 None => vec![0; tile_len(format)],
             };
@@ -90,31 +99,40 @@ pub(crate) fn write(
                 PixelFormat::Gray8 => raw.iter().all(|&value| value == 0),
             };
             if empty {
+                return Ok((position, None));
+            }
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+            encoder
+                .write_all(&raw)
+                .expect("writing to a Vec cannot fail");
+            let bytes = encoder.finish().expect("writing to a Vec cannot fail");
+            Ok((position, Some(LoroBinaryValue::from(bytes))))
+        })
+        .collect::<Result<_>>()?;
+    for (position, bytes) in written {
+        match bytes {
+            Some(bytes) => {
+                tiles.insert(position, bytes.clone());
+                changed.insert(position, Some(bytes));
+            }
+            None => {
                 if tiles.remove(&position).is_some() {
                     changed.insert(position, None);
                 }
-            } else {
-                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                encoder
-                    .write_all(&raw)
-                    .expect("writing to a Vec cannot fail");
-                let bytes =
-                    LoroBinaryValue::from(encoder.finish().expect("writing to a Vec cannot fail"));
-                tiles.insert(position, bytes.clone());
-                changed.insert(position, Some(bytes));
             }
         }
     }
     Ok(changed)
 }
 
-/// The tiles overlapping `rect` (all of them without one), decoded.
+/// The tiles overlapping `rect` (all of them without one), decoded in
+/// parallel.
 pub(crate) fn decode(
     tiles: &TileMap,
     format: PixelFormat,
     rect: Option<Rect>,
 ) -> Result<Vec<Tile>> {
-    tiles
+    let wanted: Vec<_> = tiles
         .iter()
         .filter(|&(&(x, y), _)| {
             rect.is_none_or(|rect| {
@@ -125,6 +143,9 @@ pub(crate) fn decode(
                     && rect.y < top + SIZE
             })
         })
+        .collect();
+    wanted
+        .into_par_iter()
         .map(|(&(x, y), bytes)| {
             Ok(Tile {
                 x,
@@ -133,16 +154,4 @@ pub(crate) fn decode(
             })
         })
         .collect()
-}
-
-/// The hash of a layer's pixels, over decoded tiles so that it does not
-/// depend on how zlib compressed them.
-pub(crate) fn hash(tiles: &TileMap, format: PixelFormat) -> Result<Hash> {
-    let mut hasher = blake3::Hasher::new();
-    for (&(x, y), bytes) in tiles {
-        hasher.update(&x.to_le_bytes());
-        hasher.update(&y.to_le_bytes());
-        hasher.update(&decompress(bytes, format)?);
-    }
-    Ok(hasher.finalize().into())
 }

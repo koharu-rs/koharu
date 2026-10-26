@@ -5109,6 +5109,7 @@ version = "0.83.5"
 dependencies = [
  "blake3",
  "color",
+ "criterion",
  "flate2",
  "icu_locale_core",
  "json-patch",
@@ -5116,6 +5117,7 @@ dependencies = [
  "koharu-storage",
  "kurbo",
  "loro",
+ "rayon",
  "schemars 1.2.3",
  "semver",
  "serde",
@@ -5123,6 +5125,7 @@ dependencies = [
  "serde_json_canonicalizer",
  "specta",
  "strum",
+ "tempfile",
  "thiserror 2.0.21",
  "uuid",
 ]
