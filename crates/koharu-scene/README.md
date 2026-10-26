@@ -306,11 +306,19 @@ Each example uses only this crate and runs with
 `cargo run -p koharu-scene --example <name>`:
 
 - `project`: create a project, import a page, add one layer of every kind,
-  write pixels, read everything back, save, reopen, and compact.
+  write pixels, read everything back, save, reopen (one session at a time),
+  and compact.
 - `editing`: what the editor does: patch, lock, edit text, paint, duplicate,
-  move, and remove, undo and redo, and the errors an edit can fail with.
-- `models`: what the pipeline does: provenance, overrides that survive reruns,
-  staleness, Reset, and removed outputs.
+  move, and remove, refresh from a change, undo and redo, and the errors an
+  edit can fail with.
+- `models`: provenance, overrides that survive reruns, staleness, Reset, and
+  removed outputs.
+- `pipeline`: detection, OCR, translation, and inpainting as data: a balloon
+  with workflow attributes, a pixel text mask, a translation framed by the
+  balloon's path, sources paired from a page, and a rerun replacing what a
+  model made.
+- `sharing`: one session shared by the editor and a background model, with a
+  stale result and an edit that changes nothing.
 - `tools`: what an agent or MCP client does: list and call the tools, and read
   compacted answers.
 

@@ -83,7 +83,7 @@ fn main() -> Result<()> {
 
     // Properties change with a JSON Merge Patch; `null` clears an optional
     // property.
-    session.apply(edit(
+    let change = session.apply(edit(
         &session,
         "Restyle",
         vec![
@@ -95,6 +95,11 @@ fn main() -> Result<()> {
             op(json!({"op": "update_layer", "layer": outline, "patch": {"stroke": null}})),
         ],
     ))?;
+    // A change names the pages and layers an edit touched, so the canvas and
+    // the renderer refresh just those.
+    assert!(change.pages.changed.contains(&page));
+    assert!(change.layers.contains(&line) && change.layers.contains(&outline));
+    assert!(!change.layers.contains(&inpaint));
     let text = text_layer(&session, line)?;
     assert_eq!(
         (text.name.as_str(), text.style.chars.size),
