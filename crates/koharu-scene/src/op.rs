@@ -11,10 +11,10 @@ use specta::Type;
 use uuid::Uuid;
 
 use crate::{
-    Action, ActionRecord, Created, Error, Hash, Layer, LayerId, LayerKind, PageChanges, PageId,
-    Pointer, PointerBuf, ProjectId, Read, Rect, Ref, Relationship, Result, RichText, Size,
-    SoftwareAgent,
-    doc::{self, Generated, Key, PageData},
+    Action, ActionRecord, Created, Error, Hash, Layer, LayerId, LayerKind, NamedStyle, PageChanges,
+    PageId, Pointer, PointerBuf, ProjectId, Read, Rect, Ref, Relationship, Result, RichText, Size,
+    SoftwareAgent, StyleId,
+    doc::{self, Generated, Key, PageData, StyleNode},
     error::Kind,
     model::CONTENT,
     overrides,
@@ -148,6 +148,35 @@ pub enum Op {
     /// Add an imported file, stored once by its content hash.
     #[schemars(skip)]
     AddFile { media_type: String, bytes: Vec<u8> },
+    /// Add a text style, which texts name in `text_style`.
+    AddTextStyle {
+        #[serde(default)]
+        id: Option<Ref>,
+        style: NamedStyle,
+        #[serde(default)]
+        #[schemars(skip)]
+        ingredients: Vec<Read>,
+    },
+    /// Change a text style with a JSON Merge Patch, for every text naming it.
+    UpdateTextStyle {
+        style: Ref,
+        #[schemars(schema_with = "crate::tools::style_patch")]
+        patch: Value,
+        #[serde(default)]
+        #[schemars(skip)]
+        ingredients: Vec<Read>,
+    },
+    /// Delete a text style's overrides at `paths`, or all of them, so the
+    /// model's values show again.
+    ResetTextStyle {
+        style: Ref,
+        #[serde(default)]
+        #[specta(type = Option<Vec<String>>)]
+        #[schemars(with = "Option<Vec<String>>")]
+        paths: Option<Vec<PointerBuf>>,
+    },
+    /// Remove a text style no text names.
+    RemoveTextStyle { style: Ref },
 }
 
 impl Op {
@@ -155,7 +184,9 @@ impl Op {
         match self {
             Self::AddLayer { ingredients, .. }
             | Self::UpdateLayer { ingredients, .. }
-            | Self::SetText { ingredients, .. } => ingredients,
+            | Self::SetText { ingredients, .. }
+            | Self::AddTextStyle { ingredients, .. }
+            | Self::UpdateTextStyle { ingredients, .. } => ingredients,
             _ => &[],
         }
     }
@@ -211,6 +242,15 @@ pub(crate) enum Write {
         node: NodeRef,
         write: LayerWrite,
     },
+    AddStyle {
+        id: StyleId,
+        props: Map<String, Value>,
+    },
+    Style {
+        id: StyleId,
+        entry: Entry,
+    },
+    RemoveStyle(StyleId),
     /// Clears a layer's tiles first when `clear` is set.
     Tiles {
         page: PageId,
@@ -220,22 +260,17 @@ pub(crate) enum Write {
     },
 }
 
-pub(crate) enum LayerWrite {
-    /// Sets an entry of the layer's map, or of its `generated` map; `None`
-    /// deletes it.
-    Set {
-        generated: bool,
-        key: String,
-        value: Option<LoroValue>,
-    },
-    /// Replaces one of the layer's texts in place, keeping the same
-    /// `LoroText` so cursors into it stay valid.
-    Text { store: TextStore, from: TextFrom },
+/// Sets an entry of a layer's or style's map, or of its `generated` map;
+/// `None` deletes it.
+pub(crate) struct Entry {
+    generated: bool,
+    key: String,
+    value: Option<LoroValue>,
 }
 
-impl LayerWrite {
+impl Entry {
     fn origin(origin: &[ActionRecord]) -> Self {
-        Self::Set {
+        Self {
             generated: false,
             key: Key::Origin.as_ref().to_owned(),
             value: Some(doc::loro(
@@ -243,6 +278,65 @@ impl LayerWrite {
             )),
         }
     }
+
+    fn write(self, map: LoroMap) -> Result<()> {
+        let map = match self.generated {
+            true => doc::generated(&map)?,
+            false => map,
+        };
+        match self.value {
+            Some(value) => map.insert(&self.key, value)?,
+            None => map.delete(&self.key)?,
+        }
+        Ok(())
+    }
+}
+
+/// The entries that turn shown values `old` into `new`.
+fn props_entries(old: &Map<String, Value>, new: &Map<String, Value>) -> Vec<Entry> {
+    new.iter()
+        .filter(|(key, value)| old.get(*key) != Some(value))
+        .map(|(key, value)| Entry {
+            generated: false,
+            key: key.clone(),
+            value: Some(doc::loro(value.clone())),
+        })
+        .collect()
+}
+
+/// The entries that turn kept model values `old` into `new`. Kept texts are
+/// written apart.
+fn generated_entries(
+    old: &BTreeMap<PointerBuf, Generated>,
+    new: &BTreeMap<PointerBuf, Generated>,
+) -> Vec<Entry> {
+    let removed = old
+        .keys()
+        .filter(|path| !new.contains_key(*path))
+        .map(|path| Entry {
+            generated: true,
+            key: path.as_str().to_owned(),
+            value: None,
+        });
+    let set = new.iter().filter_map(|(path, generated)| match generated {
+        Generated::Value(value) if old.get(path) != Some(generated) => Some(Entry {
+            generated: true,
+            key: path.as_str().to_owned(),
+            value: Some(doc::wrap(value.clone())),
+        }),
+        _ => None,
+    });
+    removed.chain(set).collect()
+}
+
+pub(crate) enum LayerWrite {
+    Set(Entry),
+    /// Replaces one of the layer's texts in place, keeping the same
+    /// `LoroText` so cursors into it stay valid.
+    Text {
+        store: TextStore,
+        from: TextFrom,
+    },
 }
 
 /// The text that shows, or the model's text kept under an override.
@@ -269,8 +363,16 @@ pub(crate) struct Planned {
     pub kept: Vec<LayerId>,
     pub pages: PageChanges,
     pub layers: BTreeSet<LayerId>,
+    pub styles: BTreeSet<StyleId>,
     /// The index after the edit, or `None` when it is unchanged.
     pub index: Option<Index>,
+}
+
+/// What a model's action is recorded on.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum Target {
+    Layer(LayerId),
+    Style(StyleId),
 }
 
 pub(crate) fn plan(doc: &LoroDoc, index: &Index, edit: &Edit) -> Result<Planned> {
@@ -307,8 +409,8 @@ struct Planner<'s, 'd> {
     edit: &'s Edit,
     out: Planned,
     labels: HashMap<String, Uuid>,
-    /// This edit's action on each layer a model wrote.
-    actions: BTreeMap<LayerId, ActionRecord>,
+    /// This edit's action on each layer and style a model wrote.
+    actions: BTreeMap<Target, ActionRecord>,
     /// Files that may have lost their last reference.
     files: BTreeSet<Hash>,
 }
@@ -346,6 +448,7 @@ impl Planner<'_, '_> {
         let uuid = id.uuid().expect("a ref is a label or a UUID");
         if self.state.layers.contains_key(&LayerId(uuid))
             || self.state.position(PageId(uuid)).is_ok()
+            || self.state.styles.contains(&StyleId(uuid))
         {
             return Err(Error::invalid(op, format!("id {uuid} already exists")));
         }
@@ -372,6 +475,12 @@ impl Planner<'_, '_> {
     fn layer_ref(&self, id: &Ref) -> Result<(LayerId, PageId)> {
         let layer = LayerId(self.resolve(id)?);
         Ok((layer, self.state.page_of(layer)?))
+    }
+
+    fn style_ref(&mut self, id: &Ref) -> Result<StyleId> {
+        let style = StyleId(self.resolve(id)?);
+        self.state.style(style)?;
+        Ok(style)
     }
 
     fn unlocked(&mut self, op: usize, layer: LayerId) -> Result<()> {
@@ -401,18 +510,32 @@ impl Planner<'_, '_> {
         Ok(())
     }
 
-    /// Records a model's write on `layer` in this edit's action.
+    fn push_entries(&mut self, page: PageId, id: LayerId, entries: Vec<Entry>) -> Result<()> {
+        for entry in entries {
+            self.push_layer(page, id, LayerWrite::Set(entry))?;
+        }
+        Ok(())
+    }
+
+    fn push_style(&mut self, id: StyleId, entries: Vec<Entry>) {
+        for entry in entries {
+            self.out.writes.push(Write::Style { id, entry });
+        }
+        self.out.styles.insert(id);
+    }
+
+    /// Records a model's write on a layer or style in this edit's action.
     fn record(
         &mut self,
         op: usize,
-        layer: LayerId,
+        target: Target,
         writes: Vec<PointerBuf>,
         ingredients: &[Read],
     ) -> Result<()> {
         let Some(action) = self.model().cloned() else {
             return Ok(());
         };
-        let record = self.actions.entry(layer).or_insert_with(|| ActionRecord {
+        let record = self.actions.entry(target).or_insert_with(|| ActionRecord {
             action,
             writes: Vec::new(),
             ingredients: Vec::new(),
@@ -434,9 +557,13 @@ impl Planner<'_, '_> {
             .count()
             > 1
         {
+            let what = match target {
+                Target::Layer(id) => format!("layer {id}"),
+                Target::Style(id) => format!("style {id}"),
+            };
             return Err(Error::invalid(
                 op,
-                format!("layer {layer} would have more than one parentOf ingredient"),
+                format!("{what} would have more than one parentOf ingredient"),
             ));
         }
         Ok(())
@@ -496,6 +623,18 @@ impl Planner<'_, '_> {
             } => self.write_pixels(index, layer, *rect, pixels),
             Op::Reset { layer, paths } => self.reset(index, layer, paths.as_deref()),
             Op::AddFile { media_type, bytes } => self.add_file(index, media_type, bytes),
+            Op::AddTextStyle {
+                id,
+                style,
+                ingredients,
+            } => self.add_style(index, id.as_ref(), style, ingredients),
+            Op::UpdateTextStyle {
+                style,
+                patch,
+                ingredients,
+            } => self.update_style(index, style, patch, ingredients),
+            Op::ResetTextStyle { style, paths } => self.reset_style(index, style, paths.as_deref()),
+            Op::RemoveTextStyle { style } => self.remove_style(index, style),
         }
     }
 
@@ -574,7 +713,7 @@ impl Planner<'_, '_> {
         for id in ids {
             self.state.layers.to_mut().remove(id);
             self.state.forget_tiles(*id);
-            self.actions.remove(id);
+            self.actions.remove(&Target::Layer(*id));
             self.touch(page, *id);
         }
     }
@@ -646,7 +785,7 @@ impl Planner<'_, '_> {
         });
         self.out.created.push(Created::Layer { id, label });
         self.touch(page, id);
-        self.record(op, id, vec![PointerBuf::new()], ingredients)
+        self.record(op, Target::Layer(id), vec![PointerBuf::new()], ingredients)
     }
 
     fn duplicate_layer(
@@ -712,9 +851,11 @@ impl Planner<'_, '_> {
                     self.push_layer(page, to, LayerWrite::Text { store, from })?;
                 }
             }
-            self.write_generated(page, to, &BTreeMap::new(), &original.generated)?;
+            let entries = generated_entries(&BTreeMap::new(), &original.generated);
+            self.push_entries(page, to, entries)?;
             if !original.origin.is_empty() {
-                self.push_layer(page, to, LayerWrite::origin(&original.origin))?;
+                let origin = Entry::origin(&original.origin);
+                self.push_layer(page, to, LayerWrite::Set(origin))?;
             }
             if original.pixel_format().is_some() {
                 let tiles = self.state.tiles(from)?.clone();
@@ -798,10 +939,13 @@ impl Planner<'_, '_> {
             // write with the model's latest action. A layer created earlier in
             // this edit has its action in `actions` until `finish`.
             let origin = self.state.node(id)?.origin.clone();
-            let created = origin.iter().chain(self.actions.get(&id)).any(|record| {
-                record.action.software_agent.name == agent
-                    && record.writes.iter().any(|path| path.is_root())
-            });
+            let created = origin
+                .iter()
+                .chain(self.actions.get(&Target::Layer(id)))
+                .any(|record| {
+                    record.action.software_agent.name == agent
+                        && record.writes.iter().any(|path| path.is_root())
+                });
             if !created {
                 return Err(Error::invalid(
                     op,
@@ -860,76 +1004,31 @@ impl Planner<'_, '_> {
                 "`kind` and a text's `content` can't be patched",
             ));
         }
-        let model = self.model().is_some();
-        let model_view = overrides::model_view(&node);
-        let base = if model { &model_view } else { &node.props };
-        let mut merged = Value::Object(base.clone());
-        json_patch::merge(&mut merged, patch);
-        let merged = self.normalize(op, node.kind, merged)?;
-        let changed = overrides::diff(base, &merged);
-        if changed.is_empty() {
+        let merged = overrides::merge(
+            &node.props,
+            &node.generated,
+            &node.origin,
+            patch,
+            self.model().is_some(),
+            |value| self.normalize(op, node.kind, value),
+        )?;
+        if merged.changed.is_empty() {
             // A model's rerun with the same values still takes over what its
             // patch names, so its ingredients replace the old ones.
-            let named = fields
-                .keys()
-                .map(|key| Pointer::root().with_trailing_token(key))
-                .collect();
-            return self.record(op, id, named, ingredients);
+            return self.record(op, Target::Layer(id), named(fields), ingredients);
         }
-        if changed.iter().any(|path| path.as_str() != "/locked") {
+        if merged.changed.iter().any(|path| path.as_str() != "/locked") {
             self.unlocked(op, id)?;
         }
-        let mut generated = node.generated.clone();
-        let shown = if model {
-            // A model's change lands where the user hasn't overridden it;
-            // where they have, the override widens to cover the change.
-            let mut shown = node.props.clone();
-            for path in &changed {
-                if let Some(covering) = overrides::covering(&generated, path).cloned() {
-                    let value = overrides::get(&merged, &covering).cloned();
-                    generated.insert(covering, Generated::Value(value));
-                    continue;
-                }
-                let inside = overrides::inside(&generated, path);
-                if inside.is_empty() {
-                    overrides::set(&mut shown, path, overrides::get(&merged, path).cloned());
-                } else {
-                    for each in inside {
-                        generated.remove(&each);
-                    }
-                    generated.insert(
-                        path.clone(),
-                        Generated::Value(overrides::get(&merged, path).cloned()),
-                    );
-                }
-            }
-            self.normalize(op, node.kind, Value::Object(shown))?
-        } else {
-            // The user's change to a path a model wrote keeps the model's
-            // value under an override.
-            for path in &changed {
-                if overrides::owned(&node.origin, path)
-                    && overrides::covering(&generated, path).is_none()
-                {
-                    for each in overrides::inside(&generated, path) {
-                        generated.remove(&each);
-                    }
-                    generated.insert(
-                        path.clone(),
-                        Generated::Value(overrides::get(&model_view, path).cloned()),
-                    );
-                }
-            }
-            merged
-        };
         self.files.extend(node.files());
-        self.write_generated(page, id, &node.generated, &generated)?;
-        self.write_props(page, id, &node.props, &shown)?;
+        let mut entries = generated_entries(&node.generated, &merged.generated);
+        entries.extend(props_entries(&node.props, &merged.shown));
+        self.push_entries(page, id, entries)?;
         let stored = self.state.node(id)?;
-        stored.props = shown;
-        stored.generated = generated;
+        stored.props = merged.shown;
+        stored.generated = merged.generated;
         self.touch(page, id);
-        self.record(op, id, changed, ingredients)
+        self.record(op, Target::Layer(id), merged.changed, ingredients)
     }
 
     fn set_text(&mut self, op: usize, layer: &Ref, text: &str, ingredients: &[Read]) -> Result<()> {
@@ -953,7 +1052,7 @@ impl Planner<'_, '_> {
                 from: TextFrom::Plain(text.to_owned()),
             },
         )?;
-        self.record(op, id, vec![CONTENT.to_buf()], ingredients)
+        self.record(op, Target::Layer(id), vec![CONTENT.to_buf()], ingredients)
     }
 
     fn edit_text(&mut self, op: usize, layer: &Ref, delta: &[TextDelta]) -> Result<()> {
@@ -1081,16 +1180,16 @@ impl Planner<'_, '_> {
                 }
                 Some(Generated::Value(value)) => overrides::set(&mut shown, &path, value),
             }
-            let write = LayerWrite::Set {
+            let write = LayerWrite::Set(Entry {
                 generated: true,
                 key: path.as_str().to_owned(),
                 value: None,
-            };
+            });
             self.push_layer(page, id, write)?;
         }
         let shown = self.normalize(op, node.kind, Value::Object(shown))?;
         self.files.extend(node.files());
-        self.write_props(page, id, &node.props, &shown)?;
+        self.push_entries(page, id, props_entries(&node.props, &shown))?;
         let stored = self.state.node(id)?;
         stored.props = shown;
         stored.generated = generated;
@@ -1114,73 +1213,121 @@ impl Planner<'_, '_> {
         Ok(())
     }
 
-    fn write_props(
+    fn add_style(
         &mut self,
-        page: PageId,
-        id: LayerId,
-        old: &Map<String, Value>,
-        new: &Map<String, Value>,
+        op: usize,
+        id: Option<&Ref>,
+        style: &NamedStyle,
+        ingredients: &[Read],
     ) -> Result<()> {
-        for (key, value) in new
-            .iter()
-            .filter(|(key, value)| old.get(*key) != Some(value))
-        {
-            let write = LayerWrite::Set {
-                generated: false,
-                key: key.clone(),
-                value: Some(doc::loro(value.clone())),
-            };
-            self.push_layer(page, id, write)?;
-        }
-        Ok(())
+        let props = normalize_style(op, serde_json::to_value(style).expect("styles serialize"))?;
+        let (uuid, label) = self.new_id(op, id)?;
+        let id = StyleId(uuid);
+        let node = StyleNode {
+            props: props.clone(),
+            generated: BTreeMap::new(),
+            origin: Vec::new(),
+        };
+        self.state.add_style(id, node);
+        self.out.writes.push(Write::AddStyle { id, props });
+        self.out.created.push(Created::Style { id, label });
+        self.out.styles.insert(id);
+        self.record(op, Target::Style(id), vec![PointerBuf::new()], ingredients)
     }
 
-    fn write_generated(
+    fn update_style(
         &mut self,
-        page: PageId,
-        id: LayerId,
-        old: &BTreeMap<PointerBuf, Generated>,
-        new: &BTreeMap<PointerBuf, Generated>,
+        op: usize,
+        style: &Ref,
+        patch: &Value,
+        ingredients: &[Read],
     ) -> Result<()> {
-        for path in old.keys().filter(|path| !new.contains_key(*path)) {
-            let write = LayerWrite::Set {
-                generated: true,
-                key: path.as_str().to_owned(),
-                value: None,
-            };
-            self.push_layer(page, id, write)?;
+        let id = self.style_ref(style)?;
+        let Value::Object(fields) = patch else {
+            return Err(Error::invalid(op, "a patch must be an object"));
+        };
+        let node = self.state.style(id)?.clone();
+        let merged = overrides::merge(
+            &node.props,
+            &node.generated,
+            &node.origin,
+            patch,
+            self.model().is_some(),
+            |value| normalize_style(op, value),
+        )?;
+        if merged.changed.is_empty() {
+            return self.record(op, Target::Style(id), named(fields), ingredients);
         }
-        for (path, generated) in new {
-            if let Generated::Value(value) = generated
-                && old.get(path) != Some(generated)
-            {
-                let key = path.as_str().to_owned();
-                let value = Some(doc::wrap(value.clone()));
-                self.push_layer(
-                    page,
-                    id,
-                    LayerWrite::Set {
-                        generated: true,
-                        key,
-                        value,
-                    },
-                )?;
+        let mut entries = generated_entries(&node.generated, &merged.generated);
+        entries.extend(props_entries(&node.props, &merged.shown));
+        self.push_style(id, entries);
+        let stored = self.state.style(id)?;
+        stored.props = merged.shown;
+        stored.generated = merged.generated;
+        self.record(op, Target::Style(id), merged.changed, ingredients)
+    }
+
+    fn reset_style(&mut self, op: usize, style: &Ref, paths: Option<&[PointerBuf]>) -> Result<()> {
+        self.user_only(op, "reset overrides")?;
+        let id = self.style_ref(style)?;
+        let node = self.state.style(id)?.clone();
+        let paths = paths.map_or_else(
+            || node.generated.keys().cloned().collect(),
+            <[PointerBuf]>::to_vec,
+        );
+        let mut shown = node.props.clone();
+        let mut generated = node.generated.clone();
+        for path in paths {
+            match generated.remove(&path) {
+                Some(Generated::Value(value)) => overrides::set(&mut shown, &path, value),
+                _ => {
+                    return Err(Error::Invalid {
+                        op: Some(op),
+                        path: Some(path),
+                        reason: "nothing is overridden here".to_owned(),
+                    });
+                }
             }
         }
+        let shown = normalize_style(op, Value::Object(shown))?;
+        let mut entries = generated_entries(&node.generated, &generated);
+        entries.extend(props_entries(&node.props, &shown));
+        self.push_style(id, entries);
+        let stored = self.state.style(id)?;
+        stored.props = shown;
+        stored.generated = generated;
         Ok(())
     }
 
-    /// That a named file exists.
-    fn check_file(&self, op: usize, layer: &Layer) -> Result<()> {
-        if let Layer::Image(image) = layer
-            && !self.state.files.contains(&image.file)
-        {
-            return Err(Error::invalid(
+    /// A style a text names stays, so no text loses its look silently.
+    fn remove_style(&mut self, op: usize, style: &Ref) -> Result<()> {
+        self.user_only(op, "remove a text style")?;
+        let id = self.style_ref(style)?;
+        if self.state.styles_in_use()?.contains(&id) {
+            return Err(Error::invalid(op, format!("a text names style {id}")));
+        }
+        self.state.remove_style(id);
+        self.actions.remove(&Target::Style(id));
+        self.out.writes.push(Write::RemoveStyle(id));
+        self.out.styles.insert(id);
+        Ok(())
+    }
+
+    /// That a named file or text style exists.
+    fn check_names(&self, op: usize, layer: &Layer) -> Result<()> {
+        match layer {
+            Layer::Image(image) if !self.state.files.contains(&image.file) => Err(Error::invalid(
                 op,
                 format!("file {} was not added", image.file),
-            ));
+            )),
+            Layer::Text(text) => match text.text_style {
+                Some(style) if !self.state.styles.contains(&style) => {
+                    Err(Error::invalid(op, format!("style {style} doesn't exist")))
+                }
+                _ => Ok(()),
+            },
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     /// Deserializes properties into their kind's struct and returns them as
@@ -1192,7 +1339,7 @@ impl Planner<'_, '_> {
         map.insert(Key::Kind.as_ref().to_owned(), kind.as_ref().into());
         let layer: Layer = serde_json::from_value(Value::Object(map))
             .map_err(|error| Error::invalid(op, error.to_string()))?;
-        self.check_file(op, &layer)?;
+        self.check_names(op, &layer)?;
         let Value::Object(mut props) = serde_json::to_value(&layer).expect("layers serialize")
         else {
             unreachable!("a layer serializes to an object")
@@ -1205,12 +1352,22 @@ impl Planner<'_, '_> {
     }
 
     fn finish(mut self, original: &Index) -> Result<Planned> {
-        for (id, action) in std::mem::take(&mut self.actions) {
-            let page = self.state.page_of(id)?;
-            let node = self.state.node(id)?;
-            overrides::take_over(&mut node.origin, action);
-            let write = LayerWrite::origin(&node.origin);
-            self.push_layer(page, id, write)?;
+        for (target, action) in std::mem::take(&mut self.actions) {
+            match target {
+                Target::Layer(id) => {
+                    let page = self.state.page_of(id)?;
+                    let node = self.state.node(id)?;
+                    overrides::take_over(&mut node.origin, action);
+                    let origin = Entry::origin(&node.origin);
+                    self.push_layer(page, id, LayerWrite::Set(origin))?;
+                }
+                Target::Style(id) => {
+                    let node = self.state.style(id)?;
+                    overrides::take_over(&mut node.origin, action);
+                    let origin = Entry::origin(&node.origin);
+                    self.push_style(id, vec![origin]);
+                }
+            }
         }
         if !self.files.is_empty() {
             let used = self.state.files_in_use()?;
@@ -1222,6 +1379,24 @@ impl Planner<'_, '_> {
         }
         self.out.index = self.state.index(original);
         Ok(self.out)
+    }
+}
+
+/// The top-level paths a patch names.
+fn named(fields: &Map<String, Value>) -> Vec<PointerBuf> {
+    fields
+        .keys()
+        .map(|key| Pointer::root().with_trailing_token(key))
+        .collect()
+}
+
+/// Checks a text style's values and returns them as stored.
+fn normalize_style(op: usize, value: Value) -> Result<Map<String, Value>> {
+    let style: NamedStyle =
+        serde_json::from_value(value).map_err(|error| Error::invalid(op, error.to_string()))?;
+    match serde_json::to_value(style).expect("styles serialize") {
+        Value::Object(map) => Ok(map),
+        _ => unreachable!("a style serializes to an object"),
     }
 }
 
@@ -1373,20 +1548,7 @@ pub(crate) fn execute(doc: &LoroDoc, writes: Vec<Write>) -> Result<()> {
                 let (_, tree) = page_of(doc, &mut pages, page)?;
                 let meta = tree.get_meta(resolve(&created, node))?;
                 match write {
-                    LayerWrite::Set {
-                        generated,
-                        key,
-                        value,
-                    } => {
-                        let map = match generated {
-                            true => doc::generated(&meta)?,
-                            false => meta,
-                        };
-                        match value {
-                            Some(value) => map.insert(&key, value)?,
-                            None => map.delete(&key)?,
-                        }
-                    }
+                    LayerWrite::Set(entry) => entry.write(meta)?,
                     LayerWrite::Text { store, from } => {
                         let target = match store {
                             TextStore::Shown => doc::content(&meta)?,
@@ -1421,6 +1583,9 @@ pub(crate) fn execute(doc: &LoroDoc, writes: Vec<Write>) -> Result<()> {
                     }
                 }
             }
+            Write::AddStyle { id, props } => doc::add_style(doc, id, props)?,
+            Write::Style { id, entry } => entry.write(doc::style_map(doc, id)?)?,
+            Write::RemoveStyle(id) => doc::remove_style(doc, id)?,
             Write::Tiles {
                 page,
                 layer,

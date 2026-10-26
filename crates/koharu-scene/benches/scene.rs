@@ -83,7 +83,7 @@ fn raster() -> (TempDir, Session, LayerId) {
         .iter()
         .find_map(|created| match created {
             Created::Layer { id, .. } => Some(*id),
-            Created::Page { .. } => None,
+            _ => None,
         })
         .unwrap();
     (dir, session, layer)

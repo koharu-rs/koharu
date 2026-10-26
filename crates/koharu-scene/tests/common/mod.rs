@@ -93,7 +93,7 @@ pub fn name(layer: &Layer) -> &str {
 
 pub fn text(session: &Session, layer: LayerId) -> TextLayer {
     match session.layer(layer).unwrap().view.layer {
-        Layer::Text(text) => text,
+        Layer::Text(text) => *text,
         other => panic!("{other:?}"),
     }
 }

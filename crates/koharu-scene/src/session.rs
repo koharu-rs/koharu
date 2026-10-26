@@ -15,7 +15,7 @@ use loro::{
 };
 
 use crate::{
-    Change, Edit, Error, History, LayerId, PageChanges, PageId, ProjectId, Result,
+    Change, Edit, Error, History, LayerId, PageChanges, PageId, ProjectId, Result, StyleId,
     doc::{self, Key},
     op::{self, Planned},
     state::{Index, State},
@@ -50,6 +50,7 @@ struct Touched {
     pages: BTreeSet<usize>,
     nodes: Vec<(usize, TreeID)>,
     layers: BTreeSet<LayerId>,
+    styles: BTreeSet<StyleId>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -98,8 +99,18 @@ impl Session {
             }
             let mut touched = lock(&recorder.touched);
             for diff in &event.events {
-                let (page, nodes, layer) = doc::locate(diff.path);
+                let (page, nodes, layer, style) = doc::locate(diff.path);
                 touched.layers.extend(layer);
+                touched.styles.extend(style);
+                if let Diff::Map(map) = &diff.diff
+                    && doc::is_styles(diff.path)
+                {
+                    touched.styles.extend(
+                        map.updated
+                            .keys()
+                            .filter_map(|key| key.parse::<StyleId>().ok()),
+                    );
+                }
                 let Some(page) = page else {
                     continue;
                 };
@@ -195,6 +206,7 @@ impl Session {
             kept,
             pages,
             layers,
+            styles,
             index,
         } = op::plan(&self.doc, &self.index, &edit)?;
         if !writes.is_empty() {
@@ -214,6 +226,7 @@ impl Session {
             created,
             pages,
             layers,
+            styles,
             kept,
             history: self.history(),
         })
@@ -305,6 +318,7 @@ impl Session {
                 changed,
             },
             layers,
+            styles: touched.styles,
             kept: Vec::new(),
             history: self.history(),
         }))
@@ -334,6 +348,9 @@ fn validate(doc: &LoroDoc) -> Result<(ProjectId, Index)> {
         for node in state.page(*page)?.nodes.values() {
             node.layer()?;
         }
+    }
+    for style in &index.styles {
+        state.style(*style)?.style()?;
     }
     Ok((id, index))
 }

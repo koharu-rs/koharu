@@ -313,6 +313,7 @@ fn tiles_cover_what_was_painted() {
     )
     .unwrap();
     let painted = session.tiles(raster, None).unwrap();
+    let painted_hash = session.tiles_hash(raster).unwrap();
     assert!(session.layer(raster).unwrap().view.overrides.is_empty());
     paint(
         &mut session,
@@ -338,8 +339,11 @@ fn tiles_cover_what_was_painted() {
         )
         .unwrap();
     assert_eq!(&tiles.tiles[0].pixels[40 * 4..41 * 4], &[0, 255, 0, 255]);
+    // The tile hash follows the pixels, without decoding them.
+    assert_ne!(session.tiles_hash(raster).unwrap(), painted_hash);
     session.undo().unwrap();
     assert_eq!(session.tiles(raster, None).unwrap(), painted);
+    assert_eq!(session.tiles_hash(raster).unwrap(), painted_hash);
 
     // Transparent pixels drop their tiles; a duplicate copies tiles.
     paint(

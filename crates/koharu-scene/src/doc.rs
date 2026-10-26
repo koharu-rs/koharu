@@ -2,6 +2,8 @@
 //!
 //! - `project` holds the project id and the schema version.
 //! - `files` holds imported files by content hash, each its own map.
+//! - `styles` holds text styles by id. Each style's map holds its stored id,
+//!   its values, `generated` values, and `origin` actions, as a layer's does.
 //! - `pages` is a movable list of page maps. A page map holds its id, its
 //!   size, a `layers` tree, and the `tiles` of its layers by layer id.
 //! - Each tree node's map holds the layer's stored id, `kind`, properties,
@@ -26,8 +28,8 @@ use serde_json::{Map, Value};
 use strum::{AsRefStr, EnumString};
 
 use crate::{
-    ActionRecord, CharStyle, Error, File, Hash, Layer, LayerId, LayerKind, PageId, PixelFormat,
-    Pointer, PointerBuf, Result, Revision, RichText, Size, Span,
+    ActionRecord, CharStyle, Error, File, Hash, Layer, LayerId, LayerKind, NamedStyle, PageId,
+    PixelFormat, Pointer, PointerBuf, Result, Revision, RichText, Size, Span, StyleId,
     error::Kind,
     tiles::{self, TileMap},
 };
@@ -43,6 +45,7 @@ pub(crate) const VERSION: Version = Version::new(1, 0, 0);
 pub(crate) enum Key {
     Project,
     Files,
+    Styles,
     Pages,
     Id,
     Version,
@@ -80,6 +83,10 @@ pub(crate) fn project(doc: &LoroDoc) -> LoroMap {
 
 fn files(doc: &LoroDoc) -> LoroMap {
     doc.get_map(Key::Files.as_ref())
+}
+
+fn styles(doc: &LoroDoc) -> LoroMap {
+    doc.get_map(Key::Styles.as_ref())
 }
 
 pub(crate) fn pages(doc: &LoroDoc) -> LoroMovableList {
@@ -256,6 +263,84 @@ pub(crate) fn remove_file(doc: &LoroDoc, hash: &Hash) -> Result<()> {
     Ok(files(doc).delete(hash.as_str())?)
 }
 
+pub(crate) fn style_ids(doc: &LoroDoc) -> Result<HashSet<StyleId>> {
+    styles(doc)
+        .keys()
+        .map(|key| key.parse().map_err(Error::corrupt))
+        .collect()
+}
+
+/// A style's map, made by `add_style`.
+pub(crate) fn style_map(doc: &LoroDoc, id: StyleId) -> Result<LoroMap> {
+    match child(&styles(doc), id.to_string()) {
+        Some(Container::Map(map)) => Ok(map),
+        _ => Err(Error::not_found(Kind::Style, id)),
+    }
+}
+
+pub(crate) fn add_style(doc: &LoroDoc, id: StyleId, props: Map<String, Value>) -> Result<()> {
+    let map = styles(doc).insert_container(&id.to_string(), LoroMap::new())?;
+    map.insert(Key::Id.as_ref(), id.to_string())?;
+    for (key, value) in props {
+        map.insert(&key, loro(value))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn remove_style(doc: &LoroDoc, id: StyleId) -> Result<()> {
+    Ok(styles(doc).delete(&id.to_string())?)
+}
+
+/// One loaded text style.
+#[derive(Clone, Debug)]
+pub(crate) struct StyleNode {
+    /// Its values as they show.
+    pub props: Map<String, Value>,
+    pub generated: BTreeMap<PointerBuf, Generated>,
+    pub origin: Vec<ActionRecord>,
+}
+
+impl StyleNode {
+    pub fn json(&self) -> Value {
+        Value::Object(self.props.clone())
+    }
+
+    pub fn style(&self) -> Result<NamedStyle> {
+        serde_json::from_value(self.json()).map_err(Error::corrupt)
+    }
+}
+
+pub(crate) fn read_style(doc: &LoroDoc, id: StyleId) -> Result<StyleNode> {
+    let map = style_map(doc, id)?;
+    let mut node = StyleNode {
+        props: Map::new(),
+        generated: BTreeMap::new(),
+        origin: Vec::new(),
+    };
+    let mut entries = Vec::new();
+    map.for_each(|key, value| entries.push((key.to_owned(), value)));
+    for (key, value) in entries {
+        match (key.parse(), value) {
+            (Ok(Key::Id), _) => {}
+            (Ok(Key::Generated), ValueOrContainer::Container(Container::Map(map))) => {
+                node.generated = read_generated(&map)?
+            }
+            (Ok(Key::Origin), ValueOrContainer::Value(origin)) => {
+                node.origin = serde_json::from_value(json(origin)).map_err(Error::corrupt)?;
+            }
+            (_, ValueOrContainer::Value(value)) => {
+                node.props.insert(key, json(value));
+            }
+            (_, ValueOrContainer::Container(_)) => {
+                return Err(Error::corrupt(format!(
+                    "style {id} has an unexpected `{key}`"
+                )));
+            }
+        }
+    }
+    Ok(node)
+}
+
 pub(crate) fn style_of(attributes: Map<String, Value>) -> Result<CharStyle> {
     serde_json::from_value(Value::Object(attributes)).map_err(Error::corrupt)
 }
@@ -383,17 +468,29 @@ impl Node {
     /// Files the layer names, including in model values kept under
     /// overrides.
     pub fn files(&self) -> Vec<Hash> {
-        if self.kind != LayerKind::Image {
-            return Vec::new();
+        match self.kind {
+            LayerKind::Image => self.named("file", Pointer::from_static("/file")),
+            _ => Vec::new(),
         }
-        let kept = match self.generated.get(Pointer::from_static("/file")) {
+    }
+
+    /// The text styles the layer names, as `files` does files.
+    pub fn styles(&self) -> Vec<StyleId> {
+        match self.kind {
+            LayerKind::Text => self.named("text_style", Pointer::from_static("/text_style")),
+            _ => Vec::new(),
+        }
+    }
+
+    fn named<T: FromStr>(&self, key: &str, path: &Pointer) -> Vec<T> {
+        let kept = match self.generated.get(path) {
             Some(Generated::Value(value)) => value.as_ref(),
             _ => None,
         };
-        [self.props.get("file"), kept]
+        [self.props.get(key), kept]
             .into_iter()
             .flatten()
-            .filter_map(|value| Hash::try_from(value.as_str()?.to_owned()).ok())
+            .filter_map(|value| value.as_str()?.parse().ok())
             .collect()
     }
 
@@ -560,55 +657,65 @@ pub(crate) fn layer_pages(doc: &LoroDoc) -> Result<(Vec<PageId>, HashMap<LayerId
     Ok((pages, layers))
 }
 
-/// The files an unloaded page's image layers name, read without loading the
-/// page.
-pub(crate) fn page_files(page: &LoroMap) -> Result<Vec<Hash>> {
+/// What an unloaded page's layers of `kind` name at `key`, shown or kept
+/// under an override, read without loading the page: image layers' files,
+/// or text layers' styles.
+pub(crate) fn page_names<T: FromStr>(page: &LoroMap, kind: LayerKind, key: &str) -> Result<Vec<T>> {
     let tree = tree(page)?;
-    let mut files = Vec::new();
+    let mut names = Vec::new();
     for node in tree.get_nodes(false) {
         let meta = tree.get_meta(node.id)?;
-        if string(&meta, Key::Kind)? != LayerKind::Image.as_ref() {
+        if string(&meta, Key::Kind)? != kind.as_ref() {
             continue;
         }
         let kept = match child(&meta, Key::Generated) {
-            Some(Container::Map(generated)) => value(&generated, "/file")
+            Some(Container::Map(generated)) => value(&generated, format!("/{key}"))
                 .and_then(|value| json(value).get(Key::V.as_ref()).cloned()),
             _ => None,
         };
-        let shown = value(&meta, "file").map(json);
-        files.extend(
+        let shown = value(&meta, key).map(json);
+        names.extend(
             [shown, kept]
                 .into_iter()
                 .flatten()
-                .filter_map(|value| Hash::try_from(value.as_str()?.to_owned()).ok()),
+                .filter_map(|value| value.as_str()?.parse().ok()),
         );
     }
-    Ok(files)
+    Ok(names)
 }
 
 /// Where a Loro event landed: the page's position, the tree nodes on its
-/// path, and the layer whose tiles it touched.
+/// path, the layer whose tiles it touched, and the style it touched.
 pub(crate) fn locate(
     path: &[(loro::ContainerID, Index)],
-) -> (Option<usize>, Vec<TreeID>, Option<LayerId>) {
+) -> (Option<usize>, Vec<TreeID>, Option<LayerId>, Option<StyleId>) {
     let mut page = None;
     let mut nodes = Vec::new();
     let mut layer = None;
+    let mut style = None;
     let mut in_store = false;
     for (index, (_, position)) in path.iter().enumerate() {
         match position {
             Index::Seq(at) if index == 1 => page = Some(*at),
             Index::Node(node) => nodes.push(*node),
             Index::Key(key) if in_store => layer = key.as_str().parse().ok(),
+            Index::Key(key) if index == 1 && is_styles(&path[..1]) => {
+                style = key.as_str().parse().ok()
+            }
             _ => {}
         }
         in_store = matches!(position, Index::Key(key) if key.as_str() == Key::Tiles.as_ref());
     }
-    (page, nodes, layer)
+    (page, nodes, layer, style)
 }
 
 /// True when an event's target is a page's tile store, whose keys are layer
 /// ids.
 pub(crate) fn is_store(path: &[(loro::ContainerID, Index)]) -> bool {
     matches!(path.last(), Some((_, Index::Key(key))) if key.as_str() == Key::Tiles.as_ref())
+}
+
+/// True when an event's target is the styles map, whose keys are style ids.
+pub(crate) fn is_styles(path: &[(loro::ContainerID, Index)]) -> bool {
+    matches!(path, [(_, Index::Key(key))] if key.as_str() == Key::Styles.as_ref())
 }

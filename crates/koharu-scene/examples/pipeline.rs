@@ -1,13 +1,13 @@
 //! The translation pipeline as data: detection finds a balloon and paints a
-//! text mask, OCR reads the scan, translation fills the balloon, and
-//! inpainting cleans under the mask. Workflow data goes in `attributes`, and
-//! every model names what it read.
+//! text mask, OCR reads the scan, typesetting sets the page's dialogue style,
+//! translation fills the balloon, and inpainting cleans under the mask.
+//! Workflow data goes in `attributes`, and every model names what it read.
 //!
 //! `cargo run -p koharu-scene --example pipeline`
 
 use koharu_scene::{
     Action, Author, Change, Created, Edit, Hash, Layer, LayerId, LayerView, Op, Pointer, Read,
-    Rect, Ref, Relationship, Session, Size, SoftwareAgent,
+    Rect, Ref, Relationship, Session, Size, SoftwareAgent, StyleId,
 };
 use serde_json::{Map, Value, json};
 
@@ -198,14 +198,28 @@ fn main() -> Result<()> {
     // text hidden: only the translation shows.
     let (_, from_file) = session.read(scan, Pointer::from_static("/file"))?;
     let (_, outline) = session.read(balloon, Pointer::from_static("/path"))?;
-    session.apply(edit(&session, model("c2pa.created", "ocr"), "Read text", vec![add(
+    let change = session.apply(edit(&session, model("c2pa.created", "ocr"), "Read text", vec![add(
         page.into(), None, 3, "source",
         json!({
             "kind": "text", "content": "こんにちは", "language": "ja", "direction": "vertical", "visible": false,
+            "style": {"chars": {"size": 14.0}},
             "attributes": {"koharu": {"role": "dialogue"}},
         }),
         &[from_file.parent_of(), outline],
     )]))?;
+
+    // Typesetting takes the page's dialogue size from the source text, not
+    // from each balloon, and puts it in one style that every translation
+    // names, so one edit resizes them all.
+    let (_, measured) = session.read(created(&change, "source"), Pointer::from_static("/style"))?;
+    let dialogue = StyleId::new();
+    session.apply(edit(&session, model("c2pa.created", "typesetter"), "Typeset", vec![Op::AddTextStyle {
+        id: Some(dialogue.into()),
+        style: serde_json::from_value(json!({
+            "name": "Dialogue", "style": {"chars": {"size": 14.0}, "align": "center", "line_height": 1.05},
+        }))?,
+        ingredients: vec![measured.parent_of()],
+    }]))?;
 
     // Translation finds, from the page alone, each source with no translation
     // yet: a translation names its source as its `parentOf`.
@@ -221,12 +235,24 @@ fn main() -> Result<()> {
     for source in pending {
         let (_, text) = session.read(source, Pointer::from_static("/content"))?;
         let (path, outline) = session.read(balloon, Pointer::from_static("/path"))?;
-        // The translation fills the balloon: its frame is the balloon's path.
-        session.apply(edit(&session, model("c2pa.translated", "translator"), "Translate", vec![add(
-            page.into(), None, 4, "translation",
-            json!({"kind": "text", "content": "Hello", "language": "en", "frame": {"path": {"path": path}}}),
-            &[text.parent_of(), outline],
-        )]))?;
+        // The translation fills the balloon: its frame is the balloon's path,
+        // centred, and it shrinks only if it would overflow.
+        session.apply(edit(
+            &session,
+            model("c2pa.translated", "translator"),
+            "Translate",
+            vec![add(
+                page.into(),
+                None,
+                4,
+                "translation",
+                json!({
+                    "kind": "text", "content": "Hello", "language": "en", "text_style": dialogue,
+                    "frame": {"path": {"path": path, "anchor": "center"}},
+                }),
+                &[text.parent_of(), outline],
+            )],
+        ))?;
     }
     let view = session.page(page)?;
     let layers = walk(&view.layers);
@@ -236,6 +262,18 @@ fn main() -> Result<()> {
         .collect();
     assert_eq!(pairs.len(), 1);
     println!("layer {} translates layer {}", pairs[0].0, pairs[0].1);
+
+    // The user sets dialogue larger once; the change stays under the
+    // typesetter's reruns.
+    session.apply(edit(&session, user(), "Resize dialogue", vec![op(json!({
+        "op": "update_text_style", "style": dialogue, "patch": {"style": {"chars": {"size": 16.0}}},
+    }))]))?;
+    let style = session.style(dialogue)?;
+    assert_eq!(style.overrides.len(), 1);
+    println!(
+        "every text naming {:?} is now set at {:?} px",
+        style.style.name, style.style.style.chars.size
+    );
 
     // Inpainting reads the mask's pixels and paints the cleanup under them.
     // Pixels are not a property, so it can't name the mask as an ingredient.

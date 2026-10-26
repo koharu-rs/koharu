@@ -10,10 +10,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
-use crate::{
-    ActionRecord, Pointer, PointerBuf,
-    doc::{Generated, Node},
-};
+use crate::{ActionRecord, Pointer, PointerBuf, Result, doc::Generated};
 
 pub(crate) fn diff(old: &Map<String, Value>, new: &Map<String, Value>) -> Vec<PointerBuf> {
     let mut paths = Vec::new();
@@ -83,16 +80,87 @@ pub(crate) fn set(props: &mut Map<String, Value>, path: &Pointer, value: Option<
     };
 }
 
-/// The properties as the models left them: the shown values with each
+/// The values as the models left them: the shown values with each
 /// overridden path put back to the model's value.
-pub(crate) fn model_view(node: &Node) -> Map<String, Value> {
-    let mut props = node.props.clone();
-    for (path, generated) in &node.generated {
+pub(crate) fn model_view(
+    props: &Map<String, Value>,
+    generated: &BTreeMap<PointerBuf, Generated>,
+) -> Map<String, Value> {
+    let mut props = props.clone();
+    for (path, generated) in generated {
         if let Generated::Value(value) = generated {
             set(&mut props, path, value.clone());
         }
     }
     props
+}
+
+/// A patch merged into values models may have written: what shows, the model
+/// values kept under overrides, and the paths that changed.
+pub(crate) struct Merged {
+    pub shown: Map<String, Value>,
+    pub generated: BTreeMap<PointerBuf, Generated>,
+    pub changed: Vec<PointerBuf>,
+}
+
+/// Merges a JSON Merge Patch into a layer's or a style's values. `normalize`
+/// checks a merged value and returns it as stored.
+pub(crate) fn merge(
+    props: &Map<String, Value>,
+    generated: &BTreeMap<PointerBuf, Generated>,
+    origin: &[ActionRecord],
+    patch: &Value,
+    model: bool,
+    normalize: impl Fn(Value) -> Result<Map<String, Value>>,
+) -> Result<Merged> {
+    let model_view = model_view(props, generated);
+    let base = if model { &model_view } else { props };
+    let mut merged = Value::Object(base.clone());
+    json_patch::merge(&mut merged, patch);
+    let merged = normalize(merged)?;
+    let changed = diff(base, &merged);
+    let mut generated = generated.clone();
+    let shown = if model {
+        // A model's change lands where the user hasn't overridden it; where
+        // they have, the override widens to cover the change.
+        let mut shown = props.clone();
+        for path in &changed {
+            if let Some(covering) = covering(&generated, path).cloned() {
+                let value = get(&merged, &covering).cloned();
+                generated.insert(covering, Generated::Value(value));
+                continue;
+            }
+            let inside = inside(&generated, path);
+            if inside.is_empty() {
+                set(&mut shown, path, get(&merged, path).cloned());
+            } else {
+                for each in inside {
+                    generated.remove(&each);
+                }
+                let value = get(&merged, path).cloned();
+                generated.insert(path.clone(), Generated::Value(value));
+            }
+        }
+        normalize(Value::Object(shown))?
+    } else {
+        // The user's change to a path a model wrote keeps the model's value
+        // under an override.
+        for path in &changed {
+            if owned(origin, path) && covering(&generated, path).is_none() {
+                for each in inside(&generated, path) {
+                    generated.remove(&each);
+                }
+                let value = get(&model_view, path).cloned();
+                generated.insert(path.clone(), Generated::Value(value));
+            }
+        }
+        merged
+    };
+    Ok(Merged {
+        shown,
+        generated,
+        changed,
+    })
 }
 
 /// True when some model action wrote `path`, part of it, or around it.

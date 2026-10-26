@@ -76,7 +76,10 @@ Each kind is placed the way its PSD record places it [PSD spec]:
 |---|---|---|
 | `content` | rich text: spans in order, each a string with its character marks; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
 | `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
-| `frame` | none (point text), a box (paragraph text), or a closed path that the text fills | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
+| `text_style` | the [text style](#text-styles) the text takes its other values from, by id, or none | Figma text styles [Figma text styles]; InDesign paragraph and character styles [InDesign styles] |
+| `frame` | none (point text), a box (paragraph text), or a closed path that the text fills; a box or path frame also has a `fit` and an `anchor` | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
+| `fit` | `shrink` (the default): text that would overflow shrinks just enough to fit, down to half its set size, and past that it overflows; `none`: the set size always; `grow`, for a box only: the box keeps its inline size, and its block size follows the text, growing away from its `anchor` | PowerPoint shrinks placeholder text "as you type" by default, and with fitting stopped the text "will overfill the box" [PowerPoint placeholders] [PowerPoint autofit]; Google Slides "Shrink text on overflow" and "Resize shape to fit text" [Google Slides fitting]; Keynote fits text to most text boxes by default [Keynote autosize]; Figma `HEIGHT` [Figma text resize]; InDesign Auto-Size [InDesign auto-size]; a SwiftUI minimum scale factor of 0.5 draws text "as small as half" [SwiftUI minimum scale] |
+| `anchor` | where the lines sit in a box or path frame along the block axis: `start` (the default), `center`, or `end` | OOXML `anchor`, top when omitted [OOXML anchor]; Figma vertical alignment [Figma text properties]; InDesign vertical justification, Top by default [InDesign alignment]; Clip Studio Paint Position in frame [CSP text frame]; CSS `align-content` on block containers [CSS align] |
 | `direction` | horizontal or vertical | Clip Studio Paint Text Direction [CSP vertical text] |
 | `language` | one BCP 47 tag; `und` when undetermined | SVG `systemLanguage` [SVG structure]; C2PA `sourceLanguage` and `targetLanguage` [C2PA actions] |
 
@@ -87,12 +90,68 @@ wins over `style` for its span. Alignment is a paragraph key that lives only in
 node's `TypeStyle` [Figma property types]. Its values are `start`, `center`,
 `end`, and `justify`, as in CSS `text-align`, where start and end follow the
 writing direction [CSS text], so one value serves horizontal and vertical
-text. Styling with no characters selected
-writes `style`; styling selected characters writes marks.
+text. `line_height` is the other paragraph key: a multiple of each line's
+largest size, as a unitless CSS `line-height` is [CSS line-height] and Clip
+Studio Paint's line space can be "a percentage of the character size" [CSP text
+frame]. Photoshop's leading [Photoshop leading] and Figma's line height [Figma
+text properties] are the same setting; manga letterers set it tighter than
+Photoshop's 120% Auto, at the size or 1 pt more, so dialogue reads evenly
+[Manga balloon basics]. Styling with no characters selected writes `style`;
+styling selected characters writes marks.
+
+A size is the size a text is set at. A `shrink` frame draws its spans smaller,
+all at one scale, only while they would otherwise overflow, so dialogue keeps one
+size across a page and shrinks only where a translation runs long:
+
+- Manga lettering sets one dialogue size "in accordance with the original
+  Japanese book" [Manga balloon basics], and the text stays "relatively the
+  same size across balloons, despite the different lengths of text and sizes of
+  balloons" [Search and Destroy letters].
+- A smaller font is a last resort, used "only a few instances, at most" in a
+  300-page volume, because it "alters the author's chosen balance of word and
+  image" [Manga translation II]. Comic speech is one size, and a change of size
+  means a shout or a whisper [Comics Kingdom].
+- A translation fills a region its source laid out, the way content fills a
+  slide placeholder, so `shrink` is the default.
+
+So a balloon's size comes from its source text, not from the balloon, and the
+balloon only bounds it. Start and end on the block axis follow the writing
+direction, as `align` does: top and bottom for horizontal text, right and left
+for vertical text.
+
+A balloon holding several source text blocks gets one text per block, each
+framed by its own region of the balloon and set at the same size. Texts never
+flow from one frame into another: Clip Studio Paint adds
+several texts to one balloon layer [CSP text tool], and Publisher fits text only
+in a box "not connected to other text boxes" [Publisher copyfitting]. The
+typesetting step cuts the balloon into regions with a watershed seeded by the
+source blocks on the balloon's distance from its edge, so each border falls at
+a neck [Watershed] [Watershed example], where perception places a boundary
+between parts, along the shortest cut [Shortest cuts]. When the translation
+reads as one thought, its blocks become one text framed by the whole balloon,
+as "balloons directly joined together are generally of the same thought
+process" [Blambot grammar].
 
 SVG 2 dropped text inside shapes in 2026 because no renderer implemented it
 [SVG text inside shapes dropped], so the closed-path frame follows Photoshop and
 Clip Studio Paint.
+
+### Text styles
+
+| Property | Model | Evidence |
+|---|---|---|
+| place | named styles kept by the project, each with a stored id and a `name`; a text names at most one in `text_style` | Figma text styles [Figma text styles]; InDesign paragraph and character styles [InDesign styles] |
+| values | any of the keys a text's `style` holds: the character keys, `align`, and `line_height` | the same |
+| precedence | each key comes from a span's mark, else the text's `style`, else its text style, else the renderer's default | an InDesign override is "any change made to an existing style" [InDesign styles] |
+| editing | changing a style changes every text that names it | a Figma local style's changes "are immediately applied to any text layers using that style" [Figma text styles]; InDesign's Redefine Style [InDesign styles] |
+| overrides | a text's view lists the keys its `style` sets over its text style; setting them to null shows the style's values again | InDesign marks an overridden style with a plus sign and offers Clear Overrides [InDesign styles] |
+
+The typesetting step puts a page's dialogue in one style, so one edit resizes
+every balloon. A style a text names can't be removed; the edit fails, so no
+text loses its look silently. A text style keeps its origin and the user's
+overrides as a layer does ([section 2](#2-generated-values-and-overrides)), so
+rerunning the typesetting step doesn't undo the user's change to the dialogue
+size.
 
 ### Masks
 
@@ -272,7 +331,12 @@ This section is implementation, not schema.
     the last layer naming a file deletes the file, so undo restores them
     together.
   - Each layer's tiles are their own container, so Loro decodes them only when
-    they are read.
+    they are read. `Session::tiles_hash` hashes a layer's compressed tiles
+    with BLAKE3, so a renderer can tell that pixels changed without decoding
+    them.
+- **Text styles** live in a project map keyed by style id. Each style's map
+  holds its values, `generated`, and `origin`, as a layer's does, so edits,
+  overrides, Reset, and staleness work the same on both.
 - **Undo** is Loro's `UndoManager`: one edit is one commit, which is one undo
   step.
 - **Edits.** `Session::apply` runs one `Edit`: its author, the user or a
@@ -286,8 +350,8 @@ This section is implementation, not schema.
   - Every operation checks its arguments before its first write, because Loro
     has no rollback.
   - A failure after a write poisons the session.
-- **Change** names, by id, the pages and layers an edit, undo, or redo
-  touched, and what an edit created or kept. An edit's comes from its plan;
+- **Change** names, by id, the pages, layers, and text styles an edit, undo,
+  or redo touched, and what an edit created or kept. An edit's comes from its plan;
   an undo's or redo's is built from Loro events by walking each event's layer
   up to its page.
 - **Saving.** The session's owner calls `save` when edits pause and when the
@@ -316,10 +380,11 @@ Each example uses only this crate and runs with
   edit can fail with.
 - `models`: provenance, overrides that survive reruns, staleness, Reset, and
   removed outputs.
-- `pipeline`: detection, OCR, translation, and inpainting as data: a balloon
-  with workflow attributes, a pixel text mask, a translation framed by the
-  balloon's path, sources paired from a page, and a rerun replacing what a
-  model made.
+- `pipeline`: detection, OCR, typesetting, translation, and inpainting as
+  data: a balloon with workflow attributes, a pixel text mask, a dialogue
+  style set from the source text and resized once by the user, a translation
+  framed by the balloon's path, sources paired from a page, and a rerun
+  replacing what a model made.
 - `sharing`: one session shared by the editor and a background model, with a
   stale result and an edit that changes nothing.
 - `tools`: what an agent or MCP client does: list and call the tools, and read
@@ -332,14 +397,25 @@ Read in October 2026.
 - Adobe: [PSD spec], [Photoshop type], [Photoshop characters], [Photoshop text
   in shapes], [Photoshop smart objects], [Photoshop Smart Object copies],
   [Photoshop rasterize], [Photoshop artboards], [Photoshop Generative Fill],
-  [Photoshop Content-Aware Fill], [Lightroom masking]
+  [Photoshop Content-Aware Fill], [Photoshop leading], [Lightroom masking],
+  [InDesign auto-size], [InDesign alignment], [InDesign styles]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP file
-  objects], [CSP text], [CSP text editing], [CSP vertical text], [CSP balloons]
+  objects], [CSP text], [CSP text editing], [CSP vertical text], [CSP
+  balloons], [CSP text frame], [CSP text tool]
 - Figma: [Figma nodes], [Figma node properties], [Figma property types],
-  [Figma image paint], [Figma text resize], [Figma plugin data], [Figma
-  instances], [Figma insert instances], [Figma reset overrides]
+  [Figma image paint], [Figma text resize], [Figma text properties], [Figma
+  text styles], [Figma plugin data], [Figma instances], [Figma insert
+  instances], [Figma reset overrides]
+- Microsoft: [PowerPoint placeholders], [PowerPoint autofit], [OOXML anchor],
+  [Publisher copyfitting]
+- Google and Apple: [Google Slides fitting], [Keynote autosize], [SwiftUI
+  minimum scale]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
-  inside shapes dropped], [CSS masking], [CSS text]
+  inside shapes dropped], [CSS masking], [CSS text], [CSS align], [CSS
+  line-height]
+- Lettering and manga translation: [Comics Kingdom], [Blambot grammar], [Manga
+  balloon basics], [Search and Destroy letters], [Manga translation II]
+- Shape analysis: [Watershed], [Watershed example], [Shortest cuts]
 - Others: [OpenRaster], [Krita layers], [Krita file], [Krita tiles], [GIMP
   XCF], [GIMP parasites], [Blender overrides], [Blender overrides design],
   [Blender override API], [Blender 2.90 overrides], [Blender custom
@@ -356,6 +432,10 @@ Read in October 2026.
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Lightroom masking]: https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html
+[InDesign auto-size]: https://web.archive.org/web/20260209035437/https://helpx.adobe.com/indesign/using/text-frame-fitting.html
+[InDesign alignment]: https://helpx.adobe.com/indesign/using/aligning-text.html
+[InDesign styles]: https://web.archive.org/web/20231210173751/https://helpx.adobe.com/indesign/using/paragraph-character-styles.html
+[Photoshop leading]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/adjust-line-and-character-spacing.html
 [CSP pages]: https://help.clip-studio.com/en-us/manual_en/570_pages/Management_Files_and_Page_Files.htm
 [CSP page size]: https://help.clip-studio.com/en-us/manual_en/210_file/Change_canvas_size_and_settings.htm
 [CSP layers]: https://help.clip-studio.com/en-us/manual_en/180_layers/Basic_operations.htm
@@ -364,11 +444,22 @@ Read in October 2026.
 [CSP text editing]: https://help.clip-studio.com/en-us/manual_en/480_text/Editing_text.htm
 [CSP vertical text]: https://help.clip-studio.com/en-us/manual_en/480_text/Vertical_text_and_readings.htm
 [CSP balloons]: https://help.clip-studio.com/en-us/manual_en/540_comic/Balloons.htm
+[CSP text frame]: https://help.clip-studio.com/en-us/manual_en/810_subtools/L.htm
+[CSP text tool]: https://help.clip-studio.com/en-us/manual_en/810_subtools/E.htm
 [Figma nodes]: https://developers.figma.com/docs/rest-api/file-node-types/
 [Figma node properties]: https://developers.figma.com/docs/plugins/api/node-properties/
 [Figma property types]: https://developers.figma.com/docs/rest-api/file-property-types/
 [Figma image paint]: https://developers.figma.com/docs/plugins/api/Paint/
 [Figma text resize]: https://developers.figma.com/docs/plugins/api/properties/TextNode-textautoresize/
+[Figma text properties]: https://help.figma.com/hc/en-us/articles/360039956634-Explore-text-properties
+[Figma text styles]: https://help.figma.com/hc/en-us/articles/360039957034-Create-and-apply-text-styles
+[PowerPoint placeholders]: https://support.microsoft.com/en-gb/powerpoint/add-text-to-a-slide
+[PowerPoint autofit]: https://support.microsoft.com/en-us/powerpoint/split-body-text-between-two-slides
+[OOXML anchor]: https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.bodyproperties.anchor
+[Publisher copyfitting]: https://support.microsoft.com/en-au/publisher/turn-on-and-off-automatic-copyfitting
+[Google Slides fitting]: https://support.google.com/docs/answer/10364036
+[Keynote autosize]: https://support.apple.com/guide/keynote/change-the-font-or-font-size-tane1c9a464f/mac
+[SwiftUI minimum scale]: https://developer.apple.com/documentation/swiftui/view/minimumscalefactor(_:)
 [Figma plugin data]: https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata/
 [Figma instances]: https://developers.figma.com/docs/plugins/api/InstanceNode/
 [Figma insert instances]: https://help.figma.com/hc/en-us/articles/360039150173-Create-and-insert-component-instances
@@ -380,6 +471,16 @@ Read in October 2026.
 [SVG text inside shapes dropped]: https://github.com/w3c/svgwg/issues/1067
 [CSS masking]: https://www.w3.org/TR/css-masking-1/#the-mask-composite
 [CSS text]: https://www.w3.org/TR/css-text-3/#text-align-property
+[CSS align]: https://www.w3.org/TR/css-align-3/#distribution-block
+[CSS line-height]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/line-height
+[Comics Kingdom]: https://comicskingdom.com/trending/blog/2024/07/22/do-you-speak-comics-part-2-balloons-and-bubbles
+[Blambot grammar]: https://blambot.com/pages/comic-book-grammar-tradition
+[Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie
+[Search and Destroy letters]: https://yattatachi.com/the-manga-letters-search-and-destroy
+[Manga translation II]: https://wordswithoutborders.org/read/article/2009-02/manga-translation-only-poets-need-apply-part-ii/
+[Watershed]: https://doi.org/10.1016/1047-3203(90)90014-M
+[Watershed example]: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
+[Shortest cuts]: https://doi.org/10.3758/BF03205536
 [OpenRaster]: https://www.openraster.org/baseline/layer-stack-spec.html
 [Krita layers]: https://docs.krita.org/en/reference_manual/layers_and_masks.html
 [Krita file]: https://invent.kde.org/graphics/krita/-/blob/master/plugins/impex/libkra/kis_kra_savexml_visitor.cpp

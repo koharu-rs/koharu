@@ -45,7 +45,7 @@ fn created(change: &Change, name: &str) -> LayerId {
 
 fn text_layer(session: &Session, layer: LayerId) -> Result<koharu_scene::TextLayer> {
     match session.layer(layer)?.view.layer {
-        Layer::Text(text) => Ok(text),
+        Layer::Text(text) => Ok(*text),
         _ => Err("not a text layer".into()),
     }
 }
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
     ]))?;
     let page: PageId = match &change.created[0] {
         Created::Page { id, .. } => *id,
-        Created::Layer { .. } => unreachable!("the page comes first"),
+        _ => unreachable!("the page comes first"),
     };
     let (inpaint, balloon, outline, line) = (
         created(&change, "inpaint"),
