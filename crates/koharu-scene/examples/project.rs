@@ -163,6 +163,14 @@ fn main() -> Result<()> {
     // Saving writes the whole document with its history; reopening checks
     // every layer, so unknown core data fails to open.
     session.save()?;
+    // A project is open in one session at a time: opening it again fails
+    // until this session is dropped, so switching projects drops the old
+    // session first.
+    let error = Session::open(&path)
+        .err()
+        .expect("the project is already open");
+    assert_eq!(serde_json::to_value(&error)?["error"], "storage");
+    println!("a second open failed: {error}");
     drop(session);
     let mut session = Session::open(&path)?;
     assert_eq!(session.page(page)?, view);
