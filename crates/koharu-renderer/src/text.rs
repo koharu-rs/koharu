@@ -340,13 +340,15 @@ impl Outline {
             .collect()
     }
 
-    /// The widest span inside the outline all along the band `v0..v1`.
+    /// The widest span inside the outline all along the band `v0..v1`. It is
+    /// sampled at the middles of equal parts of the band, never at its ends,
+    /// so a band reaching a flat edge of the outline isn't cut to nothing.
     fn widest(&self, v0: f64, v1: f64) -> Option<(f64, f64)> {
         const SAMPLES: usize = 5;
-        let mut spans = self.spans(v0);
+        let at = |sample: usize| v0 + (v1 - v0) * (sample as f64 + 0.5) / SAMPLES as f64;
+        let mut spans = self.spans(at(0));
         for sample in 1..SAMPLES {
-            let v = v0 + (v1 - v0) * sample as f64 / (SAMPLES - 1) as f64;
-            let next = self.spans(v);
+            let next = self.spans(at(sample));
             spans = spans
                 .iter()
                 .flat_map(|(a0, a1)| {

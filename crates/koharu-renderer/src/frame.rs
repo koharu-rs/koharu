@@ -453,3 +453,88 @@ fn mix(blend: Blend) -> Mix {
         Blend::Luminosity => Mix::Luminosity,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use koharu_scene::{Author, Edit, Op, Rect as PixelRect, Ref, Session};
+    use serde_json::json;
+
+    use super::*;
+    use crate::{Renderer, TypesettingConfig};
+
+    /// A view puts each page pixel at its output pixels, zoomed in on part of
+    /// the page or out to all of it, where a raster draws from halved tiles.
+    #[test]
+    fn a_view_maps_page_pixels_to_its_output() {
+        // A white raster under a red square from (256, 256) to (512, 512).
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::create(dir.path().join("test.koharu")).unwrap();
+        let ops = vec![
+            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1024, "height": 1024}}),
+            json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
+            json!({"op": "add_layer", "page": "$page", "index": 1, "layer": {
+                "kind": "shape", "path": "M256 256 H512 V512 H256 Z", "fill": [1.0, 0.0, 0.0, 1.0],
+            }}),
+        ];
+        let mut ops: Vec<Op> = ops
+            .into_iter()
+            .map(|op| serde_json::from_value(op).unwrap())
+            .collect();
+        ops.push(Op::WritePixels {
+            layer: Ref::try_from("$paper".to_owned()).unwrap(),
+            rect: PixelRect {
+                x: 0,
+                y: 0,
+                width: 1024,
+                height: 1024,
+            },
+            pixels: vec![255; 1024 * 1024 * 4],
+        });
+        let change = session
+            .apply(Edit {
+                project: session.id(),
+                label: "test".into(),
+                author: Author::User { via: None },
+                reads: Vec::new(),
+                ops,
+            })
+            .unwrap();
+        let renderer = Renderer::new(TypesettingConfig::default());
+        let Ok(gpu) = renderer.gpu() else {
+            eprintln!("skipped without a GPU");
+            return;
+        };
+        let frame = renderer.render(&session, change.pages.added[0]).unwrap();
+        let pixels = |view: View| {
+            let strips = frame.draw(view);
+            assert_eq!(strips.len(), 1);
+            let (width, height) = (
+                strips[0].rect.width() as u32,
+                strips[0].rect.height() as u32,
+            );
+            gpu.read(&strips[0].scene, width, height).unwrap()
+        };
+        const RED: [u8; 4] = [255, 0, 0, 255];
+        const WHITE: [u8; 4] = [255; 4];
+
+        // (240, 240) to (272, 272) at twice its size: white, then red.
+        let zoomed = pixels(View {
+            rect: Rect::new(240.0, 240.0, 272.0, 272.0),
+            scale: 2.0,
+        });
+        assert_eq!(zoomed.dimensions(), (64, 64));
+        assert_eq!(
+            (zoomed.get_pixel(16, 16).0, zoomed.get_pixel(48, 48).0),
+            (WHITE, RED)
+        );
+
+        // The page at a quarter of its size.
+        let fitted = pixels(View {
+            rect: Rect::new(0.0, 0.0, 1024.0, 1024.0),
+            scale: 0.25,
+        });
+        assert_eq!(fitted.dimensions(), (256, 256));
+        let at = |x, y| fitted.get_pixel(x, y).0;
+        assert_eq!((at(32, 32), at(96, 96), at(200, 200)), (WHITE, RED, WHITE));
+    }
+}
