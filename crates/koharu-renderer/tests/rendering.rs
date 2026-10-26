@@ -1,229 +1,187 @@
-use std::{collections::BTreeMap, io::Cursor, sync::Arc};
+//! Rendering a scene page: the order text fits in, where vertical text
+//! sets, and how masks limit a layer.
 
-use koharu_rasterizer::{PREPARED_RASTER_TILE_DIMENSION, RasterOptions, Rasterizer};
-use koharu_renderer::{ImageKind, LayerKind, Renderer};
-use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Origin, PageDraft, RasterLayer, RasterLayerKind,
-    Session,
-};
+use koharu_renderer::{Raster, Renderer, ResolvedText, TypesettingConfig};
+use koharu_scene::{Author, Change, Created, Edit, LayerId, Op, PageId, Session};
+use serde_json::{Value, json};
 
-fn png(width: u32, height: u32, color: [u8; 4]) -> Arc<[u8]> {
-    let image = image::RgbaImage::from_pixel(width, height, image::Rgba(color));
-    let mut bytes = Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(image)
-        .write_to(&mut bytes, image::ImageFormat::Png)
-        .unwrap();
-    bytes.into_inner().into()
+fn op(value: Value) -> Op {
+    serde_json::from_value(value).unwrap()
 }
 
-fn png_image(image: image::RgbaImage) -> Arc<[u8]> {
-    let mut bytes = Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(image)
-        .write_to(&mut bytes, image::ImageFormat::Png)
-        .unwrap();
-    bytes.into_inner().into()
-}
-
-#[tokio::test]
-async fn public_renderer_returns_a_complete_immutable_frame() {
-    let mut session = Session::memory().await.unwrap();
-    let mut page = None;
-    let patch = session
-        .snapshot()
-        .patch(|edit| {
-            page = Some(edit.add_page(PageDraft::new("page", 320.0, 240.0), At::End)?);
-            Ok(())
-        })
-        .unwrap();
-    let snapshot = session.commit(patch).await.unwrap().snapshot;
-    let page = page.unwrap();
-
-    let renderer = Renderer::new().unwrap();
-    let frame = renderer.render(&snapshot, page).await.unwrap();
-
-    assert_eq!(frame.page(), page);
-    assert_eq!(frame.revision(), snapshot.revision());
-    assert_eq!(frame.size(), (320, 240));
-    assert_eq!(frame.origin(), (0, 0));
-    assert!(frame.layers().is_empty());
-    assert!(frame.layer(page).is_none());
-    assert!(frame
-        .diagnostics()
-        .iter()
-        .any(|diagnostic| matches!(diagnostic, koharu_renderer::RenderDiagnostic::MissingAsset { entity, role } if *entity == page && role == "source")));
-}
-
-#[tokio::test]
-async fn native_rasterization_preserves_pixels_across_prepared_tile_edges() {
-    let width = PREPARED_RASTER_TILE_DIMENSION + 1;
-    let red = [230, 20, 30, 255];
-    let blue = [10, 40, 220, 255];
-    let mut source_image = image::RgbaImage::from_pixel(width, 1, image::Rgba(red));
-    source_image.put_pixel(width - 1, 0, image::Rgba(blue));
-    let source = AssetRole::new("source").unwrap();
-    let mut session = Session::memory().await.unwrap();
-    let mut page = None;
-    let patch = session
-        .snapshot()
-        .patch(|edit| {
-            let created = edit.add_page(PageDraft::new("page", width as f64, 1.0), At::End)?;
-            edit.set_asset(
-                created,
-                &source,
-                AssetInput::new(
-                    png_image(source_image),
-                    "image/png",
-                    AssetMetadata {
-                        width: Some(width),
-                        height: Some(1),
-                        attributes: BTreeMap::new(),
-                    },
-                ),
-            )?;
-            page = Some(created);
-            Ok(())
-        })
-        .unwrap();
-    let snapshot = session.commit(patch).await.unwrap().snapshot;
-    let frame = Renderer::new()
-        .unwrap()
-        .render(&snapshot, page.unwrap())
-        .await
-        .unwrap();
-    let manifest = frame.prepared().manifest().unwrap();
-    assert_eq!(manifest.resources.len(), 1);
-    let koharu_rasterizer::PreparedContent::Raster(prepared) = &manifest.frame.layers[0].content
-    else {
-        panic!("source layer must remain raster");
+fn apply(session: &mut Session, ops: Vec<Value>) -> Change {
+    let edit = Edit {
+        project: session.id(),
+        label: "test".into(),
+        author: Author::User { via: None },
+        reads: Vec::new(),
+        ops: ops.into_iter().map(op).collect(),
     };
-    assert_eq!(prepared.tiles.len(), 2);
-
-    let raster = Rasterizer::new()
-        .unwrap()
-        .rasterize(&frame.raster_frame().unwrap(), RasterOptions::default())
-        .unwrap();
-
-    assert_eq!(raster.image.get_pixel(width - 2, 0).0, red);
-    assert_eq!(raster.image.get_pixel(width - 1, 0).0, blue);
+    session.apply(edit).unwrap()
 }
 
-#[tokio::test]
-async fn discarded_image_nodes_are_rebuilt_for_a_reopened_presentation() {
-    let mut session = Session::memory().await.unwrap();
-    let source = AssetRole::new("source").unwrap();
-    let color = [12, 34, 56, 255];
-    let mut page = None;
-    let patch = session
-        .snapshot()
-        .patch(|edit| {
-            let created = edit.add_page(PageDraft::new("page", 4.0, 4.0), At::End)?;
-            edit.set_asset(
-                created,
-                &source,
-                AssetInput::new(
-                    png(4, 4, color),
-                    "image/png",
-                    AssetMetadata {
-                        width: Some(4),
-                        height: Some(4),
-                        attributes: BTreeMap::new(),
-                    },
-                ),
-            )?;
-            page = Some(created);
-            Ok(())
+fn layer(change: &Change, name: &str) -> LayerId {
+    change
+        .created
+        .iter()
+        .find_map(|created| match created {
+            Created::Layer { id, label } if label.as_deref() == Some(name) => Some(*id),
+            _ => None,
         })
-        .unwrap();
-    let snapshot = session.commit(patch).await.unwrap().snapshot;
-    let page = page.unwrap();
-    let renderer = Renderer::new().unwrap();
-
-    renderer.render(&snapshot, page).await.unwrap();
-    renderer.discard_retained_nodes();
-    let reopened = renderer.render(&snapshot, page).await.unwrap();
-    let raster = Rasterizer::new()
         .unwrap()
-        .rasterize(&reopened.raster_frame().unwrap(), RasterOptions::default())
-        .unwrap();
-
-    assert_eq!(reopened.stats().rebuilt_layers, 1);
-    assert!(raster.image.pixels().all(|pixel| pixel.0 == color));
 }
 
-#[tokio::test]
-async fn rasterized_png_contains_source_and_cleanup_pixels() {
-    let mut session = Session::memory().await.unwrap();
-    let source = AssetRole::new("source").unwrap();
-    let mut cleanup = image::RgbaImage::new(4, 4);
-    cleanup.put_pixel(2, 1, image::Rgba([240, 30, 20, 255]));
-    let mut page = None;
-    let patch = session
-        .snapshot()
-        .patch(|edit| {
-            let created = edit.add_page(PageDraft::new("page", 4.0, 4.0), At::End)?;
-            edit.set_asset(
-                created,
-                &source,
-                AssetInput::new(
-                    png(4, 4, [10, 20, 200, 255]),
-                    "image/png",
-                    AssetMetadata {
-                        width: Some(4),
-                        height: Some(4),
-                        attributes: BTreeMap::new(),
-                    },
-                ),
-            )?;
-            let cleanup_layer = edit.add_entity(created, At::Start)?;
-            edit.set(
-                cleanup_layer,
-                &RasterLayer {
-                    origin: Origin::User,
-                    name: "Cleanup".to_owned(),
-                    kind: RasterLayerKind::Cleanup,
-                },
-            )?;
-            edit.set_asset(
-                cleanup_layer,
-                &source,
-                AssetInput::new(
-                    png_image(cleanup),
-                    "image/png",
-                    AssetMetadata {
-                        width: Some(4),
-                        height: Some(4),
-                        attributes: BTreeMap::new(),
-                    },
-                ),
-            )?;
-            page = Some(created);
-            Ok(())
-        })
-        .unwrap();
-    let snapshot = session.commit(patch).await.unwrap().snapshot;
-    let renderer = Renderer::new().unwrap();
-    let frame = renderer.render(&snapshot, page.unwrap()).await.unwrap();
-    let raster = Rasterizer::new()
-        .unwrap()
-        .rasterize(&frame.raster_frame().unwrap(), RasterOptions::default())
-        .unwrap();
+/// A project with one `width`×`height` page holding `layers`, each labelled.
+fn page(
+    width: u32,
+    height: u32,
+    layers: Vec<Value>,
+) -> (tempfile::TempDir, Session, PageId, Change) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = Session::create(dir.path().join("test.koharu")).unwrap();
+    let mut ops = vec![
+        json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": width, "height": height}}),
+    ];
+    ops.extend(layers);
+    let change = apply(&mut session, ops);
+    let page = change.pages.added[0];
+    (dir, session, page, change)
+}
 
-    assert!(frame.layers().iter().any(|layer| matches!(
-        layer.kind(),
-        LayerKind::Image(metadata) if metadata.kind == ImageKind::Source
-    )));
-    assert!(frame.layers().iter().any(|layer| matches!(
-        layer.kind(),
-        LayerKind::Image(metadata) if metadata.kind == ImageKind::Cleanup
-    )));
-    assert_eq!(raster.image.get_pixel(0, 0).0, [10, 20, 200, 255]);
-    assert_eq!(raster.image.get_pixel(2, 1).0, [240, 30, 20, 255]);
+/// The resolved text of one word in a box `width` wide, shrinking to fit.
+fn word_in_box(width: f64, language: &str) -> ResolvedText {
+    let (_dir, session, page, change) = page(
+        400,
+        400,
+        vec![json!({
+            "op": "add_layer", "id": "$text", "page": "$page", "index": 0, "layer": {
+                "kind": "text",
+                "content": "Incomprehensibilities",
+                "style": {"chars": {"family": "Arial", "size": 40.0}},
+                "language": language,
+                "frame": {"box": {"bounds": {"x": 0.0, "y": 0.0, "width": width, "height": 400.0}}},
+            },
+        })],
+    );
+    let renderer = Renderer::new(TypesettingConfig::default());
+    let frame = renderer.render(&session, page).unwrap();
+    frame
+        .layer(layer(&change, "text"))
+        .unwrap()
+        .text()
+        .unwrap()
+        .clone()
 }
 
 #[test]
-fn public_layer_kinds_remain_export_metadata() {
-    let _ = LayerKind::Image(koharu_renderer::ImageMetadata {
-        name: None,
-        kind: ImageKind::Source,
-    });
+fn a_long_word_shrinks_then_hyphenates_then_breaks() {
+    // With room, the word sets at its size.
+    assert_eq!(word_in_box(4000.0, "en").scale, 1.0);
+
+    // A box a little narrower than the word: it shrinks and stays whole.
+    let shrunk = word_in_box(300.0, "en");
+    assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.5, "{shrunk:?}");
+    assert!(shrunk.hyphens.is_empty() && shrunk.broken.is_empty() && !shrunk.overflowed);
+
+    // Too narrow even at half size: it hyphenates by its language.
+    let hyphenated = word_in_box(120.0, "en");
+    assert!(!hyphenated.hyphens.is_empty(), "{hyphenated:?}");
+    assert!(hyphenated.broken.is_empty() && !hyphenated.overflowed);
+
+    // Without a language there are no hyphenation points, so it breaks
+    // between letters instead.
+    let broken = word_in_box(120.0, "und");
+    assert!(
+        broken.hyphens.is_empty() && !broken.broken.is_empty(),
+        "{broken:?}"
+    );
+    assert!(!broken.overflowed);
+}
+
+#[test]
+fn vertical_point_text_sets_columns_leftwards_from_its_origin() {
+    let (_dir, session, page, change) = page(
+        400,
+        400,
+        vec![json!({
+            "op": "add_layer", "id": "$text", "page": "$page", "index": 0, "layer": {
+                "kind": "text",
+                "content": "縦書き
+        二行目",
+                "style": {"chars": {"size": 40.0}},
+                "direction": "vertical",
+                "language": "ja",
+                "transform": [[1.0, 0.0, 300.0], [0.0, 1.0, 50.0]],
+            },
+        })],
+    );
+    let renderer = Renderer::new(TypesettingConfig::default());
+    let frame = renderer.render(&session, page).unwrap();
+    let bounds = frame
+        .layer(layer(&change, "text"))
+        .unwrap()
+        .bounds()
+        .unwrap();
+    // Two columns 48 px apart, the first at the origin's left.
+    assert!(
+        (bounds.x1 - 300.0).abs() < 1.0 && (bounds.x0 - 204.0).abs() < 1.0,
+        "{bounds:?}"
+    );
+    assert!(
+        (bounds.y0 - 50.0).abs() < 1.0 && bounds.y1 > 150.0,
+        "{bounds:?}"
+    );
+}
+
+#[test]
+fn masks_apply_in_order_and_cropping_drops_them() {
+    // A white raster limited to its left half, less its top-left quarter.
+    let (_dir, session, page, change) = page(
+        64,
+        64,
+        vec![
+            json!({"op": "add_layer", "id": "$paint", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
+            json!({"op": "write_pixels", "layer": "$paint", "rect": {"x": 0, "y": 0, "width": 64, "height": 64}, "pixels": vec![255u8; 64 * 64 * 4]}),
+            json!({"op": "add_layer", "id": "$left", "page": "$page", "parent": "$paint", "index": 0, "layer": {
+                "kind": "mask", "mode": "add", "content": {"path": {"path": "M0 0 H32 V64 H0 Z"}},
+            }}),
+            json!({"op": "add_layer", "id": "$corner", "page": "$page", "parent": "$paint", "index": 1, "layer": {
+                "kind": "mask", "mode": "subtract", "content": {"path": {"path": "M0 0 H32 V32 H0 Z"}},
+            }}),
+        ],
+    );
+    let renderer = Renderer::new(TypesettingConfig::default());
+    if let Err(error) = renderer.gpu() {
+        eprintln!("skipped without a GPU: {error}");
+        return;
+    }
+    // Alpha at the bottom left, the top left, and the right.
+    let alphas = |raster: Raster| {
+        [(16, 48), (16, 16), (48, 48)].map(|(x, y)| raster.image.get_pixel(x, y)[3])
+    };
+    let frame = renderer.render(&session, page).unwrap();
+    assert_eq!(alphas(renderer.rasterize(&frame).unwrap()), [255, 0, 0]);
+
+    let paint = layer(&change, "paint");
+    let cropped = renderer.rasterize(&frame.cropped(paint).unwrap()).unwrap();
+    assert_eq!(
+        (cropped.left, cropped.top, cropped.image.dimensions()),
+        (0, 0, (64, 64))
+    );
+    assert_eq!(alphas(cropped), [255; 3]);
+
+    // The mask frame draws no image, which once left the next frame's
+    // images transparent in vello.
+    let mask = frame.mask(paint).unwrap().unwrap();
+    assert_eq!(alphas(renderer.rasterize(&mask).unwrap()), [255, 0, 0]);
+
+    // A hidden component is left out.
+    let mut session = session;
+    let corner = layer(&change, "corner");
+    apply(
+        &mut session,
+        vec![json!({"op": "update_layer", "layer": corner, "patch": {"visible": false}})],
+    );
+    let frame = renderer.render(&session, page).unwrap();
+    assert_eq!(alphas(renderer.rasterize(&frame).unwrap()), [255, 255, 0]);
 }

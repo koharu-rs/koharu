@@ -31,12 +31,10 @@ pub struct PositionedGlyph<'a> {
     pub y_offset: f32,
 }
 
-/// A shaped run of text, containing positioned glyphs and overall advance.
+/// A shaped run of text: its positioned glyphs.
 #[derive(Debug, Clone)]
 pub struct ShapedRun<'a> {
     pub glyphs: Vec<PositionedGlyph<'a>>,
-    pub x_advance: f32,
-    pub y_advance: f32,
 }
 
 /// Options for shaping text.
@@ -108,14 +106,6 @@ impl TextShaper {
 
         Ok(ShapedRun {
             glyphs: positioned_glyphs,
-            x_advance: glyph_positions
-                .iter()
-                .map(|p| (p.x_advance as f32) * scale)
-                .sum(),
-            y_advance: glyph_positions
-                .iter()
-                .map(|p| (p.y_advance as f32) * scale)
-                .sum(),
         })
     }
 }
