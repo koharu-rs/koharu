@@ -13,37 +13,30 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = { workspace = true }
-image = { workspace = true }
-koharu-config = { workspace = true }
-koharu-rasterizer = { workspace = true, features = ["native"] }
-koharu-scene = { workspace = true }
-koharu-runtime = { workspace = true }
-skrifa = { workspace = true }
+fontique = { workspace = true }
 harfrust = { workspace = true }
 hypher = { workspace = true }
 icu_normalizer = { workspace = true }
 icu_properties = { workspace = true, features = ["compiled_data"] }
 icu_segmenter = { workspace = true, features = ["compiled_data"] }
+image = { workspace = true }
 jieba-rs = { workspace = true }
-unicode-bidi = { workspace = true }
-fontique = { workspace = true }
-futures = { workspace = true }
+koharu-config = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
 parking_lot = { workspace = true }
+pollster = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+skrifa = { workspace = true }
 specta = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-rayon = { workspace = true }
-tracing = { workspace = true }
+unicode-bidi = { workspace = true }
 vello = { workspace = true }
 webp = { workspace = true }
 
 [dev-dependencies]
-criterion = { workspace = true }
-
-[[bench]]
-name = "rendering"
-harness = false
+tempfile = { workspace = true }

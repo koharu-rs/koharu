@@ -1,709 +1,455 @@
-//! Immutable retained page output and synchronous vector access.
+//! A rendered page: each layer's retained content in the page's tree, drawn
+//! for a view of the canvas or for an export.
 
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::anyhow;
-use koharu_rasterizer::{
-    Bounds as PreparedBounds, LayerId, LayerKind as PreparedLayerKind,
-    PREPARED_RASTER_TILE_DIMENSION, Point as PreparedPoint, PreparedContent, PreparedElementFrame,
-    PreparedFrame, PreparedFrameBundle, PreparedLayer, PreparedRaster, PreparedRasterTile,
-    PreparedResource, Presentation as PreparedPresentation, ResourceId,
-    Revision as PreparedRevision,
+use koharu_scene::{Blend, LayerId, LayerKind, MaskMode, PageId, Revision};
+use vello::{
+    Scene,
+    kurbo::{Affine, BezPath, Rect},
+    peniko::{BlendMode, Color, Compose, Fill, Mix},
 };
-use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag, RelationId, Revision};
-use vello::kurbo::Affine;
 
-use crate::{Error, Result, TextAlign, WritingMode};
+use crate::{Error, Result, fonts::FontRequest, text::ResolvedText, tiles::Tiled};
 
-const MAX_SURFACE_DIMENSION: u32 = 32_768;
-const MAX_SURFACE_PIXELS: u64 = 268_435_456;
+/// The image pixels one pass may draw: vello 0.11 packs every image of a
+/// frame into one atlas of at most 8192×8192, and skips what doesn't fit.
+const ATLAS: u64 = 8192 * 8192 * 7 / 8;
 
+/// A page at one revision, immutable and cheap to clone.
 #[derive(Clone)]
 pub struct Frame(pub(crate) Arc<FrameData>);
 
 pub(crate) struct FrameData {
-    pub(crate) revision: Revision,
-    pub(crate) page: EntityId,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) origin: (i32, i32),
-    pub(crate) normalization: Affine,
-    pub(crate) layers: Arc<[Layer]>,
-    pub(crate) layer_index: Arc<HashMap<EntityId, usize>>,
-    pub(crate) dependencies: Arc<[RenderDependency]>,
-    pub(crate) diagnostics: Arc<[RenderDiagnostic]>,
-    pub(crate) stats: RetentionStats,
-    pub(crate) prepared: Arc<PreparedFrameBundle>,
+    pub page: PageId,
+    pub revision: Revision,
+    /// What the frame draws, in page pixels: the page, or one layer's bounds.
+    pub area: Rect,
+    pub nodes: Vec<Node>,
+    pub layers: HashMap<LayerId, Layer>,
+    /// Layer ids in the page's order, parents first.
+    pub order: Vec<LayerId>,
+    pub missing: Vec<FontRequest>,
 }
 
-impl std::fmt::Debug for Frame {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Frame")
-            .field("revision", &self.revision())
-            .field("page", &self.page())
-            .field("size", &self.size())
-            .field("origin", &self.origin())
-            .field("layers", &self.layers())
-            .field("diagnostics", &self.diagnostics())
-            .field("stats", &self.stats())
-            .finish_non_exhaustive()
-    }
-}
-
-impl Frame {
-    #[must_use]
-    pub fn revision(&self) -> Revision {
-        self.0.revision
-    }
-
-    #[must_use]
-    pub fn page(&self) -> EntityId {
-        self.0.page
-    }
-
-    #[must_use]
-    pub fn size(&self) -> (u32, u32) {
-        (self.0.width, self.0.height)
-    }
-
-    #[must_use]
-    pub fn origin(&self) -> (i32, i32) {
-        self.0.origin
-    }
-
-    #[must_use]
-    pub fn layers(&self) -> &[Layer] {
-        &self.0.layers
-    }
-
-    #[must_use]
-    pub fn layer(&self, entity: EntityId) -> Option<&Layer> {
-        self.0
-            .layer_index
-            .get(&entity)
-            .map(|index| &self.0.layers[*index])
-    }
-
-    #[must_use]
-    pub fn dependencies(&self) -> &[RenderDependency] {
-        &self.0.dependencies
-    }
-
-    #[must_use]
-    pub fn diagnostics(&self) -> &[RenderDiagnostic] {
-        &self.0.diagnostics
-    }
-
-    #[must_use]
-    pub fn stats(&self) -> RetentionStats {
-        self.0.stats
-    }
-
-    #[must_use]
-    pub fn prepared(&self) -> &PreparedFrameBundle {
-        &self.0.prepared
-    }
-
-    pub fn raster_frame(&self) -> Result<koharu_rasterizer::Frame> {
-        let raster_sources = self
-            .layers()
-            .iter()
-            .filter_map(|layer| layer.raster_image())
-            .map(|image| (image.source, Arc::clone(&image.pixels)))
-            .collect::<HashMap<_, _>>();
-        self.0
-            .prepared
-            .as_ref()
-            .clone()
-            .into_frame_with_raster_sources(&raster_sources)
-            .map_err(|error| Error::Backend(anyhow!(error)))
-    }
-
-    /// Returns one entity normalized into a tightly cropped frame.
-    ///
-    /// The original layer retains authored presentation. The isolated copy is
-    /// visible at full opacity so layered exports can store pixels separately
-    /// from their visibility and opacity metadata.
-    pub fn cropped(&self, entity: EntityId) -> Result<Option<Self>> {
-        let Some(layer) = self.layer(entity).cloned() else {
-            return Ok(None);
-        };
-        let bounds = layer.bounds();
-        if ![bounds.x, bounds.y, bounds.width, bounds.height]
-            .into_iter()
-            .all(f32::is_finite)
-            || bounds.width < 0.0
-            || bounds.height < 0.0
-        {
-            return Err(Error::invalid(format!(
-                "visual layer bounds are not finite for entity {entity}"
-            )));
-        }
-        let edges = [
-            bounds.x.floor(),
-            bounds.y.floor(),
-            (bounds.x + bounds.width).ceil(),
-            (bounds.y + bounds.height).ceil(),
-        ];
-        if edges.iter().any(|edge| {
-            f64::from(*edge) < f64::from(i32::MIN) || f64::from(*edge) > f64::from(i32::MAX)
-        }) {
-            return Err(Error::invalid("visual layer crop origin exceeds i32"));
-        }
-        let [left, top, right, bottom] = edges.map(|edge| edge as i32);
-        let width = u32::try_from((i64::from(right) - i64::from(left)).max(1))
-            .map_err(|_| Error::invalid("visual layer width exceeds u32"))?;
-        let height = u32::try_from((i64::from(bottom) - i64::from(top)).max(1))
-            .map_err(|_| Error::invalid("visual layer height exceeds u32"))?;
-        if width > MAX_SURFACE_DIMENSION
-            || height > MAX_SURFACE_DIMENSION
-            || u64::from(width) * u64::from(height) > MAX_SURFACE_PIXELS
-        {
-            return Err(Error::invalid(format!(
-                "cropped surface {width}x{height} exceeds renderer limits"
-            )));
-        }
-        let isolated = Layer(Arc::new(LayerData {
-            presentation: Presentation {
-                visible: true,
-                opacity: 1.0,
-            },
-            ..layer.0.clone_for_frame()
-        }));
-        let layers: Arc<[Layer]> = vec![isolated].into();
-        let prepared = prepare_frame(
-            self.revision(),
-            self.page(),
-            width,
-            height,
-            (left, top),
-            Affine::translate((-f64::from(left), -f64::from(top))),
-            &layers,
-        )?;
-        Ok(Some(Self(Arc::new(FrameData {
-            revision: self.revision(),
-            page: self.page(),
-            width,
-            height,
-            origin: (left, top),
-            normalization: Affine::translate((-f64::from(left), -f64::from(top))),
-            layers,
-            layer_index: Arc::new(HashMap::from([(entity, 0)])),
-            dependencies: self.0.dependencies.clone(),
-            diagnostics: self.0.diagnostics.clone(),
-            stats: self.0.stats,
-            prepared: Arc::new(prepared),
-        }))))
-    }
-
-    pub(crate) fn at_revision(&self, revision: Revision, stats: RetentionStats) -> Self {
-        let mut prepared = self.0.prepared.as_ref().clone();
-        prepared.frame.revision = PreparedRevision::new(revision.get());
-        Self(Arc::new(FrameData {
-            revision,
-            page: self.0.page,
-            width: self.0.width,
-            height: self.0.height,
-            origin: self.0.origin,
-            normalization: self.0.normalization,
-            layers: self.0.layers.clone(),
-            layer_index: self.0.layer_index.clone(),
-            dependencies: self.0.dependencies.clone(),
-            diagnostics: self.0.diagnostics.clone(),
-            stats,
-            prepared: Arc::new(prepared),
-        }))
-    }
-}
-
+/// One layer as the frame drew it.
 #[derive(Clone)]
-pub struct Layer(pub(crate) Arc<LayerData>);
-
-impl std::fmt::Debug for Layer {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Layer")
-            .field("entity", &self.entity())
-            .field("bounds", &self.bounds())
-            .field("presentation", &self.presentation())
-            .field("kind", self.kind())
-            .finish_non_exhaustive()
-    }
-}
-
-pub(crate) struct LayerData {
-    pub(crate) entity: EntityId,
-    pub(crate) geometry: Geometry,
-    pub(crate) bounds: RenderBounds,
-    pub(crate) presentation: Presentation,
-    pub(crate) ancestry: Arc<[EntityId]>,
+pub struct Layer {
+    pub(crate) id: LayerId,
     pub(crate) kind: LayerKind,
-    pub(crate) placement: Affine,
-    pub(crate) node: Arc<RetainedNode>,
-    pub(crate) dependencies: Arc<[RenderDependency]>,
-}
-
-impl LayerData {
-    fn clone_for_frame(&self) -> Self {
-        Self {
-            entity: self.entity,
-            geometry: self.geometry.clone(),
-            bounds: self.bounds,
-            presentation: self.presentation,
-            ancestry: self.ancestry.clone(),
-            kind: self.kind.clone(),
-            placement: self.placement,
-            node: self.node.clone(),
-            dependencies: self.dependencies.clone(),
-        }
-    }
+    pub(crate) visible: bool,
+    pub(crate) bounds: Option<Rect>,
+    pub(crate) text: Option<Arc<ResolvedText>>,
 }
 
 impl Layer {
     #[must_use]
-    pub fn entity(&self) -> EntityId {
-        self.0.entity
+    pub fn id(&self) -> LayerId {
+        self.id
     }
 
     #[must_use]
-    pub fn geometry(&self) -> &Geometry {
-        &self.0.geometry
+    pub fn kind(&self) -> LayerKind {
+        self.kind
     }
 
+    /// Whether it and everything above it show.
     #[must_use]
-    pub fn bounds(&self) -> RenderBounds {
-        self.0.bounds
+    pub fn visible(&self) -> bool {
+        self.visible
     }
 
+    /// What it draws, in page pixels; `None` when it draws nothing.
     #[must_use]
-    pub fn presentation(&self) -> Presentation {
-        self.0.presentation
+    pub fn bounds(&self) -> Option<Rect> {
+        self.bounds
     }
 
+    /// For a text layer, the laid-out runs.
     #[must_use]
-    pub fn ancestry(&self) -> &[EntityId] {
-        &self.0.ancestry
-    }
-
-    #[must_use]
-    pub fn kind(&self) -> &LayerKind {
-        &self.0.kind
-    }
-
-    #[must_use]
-    pub fn dependencies(&self) -> &[RenderDependency] {
-        &self.0.dependencies
-    }
-
-    #[must_use]
-    pub fn raster_image(&self) -> Option<&RasterImage> {
-        self.0.node.image.as_ref()
-    }
-
-    #[must_use]
-    pub fn placement(&self) -> Affine {
-        self.0.placement
-    }
-
-    #[must_use]
-    pub fn element_frame(&self) -> Option<PreparedElementFrame> {
-        element_frame(self)
+    pub fn text(&self) -> Option<&ResolvedText> {
+        self.text.as_deref()
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Presentation {
+#[derive(Clone)]
+pub(crate) enum Content {
+    None,
+    Vector {
+        scene: Arc<Scene>,
+        transform: Affine,
+    },
+    Pixels {
+        tiled: Arc<Tiled>,
+        transform: Affine,
+    },
+    /// A white rectangle, which a mask frame limits.
+    Coverage(Rect),
+}
+
+#[derive(Clone)]
+pub(crate) struct Node {
+    pub id: LayerId,
     pub visible: bool,
     pub opacity: f32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum LayerKind {
-    Image(ImageMetadata),
-    Text(TextMetadata),
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ImageKind {
-    Source,
-    Cleanup,
-    Paint,
-    Embedded,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ImageMetadata {
-    pub name: Option<String>,
-    pub kind: ImageKind,
+    pub blend: Blend,
+    pub content: Content,
+    pub children: Vec<Node>,
+    pub masks: Vec<MaskNode>,
 }
 
 #[derive(Clone)]
-pub struct RasterImage {
-    pub(crate) blob: BlobId,
-    pub(crate) source: ResourceId,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) media_type: String,
-    pub(crate) encoded: Arc<[u8]>,
-    pub(crate) pixels: Arc<[u8]>,
-}
-
-impl RasterImage {
-    #[must_use]
-    pub fn blob(&self) -> BlobId {
-        self.blob
-    }
-
-    #[must_use]
-    pub fn size(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
-
-    #[must_use]
-    pub fn pixels(&self) -> &[u8] {
-        &self.pixels
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextMetadata {
-    pub text: String,
-    pub language: Option<LanguageTag>,
-    pub rendered_bounds: RenderBounds,
-    pub layout_bounds: RenderBounds,
-    pub post_script_fonts: Vec<String>,
-    pub font_size: f32,
-    pub color: [u8; 4],
-    pub alignment: TextAlign,
-    pub writing_mode: WritingMode,
-    pub angle_degrees: f32,
-}
-
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub struct RetentionStats {
-    pub candidate_layers: usize,
-    pub reused_layers: usize,
-    pub rebuilt_layers: usize,
-}
-
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum RenderDependency {
-    Entity(EntityId),
-    Hierarchy(EntityId),
-    Component { entity: EntityId, kind: String },
-    Relation(RelationId),
-    RelationQuery { source: EntityId, kind: String },
-    RelationTargetQuery { target: EntityId, kind: String },
-    Blob(BlobId),
-    Font(String),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum RenderDiagnostic {
-    MissingAsset {
-        entity: EntityId,
-        role: String,
-    },
-    TextOverflow {
-        entity: EntityId,
-        available: RenderBounds,
-        actual_width: f32,
-        actual_height: f32,
-        font_size: f32,
-    },
-    TextBelowReadableSize {
-        entity: EntityId,
-        font_size: f32,
-        minimum_font_size: f32,
-    },
-}
-
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
-pub struct RenderBounds {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl From<crate::bubble::LayoutBox> for RenderBounds {
-    fn from(value: crate::bubble::LayoutBox) -> Self {
-        Self {
-            x: value.x,
-            y: value.y,
-            width: value.width,
-            height: value.height,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum NodeDescriptor {
-    Image(ImageNodeDescriptor),
-    Text(Box<crate::text_renderer::TextNodeDescriptor>),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ImageNodeDescriptor {
-    pub(crate) blob: BlobId,
-    pub(crate) media_type: String,
-    pub(crate) expected_size: Option<(u32, u32)>,
-    pub(crate) require_size: Option<(u32, u32)>,
-}
-
-pub(crate) struct RetainedNode {
-    pub(crate) descriptor: NodeDescriptor,
-    pub(crate) scene: Arc<koharu_rasterizer::PreparedScene>,
-    pub(crate) resources: Arc<[PreparedResource]>,
-    pub(crate) local_bounds: RenderBounds,
-    pub(crate) image: Option<RasterImage>,
-    pub(crate) text: Option<LocalTextMetadata>,
-    pub(crate) diagnostics: Arc<[RenderDiagnostic]>,
+pub(crate) struct MaskNode {
+    pub visible: bool,
+    pub mode: MaskMode,
+    pub shape: MaskShape,
 }
 
 #[derive(Clone)]
-pub(crate) struct LocalTextMetadata {
-    pub(crate) rendered_bounds: RenderBounds,
-    pub(crate) layout_bounds: RenderBounds,
-    pub(crate) post_script_fonts: Vec<String>,
-    pub(crate) font_size: f32,
-    pub(crate) color: [u8; 4],
+pub(crate) enum MaskShape {
+    Path(Arc<BezPath>),
+    Pixels {
+        tiled: Arc<Tiled>,
+        transform: Affine,
+    },
 }
 
-pub(crate) fn prepare_frame(
-    revision: Revision,
-    page: EntityId,
-    width: u32,
-    height: u32,
-    origin: (i32, i32),
-    normalization: Affine,
-    layers: &[Layer],
-) -> Result<PreparedFrameBundle> {
-    let mut resources = Vec::<PreparedResource>::new();
-    let mut prepared_layers = Vec::with_capacity(layers.len());
-    for layer in layers {
-        let (kind, content) = if let Some(image) = layer.raster_image() {
-            (
-                PreparedLayerKind::Raster,
-                PreparedContent::Raster(prepare_raster_tiles(image, &mut resources)?),
-            )
-        } else if matches!(layer.kind(), LayerKind::Text(_)) {
-            for resource in layer.0.node.resources.iter() {
-                if !resources
-                    .iter()
-                    .any(|candidate| candidate.id() == resource.id())
-                {
-                    resources.push(resource.clone());
-                }
-            }
-            (
-                PreparedLayerKind::Text,
-                PreparedContent::Vector(layer.0.node.scene.as_ref().clone()),
-            )
-        } else {
-            // Missing raster assets remain in native diagnostics and metadata but
-            // contribute no visual command to the portable frame.
-            continue;
-        };
-        prepared_layers.push(PreparedLayer {
-            id: layer_id(layer.entity()),
-            geometry: layer
-                .geometry()
-                .points
-                .iter()
-                .map(|point| PreparedPoint {
-                    x: point.x,
-                    y: point.y,
-                })
-                .collect(),
-            bounds: prepared_bounds(layer.bounds()),
-            local_bounds: prepared_bounds(layer.0.node.local_bounds),
-            presentation: PreparedPresentation {
-                visible: layer.presentation().visible,
-                opacity: layer.presentation().opacity.clamp(0.0, 1.0),
+/// A view of the page: the page-pixel rectangle it shows, at `scale` output
+/// pixels per page pixel.
+#[derive(Clone, Copy, Debug)]
+pub struct View {
+    pub rect: Rect,
+    pub scale: f64,
+}
+
+/// One render pass: a scene for the output pixels `rect`, its origin at
+/// that rectangle's corner.
+pub struct Strip {
+    pub rect: Rect,
+    pub scene: Scene,
+}
+
+impl Frame {
+    #[must_use]
+    pub fn page(&self) -> PageId {
+        self.0.page
+    }
+
+    #[must_use]
+    pub fn revision(&self) -> &Revision {
+        &self.0.revision
+    }
+
+    /// What the frame draws, in page pixels.
+    #[must_use]
+    pub fn area(&self) -> Rect {
+        self.0.area
+    }
+
+    #[must_use]
+    pub fn layer(&self, id: LayerId) -> Option<&Layer> {
+        self.0.layers.get(&id)
+    }
+
+    /// Every layer in the page's order, parents first.
+    pub fn layers(&self) -> impl Iterator<Item = &Layer> {
+        self.0.order.iter().filter_map(|id| self.0.layers.get(id))
+    }
+
+    /// Whether some text waits for a font `Renderer::load_fonts` would
+    /// download; until then it draws with a fallback.
+    #[must_use]
+    pub fn needs_fonts(&self) -> bool {
+        !self.0.missing.is_empty()
+    }
+
+    /// Only `layer`'s own content, shown, over its bounds rounded out to
+    /// whole pixels: without its opacity, blend mode, or masks, which a PSD
+    /// records as layer properties.
+    pub fn cropped(&self, layer: LayerId) -> Result<Self> {
+        let node = self.node(layer)?;
+        Ok(self.with(
+            self.0.layers[&layer]
+                .bounds
+                .map_or(Rect::ZERO, Rect::expand),
+            Node {
+                visible: true,
+                opacity: 1.0,
+                blend: Blend::Normal,
+                masks: Vec::new(),
+                ..node.clone()
             },
-            kind,
-            placement: layer.placement().as_coeffs(),
-            content,
-            element_frame: element_frame(layer),
-        });
+        ))
     }
-    Ok(PreparedFrameBundle {
-        frame: PreparedFrame {
-            revision: PreparedRevision::new(revision.get()),
-            page: layer_id(page),
-            width,
-            height,
-            origin,
-            normalization: normalization.as_coeffs(),
-            layers: prepared_layers,
-        },
-        resources,
-    })
-}
 
-fn prepare_raster_tiles(
-    image: &RasterImage,
-    resources: &mut Vec<PreparedResource>,
-) -> Result<PreparedRaster> {
-    let resource = PreparedResource::encoded_raster(
-        image.width,
-        image.height,
-        image.media_type.clone(),
-        Arc::clone(&image.encoded),
-    )
-    .map_err(|error| Error::Backend(anyhow!(error)))?;
-    let source = resource.id();
-    if !resources.iter().any(|candidate| candidate.id() == source) {
-        resources.push(resource);
-    }
-    let mut tiles = Vec::new();
-    for y in (0..image.height).step_by(PREPARED_RASTER_TILE_DIMENSION as usize) {
-        let height = (image.height - y).min(PREPARED_RASTER_TILE_DIMENSION);
-        for x in (0..image.width).step_by(PREPARED_RASTER_TILE_DIMENSION as usize) {
-            let width = (image.width - x).min(PREPARED_RASTER_TILE_DIMENSION);
-            let gutter = [
-                u32::from(x > 0),
-                u32::from(y > 0),
-                u32::from(x + width < image.width),
-                u32::from(y + height < image.height),
-            ];
-            tiles.push(PreparedRasterTile {
-                x,
-                y,
-                width,
-                height,
-                gutter,
-            });
+    /// `layer`'s masks merged into one coverage over the page, as white with
+    /// the coverage in alpha; `None` when it has no masks.
+    pub fn mask(&self, layer: LayerId) -> Result<Option<Self>> {
+        let node = self.node(layer)?;
+        if node.masks.is_empty() {
+            return Ok(None);
         }
+        Ok(Some(self.with(
+            self.0.area,
+            Node {
+                id: layer,
+                visible: true,
+                opacity: 1.0,
+                blend: Blend::Normal,
+                content: Content::Coverage(self.0.area),
+                children: Vec::new(),
+                masks: node.masks.clone(),
+            },
+        )))
     }
-    Ok(PreparedRaster {
-        source,
-        width: image.width,
-        height: image.height,
-        tiles,
-    })
-}
 
-fn layer_id(entity: EntityId) -> LayerId {
-    LayerId::from_bytes(*entity.as_uuid().as_bytes())
-}
-
-fn prepared_bounds(bounds: RenderBounds) -> PreparedBounds {
-    PreparedBounds {
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-    }
-}
-
-fn element_frame(layer: &Layer) -> Option<PreparedElementFrame> {
-    let LayerKind::Text(text) = layer.kind() else {
-        return None;
-    };
-    let bounds = text.rendered_bounds;
-    if bounds.width > 0.0 && bounds.height > 0.0 {
-        return Some(PreparedElementFrame {
-            x: bounds.x,
-            y: bounds.y,
-            width: bounds.width,
-            height: bounds.height,
-            angle_degrees: text.angle_degrees,
-        });
-    }
-    geometry_frame(layer.geometry())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn prepared_raster_tiles_retain_neighbor_gutters() {
-        let width = PREPARED_RASTER_TILE_DIMENSION + 1;
-        let mut pixels = Vec::with_capacity(width as usize * 4);
-        for x in 0..width {
-            pixels.extend_from_slice(&[(x & 0xff) as u8, (x >> 8) as u8, 0, 255]);
+    fn node(&self, id: LayerId) -> Result<&Node> {
+        fn find(nodes: &[Node], id: LayerId) -> Option<&Node> {
+            nodes.iter().find_map(|node| {
+                (node.id == id)
+                    .then_some(node)
+                    .or_else(|| find(&node.children, id))
+            })
         }
-        let encoded: Arc<[u8]> = Arc::from(&b"encoded-wide-image"[..]);
-        let source = ResourceId::for_encoded_raster(width, 1, "image/png", &encoded);
-        let image = RasterImage {
-            blob: BlobId::for_bytes(&pixels),
-            source,
-            width,
-            height: 1,
-            media_type: "image/png".to_owned(),
-            encoded,
-            pixels: pixels.into(),
-        };
-        let mut resources = Vec::new();
+        find(&self.0.nodes, id)
+            .ok_or_else(|| Error::invalid(format!("layer {id} isn't drawn in this frame")))
+    }
 
-        let raster = prepare_raster_tiles(&image, &mut resources).unwrap();
+    /// A frame of this page drawing only `node` over `area`.
+    fn with(&self, area: Rect, node: Node) -> Self {
+        Self(Arc::new(FrameData {
+            page: self.0.page,
+            revision: self.0.revision.clone(),
+            area,
+            nodes: vec![node],
+            layers: self.0.layers.clone(),
+            order: self.0.order.clone(),
+            missing: self.0.missing.clone(),
+        }))
+    }
 
-        assert_eq!(raster.tiles.len(), 2);
-        assert_eq!(resources.len(), 1);
-        assert_eq!(raster.source, source);
-        assert_eq!(raster.tiles[0].gutter, [0, 0, 1, 0]);
-        assert_eq!(raster.tiles[1].gutter, [1, 0, 0, 0]);
-        assert_eq!(raster.tiles[0].resource_size(), (1_025, 1));
-        assert_eq!(raster.tiles[1].resource_size(), (2, 1));
-        let PreparedResource::EncodedRaster {
-            width,
-            height,
-            bytes,
-            ..
-        } = &resources[0]
-        else {
-            unreachable!();
+    /// The passes that draw `view`: one, unless its images need more of
+    /// vello's atlas than one pass has, when they are strips across it.
+    #[must_use]
+    pub fn draw(&self, view: View) -> Vec<Strip> {
+        let output = Rect::new(
+            0.0,
+            0.0,
+            (view.rect.width() * view.scale).ceil(),
+            (view.rect.height() * view.scale).ceil(),
+        );
+        let mut strips = Vec::new();
+        self.strips(view, output, &mut strips);
+        strips
+    }
+
+    fn strips(&self, view: View, rect: Rect, out: &mut Vec<Strip>) {
+        let to_output = Affine::translate((-rect.x0, -rect.y0))
+            * Affine::scale(view.scale)
+            * Affine::translate((-view.rect.x0, -view.rect.y0));
+        let clip = Rect::new(0.0, 0.0, rect.width(), rect.height());
+        let mut pass = Pass {
+            to_output,
+            clip,
+            pixels: 0,
         };
-        assert_eq!((*width, *height), (PREPARED_RASTER_TILE_DIMENSION + 1, 1));
-        assert_eq!(bytes.as_ref(), b"encoded-wide-image");
+        let cost = self.0.nodes.iter().map(|node| pass.cost(node)).sum::<u64>();
+        if cost > ATLAS && rect.height() > 64.0 {
+            let middle = (rect.y0 + (rect.height() * 0.5).floor()).floor();
+            self.strips(view, Rect::new(rect.x0, rect.y0, rect.x1, middle), out);
+            self.strips(view, Rect::new(rect.x0, middle, rect.x1, rect.y1), out);
+            return;
+        }
+        let scene = pass.compose(&self.0.nodes);
+        out.push(Strip { rect, scene });
     }
 }
 
-fn geometry_frame(geometry: &Geometry) -> Option<PreparedElementFrame> {
-    let points = &geometry.points;
-    if points.is_empty()
-        || points
+struct Pass {
+    /// From page pixels to this pass's output pixels.
+    to_output: Affine,
+    /// The pass's output rectangle.
+    clip: Rect,
+    pixels: u64,
+}
+
+impl Pass {
+    fn cost(&self, node: &Node) -> u64 {
+        if !node.visible {
+            return 0;
+        }
+        let own = match &node.content {
+            Content::Pixels { tiled, transform } => {
+                tiled.cost(self.to_output * *transform, self.clip)
+            }
+            _ => 0,
+        };
+        let masks: u64 = node
+            .masks
             .iter()
-            .any(|point| !point.x.is_finite() || !point.y.is_finite())
-    {
-        return None;
+            .filter(|mask| mask.visible)
+            .map(|mask| match &mask.shape {
+                MaskShape::Pixels { tiled, transform } => {
+                    tiled.cost(self.to_output * *transform, self.clip)
+                }
+                MaskShape::Path(_) => 0,
+            })
+            .sum();
+        own + masks
+            + node
+                .children
+                .iter()
+                .map(|child| self.cost(child))
+                .sum::<u64>()
     }
-    if points.len() == 4 {
-        let top = (points[1].x - points[0].x, points[1].y - points[0].y);
-        let right = (points[2].x - points[1].x, points[2].y - points[1].y);
-        let width = top.0.hypot(top.1);
-        let height = right.0.hypot(right.1);
-        if width > f64::EPSILON && height > f64::EPSILON {
-            let center_x = points.iter().map(|point| point.x).sum::<f64>() * 0.25;
-            let center_y = points.iter().map(|point| point.y).sum::<f64>() * 0.25;
-            return Some(PreparedElementFrame {
-                x: (center_x - width * 0.5) as f32,
-                y: (center_y - height * 0.5) as f32,
-                width: width as f32,
-                height: height as f32,
-                angle_degrees: top.1.atan2(top.0).to_degrees() as f32,
-            });
+
+    /// Draws nodes into a fresh scene: an isolated group's content.
+    fn compose(&mut self, nodes: &[Node]) -> Scene {
+        let mut scene = Scene::new();
+        for node in nodes {
+            self.node(node, &mut scene);
+        }
+        scene
+    }
+
+    fn node(&mut self, node: &Node, scene: &mut Scene) {
+        if !node.visible {
+            return;
+        }
+        let masked = node.masks.iter().any(|mask| mask.visible);
+        let group = matches!(node.content, Content::None);
+        if group && node.blend == Blend::PassThrough {
+            if !masked && node.opacity >= 1.0 {
+                // Children blend straight into the backdrop.
+                for child in &node.children {
+                    self.node(child, scene);
+                }
+                return;
+            }
+            // The group's layer draws the backdrop again under its children,
+            // as a non-isolated group includes its backdrop, so its opacity
+            // and masks fade between the backdrop and the result.
+            let mut content = Scene::new();
+            content.append(scene, None);
+            for child in &node.children {
+                self.node(child, &mut content);
+            }
+            self.wrap(node, Mix::Normal, content, scene);
+            return;
+        }
+        let content = if group {
+            self.compose(&node.children)
+        } else {
+            let mut content = Scene::new();
+            self.content(&node.content, &mut content);
+            content
+        };
+        if !masked && node.opacity >= 1.0 && node.blend == Blend::Normal {
+            scene.append(&content, None);
+        } else {
+            self.wrap(node, mix(node.blend), content, scene);
         }
     }
-    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
-    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for point in points {
-        min_x = min_x.min(point.x);
-        min_y = min_y.min(point.y);
-        max_x = max_x.max(point.x);
-        max_y = max_y.max(point.y);
+
+    fn content(&mut self, content: &Content, scene: &mut Scene) {
+        match content {
+            Content::None => {}
+            Content::Vector {
+                scene: vector,
+                transform,
+            } => scene.append(vector, Some(self.to_output * *transform)),
+            Content::Pixels { tiled, transform } => {
+                self.pixels += tiled.draw(scene, self.to_output * *transform, self.clip);
+            }
+            Content::Coverage(rect) => {
+                scene.fill(Fill::NonZero, self.to_output, Color::WHITE, None, rect);
+            }
+        }
     }
-    let width = max_x - min_x;
-    let height = max_y - min_y;
-    (width > f64::EPSILON && height > f64::EPSILON).then_some(PreparedElementFrame {
-        x: min_x as f32,
-        y: min_y as f32,
-        width: width as f32,
-        height: height as f32,
-        angle_degrees: 0.0,
-    })
+
+    /// Composites `content` onto `scene` with the node's blend mode, opacity,
+    /// and masks.
+    fn wrap(&mut self, node: &Node, mix: Mix, content: Scene, scene: &mut Scene) {
+        scene.push_layer(
+            Fill::NonZero,
+            BlendMode::new(mix, Compose::SrcOver),
+            node.opacity,
+            Affine::IDENTITY,
+            &self.clip,
+        );
+        scene.append(&content, None);
+        let masks: Vec<&MaskNode> = node.masks.iter().filter(|mask| mask.visible).collect();
+        if !masks.is_empty() {
+            // The masks build one coverage, and the content keeps only what
+            // it covers.
+            scene.push_layer(
+                Fill::NonZero,
+                BlendMode::new(Mix::Normal, Compose::DestIn),
+                1.0,
+                Affine::IDENTITY,
+                &self.clip,
+            );
+            if masks[0].mode != MaskMode::Add {
+                scene.fill(
+                    Fill::NonZero,
+                    Affine::IDENTITY,
+                    Color::WHITE,
+                    None,
+                    &self.clip,
+                );
+            }
+            for mask in masks {
+                let compose = match mask.mode {
+                    MaskMode::Add => Compose::SrcOver,
+                    MaskMode::Subtract => Compose::DestOut,
+                    MaskMode::Intersect => Compose::DestIn,
+                };
+                scene.push_layer(
+                    Fill::NonZero,
+                    BlendMode::new(Mix::Normal, compose),
+                    1.0,
+                    Affine::IDENTITY,
+                    &self.clip,
+                );
+                match &mask.shape {
+                    MaskShape::Path(path) => {
+                        scene.fill(
+                            Fill::NonZero,
+                            self.to_output,
+                            Color::WHITE,
+                            None,
+                            path.as_ref(),
+                        );
+                    }
+                    MaskShape::Pixels { tiled, transform } => {
+                        self.pixels += tiled.draw(scene, self.to_output * *transform, self.clip);
+                    }
+                }
+                scene.pop_layer();
+            }
+            scene.pop_layer();
+        }
+        scene.pop_layer();
+    }
+}
+
+fn mix(blend: Blend) -> Mix {
+    match blend {
+        Blend::Normal | Blend::PassThrough => Mix::Normal,
+        Blend::Multiply => Mix::Multiply,
+        Blend::Screen => Mix::Screen,
+        Blend::Overlay => Mix::Overlay,
+        Blend::Darken => Mix::Darken,
+        Blend::Lighten => Mix::Lighten,
+        Blend::ColorDodge => Mix::ColorDodge,
+        Blend::ColorBurn => Mix::ColorBurn,
+        Blend::HardLight => Mix::HardLight,
+        Blend::SoftLight => Mix::SoftLight,
+        Blend::Difference => Mix::Difference,
+        Blend::Exclusion => Mix::Exclusion,
+        Blend::Hue => Mix::Hue,
+        Blend::Saturation => Mix::Saturation,
+        Blend::Color => Mix::Color,
+        Blend::Luminosity => Mix::Luminosity,
+    }
 }
