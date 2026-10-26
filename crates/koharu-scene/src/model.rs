@@ -1,18 +1,22 @@
 //! Public types: ids, values, layers, provenance, and views. Every type here
 //! serializes the way commands and tools see it.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
-use color::{AlphaColor, Srgb};
+pub use crate::color::Color;
+pub use icu_locale_core::LanguageIdentifier;
+pub use jsonptr::{Pointer, PointerBuf};
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use specta::Type;
 use uuid::Uuid;
 
-/// An sRGB colour with straight alpha, serialized as `[r, g, b, a]`, each
-/// from 0 to 1, as Figma's `Color` is.
-pub type Color = AlphaColor<Srgb>;
+/// A text layer's text, which is kept apart from its other properties.
+pub(crate) const CONTENT: &Pointer = Pointer::from_static("/content");
 
 macro_rules! uuid_ids {
     ($($(#[$doc:meta])* $name:ident),* $(,)?) => {$(
@@ -37,8 +41,8 @@ macro_rules! uuid_ids {
             }
         }
 
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 self.0.fmt(f)
             }
         }
@@ -62,76 +66,30 @@ uuid_ids! {
     LayerId,
 }
 
-macro_rules! checked_strings {
-    ($($(#[$doc:meta])* $name:ident => $check:expr),* $(,)?) => {$(
-        $(#[$doc])*
-        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type, JsonSchema)]
-        #[serde(transparent)]
-        pub struct $name(String);
+/// An existing page or layer id, or `$label` for one created earlier in the
+/// same edit.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(try_from = "String")]
+pub struct Ref(String);
 
-        impl $name {
-            pub fn new(value: impl Into<String>) -> Result<Self, String> {
-                let value = value.into();
-                let check: fn(&str) -> Result<(), String> = $check;
-                check(&value)?;
-                Ok(Self(value))
-            }
+impl TryFrom<String> for Ref {
+    type Error = String;
 
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                Self::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-    )*};
-}
-
-checked_strings! {
-    /// An existing page or layer id, or `$label` for one created earlier in
-    /// the same edit.
-    Ref => |s| {
+    fn try_from(s: String) -> Result<Self, String> {
         let valid = match s.strip_prefix('$') {
             Some(label) => {
                 !label.is_empty()
-                    && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                    && label
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             }
-            None => Uuid::parse_str(s).is_ok(),
+            None => Uuid::parse_str(&s).is_ok(),
         };
-        if valid { Ok(()) } else { Err(format!("{s:?} is neither an id nor a $label")) }
-    },
-    /// A JSON Pointer (RFC 6901) into a layer's properties; `""` is the
-    /// whole layer.
-    Pointer => |s| jsonptr::Pointer::parse(s).map(|_| ()).map_err(|e| e.to_string()),
-    /// SVG path data.
-    Path => |s| kurbo::BezPath::from_svg(s).map(|_| ()).map_err(|e| format!("invalid path data: {e}")),
-    /// A BCP 47 language tag; `und` when undetermined.
-    LanguageTag => |s| {
-        icu_locale_core::Locale::try_from_str(s)
-            .map(|_| ())
-            .map_err(|e| format!("{s:?} is not a BCP 47 tag: {e}"))
-    },
-    /// A BLAKE3 hash, as 64 lowercase hex digits.
-    Hash => check_hex,
-    /// The BLAKE3 hash of an imported file's bytes.
-    FileHash => check_hex,
-}
-
-fn check_hex(s: &str) -> Result<(), String> {
-    if s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
-        Ok(())
-    } else {
-        Err(format!("{s:?} is not a BLAKE3 hash"))
+        if valid {
+            Ok(Self(s))
+        } else {
+            Err(format!("{s:?} is neither an id nor a $label"))
+        }
     }
 }
 
@@ -147,6 +105,12 @@ impl Ref {
     }
 }
 
+impl fmt::Display for Ref {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 impl From<PageId> for Ref {
     fn from(id: PageId) -> Self {
         Self(id.to_string())
@@ -159,53 +123,56 @@ impl From<LayerId> for Ref {
     }
 }
 
-impl Pointer {
-    #[must_use]
-    pub fn root() -> Self {
-        Self(String::new())
-    }
+/// SVG path data.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(try_from = "String")]
+pub struct Path(String);
 
-    pub(crate) fn content() -> Self {
-        Self("/content".to_owned())
-    }
+impl TryFrom<String> for Path {
+    type Error = String;
 
-    pub(crate) fn pixels() -> Self {
-        Self("/pixels".to_owned())
-    }
-
-    fn parsed(&self) -> &jsonptr::Pointer {
-        jsonptr::Pointer::parse(&self.0).expect("checked on construction")
-    }
-
-    #[must_use]
-    pub fn tokens(&self) -> Vec<String> {
-        self.parsed()
-            .tokens()
-            .map(|token| token.decoded().into_owned())
-            .collect()
-    }
-
-    #[must_use]
-    pub fn child(&self, token: &str) -> Self {
-        Self(self.parsed().with_trailing_token(token).as_str().to_owned())
-    }
-
-    /// True when `self` is `other` or lies inside it.
-    #[must_use]
-    pub fn within(&self, other: &Self) -> bool {
-        self.parsed().starts_with(other.parsed())
-    }
-
-    #[must_use]
-    pub fn overlaps(&self, other: &Self) -> bool {
-        self.within(other) || other.within(self)
+    fn try_from(s: String) -> Result<Self, String> {
+        kurbo::BezPath::from_svg(&s).map_err(|e| format!("invalid path data: {e}"))?;
+        Ok(Self(s))
     }
 }
 
-impl LanguageTag {
+impl Path {
     #[must_use]
-    pub fn und() -> Self {
-        Self("und".to_owned())
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A BLAKE3 hash, as 64 lowercase hex digits: of a value read, or of an
+/// imported file's bytes, which names the file.
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type, JsonSchema,
+)]
+#[serde(try_from = "String")]
+pub struct Hash(String);
+
+impl TryFrom<String> for Hash {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, String> {
+        if s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+            Ok(Self(s))
+        } else {
+            Err(format!("{s:?} is not a BLAKE3 hash"))
+        }
+    }
+}
+
+impl Hash {
+    #[must_use]
+    pub fn of(bytes: &[u8]) -> Self {
+        blake3::hash(bytes).into()
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -215,10 +182,9 @@ impl From<blake3::Hash> for Hash {
     }
 }
 
-impl FileHash {
-    #[must_use]
-    pub fn of(bytes: &[u8]) -> Self {
-        Self(blake3::hash(bytes).to_hex().to_string())
+impl fmt::Display for Hash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -348,7 +314,7 @@ pub enum Frame {
     Path { path: Path },
 }
 
-/// What a mask is made of. Pixel tiles are read at `/pixels`.
+/// What a mask is made of.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MaskContent {
@@ -367,15 +333,15 @@ impl Default for MaskContent {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Stroke {
-    #[serde(with = "color_serde")]
+    #[serde(with = "crate::color::array")]
     #[specta(type = [f32; 4])]
     #[schemars(with = "[f32; 4]")]
     pub color: Color,
     pub width: f64,
 }
 
-/// Character values; each is also a mark key on a run, and a mark wins for
-/// its run.
+/// Character values; each is also a mark key on a span, and a mark wins for
+/// its span.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CharStyle {
@@ -387,11 +353,11 @@ pub struct CharStyle {
     pub italic: Option<bool>,
     #[serde(default)]
     pub size: Option<f64>,
-    #[serde(default, with = "option_color_serde")]
+    #[serde(default, with = "crate::color::option")]
     #[specta(type = Option<[f32; 4]>)]
     #[schemars(with = "Option<[f32; 4]>")]
     pub fill: Option<Color>,
-    #[serde(default, with = "option_color_serde")]
+    #[serde(default, with = "crate::color::option")]
     #[specta(type = Option<[f32; 4]>)]
     #[schemars(with = "Option<[f32; 4]>")]
     pub stroke: Option<Color>,
@@ -409,56 +375,59 @@ pub struct TextStyle {
     pub align: Align,
 }
 
-/// Text with styled runs. Deserializes from a plain string too.
+/// Text as the inserts of a Loro text delta: spans in order, each with its
+/// marks, so no mark can fall outside the text. Deserializes from a plain
+/// string too.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(from = "RichTextInput")]
-pub struct RichText {
-    pub text: String,
-    pub runs: Vec<Run>,
-}
+pub struct RichText(pub Vec<Span>);
 
-/// A styled run over Unicode scalar indices `start..end`.
+/// A string with its character marks: one insert of a Loro text delta.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Run {
-    pub start: usize,
-    pub end: usize,
-    pub style: CharStyle,
+pub struct Span {
+    pub insert: String,
+    #[serde(default, skip_serializing_if = "unmarked")]
+    pub attributes: CharStyle,
+}
+
+fn unmarked(style: &CharStyle) -> bool {
+    *style == CharStyle::default()
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(untagged)]
 enum RichTextInput {
     Plain(String),
-    Rich(RichTextFields),
-}
-
-#[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct RichTextFields {
-    text: String,
-    #[serde(default)]
-    runs: Vec<Run>,
+    Spans(Vec<Span>),
 }
 
 impl From<RichTextInput> for RichText {
     fn from(input: RichTextInput) -> Self {
         match input {
-            RichTextInput::Plain(text) => Self {
-                text,
-                runs: Vec::new(),
-            },
-            RichTextInput::Rich(RichTextFields { text, runs }) => Self { text, runs },
+            RichTextInput::Plain(text) => Self::from(text.as_str()),
+            RichTextInput::Spans(spans) => Self(spans),
         }
+    }
+}
+
+impl RichText {
+    /// The plain text.
+    #[must_use]
+    pub fn text(&self) -> String {
+        self.0.iter().map(|span| span.insert.as_str()).collect()
     }
 }
 
 impl From<&str> for RichText {
     fn from(text: &str) -> Self {
-        Self {
-            text: text.to_owned(),
-            runs: Vec::new(),
-        }
+        Self(match text.is_empty() {
+            true => Vec::new(),
+            false => vec![Span {
+                insert: text.to_owned(),
+                attributes: CharStyle::default(),
+            }],
+        })
     }
 }
 
@@ -473,225 +442,175 @@ fn opaque() -> f32 {
     1.0
 }
 
-fn normal() -> Blend {
-    Blend::Normal
-}
-
 fn pass_through() -> Blend {
     Blend::PassThrough
 }
 
-macro_rules! layers {
-    ($(
-        $(#[$doc:meta])*
-        $variant:ident => $name:ident ($blend:literal) {
-            $( $(#[$field_meta:meta])* $field:ident : $ty:ty ),* $(,)?
-        }
-    )*) => {
-        $(
-            $(#[$doc])*
-            #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-            #[serde(deny_unknown_fields)]
-            pub struct $name {
-                #[serde(default)]
-                pub name: String,
-                #[serde(default = "visible")]
-                pub visible: bool,
-                #[serde(default)]
-                pub locked: bool,
-                /// 0 to 1.
-                #[serde(default = "opaque")]
-                pub opacity: f32,
-                #[serde(default = $blend)]
-                pub blend: Blend,
-                #[serde(default)]
-                pub attributes: Attributes,
-                $( $(#[$field_meta])* pub $field: $ty, )*
-            }
-        )*
-
-        /// A layer: the common properties plus its kind's own. In JSON it is
-        /// one flat object tagged by `kind`.
-        #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-        #[serde(tag = "kind", rename_all = "snake_case")]
-        pub enum Layer {
-            $( $variant($name), )*
-        }
-
-        /// What kind a layer is, without its properties.
-        #[derive(
-            Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema,
-            strum::AsRefStr, strum::EnumString,
-        )]
-        #[serde(rename_all = "snake_case")]
-        #[strum(serialize_all = "snake_case")]
-        pub enum LayerKind {
-            $( $variant, )*
-        }
-
-        impl Layer {
-            #[must_use]
-            pub fn kind(&self) -> LayerKind {
-                match self { $( Self::$variant(_) => LayerKind::$variant, )* }
-            }
-
-            #[must_use]
-            pub fn name(&self) -> &str {
-                match self { $( Self::$variant(layer) => &layer.name, )* }
-            }
-
-            fn common(&self) -> (f32, Blend) {
-                match self { $( Self::$variant(layer) => (layer.opacity, layer.blend), )* }
-            }
-        }
-    };
+fn und() -> LanguageIdentifier {
+    LanguageIdentifier::UNKNOWN
 }
 
-layers! {
-    /// A folder of layers, drawn first to last.
-    Group => GroupLayer ("pass_through") {}
-    /// An imported file, kept byte for byte.
-    Image => ImageLayer ("normal") {
-        file: FileHash,
-        #[serde(default)]
-        transform: Transform,
-    }
-    /// Editable RGBA pixels, read at `/pixels`.
-    Raster => RasterLayer ("normal") {
-        #[serde(default)]
-        offset: Offset,
-    }
-    /// A vector path with an optional fill and stroke, in page coordinates.
-    Shape => ShapeLayer ("normal") {
-        path: Path,
-        #[serde(default)]
-        fill_rule: FillRule,
-        #[serde(default, with = "option_color_serde")]
-        #[specta(type = Option<[f32; 4]>)]
-        #[schemars(with = "Option<[f32; 4]>")]
-        fill: Option<Color>,
-        #[serde(default)]
-        stroke: Option<Stroke>,
-    }
-    /// Styled text in a frame. `content` is set when the layer is added;
-    /// after that only the text ops change it.
-    Text => TextLayer ("normal") {
-        #[serde(default)]
-        content: RichText,
-        #[serde(default)]
-        style: TextStyle,
-        #[serde(default)]
-        frame: Frame,
-        #[serde(default)]
-        direction: Direction,
-        #[serde(default = "LanguageTag::und")]
-        language: LanguageTag,
-        #[serde(default)]
-        transform: Transform,
-    }
-    /// Limits its parent's visibility; never drawn. Masks apply in order.
-    Mask => MaskLayer ("normal") {
-        #[serde(default)]
-        mode: MaskMode,
-        #[serde(default)]
-        content: MaskContent,
-    }
+/// A folder of layers, drawn first to last.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GroupLayer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    /// 0 to 1.
+    #[serde(default = "opaque")]
+    pub opacity: f32,
+    #[serde(default = "pass_through")]
+    pub blend: Blend,
+    #[serde(default)]
+    pub attributes: Attributes,
 }
 
-impl Layer {
-    /// Checks what serde can't: ranges, finite numbers, and runs inside the
-    /// text. Whether a named file exists is the planner's to check.
-    pub fn check(&self) -> Result<(), String> {
-        let (opacity, blend) = self.common();
-        if !(0.0..=1.0).contains(&opacity) {
-            return Err(format!("opacity {opacity} is outside 0 to 1"));
-        }
-        if blend == Blend::PassThrough && !matches!(self, Self::Group(_)) {
-            return Err("only a group can pass through".to_owned());
-        }
-        match self {
-            Self::Group(_) | Self::Raster(_) | Self::Mask(_) => Ok(()),
-            Self::Image(image) => finite_transform(&image.transform),
-            Self::Shape(shape) => {
-                shape.fill.iter().try_for_each(check_color)?;
-                match &shape.stroke {
-                    Some(stroke) => {
-                        check_color(&stroke.color)?;
-                        at_least_zero(stroke.width, "a stroke width")
-                    }
-                    None => Ok(()),
-                }
-            }
-            Self::Text(text) => {
-                finite_transform(&text.transform)?;
-                text.style.chars.check()?;
-                let length = text.content.text.chars().count();
-                for run in &text.content.runs {
-                    if run.start >= run.end || run.end > length {
-                        return Err(format!(
-                            "run {}..{} is outside the text",
-                            run.start, run.end
-                        ));
-                    }
-                    run.style.check()?;
-                }
-                if let Frame::Box { bounds } = &text.frame {
-                    if !(bounds.x.is_finite() && bounds.y.is_finite()) {
-                        return Err("a frame must be finite".to_owned());
-                    }
-                    at_least_zero(bounds.width, "a frame width")?;
-                    at_least_zero(bounds.height, "a frame height")?;
-                }
-                Ok(())
-            }
-        }
-    }
+/// An imported file, kept byte for byte.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ImageLayer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    /// 0 to 1.
+    #[serde(default = "opaque")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub blend: Blend,
+    #[serde(default)]
+    pub attributes: Attributes,
+    pub file: Hash,
+    #[serde(default)]
+    pub transform: Transform,
 }
 
-impl CharStyle {
-    pub fn check(&self) -> Result<(), String> {
-        if let Some(size) = self.size
-            && !(size.is_finite() && size > 0.0)
-        {
-            return Err("a font size must be above 0".to_owned());
-        }
-        if let Some(weight) = self.weight
-            && !(1..=1000).contains(&weight)
-        {
-            return Err("a font weight must be from 1 to 1000".to_owned());
-        }
-        if let Some(width) = self.stroke_width {
-            at_least_zero(width, "a stroke width")?;
-        }
-        self.fill
-            .iter()
-            .chain(&self.stroke)
-            .try_for_each(check_color)
-    }
+/// Editable RGBA pixels.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RasterLayer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    /// 0 to 1.
+    #[serde(default = "opaque")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub blend: Blend,
+    #[serde(default)]
+    pub attributes: Attributes,
+    #[serde(default)]
+    pub offset: Offset,
 }
 
-fn check_color(color: &Color) -> Result<(), String> {
-    if color.components.iter().all(|c| (0.0..=1.0).contains(c)) {
-        Ok(())
-    } else {
-        Err("a colour component is outside 0 to 1".to_owned())
-    }
+/// A vector path with an optional fill and stroke, in page coordinates.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ShapeLayer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    /// 0 to 1.
+    #[serde(default = "opaque")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub blend: Blend,
+    #[serde(default)]
+    pub attributes: Attributes,
+    pub path: Path,
+    #[serde(default)]
+    pub fill_rule: FillRule,
+    #[serde(default, with = "crate::color::option")]
+    #[specta(type = Option<[f32; 4]>)]
+    #[schemars(with = "Option<[f32; 4]>")]
+    pub fill: Option<Color>,
+    #[serde(default)]
+    pub stroke: Option<Stroke>,
 }
 
-fn at_least_zero(value: f64, what: &str) -> Result<(), String> {
-    if value.is_finite() && value >= 0.0 {
-        Ok(())
-    } else {
-        Err(format!("{what} must be a finite number of at least 0"))
-    }
+/// Styled text in a frame. `content` is set when the layer is added; after
+/// that only the text ops change it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TextLayer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    /// 0 to 1.
+    #[serde(default = "opaque")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub blend: Blend,
+    #[serde(default)]
+    pub attributes: Attributes,
+    #[serde(default)]
+    pub content: RichText,
+    #[serde(default)]
+    pub style: TextStyle,
+    #[serde(default)]
+    pub frame: Frame,
+    #[serde(default)]
+    pub direction: Direction,
+    /// A BCP 47 tag; `und` when undetermined.
+    #[serde(default = "und")]
+    #[specta(type = String)]
+    #[schemars(with = "String")]
+    pub language: LanguageIdentifier,
+    #[serde(default)]
+    pub transform: Transform,
 }
 
-fn finite_transform(transform: &Transform) -> Result<(), String> {
-    if transform.0.iter().flatten().all(|value| value.is_finite()) {
-        Ok(())
-    } else {
-        Err("a transform must be finite".to_owned())
-    }
+/// Limits its parent's visibility; never drawn, so of the common properties
+/// it takes only the name, visibility, and attributes. Masks apply in order.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaskLayer {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub attributes: Attributes,
+    #[serde(default)]
+    pub mode: MaskMode,
+    #[serde(default)]
+    pub content: MaskContent,
+}
+
+/// A layer: the common properties plus its kind's own. In JSON it is one
+/// flat object tagged by `kind`.
+#[derive(
+    Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema, strum::EnumDiscriminants,
+)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[strum_discriminants(
+    name(LayerKind),
+    doc = "What kind a layer is, without its properties.",
+    derive(strum::AsRefStr, strum::EnumString),
+    strum(serialize_all = "snake_case")
+)]
+pub enum Layer {
+    Group(GroupLayer),
+    Image(ImageLayer),
+    Raster(RasterLayer),
+    Shape(ShapeLayer),
+    Text(TextLayer),
+    Mask(MaskLayer),
 }
 
 /// The program that made a model's output.
@@ -735,7 +654,9 @@ pub enum Relationship {
 #[serde(deny_unknown_fields)]
 pub struct Read {
     pub layer: LayerId,
-    pub path: Pointer,
+    #[specta(type = String)]
+    #[schemars(with = "String")]
+    pub path: PointerBuf,
     pub hash: Hash,
     pub relationship: Relationship,
 }
@@ -764,7 +685,9 @@ impl Read {
 #[serde(deny_unknown_fields)]
 pub struct ActionRecord {
     pub action: Action,
-    pub writes: Vec<Pointer>,
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
+    pub writes: Vec<PointerBuf>,
     pub ingredients: Vec<Read>,
 }
 
@@ -773,15 +696,8 @@ pub struct ProjectView {
     pub id: ProjectId,
     /// A SemVer version.
     pub version: String,
-    pub pages: Vec<PageSummary>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-pub struct PageSummary {
-    pub id: PageId,
-    pub index: usize,
-    pub size: Size,
-    pub layers: usize,
+    /// In order.
+    pub pages: Vec<PageView>,
 }
 
 /// A page's layer tree, first drawn first, without pixels or file bytes.
@@ -800,9 +716,13 @@ pub struct LayerView {
     pub layer: Layer,
     pub origin: Vec<ActionRecord>,
     /// Paths where the user's value replaced a model's.
-    pub overrides: Vec<Pointer>,
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
+    pub overrides: Vec<PointerBuf>,
     /// Paths a model wrote whose ingredients have changed since.
-    pub stale: Vec<Pointer>,
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
+    pub stale: Vec<PointerBuf>,
     /// Drawn children, first to last.
     pub children: Vec<LayerView>,
     /// Masks, applied in order; not drawn.
@@ -814,20 +734,6 @@ pub struct LayerAnswer {
     pub page: PageId,
     pub parent: Option<LayerId>,
     pub view: LayerView,
-}
-
-/// A translation paired with the source it was translated from.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-pub struct StoryEntry {
-    pub translation: LayerId,
-    pub translation_hash: Hash,
-    pub text: String,
-    pub language: LanguageTag,
-    pub source: LayerId,
-    pub source_hash: Hash,
-    pub source_text: String,
-    pub source_language: LanguageTag,
-    pub stale: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
@@ -890,35 +796,4 @@ pub struct Change {
     /// Layers a model's removal skipped because the user changed them.
     pub kept: Vec<LayerId>,
     pub history: History,
-}
-
-mod color_serde {
-    use super::Color;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<S: Serializer>(color: &Color, serializer: S) -> Result<S::Ok, S::Error> {
-        color.components.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Color, D::Error> {
-        <[f32; 4]>::deserialize(deserializer).map(Color::new)
-    }
-}
-
-mod option_color_serde {
-    use super::Color;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<S: Serializer>(
-        color: &Option<Color>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        color.map(|color| color.components).serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Color>, D::Error> {
-        Option::<[f32; 4]>::deserialize(deserializer).map(|c| c.map(Color::new))
-    }
 }

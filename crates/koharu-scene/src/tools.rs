@@ -10,7 +10,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, generate::SchemaSettings, js
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 
-use crate::{Answer, Error, Layer, LayerKind, LayerView, Op, Query, Result, doc::Key};
+use crate::{Answer, Error, Layer, LayerKind, LayerView, Op, PageView, Query, Result, doc::Key};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolSpec {
@@ -136,32 +136,27 @@ fn parse<T: DeserializeOwned>(value: Value) -> Result<T> {
 /// each action reduced to what it was and who did it.
 pub fn compact(answer: &Answer) -> Value {
     match answer {
-        Answer::Page(page) => json!({
-            "id": page.id,
-            "size": page.size,
-            "layers": page.layers.iter().map(compact_layer).collect::<Vec<_>>(),
+        Answer::Project(project) => json!({
+            "id": project.id,
+            "version": project.version,
+            "pages": project.pages.iter().map(compact_page).collect::<Vec<_>>(),
         }),
+        Answer::Page(page) => compact_page(page),
         Answer::Layer(answer) => json!({
             "page": answer.page,
             "parent": answer.parent,
             "view": compact_layer(&answer.view),
         }),
-        Answer::Story(entries) => entries
-            .iter()
-            .map(|entry| {
-                json!({
-                    "translation": entry.translation,
-                    "text": entry.text,
-                    "language": entry.language,
-                    "source": entry.source,
-                    "source_text": entry.source_text,
-                    "source_language": entry.source_language,
-                    "stale": entry.stale,
-                })
-            })
-            .collect(),
         other => serde_json::to_value(other).expect("answers serialize"),
     }
+}
+
+fn compact_page(page: &PageView) -> Value {
+    json!({
+        "id": page.id,
+        "size": page.size,
+        "layers": page.layers.iter().map(compact_layer).collect::<Vec<_>>(),
+    })
 }
 
 fn compact_layer(view: &LayerView) -> Value {

@@ -18,16 +18,16 @@ use std::{
 };
 
 use loro::{
-    Container, ExpandType, Index, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroTree,
-    LoroValue, StyleConfig, TextDelta, TreeID, ValueOrContainer,
+    Container, ExpandType, Index, LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue,
+    StyleConfig, TextDelta, TreeID, ValueOrContainer,
 };
 use semver::Version;
 use serde_json::{Map, Value};
 use strum::{AsRefStr, EnumString};
 
 use crate::{
-    ActionRecord, CharStyle, Error, File, FileHash, Layer, LayerId, LayerKind, PageId, PageSummary,
-    PixelFormat, Pointer, Result, Revision, RichText, Run, Size,
+    ActionRecord, CharStyle, Error, File, Hash, Layer, LayerId, LayerKind, PageId, PixelFormat,
+    Pointer, PointerBuf, Result, Revision, RichText, Size, Span,
     error::Kind,
     tiles::{self, TileMap},
 };
@@ -61,7 +61,7 @@ pub(crate) enum Key {
 }
 
 /// Loro keeps no mark configuration, so it is set on every load. Every mark
-/// expands after its run, so typing at a run's end continues it.
+/// expands after its span, so typing at a span's end continues it.
 pub(crate) fn configure(doc: &LoroDoc) {
     doc.config_default_text_style(Some(StyleConfig {
         expand: ExpandType::After,
@@ -109,14 +109,6 @@ pub(crate) fn child_map(parent: &LoroMap, key: impl AsRef<str>) -> Result<LoroMa
     }
 }
 
-pub(crate) fn child_list(parent: &LoroMap, key: impl AsRef<str>) -> Result<LoroList> {
-    let key = key.as_ref();
-    match child(parent, key) {
-        Some(Container::List(list)) => Ok(list),
-        _ => Ok(parent.insert_container(key, LoroList::new())?),
-    }
-}
-
 pub(crate) fn text(map: &LoroMap, key: impl AsRef<str>) -> Result<LoroText> {
     let key = key.as_ref();
     child(map, key)
@@ -130,10 +122,6 @@ pub(crate) fn content(meta: &LoroMap) -> Result<LoroText> {
 
 pub(crate) fn generated(meta: &LoroMap) -> Result<LoroMap> {
     child_map(meta, Key::Generated)
-}
-
-pub(crate) fn origin(meta: &LoroMap) -> Result<LoroList> {
-    child_list(meta, Key::Origin)
 }
 
 fn string(map: &LoroMap, key: impl AsRef<str>) -> Result<String> {
@@ -237,14 +225,14 @@ pub(crate) fn read_tiles(page: &LoroMap, layer: LayerId) -> Result<TileMap> {
     error.map_or(Ok(tiles), Err)
 }
 
-pub(crate) fn file_hashes(doc: &LoroDoc) -> Result<HashSet<FileHash>> {
+pub(crate) fn file_hashes(doc: &LoroDoc) -> Result<HashSet<Hash>> {
     files(doc)
         .keys()
-        .map(|key| FileHash::new(key.to_string()).map_err(Error::corrupt))
+        .map(|key| Hash::try_from(key.to_string()).map_err(Error::corrupt))
         .collect()
 }
 
-pub(crate) fn file(doc: &LoroDoc, hash: &FileHash) -> Result<File> {
+pub(crate) fn file(doc: &LoroDoc, hash: &Hash) -> Result<File> {
     let Some(Container::Map(map)) = child(&files(doc), hash.as_str()) else {
         return Err(Error::not_found(Kind::File, hash));
     };
@@ -257,19 +245,14 @@ pub(crate) fn file(doc: &LoroDoc, hash: &FileHash) -> Result<File> {
     }
 }
 
-pub(crate) fn add_file(
-    doc: &LoroDoc,
-    hash: &FileHash,
-    media_type: &str,
-    bytes: Vec<u8>,
-) -> Result<()> {
+pub(crate) fn add_file(doc: &LoroDoc, hash: &Hash, media_type: &str, bytes: Vec<u8>) -> Result<()> {
     let file = files(doc).insert_container(hash.as_str(), LoroMap::new())?;
     file.insert(Key::MediaType.as_ref(), media_type)?;
     file.insert(Key::Bytes.as_ref(), bytes)?;
     Ok(())
 }
 
-pub(crate) fn remove_file(doc: &LoroDoc, hash: &FileHash) -> Result<()> {
+pub(crate) fn remove_file(doc: &LoroDoc, hash: &Hash) -> Result<()> {
     Ok(files(doc).delete(hash.as_str())?)
 }
 
@@ -278,43 +261,46 @@ pub(crate) fn style_of(attributes: Map<String, Value>) -> Result<CharStyle> {
 }
 
 pub(crate) fn rich_text(text: &LoroText) -> Result<RichText> {
-    let mut rich = RichText::default();
-    let mut position = 0;
-    for delta in text.to_delta() {
-        let TextDelta::Insert { insert, attributes } = delta else {
-            return Err(Error::corrupt("a text's delta is not all inserts"));
-        };
-        let length = insert.chars().count();
-        if let Some(attributes) = attributes.filter(|attributes| !attributes.is_empty()) {
-            rich.runs.push(Run {
-                start: position,
-                end: position + length,
-                style: style_of(
+    text.to_delta()
+        .into_iter()
+        .map(|delta| match delta {
+            TextDelta::Insert { insert, attributes } => Ok(Span {
+                insert,
+                attributes: style_of(
                     attributes
                         .into_iter()
+                        .flatten()
                         .map(|(key, value)| (key, json(value)))
                         .collect(),
                 )?,
-            });
-        }
-        rich.text.push_str(&insert);
-        position += length;
-    }
-    Ok(rich)
+            }),
+            _ => Err(Error::corrupt("a text's delta is not all inserts")),
+        })
+        .collect::<Result<_>>()
+        .map(RichText)
 }
 
-fn write_rich_text(text: &LoroText, rich: &RichText) -> Result<()> {
-    text.insert(0, &rich.text)?;
-    for run in &rich.runs {
-        let Value::Object(marks) = serde_json::to_value(&run.style).expect("styles serialize")
-        else {
-            unreachable!("a style serializes to an object")
-        };
-        for (key, value) in marks.into_iter().filter(|(_, value)| !value.is_null()) {
-            text.mark(run.start..run.end, &key, loro(value))?;
-        }
-    }
-    Ok(())
+/// The delta that writes `rich` into an empty text.
+fn delta(rich: &RichText) -> Vec<TextDelta> {
+    rich.0
+        .iter()
+        .map(|span| {
+            let Value::Object(marks) =
+                serde_json::to_value(&span.attributes).expect("styles serialize")
+            else {
+                unreachable!("a style serializes to an object")
+            };
+            let marks: Vec<(String, LoroValue)> = marks
+                .into_iter()
+                .filter(|(_, value)| !value.is_null())
+                .map(|(key, value)| (key, loro(value)))
+                .collect();
+            TextDelta::Insert {
+                insert: span.insert.clone(),
+                attributes: (!marks.is_empty()).then(|| marks.into_iter().collect()),
+            }
+        })
+        .collect()
 }
 
 /// Fills a new tree node's map.
@@ -331,10 +317,8 @@ pub(crate) fn write_node(
         meta.insert(&key, loro(value))?;
     }
     if let Some(text) = text {
-        write_rich_text(
-            &meta.insert_container(Key::Content.as_ref(), LoroText::new())?,
-            text,
-        )?;
+        meta.insert_container(Key::Content.as_ref(), LoroText::new())?
+            .apply_delta(&delta(text))?;
     }
     Ok(())
 }
@@ -369,7 +353,7 @@ pub(crate) struct Node {
     /// Every property but `content`, as it shows.
     pub props: Map<String, Value>,
     pub text: Option<RichText>,
-    pub generated: BTreeMap<Pointer, Generated>,
+    pub generated: BTreeMap<PointerBuf, Generated>,
     pub origin: Vec<ActionRecord>,
     pub children: Vec<LayerId>,
     pub masks: Vec<LayerId>,
@@ -398,21 +382,18 @@ impl Node {
 
     /// Files the layer names, including in model values kept under
     /// overrides.
-    pub fn files(&self) -> Vec<FileHash> {
+    pub fn files(&self) -> Vec<Hash> {
         if self.kind != LayerKind::Image {
             return Vec::new();
         }
-        let kept = match self
-            .generated
-            .get(&Pointer::new("/file").expect("a valid pointer"))
-        {
+        let kept = match self.generated.get(Pointer::from_static("/file")) {
             Some(Generated::Value(value)) => value.as_ref(),
             _ => None,
         };
         [self.props.get("file"), kept]
             .into_iter()
             .flatten()
-            .filter_map(|value| FileHash::new(value.as_str()?).ok())
+            .filter_map(|value| Hash::try_from(value.as_str()?.to_owned()).ok())
             .collect()
     }
 
@@ -447,15 +428,6 @@ fn size(page: &LoroMap) -> Result<Size> {
     Ok(Size {
         width: uint(page, Key::Width)?,
         height: uint(page, Key::Height)?,
-    })
-}
-
-pub(crate) fn page_summary(page: &LoroMap, index: usize) -> Result<PageSummary> {
-    Ok(PageSummary {
-        id: id(page)?,
-        index,
-        size: size(page)?,
-        layers: tree(page)?.get_nodes(false).len(),
     })
 }
 
@@ -526,12 +498,8 @@ fn read_node(meta: &LoroMap) -> Result<Node> {
             (Ok(Key::Generated), ValueOrContainer::Container(Container::Map(map))) => {
                 node.generated = read_generated(&map)?
             }
-            (Ok(Key::Origin), ValueOrContainer::Container(Container::List(list))) => {
-                node.origin = list
-                    .to_vec()
-                    .into_iter()
-                    .map(|record| serde_json::from_value(json(record)).map_err(Error::corrupt))
-                    .collect::<Result<_>>()?;
+            (Ok(Key::Origin), ValueOrContainer::Value(origin)) => {
+                node.origin = serde_json::from_value(json(origin)).map_err(Error::corrupt)?;
             }
             (_, ValueOrContainer::Value(value)) => {
                 node.props.insert(key, json(value));
@@ -553,16 +521,16 @@ fn read_node(meta: &LoroMap) -> Result<Node> {
     Ok(node)
 }
 
-fn read_generated(map: &LoroMap) -> Result<BTreeMap<Pointer, Generated>> {
+fn read_generated(map: &LoroMap) -> Result<BTreeMap<PointerBuf, Generated>> {
     let mut entries = Vec::new();
     map.for_each(|key, value| entries.push((key.to_owned(), value)));
     entries
         .into_iter()
         .map(|(key, value)| {
-            let path = Pointer::new(key).map_err(Error::corrupt)?;
+            let path = PointerBuf::parse(key).map_err(Error::corrupt)?;
             let generated = match value {
                 ValueOrContainer::Container(Container::Text(text))
-                    if path == Pointer::content() =>
+                    if path == crate::model::CONTENT =>
                 {
                     Generated::Text(rich_text(&text)?)
                 }
@@ -594,7 +562,7 @@ pub(crate) fn layer_pages(doc: &LoroDoc) -> Result<(Vec<PageId>, HashMap<LayerId
 
 /// The files an unloaded page's image layers name, read without loading the
 /// page.
-pub(crate) fn page_files(page: &LoroMap) -> Result<Vec<FileHash>> {
+pub(crate) fn page_files(page: &LoroMap) -> Result<Vec<Hash>> {
     let tree = tree(page)?;
     let mut files = Vec::new();
     for node in tree.get_nodes(false) {
@@ -612,7 +580,7 @@ pub(crate) fn page_files(page: &LoroMap) -> Result<Vec<FileHash>> {
             [shown, kept]
                 .into_iter()
                 .flatten()
-                .filter_map(|value| FileHash::new(value.as_str()?).ok()),
+                .filter_map(|value| Hash::try_from(value.as_str()?.to_owned()).ok()),
         );
     }
     Ok(files)

@@ -1,6 +1,6 @@
 use serde::{Serialize, Serializer, ser::SerializeMap};
 
-use crate::{LayerId, Pointer, ProjectId, Read};
+use crate::{LayerId, PointerBuf, ProjectId, Read};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -22,7 +22,7 @@ pub enum Error {
     #[error("{}{}{reason}", op.map(|op| format!("op {op}: ")).unwrap_or_default(), path.as_ref().map(|path| format!("at {:?}: ", path.as_str())).unwrap_or_default())]
     Invalid {
         op: Option<usize>,
-        path: Option<Pointer>,
+        path: Option<PointerBuf>,
         reason: String,
     },
     #[error("op {op}: layer {layer} is locked")]

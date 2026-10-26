@@ -7,6 +7,7 @@
 //! and the in-app agent all use the same [`Op`] and [`Query`] types, and
 //! [`tools()`] generates the agent and MCP tools from them.
 
+mod color;
 mod doc;
 mod error;
 mod model;
@@ -19,6 +20,7 @@ mod tiles;
 mod tools;
 
 pub use error::{Error, Kind, Result};
+pub use loro::TextDelta;
 pub use model::*;
 pub use op::{Author, Edit, Op};
 pub use query::{Answer, Query};

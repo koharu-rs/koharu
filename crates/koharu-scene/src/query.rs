@@ -6,26 +6,21 @@ use serde_json::Value;
 use specta::Type;
 
 use crate::{
-    Error, File, FileHash, History, LanguageTag, Layer, LayerAnswer, LayerId, LayerView,
-    MaskContent, Offset, PageId, PageView, Pointer, ProjectView, Read, Rect, Relationship, Result,
-    Session, StoryEntry, Tiles,
-    doc::{self, Node},
-    state::State,
-    tiles,
+    Error, File, Hash, History, Layer, LayerAnswer, LayerId, LayerView, MaskContent, Offset,
+    PageId, PageView, Pointer, ProjectView, Read, Rect, Relationship, Result, Session, Tiles, doc,
+    state::State, tiles,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "query", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Query {
-    /// List the pages in order, with their sizes and layer counts.
+    /// List the pages in order, each with its layer tree, without pixels or
+    /// file bytes.
     GetProject,
     /// Get one page's layer tree, without pixels or file bytes.
     GetPage { page: PageId },
     /// Get one layer and where it sits.
     GetLayer { layer: LayerId },
-    /// List each translation on a page, paired with the OCR text it came
-    /// from.
-    GetStory { page: PageId },
     /// Get the undo and redo labels.
     GetHistory,
 }
@@ -36,7 +31,6 @@ pub enum Answer {
     Project(ProjectView),
     Page(PageView),
     Layer(Box<LayerAnswer>),
-    Story(Vec<StoryEntry>),
     History(History),
 }
 
@@ -50,7 +44,6 @@ impl Session {
             Query::GetProject => Answer::Project(self.project()?),
             Query::GetPage { page } => Answer::Page(self.page(page)?),
             Query::GetLayer { layer } => Answer::Layer(Box::new(self.layer(layer)?)),
-            Query::GetStory { page } => Answer::Story(self.story(page)?),
             Query::GetHistory => Answer::History(self.history()),
         })
     }
@@ -59,10 +52,11 @@ impl Session {
         Ok(ProjectView {
             id: self.id,
             version: doc::version(&self.doc)?.to_string(),
-            pages: doc::page_maps(&self.doc)?
+            pages: self
+                .index
+                .pages
                 .iter()
-                .enumerate()
-                .map(|(index, page)| doc::page_summary(page, index))
+                .map(|page| self.page(*page))
                 .collect::<Result<_>>()?,
         })
     }
@@ -92,50 +86,7 @@ impl Session {
         })
     }
 
-    /// Each text a model translated from another text, in drawing order.
-    pub fn story(&self, page: PageId) -> Result<Vec<StoryEntry>> {
-        let mut state = self.state();
-        let data = state.page(page)?;
-        let mut order = Vec::new();
-        let mut stack: Vec<LayerId> = data.roots.iter().rev().copied().collect();
-        while let Some(id) = stack.pop() {
-            order.push(id);
-            stack.extend(data.nodes[&id].children.iter().rev());
-        }
-        let mut entries = Vec::new();
-        for id in order {
-            let node = state.node(id)?;
-            let source = node
-                .origin
-                .iter()
-                .flat_map(|action| &action.ingredients)
-                .find(|read| read.relationship == Relationship::ParentOf)
-                .map(|read| read.layer);
-            let Some(source) = source.filter(|source| state.layers.contains_key(source)) else {
-                continue;
-            };
-            let (Some((text, language)), Some((source_text, source_language))) =
-                (text_of(state.node(id)?), text_of(state.node(source)?))
-            else {
-                continue;
-            };
-            entries.push(StoryEntry {
-                translation: id,
-                translation_hash: state.hash(id, &Pointer::root())?,
-                text,
-                language,
-                source,
-                source_hash: state.hash(source, &Pointer::root())?,
-                source_text,
-                source_language,
-                stale: !state.stale(id)?.is_empty(),
-            });
-        }
-        Ok(entries)
-    }
-
     /// The value at `path` and a read of it with the relationship `inputTo`.
-    /// `/pixels` reads as `null`; its hash covers the decoded tiles.
     pub fn read(&self, layer: LayerId, path: &Pointer) -> Result<(Value, Read)> {
         let mut state = self.state();
         let hash = state.hash(layer, path)?;
@@ -145,7 +96,7 @@ impl Session {
             value,
             Read {
                 layer,
-                path: path.clone(),
+                path: path.to_buf(),
                 hash,
                 relationship,
             },
@@ -174,16 +125,9 @@ impl Session {
         })
     }
 
-    pub fn file(&self, hash: &FileHash) -> Result<File> {
+    pub fn file(&self, hash: &Hash) -> Result<File> {
         doc::file(&self.doc, hash)
     }
-}
-
-/// A text layer's plain text and language; `None` for other kinds.
-fn text_of(node: &Node) -> Option<(String, LanguageTag)> {
-    let text = node.text.as_ref()?.text.clone();
-    let language = LanguageTag::new(node.props.get("language")?.as_str()?).ok()?;
-    Some((text, language))
 }
 
 fn view(state: &mut State<'_>, id: LayerId) -> Result<LayerView> {

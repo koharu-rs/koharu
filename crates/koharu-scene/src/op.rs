@@ -11,10 +11,12 @@ use specta::Type;
 use uuid::Uuid;
 
 use crate::{
-    Action, ActionRecord, Created, Error, FileHash, Layer, LayerId, LayerKind, PageChanges, PageId,
-    Pointer, ProjectId, Read, Rect, Ref, Relationship, Result, RichText, Size, SoftwareAgent,
+    Action, ActionRecord, Created, Error, Hash, Layer, LayerId, LayerKind, PageChanges, PageId,
+    Pointer, PointerBuf, ProjectId, Read, Rect, Ref, Relationship, Result, RichText, Size,
+    SoftwareAgent,
     doc::{self, Generated, Key, PageData},
     error::Kind,
+    model::CONTENT,
     overrides,
     state::{Index, Slot, State},
     tiles::{self, Changes},
@@ -108,8 +110,8 @@ pub enum Op {
         #[schemars(skip)]
         ingredients: Vec<Read>,
     },
-    /// Replace a text layer's text; styling on unchanged runs is kept.
-    SetLayerText {
+    /// Replace a text layer's text; styling on unchanged spans is kept.
+    SetText {
         layer: Ref,
         text: String,
         #[serde(default)]
@@ -119,28 +121,29 @@ pub enum Op {
     /// Apply a Loro text delta from the rich editor. The edit must read the
     /// layer's `/content`.
     #[schemars(skip)]
-    EditLayerText {
+    EditText {
         layer: Ref,
         #[specta(type = Vec<Value>)]
         #[schemars(with = "Vec<Value>")]
         delta: Vec<TextDelta>,
     },
     /// Replace pixels: RGBA8 for a raster, grey8 for a pixel mask, in the
-    /// layer's pixel coordinates.
+    /// layer's pixel coordinates. Pixels are not a property, so no action
+    /// records writing them.
     #[schemars(skip)]
-    WriteLayerPixels {
+    WritePixels {
         layer: Ref,
         rect: Rect,
         pixels: Vec<u8>,
-        #[serde(default)]
-        ingredients: Vec<Read>,
     },
     /// Delete the overrides at `paths`, or all of them, so the model's values
     /// show again.
-    ResetLayer {
+    Reset {
         layer: Ref,
         #[serde(default)]
-        paths: Option<Vec<Pointer>>,
+        #[specta(type = Option<Vec<String>>)]
+        #[schemars(with = "Option<Vec<String>>")]
+        paths: Option<Vec<PointerBuf>>,
     },
     /// Add an imported file, stored once by its content hash.
     #[schemars(skip)]
@@ -152,8 +155,7 @@ impl Op {
         match self {
             Self::AddLayer { ingredients, .. }
             | Self::UpdateLayer { ingredients, .. }
-            | Self::SetLayerText { ingredients, .. }
-            | Self::WriteLayerPixels { ingredients, .. } => ingredients,
+            | Self::SetText { ingredients, .. } => ingredients,
             _ => &[],
         }
     }
@@ -170,11 +172,11 @@ pub(crate) enum NodeRef {
 /// A low-level write, planned after every check passed.
 pub(crate) enum Write {
     AddFile {
-        hash: FileHash,
+        hash: Hash,
         media_type: String,
         bytes: Vec<u8>,
     },
-    RemoveFile(FileHash),
+    RemoveFile(Hash),
     AddPage {
         id: PageId,
         index: usize,
@@ -219,29 +221,44 @@ pub(crate) enum Write {
 }
 
 pub(crate) enum LayerWrite {
-    Props(Vec<(String, Value)>),
-    /// The text that shows, or the model's text kept under an override.
-    Text {
-        kept: bool,
-        text: String,
-    },
-    Delta(Vec<TextDelta>),
-    /// Copies another layer's text, with its marks: the text that shows, or
-    /// the model's text kept under an override.
-    CopyText {
-        from: NodeRef,
-        kept: bool,
-    },
-    /// Keeps the model's text before the user's first edit.
-    KeepText,
-    /// Shows the kept model text again.
-    RestoreText,
-    /// Sets a kept model value; `None` deletes it.
-    Generated {
-        path: Pointer,
+    /// Sets an entry of the layer's map, or of its `generated` map; `None`
+    /// deletes it.
+    Set {
+        generated: bool,
+        key: String,
         value: Option<LoroValue>,
     },
-    Origin(Vec<ActionRecord>),
+    /// Replaces one of the layer's texts in place, keeping the same
+    /// `LoroText` so cursors into it stay valid.
+    Text { store: TextStore, from: TextFrom },
+}
+
+impl LayerWrite {
+    fn origin(origin: &[ActionRecord]) -> Self {
+        Self::Set {
+            generated: false,
+            key: Key::Origin.as_ref().to_owned(),
+            value: Some(doc::loro(
+                serde_json::to_value(origin).expect("actions serialize"),
+            )),
+        }
+    }
+}
+
+/// The text that shows, or the model's text kept under an override.
+#[derive(Clone, Copy)]
+pub(crate) enum TextStore {
+    Shown,
+    Kept,
+}
+
+pub(crate) enum TextFrom {
+    /// A diff against the current text, so marks on unchanged text stay.
+    Plain(String),
+    /// The editor's delta, applied as is.
+    Delta(Vec<TextDelta>),
+    /// Another text, with its marks.
+    Copy { node: NodeRef, store: TextStore },
 }
 
 /// A checked edit and what it changes.
@@ -293,7 +310,7 @@ struct Planner<'s, 'd> {
     /// This edit's action on each layer a model wrote.
     actions: BTreeMap<LayerId, ActionRecord>,
     /// Files that may have lost their last reference.
-    files: BTreeSet<FileHash>,
+    files: BTreeSet<Hash>,
 }
 
 impl Planner<'_, '_> {
@@ -389,7 +406,7 @@ impl Planner<'_, '_> {
         &mut self,
         op: usize,
         layer: LayerId,
-        writes: Vec<Pointer>,
+        writes: Vec<PointerBuf>,
         ingredients: &[Read],
     ) -> Result<()> {
         let Some(action) = self.model().cloned() else {
@@ -466,19 +483,18 @@ impl Planner<'_, '_> {
                 patch,
                 ingredients,
             } => self.update_layer(index, layer, patch, ingredients),
-            Op::SetLayerText {
+            Op::SetText {
                 layer,
                 text,
                 ingredients,
             } => self.set_text(index, layer, text, ingredients),
-            Op::EditLayerText { layer, delta } => self.edit_text(index, layer, delta),
-            Op::WriteLayerPixels {
+            Op::EditText { layer, delta } => self.edit_text(index, layer, delta),
+            Op::WritePixels {
                 layer,
                 rect,
                 pixels,
-                ingredients,
-            } => self.write_pixels(index, layer, *rect, pixels, ingredients),
-            Op::ResetLayer { layer, paths } => self.reset(index, layer, paths.as_deref()),
+            } => self.write_pixels(index, layer, *rect, pixels),
+            Op::Reset { layer, paths } => self.reset(index, layer, paths.as_deref()),
             Op::AddFile { media_type, bytes } => self.add_file(index, media_type, bytes),
         }
     }
@@ -589,17 +605,16 @@ impl Planner<'_, '_> {
             }
             None => None,
         };
-        self.check(op, layer)?;
-        let Value::Object(mut props) = serde_json::to_value(layer).expect("layers serialize")
-        else {
-            unreachable!("a layer serializes to an object")
-        };
-        props.remove(Key::Kind.as_ref());
+        let kind = LayerKind::from(layer);
+        // The round trip through JSON rejects what JSON can't hold, such as
+        // a NaN from a Rust caller.
+        let props = self.normalize(
+            op,
+            kind,
+            serde_json::to_value(layer).expect("layers serialize"),
+        )?;
         let text = match layer {
-            Layer::Text(text) => {
-                props.remove(Key::Content.as_ref());
-                Some(text.content.clone())
-            }
+            Layer::Text(text) => Some(text.content.clone()),
             _ => None,
         };
         let (uuid, label) = self.new_id(op, id)?;
@@ -608,7 +623,7 @@ impl Planner<'_, '_> {
             id,
             tree_id: None,
             parent,
-            kind: layer.kind(),
+            kind,
             props: props.clone(),
             text: text.clone(),
             generated: BTreeMap::new(),
@@ -625,13 +640,13 @@ impl Planner<'_, '_> {
             id,
             parent,
             index,
-            kind: layer.kind(),
+            kind,
             props,
             text,
         });
         self.out.created.push(Created::Layer { id, label });
         self.touch(page, id);
-        self.record(op, id, vec![Pointer::root()], ingredients)
+        self.record(op, id, vec![PointerBuf::new()], ingredients)
     }
 
     fn duplicate_layer(
@@ -687,15 +702,19 @@ impl Planner<'_, '_> {
                 text: original.text.as_ref().map(|_| RichText::default()),
             });
             if original.text.is_some() {
-                let from = self.node_ref(from)?;
-                self.push_layer(page, to, LayerWrite::CopyText { from, kept: false })?;
-                if let Some(Generated::Text(_)) = original.generated.get(&Pointer::content()) {
-                    self.push_layer(page, to, LayerWrite::CopyText { from, kept: true })?;
+                let node = self.node_ref(from)?;
+                let mut stores = vec![TextStore::Shown];
+                if let Some(Generated::Text(_)) = original.generated.get(CONTENT) {
+                    stores.push(TextStore::Kept);
+                }
+                for store in stores {
+                    let from = TextFrom::Copy { node, store };
+                    self.push_layer(page, to, LayerWrite::Text { store, from })?;
                 }
             }
             self.write_generated(page, to, &BTreeMap::new(), &original.generated)?;
             if !original.origin.is_empty() {
-                self.push_layer(page, to, LayerWrite::Origin(original.origin.clone()))?;
+                self.push_layer(page, to, LayerWrite::origin(&original.origin))?;
             }
             if original.pixel_format().is_some() {
                 let tiles = self.state.tiles(from)?.clone();
@@ -775,17 +794,14 @@ impl Planner<'_, '_> {
             .model()
             .map(|action| action.software_agent.name.clone())
         {
-            let created_by = |action: &Action| {
-                action.action == "c2pa.created" && action.software_agent.name == agent
-            };
-            // A layer created earlier in this edit has its action in
-            // `actions` until `finish`.
-            let created = match self.state.node(id)?.origin.first() {
-                Some(first) => created_by(&first.action),
-                None => self.actions.get(&id).is_some_and(|record| {
-                    created_by(&record.action) && record.writes.contains(&Pointer::root())
-                }),
-            };
+            // Only creating a layer writes all of it, and a rerun keeps that
+            // write with the model's latest action. A layer created earlier in
+            // this edit has its action in `actions` until `finish`.
+            let origin = self.state.node(id)?.origin.clone();
+            let created = origin.iter().chain(self.actions.get(&id)).any(|record| {
+                record.action.software_agent.name == agent
+                    && record.writes.iter().any(|path| path.is_root())
+            });
             if !created {
                 return Err(Error::invalid(
                     op,
@@ -856,7 +872,7 @@ impl Planner<'_, '_> {
             // patch names, so its ingredients replace the old ones.
             let named = fields
                 .keys()
-                .map(|key| Pointer::root().child(key))
+                .map(|key| Pointer::root().with_trailing_token(key))
                 .collect();
             return self.record(op, id, named, ingredients);
         }
@@ -921,19 +937,23 @@ impl Planner<'_, '_> {
         self.unlocked(op, id)?;
         let kept = self.text_store(page, id)?;
         let node = self.state.node(id)?;
-        match node.generated.get_mut(&Pointer::content()) {
-            Some(Generated::Text(model)) if kept => model.text = text.to_owned(),
+        match node.generated.get_mut(CONTENT) {
+            Some(Generated::Text(model)) if kept => *model = RichText::from(text),
             _ => node.text = Some(RichText::from(text)),
         }
         self.push_layer(
             page,
             id,
             LayerWrite::Text {
-                kept,
-                text: text.to_owned(),
+                store: if kept {
+                    TextStore::Kept
+                } else {
+                    TextStore::Shown
+                },
+                from: TextFrom::Plain(text.to_owned()),
             },
         )?;
-        self.record(op, id, vec![Pointer::content()], ingredients)
+        self.record(op, id, vec![CONTENT.to_buf()], ingredients)
     }
 
     fn edit_text(&mut self, op: usize, layer: &Ref, delta: &[TextDelta]) -> Result<()> {
@@ -943,7 +963,7 @@ impl Planner<'_, '_> {
             .edit
             .reads
             .iter()
-            .any(|read| read.layer == id && read.path == Pointer::content())
+            .any(|read| read.layer == id && read.path == CONTENT)
         {
             return Err(Error::invalid(
                 op,
@@ -953,10 +973,17 @@ impl Planner<'_, '_> {
         self.unlocked(op, id)?;
         let current = self.state.node(id)?.text.clone().unwrap_or_default();
         let text =
-            apply_delta(&current.text, delta).map_err(|reason| Error::invalid(op, reason))?;
+            apply_delta(&current.text(), delta).map_err(|reason| Error::invalid(op, reason))?;
         self.text_store(page, id)?;
         self.state.node(id)?.text = Some(RichText::from(text.as_str()));
-        self.push_layer(page, id, LayerWrite::Delta(delta.to_vec()))
+        self.push_layer(
+            page,
+            id,
+            LayerWrite::Text {
+                store: TextStore::Shown,
+                from: TextFrom::Delta(delta.to_vec()),
+            },
+        )
     }
 
     fn text_layer(&mut self, op: usize, layer: &Ref) -> Result<(LayerId, PageId)> {
@@ -976,26 +1003,25 @@ impl Planner<'_, '_> {
     fn text_store(&mut self, page: PageId, id: LayerId) -> Result<bool> {
         let model = self.model().is_some();
         let node = self.state.node(id)?;
-        let overridden = node.generated.contains_key(&Pointer::content());
+        let overridden = node.generated.contains_key(CONTENT);
         if model {
             return Ok(overridden);
         }
-        if !overridden && overrides::owned(&node.origin, &Pointer::content()) {
+        if !overridden && overrides::owned(&node.origin, CONTENT) {
             let text = Generated::Text(node.text.clone().unwrap_or_default());
-            node.generated.insert(Pointer::content(), text);
-            self.push_layer(page, id, LayerWrite::KeepText)?;
+            node.generated.insert(CONTENT.to_buf(), text);
+            let node = self.node_ref(id)?;
+            let from = TextFrom::Copy {
+                node,
+                store: TextStore::Shown,
+            };
+            let store = TextStore::Kept;
+            self.push_layer(page, id, LayerWrite::Text { store, from })?;
         }
         Ok(false)
     }
 
-    fn write_pixels(
-        &mut self,
-        op: usize,
-        layer: &Ref,
-        rect: Rect,
-        pixels: &[u8],
-        ingredients: &[Read],
-    ) -> Result<()> {
+    fn write_pixels(&mut self, op: usize, layer: &Ref, rect: Rect, pixels: &[u8]) -> Result<()> {
         let (id, page) = self.layer_ref(layer)?;
         let Some(format) = self.state.node(id)?.pixel_format() else {
             return Err(Error::invalid(op, format!("layer {id} has no pixels")));
@@ -1019,17 +1045,17 @@ impl Planner<'_, '_> {
             tiles,
         });
         self.touch(page, id);
-        self.record(op, id, vec![Pointer::pixels()], ingredients)
+        Ok(())
     }
 
-    fn reset(&mut self, op: usize, layer: &Ref, paths: Option<&[Pointer]>) -> Result<()> {
+    fn reset(&mut self, op: usize, layer: &Ref, paths: Option<&[PointerBuf]>) -> Result<()> {
         self.user_only(op, "reset overrides")?;
         let (id, page) = self.layer_ref(layer)?;
         self.unlocked(op, id)?;
         let node = self.state.node(id)?.clone();
         let paths = paths.map_or_else(
             || node.generated.keys().cloned().collect(),
-            <[Pointer]>::to_vec,
+            <[PointerBuf]>::to_vec,
         );
         let mut shown = node.props.clone();
         let mut generated = node.generated.clone();
@@ -1045,13 +1071,22 @@ impl Planner<'_, '_> {
                 }
                 Some(Generated::Text(model)) => {
                     text = Some(model);
-                    self.push_layer(page, id, LayerWrite::RestoreText)?;
+                    let node = self.node_ref(id)?;
+                    let from = TextFrom::Copy {
+                        node,
+                        store: TextStore::Kept,
+                    };
+                    let store = TextStore::Shown;
+                    self.push_layer(page, id, LayerWrite::Text { store, from })?;
                 }
-                Some(Generated::Value(value)) => {
-                    overrides::set(&mut shown, &path, value);
-                    self.push_layer(page, id, LayerWrite::Generated { path, value: None })?;
-                }
+                Some(Generated::Value(value)) => overrides::set(&mut shown, &path, value),
             }
+            let write = LayerWrite::Set {
+                generated: true,
+                key: path.as_str().to_owned(),
+                value: None,
+            };
+            self.push_layer(page, id, write)?;
         }
         let shown = self.normalize(op, node.kind, Value::Object(shown))?;
         self.files.extend(node.files());
@@ -1068,7 +1103,7 @@ impl Planner<'_, '_> {
         if media_type.is_empty() {
             return Err(Error::invalid(op, "a file needs a media type"));
         }
-        let hash = FileHash::of(bytes);
+        let hash = Hash::of(bytes);
         if self.state.files.to_mut().insert(hash.clone()) {
             self.out.writes.push(Write::AddFile {
                 hash,
@@ -1086,44 +1121,47 @@ impl Planner<'_, '_> {
         old: &Map<String, Value>,
         new: &Map<String, Value>,
     ) -> Result<()> {
-        let props: Vec<(String, Value)> = new
+        for (key, value) in new
             .iter()
             .filter(|(key, value)| old.get(*key) != Some(value))
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect();
-        if props.is_empty() {
-            return Ok(());
+        {
+            let write = LayerWrite::Set {
+                generated: false,
+                key: key.clone(),
+                value: Some(doc::loro(value.clone())),
+            };
+            self.push_layer(page, id, write)?;
         }
-        self.push_layer(page, id, LayerWrite::Props(props))
+        Ok(())
     }
 
     fn write_generated(
         &mut self,
         page: PageId,
         id: LayerId,
-        old: &BTreeMap<Pointer, Generated>,
-        new: &BTreeMap<Pointer, Generated>,
+        old: &BTreeMap<PointerBuf, Generated>,
+        new: &BTreeMap<PointerBuf, Generated>,
     ) -> Result<()> {
         for path in old.keys().filter(|path| !new.contains_key(*path)) {
-            self.push_layer(
-                page,
-                id,
-                LayerWrite::Generated {
-                    path: path.clone(),
-                    value: None,
-                },
-            )?;
+            let write = LayerWrite::Set {
+                generated: true,
+                key: path.as_str().to_owned(),
+                value: None,
+            };
+            self.push_layer(page, id, write)?;
         }
         for (path, generated) in new {
             if let Generated::Value(value) = generated
                 && old.get(path) != Some(generated)
             {
+                let key = path.as_str().to_owned();
                 let value = Some(doc::wrap(value.clone()));
                 self.push_layer(
                     page,
                     id,
-                    LayerWrite::Generated {
-                        path: path.clone(),
+                    LayerWrite::Set {
+                        generated: true,
+                        key,
                         value,
                     },
                 )?;
@@ -1132,9 +1170,8 @@ impl Planner<'_, '_> {
         Ok(())
     }
 
-    /// The model's own checks, plus that a named file exists.
-    fn check(&self, op: usize, layer: &Layer) -> Result<()> {
-        layer.check().map_err(|reason| Error::invalid(op, reason))?;
+    /// That a named file exists.
+    fn check_file(&self, op: usize, layer: &Layer) -> Result<()> {
         if let Layer::Image(image) = layer
             && !self.state.files.contains(&image.file)
         {
@@ -1146,8 +1183,8 @@ impl Planner<'_, '_> {
         Ok(())
     }
 
-    /// Deserializes properties into their kind's struct, checks them, and
-    /// returns them as stored: everything but `kind` and a text's `content`.
+    /// Deserializes properties into their kind's struct and returns them as
+    /// stored: everything but `kind` and a text's `content`.
     fn normalize(&self, op: usize, kind: LayerKind, value: Value) -> Result<Map<String, Value>> {
         let Value::Object(mut map) = value else {
             return Err(Error::invalid(op, "a layer must be an object"));
@@ -1155,7 +1192,7 @@ impl Planner<'_, '_> {
         map.insert(Key::Kind.as_ref().to_owned(), kind.as_ref().into());
         let layer: Layer = serde_json::from_value(Value::Object(map))
             .map_err(|error| Error::invalid(op, error.to_string()))?;
-        self.check(op, &layer)?;
+        self.check_file(op, &layer)?;
         let Value::Object(mut props) = serde_json::to_value(&layer).expect("layers serialize")
         else {
             unreachable!("a layer serializes to an object")
@@ -1172,8 +1209,8 @@ impl Planner<'_, '_> {
             let page = self.state.page_of(id)?;
             let node = self.state.node(id)?;
             overrides::take_over(&mut node.origin, action);
-            let origin = node.origin.clone();
-            self.push_layer(page, id, LayerWrite::Origin(origin))?;
+            let write = LayerWrite::origin(&node.origin);
+            self.push_layer(page, id, write)?;
         }
         if !self.files.is_empty() {
             let used = self.state.files_in_use()?;
@@ -1235,7 +1272,7 @@ fn place(data: &mut PageData, node: doc::Node, index: usize) -> Result<usize, St
 }
 
 /// Applies a delta to plain text, checking that it stays in bounds and uses
-/// valid marks.
+/// known marks.
 fn apply_delta(text: &str, delta: &[TextDelta]) -> Result<String, String> {
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::new();
@@ -1269,9 +1306,7 @@ fn apply_delta(text: &str, delta: &[TextDelta]) -> Result<String, String> {
             .flatten()
             .map(|(key, value)| (key.clone(), doc::json(value.clone())))
             .collect();
-        doc::style_of(marks)
-            .map_err(|error| error.to_string())?
-            .check()?;
+        doc::style_of(marks).map_err(|error| error.to_string())?;
     }
     out.extend(&chars[position..]);
     Ok(out)
@@ -1338,63 +1373,50 @@ pub(crate) fn execute(doc: &LoroDoc, writes: Vec<Write>) -> Result<()> {
                 let (_, tree) = page_of(doc, &mut pages, page)?;
                 let meta = tree.get_meta(resolve(&created, node))?;
                 match write {
-                    LayerWrite::Props(props) => {
-                        for (key, value) in props {
-                            meta.insert(&key, doc::loro(value))?;
-                        }
-                    }
-                    LayerWrite::Text { kept, text } => {
-                        let target = if kept {
-                            doc::text(&doc::generated(&meta)?, Pointer::content().as_str())?
-                        } else {
-                            doc::content(&meta)?
+                    LayerWrite::Set {
+                        generated,
+                        key,
+                        value,
+                    } => {
+                        let map = match generated {
+                            true => doc::generated(&meta)?,
+                            false => meta,
                         };
-                        target
-                            .update(&text, UpdateOptions::default())
-                            .map_err(|_| Error::corrupt("a text update timed out"))?;
-                    }
-                    LayerWrite::Delta(delta) => doc::content(&meta)?.apply_delta(&delta)?,
-                    LayerWrite::CopyText { from, kept } => {
-                        let source = tree.get_meta(resolve(&created, from))?;
-                        if kept {
-                            let delta =
-                                doc::text(&doc::generated(&source)?, Pointer::content().as_str())?
-                                    .to_delta();
-                            doc::generated(&meta)?
-                                .insert_container(Pointer::content().as_str(), LoroText::new())?
-                                .apply_delta(&delta)?;
-                        } else {
-                            doc::content(&meta)?.apply_delta(&doc::content(&source)?.to_delta())?;
-                        }
-                    }
-                    LayerWrite::KeepText => {
-                        let delta = doc::content(&meta)?.to_delta();
-                        doc::generated(&meta)?
-                            .insert_container(Pointer::content().as_str(), LoroText::new())?
-                            .apply_delta(&delta)?;
-                    }
-                    LayerWrite::RestoreText => {
-                        let generated = doc::generated(&meta)?;
-                        let delta = doc::text(&generated, Pointer::content().as_str())?.to_delta();
-                        let text = doc::content(&meta)?;
-                        text.delete(0, text.len_unicode())?;
-                        text.apply_delta(&delta)?;
-                        generated.delete(Pointer::content().as_str())?;
-                    }
-                    LayerWrite::Generated { path, value } => {
-                        let generated = doc::generated(&meta)?;
                         match value {
-                            Some(value) => generated.insert(path.as_str(), value)?,
-                            None => generated.delete(path.as_str())?,
+                            Some(value) => map.insert(&key, value)?,
+                            None => map.delete(&key)?,
                         }
                     }
-                    LayerWrite::Origin(origin) => {
-                        let list = doc::origin(&meta)?;
-                        list.clear()?;
-                        for action in origin {
-                            list.push(doc::loro(
-                                serde_json::to_value(action).expect("actions serialize"),
-                            ))?;
+                    LayerWrite::Text { store, from } => {
+                        let target = match store {
+                            TextStore::Shown => doc::content(&meta)?,
+                            // Made fresh when missing, so a deleted kept
+                            // text never comes back.
+                            TextStore::Kept => {
+                                let generated = doc::generated(&meta)?;
+                                match doc::text(&generated, CONTENT.as_str()) {
+                                    Ok(text) => text,
+                                    Err(_) => generated
+                                        .insert_container(CONTENT.as_str(), LoroText::new())?,
+                                }
+                            }
+                        };
+                        match from {
+                            TextFrom::Plain(text) => target
+                                .update(&text, UpdateOptions::default())
+                                .map_err(|_| Error::corrupt("a text update timed out"))?,
+                            TextFrom::Delta(delta) => target.apply_delta(&delta)?,
+                            TextFrom::Copy { node, store } => {
+                                let source = tree.get_meta(resolve(&created, node))?;
+                                let source = match store {
+                                    TextStore::Shown => doc::content(&source)?,
+                                    TextStore::Kept => {
+                                        doc::text(&doc::generated(&source)?, CONTENT.as_str())?
+                                    }
+                                };
+                                target.delete(0, target.len_unicode())?;
+                                target.apply_delta(&source.to_delta())?;
+                            }
                         }
                     }
                 }
