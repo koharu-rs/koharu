@@ -81,7 +81,7 @@ fn main() -> Result<()> {
     ]))?;
     let text = match &change.created[1] {
         koharu_scene::Created::Layer { id, .. } => *id,
-        koharu_scene::Created::Page { .. } => unreachable!("the layer comes second"),
+        _ => unreachable!("the layer comes second"),
     };
     // `Session` is `Send` and `Sync`, so it can sit behind a mutex that the
     // UI and background work share.

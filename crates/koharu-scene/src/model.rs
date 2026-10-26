@@ -64,6 +64,8 @@ uuid_ids! {
     PageId,
     /// A layer; stored, so it survives undo.
     LayerId,
+    /// A text style; stored, so it survives undo.
+    StyleId,
 }
 
 /// An existing page or layer id, or `$label` for one created earlier in the
@@ -123,6 +125,12 @@ impl From<LayerId> for Ref {
     }
 }
 
+impl From<StyleId> for Ref {
+    fn from(id: StyleId) -> Self {
+        Self(id.to_string())
+    }
+}
+
 /// SVG path data.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(try_from = "String")]
@@ -161,6 +169,14 @@ impl TryFrom<String> for Hash {
         } else {
             Err(format!("{s:?} is not a BLAKE3 hash"))
         }
+    }
+}
+
+impl std::str::FromStr for Hash {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        Self::try_from(s.to_owned())
     }
 }
 
@@ -301,6 +317,41 @@ pub enum MaskMode {
     Intersect,
 }
 
+/// How a box's text meets the box.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Fit {
+    /// Text that would overflow shrinks just enough to fit, down to half its
+    /// size.
+    #[default]
+    Shrink,
+    /// The set size always.
+    None,
+    /// The box keeps its inline size, and its block size follows the text,
+    /// growing away from its anchor.
+    Grow,
+}
+
+/// How a path's text meets the path: as a box's, but a path never grows.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PathFit {
+    #[default]
+    Shrink,
+    None,
+}
+
+/// Where the lines sit along a frame's block axis, which follows the writing
+/// direction.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Anchor {
+    #[default]
+    Start,
+    Center,
+    End,
+}
+
 /// Where a text lays out. Externally tagged, so a merge patch can switch
 /// variants: `{"frame": {"path": {"path": "M…"}, "box": null}}`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
@@ -310,9 +361,21 @@ pub enum Frame {
     #[default]
     Point,
     /// Paragraph text wrapping inside a box, in the text's own coordinates.
-    Box { bounds: Bounds },
+    Box {
+        bounds: Bounds,
+        #[serde(default)]
+        fit: Fit,
+        #[serde(default)]
+        anchor: Anchor,
+    },
     /// Text filling a closed path, in the text's own coordinates.
-    Path { path: Path },
+    Path {
+        path: Path,
+        #[serde(default)]
+        fit: PathFit,
+        #[serde(default)]
+        anchor: Anchor,
+    },
 }
 
 /// What a mask is made of.
@@ -366,6 +429,23 @@ pub struct CharStyle {
     pub stroke_width: Option<f64>,
 }
 
+impl CharStyle {
+    /// These values, with `base`'s where these have none.
+    #[must_use]
+    pub fn or(&self, base: &Self) -> Self {
+        Self {
+            family: self.family.clone().or_else(|| base.family.clone()),
+            weight: self.weight.or(base.weight),
+            italic: self.italic.or(base.italic),
+            size: self.size.or(base.size),
+            fill: self.fill.or(base.fill),
+            stroke: self.stroke.or(base.stroke),
+            stroke_width: self.stroke_width.or(base.stroke_width),
+        }
+    }
+}
+
+/// Character and paragraph values. A text's own win over its text style's.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TextStyle {
@@ -373,7 +453,33 @@ pub struct TextStyle {
     pub chars: CharStyle,
     /// A paragraph key: style only, never a mark.
     #[serde(default)]
-    pub align: Align,
+    pub align: Option<Align>,
+    /// A paragraph key: a multiple of each line's largest size.
+    #[serde(default)]
+    pub line_height: Option<f64>,
+}
+
+impl TextStyle {
+    /// These values, with `base`'s where these have none.
+    #[must_use]
+    pub fn or(&self, base: &Self) -> Self {
+        Self {
+            chars: self.chars.or(&base.chars),
+            align: self.align.or(base.align),
+            line_height: self.line_height.or(base.line_height),
+        }
+    }
+}
+
+/// A text style the project keeps, which every text naming it takes its
+/// unset values from.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NamedStyle {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub style: TextStyle,
 }
 
 /// Text as the inserts of a Loro text delta: spans in order, each with its
@@ -563,6 +669,9 @@ pub struct TextLayer {
     pub content: RichText,
     #[serde(default)]
     pub style: TextStyle,
+    /// The text style the values `style` leaves unset come from.
+    #[serde(default)]
+    pub text_style: Option<StyleId>,
     #[serde(default)]
     pub frame: Frame,
     #[serde(default)]
@@ -610,7 +719,7 @@ pub enum Layer {
     Image(ImageLayer),
     Raster(RasterLayer),
     Shape(ShapeLayer),
-    Text(TextLayer),
+    Text(Box<TextLayer>),
     Mask(MaskLayer),
 }
 
@@ -699,6 +808,26 @@ pub struct ProjectView {
     pub version: String,
     /// In order.
     pub pages: Vec<PageView>,
+    /// In the order they were added.
+    pub styles: Vec<StyleView>,
+}
+
+/// A text style with what models wrote in it, as a layer's view has.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+pub struct StyleView {
+    pub id: StyleId,
+    /// The hash of the style's values.
+    pub hash: Hash,
+    pub style: NamedStyle,
+    pub origin: Vec<ActionRecord>,
+    /// Paths where the user's value replaced a model's.
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
+    pub overrides: Vec<PointerBuf>,
+    /// Paths a model wrote whose ingredients have changed since.
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
+    pub stale: Vec<PointerBuf>,
 }
 
 /// A page's layer tree, first drawn first, without pixels or file bytes.
@@ -724,6 +853,11 @@ pub struct LayerView {
     #[specta(type = Vec<String>)]
     #[schemars(with = "Vec<String>")]
     pub stale: Vec<PointerBuf>,
+    /// For a text naming a text style, the `style` paths it sets over the
+    /// style's.
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
+    pub style_overrides: Vec<PointerBuf>,
     /// Drawn children, first to last.
     pub children: Vec<LayerView>,
     /// Masks, applied in order; not drawn.
@@ -776,6 +910,7 @@ pub struct File {
 pub enum Created {
     Page { id: PageId, label: Option<String> },
     Layer { id: LayerId, label: Option<String> },
+    Style { id: StyleId, label: Option<String> },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
@@ -794,6 +929,8 @@ pub struct Change {
     pub pages: PageChanges,
     /// Changed or removed layers.
     pub layers: BTreeSet<LayerId>,
+    /// Changed or removed text styles; texts naming them change with them.
+    pub styles: BTreeSet<StyleId>,
     /// Layers a model's removal skipped because the user changed them.
     pub kept: Vec<LayerId>,
     pub history: History,

@@ -151,7 +151,7 @@ fn a_models_variant_switch_widens_the_users_override() {
         vec![pointer("/frame")]
     );
     assert!(
-        matches!(text(&session, layer).frame, Frame::Box { bounds } if bounds.x == 5.0),
+        matches!(text(&session, layer).frame, Frame::Box { bounds, .. } if bounds.x == 5.0),
         "the user's frame still shows"
     );
     session
