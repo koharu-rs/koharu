@@ -1,260 +1,304 @@
 # koharu-renderer
 
-`koharu-renderer` turns one page from `koharu-scene` into retained Vello content
-and, when requested, pixels. The editor canvas, flattened image export, and PSD
-export must all use the same rendering result.
-
-This document describes a behavior-preserving redesign with explicit dead-code
-removal. Rust APIs may change, but scene meaning, active product behavior,
-editor behavior, export behavior, and document compatibility may not change as
-a side effect of the refactor. Dormant policy with no intended product use is
-deleted rather than carried into the new design.
-
-## Design constraints
-
-- Keep the existing crate. Do not introduce another rendering crate.
-- Use the names `Renderer`, `Frame`, `Layer`, and `Raster`; do not introduce
-  `RenderEngine`, `RenderPage`, or similarly indirect names.
-- A caller asks for a rendered page once. There is no public `compose` /
-  `compose_complete` pair and no public intermediate `Composition`.
-- Remove `request.rs` and `RenderRequest`. The complete rendering input is a
-  `Snapshot` and page ID; there is no renderer configuration object.
-- Do not add compatibility wrappers or aliases. Update in-repository callers
-  directly when the implementation is migrated.
-- Every setting, diagnostic, cache, and public method must have a current
-  in-repository consumer. Remove policy that exists only for hypothetical use.
-- Operations that can perform storage I/O, font loading, image decoding, or GPU
-  work are asynchronous. Access to an already built `Frame` stays synchronous.
-- Refactoring ownership is not permission to change product behavior.
-
-## Preserved behavior
-
-The new implementation must first reproduce the active renderer behavior:
-
-| Area | Required behavior |
-| --- | --- |
-| Page background | Render the document's source page image. There is no caller-selected asset-role preference list. |
-| Child images | Render explicit image/raster entities in scene order with their geometry. |
-| Text choice | Render `Translation` only. `SourceText` remains semantic OCR input and editable document data, but is never visual renderer input. A text entity without a translation produces no glyph content. |
-| Typography | Preserve writing mode, alignment, font chain, fallback, size, auto-fit, line height, spacing, insets, fill, and stroke. |
-| Fitting | Preserve text-to-region and text-to-bubble fitting, including overflow diagnostics without clipping authored glyphs. |
-| Presentation | Preserve group ancestry, visibility, opacity, resolved presentation, and deferred presentation used by interactive previews. |
-| Layer access | Preserve ordered layers, per-entity lookup, per-entity vector embedding, and tightly cropped entity output. |
-| Diagnostics | Preserve missing assets, overflow, minimum readable size, and resource errors as applicable. |
-| Export | PNG and PSD must consume the same retained vector result as the canvas. |
-| Limits | Preserve finite/positive dimension checks, surface limits, decode validation, and supersampling bounds. |
-
-Source-text fallback is intentionally removed. Delete
-`fallback_to_source_text`, `RenderDiagnostic::UsedSourceText`, their branches,
-and their tests. Output, previews, PSD export, pipeline utilities, and canvas
-must all use the same translation-only rule. No caller-specific fallback flag
-replaces it.
-
-Any other intentional product change must be implemented and tested separately
-from the ownership migration.
+`koharu-renderer` draws a page of a [`koharu-scene`](../koharu-scene/README.md)
+project with [vello]. The desktop canvas, PNG and CBZ export, and PSD export all
+draw the same `Frame`, so every export writes what the editor shows. The scene
+README says what a page holds and means. This crate lays out its text,
+composites its layers, and turns it into pixels.
 
 ## Ownership
 
-### `koharu-scene`
+| Owner | Owns |
+|---|---|
+| `koharu-scene` | what the page holds and means; the renderer reads a `Session` and never writes to it |
+| `Renderer` | fonts (discovery, the bundled fonts, fallback, and their caches), decoded files, raster tiles, retained layer scenes, and the one wgpu device and vello renderer that export and the canvas share |
+| `Frame` | one page at one revision, immutable: its layers' scenes, bounds, and resolved text; cloning it is cheap |
+| the desktop canvas | showing frames in the window under the web UI, which CEF paints off-screen [CEF OSR]; camera, tools, hit testing, selection, overflow marks, and transient previews |
 
-The scene owns persistent meaning:
-
-- page size and hierarchy;
-- asset roles and blob references;
-- text content, translations, typography, geometry, visibility, and relations;
-- revision and change information.
-
-The renderer does not create a second document model and does not write to the
-scene.
-
-### `Renderer`
-
-One long-lived `Renderer` owns all reusable rendering resources:
-
-- font discovery, bundled-font loading, and font caches;
-- decoded-image cache and bounded decode workers;
-- retained vector nodes and their dependency index;
-- the headless Vello rasterizer, GPU context, readback buffers, and target pool.
-
-Cloning `Renderer` shares this state. Construction is cheap and performs no
-blocking work.
-
-### `Frame`
-
-`Frame` is the only public rendered-page value. It is not a forwarding wrapper;
-it owns the immutable result needed by every consumer:
-
-- page ID, scene revision, size, and page-space origin;
-- ordered retained layers;
-- O(1) entity lookup;
-- per-layer geometry, presentation, ancestry, and text metadata;
-- dependencies, diagnostics, and retention statistics;
-- whole-page and per-layer Vello scenes.
-
-`Frame` contains no `Snapshot`, mutable cache, caller policy, or storage handle.
-Cloning it is O(1).
-
-### `Raster`
-
-`Raster` owns CPU-readable RGBA pixels plus their page-space origin. A full
-page and a cropped layer use the same type.
-
-## Public API shape
-
-The target API has one rendering entry point:
+## API
 
 ```rust,ignore
-let renderer = Renderer::new()?;
+let renderer = Renderer::new(typesetting);
 
-let frame = renderer
-    .render(&snapshot, page)
-    .await?;
+let frame = renderer.render(&session, page)?;
 
-let updated = renderer
-    .update(&frame, &snapshot, &change)
-    .await?;
+// The canvas draws what one view of the page needs.
+frame.draw(&mut scene, View { rect, scale });
 
-let raster = renderer
-    .rasterize(&updated, RasterOptions::default())
-    .await?;
+// Exports.
+let composite = renderer.rasterize(&frame)?;
+let own = renderer.rasterize(&frame.cropped(layer)?)?;
+if let Some(mask) = frame.mask(layer)? {
+    let coverage = renderer.rasterize(&mask)?;
+}
+let text = frame.layer(layer).and_then(Layer::text);
+
+let families = renderer.available_fonts()?;
+let preview = renderer.font_preview(family)?;
 ```
 
-`render` is complete when it returns. It performs scene interpretation,
-resource loading, and retained-node construction internally. A caller never
-coordinates a compositor and a scene renderer and never supplies a request
-object.
+- `render` is synchronous. Files and pixel tiles live in memory in the Loro
+  document, so drawing does no storage I/O. The caller renders on a worker
+  thread while it holds a shared borrow of the session, which is `Sync`, and
+  the renderer spreads decoding and layout over rayon.
+- `render` reuses every retained layer whose inputs are unchanged
+  ([Retention](#retention)), so the canvas renders again after every change,
+  whoever made it.
+- `rasterize` renders at the page's pixel size and returns RGBA with its
+  page-space origin. A page and a cropped layer give the same `Raster` type.
+- The renderer follows the typesetting preference as it changes; a new font
+  chain rebuilds text.
 
-There is no settings parameter. Asset selection, layer inclusion, text choice,
-typography, and presentation all come from the scene. Renderer-owned safety
-limits and cache budgets are implementation invariants, not per-render policy.
+## Drawing
 
-`update` produces the same result as `render` for the new snapshot. It is only
-an optimization: unchanged retained nodes are reused through the change and
-dependency indexes. Incorrect or non-contiguous revision input is rejected.
+| Scene | Drawn as |
+|---|---|
+| page | a transparent surface of the page's `size`, with layers drawn first to last |
+| group | a vello layer with the group's blend mode and opacity: its children composite first, then the group blends as one image, as Photoshop composites a group in any mode but Pass Through [Photoshop blending] |
+| pass-through group | its children blend with the layers below the group, as Photoshop's Pass Through [Photoshop blending] and Clip Studio Paint's Through [CSP through] do |
+| raster | its tiles at its `offset` |
+| image | the file, decoded once per content hash, cut into tiles, and drawn through its `transform` |
+| shape | the path filled with its fill rule; a stroke is centred on the path, as Clip Studio Paint draws vector lines [CSP vector lines] and Photoshop's Center alignment does, with miter joins and butt caps, two of Photoshop's stroke options [Photoshop shape strokes] |
+| text | glyph runs from [Text](#text), drawn through its `transform` |
+| hidden layer | nothing, and nothing inside it |
 
-Scene data determines what is rendered. `Frame` retains authored presentation
-metadata so canvas can override visibility and opacity transiently without a
-second document-rendering path. `Frame::cropped` provides one-layer output
-without an entity-selection input to `render`. Raster options remain separate
-because they affect pixel production, not vector content.
+The scene's blend modes are W3C Compositing's separable and non-separable modes,
+which vello's `Mix` implements one for one [W3C compositing].
 
-Already rendered data is synchronous:
+Neither Photoshop nor Clip Studio Paint documents how a pass-through group's own
+opacity and masks apply. The renderer draws the backdrop again inside the
+group's layer, as a non-isolated group includes its backdrop [W3C compositing],
+so the group's opacity and masks fade between the backdrop and the result.
 
-```rust,ignore
-frame.append_to(&mut scene, None);
+A layer's masks are never drawn. They build one coverage in a vello layer, and
+the layer's content is composited into it with `DestIn`. Components apply in
+order, as the scene README says: add with `SrcOver`, subtract with `DestOut`,
+intersect with `DestIn`, starting empty when the first one adds and full
+otherwise. A pixel mask's grey becomes coverage, and a path mask fills its path.
+A hidden component is left out, as Photoshop disables a mask [Photoshop disable
+mask] and Clip Studio Paint unchecks Enable Mask [CSP masks].
 
-if let Some(layer) = frame.layer(entity) {
-    layer.append_to(&mut scene, Some(preview_transform));
-}
+## Rasters and images
 
-if let Some(cropped) = frame.cropped(entity)? {
-    let raster = renderer.rasterize(&cropped, options).await?;
-}
-```
+vello 0.11 draws every image in a frame from one atlas of at most 8192×8192
+pixels [vello atlas], skips an image that doesn't fit [vello overflow], and
+copies even a registered wgpu texture into that atlas each frame [vello
+textures]. A whole page wider or taller than 8192 pixels could never show, and
+an A4 page at 600 dpi (4961×7016) fits only one full-page image per frame. So:
 
-Font-family discovery and preview generation are asynchronous methods on
-`Renderer`; callers do not own a separate public font service.
+- Rasters, pixel masks, and decoded images are cut into 512×512 tiles,
+  assembled from the scene's 64×64 tiles. Each tile carries a one-pixel border
+  from its neighbours, so filtered sampling leaves no seams.
+- Each layer's tiles have levels at half, quarter, and smaller scales, down to
+  a single tile, built the first time a view needs them.
+- A pass draws only the tiles its rectangle meets, at the smallest level at or
+  above the pass's scale.
+- A pass whose tiles hold more pixels than the atlas is split into strips that
+  each fit. The canvas at any zoom and an export at full size take the same
+  path.
 
-## Internal rendering path
+## Text
 
-One call to `render` has four internal phases. These are functions and private
-data, not public lifecycle objects.
+The renderer keeps its own shaping and line breaking (HarfRust, ICU4X
+segmentation, and fontique) because Parley, the rich-text layout crate on the
+same stack, has no vertical writing yet [Parley vertical text], and much manga
+text is vertical.
+
+Each value comes from a span's mark, else the text's `style`, else its text
+style, else this table:
+
+| Value | When unset |
+|---|---|
+| family | the typesetting preference's font chain, then fontique's fallback for the text's script and `language` |
+| weight | the family's regular face, weight 400 [CSS font-weight] |
+| italic | upright |
+| size | 24 px; Photoshop picks its default from the document's resolution and zoom [Photoshop type defaults], and Clip Studio Paint doesn't document one |
+| fill | opaque black |
+| stroke | none |
+| `line_height` | 1.2, Photoshop's Auto leading of 120% [Photoshop spacing] |
+
+The scene stores no kerning, tracking, or hyphenation:
+
+- **Kerning** uses the font's own pairs, as Photoshop's Metrics kerning does
+  [Photoshop spacing]. Tracking is 0.
+- **Hyphenation** is off. Letterers avoid it [Comicraft glossary], and CSS
+  hyphenates only where a text asks for it [CSS hyphens].
+
+### Frames
+
+- **Point text** breaks lines only where the text has a line break, as
+  Photoshop's point type treats each line as a paragraph [Photoshop
+  paragraphs].
+- **Box text** wraps at the box's inline edges.
+- **Path text** sets each line across the inside of the closed path at that
+  line, as Photoshop sets type inside a path [Photoshop type in a path], less
+  half the size on each side: about one letter width, the air letterers leave
+  inside a balloon [Comicraft glossary]. The whole height of the line must fit,
+  so curved edges keep their air too. Where a line meets the inside in several
+  spans, it takes the widest, as CSS Exclusions' `wrap-flow: maximum` flows
+  only beside "the largest available space" [CSS exclusions], so a line never
+  reads across a gap. SVG 2 instead fills every span of a broken line [SVG
+  broken lines], which would carry a line across a balloon's neck.
+- **Several texts in one balloon** each fit their own frame; they share no
+  layout, and each shrinks on its own.
+- **Anchor.** The block of lines sits at the start, centre, or end of the
+  frame's block axis: top, middle, or bottom for horizontal text, and right,
+  middle, or left for vertical text.
+
+### Fit
+
+- **`shrink`.** When the text would overflow at its set size, the renderer
+  draws every span at one scale, the largest that fits, and never below half.
+  It fits again on every render, so typing, deleting, restyling, and resizing
+  the frame all refit live, and a shortened text grows back to its set size, as
+  PowerPoint fits placeholder text "as you type" [PowerPoint placeholders].
+  The text reports the scale, and the canvas marks shrunk text as it marks
+  overflow, because publishers shrink a balloon's text only when rephrasing
+  can't make it fit [Manga translation II].
+- **`none`.** The text keeps its set size.
+- **`grow`.** The box keeps its inline size and its block size follows the
+  text, growing away from the anchor: down from a top anchor, both ways from a
+  middle one, and up from a bottom one.
+- **Overflow.** Text that still doesn't fit is drawn past its frame and never
+  clipped, as PowerPoint lets it "overfill the box" [PowerPoint autofit] and
+  CSS shows overflow by default [CSS overflow]. The text reports that it
+  overflowed, so the canvas can mark it. Hiding the overflow would drop
+  translated words from an export without a trace.
+
+### Lines
+
+- **Spans.** Each span is shaped with its own font and size, and a mark wins
+  over `style` for its span. Lines break across spans, and a line's leading
+  comes from its largest span.
+- **Breaks** fall at Unicode line-break opportunities. A break after
+  punctuation is preferred to one inside a phrase, as subtitle guides ask
+  [BBC subtitles].
+- **Balance.** Centred text evens out its line lengths, so a block reads as one
+  round shape, as letterers arrange balloon text [Comicraft glossary], InDesign
+  balances centred paragraphs [InDesign alignment], and CSS `text-wrap:
+  balance` does [CSS text-wrap].
+- **Direction.** Vertical text sets columns right to left with the font's
+  vertical forms (`vert` and `vrt2`). Chinese and Japanese text uses CJK
+  punctuation layout.
+- **Alignment** works along the inline axis: left, centre, or right in
+  horizontal text, and top, centre, or bottom in vertical text, as in Photoshop
+  [Photoshop paragraphs] and Clip Studio Paint [CSP text frame].
+- **Justify** stretches every line but the last to both edges and sets the last
+  at the start, in both directions: Photoshop's Justify last left (top in
+  vertical type) [Photoshop paragraphs] and Clip Studio Paint's Align last line
+  left [CSP text frame].
+- **Stroke.** A character stroke is drawn under the fill at twice its width, so
+  `stroke_width` of it shows outside the glyphs, as Photoshop's Outside stroke
+  position [Photoshop stroke] and Clip Studio Paint's text edge [CSP text edge]
+  sit outside the characters.
+
+### Resolved text
+
+`Layer::text` gives the laid-out text as runs: each run's UTF-16 range, the
+PostScript name of the face that drew it, the size it was drawn at, its fill,
+and its stroke and width. It also gives the box the text was laid out in, the
+scale `shrink` drew it at, and whether it overflowed. The canvas's inspector
+shows the set size beside the drawn one. A fallback face gets a run of its own,
+so the PSD's type layer names every font it uses.
+
+## Retention
+
+A render assembles the frame from the retained scenes of the layers that draw,
+and composes groups and masks around them. A layer's scene is reused while its
+key is unchanged:
+
+| Layer | Key |
+|---|---|
+| text | the layer's hash (the hash of `""`, which its view carries), its text style's values, and the typesetting preference |
+| shape | the layer's hash |
+| image | the layer's hash; the decoded file is cached by its content hash |
+| raster, pixel mask | the hash of the layer's stored tiles, which the scene reports |
+
+Keys are content, so a frame is right whoever edited the session (the user, the
+agent, an MCP client, or the pipeline), and no change log has to reach the
+renderer. Caches are bounded, and eviction costs time, never output.
+
+## Exports
+
+- PNG and CBZ rasterize the frame.
+- PSD export takes the composite, each layer's `cropped` frame, each masked
+  layer's `mask` frame, and the resolved text. `cropped` draws only the layer's
+  own content, without its opacity, blend mode, or masks, which the PSD records
+  as layer properties. `mask` draws the layer's components merged into one
+  coverage.
+
+## Modules
+
+| Module | Owns |
+|---|---|
+| `renderer` | `Renderer`, the scene walk, and the caches |
+| `frame` | `Frame`, `Layer`, drawing a view, `cropped`, and `mask` |
+| `tiles` | raster tiles, their levels, and strips |
+| `text` | spans to layout, frames, fitting, glyph runs, and resolved text |
+| `layout`, `shape`, `segment`, `script` | line breaking, shaping, Unicode segmentation, and scripts |
+| `fonts` | discovery, the bundled fonts, fallback, and previews |
+| `images` | decoding files, with their sizes checked first |
+| `raster` | the wgpu device, vello rendering, and readback |
+| `config` | the typesetting preference |
+| `error` | errors that keep their causes |
+
+A page is at most 32,768 pixels on a side and 268,435,456 pixels in all.
+
+## Checks
 
 ```text
-Snapshot + page
-          |
-          v
-single scene traversal -> private layer descriptors + dependencies
-          |
-          v
-deduplicated resource plan -> batched async blob/font loading
-          |
-          v
-parallel retained-node construction or cache reuse
-          |
-          v
-immutable Frame
-```
-
-The scene is traversed once. Cross-entity text, fit, asset, and presentation
-relationships are resolved during that traversal. Resource IDs are
-deduplicated before any I/O. Image decoding runs on a bounded renderer-owned
-pool; it never uses the global Rayon pool and never blocks the async caller.
-
-Text shaping and glyph recording remain specialized internal modules because
-they own real algorithms. They are not public pipeline stages.
-
-## Retention and invalidation
-
-Each retained node is keyed by the scene values and resources that affect its
-visual output. A `Frame` records exact entity, hierarchy, component, relation,
-blob, and font dependencies.
-
-`update` uses `Change` to identify candidates, then compares descriptors:
-
-- unchanged descriptors reuse the same `Arc` node;
-- placement-only changes reuse vector content and replace placement metadata;
-- changed visual descriptors rebuild only their node;
-- insertion of a previously absent relation is detected through relation-query
-  dependencies;
-- immutable blobs are cached by `BlobId`.
-
-Cache capacity is bounded. Eviction affects performance only, never output.
-
-## Concurrency
-
-- Snapshot interpretation is deterministic and read-only.
-- Blob reads, image decoding, font loading, and raster readback occur away from
-  the caller's async executor.
-- Resource batches are deduplicated before scheduling.
-- Independent changed layers may be built in parallel on bounded workers.
-- Vello GPU submission is serialized only around the state Vello actually
-  mutates.
-- No method holds a renderer cache lock while awaiting work.
-
-Making a function `async` does not make CPU work non-blocking; blocking work
-must be moved to the renderer's bounded workers.
-
-## Module boundaries
-
-The target source layout reflects owners rather than public stages:
-
-| Module | Responsibility |
-| --- | --- |
-| `renderer` | `Renderer`, scene traversal, resource planning, and update orchestration. |
-| `frame` | Immutable `Frame`, `Layer`, metadata, indexes, vector embedding, cropping. |
-| `fonts` | Discovery, bundled/system loading, fallback, and font cache. |
-| `text` plus layout modules | Unicode segmentation, shaping, fitting, layout, and glyph recording. |
-| `images` | Batched blob loading, decode validation, and byte-bounded cache. |
-| `raster` | Vello execution, reusable targets, readback, and downsampling. |
-| `error` | Errors that retain their underlying causes. |
-
-There is no `request`, `compositor`, or `scene_renderer` public subsystem.
-Private helpers are kept only when they own a substantial algorithm or state.
-
-## Migration and verification
-
-The migration must be behavior-first:
-
-1. Add characterization tests around the active renderer behavior before
-   replacing it.
-2. Record representative page output, ordered layer metadata, diagnostics,
-   entity crops, translation-only rendering, and source-only invisibility.
-3. Implement `Renderer` and `Frame` behind the new API.
-4. Update canvas, PNG output, PSD output, previews, and pipeline callers
-   directly; add no compatibility layer.
-5. Compare old and new output on identical snapshots. Pixel differences must
-   be zero unless a separately approved rendering fix explains them.
-6. Delete the replaced modules only after every in-repository consumer and
-   characterization test passes.
-7. Audit the completed API for inputs and diagnostics with no product consumer;
-   delete them instead of documenting hypothetical use.
-
-Focused validation:
-
-```text
-cargo test -p koharu-renderer
 cargo check -p koharu-renderer --all-targets
+cargo test -p koharu-renderer
 ```
 
-GPU tests remain explicitly opt-in on a machine with a usable Vello adapter.
+GPU tests run only on a machine with a usable adapter.
+
+## Sources
+
+- Adobe: [Photoshop blending], [Photoshop shape strokes], [Photoshop disable
+  mask], [Photoshop type defaults], [Photoshop spacing], [Photoshop
+  paragraphs], [Photoshop type in a path], [Photoshop stroke], [InDesign
+  alignment]
+- Celsys: [CSP through], [CSP vector lines], [CSP masks], [CSP text frame],
+  [CSP text edge]
+- Microsoft: [PowerPoint placeholders], [PowerPoint autofit]
+- Lettering, manga translation, and subtitles: [Comicraft glossary], [Manga
+  translation II], [BBC subtitles]
+- vello: [vello atlas], [vello overflow], [vello textures]
+- Linebender: [Parley vertical text]
+- W3C and MDN: [W3C compositing], [CSS font-weight], [CSS hyphens], [CSS
+  overflow], [CSS text-wrap], [CSS exclusions], [SVG broken lines]
+- Tauri: [CEF OSR]
+
+[vello]: https://github.com/linebender/vello
+[Photoshop blending]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/apply-layer-effects/set-layer-opacity-and-blending-modes.html
+[Photoshop shape strokes]: https://helpx.adobe.com/photoshop/desktop/draw-shapes-paths/create-shapes/set-and-manage-shape-stroke-options.html
+[Photoshop disable mask]: https://helpx.adobe.com/photoshop/desktop/create-masks/layer-masks/disable-or-enable-layer-masks.html
+[Photoshop type defaults]: https://web.archive.org/web/20241226200333/https://helpx.adobe.com/photoshop/using/editing-text.html
+[Photoshop spacing]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/adjust-line-and-character-spacing.html
+[Photoshop paragraphs]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/format-paragraphs.html
+[Photoshop type in a path]: https://web.archive.org/web/20241213102001/https://helpx.adobe.com/photoshop/using/creating-type-effects.html
+[Photoshop stroke]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/apply-layer-effects/layer-style-effects-and-options-overview.html
+[InDesign alignment]: https://helpx.adobe.com/indesign/using/aligning-text.html
+[CSP through]: https://help.clip-studio.com/en-us/manual_en/390_filters/Tonal_Correction.htm
+[CSP vector lines]: https://tips.clip-studio.com/en-us/articles/600
+[CSP masks]: https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_masks.htm
+[CSP text frame]: https://help.clip-studio.com/en-us/manual_en/810_subtools/L.htm
+[CSP text edge]: https://help.clip-studio.com/en-us/manual_en/480_text/Editing_text.htm
+[PowerPoint placeholders]: https://support.microsoft.com/en-gb/powerpoint/add-text-to-a-slide
+[PowerPoint autofit]: https://support.microsoft.com/en-us/powerpoint/split-body-text-between-two-slides
+[Comicraft glossary]: https://balloontales.com/the-comicraft-glossary-of-lettering-terms/
+[Manga translation II]: https://wordswithoutborders.org/read/article/2009-02/manga-translation-only-poets-need-apply-part-ii/
+[BBC subtitles]: https://www.bbc.co.uk/accessibility/forproducts/guides/subtitles/
+[vello atlas]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_encoding/src/image_cache.rs#L10
+[vello overflow]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_encoding/src/resolve.rs#L306-L311
+[vello textures]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_research/src/lib.rs#L564-L574
+[Parley vertical text]: https://github.com/linebender/parley/issues/634
+[W3C compositing]: https://www.w3.org/TR/compositing-1/#isolation
+[CSS font-weight]: https://www.w3.org/TR/css-fonts-4/#font-weight-prop
+[CSS hyphens]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/hyphens
+[CSS overflow]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overflow
+[CSS text-wrap]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-wrap
+[CSS exclusions]: https://www.w3.org/TR/css3-exclusions/#wrap-flow-property
+[SVG broken lines]: https://www.w3.org/TR/SVG2/text.html#TextLayoutAutoNotesBrokenLines
+[CEF OSR]: https://github.com/tauri-apps/tauri/pull/16225
