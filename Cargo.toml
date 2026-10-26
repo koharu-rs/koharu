@@ -104,7 +104,7 @@ json-patch = { version = "4.2.0", default-features = false }
 jsonptr = "0.7.1"
 kurbo = "0.13.1"
 color = "0.3.3"
-icu_locale_core = { version = "2.3.0", features = ["alloc"] }
+icu_locale_core = { version = "2.3.0", features = ["alloc", "serde"] }
 semver = "1.0.28"
 serde_json_canonicalizer = "0.3.2"
 nvml-wrapper = "0.13.0"

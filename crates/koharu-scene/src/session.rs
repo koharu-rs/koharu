@@ -332,9 +332,7 @@ fn validate(doc: &LoroDoc) -> Result<(ProjectId, Index)> {
     let mut state = State::new(doc, &index);
     for page in &index.pages {
         for node in state.page(*page)?.nodes.values() {
-            node.layer()?
-                .check()
-                .map_err(|reason| Error::corrupt(format!("layer {}: {reason}", node.id)))?;
+            node.layer()?;
         }
     }
     Ok((id, index))

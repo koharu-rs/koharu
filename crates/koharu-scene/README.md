@@ -74,7 +74,7 @@ Each kind is placed the way its PSD record places it [PSD spec]:
 
 | Property | Model | Evidence |
 |---|---|---|
-| `content` | rich text: a string whose runs carry character marks | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
+| `content` | rich text: spans in order, each a string with its character marks; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
 | `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
 | `frame` | none (point text), a box (paragraph text), or a closed path that the text fills | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
 | `direction` | horizontal or vertical | Clip Studio Paint Text Direction [CSP vertical text] |
@@ -82,7 +82,7 @@ Each kind is placed the way its PSD record places it [PSD spec]:
 
 The character keys are font family, weight, italic, size, fill colour, stroke
 colour, and stroke width. Each is both a `style` key and a mark key, and a mark
-wins over `style` for its run. Alignment is a paragraph key that lives only in
+wins over `style` for its span. Alignment is a paragraph key that lives only in
 `style` and applies to the whole text, like `textAlignHorizontal` in a Figma
 node's `TypeStyle` [Figma property types]. Its values are `start`, `center`,
 `end`, and `justify`, as in CSS `text-align`, where start and end follow the
@@ -125,9 +125,12 @@ Masks take `name` and `visible` from the common properties.
   `softwareAgent` (a name and version), `digitalSourceType`, `parameters`, and
   `ingredients`, plus `writes`, the property paths it wrote, which C2PA does
   not have. A layer no model has written has an empty origin.
-  - Each path belongs to the latest action that wrote it. A rerun, or another
-    model writing the same path, takes the path over, and an action left with
-    no paths is dropped.
+  - Each path belongs to the latest action that wrote it. A rerun of a model
+    takes over every path that model wrote on the layer, so its ingredients
+    replace the old ones, as Lightroom's Update AI Masks recomputes an AI mask
+    once the photo under it changes [Lightroom masking]. Another model takes
+    over only the paths it writes, and an action left with no paths is
+    dropped.
   - A `c2pa.translated` action carries `sourceLanguage` and `targetLanguage`
     in its parameters, as C2PA requires [C2PA actions]. An undetermined source
     language is `und`, BCP 47's tag for one.
@@ -182,6 +185,8 @@ Masks take `name` and `visible` from the common properties.
   overrides `/style` keys only, so regenerated text still shows.
 - **Painting.** Pixels take no override: painting over pixels a model wrote
   replaces them, a rerun replaces your painting, and undo is the only way back.
+  Pixels are not a property either, so no ingredient reads them and no action
+  records writing them; staleness covers properties only.
 - **Rerunning a model** writes each value it produces onto the layer, except at
   a path in `generated`, where it replaces the stored model value and the
   user's value keeps showing. Which existing layer a new output replaces is the
@@ -248,10 +253,11 @@ This section is implementation, not schema.
     brings the stored id back.
   - Selection, caches, and jobs outside the document key on stored ids, so they
     survive undo.
-- **Text** is `LoroText`. Character keys are Loro rich-text marks that expand
-  after their run, so typing at the end of a run continues its style. Loro does
-  not store mark configuration, so that expand rule is set as the default for
-  every key on every load.
+- **Text** is `LoroText`, read and written as its delta, whose inserts are the
+  spans. Character keys are Loro rich-text marks that expand after their span,
+  so typing at the end of a span continues its style. Loro does not store mark
+  configuration, so that expand rule is set as the default for every key on
+  every load.
 - **Replaced model values.** `generated` is a `LoroMap` from JSON Pointer to the
   model's value; `/content` holds a `LoroText` copied with `apply_delta`. The
   text on the layer stays one `LoroText` across your edits, so cursors into it
@@ -293,6 +299,20 @@ This section is implementation, not schema.
   major version, because no upgrade decoder is written. The patch stays 0,
   since stored data has no bug fixes. A newer version, a pre-release, or
   unknown core data fails to open; unknown attributes never do.
+
+## Examples
+
+Each example uses only this crate and runs with
+`cargo run -p koharu-scene --example <name>`:
+
+- `project`: create a project, import a page, add one layer of every kind,
+  write pixels, read everything back, save, reopen, and compact.
+- `editing`: what the editor does: patch, lock, edit text, paint, duplicate,
+  move, and remove, undo and redo, and the errors an edit can fail with.
+- `models`: what the pipeline does: provenance, overrides that survive reruns,
+  staleness, Reset, and removed outputs.
+- `tools`: what an agent or MCP client does: list and call the tools, and read
+  compacted answers.
 
 ## Sources
 

@@ -10,11 +10,12 @@ use loro::LoroDoc;
 use serde_json::Value;
 
 use crate::{
-    Error, FileHash, Hash, LayerId, PageId, Pointer, Result,
+    Error, Hash, LayerId, PageId, Pointer, PointerBuf, Result,
     doc::{self, Node, PageData},
     error::Kind,
+    model::CONTENT,
     overrides,
-    tiles::{self, TileMap},
+    tiles::TileMap,
 };
 
 /// What the session keeps between edits so that nothing rescans the
@@ -23,7 +24,7 @@ use crate::{
 pub(crate) struct Index {
     pub pages: Vec<PageId>,
     pub layers: HashMap<LayerId, PageId>,
-    pub files: HashSet<FileHash>,
+    pub files: HashSet<Hash>,
 }
 
 impl Index {
@@ -45,36 +46,16 @@ pub(crate) struct Slot {
     pub position: Option<usize>,
 }
 
-/// `/content` and `/pixels` name stores of their own, not property paths.
-enum Field<'a> {
-    Props(&'a Pointer),
-    Content,
-    Pixels,
-}
-
-impl<'a> Field<'a> {
-    fn of(path: &'a Pointer) -> Result<Self> {
-        match path.as_str() {
-            "/content" => Ok(Self::Content),
-            "/pixels" => Ok(Self::Pixels),
-            other if other.starts_with("/content/") || other.starts_with("/pixels/") => {
-                Err(Error::rejected(format!("{other:?} can only be read whole")))
-            }
-            _ => Ok(Self::Props(path)),
-        }
-    }
-}
-
 pub(crate) struct State<'d> {
     pub doc: &'d LoroDoc,
     pub pages: Vec<Slot>,
     /// Borrowed from the session, and copied only if an edit changes it.
     pub layers: Cow<'d, HashMap<LayerId, PageId>>,
-    pub files: Cow<'d, HashSet<FileHash>>,
+    pub files: Cow<'d, HashSet<Hash>>,
     tiles: HashMap<LayerId, TileMap>,
     /// Hashes are only taken before a state changes: `plan` checks every
     /// read before its first op, and queries never change the state.
-    hashes: HashMap<(LayerId, Pointer), Hash>,
+    hashes: HashMap<(LayerId, PointerBuf), Hash>,
 }
 
 impl<'d> State<'d> {
@@ -193,40 +174,40 @@ impl<'d> State<'d> {
         self.tiles.remove(&layer);
     }
 
-    /// What a read at `path` sees, except `/pixels`: `""` is the layer with
-    /// its text, `/content` its plain text.
+    /// What a read at `path` sees: `""` is the layer with its text, and a
+    /// text layer's `/content` is its plain text, a store of its own that is
+    /// read whole.
     pub fn value(&mut self, layer: LayerId, path: &Pointer) -> Result<Option<Value>> {
         let node = self.node(layer)?;
-        Ok(match Field::of(path)? {
-            Field::Content => node
-                .text
-                .as_ref()
-                .map(|text| Value::String(text.text.clone())),
-            Field::Pixels => None,
-            Field::Props(path) if path.as_str().is_empty() => Some(node.json()),
-            Field::Props(path) => overrides::get(&node.props, path).cloned(),
+        if let Some(text) = &node.text
+            && path.starts_with(CONTENT)
+        {
+            return match path == CONTENT {
+                true => Ok(Some(Value::String(text.text()))),
+                false => Err(Error::rejected(format!(
+                    "{:?} can only be read whole",
+                    path.as_str()
+                ))),
+            };
+        }
+        Ok(match path.is_root() {
+            true => Some(node.json()),
+            false => overrides::get(&node.props, path).cloned(),
         })
     }
 
-    /// The hash of what a read at `path` sees; for `/pixels`, the decoded
-    /// tiles.
+    /// The hash of what a read at `path` sees.
     pub fn hash(&mut self, layer: LayerId, path: &Pointer) -> Result<Hash> {
-        if let Some(hash) = self.hashes.get(&(layer, path.clone())) {
+        if let Some(hash) = self.hashes.get(&(layer, path.to_buf())) {
             return Ok(hash.clone());
         }
-        let hash = match Field::of(path)? {
-            Field::Pixels => match self.node(layer)?.pixel_format() {
-                Some(format) => tiles::hash(self.tiles(layer)?, format)?,
-                None => hash_value(None),
-            },
-            _ => hash_value(self.value(layer, path)?.as_ref()),
-        };
-        self.hashes.insert((layer, path.clone()), hash.clone());
+        let hash = hash_value(self.value(layer, path)?.as_ref());
+        self.hashes.insert((layer, path.to_buf()), hash.clone());
         Ok(hash)
     }
 
     /// The paths of `layer` whose model ingredients have changed or gone.
-    pub fn stale(&mut self, layer: LayerId) -> Result<Vec<Pointer>> {
+    pub fn stale(&mut self, layer: LayerId) -> Result<Vec<PointerBuf>> {
         let origin = self.node(layer)?.origin.clone();
         let mut stale = Vec::new();
         for action in origin {
@@ -243,7 +224,7 @@ impl<'d> State<'d> {
     }
 
     /// Every file a layer names, reading unloaded pages without loading them.
-    pub fn files_in_use(&self) -> Result<HashSet<FileHash>> {
+    pub fn files_in_use(&self) -> Result<HashSet<Hash>> {
         let mut used = HashSet::new();
         for slot in &self.pages {
             match (&slot.data, slot.position) {
