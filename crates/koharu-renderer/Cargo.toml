@@ -17,8 +17,8 @@ fontique = { workspace = true }
 harfrust = { workspace = true }
 hypher = { workspace = true }
 icu_normalizer = { workspace = true }
-icu_properties = { workspace = true, features = ["compiled_data"] }
-icu_segmenter = { workspace = true, features = ["compiled_data"] }
+icu_properties = { workspace = true }
+icu_segmenter = { workspace = true }
 image = { workspace = true }
 jieba-rs = { workspace = true }
 koharu-config = { workspace = true }
@@ -26,6 +26,7 @@ koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 parking_lot = { workspace = true }
 pollster = { workspace = true }
+quick_cache = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

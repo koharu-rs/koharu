@@ -5070,6 +5070,7 @@ dependencies = [
  "koharu-scene",
  "parking_lot 0.13.0",
  "pollster 1.0.1",
+ "quick_cache",
  "rayon",
  "serde",
  "serde_json",

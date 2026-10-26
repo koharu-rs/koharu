@@ -350,10 +350,13 @@ fn a_hidden_layer_stays_out_of_the_page_but_exports_at_its_offset() {
     let page_pixels = renderer.rasterize(&frame).unwrap();
     assert_eq!(page_pixels.image.get_pixel(20, 12)[3], 0);
 
+    // Its own pixels are what it painted, not the 64×64 tile holding them.
     let own = renderer.rasterize(&frame.cropped(draft).unwrap()).unwrap();
-    assert_eq!((own.left, own.top), (16, 8));
-    assert_eq!(own.image.get_pixel(4, 4)[3], 255);
-    assert_eq!(own.image.get_pixel(20, 20)[3], 0);
+    assert_eq!(
+        (own.left, own.top, own.image.dimensions()),
+        (16, 8, (16, 16))
+    );
+    assert!(own.image.pixels().all(|pixel| pixel[3] == 255));
 }
 
 #[test]

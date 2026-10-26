@@ -152,6 +152,8 @@ struct Prepared<'a> {
     rtl: bool,
     /// Each byte's bidi embedding level.
     levels: Vec<Level>,
+    /// A path frame's inside, flattened once for every placement.
+    outline: Option<Outline>,
 }
 
 pub(crate) fn lay_out(input: &Input) -> Result<Laid> {
@@ -166,6 +168,10 @@ pub(crate) fn lay_out(input: &Input) -> Result<Laid> {
                 .first()
                 .is_some_and(|paragraph| paragraph.level.is_rtl()),
         levels,
+        outline: match &input.room {
+            Room::Path { outline, .. } => Some(Outline::new(outline, input.vertical)),
+            _ => None,
+        },
     };
     let shrink = match input.room {
         Room::Point => false,
@@ -181,15 +187,16 @@ pub(crate) fn lay_out(input: &Input) -> Result<Laid> {
             continue;
         }
         let segments = prepared.segments(mode)?;
-        let fitted = largest_fit(floor, |scale| prepared.place(&segments, scale))?;
+        let measures: Vec<Measure> = segments.iter().map(|s| s.measure.clone()).collect();
+        let fitted = largest_fit(floor, |scale| prepared.place(&segments, &measures, scale))?;
         let fits = !fitted.overflowed;
-        placed = Some((segments, fitted));
+        placed = Some((segments, measures, fitted));
         if fits {
             break;
         }
     }
-    let (segments, placed) = placed.expect("a mode ran");
-    Ok(prepared.draw(&segments, placed))
+    let (segments, measures, placed) = placed.expect("a mode ran");
+    Ok(prepared.draw(&segments, &measures, placed))
 }
 
 /// The largest scale from 1 down to `floor` at which the text fits, else the
@@ -665,8 +672,7 @@ impl Prepared<'_> {
         }
     }
 
-    fn place(&self, segments: &[Segment], scale: f32) -> Result<Placed> {
-        let measures: Vec<Measure> = segments.iter().map(|s| s.measure.clone()).collect();
+    fn place(&self, segments: &[Segment], measures: &[Measure], scale: f32) -> Result<Placed> {
         let vertical = self.input.vertical;
         let shape = self.shape_for();
         let line_pitch = |range: &Range<usize>| {
@@ -679,12 +685,12 @@ impl Prepared<'_> {
         };
         Ok(match &self.input.room {
             Room::Point => {
-                let lines = layout::break_lines(&measures, scale, shape, None, |_| f32::INFINITY)
+                let lines = layout::break_lines(measures, scale, shape, None, |_| f32::INFINITY)
                     .expect("point text always breaks");
                 let room = lines
                     .lines
                     .iter()
-                    .map(|range| layout::length(&measures, range.clone(), scale))
+                    .map(|range| layout::length(measures, range.clone(), scale))
                     .fold(0.0, f32::max);
                 let pitches: Vec<f32> = lines.lines.iter().map(line_pitch).collect();
                 let total: f32 = pitches.iter().sum();
@@ -692,7 +698,7 @@ impl Prepared<'_> {
                 let mut top = 0.0;
                 let mut placed = Vec::new();
                 for (range, pitch) in lines.lines.into_iter().zip(pitches) {
-                    placed.push(self.line(&measures, range, 0.0, room, top, pitch));
+                    placed.push(self.line(measures, range, 0.0, room, top, pitch));
                     top += pitch;
                 }
                 let frame = Rect::from_points(
@@ -714,7 +720,7 @@ impl Prepared<'_> {
             } => {
                 let logical_box = logical_rect(*bounds, vertical);
                 let room = logical_box.width() as f32;
-                let lines = layout::break_lines(&measures, scale, shape, None, |_| room)
+                let lines = layout::break_lines(measures, scale, shape, None, |_| room)
                     .expect("box text always breaks");
                 let pitches: Vec<f32> = lines.lines.iter().map(line_pitch).collect();
                 let total: f32 = pitches.iter().sum();
@@ -740,7 +746,7 @@ impl Prepared<'_> {
                 let mut placed = Vec::new();
                 for (range, pitch) in lines.lines.into_iter().zip(pitches) {
                     placed.push(self.line(
-                        &measures,
+                        measures,
                         range,
                         logical_box.x0 as f32,
                         room,
@@ -760,11 +766,9 @@ impl Prepared<'_> {
                     overflowed: lines.overflowed || (!*grow && total > extent + 0.01),
                 }
             }
-            Room::Path {
-                outline, anchor, ..
-            } => {
-                let outline = Outline::new(outline, vertical);
-                self.place_in(&outline, &measures, segments, scale, *anchor)
+            Room::Path { anchor, .. } => {
+                let outline = self.outline.as_ref().expect("a path frame has an outline");
+                self.place_in(outline, measures, segments, scale, *anchor)
             }
         })
     }
@@ -916,19 +920,18 @@ impl Prepared<'_> {
         }
     }
 
-    fn draw(&self, segments: &[Segment], placed: Placed) -> Laid {
+    fn draw(&self, segments: &[Segment], measures: &[Measure], placed: Placed) -> Laid {
         let vertical = self.input.vertical;
         let scale = placed.scale;
         let mut runs: Vec<(usize, usize, Vec<Glyph>, Range<usize>)> = Vec::new();
         let mut hyphens = Vec::new();
         let mut broken = Vec::new();
         let mut bounds: Option<Rect> = None;
-        let measures: Vec<Measure> = segments.iter().map(|s| s.measure.clone()).collect();
         for line in &placed.lines {
             let Some(last) = line.segments.end.checked_sub(1) else {
                 continue;
             };
-            let used = layout::length(&measures, line.segments.clone(), scale);
+            let used = layout::length(measures, line.segments.clone(), scale);
             let mut pieces: Vec<&Piece> = segments[line.segments.clone()]
                 .iter()
                 .flat_map(|segment| &segment.pieces)

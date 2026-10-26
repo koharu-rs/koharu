@@ -575,7 +575,7 @@ pub(crate) struct Fonts {
 }
 
 /// A face a text asked for that isn't installed or loaded yet.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct FontRequest {
     pub(crate) family: String,
     pub(crate) weight: u16,
