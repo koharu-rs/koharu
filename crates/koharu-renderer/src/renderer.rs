@@ -14,7 +14,7 @@ use koharu_scene::{
     Align, Direction, FillRule, Frame as TextFrame, Hash, LanguageIdentifier, Layer as SceneLayer,
     LayerId, LayerKind, LayerView, MaskContent, PageId, PathFit, PixelFormat, Session, Tiles,
 };
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use rayon::prelude::*;
 use vello::{
     Scene,
@@ -35,7 +35,9 @@ use crate::{
 
 const DEFAULT_SIZE: f64 = 24.0;
 const DEFAULT_LINE_HEIGHT: f64 = 1.2;
-const CACHE_ENTRIES: usize = 4096;
+/// What retained content may take, in bytes: pixels count with their tiles;
+/// a vector scene counts as a kilobyte.
+const CACHE_BYTES: u64 = 2 << 30;
 
 /// Renders pages. Cloning it shares its fonts, caches, and GPU.
 #[derive(Clone)]
@@ -47,7 +49,7 @@ struct Inner {
     /// Bumped when the typesetting preference or the loaded fonts change, so
     /// text lays out again.
     generation: AtomicU64,
-    cache: Mutex<Cache>,
+    cache: quick_cache::sync::Cache<Key, Cached, Weight>,
     gpu: OnceLock<std::result::Result<Arc<Gpu>, String>>,
 }
 
@@ -80,34 +82,15 @@ enum Cached {
     Pixels(Option<Arc<Tiled>>),
 }
 
-#[derive(Default)]
-struct Cache {
-    entries: HashMap<Key, (Cached, u64)>,
-    clock: u64,
-}
+#[derive(Clone)]
+struct Weight;
 
-impl Cache {
-    fn get(&mut self, key: &Key) -> Option<Cached> {
-        self.clock += 1;
-        let clock = self.clock;
-        self.entries.get_mut(key).map(|(cached, used)| {
-            *used = clock;
-            cached.clone()
-        })
-    }
-
-    fn insert(&mut self, key: Key, cached: Cached) {
-        self.clock += 1;
-        if self.entries.len() >= CACHE_ENTRIES
-            && let Some(oldest) = self
-                .entries
-                .iter()
-                .min_by_key(|(_, (_, used))| *used)
-                .map(|(key, _)| key.clone())
-        {
-            self.entries.remove(&oldest);
+impl quick_cache::Weighter<Key, Cached> for Weight {
+    fn weight(&self, _: &Key, cached: &Cached) -> u64 {
+        match cached {
+            Cached::Pixels(Some(tiled)) => tiled.bytes(),
+            _ => 1024,
         }
-        self.entries.insert(key, (cached, self.clock));
     }
 }
 
@@ -119,7 +102,7 @@ impl Renderer {
             fonts: Fonts::new(),
             typesetting: RwLock::new(typesetting),
             generation: AtomicU64::new(0),
-            cache: Mutex::new(Cache::default()),
+            cache: quick_cache::sync::Cache::with_weighter(1024, CACHE_BYTES, Weight),
             gpu: OnceLock::new(),
         }))
     }
@@ -169,7 +152,7 @@ impl Renderer {
             .map(|layer| builder.node(layer, true))
             .collect::<Result<Vec<_>>>()?;
         let mut missing = builder.missing;
-        missing.sort_by(|a, b| a.family.cmp(&b.family));
+        missing.sort();
         missing.dedup();
         Ok(Frame(Arc::new(FrameData {
             page,
@@ -181,9 +164,9 @@ impl Renderer {
                 f64::from(view.size.height),
             ),
             nodes,
-            layers: builder.layers,
-            order: builder.order,
-            missing,
+            layers: Arc::new(builder.layers),
+            order: builder.order.into(),
+            missing: missing.into(),
         })))
     }
 
@@ -324,12 +307,12 @@ impl Renderer {
                 )
             }
         };
-        if let Some(cached) = self.0.cache.lock().get(&key) {
+        if let Some(cached) = self.0.cache.get(&key) {
             return Ok(Some(cached));
         }
         let cached = match (&view.layer, &key) {
             (SceneLayer::Raster(_) | SceneLayer::Mask(_), _) => {
-                Cached::Pixels(assemble(session.tiles(view.id, None)?).map(Arc::new))
+                Cached::Pixels(assemble(session.tiles(view.id, None)?)?.map(Arc::new))
             }
             (SceneLayer::Image(image), _) => {
                 let file = session.file(&image.file)?;
@@ -365,7 +348,7 @@ impl Renderer {
             (SceneLayer::Text(layer), _) => self.text(session, view.id, layer)?,
             _ => unreachable!("every keyed layer is built"),
         };
-        self.0.cache.lock().insert(key, cached.clone());
+        self.0.cache.insert(key, cached.clone());
         Ok(Some(cached))
     }
 
@@ -479,15 +462,22 @@ fn parse(path: &str) -> Result<BezPath> {
     BezPath::from_svg(path).map_err(|error| Error::invalid(format!("invalid path data: {error}")))
 }
 
-/// The scene's 64×64 tiles as one image, at the tiles' corner relative to
-/// the layer's offset; a pixel mask's grey becomes alpha under white.
-fn assemble(tiles: Tiles) -> Option<Tiled> {
+/// The scene's 64×64 tiles as one image, cropped to its painted pixels and
+/// placed relative to the layer's offset; a pixel mask's grey becomes alpha
+/// under white. Tiles spread wider than a page could hold fail.
+fn assemble(tiles: Tiles) -> Result<Option<Tiled>> {
     const TILE: i32 = 64;
-    let x0 = tiles.tiles.iter().map(|tile| tile.x).min()?;
-    let y0 = tiles.tiles.iter().map(|tile| tile.y).min()?;
-    let x1 = tiles.tiles.iter().map(|tile| tile.x).max()? + 1;
-    let y1 = tiles.tiles.iter().map(|tile| tile.y).max()? + 1;
-    let (width, height) = (((x1 - x0) * TILE) as u32, ((y1 - y0) * TILE) as u32);
+    let Some(x0) = tiles.tiles.iter().map(|tile| tile.x).min() else {
+        return Ok(None);
+    };
+    let y0 = tiles.tiles.iter().map(|tile| tile.y).min().unwrap_or(0);
+    let x1 = tiles.tiles.iter().map(|tile| tile.x).max().unwrap_or(0) + 1;
+    let y1 = tiles.tiles.iter().map(|tile| tile.y).max().unwrap_or(0) + 1;
+    let extent = |from: i32, to: i32| {
+        u32::try_from(i64::from(to - from) * i64::from(TILE)).unwrap_or(u32::MAX)
+    };
+    let (width, height) = (extent(x0, x1), extent(y0, y1));
+    images::check_size(width, height)?;
     let mut image = RgbaImage::new(width, height);
     let row = TILE as usize * 4;
     for tile in &tiles.tiles {
@@ -512,7 +502,20 @@ fn assemble(tiles: Tiles) -> Option<Tiled> {
             }
         }
     }
-    Some(Tiled::new((x0 * TILE, y0 * TILE), image))
+    let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+    for (x, y, pixel) in image.enumerate_pixels() {
+        if pixel[3] > 0 {
+            (left, top) = (left.min(x), top.min(y));
+            (right, bottom) = (right.max(x + 1), bottom.max(y + 1));
+        }
+    }
+    if right <= left {
+        return Ok(None);
+    }
+    let painted =
+        image::imageops::crop_imm(&image, left, top, right - left, bottom - top).to_image();
+    let origin = (x0 * TILE + left as i32, y0 * TILE + top as i32);
+    Ok(Some(Tiled::new(origin, painted)))
 }
 
 struct Builder<'r, 's> {

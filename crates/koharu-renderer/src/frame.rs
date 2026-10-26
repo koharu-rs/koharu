@@ -10,11 +10,11 @@ use vello::{
     peniko::{BlendMode, Color, Compose, Fill, Mix},
 };
 
-use crate::{Error, Result, fonts::FontRequest, text::ResolvedText, tiles::Tiled};
+use crate::{Error, Result, fonts::FontRequest, raster::ATLAS, text::ResolvedText, tiles::Tiled};
 
-/// The image pixels one pass may draw: vello 0.11 packs every image of a
-/// frame into one atlas of at most 8192×8192, and skips what doesn't fit.
-const ATLAS: u64 = 8192 * 8192 * 7 / 8;
+/// The image pixels one pass may draw: vello skips an image that doesn't fit
+/// its atlas, so a pass keeps an eighth of it free for packing.
+const BUDGET: u64 = ATLAS * 7 / 8;
 
 /// A page at one revision, immutable and cheap to clone.
 #[derive(Clone)]
@@ -26,10 +26,11 @@ pub(crate) struct FrameData {
     /// What the frame draws, in page pixels: the page, or one layer's bounds.
     pub area: Rect,
     pub nodes: Vec<Node>,
-    pub layers: HashMap<LayerId, Layer>,
+    /// The page's layers, which the frames drawn from it share.
+    pub layers: Arc<HashMap<LayerId, Layer>>,
     /// Layer ids in the page's order, parents first.
-    pub order: Vec<LayerId>,
-    pub missing: Vec<FontRequest>,
+    pub order: Arc<[LayerId]>,
+    pub missing: Arc<[FontRequest]>,
 }
 
 /// One layer as the frame drew it.
@@ -248,13 +249,9 @@ impl Frame {
             * Affine::scale(view.scale)
             * Affine::translate((-view.rect.x0, -view.rect.y0));
         let clip = Rect::new(0.0, 0.0, rect.width(), rect.height());
-        let mut pass = Pass {
-            to_output,
-            clip,
-            pixels: 0,
-        };
+        let pass = Pass { to_output, clip };
         let cost = self.0.nodes.iter().map(|node| pass.cost(node)).sum::<u64>();
-        if cost > ATLAS && rect.height() > 64.0 {
+        if cost > BUDGET && rect.height() > 64.0 {
             let middle = (rect.y0 + (rect.height() * 0.5).floor()).floor();
             self.strips(view, Rect::new(rect.x0, rect.y0, rect.x1, middle), out);
             self.strips(view, Rect::new(rect.x0, middle, rect.x1, rect.y1), out);
@@ -270,7 +267,6 @@ struct Pass {
     to_output: Affine,
     /// The pass's output rectangle.
     clip: Rect,
-    pixels: u64,
 }
 
 impl Pass {
@@ -304,7 +300,7 @@ impl Pass {
     }
 
     /// Draws nodes into a fresh scene: an isolated group's content.
-    fn compose(&mut self, nodes: &[Node]) -> Scene {
+    fn compose(&self, nodes: &[Node]) -> Scene {
         let mut scene = Scene::new();
         for node in nodes {
             self.node(node, &mut scene);
@@ -312,7 +308,7 @@ impl Pass {
         scene
     }
 
-    fn node(&mut self, node: &Node, scene: &mut Scene) {
+    fn node(&self, node: &Node, scene: &mut Scene) {
         if !node.visible {
             return;
         }
@@ -351,7 +347,7 @@ impl Pass {
         }
     }
 
-    fn content(&mut self, content: &Content, scene: &mut Scene) {
+    fn content(&self, content: &Content, scene: &mut Scene) {
         match content {
             Content::None => {}
             Content::Vector {
@@ -359,7 +355,7 @@ impl Pass {
                 transform,
             } => scene.append(vector, Some(self.to_output * *transform)),
             Content::Pixels { tiled, transform } => {
-                self.pixels += tiled.draw(scene, self.to_output * *transform, self.clip);
+                tiled.draw(scene, self.to_output * *transform, self.clip);
             }
             Content::Coverage(rect) => {
                 scene.fill(Fill::NonZero, self.to_output, Color::WHITE, None, rect);
@@ -369,7 +365,7 @@ impl Pass {
 
     /// Composites `content` onto `scene` with the node's blend mode, opacity,
     /// and masks.
-    fn wrap(&mut self, node: &Node, mix: Mix, content: Scene, scene: &mut Scene) {
+    fn wrap(&self, node: &Node, mix: Mix, content: Scene, scene: &mut Scene) {
         scene.push_layer(
             Fill::NonZero,
             BlendMode::new(mix, Compose::SrcOver),
@@ -422,7 +418,7 @@ impl Pass {
                         );
                     }
                     MaskShape::Pixels { tiled, transform } => {
-                        self.pixels += tiled.draw(scene, self.to_output * *transform, self.clip);
+                        tiled.draw(scene, self.to_output * *transform, self.clip);
                     }
                 }
                 scene.pop_layer();
