@@ -520,6 +520,30 @@ const TILE_SIZE: u32 = 512;
 const TILE_CONTEXT: u32 = 128;
 const UNIFORM_BACKGROUND_MIN_PIXELS: usize = 16;
 const FLAT_FILL_EDGE_MARGIN: f32 = 3.0;
+// The tile and flat-fill sizes above are tuned for pages up to this long side.
+// A larger page is worked on as if it were scaled down to it: its tiles cover the
+// same share of the artwork and reach the model at the size the model expects, so
+// a glyph's hole doesn't grow past what LaMa and AOT can fill.
+const REFERENCE_PAGE_SIDE: u32 = 2048;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TileGeometry {
+    /// Page pixels per working pixel; 1 for pages up to `REFERENCE_PAGE_SIDE`.
+    scale: f32,
+    size: u32,
+    context: u32,
+}
+
+impl TileGeometry {
+    fn for_page(width: u32, height: u32) -> Self {
+        let scale = (width.max(height) as f32 / REFERENCE_PAGE_SIDE as f32).max(1.0);
+        Self {
+            scale,
+            size: (TILE_SIZE as f32 * scale).round() as u32,
+            context: (TILE_CONTEXT as f32 * scale).round() as u32,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct InpaintTile {
@@ -557,8 +581,15 @@ fn inpaint_tiled(
 
     let mut output = image.to_rgb8();
     let mut pending_mask = mask.clone();
-    fill_uniform_regions(&mut output, &mut pending_mask, text_mask, flat_fill_regions);
-    let (component_labels, tiles) = inpaint_tiles(&pending_mask);
+    let geometry = TileGeometry::for_page(image.width(), image.height());
+    fill_uniform_regions(
+        &mut output,
+        &mut pending_mask,
+        text_mask,
+        flat_fill_regions,
+        geometry.scale,
+    );
+    let (component_labels, tiles) = inpaint_tiles(&pending_mask, geometry);
     for tile in &tiles {
         let [left, top, right, bottom] = tile.crop;
         let crop_width = right - left;
@@ -566,6 +597,7 @@ fn inpaint_tiled(
         let crop_image =
             image::imageops::crop_imm(&output, left, top, crop_width, crop_height).to_image();
         let crop_mask = crop_tile_mask(&pending_mask, tile);
+        let (crop_image, crop_mask) = downscale_tile(crop_image, crop_mask, geometry.scale);
 
         let generated = inference(&DynamicImage::ImageRgb8(crop_image), &crop_mask)?;
         let generated = if generated.dimensions() == (crop_width, crop_height) {
@@ -584,11 +616,30 @@ fn inpaint_tiled(
     Ok(DynamicImage::ImageRgb8(output))
 }
 
+/// Shrinks a tile from page pixels to working pixels. Any mask coverage keeps a
+/// working pixel masked, so thin strokes aren't dropped from the hole.
+fn downscale_tile(image: RgbImage, mask: GrayImage, scale: f32) -> (RgbImage, GrayImage) {
+    if scale <= 1.0 {
+        return (image, mask);
+    }
+    let width = ((image.width() as f32 / scale).round() as u32).max(1);
+    let height = ((image.height() as f32 / scale).round() as u32).max(1);
+    let image =
+        image::imageops::resize(&image, width, height, image::imageops::FilterType::Triangle);
+    let mut mask =
+        image::imageops::resize(&mask, width, height, image::imageops::FilterType::Triangle);
+    for pixel in mask.pixels_mut() {
+        pixel[0] = if pixel[0] > 0 { u8::MAX } else { 0 };
+    }
+    (image, mask)
+}
+
 fn fill_uniform_regions(
     output: &mut RgbImage,
     pending_mask: &mut GrayImage,
     text_mask: &GrayImage,
     regions: &[FlatFillRegion],
+    scale: f32,
 ) {
     for region in regions {
         let [left, top, right, bottom] = region.bounds;
@@ -606,7 +657,7 @@ fn fill_uniform_regions(
         if targets.is_empty() {
             continue;
         }
-        let Some(color) = uniform_region_color(output, pending_mask, region) else {
+        let Some(color) = uniform_region_color(output, pending_mask, region, scale) else {
             continue;
         };
         for (x, y) in targets {
@@ -616,20 +667,28 @@ fn fill_uniform_regions(
     }
 }
 
-fn inpaint_tiles(mask: &GrayImage) -> (ImageBuffer<Luma<u32>, Vec<u32>>, Vec<InpaintTile>) {
+fn inpaint_tiles(
+    mask: &GrayImage,
+    geometry: TileGeometry,
+) -> (ImageBuffer<Luma<u32>, Vec<u32>>, Vec<InpaintTile>) {
+    let TileGeometry {
+        size: tile_size,
+        context,
+        ..
+    } = geometry;
     let (labels, components) = mask_components(mask);
     let mut bounded_tiles: Vec<InpaintTile> = Vec::new();
     let mut split_tiles = Vec::new();
 
     for component in components {
         let [left, top, right, bottom] = component.bounds;
-        if right - left <= TILE_SIZE && bottom - top <= TILE_SIZE {
+        if right - left <= tile_size && bottom - top <= tile_size {
             let best = bounded_tiles
                 .iter()
                 .enumerate()
                 .filter_map(|(index, tile)| {
                     let bounds = union_bounds(tile.core, component.bounds);
-                    ((bounds[2] - bounds[0] <= TILE_SIZE) && (bounds[3] - bounds[1] <= TILE_SIZE))
+                    ((bounds[2] - bounds[0] <= tile_size) && (bounds[3] - bounds[1] <= tile_size))
                         .then_some((bounds_area(bounds) - bounds_area(tile.core), index, bounds))
                 })
                 .min_by_key(|(growth, index, _)| (*growth, *index));
@@ -637,12 +696,12 @@ fn inpaint_tiles(mask: &GrayImage) -> (ImageBuffer<Luma<u32>, Vec<u32>>, Vec<Inp
                 let tile = &mut bounded_tiles[index];
                 tile.components.push(component.label);
                 tile.core = bounds;
-                tile.crop = expand_bounds(bounds, mask.width(), mask.height());
+                tile.crop = expand_bounds(bounds, mask.width(), mask.height(), context);
             } else {
                 bounded_tiles.push(InpaintTile {
                     components: vec![component.label],
                     core: component.bounds,
-                    crop: expand_bounds(component.bounds, mask.width(), mask.height()),
+                    crop: expand_bounds(component.bounds, mask.width(), mask.height(), context),
                 });
             }
             continue;
@@ -650,16 +709,16 @@ fn inpaint_tiles(mask: &GrayImage) -> (ImageBuffer<Luma<u32>, Vec<u32>>, Vec<Inp
 
         let mut core_top = top;
         while core_top < bottom {
-            let core_bottom = core_top.saturating_add(TILE_SIZE).min(bottom);
+            let core_bottom = core_top.saturating_add(tile_size).min(bottom);
             let mut core_left = left;
             while core_left < right {
-                let core_right = core_left.saturating_add(TILE_SIZE).min(right);
+                let core_right = core_left.saturating_add(tile_size).min(right);
                 let core = [core_left, core_top, core_right, core_bottom];
                 if let Some(owned_bounds) = component_bounds_in(&labels, component.label, core) {
                     split_tiles.push(InpaintTile {
                         components: vec![component.label],
                         core,
-                        crop: expand_bounds(owned_bounds, mask.width(), mask.height()),
+                        crop: expand_bounds(owned_bounds, mask.width(), mask.height(), context),
                     });
                 }
                 core_left = core_right;
@@ -723,12 +782,17 @@ fn bounds_area([left, top, right, bottom]: [u32; 4]) -> u64 {
     u64::from(right - left) * u64::from(bottom - top)
 }
 
-fn expand_bounds([left, top, right, bottom]: [u32; 4], width: u32, height: u32) -> [u32; 4] {
+fn expand_bounds(
+    [left, top, right, bottom]: [u32; 4],
+    width: u32,
+    height: u32,
+    context: u32,
+) -> [u32; 4] {
     [
-        left.saturating_sub(TILE_CONTEXT),
-        top.saturating_sub(TILE_CONTEXT),
-        right.saturating_add(TILE_CONTEXT).min(width),
-        bottom.saturating_add(TILE_CONTEXT).min(height),
+        left.saturating_sub(context),
+        top.saturating_sub(context),
+        right.saturating_add(context).min(width),
+        bottom.saturating_add(context).min(height),
     ]
 }
 
@@ -771,16 +835,17 @@ fn uniform_region_color(
     image: &RgbImage,
     mask: &GrayImage,
     region: &FlatFillRegion,
+    scale: f32,
 ) -> Option<Rgb<u8>> {
     let [left, top, right, bottom] = region.bounds;
+    let edge_margin = FLAT_FILL_EDGE_MARGIN * scale;
     let mut channels = [Vec::new(), Vec::new(), Vec::new()];
     for y in top..bottom {
         for x in left..right {
             let point = (x as f32 + 0.5, y as f32 + 0.5);
             if mask.get_pixel(x, y)[0] >= 127
                 || !point_in_polygon(point, &region.polygon)
-                || polygon_edge_distance_squared(point, &region.polygon)
-                    < FLAT_FILL_EDGE_MARGIN * FLAT_FILL_EDGE_MARGIN
+                || polygon_edge_distance_squared(point, &region.polygon) < edge_margin * edge_margin
             {
                 continue;
             }
@@ -1157,7 +1222,8 @@ mod tests {
             }
         }
 
-        let (labels, tiles) = inpaint_tiles(&mask);
+        let geometry = TileGeometry::for_page(mask.width(), mask.height());
+        let (labels, tiles) = inpaint_tiles(&mask, geometry);
 
         assert_eq!(tiles.len(), 2);
         for tile in &tiles {
@@ -1179,6 +1245,125 @@ mod tests {
                 .count();
             assert!(masked > owned);
         }
+    }
+
+    fn bubble_with_soft_edge(width: u32, height: u32) -> (RgbImage, GrayImage) {
+        // A white bubble whose outline fades through an 8 px grey band, as a large
+        // scan's antialiased outline does, with one dark glyph in the middle.
+        let mut image = RgbImage::from_pixel(width, height, Rgb([30, 30, 30]));
+        for y in 100..400 {
+            for x in 100..400 {
+                let edge = (x - 100).min(399 - x).min(y - 100).min(399 - y);
+                let pixel = if edge < 8 {
+                    Rgb([128, 128, 128])
+                } else {
+                    Rgb([255, 255, 255])
+                };
+                image.put_pixel(x, y, pixel);
+            }
+        }
+        let mut mask = GrayImage::new(width, height);
+        for y in 200..300 {
+            for x in 220..280 {
+                image.put_pixel(x, y, Rgb([10, 10, 10]));
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        (image, mask)
+    }
+
+    #[test]
+    fn soft_bubble_edges_grow_with_the_page() {
+        for (width, expected_calls) in [(512, 1), (6144, 0)] {
+            let (image, mask) = bubble_with_soft_edge(width, 512);
+            let mut calls = 0;
+
+            let output = inpaint_tiled(
+                &DynamicImage::ImageRgb8(image),
+                &mask,
+                &mask,
+                &[rectangle_region([100, 100, 400, 400])],
+                |tile, _| {
+                    calls += 1;
+                    Ok(DynamicImage::ImageRgb8(RgbImage::from_pixel(
+                        tile.width(),
+                        tile.height(),
+                        Rgb([1, 2, 3]),
+                    )))
+                },
+            )
+            .unwrap()
+            .to_rgb8();
+
+            assert_eq!(calls, expected_calls, "page width {width}");
+            if expected_calls == 0 {
+                assert_eq!(output.get_pixel(250, 250), &Rgb([255, 255, 255]));
+            }
+        }
+    }
+
+    #[test]
+    fn large_pages_reach_the_model_at_working_size() {
+        let geometry = TileGeometry::for_page(4096, 1024);
+        assert_eq!(geometry.scale, 2.0);
+        assert_eq!(
+            geometry,
+            TileGeometry {
+                scale: 2.0,
+                size: TILE_SIZE * 2,
+                context: TILE_CONTEXT * 2,
+            }
+        );
+        assert_eq!(TileGeometry::for_page(1500, 2048).scale, 1.0);
+
+        let mut image = RgbImage::new(4096, 1024);
+        for (x, y, pixel) in image.enumerate_pixels_mut() {
+            *pixel = if (x + y).is_multiple_of(2) {
+                Rgb([0, 40, 80])
+            } else {
+                Rgb([255, 215, 175])
+            };
+        }
+        let original = image.clone();
+        let mut mask = GrayImage::new(4096, 1024);
+        for y in 400..600 {
+            for x in 2000..2101 {
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        // A one-pixel line must survive the downscale as part of the hole.
+        for y in 400..600 {
+            mask.put_pixel(2200, y, Luma([u8::MAX]));
+        }
+        let mut calls = 0;
+
+        let output = inpaint_tiled(
+            &DynamicImage::ImageRgb8(image),
+            &mask,
+            &mask,
+            &[],
+            |tile, tile_mask| {
+                calls += 1;
+                assert!(tile.width() <= TILE_SIZE + TILE_CONTEXT * 2);
+                assert!(tile.height() <= TILE_SIZE + TILE_CONTEXT * 2);
+                assert_eq!(tile.dimensions(), tile_mask.dimensions());
+                let masked = tile_mask.pixels().filter(|pixel| pixel[0] >= 127).count();
+                assert!((50 * 100..=6000).contains(&masked), "{masked}");
+                Ok(DynamicImage::ImageRgb8(RgbImage::from_pixel(
+                    tile.width(),
+                    tile.height(),
+                    Rgb([1, 2, 3]),
+                )))
+            },
+        )
+        .unwrap()
+        .to_rgb8();
+
+        assert_eq!(calls, 1);
+        assert_eq!(output.get_pixel(2050, 500), &Rgb([1, 2, 3]));
+        assert_eq!(output.get_pixel(2200, 500), &Rgb([1, 2, 3]));
+        assert_eq!(output.get_pixel(2150, 500), original.get_pixel(2150, 500));
+        assert_eq!(output.get_pixel(10, 10), original.get_pixel(10, 10));
     }
 
     #[test]
