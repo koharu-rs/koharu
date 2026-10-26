@@ -17,16 +17,6 @@ pub enum FontStyle {
     Oblique,
 }
 
-impl From<koharu_scene::FontStyle> for FontStyle {
-    fn from(value: koharu_scene::FontStyle) -> Self {
-        match value {
-            koharu_scene::FontStyle::Normal => Self::Normal,
-            koharu_scene::FontStyle::Italic => Self::Italic,
-            koharu_scene::FontStyle::Oblique => Self::Oblique,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub struct FontFamily {
@@ -61,14 +51,4 @@ pub struct FontFace {
     pub weight: u16,
     pub weight_range: Option<FontRange>,
     pub style: FontStyle,
-}
-
-/// Inline-axis alignment within a text layout box.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum TextAlign {
-    #[default]
-    Left,
-    Center,
-    Right,
-    Justify,
 }

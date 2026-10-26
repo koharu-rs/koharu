@@ -28,14 +28,6 @@ pub enum LineBreakSuffix {
     Hyphen,
 }
 
-impl LineBreakSuffix {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Hyphen => "-",
-        }
-    }
-}
-
 /// A trimmed line segment ready for shaping.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LineSegment {

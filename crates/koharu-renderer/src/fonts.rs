@@ -63,7 +63,6 @@ fn symbol_fallback_families() -> &'static [String] {
 #[derive(Clone)]
 pub struct Font {
     data: Blob<u8>,
-    bytes: Arc<OnceLock<Arc<[u8]>>>,
     index: u32,
     family_name: String,
     font_name: String,
@@ -134,7 +133,6 @@ impl Font {
 
         Ok(Self {
             data: font.blob,
-            bytes: Arc::new(OnceLock::new()),
             index: font.index,
             family_name,
             font_name,
@@ -147,18 +145,13 @@ impl Font {
         })
     }
 
-    pub(crate) fn bytes(&self) -> &[u8] {
-        self.bytes
-            .get_or_init(|| Arc::from(self.data.as_ref()))
-            .as_ref()
+    /// Whether both are the same face of the same file.
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        self.data.id() == other.data.id() && self.index == other.index
     }
 
-    pub(crate) fn shared_bytes(&self) -> Arc<[u8]> {
-        Arc::clone(self.bytes.get_or_init(|| Arc::from(self.data.as_ref())))
-    }
-
-    pub(crate) const fn index(&self) -> u32 {
-        self.index
+    pub(crate) fn font_data(&self) -> vello::peniko::FontData {
+        vello::peniko::FontData::new(self.data.clone(), self.index)
     }
 
     pub(crate) fn normalized_coords(&self) -> &[vello::NormalizedCoord] {
@@ -337,10 +330,6 @@ fn is_default_ignorable(character: char) -> bool {
         character as u32,
         0x200C | 0x200D | 0xFE00..=0xFE0F | 0xE0020..=0xE007F | 0xE0100..=0xE01EF
     )
-}
-
-pub(crate) fn font_key(font: &Font) -> usize {
-    font as *const Font as usize
 }
 
 #[derive(Clone, Debug)]
@@ -522,19 +511,6 @@ impl FontSystem {
         .with_context(|| format!("no font found for family {family:?}"))
     }
 
-    #[cfg(test)]
-    pub fn first_font(&mut self) -> Result<Font> {
-        self.resolve(
-            &[],
-            Attributes::default(),
-            &[Script::from_bytes(*b"Latn")],
-            None,
-        )?
-        .into_iter()
-        .next()
-        .context("no usable fonts are installed")
-    }
-
     fn system_faces(&mut self) -> Vec<SystemFace> {
         if let Some(faces) = &self.system_faces {
             return faces.clone();
@@ -590,16 +566,34 @@ impl Default for FontSystem {
 }
 
 pub(crate) struct Fonts {
-    system: OnceCell<Arc<Mutex<FontSystem>>>,
+    system: OnceLock<Arc<Mutex<FontSystem>>>,
     catalog: OnceCell<Arc<FontCatalog>>,
     cache: Mutex<FontCache>,
+    /// Families a load found in neither the system nor the catalog, which
+    /// are no longer reported missing.
+    unavailable: Mutex<HashSet<String>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A face a text asked for that isn't installed or loaded yet.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct FontRequest {
     pub(crate) family: String,
-    pub(crate) weight: Option<u16>,
-    pub(crate) style: Option<PublicFontStyle>,
+    pub(crate) weight: u16,
+    pub(crate) italic: bool,
+}
+
+impl FontRequest {
+    fn attributes(&self) -> Attributes {
+        Attributes {
+            weight: fontique::FontWeight::new(f32::from(self.weight)),
+            style: if self.italic {
+                FontStyle::Italic
+            } else {
+                FontStyle::Normal
+            },
+            ..Attributes::default()
+        }
+    }
 }
 
 pub(crate) enum FontPreview {
@@ -610,19 +604,21 @@ pub(crate) enum FontPreview {
 impl Fonts {
     pub(crate) fn new() -> Self {
         Self {
-            system: OnceCell::new(),
+            system: OnceLock::new(),
             catalog: OnceCell::new(),
             cache: Mutex::new(FontCache::new(DEFAULT_FONT_CACHE_BYTES)),
+            unavailable: Mutex::new(HashSet::new()),
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn is_system_initialized(&self) -> bool {
-        self.system.get().is_some()
+    /// The installed fonts, scanned on first use.
+    fn system(&self) -> &Arc<Mutex<FontSystem>> {
+        self.system
+            .get_or_init(|| Arc::new(Mutex::new(FontSystem::new())))
     }
 
     pub(crate) async fn families(&self) -> Result<Vec<FontFamily>> {
-        let system = self.ensure_system().await;
+        let system = self.system().clone();
         let catalog = self.catalog().await?;
         let mut families = BTreeMap::<String, FontFamily>::new();
 
@@ -679,17 +675,21 @@ impl Fonts {
         Ok(families)
     }
 
+    /// The font chain for one span: `preferred`, then the typesetting
+    /// families, then the platform's fallback for the text. A preferred
+    /// family that is neither installed nor loaded comes back as a request,
+    /// and the chain falls back until `load` brings it in.
     pub(crate) fn resolve(
         &self,
-        preferred_font: Option<&str>,
-        font_weight: Option<u16>,
-        font_style: Option<PublicFontStyle>,
+        preferred: Option<&str>,
+        weight: u16,
+        italic: bool,
         theme_families: &[String],
         text: &str,
         language: Option<&str>,
-    ) -> Result<Vec<Font>> {
+    ) -> Result<(Vec<Font>, Option<FontRequest>)> {
         let mut families = Vec::with_capacity(theme_families.len() + 2);
-        if let Some(preferred) = preferred_font.filter(|value| !value.trim().is_empty()) {
+        if let Some(preferred) = preferred.filter(|value| !value.trim().is_empty()) {
             families.push(preferred.to_owned());
         }
         for family in theme_families {
@@ -706,35 +706,35 @@ impl Fonts {
         {
             families.push("Arial".to_owned());
         }
+        let request = FontRequest {
+            family: families[0].clone(),
+            weight,
+            italic,
+        };
+        let attributes = request.attributes();
 
-        let mut attributes = Attributes::default();
-        if let Some(weight) = font_weight {
-            attributes.weight = fontique::FontWeight::new(f32::from(weight));
-        }
-        if let Some(style) = font_style {
-            attributes.style = match style {
-                PublicFontStyle::Normal => FontStyle::Normal,
-                PublicFontStyle::Italic => FontStyle::Italic,
-                PublicFontStyle::Oblique => FontStyle::Oblique(None),
-            };
-        }
-
-        let system = self
-            .system
-            .get()
-            .context("font system was not prepared before shaping")?;
-        let bundled = if let Some(family) = families
-            .first()
-            .filter(|family| system.lock().collection.family_by_name(family).is_none())
-            && let Some(catalog) = self.catalog.get()
-        {
-            if let Some(face) = catalog.select(family, attributes) {
-                self.cache.lock().get(&face.post_script_name)
-            } else {
-                None
-            }
-        } else {
+        let system = self.system();
+        let installed = system
+            .lock()
+            .collection
+            .family_by_name(&families[0])
+            .is_some();
+        let mut missing = None;
+        let bundled = if installed {
             None
+        } else {
+            let face = self
+                .catalog
+                .get()
+                .and_then(|catalog| catalog.select(&families[0], attributes));
+            let font = face
+                .as_ref()
+                .and_then(|face| self.cache.lock().get(&face.post_script_name));
+            let unavailable = self.unavailable.lock().contains(&normalize(&families[0]));
+            if font.is_none() && !unavailable {
+                missing = Some(request);
+            }
+            font
         };
 
         let mut resolved = system.lock().resolve_with_fallback_families(
@@ -745,16 +745,14 @@ impl Fonts {
             language,
         )?;
         if let Some(font) = bundled {
-            resolved.retain(|candidate| {
-                candidate.data.id() != font.data.id() || candidate.index != font.index
-            });
+            resolved.retain(|candidate| !candidate.same(&font));
             resolved.insert(0, font);
         }
-        Ok(resolved)
+        Ok((resolved, missing))
     }
 
     pub(crate) async fn preview(&self, family_name: &str) -> Result<FontPreview> {
-        let system = self.ensure_system().await;
+        let system = self.system().clone();
         let catalog = self.catalog().await?;
         if let Some(face) = catalog.select(family_name, Attributes::default()) {
             let path =
@@ -779,46 +777,24 @@ impl Fonts {
         .await
     }
 
-    pub(crate) async fn prepare(&self, requests: &[FontRequest]) -> Result<()> {
+    /// Downloads the bundled faces `requests` name. A family the catalog
+    /// doesn't have is remembered, so it isn't requested again.
+    pub(crate) async fn load(&self, requests: &[FontRequest]) -> Result<()> {
         if requests.is_empty() {
             return Ok(());
         }
-        let system = self.ensure_system().await;
-        let missing = {
-            let mut system = system.lock();
-            requests
-                .iter()
-                .filter(|request| system.collection.family_by_name(&request.family).is_none())
-                .cloned()
-                .collect::<Vec<_>>()
-        };
-        if missing.is_empty() {
-            return Ok(());
-        }
         let catalog = self.catalog().await?;
-        for request in missing {
-            let style = match request.style.unwrap_or(PublicFontStyle::Normal) {
-                PublicFontStyle::Normal => FontStyle::Normal,
-                PublicFontStyle::Italic => FontStyle::Italic,
-                PublicFontStyle::Oblique => FontStyle::Oblique(None),
-            };
-            let attributes = Attributes {
-                weight: fontique::FontWeight::new(f32::from(request.weight.unwrap_or(400))),
-                style,
-                ..Attributes::default()
-            };
-            if let Some(face) = catalog.select(&request.family, attributes) {
-                self.load(face).await?;
+        for request in requests {
+            match catalog.select(&request.family, request.attributes()) {
+                Some(face) => {
+                    self.load_face(face).await?;
+                }
+                None => {
+                    self.unavailable.lock().insert(normalize(&request.family));
+                }
             }
         }
         Ok(())
-    }
-
-    async fn ensure_system(&self) -> Arc<Mutex<FontSystem>> {
-        self.system
-            .get_or_init(|| tokio_rayon::spawn(|| Arc::new(Mutex::new(FontSystem::new()))))
-            .await
-            .clone()
     }
 
     async fn catalog(&self) -> Result<&Arc<FontCatalog>> {
@@ -847,7 +823,7 @@ impl Fonts {
             .await
     }
 
-    async fn load(&self, face: Arc<BundledFace>) -> Result<Font> {
+    async fn load_face(&self, face: Arc<BundledFace>) -> Result<Font> {
         if let Some(font) = self.cache.lock().get(&face.post_script_name) {
             return Ok(font);
         }

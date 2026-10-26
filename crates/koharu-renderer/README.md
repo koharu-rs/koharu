@@ -21,9 +21,17 @@ composites its layers, and turns it into pixels.
 let renderer = Renderer::new(typesetting);
 
 let frame = renderer.render(&session, page)?;
+if frame.needs_fonts() {
+    renderer.load_fonts(&frame).await?;
+    // Render again to draw with them.
+}
 
-// The canvas draws what one view of the page needs.
-frame.draw(&mut scene, View { rect, scale });
+// The canvas draws what one view of the page needs: usually one strip, each
+// rendered into a target placed at its `rect`.
+let gpu = renderer.gpu()?;
+for strip in frame.draw(View { rect, scale }) {
+    gpu.render(&strip.scene, &target, width, height)?;
+}
 
 // Exports.
 let composite = renderer.rasterize(&frame)?;
@@ -33,8 +41,8 @@ if let Some(mask) = frame.mask(layer)? {
 }
 let text = frame.layer(layer).and_then(Layer::text);
 
-let families = renderer.available_fonts()?;
-let preview = renderer.font_preview(family)?;
+let families = renderer.available_fonts().await?;
+let preview = renderer.font_preview(family).await?;
 ```
 
 - `render` is synchronous. Files and pixel tiles live in memory in the Loro
@@ -46,6 +54,10 @@ let preview = renderer.font_preview(family)?;
   whoever made it.
 - `rasterize` renders at the page's pixel size and returns RGBA with its
   page-space origin. A page and a cropped layer give the same `Raster` type.
+- A text whose bundled font hasn't downloaded draws with the rest of its font
+  chain, and its frame `needs_fonts`. `load_fonts` downloads those fonts, and
+  the next render lays the text out with them. A family that is neither
+  installed nor bundled isn't asked for again.
 - The renderer follows the typesetting preference as it changes; a new font
   chain rebuilds text.
 
@@ -96,6 +108,13 @@ an A4 page at 600 dpi (4961×7016) fits only one full-page image per frame. So:
 - A pass whose tiles hold more pixels than the atlas is split into strips that
   each fit. The canvas at any zoom and an export at full size take the same
   path.
+- Every render goes through `Gpu::render`, which works around two faults of
+  vello 0.11's atlas. A render with no image, gradient, or glyph frees the
+  atlas while vello still counts its images as uploaded, so they draw
+  transparent from then on [vello#1948]; such a scene gets one transparent
+  pixel image. vello never evicts an image either of the last two renders drew
+  [vello#2011], so consecutive strips would lose tiles; before a render whose
+  images don't fit beside theirs, two renders of that pixel let them go.
 
 ## Text
 
@@ -161,7 +180,8 @@ order, each only when the ones before can't make it fit:
    has more than five letters, keeping at least two on each side, and at most
    two lines in a row end with a hyphen, as Photoshop's hyphenation defaults
    are [Photoshop hyphenation]. CJK text needs none: it already breaks between
-   characters.
+   characters. A text whose `language` has no hyphenation patterns, or is
+   undetermined, has no hyphenation points and goes on to step 4.
 4. **Breaking inside a word** with no hyphenation point, such as a long scream
    or a URL, between any two characters, as CSS `overflow-wrap: anywhere`
    breaks "an otherwise unbreakable string of characters" when nothing else
@@ -199,7 +219,9 @@ Vertical shrinks a balloon's text only when rephrasing can't make it fit
     balance` does [CSS text-wrap].
 - **Direction.** Vertical text sets columns right to left with the font's
   vertical forms (`vert` and `vrt2`). Chinese and Japanese text uses CJK
-  punctuation layout.
+  punctuation layout. `?` and `!` stand upright in their full-width forms
+  [JLREQ punctuation], and a run of two or three is set side by side and
+  centred in one cell, as tate-chu-yoko is [JLREQ tate-chu-yoko].
 - **Alignment** works along the inline axis: left, centre, or right in
   horizontal text, and top, centre, or bottom in vertical text, as in Photoshop
   [Photoshop paragraphs] and Clip Studio Paint [CSP text frame].
@@ -230,9 +252,9 @@ key is unchanged:
 
 | Layer | Key |
 |---|---|
-| text | the layer's hash (the hash of `""`, which its view carries), its text style's values, and the typesetting preference |
+| text | the layer's hash (the hash of `""`, which its view carries), its text style's values, the typesetting preference, and the fonts loaded |
 | shape | the layer's hash |
-| image | the layer's hash; the decoded file is cached by its content hash |
+| image | the file's content hash; the layer's transform applies as the frame is assembled |
 | raster, pixel mask | the hash of the layer's stored tiles, which the scene reports |
 
 Keys are content, so a frame is right whoever edited the session (the user, the
@@ -244,9 +266,10 @@ renderer. Caches are bounded, and eviction costs time, never output.
 - PNG and CBZ rasterize the frame.
 - PSD export takes the composite, each layer's `cropped` frame, each masked
   layer's `mask` frame, and the resolved text. `cropped` draws only the layer's
-  own content, without its opacity, blend mode, or masks, which the PSD records
-  as layer properties. `mask` draws the layer's components merged into one
-  coverage.
+  own content, shown, over its bounds rounded out to whole pixels, without its
+  opacity, blend mode, or masks, which the PSD records as layer properties.
+  `mask` draws the layer's components merged into one coverage over the page,
+  as white with the coverage in alpha.
 
 ## Modules
 
@@ -259,7 +282,7 @@ renderer. Caches are bounded, and eviction costs time, never output.
 | `layout`, `shape`, `segment`, `script` | line breaking, shaping, Unicode segmentation, and scripts |
 | `fonts` | discovery, the bundled fonts, fallback, and previews |
 | `images` | decoding files, with their sizes checked first |
-| `raster` | the wgpu device, vello rendering, and readback |
+| `raster` | the wgpu device, vello rendering and its atlas workarounds, and readback |
 | `config` | the typesetting preference |
 | `error` | errors that keep their causes |
 
@@ -270,6 +293,7 @@ A page is at most 32,768 pixels on a side and 268,435,456 pixels in all.
 ```text
 cargo check -p koharu-renderer --all-targets
 cargo test -p koharu-renderer
+cargo run -p koharu-renderer --example page -- page.png
 ```
 
 GPU tests run only on a machine with a usable adapter.
@@ -286,10 +310,12 @@ GPU tests run only on a machine with a usable adapter.
 - Lettering, manga translation, and subtitles: [Comicraft glossary],
   [Comicraft word arrangement], [Blambot grammar], [Manga lettering], [Manga
   translation II], [BBC subtitles]
-- vello: [vello atlas], [vello overflow], [vello textures]
+- vello: [vello atlas], [vello overflow], [vello textures], [vello#1948],
+  [vello#2011]
 - Linebender: [Parley vertical text]
 - W3C and MDN: [W3C compositing], [CSS font-weight], [CSS overflow], [CSS
-  overflow-wrap], [CSS text-wrap], [CSS exclusions], [SVG broken lines]
+  overflow-wrap], [CSS text-wrap], [CSS exclusions], [SVG broken lines], [JLREQ
+  punctuation], [JLREQ tate-chu-yoko]
 - Tauri: [CEF OSR]
 
 [vello]: https://github.com/linebender/vello
@@ -319,6 +345,8 @@ GPU tests run only on a machine with a usable adapter.
 [vello atlas]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_encoding/src/image_cache.rs#L10
 [vello overflow]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_encoding/src/resolve.rs#L306-L311
 [vello textures]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_research/src/lib.rs#L564-L574
+[vello#1948]: https://github.com/linebender/vello/issues/1948
+[vello#2011]: https://github.com/linebender/vello/issues/2011
 [Parley vertical text]: https://github.com/linebender/parley/issues/634
 [W3C compositing]: https://www.w3.org/TR/compositing-1/#isolation
 [CSS font-weight]: https://www.w3.org/TR/css-fonts-4/#font-weight-prop
@@ -327,4 +355,6 @@ GPU tests run only on a machine with a usable adapter.
 [CSS text-wrap]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-wrap
 [CSS exclusions]: https://www.w3.org/TR/css3-exclusions/#wrap-flow-property
 [SVG broken lines]: https://www.w3.org/TR/SVG2/text.html#TextLayoutAutoNotesBrokenLines
+[JLREQ punctuation]: https://www.w3.org/TR/jlreq/#positioning-of-dividing-punctuation-marks-question-mark-and-exclamation-mark-and-hyphens
+[JLREQ tate-chu-yoko]: https://www.w3.org/TR/jlreq/#handling_of_tatechuyoko
 [CEF OSR]: https://github.com/tauri-apps/tauri/pull/16225
