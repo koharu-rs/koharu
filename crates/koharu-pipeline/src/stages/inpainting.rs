@@ -520,6 +520,8 @@ const TILE_SIZE: u32 = 512;
 const TILE_CONTEXT: u32 = 128;
 const UNIFORM_BACKGROUND_MIN_PIXELS: usize = 16;
 const FLAT_FILL_EDGE_MARGIN: f32 = 3.0;
+const UNIFORM_OUTLIER_DISTANCE: u8 = 48;
+const UNIFORM_OUTLIER_SHARE: f64 = 0.03;
 // The tile and flat-fill sizes above are tuned for pages up to this long side.
 // A larger page is worked on as if it were scaled down to it: its tiles cover the
 // same share of the artwork and reach the model at the size the model expects, so
@@ -839,7 +841,7 @@ fn uniform_region_color(
 ) -> Option<Rgb<u8>> {
     let [left, top, right, bottom] = region.bounds;
     let edge_margin = FLAT_FILL_EDGE_MARGIN * scale;
-    let mut channels = [Vec::new(), Vec::new(), Vec::new()];
+    let mut pixels = Vec::new();
     for y in top..bottom {
         for x in left..right {
             let point = (x as f32 + 0.5, y as f32 + 0.5);
@@ -849,17 +851,33 @@ fn uniform_region_color(
             {
                 continue;
             }
-            let pixel = image.get_pixel(x, y);
-            for channel in 0..3 {
-                channels[channel].push(pixel[channel]);
-            }
+            pixels.push(image.get_pixel(x, y).0);
         }
     }
-    if channels[0].len() < UNIFORM_BACKGROUND_MIN_PIXELS {
+    if pixels.len() < UNIFORM_BACKGROUND_MIN_PIXELS {
         return None;
     }
 
-    let medians = channels.each_mut().map(|values| median(values));
+    // A few stray pixels (a bit of outline inside the detected polygon, a speck)
+    // shouldn't disqualify an otherwise flat bubble, so the spread is measured
+    // after dropping a small share of pixels far from the median colour.
+    let medians = std::array::from_fn::<_, 3, _>(|channel| {
+        median(
+            &mut pixels
+                .iter()
+                .map(|pixel| pixel[channel])
+                .collect::<Vec<_>>(),
+        )
+    });
+    let total = pixels.len();
+    pixels.retain(|pixel| {
+        (0..3).all(|channel| pixel[channel].abs_diff(medians[channel]) <= UNIFORM_OUTLIER_DISTANCE)
+    });
+    if (total - pixels.len()) as f64 > total as f64 * UNIFORM_OUTLIER_SHARE {
+        return None;
+    }
+    let channels: [Vec<u8>; 3] =
+        std::array::from_fn(|channel| pixels.iter().map(|pixel| pixel[channel]).collect());
     let deviations = std::array::from_fn::<_, 3, _>(|channel| {
         standard_deviation(&channels[channel], f64::from(medians[channel]))
     });
@@ -1300,6 +1318,43 @@ mod tests {
                 assert_eq!(output.get_pixel(250, 250), &Rgb([255, 255, 255]));
             }
         }
+    }
+
+    #[test]
+    fn stray_dark_pixels_do_not_block_a_flat_fill() {
+        let mut image = RgbImage::from_pixel(300, 300, Rgb([250, 250, 250]));
+        let mut mask = GrayImage::new(300, 300);
+        // About 1% of the bubble is a dark speck, e.g. outline caught inside the
+        // detected polygon. Its spread alone (~25) would fail the uniform check.
+        for y in 20..50 {
+            for x in 20..50 {
+                image.put_pixel(x, y, Rgb([0, 0, 0]));
+            }
+        }
+        for y in 120..180 {
+            for x in 130..170 {
+                image.put_pixel(x, y, Rgb([10, 10, 10]));
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        let mut calls = 0;
+
+        let output = inpaint_tiled(
+            &DynamicImage::ImageRgb8(image),
+            &mask,
+            &mask,
+            &[rectangle_region([0, 0, 300, 300])],
+            |_, _| {
+                calls += 1;
+                Ok(DynamicImage::new_rgb8(1, 1))
+            },
+        )
+        .unwrap()
+        .to_rgb8();
+
+        assert_eq!(calls, 0);
+        assert_eq!(output.get_pixel(150, 150), &Rgb([250, 250, 250]));
+        assert_eq!(output.get_pixel(30, 30), &Rgb([0, 0, 0]));
     }
 
     #[test]
