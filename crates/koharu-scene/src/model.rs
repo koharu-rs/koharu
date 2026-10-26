@@ -188,8 +188,9 @@ impl fmt::Display for Hash {
     }
 }
 
-/// The document's version, as opaque Loro frontiers.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+/// The document's version, as opaque Loro frontiers. Equal revisions are the
+/// same document; frontiers have no order, so revisions are not compared.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(transparent)]
 pub struct Revision(pub(crate) String);
 
