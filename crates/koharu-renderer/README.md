@@ -117,12 +117,8 @@ style, else this table:
 | stroke | none |
 | `line_height` | 1.2, Photoshop's Auto leading of 120% [Photoshop spacing] |
 
-The scene stores no kerning, tracking, or hyphenation:
-
-- **Kerning** uses the font's own pairs, as Photoshop's Metrics kerning does
-  [Photoshop spacing]. Tracking is 0.
-- **Hyphenation** is off. Letterers avoid it [Comicraft glossary], and CSS
-  hyphenates only where a text asks for it [CSS hyphens].
+The scene stores no kerning or tracking. Kerning uses the font's own pairs, as
+Photoshop's Metrics kerning does [Photoshop spacing], and tracking is 0.
 
 ### Frames
 
@@ -140,30 +136,48 @@ The scene stores no kerning, tracking, or hyphenation:
   reads across a gap. SVG 2 instead fills every span of a broken line [SVG
   broken lines], which would carry a line across a balloon's neck.
 - **Several texts in one balloon** each fit their own frame; they share no
-  layout, and each shrinks on its own.
+  layout, and each shrinks on its own, so their drawn sizes can differ.
 - **Anchor.** The block of lines sits at the start, centre, or end of the
   frame's block axis: top, middle, or bottom for horizontal text, and right,
   middle, or left for vertical text.
 
 ### Fit
 
-- **`shrink`.** When the text would overflow at its set size, the renderer
-  draws every span at one scale, the largest that fits, and never below half.
-  It fits again on every render, so typing, deleting, restyling, and resizing
-  the frame all refit live, and a shortened text grows back to its set size, as
-  PowerPoint fits placeholder text "as you type" [PowerPoint placeholders].
-  The text reports the scale, and the canvas marks shrunk text as it marks
-  overflow, because publishers shrink a balloon's text only when rephrasing
-  can't make it fit [Manga translation II].
-- **`none`.** The text keeps its set size.
-- **`grow`.** The box keeps its inline size and its block size follows the
-  text, growing away from the anchor: down from a top anchor, both ways from a
-  middle one, and up from a bottom one.
-- **Overflow.** Text that still doesn't fit is drawn past its frame and never
-  clipped, as PowerPoint lets it "overfill the box" [PowerPoint autofit] and
-  CSS shows overflow by default [CSS overflow]. The text reports that it
-  overflowed, so the canvas can mark it. Hiding the overflow would drop
-  translated words from an export without a trace.
+Box and path text that doesn't fit its frame goes through these steps in
+order, each only when the ones before can't make it fit:
+
+1. **Breaks between words**, at the set size, including after a hyphen the
+   text already has.
+2. **Shrinking**, for `fit: shrink`: every span at one scale, the largest that
+   fits, never below half the set size. It fits again on every render, so
+   typing, deleting, restyling, and resizing the frame all refit live, and a
+   shortened text grows back to its set size, as PowerPoint fits placeholder
+   text "as you type" [PowerPoint placeholders].
+3. **Hyphenation** by the text's `language`, at the largest size it lets the
+   text fit. Letterers hyphenate only when they must: Blambot advises avoiding
+   it "if at all possible, and even then, only if it's a compound word that
+   breaks well" [Blambot grammar], and a manga letterer divides and hyphenates
+   "longer words as necessary" [Manga lettering]. A word is split only if it
+   has more than five letters, keeping at least two on each side, and at most
+   two lines in a row end with a hyphen, as Photoshop's hyphenation defaults
+   are [Photoshop hyphenation]. CJK text needs none: it already breaks between
+   characters.
+4. **Breaking inside a word** with no hyphenation point, such as a long scream
+   or a URL, between any two characters, as CSS `overflow-wrap: anywhere`
+   breaks "an otherwise unbreakable string of characters" when nothing else
+   prevents overflow [CSS overflow-wrap], so the word stays inside its balloon.
+5. **Overflow.** What still doesn't fit is drawn past the frame and never
+   clipped, as PowerPoint lets text "overfill the box" [PowerPoint autofit] and
+   CSS shows overflow by default [CSS overflow]. Hiding it would drop translated
+   words from an export without a trace.
+
+`fit: none` skips step 2. With `fit: grow`, the box keeps its inline size and
+its block size follows the text, growing away from the anchor: down from a top
+anchor, both ways from a middle one, and up from a bottom one; only a word wider
+than the box reaches steps 3 to 5. The text reports its scale, its hyphens and
+breaks inside words, and whether it overflowed, and the canvas marks each:
+Vertical shrinks a balloon's text only when rephrasing can't make it fit
+[Manga translation II], and a hyphen is as much a last resort.
 
 ### Lines
 
@@ -173,10 +187,16 @@ The scene stores no kerning, tracking, or hyphenation:
 - **Breaks** fall at Unicode line-break opportunities. A break after
   punctuation is preferred to one inside a phrase, as subtitle guides ask
   [BBC subtitles].
-- **Balance.** Centred text evens out its line lengths, so a block reads as one
-  round shape, as letterers arrange balloon text [Comicraft glossary], InDesign
-  balances centred paragraphs [InDesign alignment], and CSS `text-wrap:
-  balance` does [CSS text-wrap].
+- **Shape.** Breaks are chosen over the whole paragraph, not line by line:
+  - Path text fills every line in the same proportion to its span, so in a
+    balloon the block takes the outline's round shape: "the center line of text
+    should be the widest, and each line above or below it should be slightly
+    narrower" [Comicraft word arrangement]. A last line shorter than the lines
+    above it is avoided, the "parking space" letterers remove [Comicraft
+    glossary].
+  - Centred box text evens out its line lengths, as InDesign suggests
+    balancing centred paragraphs [InDesign alignment] and CSS `text-wrap:
+    balance` does [CSS text-wrap].
 - **Direction.** Vertical text sets columns right to left with the font's
   vertical forms (`vert` and `vrt2`). Chinese and Japanese text uses CJK
   punctuation layout.
@@ -197,7 +217,8 @@ The scene stores no kerning, tracking, or hyphenation:
 `Layer::text` gives the laid-out text as runs: each run's UTF-16 range, the
 PostScript name of the face that drew it, the size it was drawn at, its fill,
 and its stroke and width. It also gives the box the text was laid out in, the
-scale `shrink` drew it at, and whether it overflowed. The canvas's inspector
+scale `shrink` drew it at, where it hyphenated or broke inside a word, and
+whether it overflowed. The canvas's inspector
 shows the set size beside the drawn one. A fallback face gets a run of its own,
 so the PSD's type layer names every font it uses.
 
@@ -257,17 +278,18 @@ GPU tests run only on a machine with a usable adapter.
 
 - Adobe: [Photoshop blending], [Photoshop shape strokes], [Photoshop disable
   mask], [Photoshop type defaults], [Photoshop spacing], [Photoshop
-  paragraphs], [Photoshop type in a path], [Photoshop stroke], [InDesign
-  alignment]
+  paragraphs], [Photoshop type in a path], [Photoshop stroke], [Photoshop
+  hyphenation], [InDesign alignment]
 - Celsys: [CSP through], [CSP vector lines], [CSP masks], [CSP text frame],
   [CSP text edge]
 - Microsoft: [PowerPoint placeholders], [PowerPoint autofit]
-- Lettering, manga translation, and subtitles: [Comicraft glossary], [Manga
+- Lettering, manga translation, and subtitles: [Comicraft glossary],
+  [Comicraft word arrangement], [Blambot grammar], [Manga lettering], [Manga
   translation II], [BBC subtitles]
 - vello: [vello atlas], [vello overflow], [vello textures]
 - Linebender: [Parley vertical text]
-- W3C and MDN: [W3C compositing], [CSS font-weight], [CSS hyphens], [CSS
-  overflow], [CSS text-wrap], [CSS exclusions], [SVG broken lines]
+- W3C and MDN: [W3C compositing], [CSS font-weight], [CSS overflow], [CSS
+  overflow-wrap], [CSS text-wrap], [CSS exclusions], [SVG broken lines]
 - Tauri: [CEF OSR]
 
 [vello]: https://github.com/linebender/vello
@@ -279,6 +301,7 @@ GPU tests run only on a machine with a usable adapter.
 [Photoshop paragraphs]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/format-paragraphs.html
 [Photoshop type in a path]: https://web.archive.org/web/20241213102001/https://helpx.adobe.com/photoshop/using/creating-type-effects.html
 [Photoshop stroke]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/apply-layer-effects/layer-style-effects-and-options-overview.html
+[Photoshop hyphenation]: https://developer.adobe.com/photoshop/uxp/2022/ps-reference/objects/options/hyphenationproperties
 [InDesign alignment]: https://helpx.adobe.com/indesign/using/aligning-text.html
 [CSP through]: https://help.clip-studio.com/en-us/manual_en/390_filters/Tonal_Correction.htm
 [CSP vector lines]: https://tips.clip-studio.com/en-us/articles/600
@@ -288,6 +311,9 @@ GPU tests run only on a machine with a usable adapter.
 [PowerPoint placeholders]: https://support.microsoft.com/en-gb/powerpoint/add-text-to-a-slide
 [PowerPoint autofit]: https://support.microsoft.com/en-us/powerpoint/split-body-text-between-two-slides
 [Comicraft glossary]: https://balloontales.com/the-comicraft-glossary-of-lettering-terms/
+[Comicraft word arrangement]: https://balloontales.com/word-arrangement/
+[Blambot grammar]: https://blambot.com/pages/comic-book-grammar-tradition
+[Manga lettering]: https://swet.jp/members/article/manga_lettering_and_translation
 [Manga translation II]: https://wordswithoutborders.org/read/article/2009-02/manga-translation-only-poets-need-apply-part-ii/
 [BBC subtitles]: https://www.bbc.co.uk/accessibility/forproducts/guides/subtitles/
 [vello atlas]: https://github.com/linebender/vello/blob/v0.11.0/research/vello_encoding/src/image_cache.rs#L10
@@ -296,8 +322,8 @@ GPU tests run only on a machine with a usable adapter.
 [Parley vertical text]: https://github.com/linebender/parley/issues/634
 [W3C compositing]: https://www.w3.org/TR/compositing-1/#isolation
 [CSS font-weight]: https://www.w3.org/TR/css-fonts-4/#font-weight-prop
-[CSS hyphens]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/hyphens
 [CSS overflow]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overflow
+[CSS overflow-wrap]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/overflow-wrap
 [CSS text-wrap]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/text-wrap
 [CSS exclusions]: https://www.w3.org/TR/css3-exclusions/#wrap-flow-property
 [SVG broken lines]: https://www.w3.org/TR/SVG2/text.html#TextLayoutAutoNotesBrokenLines
