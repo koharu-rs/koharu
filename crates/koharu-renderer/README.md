@@ -288,12 +288,22 @@ renderer. Caches are bounded, and eviction costs time, never output.
 
 A page is at most 32,768 pixels on a side and 268,435,456 pixels in all.
 
+## Examples
+
+Each example builds its page in code and prints what the renderer gives.
+
+| Example | Shows |
+|---|---|
+| `typeset` | the pipeline: a translation set in its balloons with a shared text style, how each text fit, and how they fit again when the style changes |
+| `export` | PNG and PSD export: the composite, each layer's own pixels and position, merged masks, and text runs |
+| `canvas` | the desktop canvas: a view drawn in strips, hit testing, overflow marks, and rendering again after an edit |
+
 ## Checks
 
 ```text
 cargo check -p koharu-renderer --all-targets
 cargo test -p koharu-renderer
-cargo run -p koharu-renderer --example page -- page.png
+cargo run -p koharu-renderer --example typeset
 ```
 
 GPU tests run only on a machine with a usable adapter.
