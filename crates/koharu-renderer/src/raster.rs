@@ -20,8 +20,9 @@ use vello::{
     },
 };
 
-/// The pixels vello 0.11's image atlas holds at most.
-const ATLAS: u64 = 8192 * 8192;
+/// The pixels vello 0.11's image atlas holds at most; it draws every image
+/// of a render from it, and skips what doesn't fit.
+pub(crate) const ATLAS: u64 = 8192 * 8192;
 
 /// One transparent pixel, drawn so a render always has an image.
 static PIXEL: LazyLock<ImageData> = LazyLock::new(|| ImageData {

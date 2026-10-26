@@ -24,14 +24,28 @@ pub(crate) struct Tiled {
     pub origin: (i32, i32),
     pub width: u32,
     pub height: u32,
+    /// Level 0 holds the pixels as given; the others are built when a view
+    /// first needs them.
     levels: Vec<OnceLock<Arc<Level>>>,
-    full: RgbaImage,
 }
 
 struct Level {
     image: RgbaImage,
     /// Tiles in rows, each with its rectangle in this level's pixels.
-    tiles: Vec<(Rect, ImageData)>,
+    tiles: OnceLock<Vec<(Rect, ImageData)>>,
+}
+
+impl Level {
+    fn new(image: RgbaImage) -> Arc<Self> {
+        Arc::new(Self {
+            image,
+            tiles: OnceLock::new(),
+        })
+    }
+
+    fn tiles(&self) -> &[(Rect, ImageData)] {
+        self.tiles.get_or_init(|| cut(&self.image))
+    }
 }
 
 impl Tiled {
@@ -42,39 +56,34 @@ impl Tiled {
             .ceil()
             .max(0.0) as usize
             + 1;
+        let levels: Vec<_> = (0..count).map(|_| OnceLock::new()).collect();
+        let _ = levels[0].set(Level::new(image));
         Self {
             origin,
             width,
             height,
-            levels: (0..count).map(|_| OnceLock::new()).collect(),
-            full: image,
+            levels,
         }
+    }
+
+    /// What the full-size pixels and their tiles take, for the cache.
+    pub fn bytes(&self) -> u64 {
+        u64::from(self.width) * u64::from(self.height) * 4 * 2
     }
 
     fn level(&self, index: usize) -> Arc<Level> {
         self.levels[index]
-            .get_or_init(|| {
-                let image = match index {
-                    0 => self.full.clone(),
-                    _ => half(&self.level(index - 1).image),
-                };
-                Arc::new(Level {
-                    tiles: cut(&image),
-                    image,
-                })
-            })
+            .get_or_init(|| Level::new(half(&self.level(index - 1).image)))
             .clone()
     }
 
     /// Draws the tiles that meet `visible`, a rectangle of output pixels,
-    /// through `transform` from layer pixels to output pixels. Returns the
-    /// image pixels drawn.
-    pub fn draw(&self, scene: &mut Scene, transform: Affine, visible: Rect) -> u64 {
+    /// through `transform` from layer pixels to output pixels.
+    pub fn draw(&self, scene: &mut Scene, transform: Affine, visible: Rect) {
         let (index, tiles, to_layer) = self.select(transform, visible);
         let level = self.level(index);
-        let mut pixels = 0;
         for at in tiles {
-            let (rect, image) = &level.tiles[at];
+            let (rect, image) = &level.tiles()[at];
             let brush = ImageBrush::new(image.clone())
                 .with_extend(Extend::Pad)
                 .with_quality(ImageQuality::Medium);
@@ -87,9 +96,7 @@ impl Tiled {
                 Some(brush_transform),
                 rect,
             );
-            pixels += u64::from(image.width) * u64::from(image.height);
         }
-        pixels
     }
 
     /// The image pixels `draw` would draw.

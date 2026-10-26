@@ -121,11 +121,12 @@ skrifa = "0.49.0"
 harfrust = "0.15.0"
 hypher = "0.1.8"
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
-icu_properties = "2.3.0"
-icu_segmenter = "2.3.0"
+icu_properties = { version = "2.3.0", features = ["compiled_data"] }
+icu_segmenter = { version = "2.3.0", features = ["compiled_data"] }
 jieba-rs = "0.11.0"
 fontique = "0.12.0"
 pollster = "1.0.1"
+quick_cache = "0.6.24"
 vello = "0.11.0"
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74", default-features = false, features = [
     "compression",
