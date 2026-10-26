@@ -286,11 +286,14 @@ This section is implementation, not schema.
   - Every operation checks its arguments before its first write, because Loro
     has no rollback.
   - A failure after a write poisons the session.
-- **Change** names, by id, the pages an edit touched. It is built from Loro
-  events by walking each event's layer up to its page.
-- **Saving.** The session saves when edits pause and when the project closes,
-  not after every edit. Each save rewrites the whole file with its history, so
-  save time grows with raster history until compaction drops it.
+- **Change** names, by id, the pages and layers an edit, undo, or redo
+  touched, and what an edit created or kept. An edit's comes from its plan;
+  an undo's or redo's is built from Loro events by walking each event's layer
+  up to its page.
+- **Saving.** The session's owner calls `save` when edits pause and when the
+  project closes, not after every edit. Each save rewrites the whole file with
+  its history, so save time grows with raster history until compaction drops
+  it.
 - **Versioning.** The project `version` is a SemVer version [SemVer] and
   changes only when the core does. A new layer kind or core property raises the
   minor version, and a reader opens any version up to its own with the same
