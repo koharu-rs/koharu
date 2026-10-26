@@ -56,7 +56,7 @@ fn created(change: &Change) -> LayerId {
         .iter()
         .find_map(|created| match created {
             Created::Layer { id, .. } => Some(*id),
-            Created::Page { .. } => None,
+            _ => None,
         })
         .expect("a layer was created")
 }

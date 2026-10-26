@@ -7,8 +7,10 @@ use specta::Type;
 
 use crate::{
     Error, File, Hash, History, Layer, LayerAnswer, LayerId, LayerView, MaskContent, Offset,
-    PageId, PageView, Pointer, ProjectView, Read, Rect, Relationship, Result, Session, Tiles, doc,
-    state::State, tiles,
+    PageId, PageView, Pointer, PointerBuf, ProjectView, Read, Rect, Relationship, Result, Session,
+    StyleId, StyleView, Tiles, doc,
+    state::{State, hash_value},
+    tiles,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, JsonSchema)]
@@ -21,6 +23,8 @@ pub enum Query {
     GetPage { page: PageId },
     /// Get one layer and where it sits.
     GetLayer { layer: LayerId },
+    /// Get one text style.
+    GetStyle { style: StyleId },
     /// Get the undo and redo labels.
     GetHistory,
 }
@@ -31,6 +35,7 @@ pub enum Answer {
     Project(ProjectView),
     Page(PageView),
     Layer(Box<LayerAnswer>),
+    Style(Box<StyleView>),
     History(History),
 }
 
@@ -44,6 +49,7 @@ impl Session {
             Query::GetProject => Answer::Project(self.project()?),
             Query::GetPage { page } => Answer::Page(self.page(page)?),
             Query::GetLayer { layer } => Answer::Layer(Box::new(self.layer(layer)?)),
+            Query::GetStyle { style } => Answer::Style(Box::new(self.style(style)?)),
             Query::GetHistory => Answer::History(self.history()),
         })
     }
@@ -58,7 +64,19 @@ impl Session {
                 .iter()
                 .map(|page| self.page(*page))
                 .collect::<Result<_>>()?,
+            styles: {
+                let mut state = self.state();
+                let mut ids: Vec<StyleId> = self.index.styles.iter().copied().collect();
+                ids.sort_unstable();
+                ids.into_iter()
+                    .map(|style| style_view(&mut state, style))
+                    .collect::<Result<_>>()?
+            },
         })
+    }
+
+    pub fn style(&self, style: StyleId) -> Result<StyleView> {
+        style_view(&mut self.state(), style)
     }
 
     pub fn page(&self, page: PageId) -> Result<PageView> {
@@ -125,8 +143,52 @@ impl Session {
         })
     }
 
+    /// A hash of a layer's stored tiles, which changes whenever its pixels
+    /// do, taken without decoding them.
+    pub fn tiles_hash(&self, layer: LayerId) -> Result<Hash> {
+        let mut state = self.state();
+        if state.node(layer)?.pixel_format().is_none() {
+            return Err(Error::rejected(format!("layer {layer} has no pixels")));
+        }
+        let mut hasher = blake3::Hasher::new();
+        for ((x, y), bytes) in state.tiles(layer)?.iter() {
+            hasher.update(&x.to_le_bytes());
+            hasher.update(&y.to_le_bytes());
+            hasher.update(&(bytes.len() as u64).to_le_bytes());
+            hasher.update(bytes);
+        }
+        Ok(hasher.finalize().into())
+    }
+
     pub fn file(&self, hash: &Hash) -> Result<File> {
         doc::file(&self.doc, hash)
+    }
+}
+
+fn style_view(state: &mut State<'_>, id: StyleId) -> Result<StyleView> {
+    let node = state.style(id)?.clone();
+    let style = node
+        .style()
+        .map_err(|error| Error::corrupt(format!("style {id}: {error}")))?;
+    Ok(StyleView {
+        id,
+        hash: hash_value(Some(&node.json())),
+        style,
+        overrides: node.generated.keys().cloned().collect(),
+        stale: state.stale_in(node.origin.clone())?,
+        origin: node.origin,
+    })
+}
+
+/// The paths under `path` that `value` sets: its non-null leaves.
+fn set_paths(value: &Value, path: &Pointer) -> Vec<PointerBuf> {
+    match value {
+        Value::Null => Vec::new(),
+        Value::Object(map) => map
+            .iter()
+            .flat_map(|(key, value)| set_paths(value, &path.with_trailing_token(key)))
+            .collect(),
+        _ => vec![path.to_buf()],
     }
 }
 
@@ -138,13 +200,18 @@ fn view(state: &mut State<'_>, id: LayerId) -> Result<LayerView> {
         .map_err(|error| Error::corrupt(format!("layer {id}: {error}")))?;
     let origin = node.origin.clone();
     let overrides = node.generated.keys().cloned().collect();
+    let style_overrides = match (node.props.get("text_style"), node.props.get("style")) {
+        (Some(Value::String(_)), Some(style)) => set_paths(style, Pointer::from_static("/style")),
+        _ => Vec::new(),
+    };
     Ok(LayerView {
         id,
-        hash: crate::state::hash_value(Some(&json)),
+        hash: hash_value(Some(&json)),
         layer,
         origin,
         overrides,
         stale: state.stale(id)?,
+        style_overrides,
         children: children
             .into_iter()
             .map(|child| view(state, child))

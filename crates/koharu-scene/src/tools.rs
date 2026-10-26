@@ -10,7 +10,10 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, generate::SchemaSettings, js
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 
-use crate::{Answer, Error, Layer, LayerKind, LayerView, Op, PageView, Query, Result, doc::Key};
+use crate::{
+    Answer, Error, Layer, LayerKind, LayerView, NamedStyle, Op, PageView, Query, Result, StyleView,
+    doc::Key,
+};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolSpec {
@@ -140,6 +143,7 @@ pub fn compact(answer: &Answer) -> Value {
             "id": project.id,
             "version": project.version,
             "pages": project.pages.iter().map(compact_page).collect::<Vec<_>>(),
+            "styles": project.styles.iter().map(compact_style).collect::<Vec<_>>(),
         }),
         Answer::Page(page) => compact_page(page),
         Answer::Layer(answer) => json!({
@@ -147,6 +151,7 @@ pub fn compact(answer: &Answer) -> Value {
             "parent": answer.parent,
             "view": compact_layer(&answer.view),
         }),
+        Answer::Style(view) => compact_style(view),
         other => serde_json::to_value(other).expect("answers serialize"),
     }
 }
@@ -159,17 +164,31 @@ fn compact_page(page: &PageView) -> Value {
     })
 }
 
+fn compact_origin(origin: &[crate::ActionRecord]) -> Vec<Value> {
+    origin
+        .iter()
+        .map(|record| json!({ "action": record.action.action, "by": record.action.software_agent.name }))
+        .collect()
+}
+
+fn compact_style(view: &StyleView) -> Value {
+    json!({
+        "id": view.id,
+        "style": view.style,
+        "origin": compact_origin(&view.origin),
+        "overrides": view.overrides,
+        "stale": view.stale,
+    })
+}
+
 fn compact_layer(view: &LayerView) -> Value {
     json!({
         "id": view.id,
         "layer": view.layer,
-        "origin": view
-            .origin
-            .iter()
-            .map(|record| json!({ "action": record.action.action, "by": record.action.software_agent.name }))
-            .collect::<Vec<_>>(),
+        "origin": compact_origin(&view.origin),
         "overrides": view.overrides,
         "stale": view.stale,
+        "style_overrides": view.style_overrides,
         "children": view.children.iter().map(compact_layer).collect::<Vec<_>>(),
         "masks": view.masks.iter().map(compact_layer).collect::<Vec<_>>(),
     })
@@ -288,6 +307,27 @@ pub(crate) fn layer_patch(generator: &mut SchemaGenerator) -> Schema {
     json_schema!({
         "description": "A JSON Merge Patch over the layer's properties; null clears an optional property.",
         "$ref": "#/$defs/LayerPatch",
+    })
+}
+
+/// The schema of `update_text_style`'s patch: a style with nothing required
+/// and `null` allowed everywhere. It registers `StylePatch`.
+pub(crate) fn style_patch(generator: &mut SchemaGenerator) -> Schema {
+    if !generator.definitions().contains_key("StylePatch") {
+        let mut style = root_schema::<NamedStyle>();
+        let defs = generator.definitions_mut();
+        if let Some(Value::Object(style_defs)) = style.remove("$defs") {
+            for (name, schema) in style_defs {
+                defs.insert(format!("Partial{name}"), partial(schema));
+            }
+        }
+        style.remove("$schema");
+        style.remove("title");
+        defs.insert("StylePatch".to_owned(), partial(Value::Object(style)));
+    }
+    json_schema!({
+        "description": "A JSON Merge Patch over the style's values; null clears an optional value.",
+        "$ref": "#/$defs/StylePatch",
     })
 }
 

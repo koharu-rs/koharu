@@ -10,8 +10,8 @@ use loro::LoroDoc;
 use serde_json::Value;
 
 use crate::{
-    Error, Hash, LayerId, PageId, Pointer, PointerBuf, Result,
-    doc::{self, Node, PageData},
+    ActionRecord, Error, Hash, LayerId, LayerKind, PageId, Pointer, PointerBuf, Result, StyleId,
+    doc::{self, Node, PageData, StyleNode},
     error::Kind,
     model::CONTENT,
     overrides,
@@ -19,12 +19,14 @@ use crate::{
 };
 
 /// What the session keeps between edits so that nothing rescans the
-/// document: the page order, each layer's page, and the stored files.
+/// document: the page order, each layer's page, and the stored files and
+/// styles.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Index {
     pub pages: Vec<PageId>,
     pub layers: HashMap<LayerId, PageId>,
     pub files: HashSet<Hash>,
+    pub styles: HashSet<StyleId>,
 }
 
 impl Index {
@@ -34,6 +36,7 @@ impl Index {
             pages,
             layers,
             files: doc::file_hashes(doc)?,
+            styles: doc::style_ids(doc)?,
         })
     }
 }
@@ -52,6 +55,9 @@ pub(crate) struct State<'d> {
     /// Borrowed from the session, and copied only if an edit changes it.
     pub layers: Cow<'d, HashMap<LayerId, PageId>>,
     pub files: Cow<'d, HashSet<Hash>>,
+    pub styles: Cow<'d, HashSet<StyleId>>,
+    /// Styles loaded or added by the edit being planned.
+    style_nodes: HashMap<StyleId, StyleNode>,
     tiles: HashMap<LayerId, TileMap>,
     /// Hashes are only taken before a state changes: `plan` checks every
     /// read before its first op, and queries never change the state.
@@ -74,6 +80,8 @@ impl<'d> State<'d> {
                 .collect(),
             layers: Cow::Borrowed(&index.layers),
             files: Cow::Borrowed(&index.files),
+            styles: Cow::Borrowed(&index.styles),
+            style_nodes: HashMap::new(),
             tiles: HashMap::new(),
             hashes: HashMap::new(),
         }
@@ -84,11 +92,13 @@ impl<'d> State<'d> {
         let pages: Vec<PageId> = self.pages.iter().map(|slot| slot.id).collect();
         let unchanged = matches!(self.layers, Cow::Borrowed(_))
             && matches!(self.files, Cow::Borrowed(_))
+            && matches!(self.styles, Cow::Borrowed(_))
             && pages == original.pages;
         (!unchanged).then(|| Index {
             pages,
             layers: self.layers.into_owned(),
             files: self.files.into_owned(),
+            styles: self.styles.into_owned(),
         })
     }
 
@@ -125,6 +135,28 @@ impl<'d> State<'d> {
             .nodes
             .get_mut(&layer)
             .ok_or_else(|| Error::not_found(Kind::Layer, layer))
+    }
+
+    pub fn style(&mut self, id: StyleId) -> Result<&mut StyleNode> {
+        if !self.styles.contains(&id) {
+            return Err(Error::not_found(Kind::Style, id));
+        }
+        if !self.style_nodes.contains_key(&id) {
+            let node = doc::read_style(self.doc, id)?;
+            self.style_nodes.insert(id, node);
+        }
+        Ok(self.style_nodes.get_mut(&id).expect("just loaded"))
+    }
+
+    /// Adds a style the edit being planned creates.
+    pub fn add_style(&mut self, id: StyleId, node: StyleNode) {
+        self.styles.to_mut().insert(id);
+        self.style_nodes.insert(id, node);
+    }
+
+    pub fn remove_style(&mut self, id: StyleId) {
+        self.styles.to_mut().remove(&id);
+        self.style_nodes.remove(&id);
     }
 
     /// The first locked layer among `layer` and its ancestors.
@@ -209,6 +241,12 @@ impl<'d> State<'d> {
     /// The paths of `layer` whose model ingredients have changed or gone.
     pub fn stale(&mut self, layer: LayerId) -> Result<Vec<PointerBuf>> {
         let origin = self.node(layer)?.origin.clone();
+        self.stale_in(origin)
+    }
+
+    /// The paths an origin's actions wrote whose ingredients have changed or
+    /// gone.
+    pub fn stale_in(&mut self, origin: Vec<ActionRecord>) -> Result<Vec<PointerBuf>> {
         let mut stale = Vec::new();
         for action in origin {
             for read in &action.ingredients {
@@ -225,11 +263,25 @@ impl<'d> State<'d> {
 
     /// Every file a layer names, reading unloaded pages without loading them.
     pub fn files_in_use(&self) -> Result<HashSet<Hash>> {
+        self.in_use(Node::files, LayerKind::Image, "file")
+    }
+
+    /// Every style a text names, as `files_in_use` finds files.
+    pub fn styles_in_use(&self) -> Result<HashSet<StyleId>> {
+        self.in_use(Node::styles, LayerKind::Text, "text_style")
+    }
+
+    fn in_use<T: std::str::FromStr + Eq + std::hash::Hash>(
+        &self,
+        loaded: fn(&Node) -> Vec<T>,
+        kind: LayerKind,
+        key: &str,
+    ) -> Result<HashSet<T>> {
         let mut used = HashSet::new();
         for slot in &self.pages {
             match (&slot.data, slot.position) {
-                (Some(page), _) => used.extend(page.nodes.values().flat_map(Node::files)),
-                (None, Some(at)) => used.extend(doc::page_files(&self.page_map(at)?)?),
+                (Some(page), _) => used.extend(page.nodes.values().flat_map(loaded)),
+                (None, Some(at)) => used.extend(doc::page_names(&self.page_map(at)?, kind, key)?),
                 (None, None) => {}
             }
         }
