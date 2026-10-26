@@ -1,4 +1,4 @@
-//! Koharu's project model on Loro. The schema and its evidence are in the
+//! Koharu's scene graph on Loro. The schema and its evidence are in the
 //! crate README.
 //!
 //! A [`Session`] alone owns an open project's document. Reads return owned

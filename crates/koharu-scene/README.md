@@ -1,6 +1,6 @@
 # koharu-scene
 
-Koharu's project model on Loro.
+Koharu's scene graph on Loro.
 
 Every element of this schema copies something an established editor or format
 already has, and cites it. Nothing is new. Where sources differ, Photoshop and

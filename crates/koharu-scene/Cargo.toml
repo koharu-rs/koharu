@@ -2,7 +2,7 @@
 name = "koharu-scene"
 version.workspace = true
 edition.workspace = true
-description = "Koharu's project model on Loro."
+description = "Koharu's scene graph on Loro."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
