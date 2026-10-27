@@ -125,6 +125,7 @@ icu_properties = { version = "2.3.0", features = ["compiled_data"] }
 icu_segmenter = { version = "2.3.0", features = ["compiled_data"] }
 jieba-rs = "0.11.0"
 fontique = "0.12.0"
+photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "59cb4c49bd236df04d8e37d4764253f29ca6600a" }
 pollster = "1.0.1"
 quick_cache = "0.6.24"
 vello = "0.11.0"
