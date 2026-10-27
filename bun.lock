@@ -13,7 +13,7 @@
         "oxfmt": "^0.74.0",
         "playwright": "1.64.1",
         "release-please": "17.11.2",
-        "sponsorkit": "^18.0.0",
+        "sponsorkit": "^19.0.0",
         "typescript": "^7.0.2",
       },
     },
@@ -1232,7 +1232,7 @@
 
     "bytes": ["bytes@3.1.2", "", {}, "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg=="],
 
-    "cac": ["cac@7.0.0", "", {}, "sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ=="],
+    "cac": ["cac@7.1.0", "", {}, "sha512-LMDU/U2yA4IPIY8KT0NsNPWEYZvAMkbgyspxJ6btJaYV+WMDOHAZCmB0lsTObiHaRS1V/ztKAl7+TSkTqXyeoA=="],
 
     "cacheable-lookup": ["cacheable-lookup@7.0.0", "", {}, "sha512-+qJyx4xiKra8mZrcwhjMRMUhD5NR1R8esPkzIYxX96JiecFoxAXFuz/GpR3+ev4PE1WamHip78wV0vcmPQtp8w=="],
 
@@ -2314,7 +2314,7 @@
 
     "normalize-path": ["normalize-path@3.0.0", "", {}, "sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA=="],
 
-    "normalize-url": ["normalize-url@9.0.1", "", {}, "sha512-ARftfC5HdUNu9jJeL8pHj8debUIHA2b91FizCoMzY4lG6dDX13jdvTK0TBe24IBDRf2HvJSzzwEPvmbkQWHRSg=="],
+    "normalize-url": ["normalize-url@10.0.0", "", {}, "sha512-aZEiiOP3lVdNrCCdPELWvJHbjJjoPfbWRLPAZLSsGA6l4ckvPmZSB+uX6JB4QQu33SeXCsd6v75jKivr43n/EQ=="],
 
     "npm-run-path": ["npm-run-path@6.0.0", "", { "dependencies": { "path-key": "^4.0.0", "unicorn-magic": "^0.3.0" } }, "sha512-9qny7Z9DsQU8Ou39ERsPU4OZQlSTP47ShQzuKZ6PRXpYLtIFgl/DEBYEXKlvcEa+9tHVcK8CF81Y2V72qaZhWA=="],
 
@@ -2740,7 +2740,7 @@
 
     "split": ["split@1.0.1", "", { "dependencies": { "through": "2" } }, "sha512-mTyOoPbrivtXnwnIxZRFYRrPNtEFKlpB2fvjSnCQUiAA6qAZzqwna5envK4uk6OIeP17CsdF3rSBGYVBsU0Tkg=="],
 
-    "sponsorkit": ["sponsorkit@18.0.0", "", { "dependencies": { "ansis": "^4.3.1", "cac": "^7.0.0", "consola": "^3.4.2", "d3-hierarchy": "^3.1.2", "normalize-url": "^9.0.1", "ofetch": "^1.5.1", "p-limit": "^7.3.1", "sharp": "^0.35.3", "unconfig": "^7.5.0" }, "bin": { "sponsorkit": "./dist/cli.mjs" } }, "sha512-9Jr+n4SjU8Qtldq8i0UlwwqBEAVy5JFbIQNXRUIs1N+LPTCnX2/of5oyHYftCLi3KxAODVMmyEdWqkJMTagR6w=="],
+    "sponsorkit": ["sponsorkit@19.0.0", "", { "dependencies": { "ansis": "^4.4.0", "cac": "^7.1.0", "consola": "^3.4.2", "d3-hierarchy": "^3.1.2", "normalize-url": "^10.0.0", "ofetch": "^1.5.1", "p-limit": "^7.3.3", "sharp": "^0.35.5", "unconfig": "^7.5.0" }, "bin": { "sponsorkit": "./dist/cli.mjs" } }, "sha512-srRaflySPU40DjZ07DUnxF9VhnbotupyIs1ahUXNLWf+T2V75uELRxCEmzeB7CE3WYhrsLC2JYRrtNlWQlPmtw=="],
 
     "sprintf-js": ["sprintf-js@1.0.3", "", {}, "sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g=="],
 
