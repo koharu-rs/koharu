@@ -5011,13 +5011,13 @@ dependencies = [
 name = "koharu-psd"
 version = "0.83.5"
 dependencies = [
- "image",
- "koharu-rasterizer",
  "koharu-renderer",
  "koharu-scene",
+ "kurbo",
+ "photocraft-psd",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
- "tokio-rayon",
- "tracing",
 ]
 
 [[package]]
@@ -7078,6 +7078,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
 dependencies = [
  "siphasher 1.0.4",
+]
+
+[[package]]
+name = "photocraft-psd"
+version = "0.16.0"
+source = "git+https://github.com/storytold/photocraft?rev=59cb4c49bd236df04d8e37d4764253f29ca6600a#59cb4c49bd236df04d8e37d4764253f29ca6600a"
+dependencies = [
+ "flate2",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
