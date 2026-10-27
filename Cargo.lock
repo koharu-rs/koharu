@@ -4702,7 +4702,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "webp",
- "zip 9.0.5",
+ "zip 9.1.2",
 ]
 
 [[package]]
@@ -4962,7 +4962,7 @@ dependencies = [
  "toml",
  "tracing",
  "walkdir",
- "zip 9.0.5",
+ "zip 9.1.2",
 ]
 
 [[package]]
@@ -5033,7 +5033,7 @@ dependencies = [
  "rand 0.10.3",
  "safetensors",
  "thiserror 2.0.21",
- "zip 9.0.5",
+ "zip 9.1.2",
 ]
 
 [[package]]
@@ -5352,9 +5352,9 @@ dependencies = [
 
 [[package]]
 name = "lzma-rust2"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7277c9742229dc25243236d578b6471a798c554512c6f6a04365ec2e87c2a3bb"
+checksum = "f1c46f3fcd2e888afdb01a07efc071cb21300e07c68d32c3e8b01b5c8cb1fcaa"
 dependencies = [
  "sha2 0.11.0",
 ]
@@ -9546,7 +9546,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.5",
  "windows-sys 0.61.2",
@@ -10072,9 +10072,9 @@ checksum = "5283634e518fe9e82c7b20520bb4bc209009fd16c82077c802f8111ecbb0117a"
 
 [[package]]
 name = "typed-path"
-version = "0.12.3"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typeid"
@@ -11872,9 +11872,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.0.5"
+version = "9.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
+checksum = "ec2e3161de27091f18a831d9494e9c53378a34833af5c1dda35ad85849da18d6"
 dependencies = [
  "aes",
  "bzip2",
@@ -11893,6 +11893,7 @@ dependencies = [
  "sha1",
  "time",
  "typed-path",
+ "windows-sys 0.61.2",
  "zeroize",
  "zopfli",
  "zstd 0.14.2",
