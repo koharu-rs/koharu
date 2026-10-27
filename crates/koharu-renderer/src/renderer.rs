@@ -75,6 +75,8 @@ enum Key {
 enum Cached {
     Vector {
         scene: Arc<Scene>,
+        /// A text's strokes, drawn under `scene`.
+        strokes: Option<Arc<Scene>>,
         bounds: Rect,
         text: Option<Arc<ResolvedText>>,
         missing: Vec<FontRequest>,
@@ -340,6 +342,7 @@ impl Renderer {
                 }
                 Cached::Vector {
                     scene: Arc::new(scene),
+                    strokes: None,
                     bounds,
                     text: None,
                     missing: Vec::new(),
@@ -425,6 +428,7 @@ impl Renderer {
         if spans.is_empty() {
             return Ok(Cached::Vector {
                 scene: Arc::new(Scene::new()),
+                strokes: None,
                 bounds: Rect::ZERO,
                 text: None,
                 missing,
@@ -442,6 +446,7 @@ impl Renderer {
         .map_err(|source| Error::Text { layer: id, source })?;
         Ok(Cached::Vector {
             scene: Arc::new(laid.scene),
+            strokes: laid.strokes.map(Arc::new),
             bounds: laid.bounds,
             text: Some(Arc::new(laid.resolved)),
             missing,
@@ -557,6 +562,7 @@ impl Builder<'_, '_> {
             }
             Some(Cached::Vector {
                 scene,
+                strokes,
                 bounds,
                 text,
                 missing,
@@ -568,7 +574,15 @@ impl Builder<'_, '_> {
                 };
                 let shown_bounds =
                     (bounds.area() > 0.0).then(|| transform.transform_rect_bbox(bounds));
-                (Content::Vector { scene, transform }, shown_bounds, text)
+                (
+                    Content::Vector {
+                        scene,
+                        strokes,
+                        transform,
+                    },
+                    shown_bounds,
+                    text,
+                )
             }
             Some(Cached::Pixels(None)) => (Content::None, None, None),
             Some(Cached::Pixels(Some(tiled))) => {

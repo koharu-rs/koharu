@@ -95,10 +95,25 @@ pub struct ResolvedText {
     /// UTF-16 offsets where a line breaks inside a word without one.
     pub broken: Vec<usize>,
     pub overflowed: bool,
+    /// Where the first line's glyphs stand, in the text's own coordinates:
+    /// the y of its baseline in horizontal text, and in vertical text the x
+    /// of the column's centre line. Photoshop anchors point type there.
+    pub baseline: f32,
+    /// The alignment and line height it was set with, its style's or the
+    /// defaults.
+    pub align: Align,
+    /// Whether its first paragraph runs right to left, which puts the start
+    /// of its lines on the right.
+    pub rtl: bool,
+    pub line_height: f32,
 }
 
 pub(crate) struct Laid {
+    /// The glyphs' fills.
     pub scene: Scene,
+    /// The glyphs' strokes, drawn under every fill as Photoshop draws an
+    /// Outside stroke under its type; `None` when no span has one.
+    pub strokes: Option<Scene>,
     pub resolved: ResolvedText,
     /// What the text covers, in its own coordinates.
     pub bounds: Rect,
@@ -927,6 +942,7 @@ impl Prepared<'_> {
         let mut hyphens = Vec::new();
         let mut broken = Vec::new();
         let mut bounds: Option<Rect> = None;
+        let mut first_baseline = None;
         for line in &placed.lines {
             let Some(last) = line.segments.end.checked_sub(1) else {
                 continue;
@@ -999,6 +1015,7 @@ impl Prepared<'_> {
                     .and_then(|font| metrics(&self.fonts[font], size))
                     .unwrap_or((size * 0.8, size * 0.2));
                 let baseline = line.top + (line.pitch - (ascent + descent)) * 0.5 + ascent;
+                first_baseline.get_or_insert(if vertical { -block_center } else { baseline });
                 if piece.upright_group {
                     let width: f32 = piece.glyphs.iter().map(|g| g.advance * scale).sum();
                     let mut across = -width * 0.5;
@@ -1048,6 +1065,7 @@ impl Prepared<'_> {
         }
 
         let mut scene = Scene::new();
+        let mut strokes: Option<Scene> = None;
         let mut resolved_runs = Vec::new();
         for (font, span, glyphs, range) in runs {
             let style = &self.input.spans[span];
@@ -1064,7 +1082,8 @@ impl Prepared<'_> {
             };
             if let Some((color, width)) = style.stroke {
                 let amount = bold + f64::from(width * scale);
-                scene
+                strokes
+                    .get_or_insert_with(Scene::new)
                     .draw_glyphs(&data)
                     .font_size(size)
                     .normalized_coords(font.normalized_coords())
@@ -1102,6 +1121,7 @@ impl Prepared<'_> {
             .inflate(f64::from(stroke), f64::from(stroke));
         Laid {
             scene,
+            strokes,
             resolved: ResolvedText {
                 runs: resolved_runs,
                 frame: placed.frame,
@@ -1115,6 +1135,10 @@ impl Prepared<'_> {
                     .map(|at| utf16(&self.input.text, *at))
                     .collect(),
                 overflowed: placed.overflowed,
+                baseline: first_baseline.unwrap_or_default(),
+                align: self.input.align,
+                rtl: self.rtl,
+                line_height: self.input.line_height,
             },
             bounds,
         }
