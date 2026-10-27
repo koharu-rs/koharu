@@ -4807,7 +4807,6 @@ dependencies = [
  "koharu-ml",
  "koharu-pipeline",
  "koharu-psd",
- "koharu-rasterizer",
  "koharu-renderer",
  "koharu-runtime",
  "koharu-scene",
@@ -4862,7 +4861,6 @@ version = "0.83.5"
 dependencies = [
  "futures-channel",
  "js-sys",
- "koharu-rasterizer",
  "serde",
  "serde-wasm-bindgen",
  "vello",
@@ -4890,7 +4888,6 @@ name = "koharu-desktop"
 version = "0.83.5"
 dependencies = [
  "anyhow",
- "koharu-rasterizer",
  "koharu-renderer",
  "koharu-scene",
  "parking_lot 0.13.0",
@@ -4991,7 +4988,6 @@ dependencies = [
  "imageproc",
  "koharu-config",
  "koharu-ml",
- "koharu-rasterizer",
  "koharu-renderer",
  "koharu-scene",
  "koharu-translator",
@@ -5019,22 +5015,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
-]
-
-[[package]]
-name = "koharu-rasterizer"
-version = "0.83.5"
-dependencies = [
- "anyhow",
- "blake3",
- "fast_image_resize",
- "image",
- "parking_lot 0.13.0",
- "pollster 1.0.1",
- "postcard",
- "serde",
- "thiserror 2.0.21",
- "vello",
 ]
 
 [[package]]

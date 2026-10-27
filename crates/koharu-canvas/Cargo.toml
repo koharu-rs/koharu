@@ -17,7 +17,6 @@ crate-type = ["cdylib", "rlib"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-channel = { workspace = true }
 js-sys = { workspace = true }
-koharu-rasterizer = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = { workspace = true }
 vello = { workspace = true }
@@ -34,6 +33,3 @@ web-sys = { workspace = true, features = [
     "PremultiplyAlpha",
     "Window",
 ] }
-
-[dev-dependencies]
-koharu-rasterizer = { workspace = true }
