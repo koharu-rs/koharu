@@ -12,10 +12,12 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-image = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-scene = { workspace = true }
+kurbo = { workspace = true }
+photocraft-psd = { workspace = true }
 thiserror = { workspace = true }
-tokio-rayon = { workspace = true }
-tracing = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }
