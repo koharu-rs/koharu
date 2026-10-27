@@ -78,6 +78,8 @@ pub(crate) enum Content {
     None,
     Vector {
         scene: Arc<Scene>,
+        /// A text's strokes, drawn under `scene`.
+        strokes: Option<Arc<Scene>>,
         transform: Affine,
     },
     Pixels {
@@ -168,7 +170,27 @@ impl Frame {
     /// whole pixels: without its opacity, blend mode, or masks, which a PSD
     /// records as layer properties.
     pub fn cropped(&self, layer: LayerId) -> Result<Self> {
+        self.own(layer, true)
+    }
+
+    /// `cropped`, but a text without its strokes, which a PSD writes as a
+    /// stroke effect.
+    pub fn unstroked(&self, layer: LayerId) -> Result<Self> {
+        self.own(layer, false)
+    }
+
+    fn own(&self, layer: LayerId, strokes: bool) -> Result<Self> {
         let node = self.node(layer)?;
+        let content = match &node.content {
+            Content::Vector {
+                scene, transform, ..
+            } if !strokes => Content::Vector {
+                scene: scene.clone(),
+                strokes: None,
+                transform: *transform,
+            },
+            content => content.clone(),
+        };
         Ok(self.with(
             self.0.layers[&layer]
                 .bounds
@@ -177,6 +199,7 @@ impl Frame {
                 visible: true,
                 opacity: 1.0,
                 blend: Blend::Normal,
+                content,
                 masks: Vec::new(),
                 ..node.clone()
             },
@@ -352,8 +375,15 @@ impl Pass {
             Content::None => {}
             Content::Vector {
                 scene: vector,
+                strokes,
                 transform,
-            } => scene.append(vector, Some(self.to_output * *transform)),
+            } => {
+                let transform = Some(self.to_output * *transform);
+                if let Some(strokes) = strokes {
+                    scene.append(strokes, transform);
+                }
+                scene.append(vector, transform);
+            }
             Content::Pixels { tiled, transform } => {
                 tiled.draw(scene, self.to_output * *transform, self.clip);
             }

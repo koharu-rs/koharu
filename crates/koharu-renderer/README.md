@@ -229,18 +229,20 @@ Vertical shrinks a balloon's text only when rephrasing can't make it fit
   at the start, in both directions: Photoshop's Justify last left (top in
   vertical type) [Photoshop paragraphs] and Clip Studio Paint's Align last line
   left [CSP text frame].
-- **Stroke.** A character stroke is drawn under the fill at twice its width, so
-  `stroke_width` of it shows outside the glyphs, as Photoshop's Outside stroke
-  position [Photoshop stroke] and Clip Studio Paint's text edge [CSP text edge]
-  sit outside the characters.
+- **Stroke.** A character stroke is drawn under every glyph's fill at twice its
+  width, so `stroke_width` of it shows outside the glyphs, as Photoshop's
+  Outside stroke position [Photoshop stroke] and Clip Studio Paint's text edge
+  [CSP text edge] sit outside the characters.
 
 ### Resolved text
 
 `Layer::text` gives the laid-out text as runs: each run's UTF-16 range, the
 PostScript name of the face that drew it, the size it was drawn at, its fill,
 and its stroke and width. It also gives the box the text was laid out in, the
-scale `shrink` drew it at, where it hyphenated or broke inside a word, and
-whether it overflowed. The canvas's inspector
+scale `shrink` drew it at, where it hyphenated or broke inside a word,
+whether it overflowed, where its first line's glyphs stand, which is where
+PSD export anchors point type, and whether its first paragraph runs right to
+left, which puts the start of its lines on the right. The canvas's inspector
 shows the set size beside the drawn one. A fallback face gets a run of its own,
 so the PSD's type layer names every font it uses.
 
@@ -268,15 +270,16 @@ renderer. Caches are bounded, and eviction costs time, never output.
   layer's `mask` frame, and the resolved text. `cropped` draws only the layer's
   own content, shown, over its bounds rounded out to whole pixels, without its
   opacity, blend mode, or masks, which the PSD records as layer properties.
-  `mask` draws the layer's components merged into one coverage over the page,
-  as white with the coverage in alpha.
+  `unstroked` is `cropped` without a text's strokes, for a PSD that writes them
+  as a stroke effect. `mask` draws the layer's components merged into one
+  coverage over the page, as white with the coverage in alpha.
 
 ## Modules
 
 | Module | Owns |
 |---|---|
 | `renderer` | `Renderer`, the scene walk, and the caches |
-| `frame` | `Frame`, `Layer`, drawing a view, `cropped`, and `mask` |
+| `frame` | `Frame`, `Layer`, drawing a view, `cropped`, `unstroked`, and `mask` |
 | `tiles` | raster tiles, their levels, and strips |
 | `text` | spans to layout, frames, fitting, glyph runs, and resolved text |
 | `layout`, `shape`, `segment`, `script` | line breaking, shaping, Unicode segmentation, and scripts |
