@@ -539,6 +539,10 @@ const MAX_HOLE_RADIUS: f32 = 24.0;
 // colour. The ring starts a little away from the hole to skip glyph antialiasing.
 const SURROUNDING_GAP: f32 = 2.0;
 const SURROUNDING_RING: f32 = 6.0;
+// Every pixel of that ring, and of the ring around text in a bubble, must be this
+// close to the fill colour. A spread measure alone lets a thin line crossing the
+// hole through, and filling would cut the line.
+const RING_PIXEL_TOLERANCE: u8 = 40;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct TileGeometry {
@@ -701,10 +705,7 @@ fn fill_uniform_surroundings(
     components: Vec<MaskComponent>,
     scale: f32,
 ) -> Vec<MaskComponent> {
-    let gap = (SURROUNDING_GAP * scale)
-        .ceil()
-        .min(f32::from(u8::MAX) / 2.0) as u8;
-    let reach = (gap as f32 + (SURROUNDING_RING * scale).ceil()).min(f32::from(u8::MAX)) as u8;
+    let (gap, reach) = ring_reach(scale);
     let (width, height) = pending_mask.dimensions();
     let mut remaining = Vec::new();
     for component in components {
@@ -713,19 +714,13 @@ fn fill_uniform_surroundings(
         let hole = GrayImage::from_fn(right - left, bottom - top, |x, y| {
             Luma([u8::from(labels.get_pixel(left + x, top + y)[0] == component.label) * u8::MAX])
         });
-        let inner = dilate(&hole, Norm::LInf, gap);
-        let outer = dilate(&hole, Norm::LInf, reach);
-        let mut ring = Vec::new();
-        for (x, y, pixel) in outer.enumerate_pixels() {
-            if pixel[0] != 0
-                && inner.get_pixel(x, y)[0] == 0
-                && pending_mask.get_pixel(left + x, top + y)[0] < 127
-            {
-                ring.push(output.get_pixel(left + x, top + y).0);
-            }
-        }
+        let ring = ring_around(&hole, gap, reach)
+            .into_iter()
+            .filter(|&(x, y)| pending_mask.get_pixel(left + x, top + y)[0] < 127)
+            .map(|(x, y)| output.get_pixel(left + x, top + y).0)
+            .collect();
         // Outside a bubble a thin line through the ring is artwork, not a stray
-        // speck, so every sampled pixel has to be flat.
+        // speck, so no outliers are dropped and every ring pixel has to be flat.
         let Some(color) = uniform_color(ring, false) else {
             remaining.push(component);
             continue;
@@ -741,6 +736,30 @@ fn fill_uniform_surroundings(
         }
     }
     remaining
+}
+
+/// The gap and reach, in page pixels, of the ring sampled around a hole.
+fn ring_reach(scale: f32) -> (u8, u8) {
+    let gap = (SURROUNDING_GAP * scale)
+        .ceil()
+        .min(f32::from(u8::MAX) / 2.0) as u8;
+    let reach = (gap as f32 + (SURROUNDING_RING * scale).ceil()).min(f32::from(u8::MAX)) as u8;
+    (gap, reach)
+}
+
+/// Pixels of `hole`'s image between `gap` and `reach` pixels from the hole.
+fn ring_around(hole: &GrayImage, gap: u8, reach: u8) -> Vec<(u32, u32)> {
+    let inner = dilate(hole, Norm::LInf, gap);
+    let outer = dilate(hole, Norm::LInf, reach);
+    outer
+        .enumerate_pixels()
+        .filter(|&(x, y, pixel)| pixel[0] != 0 && inner.get_pixel(x, y)[0] == 0)
+        .map(|(x, y, _)| (x, y))
+        .collect()
+}
+
+fn near_color(pixel: [u8; 3], color: [u8; 3]) -> bool {
+    (0..3).all(|channel| pixel[channel].abs_diff(color[channel]) <= RING_PIXEL_TOLERANCE)
 }
 
 /// Shrinks a tile from page pixels to working pixels. Any mask coverage keeps a
@@ -787,6 +806,11 @@ fn fill_uniform_regions(
         let Some(color) = uniform_region_color(output, pending_mask, region, scale) else {
             continue;
         };
+        // The bubble's colour tolerates a few stray pixels, but the area right
+        // around the text must not: a line running into the text is artwork.
+        if !bubble_ring_is_flat(output, pending_mask, region, &targets, color, scale) {
+            continue;
+        }
         for (x, y) in targets {
             output.put_pixel(x, y, color);
             pending_mask.put_pixel(x, y, Luma([0]));
@@ -958,6 +982,37 @@ fn crop_tile_mask(mask: &GrayImage, tile: &InpaintTile) -> GrayImage {
     crop
 }
 
+fn bubble_ring_is_flat(
+    image: &RgbImage,
+    mask: &GrayImage,
+    region: &FlatFillRegion,
+    targets: &[(u32, u32)],
+    color: Rgb<u8>,
+    scale: f32,
+) -> bool {
+    let (gap, reach) = ring_reach(scale);
+    let [left, top, right, bottom] = expand_bounds(
+        region.bounds,
+        image.width(),
+        image.height(),
+        u32::from(reach),
+    );
+    let mut hole = GrayImage::new(right - left, bottom - top);
+    for &(x, y) in targets {
+        hole.put_pixel(x - left, y - top, Luma([u8::MAX]));
+    }
+    let edge_margin = FLAT_FILL_EDGE_MARGIN * scale;
+    ring_around(&hole, gap, reach).into_iter().all(|(x, y)| {
+        let (x, y) = (left + x, top + y);
+        let point = (x as f32 + 0.5, y as f32 + 0.5);
+        // Only the part of the ring the bubble's colour was measured on counts.
+        mask.get_pixel(x, y)[0] >= 127
+            || !point_in_polygon(point, &region.polygon)
+            || polygon_edge_distance_squared(point, &region.polygon) < edge_margin * edge_margin
+            || near_color(image.get_pixel(x, y).0, color.0)
+    })
+}
+
 fn uniform_region_color(
     image: &RgbImage,
     mask: &GrayImage,
@@ -983,7 +1038,8 @@ fn uniform_region_color(
 }
 
 /// The median colour of `pixels` if they are flat enough to fill a hole with.
-/// With `tolerate_outliers`, a small share of pixels far from it is ignored.
+/// With `tolerate_outliers`, a small share of pixels far from it is ignored;
+/// without, every pixel must be within `RING_PIXEL_TOLERANCE` of it.
 fn uniform_color(mut pixels: Vec<[u8; 3]>, tolerate_outliers: bool) -> Option<Rgb<u8>> {
     if pixels.len() < UNIFORM_BACKGROUND_MIN_PIXELS {
         return None;
@@ -1009,6 +1065,8 @@ fn uniform_color(mut pixels: Vec<[u8; 3]>, tolerate_outliers: bool) -> Option<Rg
         if (total - pixels.len()) as f64 > total as f64 * UNIFORM_OUTLIER_SHARE {
             return None;
         }
+    } else if !pixels.iter().all(|&pixel| near_color(pixel, medians)) {
+        return None;
     }
     let channels: [Vec<u8>; 3] =
         std::array::from_fn(|channel| pixels.iter().map(|pixel| pixel[channel]).collect());
@@ -1521,6 +1579,97 @@ mod tests {
 
         assert_eq!(calls, 1);
         assert_eq!(output.get_pixel(150, 150), &Rgb([0, 0, 0]));
+    }
+
+    #[test]
+    fn bubble_flat_fill_does_not_break_a_continuous_rule() {
+        let mut image = RgbImage::from_pixel(300, 300, Rgb([250, 250, 250]));
+        let mut mask = GrayImage::new(300, 300);
+        for y in 0..300 {
+            image.put_pixel(150, y, Rgb([0, 0, 0]));
+        }
+        for y in 120..180 {
+            for x in 130..170 {
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        let mut calls = 0;
+
+        let output = inpaint_tiled(
+            &DynamicImage::ImageRgb8(image),
+            &mask,
+            &mask,
+            &[rectangle_region([0, 0, 300, 300])],
+            |image, _| {
+                calls += 1;
+                Ok(image.clone())
+            },
+        )
+        .unwrap()
+        .to_rgb8();
+
+        assert_eq!(calls, 1);
+        for y in 120..180 {
+            assert_eq!(output.get_pixel(150, y), &Rgb([0, 0, 0]));
+        }
+    }
+
+    fn sparse_crossing_rule(rule: Rgb<u8>, transpose: bool) {
+        let (width, height) = if transpose { (1400, 200) } else { (200, 1400) };
+        let mut image = RgbImage::from_pixel(width, height, Rgb([250, 250, 250]));
+        let mut mask = GrayImage::new(width, height);
+        // A long, narrow hole: the rule is under 0.1% of its ring, too little to
+        // move the ring's spread past the uniform threshold.
+        let at = |along: u32, across: u32| {
+            if transpose {
+                (along, across)
+            } else {
+                (across, along)
+            }
+        };
+        for across in 0..200 {
+            let (x, y) = at(700, across);
+            image.put_pixel(x, y, rule);
+        }
+        for along in 100..1300 {
+            for across in 90..110 {
+                let (x, y) = at(along, across);
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        let mut calls = 0;
+
+        let output = inpaint_tiled(
+            &DynamicImage::ImageRgb8(image),
+            &mask,
+            &mask,
+            &[],
+            |image, _| {
+                calls += 1;
+                Ok(image.clone())
+            },
+        )
+        .unwrap()
+        .to_rgb8();
+
+        // The 1200 px hole is longer than a tile, so it reaches the model in pieces.
+        assert!(calls > 0);
+        for across in 90..110 {
+            let (x, y) = at(700, across);
+            assert_eq!(output.get_pixel(x, y), &rule);
+        }
+    }
+
+    #[test]
+    fn sparse_crossing_rule_is_not_hidden_by_ring_averaging() {
+        sparse_crossing_rule(Rgb([0, 0, 0]), false);
+        sparse_crossing_rule(Rgb([0, 0, 0]), true);
+    }
+
+    #[test]
+    fn sparse_grey_rule_is_not_hidden_by_ring_averaging() {
+        sparse_crossing_rule(Rgb([160, 160, 160]), false);
+        sparse_crossing_rule(Rgb([160, 160, 160]), true);
     }
 
     #[test]
