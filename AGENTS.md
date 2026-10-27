@@ -26,6 +26,7 @@ Koharu is a local-first manga translator: a Rust workspace with a TypeScript int
 - Do not hand-edit generated or derived source. Change its input and rerun the generator.
 - Comments explain ownership, invariants, upstream mapping, or a deliberate divergence. Do not narrate straightforward code.
 - Do not commit credentials, model weights, datasets, generated outputs, or machine-specific files.
+- Search with `rg`, never `grep`.
 
 ## Interface
 
