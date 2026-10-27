@@ -22,7 +22,6 @@ imageproc = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-config = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-scene = { workspace = true }
 koharu-translator = { workspace = true }
 rayon = { workspace = true }

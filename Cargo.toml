@@ -37,7 +37,6 @@ koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
-koharu-rasterizer = { path = "crates/koharu-rasterizer", default-features = false }
 koharu-desktop = { path = "crates/koharu-desktop" }
 koharu-secrets = { path = "crates/koharu-secrets" }
 
@@ -196,9 +195,6 @@ debug = 1
 opt-level = 3
 
 [profile.dev.package.koharu-canvas]
-opt-level = 3
-
-[profile.dev.package.koharu-rasterizer]
 opt-level = 3
 
 [profile.dev.package.postcard]
