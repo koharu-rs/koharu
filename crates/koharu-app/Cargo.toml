@@ -25,7 +25,6 @@ koharu-ml = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-secrets = { workspace = true }
