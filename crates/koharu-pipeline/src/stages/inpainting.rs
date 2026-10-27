@@ -606,8 +606,17 @@ fn inpaint_tiled(
         flat_fill_regions,
         page_scale,
     );
-    fill_uniform_surroundings(&mut output, &mut pending_mask, page_scale);
     let (component_labels, components) = mask_components(&pending_mask);
+    let components = fill_uniform_surroundings(
+        &mut output,
+        &mut pending_mask,
+        &component_labels,
+        components,
+        page_scale,
+    );
+    if components.is_empty() {
+        return Ok(DynamicImage::ImageRgb8(output));
+    }
     for (scale, components) in
         group_by_hole_scale(&pending_mask, &component_labels, components, page_scale)
     {
@@ -683,14 +692,21 @@ fn group_by_hole_scale(
 }
 
 /// Flat-fills each remaining hole whose surroundings are one colour, such as text
-/// on a plain background outside any detected bubble.
-fn fill_uniform_surroundings(output: &mut RgbImage, pending_mask: &mut GrayImage, scale: f32) {
+/// on a plain background outside any detected bubble. Returns the holes still
+/// left for the model.
+fn fill_uniform_surroundings(
+    output: &mut RgbImage,
+    pending_mask: &mut GrayImage,
+    labels: &ImageBuffer<Luma<u32>, Vec<u32>>,
+    components: Vec<MaskComponent>,
+    scale: f32,
+) -> Vec<MaskComponent> {
     let gap = (SURROUNDING_GAP * scale)
         .ceil()
         .min(f32::from(u8::MAX) / 2.0) as u8;
     let reach = (gap as f32 + (SURROUNDING_RING * scale).ceil()).min(f32::from(u8::MAX)) as u8;
     let (width, height) = pending_mask.dimensions();
-    let (labels, components) = mask_components(pending_mask);
+    let mut remaining = Vec::new();
     for component in components {
         let [left, top, right, bottom] =
             expand_bounds(component.bounds, width, height, u32::from(reach));
@@ -708,7 +724,10 @@ fn fill_uniform_surroundings(output: &mut RgbImage, pending_mask: &mut GrayImage
                 ring.push(output.get_pixel(left + x, top + y).0);
             }
         }
-        let Some(color) = uniform_color(ring) else {
+        // Outside a bubble a thin line through the ring is artwork, not a stray
+        // speck, so every sampled pixel has to be flat.
+        let Some(color) = uniform_color(ring, false) else {
+            remaining.push(component);
             continue;
         };
         let [left, top, right, bottom] = component.bounds;
@@ -721,6 +740,7 @@ fn fill_uniform_surroundings(output: &mut RgbImage, pending_mask: &mut GrayImage
             }
         }
     }
+    remaining
 }
 
 /// Shrinks a tile from page pixels to working pixels. Any mask coverage keeps a
@@ -959,11 +979,12 @@ fn uniform_region_color(
             pixels.push(image.get_pixel(x, y).0);
         }
     }
-    uniform_color(pixels)
+    uniform_color(pixels, true)
 }
 
 /// The median colour of `pixels` if they are flat enough to fill a hole with.
-fn uniform_color(mut pixels: Vec<[u8; 3]>) -> Option<Rgb<u8>> {
+/// With `tolerate_outliers`, a small share of pixels far from it is ignored.
+fn uniform_color(mut pixels: Vec<[u8; 3]>, tolerate_outliers: bool) -> Option<Rgb<u8>> {
     if pixels.len() < UNIFORM_BACKGROUND_MIN_PIXELS {
         return None;
     }
@@ -978,12 +999,16 @@ fn uniform_color(mut pixels: Vec<[u8; 3]>) -> Option<Rgb<u8>> {
                 .collect::<Vec<_>>(),
         )
     });
-    let total = pixels.len();
-    pixels.retain(|pixel| {
-        (0..3).all(|channel| pixel[channel].abs_diff(medians[channel]) <= UNIFORM_OUTLIER_DISTANCE)
-    });
-    if (total - pixels.len()) as f64 > total as f64 * UNIFORM_OUTLIER_SHARE {
-        return None;
+    if tolerate_outliers {
+        let total = pixels.len();
+        pixels.retain(|pixel| {
+            (0..3).all(|channel| {
+                pixel[channel].abs_diff(medians[channel]) <= UNIFORM_OUTLIER_DISTANCE
+            })
+        });
+        if (total - pixels.len()) as f64 > total as f64 * UNIFORM_OUTLIER_SHARE {
+            return None;
+        }
     }
     let channels: [Vec<u8>; 3] =
         std::array::from_fn(|channel| pixels.iter().map(|pixel| pixel[channel]).collect());
@@ -1464,6 +1489,38 @@ mod tests {
 
         assert_eq!(calls, 0);
         assert_eq!(output.get_pixel(130, 130), &Rgb([12, 12, 12]));
+    }
+
+    #[test]
+    fn thin_lines_through_plain_surroundings_are_not_erased() {
+        let mut image = RgbImage::from_pixel(300, 300, Rgb([250, 250, 250]));
+        let mut mask = GrayImage::new(300, 300);
+        // A one-pixel rule crosses the text; it is under 1% of the sampled ring.
+        for y in 0..300 {
+            image.put_pixel(150, y, Rgb([0, 0, 0]));
+        }
+        for y in 120..180 {
+            for x in 130..170 {
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        let mut calls = 0;
+
+        let output = inpaint_tiled(
+            &DynamicImage::ImageRgb8(image),
+            &mask,
+            &mask,
+            &[],
+            |image, _| {
+                calls += 1;
+                Ok(image.clone())
+            },
+        )
+        .unwrap()
+        .to_rgb8();
+
+        assert_eq!(calls, 1);
+        assert_eq!(output.get_pixel(150, 150), &Rgb([0, 0, 0]));
     }
 
     #[test]
