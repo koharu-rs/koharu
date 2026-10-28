@@ -38,10 +38,6 @@ impl VarStore {
         }
     }
 
-    pub fn device(&self) -> Device {
-        self.device
-    }
-
     pub fn kind(&self) -> Kind {
         self.kind
     }
@@ -58,17 +54,6 @@ impl VarStore {
     /// differs, and one the model doesn't declare are errors, as each means
     /// the port's names don't match the checkpoint's.
     pub fn load<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<()> {
-        self.load_ignoring(path, &[])
-    }
-
-    /// [`Self::load`], leaving out a checkpoint's weights whose names contain
-    /// one of `unexpected`, as transformers' `_keys_to_ignore_on_load_unexpected`
-    /// does for weights a checkpoint carries and its model never builds.
-    pub fn load_ignoring<P: AsRef<std::path::Path>>(
-        &mut self,
-        path: P,
-        unexpected: &[&str],
-    ) -> Result<()> {
         let path = path.as_ref();
         let file = path.display().to_string();
         let mut variables = self
@@ -82,11 +67,7 @@ impl VarStore {
         let mapping = unsafe { memmap2::Mmap::map(&handle) }?;
         let tensors = SafeTensors::deserialize(&mapping)
             .map_err(|err| TchError::FileFormat(format!("{file}: {err}")))?;
-        let mut unused = tensors
-            .names()
-            .into_iter()
-            .filter(|name| !unexpected.iter().any(|ignored| name.contains(ignored)))
-            .collect::<BTreeSet<_>>();
+        let mut unused = tensors.names().into_iter().collect::<BTreeSet<_>>();
         let _guard = tch::no_grad_guard();
         for (name, variable) in variables.iter_mut() {
             let Ok(view) = tensors.tensor(name) else {

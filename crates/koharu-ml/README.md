@@ -1,9 +1,8 @@
 # koharu-ml
 
-`koharu-ml` holds the vision models Koharu runs on the user's machine:
-detection, OCR, inpainting, and the layout, bubble, font, and text models kept
-for later steps. Each is a port that stays traceable to a pinned upstream, with
-one lifecycle for all. They run on libtorch (`tch`),
+`koharu-ml` holds the vision models Koharu runs on the user's machine for
+the pipeline's detection, OCR, and inpainting steps. Each is a port that stays
+traceable to a pinned upstream, with one lifecycle for all. They run on libtorch (`tch`),
 stable-diffusion.cpp (`koharu-diffusion`), or, for PaddleOCR-VL, llama.cpp
 through `koharu-llm`'s engine.
 
@@ -21,21 +20,18 @@ let texts = ocr.inference(&crops)?;        // one call for a batch of crops
 | OCR | `manga_ocr` | libtorch | manga-ocr `847e093` | OCR |
 | OCR | `baberu_ocr` | libtorch | transformers DINOv2 `c6c8503` | OCR |
 | OCR | `hayai_ocr` | libtorch | SigLIP2 at a commit (today `main`) | OCR |
-| OCR | `paddle_ocr_vl_quantized` | llama.cpp, through `koharu-llm` | the libtorch port's prompts | OCR |
-| OCR, reference port | `paddle_ocr_vl` | libtorch | transformers `63f32a8` | kept |
+| OCR | `paddle_ocr_vl_quantized` | llama.cpp, through `koharu-llm` | the model card's task prompts, `66317ac` | OCR |
 | inpainting | `lama` | libtorch | IOPaint `61a759f` | inpainting |
 | inpainting | `aot_inpainting` | libtorch | BallonsTranslator `4bcc635` | inpainting |
 | inpainting | `rorem_mixed` | stable-diffusion.cpp | RORem `891ab8a` | inpainting |
 | inpainting and generation | `flux2_klein` | stable-diffusion.cpp | diffusers `a37f6f8` | inpainting |
-| layout, bubbles, text | `comic_layout_yolo26s`, `speech_bubble_yolo11n`, `speech_bubble_yolov8m`, `comic_text_bubble_detector`, `comic_text_detector`, `manga_text_mask`, `pp_doclayout_v3` | libtorch | each pinned, as now | kept |
-| sound effects, OCR, fonts | `comic_onomatopoeia`, `pp_ocr_v6`, `font_detector` | libtorch | each pinned, as now | kept |
 
 ## Lifecycle
 
 | Rule | Evidence |
 |---|---|
 | `load(&Device)` resolves the model's pinned files, converts the device once into a libtorch device and a precision chosen from that device, builds the network, and loads its weights, which never track gradients; network and weights are apart from pre- and post-processing. | `AGENTS.md` "Models" |
-| Loading fails on a missing weight and on an unexpected one, except where upstream itself allows it: a BatchNorm's `num_batches_tracked`, which PyTorch fills in when a checkpoint leaves it out, and the weights a transformers model lists in `_keys_to_ignore_on_load_unexpected`, as PaddleOCR-VL lists its unused pooling head. | `AGENTS.md`: missing or unexpected weights mean a name mismatch; PyTorch's BatchNorm loading [PyTorch batch norm]; PaddleOCR-VL's ignored keys [PaddleOCR-VL keys] |
+| Loading fails on a missing weight and on an unexpected one, except where upstream itself allows it: a BatchNorm's `num_batches_tracked`, which PyTorch fills in when a checkpoint leaves it out. | `AGENTS.md`: missing or unexpected weights mean a name mismatch; PyTorch's BatchNorm loading [PyTorch batch norm] |
 | `inference(&self, …)` runs under `no_grad` and returns a `Result`: a port calls `tch`'s `f_` ops and this crate's layers, never `tch`'s panicking forms. | `AGENTS.md`; `tch`'s fallible ops [tch fallible] |
 | Layers and the weight store are this crate's own (`nn`): a constructor declares each weight under the checkpoint's name, in the store's device and precision, holding nothing until the store fills it from the checkpoint once. | `tch`'s `nn` starts each weight random and tracking gradients [tch var], and its loading ignores weights the model doesn't declare [tch load] |
 | Token ids and index tensors are made on the model's device. | `AGENTS.md`: "a CPU tensor used against accelerator embeddings is a defect" |
@@ -78,9 +74,6 @@ examples].
   Vulkan fails instead of falling back to the CPU silently.
 - `init` and `device` go: the runtime starts and hands out the device.
 - RF-DETR's weights are frozen, and loading fails on unexpected weights.
-- The comic text and bubble detector and the onomatopoeia recognizer run on a
-  BF16 GPU; today the first overflows a BF16 fill and the second inverts its
-  TPS matrix on the CPU, where Koharu's libtorch has no LAPACK.
 - The OCR models take batches.
 - FLUX.2 Klein loads once for generation and inpainting; today two types load
   it twice.
@@ -90,8 +83,12 @@ examples].
   weight store `koharu-torch` held move here.
 - One repetition penalty, `Vec::try_from` for tensors, and `round_ties_even`
   replace the copies across ports.
-- Hayai's SigLIP2 references and the OpenCV references are pinned to commits;
-  the benchmarks run on the GPU.
+- Hayai's SigLIP2 references are pinned to commits; the benchmarks run on the
+  GPU.
+- The models no pipeline step runs go: the comic layout, speech bubble, comic
+  text, text mask, and document layout detectors, the onomatopoeia, PP-OCRv6,
+  and font models, and PaddleOCR-VL's libtorch port, whose task prompts the
+  quantized model keeps.
 
 ## Sources
 
@@ -100,4 +97,3 @@ examples].
 [tch fallible]: https://github.com/LaurentMazare/tch-rs/blob/4227b89b72059b0651ff83a38637693574e0a2d6/gen/gen.ml#L786
 [tch var]: https://github.com/LaurentMazare/tch-rs/blob/4227b89b72059b0651ff83a38637693574e0a2d6/src/nn/var_store.rs#L560-L569
 [tch load]: https://github.com/LaurentMazare/tch-rs/blob/4227b89b72059b0651ff83a38637693574e0a2d6/src/nn/var_store.rs#L204-L222
-[PaddleOCR-VL keys]: https://github.com/huggingface/transformers/blob/63f32a8782cb70da3365acab16f2b67947737985/src/transformers/models/paddleocr_vl/modeling_paddleocr_vl.py#L1309
