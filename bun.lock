@@ -49,7 +49,7 @@
         "@tauri-apps/plugin-process": "3.0.0-alpha.3",
         "@tauri-apps/plugin-updater": "3.0.0-alpha.3",
         "i18next": "^26.5.10",
-        "i18next-browser-languagedetector": "^8.2.1",
+        "i18next-browser-languagedetector": "^8.2.3",
         "i18next-localstorage-backend": "^4.3.2",
         "lucide-react": "^1.61.0",
         "next": "^16.4.3",
@@ -1826,7 +1826,7 @@
 
     "i18next": ["i18next@26.5.10", "", { "peerDependencies": { "typescript": "^5 || ^6 || ^7" }, "optionalPeers": ["typescript"] }, "sha512-YS4EiLQhhk0wGThm4Zy+BL2c9rBNIK+kAbksi4l/B+D6kVRQLIFZgu2b/MU2LibJJHwWNTYoOYR52T+jfV8kPQ=="],
 
-    "i18next-browser-languagedetector": ["i18next-browser-languagedetector@8.2.1", "", { "dependencies": { "@babel/runtime": "^7.23.2" } }, "sha512-bZg8+4bdmaOiApD7N7BPT9W8MLZG+nPTOFlLiJiT8uzKXFjhxw4v2ierCXOwB5sFDMtuA5G4kgYZ0AznZxQ/cw=="],
+    "i18next-browser-languagedetector": ["i18next-browser-languagedetector@8.2.3", "", { "dependencies": { "@babel/runtime": "^7.29.2" } }, "sha512-0jSTK3ncpXj9MFdxRz+TVTKDkSvYH8ifB/OCmUdEMprvXC3vy7kEvdKpj0yYB72B0UKEHJLPMEeRVC/UXroWnw=="],
 
     "i18next-localstorage-backend": ["i18next-localstorage-backend@4.3.2", "", { "dependencies": { "@babel/runtime": "^7.28.4" } }, "sha512-fBXOGTcUrS7ueD6W/I/+ruByGEiZlxjNU1xlRTCVtMzBqoPxH+xa1i/KXp3Gxy0gBQlX6Ni9WU06LXGLdJHIvg=="],
 
