@@ -6,7 +6,7 @@ Koharu is a local-first manga translator: a Rust workspace with a TypeScript int
 
 - Models run on the user's machine. Pages and text leave it only through a hosted provider the user chose.
 - Editor behavior that is not already specified matches Photoshop or Clip Studio Paint. Ordinary editing happens in the app, not through an export and re-import round trip.
-- Desktop API keys live in the OS credential store. Do not fall back to a project environment file.
+- Desktop API keys and sign-in tokens are stored encrypted, with the key kept in the OS credential store. Do not fall back to a project environment file.
 
 ## Changes
 
