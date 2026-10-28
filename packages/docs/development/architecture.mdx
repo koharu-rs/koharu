@@ -13,8 +13,8 @@ flowchart TB
   bridge -->|"commands and channels"| app
   app --> scene["koharu-scene"] --> storage["koharu-storage"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["native runtimes"]
-  app --> translator["koharu-translator"]
-  app --> agent["koharu-agent"]
+  app --> llm["koharu-llm"]
+  pipeline --> llm
   app --> desktop["koharu-desktop"] --> renderer["koharu-renderer"] --> rasterizer["koharu-rasterizer"]
   bridge --> canvas["koharu-canvas"] --> rasterizer
   app --> psd["koharu-psd"] --> renderer
@@ -42,7 +42,7 @@ Independent typed channels carry project, canvas, job, download, and resource up
 
 `koharu-scene` owns the canonical project, hierarchy, components, relations, patches, revisions, and session undo. `koharu-storage` persists opaque complete state payloads and immutable blobs.
 
-`koharu-pipeline` owns page-stage scheduling, model lifetime, progress, cancellation, and incremental commits. `koharu-ml` owns models and the shared device abstraction; `koharu-translator` owns local and hosted translation connections.
+`koharu-pipeline` owns page-stage scheduling, model lifetime, progress, cancellation, and incremental commits. `koharu-ml` owns the vision models; `koharu-llm` owns the local and hosted language models and the agent.
 
 ## Rendering and transport
 
@@ -54,9 +54,9 @@ Independent typed channels carry project, canvas, job, download, and resource up
 
 ## Native runtime boundary
 
-Safe wrappers `koharu-torch`, `koharu-llama`, and `koharu-diffusion` are separate from unsafe `-sys` dynamic-loading crates. `koharu-runtime` discovers, downloads, validates, and loads their packages.
+Safe wrappers `koharu-torch`, `llama-cpp-2`, and `koharu-diffusion` are separate from the unsafe `-sys` dynamic-loading crates, Koharu's own `llama-cpp-sys-2` among them. `koharu-runtime` discovers, downloads, validates, and loads their packages.
 
-Two crates are shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml`, and `koharu-secrets` wraps the operating system credential store.
+One crate is shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml` and the encrypted secrets, whose key is kept in the operating system credential store.
 
 <CardGroup cols={2}>
   <Card title="Scene and storage" icon="database" href="/development/scene">

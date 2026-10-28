@@ -67,9 +67,9 @@ impl Processor {
                 resize_normalize(&clockwise, self.image_width, self.image_height)?,
             )
         } else {
-            (original.shallow_clone(), original.shallow_clone())
+            (original.alias()?, original.alias()?)
         };
-        Ok(Tensor::stack(&[original, rotated_90, rotated_270], 0).to_device(device))
+        Ok(Tensor::stack(&[original, rotated_90, rotated_270], 0)?.to_device(device)?)
     }
 
     pub(super) fn postprocess(&self, logits: &Tensor) -> Result<Recognition> {
@@ -78,12 +78,12 @@ impl Processor {
             "COO SAR decoder expects logits for three rotations, got {:?}",
             logits.size()
         );
-        let probabilities = logits.softmax(-1, Kind::Float);
-        let (maximum_probabilities, indices) = probabilities.max_dim(-1, false);
-        let indices: Vec<Vec<i64>> = Vec::<Vec<i64>>::try_from(&indices.to_device(Device::Cpu))
+        let probabilities = logits.softmax(-1, Kind::Float)?;
+        let (maximum_probabilities, indices) = probabilities.max_dim(-1, false)?;
+        let indices: Vec<Vec<i64>> = Vec::<Vec<i64>>::try_from(&indices.to_device(Device::Cpu)?)
             .context("failed to copy COO token indices to CPU")?;
         let maximum_probabilities: Vec<Vec<f32>> =
-            Vec::<Vec<f32>>::try_from(&maximum_probabilities.to_device(Device::Cpu))
+            Vec::<Vec<f32>>::try_from(&maximum_probabilities.to_device(Device::Cpu)?)
                 .context("failed to copy COO token probabilities to CPU")?;
 
         let mut candidates = indices
@@ -145,9 +145,9 @@ fn resize_normalize(image: &image::RgbImage, width: u32, height: u32) -> Result<
         .flat_map(|pixel| pixel.0)
         .map(|value| value as f32 / 127.5 - 1.0)
         .collect::<Vec<_>>();
-    Ok(Tensor::from_slice(&values)
-        .view([height as i64, width as i64, 3])
-        .permute([2, 0, 1]))
+    Ok(Tensor::from_slice(&values)?
+        .view([height as i64, width as i64, 3])?
+        .permute([2, 0, 1])?)
 }
 
 #[cfg(test)]

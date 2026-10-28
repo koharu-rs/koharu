@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="470" viewBox="0 0 900 470" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <rect width="900" height="470" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#666"/>
+    </marker>
+  </defs>
+  <text x="20" y="30" font-size="16" font-weight="600" fill="#222">Who asks koharu-llm, and what it asks</text>
+
+  <!-- Callers -->
+  <g>
+    <rect x="20" y="70" width="190" height="62" rx="8" fill="#f3eef6" stroke="#b279a2"/>
+    <text x="34" y="94" font-weight="600" fill="#222">Pipeline translation</text>
+    <text x="34" y="114" fill="#555">a page in, JSON out</text>
+
+    <rect x="20" y="150" width="190" height="62" rx="8" fill="#fdf1e6" stroke="#f58518"/>
+    <text x="34" y="174" font-weight="600" fill="#222">PaddleOCR-VL OCR</text>
+    <text x="34" y="194" fill="#555">koharu-ml; crops in, text out</text>
+
+    <rect x="20" y="230" width="190" height="62" rx="8" fill="#eef3f8" stroke="#4c78a8"/>
+    <text x="34" y="254" font-weight="600" fill="#222">Agent panel</text>
+    <text x="34" y="274" fill="#555">the app's host gives tools</text>
+  </g>
+
+  <!-- koharu-llm -->
+  <rect x="260" y="56" width="380" height="390" rx="10" fill="#fafafa" stroke="#888"/>
+  <text x="276" y="80" font-weight="600" fill="#222">koharu-llm</text>
+  <text x="276" y="98" fill="#555">every model is a rig model</text>
+
+  <rect x="276" y="112" width="348" height="70" rx="6" fill="#ffffff" stroke="#b9b2a4"/>
+  <text x="290" y="134" font-weight="600" fill="#222">Local engine</text>
+  <text x="290" y="152" fill="#555">a thread and a context per loaded model;</text>
+  <text x="290" y="170" fill="#555">requests decode together as sequences</text>
+
+  <rect x="276" y="192" width="348" height="70" rx="6" fill="#ffffff" stroke="#b9b2a4"/>
+  <text x="290" y="214" font-weight="600" fill="#222">Hosted models, rig's providers</text>
+  <text x="290" y="232" fill="#555">OpenAI, Claude, Gemini, xAI, DeepSeek, MiniMax,</text>
+  <text x="290" y="250" fill="#555">OpenRouter, LM Studio, OpenAI-compatible</text>
+
+  <rect x="276" y="272" width="348" height="52" rx="6" fill="#ffffff" stroke="#b9b2a4"/>
+  <text x="290" y="294" font-weight="600" fill="#222">ChatGPT sign-in</text>
+  <text x="290" y="312" fill="#555">rig's sign-in, on Codex's route</text>
+
+  <rect x="276" y="334" width="348" height="52" rx="6" fill="#ffffff" stroke="#b9b2a4"/>
+  <text x="290" y="356" font-weight="600" fill="#222">Agent, on rig's loop</text>
+  <text x="290" y="374" fill="#555">model, then tools, then model; 20 calls at most</text>
+
+  <rect x="276" y="396" width="348" height="40" rx="6" fill="#ffffff" stroke="#b9b2a4"/>
+  <text x="290" y="421" fill="#222"><tspan font-weight="600">Models</tspan><tspan fill="#555"> · the GGUF catalog and each provider's list</tspan></text>
+
+  <!-- Right side -->
+  <rect x="690" y="112" width="190" height="70" rx="8" fill="#f1f5ee" stroke="#54a24b"/>
+  <text x="704" y="136" font-weight="600" fill="#222">The GPU</text>
+  <text x="704" y="156" fill="#555">llama.cpp, on the user's</text>
+  <text x="704" y="174" fill="#555">machine</text>
+
+  <rect x="690" y="192" width="190" height="132" rx="8" fill="#f6f6f6" stroke="#999"/>
+  <text x="704" y="216" font-weight="600" fill="#222">Provider APIs</text>
+  <text x="704" y="236" fill="#555">only a provider the user</text>
+  <text x="704" y="254" fill="#555">chose sees a page</text>
+
+  <rect x="690" y="372" width="190" height="64" rx="8" fill="#fffbe6" stroke="#c9a227"/>
+  <text x="704" y="396" font-weight="600" fill="#222">Encrypted secrets</text>
+  <text x="704" y="416" fill="#555">API keys, ChatGPT tokens</text>
+
+  <!-- Arrows -->
+  <g stroke="#666" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M210 101 L258 140"/>
+    <path d="M210 181 L258 150"/>
+    <path d="M210 261 L258 355"/>
+    <path d="M624 147 L688 147"/>
+    <path d="M624 227 L688 240"/>
+    <path d="M624 298 L688 290"/>
+    <path d="M640 404 L688 404"/>
+  </g>
+  <g stroke="#4c78a8" stroke-width="1.6" fill="none" marker-end="url(#arrow)" stroke-dasharray="5 3">
+    <path d="M276 372 C230 372 230 300 200 296"/>
+  </g>
+  <text x="120" y="320" fill="#4c78a8" text-anchor="middle">tool calls, one at a time</text>
+</svg>

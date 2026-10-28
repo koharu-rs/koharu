@@ -5,9 +5,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbImage};
-use koharu_torch::Device;
-
-use crate::backend::TryIntoDevice;
 
 use self::{model::Model, processor::Processor};
 
@@ -22,13 +19,13 @@ pub struct AotInpainting {
 }
 
 impl AotInpainting {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let weights_path = WEIGHTS
             .resolve()
             .await
             .context("failed to resolve AOT inpainting weights")?;
-        let mut model = Model::new(device);
+        let mut model = Model::new(device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;

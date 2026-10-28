@@ -6,8 +6,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::PPOCRV6MediumRecConfig,
     processor::{PPOCRV6MediumRecImageProcessor, SizeDict, TextRecognition},
@@ -29,8 +27,8 @@ pub struct PPOCRV6MediumRec {
 }
 
 impl PPOCRV6MediumRec {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -55,7 +53,7 @@ impl PPOCRV6MediumRec {
                 config.head_out_channels
             );
         }
-        let mut model = Model::new(&config, device);
+        let mut model = Model::new(&config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -70,7 +68,7 @@ impl PPOCRV6MediumRec {
     pub fn inference(&self, image: &DynamicImage) -> Result<TextRecognition> {
         koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
-            let probabilities = self.model.forward(&pixel_values);
+            let probabilities = self.model.forward(&pixel_values)?;
             self.processor.postprocess(&probabilities)
         })
     }
@@ -78,19 +76,16 @@ impl PPOCRV6MediumRec {
 
 #[cfg(test)]
 mod tests {
-    use koharu_runtime::{Feature, Runtime};
+    use koharu_runtime::Runtime;
 
     use super::*;
 
     #[tokio::test]
     #[ignore = "downloads the checkpoint and LibTorch runtime"]
-    async fn loads_medium_recognizer_checkpoint() {
-        Runtime::discover([Feature::Torch])
-            .unwrap()
-            .initialize()
-            .await
-            .unwrap();
-        let model = PPOCRV6MediumRec::load(crate::Device::cpu()).await.unwrap();
-        model.inference(&DynamicImage::new_rgb8(128, 32)).unwrap();
+    async fn loads_medium_recognizer_checkpoint() -> anyhow::Result<()> {
+        let runtime = Runtime::start().await?;
+        let model = PPOCRV6MediumRec::load(runtime.device()).await.unwrap();
+        model.inference(&DynamicImage::new_rgb8(128, 32))?;
+        Ok(())
     }
 }

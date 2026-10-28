@@ -94,10 +94,10 @@ impl RTDetrImageProcessor {
         // For a single image, Transformers pads to the image's own dimensions.
         // Therefore `do_pad` does not change this tensor's shape or values.
         let _ = self.do_pad;
-        Ok(Tensor::from_slice(&pixels)
-            .view([1, height as i64, width as i64, 3])
-            .permute([0, 3, 1, 2])
-            .to_device(device))
+        Ok(Tensor::from_slice(&pixels)?
+            .view([1, height as i64, width as i64, 3])?
+            .permute([0, 3, 1, 2])?
+            .to_device(device)?)
     }
 
     pub(super) fn post_process_object_detection(
@@ -117,7 +117,7 @@ impl RTDetrImageProcessor {
             );
         }
 
-        let mut boxes = center_to_corners_format(&outputs.pred_boxes);
+        let mut boxes = center_to_corners_format(&outputs.pred_boxes)?;
         let mut scale_values = Vec::with_capacity(batch_size * 4);
         for &(height, width) in target_sizes {
             scale_values.extend_from_slice(&[
@@ -127,38 +127,39 @@ impl RTDetrImageProcessor {
                 height as f32,
             ]);
         }
-        boxes *= Tensor::from_slice(&scale_values)
-            .view([batch_size as i64, 1, 4])
-            .to_device(boxes.device());
+        boxes = (&boxes
+            * Tensor::from_slice(&scale_values)?
+                .view([batch_size as i64, 1, 4])?
+                .to_device(boxes.device())?)?;
 
         let num_top_queries = logits.size()[1];
         let num_classes = logits.size()[2];
         let (scores, labels, boxes) = if use_focal_loss {
             let (scores, index) =
                 logits
-                    .sigmoid()
-                    .flatten(1, -1)
-                    .topk(num_top_queries, -1, true, true);
-            let labels = index.remainder(num_classes);
-            let index = index.floor_divide_scalar(num_classes);
+                    .sigmoid()?
+                    .flatten(1, -1)?
+                    .topk(num_top_queries, -1, true, true)?;
+            let labels = index.remainder(num_classes)?;
+            let index = index.floor_divide_scalar(num_classes)?;
             let boxes = boxes.gather(
                 1,
-                &index.unsqueeze(-1).repeat([1, 1, boxes.size()[2]]),
+                &index.unsqueeze(-1)?.repeat([1, 1, boxes.size()[2]])?,
                 false,
-            );
+            )?;
             (scores, labels, boxes)
         } else {
-            let probabilities = logits.softmax(-1, None::<Kind>);
-            let probabilities = probabilities.slice(-1, 0, num_classes - 1, 1);
-            let (scores, labels) = probabilities.max_dim(-1, false);
+            let probabilities = logits.softmax(-1, None::<Kind>)?;
+            let probabilities = probabilities.slice(-1, 0, num_classes - 1, 1)?;
+            let (scores, labels) = probabilities.max_dim(-1, false)?;
             (scores, labels, boxes)
         };
 
         let mut results = Vec::with_capacity(batch_size);
         for batch in 0..batch_size {
-            let scores = tensor_to_vec_f32(&scores.i(batch as i64))?;
-            let labels = tensor_to_vec_i64(&labels.i(batch as i64))?;
-            let boxes = tensor_to_vec_f32(&boxes.i(batch as i64).contiguous().view([-1]))?;
+            let scores = Vec::<f32>::try_from(scores.i(batch as i64)?)?;
+            let labels = Vec::<i64>::try_from(labels.i(batch as i64)?)?;
+            let boxes = Vec::<f32>::try_from(boxes.i(batch as i64)?.contiguous()?.view([-1])?)?;
             let mut result = ObjectDetectionOutput::default();
             for query in 0..scores.len() {
                 if scores[query] <= threshold {
@@ -435,35 +436,16 @@ pub(super) fn create_text_blocks(
         .collect()
 }
 
-fn center_to_corners_format(boxes: &Tensor) -> Tensor {
-    let centers = boxes.slice(-1, 0, 2, 1);
-    let dimensions = boxes.slice(-1, 2, 4, 1);
+fn center_to_corners_format(boxes: &Tensor) -> koharu_torch::Result<Tensor> {
+    let centers = boxes.slice(-1, 0, 2, 1)?;
+    let dimensions = boxes.slice(-1, 2, 4, 1)?;
     Tensor::cat(
-        &[&centers - &dimensions * 0.5, centers + dimensions * 0.5],
+        &[
+            (&centers - (&dimensions * 0.5)?)?,
+            (centers + (dimensions * 0.5)?)?,
+        ],
         -1,
     )
-}
-
-fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {
-    let tensor = tensor
-        .to_device(Device::Cpu)
-        .to_kind(Kind::Float)
-        .contiguous();
-    let mut values = vec![0.0; tensor.numel()];
-    let len = values.len();
-    tensor.f_copy_data(&mut values, len)?;
-    Ok(values)
-}
-
-fn tensor_to_vec_i64(tensor: &Tensor) -> Result<Vec<i64>> {
-    let tensor = tensor
-        .to_device(Device::Cpu)
-        .to_kind(Kind::Int64)
-        .contiguous();
-    let mut values = vec![0; tensor.numel()];
-    let len = values.len();
-    tensor.f_copy_data(&mut values, len)?;
-    Ok(values)
 }
 
 fn filter_and_fix_bboxes(

@@ -9,9 +9,9 @@ async fn main() -> Result<()> {
     let input =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/object_detection/1.jpg");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let image = image::open(input)?;
-    let model = KoharuLayoutRFDetrSeg2XL::load(koharu_ml::Device::default()).await?;
+    let model = KoharuLayoutRFDetrSeg2XL::load(runtime.device()).await?;
 
     let warmup = model.inference(&image)?;
     black_box(warmup);

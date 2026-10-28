@@ -2,32 +2,20 @@
 name = "koharu-torch-sys"
 version.workspace = true
 edition.workspace = true
-description = "Low-level FFI bindings for the LibTorch C++ API."
+description = "libtorch's C API through Koharu's shim, bound to the build Koharu's runtime loads."
 license = "MIT OR Apache-2.0"
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
-publish = true
-build = "build.rs"
-
 categories = ["external-ffi-bindings", "science"]
+publish = false
+build = "build.rs"
 
 [dependencies]
 libloading = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = { workspace = true }
-
 [build-dependencies]
 anyhow = { workspace = true }
 koharu-bindgen = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    "anyhow",
-    "koharu-bindgen",
-    "libc",
-    "libloading",
-]
