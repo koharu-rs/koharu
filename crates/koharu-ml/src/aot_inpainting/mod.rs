@@ -45,6 +45,6 @@ impl AotInpainting {
         mask: &GrayImage,
         max_side: u32,
     ) -> Result<RgbImage> {
-        koharu_torch::no_grad(|| self.processor.call(&self.model, image, mask, max_side))
+        tch::no_grad(|| self.processor.call(&self.model, image, mask, max_side))
     }
 }

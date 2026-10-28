@@ -7,7 +7,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::{
     config::{PaddleOCRVLConfig, PaddleOCRVisionConfig, RopeScaling},
@@ -74,7 +74,7 @@ impl PaddleOCRVL {
         image: &DynamicImage,
         task: PaddleOCRVLTask,
     ) -> Result<PaddleOCRVLResult> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let (pixel_values, image_grid_thw) =
                 self.processor.preprocess(image, task, self.device)?;
             let (input_ids, mm_token_type_ids) =

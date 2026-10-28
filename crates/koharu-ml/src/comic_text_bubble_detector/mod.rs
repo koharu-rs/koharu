@@ -9,7 +9,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::{
     config::{RTDetrResNetConfig, RTDetrV2Config},
@@ -86,7 +86,7 @@ impl RTDetrV2Detection {
         image: &DynamicImage,
         confidence_threshold: f32,
     ) -> Result<Vec<TextBlock>> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let (bubble_boxes, text_boxes) = self
                 .image_slicer
                 .process_slices_for_detection(image, |slice| {

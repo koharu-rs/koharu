@@ -10,8 +10,8 @@
 use anyhow::{Result, bail, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, Rgb, RgbImage, imageops};
-use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::Serialize;
+use tch::{Device, IndexOp, Kind, Tensor};
 
 use super::{config::Yolo11nSpeechBubbleConfig, model::Output};
 
@@ -87,17 +87,17 @@ impl Yolo11nSegImageProcessor {
             i64::from(letterbox.pad_y),
         );
 
-        let pixel_values = (Tensor::from_slice(padded.as_raw())?
-            .view([
+        let pixel_values = (Tensor::f_from_slice(padded.as_raw())?
+            .f_view([
                 1,
                 i64::from(letterbox.output_height),
                 i64::from(letterbox.output_width),
                 3,
             ])?
-            .permute([0, 3, 1, 2])?
-            .to_device(device)?
-            .to_kind(Kind::Float)?
-            / 255.0)?;
+            .f_permute([0, 3, 1, 2])?
+            .f_to_device(device)?
+            .f_to_kind(Kind::Float)?)
+        .f_div_scalar(255.0)?;
         Ok((pixel_values, letterbox))
     }
 
@@ -134,27 +134,27 @@ impl Yolo11nSegImageProcessor {
             .iter()
             .map(|candidate| candidate.anchor)
             .collect::<Vec<_>>();
-        let selected = Tensor::from_slice(&selected)?.to_device(output.pred.device())?;
+        let selected = Tensor::f_from_slice(&selected)?.f_to_device(output.pred.device())?;
         let mask_coefficients = output
             .pred
-            .i((
+            .f_i((
                 0,
                 4 + self.num_classes..4 + self.num_classes + self.num_masks,
                 ..,
             ))?
-            .transpose(0, 1)?
-            .index_select(0, &selected)?
-            .to_kind(Kind::Float)?;
+            .f_transpose(0, 1)?
+            .f_index_select(0, &selected)?
+            .f_to_kind(Kind::Float)?;
 
-        let proto = output.proto.i(0)?.to_kind(Kind::Float)?;
+        let proto = output.proto.f_i(0)?.f_to_kind(Kind::Float)?;
         let proto_size = proto.size();
         ensure!(
             proto_size.len() == 3 && proto_size[0] == self.num_masks,
             "unexpected YOLO11 prototype shape {proto_size:?}"
         );
         let masks = mask_coefficients
-            .matmul(&proto.view([self.num_masks, -1])?)?
-            .view([candidates.len() as i64, 1, proto_size[1], proto_size[2]])?;
+            .f_matmul(&proto.f_view([self.num_masks, -1])?)?
+            .f_view([candidates.len() as i64, 1, proto_size[1], proto_size[2]])?;
         // The public result requires original-resolution masks, so this follows
         // Ultralytics' `retina_masks=True` `process_mask_native` path exactly.
         let masks = scale_masks(
@@ -181,9 +181,9 @@ impl Yolo11nSegImageProcessor {
             }
 
             let mask = masks
-                .i((index as i64, 0, y1..y2, x1..x2))?
-                .gt(mask_logit_threshold)?;
-            let pixels = Vec::<u8>::try_from(mask.reshape([-1])?)?;
+                .f_i((index as i64, 0, y1..y2, x1..x2))?
+                .f_gt(mask_logit_threshold)?;
+            let pixels = Vec::<u8>::try_from(mask.f_reshape([-1])?)?;
             let area = pixels.iter().map(|&value| u32::from(value != 0)).sum();
             if area == 0 {
                 continue;
@@ -321,7 +321,7 @@ fn non_max_suppression(
         size[1]
     );
     let anchors = size[2] as usize;
-    let values = Vec::<f32>::try_from(pred.i(0)?.reshape([-1])?)?;
+    let values = Vec::<f32>::try_from(pred.f_i(0)?.f_reshape([-1])?)?;
     let mut candidates = Vec::new();
 
     for anchor in 0..anchors {
@@ -392,7 +392,7 @@ fn scale_boxes(mut bbox: [f32; 4], letterbox: &LetterBox) -> [f32; 4] {
     bbox
 }
 
-fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> koharu_torch::Result<Tensor> {
+fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> tch::Result<Tensor> {
     let size = masks.size();
     let input_height = size[2];
     let input_width = size[3];
@@ -411,9 +411,9 @@ fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> koharu_torch::Result<Tensor
     let right =
         (input_width - (pad_width + 0.1).round_ties_even() as i64).clamp(left + 1, input_width);
     masks
-        .slice(2, top, bottom, 1)?
-        .slice(3, left, right, 1)?
-        .upsample_bilinear2d(
+        .f_slice(2, top, bottom, 1)?
+        .f_slice(3, left, right, 1)?
+        .f_upsample_bilinear2d(
             [output_height, output_width],
             false,
             None::<f64>,

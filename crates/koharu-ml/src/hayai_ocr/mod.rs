@@ -4,7 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 use self::{
     config::HayaiConfig,
@@ -84,7 +84,7 @@ impl HayaiOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let inputs = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))

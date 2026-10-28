@@ -54,7 +54,7 @@ flowchart TB
 
 ## 原生运行时边界
 
-安全包装层 `koharu-torch`、`llama-cpp-2`、`koharu-diffusion` 与 unsafe `-sys` 动态加载 crate（包括 Koharu 自己的 `llama-cpp-sys-2`）分离。`koharu-runtime` 负责发现、下载、验证和加载软件包。
+安全包装层 `tch`、`llama-cpp-2`、`koharu-diffusion` 与 unsafe `-sys` 动态加载 crate（包括 Koharu 自己的 `torch-sys` 和 `llama-cpp-sys-2`）分离。`koharu-runtime` 负责发现、下载、验证和加载软件包。
 
 有一个 crate 被图中各组件共用，因此未在图中标出：`koharu-config` 拥有 `config.toml` 的类型化配置节和加密的密钥，其加密密钥保存在操作系统凭据存储中。
 

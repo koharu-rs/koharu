@@ -5,11 +5,9 @@
 
 use std::{collections::HashSet, path::Path};
 
+use crate::nn::{self, Module};
 use anyhow::{Result, bail, ensure};
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module},
-};
+use tch::{Device, Kind, Tensor};
 
 use super::{
     REPETITION_PENALTY,
@@ -75,17 +73,17 @@ impl Model {
             "input_ids and mm_token_type_ids must have equal lengths"
         );
         let device = self.vs.device();
-        let ids = Tensor::from_slice(input_ids)?
-            .view([1, input_ids.len() as i64])?
-            .to_device(device)?;
+        let ids = Tensor::f_from_slice(input_ids)?
+            .f_view([1, input_ids.len() as i64])?
+            .f_to_device(device)?;
         let mut inputs_embeds = self.language_model.embed_tokens(&ids)?;
 
         let image_features =
-            self.get_image_features(&pixel_values.to_kind(self.vs.kind())?, image_grid_thw)?;
+            self.get_image_features(&pixel_values.f_to_kind(self.vs.kind())?, image_grid_thw)?;
         let image_mask = ids
-            .eq(self.config.image_token_id)?
-            .unsqueeze(-1)?
-            .expand_as(&inputs_embeds)?;
+            .f_eq(self.config.image_token_id)?
+            .f_unsqueeze(-1)?
+            .f_expand_as(&inputs_embeds)?;
         let expected = input_ids
             .iter()
             .filter(|&&id| id == self.config.image_token_id)
@@ -95,7 +93,7 @@ impl Model {
             "image features and image tokens do not match: tokens={expected}, features={}",
             image_features.size()[0]
         );
-        inputs_embeds = inputs_embeds.masked_scatter(&image_mask, &image_features)?;
+        inputs_embeds = inputs_embeds.f_masked_scatter(&image_mask, &image_features)?;
 
         let (position_ids, rope_delta) =
             self.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw, device)?;
@@ -136,7 +134,7 @@ impl Model {
         let last_index = hidden_states.size()[1] - 1;
         let mut logits = self
             .lm_head
-            .forward(&hidden_states.select(1, last_index)?)?;
+            .forward(&hidden_states.f_select(1, last_index)?)?;
 
         let mut generated = Vec::with_capacity(max_new_tokens);
         let mut unique_tokens = HashSet::new();
@@ -151,24 +149,24 @@ impl Model {
                 break;
             }
 
-            let next_ids = Tensor::from_slice(&[next_token])?
-                .view([1, 1])?
-                .to_device(device)?;
+            let next_ids = Tensor::f_from_slice(&[next_token])?
+                .f_view([1, 1])?
+                .f_to_device(device)?;
             if unique_tokens.insert(next_token) {
                 seen_ids = Some(match seen_ids {
-                    Some(seen_ids) => Tensor::cat(&[seen_ids, next_ids.alias()?], 1)?,
-                    None => next_ids.alias()?,
+                    Some(seen_ids) => Tensor::f_cat(&[seen_ids, next_ids.f_alias()?], 1)?,
+                    None => next_ids.f_alias()?,
                 });
             }
             let position = input_length + step as i64 + rope_delta;
-            let position_ids = Tensor::full([3, 1, 1], position, (Kind::Int64, device))?;
+            let position_ids = Tensor::f_full([3, 1, 1], position, (Kind::Int64, device))?;
             let hidden_states = self.language_model.forward(
                 self.language_model.embed_tokens(&next_ids)?,
                 &position_ids,
                 false,
                 &mut cache,
             )?;
-            logits = self.lm_head.forward(&hidden_states.select(1, 0)?)?;
+            logits = self.lm_head.forward(&hidden_states.f_select(1, 0)?)?;
         }
         Ok(generated)
     }
@@ -190,7 +188,7 @@ impl Model {
                 .map(|_| None)
                 .collect::<Vec<Option<(Tensor, Tensor)>>>();
             let hidden_states = self.language_model.forward(
-                inputs_embeds.alias()?,
+                inputs_embeds.f_alias()?,
                 &position_ids,
                 true,
                 &mut cache,
@@ -198,7 +196,7 @@ impl Model {
             let last_index = hidden_states.size()[1] - 1;
             let logits = self
                 .lm_head
-                .forward(&hidden_states.select(1, last_index)?)?;
+                .forward(&hidden_states.f_select(1, last_index)?)?;
             let next_token = greedy_token(&logits, seen_ids.as_ref())?;
             if next_token == self.config.eos_token_id {
                 break;
@@ -208,24 +206,24 @@ impl Model {
                 break;
             }
 
-            let next_ids = Tensor::from_slice(&[next_token])?
-                .view([1, 1])?
-                .to_device(device)?;
+            let next_ids = Tensor::f_from_slice(&[next_token])?
+                .f_view([1, 1])?
+                .f_to_device(device)?;
             if unique_tokens.insert(next_token) {
                 seen_ids = Some(match seen_ids {
-                    Some(seen_ids) => Tensor::cat(&[seen_ids, next_ids.alias()?], 1)?,
-                    None => next_ids.alias()?,
+                    Some(seen_ids) => Tensor::f_cat(&[seen_ids, next_ids.f_alias()?], 1)?,
+                    None => next_ids.f_alias()?,
                 });
             }
-            inputs_embeds = Tensor::cat(
+            inputs_embeds = Tensor::f_cat(
                 &[inputs_embeds, self.language_model.embed_tokens(&next_ids)?],
                 1,
             )?;
             let position = input_length + step as i64 + rope_delta;
-            position_ids = Tensor::cat(
+            position_ids = Tensor::f_cat(
                 &[
                     position_ids,
-                    Tensor::full([3, 1, 1], position, (Kind::Int64, device))?,
+                    Tensor::f_full([3, 1, 1], position, (Kind::Int64, device))?,
                 ],
                 2,
             )?;
@@ -302,24 +300,24 @@ impl Model {
             .max()
             .unwrap_or(0);
         let rope_delta = maximum + 1 - input_ids.len() as i64;
-        let position_ids = Tensor::stack(
+        let position_ids = Tensor::f_stack(
             &positions
                 .iter()
-                .map(|axis| Tensor::from_slice(axis)?.to_device(device))
-                .collect::<koharu_torch::Result<Vec<_>>>()?,
+                .map(|axis| Tensor::f_from_slice(axis)?.f_to_device(device))
+                .collect::<tch::Result<Vec<_>>>()?,
             0,
         )?
-        .unsqueeze(1)?;
+        .f_unsqueeze(1)?;
         Ok((position_ids, rope_delta))
     }
 }
 
 fn greedy_token(logits: &Tensor, seen_ids: Option<&Tensor>) -> Result<i64> {
     let logits = seen_ids.map_or_else(
-        || logits.alias(),
+        || logits.f_alias(),
         |seen_ids| crate::repetition_penalty(logits, seen_ids, f64::from(REPETITION_PENALTY)),
     )?;
-    Ok(logits.argmax(-1, false)?.int64_value(&[0])?)
+    Ok(logits.f_argmax(-1, false)?.f_int64_value(&[0])?)
 }
 
 #[derive(Debug)]
@@ -361,7 +359,7 @@ impl PaddleOCRProjector {
         let hidden = image_features.size()[1];
         let image_features = self.pre_norm.forward(image_features)?;
         let image_features = image_features
-            .reshape([
+            .f_reshape([
                 temporal,
                 height / merge,
                 merge,
@@ -369,14 +367,14 @@ impl PaddleOCRProjector {
                 merge,
                 hidden,
             ])?
-            .transpose(2, 3)?
-            .reshape([
+            .f_transpose(2, 3)?
+            .f_reshape([
                 temporal * (height / merge) * (width / merge),
                 merge * merge * hidden,
             ])?;
         Ok(self
             .linear_2
-            .forward(&self.linear_1.forward(&image_features)?.gelu("none")?)?)
+            .forward(&self.linear_1.forward(&image_features)?.f_gelu("none")?)?)
     }
 }
 
@@ -444,30 +442,30 @@ impl PaddleOCRVisionEmbeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor, grid_thw: [i64; 3]) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor, grid_thw: [i64; 3]) -> tch::Result<Tensor> {
         let embeddings = self
             .patch_embedding
-            .forward(&pixel_values.to_kind(self.patch_embedding.ws.kind())?)?
-            .flatten(2, 3)?
-            .squeeze_dim(-1)?
-            .reshape([-1, self.patch_embedding.ws.size()[0]])?;
+            .forward(&pixel_values.f_to_kind(self.patch_embedding.ws.kind())?)?
+            .f_flatten(2, 3)?
+            .f_squeeze_dim(-1)?
+            .f_reshape([-1, self.patch_embedding.ws.size()[0]])?;
         let position_embeddings = self.position_embeddings(grid_thw)?;
-        embeddings + position_embeddings
+        embeddings.f_add(&position_embeddings)
     }
 
     // https://github.com/huggingface/transformers/blob/8c84144bfc7dd0c9c5e336a6d89c9dcee2efc2a8/src/transformers/models/paddleocr_vl/modeling_paddleocr_vl.py#L593-L621
-    fn position_embeddings(&self, grid: [i64; 3]) -> koharu_torch::Result<Tensor> {
+    fn position_embeddings(&self, grid: [i64; 3]) -> tch::Result<Tensor> {
         let [temporal, height, width] = grid;
         let side = self.num_grid_per_side;
         let hidden = self.position_embedding.ws.size()[1];
         self.position_embedding
             .ws
-            .reshape([1, side, side, hidden])?
-            .permute([0, 3, 1, 2])?
-            .upsample_bilinear2d([height, width], false, None::<f64>, None::<f64>)?
-            .permute([0, 2, 3, 1])?
-            .reshape([height * width, hidden])?
-            .repeat([temporal, 1])
+            .f_reshape([1, side, side, hidden])?
+            .f_permute([0, 3, 1, 2])?
+            .f_upsample_bilinear2d([height, width], false, None::<f64>, None::<f64>)?
+            .f_permute([0, 2, 3, 1])?
+            .f_reshape([height * width, hidden])?
+            .f_repeat([temporal, 1])
     }
 }
 
@@ -490,11 +488,12 @@ impl PaddleOCRVisionEncoder {
     fn forward(&self, mut hidden_states: Tensor, grid_thw: [i64; 3]) -> Result<Tensor> {
         let position_ids = vision_position_ids(grid_thw, hidden_states.device())?;
         let inv_freq = rotary_inv_freq(self.head_dim / 2, 10_000.0, hidden_states.device())?;
-        let rotary = (position_ids.to_kind(Kind::Float)?.unsqueeze(-1)? * inv_freq)?
-            .flatten(1, 2)?
-            .repeat([1, 2])?;
-        let cos = rotary.cos()?;
-        let sin = rotary.sin()?;
+        let rotary = (position_ids.f_to_kind(Kind::Float)?.f_unsqueeze(-1)?)
+            .f_mul(&inv_freq)?
+            .f_flatten(1, 2)?
+            .f_repeat([1, 2])?;
+        let cos = rotary.f_cos()?;
+        let sin = rotary.f_sin()?;
         for layer in &self.layers {
             hidden_states = layer.forward(hidden_states, &cos, &sin)?;
         }
@@ -533,16 +532,18 @@ impl PaddleOCRVisionEncoderLayer {
     }
 
     fn forward(&self, hidden_states: Tensor, cos: &Tensor, sin: &Tensor) -> Result<Tensor> {
-        let residual = hidden_states.alias()?;
-        let hidden_states = (residual
-            + self
-                .self_attn
-                .forward(&self.layer_norm1.forward(&hidden_states)?, cos, sin)?)?;
-        let residual = hidden_states.alias()?;
-        Ok((residual
-            + self
+        let residual = hidden_states.f_alias()?;
+        let hidden_states = residual.f_add(&self.self_attn.forward(
+            &self.layer_norm1.forward(&hidden_states)?,
+            cos,
+            sin,
+        )?)?;
+        let residual = hidden_states.f_alias()?;
+        Ok(residual.f_add(
+            &self
                 .mlp
-                .forward(&self.layer_norm2.forward(&hidden_states)?)?)?)
+                .forward(&self.layer_norm2.forward(&hidden_states)?)?,
+        )?)
     }
 }
 
@@ -571,33 +572,33 @@ impl PaddleOCRVisionAttention {
 
     fn forward(&self, hidden_states: &Tensor, cos: &Tensor, sin: &Tensor) -> Result<Tensor> {
         let sequence_length = hidden_states.size()[0];
-        let query = self.q_proj.forward(hidden_states)?.view([
+        let query = self.q_proj.forward(hidden_states)?.f_view([
             sequence_length,
             self.num_heads,
             self.head_dim,
         ])?;
-        let key = self.k_proj.forward(hidden_states)?.view([
+        let key = self.k_proj.forward(hidden_states)?.f_view([
             sequence_length,
             self.num_heads,
             self.head_dim,
         ])?;
-        let value = self.v_proj.forward(hidden_states)?.view([
+        let value = self.v_proj.forward(hidden_states)?.f_view([
             sequence_length,
             self.num_heads,
             self.head_dim,
         ])?;
         let (query, key) = apply_vision_rotary(query, key, cos, sin)?;
-        let query = query.transpose(0, 1)?.unsqueeze(0)?;
-        let key = key.transpose(0, 1)?.unsqueeze(0)?;
-        let value = value.transpose(0, 1)?.unsqueeze(0)?;
-        let attention = (query.matmul(&key.transpose(-2, -1)?)?
-            * (self.head_dim as f64).powf(-0.5))?
-        .softmax(-1, Kind::Float)?
-        .to_kind(query.kind())?;
+        let query = query.f_transpose(0, 1)?.f_unsqueeze(0)?;
+        let key = key.f_transpose(0, 1)?.f_unsqueeze(0)?;
+        let value = value.f_transpose(0, 1)?.f_unsqueeze(0)?;
+        let attention = (query.f_matmul(&key.f_transpose(-2, -1)?)?)
+            .f_mul_scalar((self.head_dim as f64).powf(-0.5))?
+            .f_softmax(-1, Kind::Float)?
+            .f_to_kind(query.kind())?;
         let output = attention
-            .matmul(&value)?
-            .transpose(1, 2)?
-            .reshape([sequence_length, self.num_heads * self.head_dim])?;
+            .f_matmul(&value)?
+            .f_transpose(1, 2)?
+            .f_reshape([sequence_length, self.num_heads * self.head_dim])?;
         Ok(self.out_proj.forward(&output)?)
     }
 }
@@ -626,9 +627,9 @@ impl PaddleOCRVisionMLP {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         self.fc2
-            .forward(&self.fc1.forward(hidden_states)?.gelu("tanh")?)
+            .forward(&self.fc1.forward(hidden_states)?.f_gelu("tanh")?)
     }
 }
 
@@ -676,10 +677,11 @@ impl PaddleOCRTextModel {
         cache: &mut [Option<(Tensor, Tensor)>],
     ) -> Result<Tensor> {
         let inv_freq = rotary_inv_freq(self.head_dim, self.rope_theta, hidden_states.device())?;
-        let frequencies = (position_ids.to_kind(Kind::Float)?.unsqueeze(-1)? * inv_freq)?;
-        let embeddings = Tensor::cat(&[frequencies.alias()?, frequencies], -1)?;
-        let cos = embeddings.cos()?.to_kind(hidden_states.kind())?;
-        let sin = embeddings.sin()?.to_kind(hidden_states.kind())?;
+        let frequencies =
+            (position_ids.f_to_kind(Kind::Float)?.f_unsqueeze(-1)?).f_mul(&inv_freq)?;
+        let embeddings = Tensor::f_cat(&[frequencies.f_alias()?, frequencies], -1)?;
+        let cos = embeddings.f_cos()?.f_to_kind(hidden_states.kind())?;
+        let sin = embeddings.f_sin()?.f_to_kind(hidden_states.kind())?;
         let attention_mask = causal
             .then(|| {
                 causal_mask(
@@ -736,20 +738,20 @@ impl PaddleOCRDecoderLayer {
         sin: &Tensor,
         cache: &mut Option<(Tensor, Tensor)>,
     ) -> Result<Tensor> {
-        let residual = hidden_states.alias()?;
-        let hidden_states = (residual
-            + self.self_attn.forward(
-                &self.input_layernorm.forward(&hidden_states)?,
-                attention_mask,
-                cos,
-                sin,
-                cache,
-            )?)?;
-        let residual = hidden_states.alias()?;
-        Ok((residual
-            + self
+        let residual = hidden_states.f_alias()?;
+        let hidden_states = residual.f_add(&self.self_attn.forward(
+            &self.input_layernorm.forward(&hidden_states)?,
+            attention_mask,
+            cos,
+            sin,
+            cache,
+        )?)?;
+        let residual = hidden_states.f_alias()?;
+        Ok(residual.f_add(
+            &self
                 .mlp
-                .forward(&self.post_attention_layernorm.forward(&hidden_states)?)?)?)
+                .forward(&self.post_attention_layernorm.forward(&hidden_states)?)?,
+        )?)
     }
 }
 
@@ -813,45 +815,47 @@ impl PaddleOCRAttention {
         let query = self
             .q_proj
             .forward(hidden_states)?
-            .view([batch, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
+            .f_view([batch, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
         let key = self
             .k_proj
             .forward(hidden_states)?
-            .view([
+            .f_view([
                 batch,
                 sequence_length,
                 self.num_key_value_heads,
                 self.head_dim,
             ])?
-            .transpose(1, 2)?;
+            .f_transpose(1, 2)?;
         let value = self
             .v_proj
             .forward(hidden_states)?
-            .view([
+            .f_view([
                 batch,
                 sequence_length,
                 self.num_key_value_heads,
                 self.head_dim,
             ])?
-            .transpose(1, 2)?;
+            .f_transpose(1, 2)?;
         let (query, mut key) = apply_multimodal_rotary(query, key, cos, sin, &self.mrope_section)?;
         let mut value = value;
         if let Some((cached_key, cached_value)) = cache.as_ref() {
-            key = Tensor::cat(&[cached_key.alias()?, key], 2)?;
-            value = Tensor::cat(&[cached_value.alias()?, value], 2)?;
+            key = Tensor::f_cat(&[cached_key.f_alias()?, key], 2)?;
+            value = Tensor::f_cat(&[cached_value.f_alias()?, value], 2)?;
         }
-        *cache = Some((key.alias()?, value.alias()?));
+        *cache = Some((key.f_alias()?, value.f_alias()?));
 
         let key = repeat_kv(&key, self.num_key_value_groups)?;
         let value = repeat_kv(&value, self.num_key_value_groups)?;
-        let mut weights =
-            (query.matmul(&key.transpose(2, 3)?)? * (self.head_dim as f64).powf(-0.5))?;
+        let mut weights = (query.f_matmul(&key.f_transpose(2, 3)?)?)
+            .f_mul_scalar((self.head_dim as f64).powf(-0.5))?;
         if let Some(mask) = attention_mask {
-            weights = (weights + mask)?;
+            weights = weights.f_add(mask)?;
         }
-        weights = weights.softmax(-1, Kind::Float)?.to_kind(query.kind())?;
-        let output = weights.matmul(&value)?.transpose(1, 2)?.reshape([
+        weights = weights
+            .f_softmax(-1, Kind::Float)?
+            .f_to_kind(query.kind())?;
+        let output = weights.f_matmul(&value)?.f_transpose(1, 2)?.f_reshape([
             batch,
             sequence_length,
             self.num_heads * self.head_dim,
@@ -891,10 +895,13 @@ impl PaddleOCRMLP {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         self.down_proj.forward(
-            &(self.gate_proj.forward(hidden_states)?.silu()?
-                * self.up_proj.forward(hidden_states)?)?,
+            &self
+                .gate_proj
+                .forward(hidden_states)?
+                .f_silu()?
+                .f_mul(&self.up_proj.forward(hidden_states)?)?,
         )
     }
 }
@@ -913,14 +920,18 @@ impl PaddleOCRRMSNorm {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let input_kind = hidden_states.kind();
-        let hidden_states = hidden_states.to_kind(Kind::Float)?;
+        let hidden_states = hidden_states.f_to_kind(Kind::Float)?;
         let variance =
             hidden_states
-                .pow_tensor_scalar(2.0)?
-                .mean_dim(&[-1i64][..], true, None::<Kind>)?;
-        &self.weight * (hidden_states * (variance + self.eps)?.rsqrt()?)?.to_kind(input_kind)?
+                .f_pow_tensor_scalar(2.0)?
+                .f_mean_dim(&[-1i64][..], true, None::<Kind>)?;
+        self.weight.f_mul(
+            &hidden_states
+                .f_mul(&variance.f_add_scalar(self.eps)?.f_rsqrt()?)?
+                .f_to_kind(input_kind)?,
+        )
     }
 }
 
@@ -928,17 +939,18 @@ fn linear(path: &nn::Path<'_>, input: i64, output: i64, bias: bool) -> Result<nn
     Ok(nn::linear(path, input, output, nn::LinearConfig { bias })?)
 }
 
-fn rotary_inv_freq(dim: i64, theta: f64, device: Device) -> koharu_torch::Result<Tensor> {
-    let exponents = (Tensor::arange_start_step(0, dim, 2, (Kind::Float, device))? / dim as f64)?;
-    (-theta.ln() * exponents)?.exp()
+fn rotary_inv_freq(dim: i64, theta: f64, device: Device) -> tch::Result<Tensor> {
+    let exponents = (Tensor::f_arange_start_step(0, dim, 2, (Kind::Float, device))?)
+        .f_div_scalar(dim as f64)?;
+    exponents.f_mul_scalar(-theta.ln())?.f_exp()
 }
 
 fn rotate_half(tensor: &Tensor) -> Result<Tensor> {
     let half = tensor.size().last().copied().unwrap() / 2;
-    Ok(Tensor::cat(
+    Ok(Tensor::f_cat(
         &[
-            (-tensor.narrow(-1, half, half)?)?,
-            tensor.narrow(-1, 0, half)?,
+            (tensor.f_narrow(-1, half, half)?).f_neg()?,
+            tensor.f_narrow(-1, 0, half)?,
         ],
         -1,
     )?)
@@ -952,15 +964,15 @@ fn apply_vision_rotary(
 ) -> Result<(Tensor, Tensor)> {
     let query_kind = query.kind();
     let key_kind = key.kind();
-    let cos = cos.unsqueeze(-2)?.to_kind(Kind::Float)?;
-    let sin = sin.unsqueeze(-2)?.to_kind(Kind::Float)?;
-    let query = query.to_kind(Kind::Float)?;
-    let key = key.to_kind(Kind::Float)?;
-    let query_rotated = ((&query * &cos)? + (rotate_half(&query)? * &sin)?)?;
-    let key_rotated = ((&key * &cos)? + (rotate_half(&key)? * &sin)?)?;
+    let cos = cos.f_unsqueeze(-2)?.f_to_kind(Kind::Float)?;
+    let sin = sin.f_unsqueeze(-2)?.f_to_kind(Kind::Float)?;
+    let query = query.f_to_kind(Kind::Float)?;
+    let key = key.f_to_kind(Kind::Float)?;
+    let query_rotated = (query.f_mul(&cos)?).f_add(&(rotate_half(&query)?).f_mul(&sin)?)?;
+    let key_rotated = (key.f_mul(&cos)?).f_add(&(rotate_half(&key)?).f_mul(&sin)?)?;
     Ok((
-        query_rotated.to_kind(query_kind)?,
-        key_rotated.to_kind(key_kind)?,
+        query_rotated.f_to_kind(query_kind)?,
+        key_rotated.f_to_kind(key_kind)?,
     ))
 }
 
@@ -972,47 +984,50 @@ fn apply_multimodal_rotary(
     sections: &[i64],
 ) -> Result<(Tensor, Tensor)> {
     let doubled = sections.iter().map(|value| value * 2).collect::<Vec<_>>();
-    let cos_chunks = cos.split_with_sizes(&doubled, -1)?;
-    let sin_chunks = sin.split_with_sizes(&doubled, -1)?;
-    let selected_cos = Tensor::cat(
+    let cos_chunks = cos.f_split_with_sizes(&doubled, -1)?;
+    let sin_chunks = sin.f_split_with_sizes(&doubled, -1)?;
+    let selected_cos = Tensor::f_cat(
         &cos_chunks
             .iter()
             .enumerate()
-            .map(|(index, chunk)| chunk.select(0, index as i64 % 3))
-            .collect::<koharu_torch::Result<Vec<_>>>()?,
+            .map(|(index, chunk)| chunk.f_select(0, index as i64 % 3))
+            .collect::<tch::Result<Vec<_>>>()?,
         -1,
     )?
-    .unsqueeze(1)?;
-    let selected_sin = Tensor::cat(
+    .f_unsqueeze(1)?;
+    let selected_sin = Tensor::f_cat(
         &sin_chunks
             .iter()
             .enumerate()
-            .map(|(index, chunk)| chunk.select(0, index as i64 % 3))
-            .collect::<koharu_torch::Result<Vec<_>>>()?,
+            .map(|(index, chunk)| chunk.f_select(0, index as i64 % 3))
+            .collect::<tch::Result<Vec<_>>>()?,
         -1,
     )?
-    .unsqueeze(1)?;
-    let rotated_query = ((&query * &selected_cos)? + (rotate_half(&query)? * &selected_sin)?)?;
-    let rotated_key = ((&key * &selected_cos)? + (rotate_half(&key)? * &selected_sin)?)?;
+    .f_unsqueeze(1)?;
+    let rotated_query =
+        (query.f_mul(&selected_cos)?).f_add(&(rotate_half(&query)?).f_mul(&selected_sin)?)?;
+    let rotated_key =
+        (key.f_mul(&selected_cos)?).f_add(&(rotate_half(&key)?).f_mul(&selected_sin)?)?;
     Ok((rotated_query, rotated_key))
 }
 
 fn repeat_kv(hidden_states: &Tensor, repeats: i64) -> Result<Tensor> {
     if repeats == 1 {
-        return Ok(hidden_states.alias()?);
+        return Ok(hidden_states.f_alias()?);
     }
     let size = hidden_states.size();
     Ok(hidden_states
-        .unsqueeze(2)?
-        .expand([size[0], size[1], repeats, size[2], size[3]], false)?
-        .reshape([size[0], size[1] * repeats, size[2], size[3]])?)
+        .f_unsqueeze(2)?
+        .f_expand([size[0], size[1], repeats, size[2], size[3]], false)?
+        .f_reshape([size[0], size[1] * repeats, size[2], size[3]])?)
 }
 
-fn causal_mask(sequence_length: i64, device: Device, kind: Kind) -> koharu_torch::Result<Tensor> {
-    let mask = Tensor::ones([sequence_length, sequence_length], (Kind::Bool, device))?.triu(1)?;
-    Tensor::zeros([sequence_length, sequence_length], (kind, device))?
-        .masked_fill(&mask, f64::NEG_INFINITY)?
-        .view([1, 1, sequence_length, sequence_length])
+fn causal_mask(sequence_length: i64, device: Device, kind: Kind) -> tch::Result<Tensor> {
+    let mask =
+        Tensor::f_ones([sequence_length, sequence_length], (Kind::Bool, device))?.f_triu(1)?;
+    Tensor::f_zeros([sequence_length, sequence_length], (kind, device))?
+        .f_masked_fill(&mask, f64::NEG_INFINITY)?
+        .f_view([1, 1, sequence_length, sequence_length])
 }
 
 fn vision_position_ids(grid: [i64; 3], device: Device) -> Result<Tensor> {
@@ -1027,10 +1042,10 @@ fn vision_position_ids(grid: [i64; 3], device: Device) -> Result<Tensor> {
             }
         }
     }
-    Ok(Tensor::stack(
+    Ok(Tensor::f_stack(
         &[
-            Tensor::from_slice(&rows)?.to_device(device)?,
-            Tensor::from_slice(&columns)?.to_device(device)?,
+            Tensor::f_from_slice(&rows)?.f_to_device(device)?,
+            Tensor::f_from_slice(&columns)?.f_to_device(device)?,
         ],
         1,
     )?)

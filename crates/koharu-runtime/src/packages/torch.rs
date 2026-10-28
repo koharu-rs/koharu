@@ -113,11 +113,12 @@ pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
     for library in libraries(backend) {
         preload(&folder.join(library), false)?;
     }
-    koharu_torch_sys::load(&[&folder.join(shim())])?;
+    torch_sys::load(&[&folder.join(shim())])?;
+    torch_sys::io::register_stream_callbacks();
     // libtorch's cuDNN switch also turns MIOpen on and off; MIOpen isn't
     // reliable on Windows. Set once, before any model runs.
     let cudnn = !(cfg!(windows) && backend == Backend::Rocm);
-    unsafe { koharu_torch_sys::atc_set_user_enabled_cudnn(i32::from(cudnn)) };
+    unsafe { torch_sys::cuda::atc_set_user_enabled_cudnn(i32::from(cudnn)) };
     Ok(())
 }
 

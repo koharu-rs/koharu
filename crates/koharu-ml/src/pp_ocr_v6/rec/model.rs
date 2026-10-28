@@ -5,11 +5,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Kind, Tensor};
 
 use super::super::pp_lcnet_v4::PPLCNetV4Backbone;
 use super::config::PPOCRV6MediumRecConfig;
@@ -24,7 +22,7 @@ pub(crate) struct Model {
 impl Model {
     pub(crate) fn new(
         config: &PPOCRV6MediumRecConfig,
-        device: koharu_torch::Device,
+        device: tch::Device,
         kind: Kind,
     ) -> Result<Self> {
         let vs = nn::VarStore::new(device, kind);
@@ -41,22 +39,22 @@ impl Model {
         Ok(())
     }
 
-    pub(crate) fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    pub(crate) fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         let feature_maps = self
             .backbone
-            .forward(&pixel_values.to_kind(self.vs.kind())?)?;
+            .forward(&pixel_values.f_to_kind(self.vs.kind())?)?;
         let hidden_states = feature_maps.last().expect("PP-LCNetV4 stage4 feature");
         let hidden_states =
-            hidden_states.avg_pool2d([3, 2], [3, 2], [0, 0], false, true, None::<i64>)?;
+            hidden_states.f_avg_pool2d([3, 2], [3, 2], [0, 0], false, true, None::<i64>)?;
         self.head.forward(&hidden_states)
     }
 }
 
-fn activate(hidden_states: Tensor, activation: &str) -> koharu_torch::Result<Tensor> {
+fn activate(hidden_states: Tensor, activation: &str) -> tch::Result<Tensor> {
     match activation {
-        "silu" => hidden_states.silu(),
-        "relu" => hidden_states.relu(),
-        "gelu" => hidden_states.gelu("none"),
+        "silu" => hidden_states.f_silu(),
+        "relu" => hidden_states.f_relu(),
+        "gelu" => hidden_states.f_gelu("none"),
         name => panic!("unsupported PP-OCRv6 recognition activation {name}"),
     }
 }
@@ -100,7 +98,7 @@ impl ConvLayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = self.convolution.forward(hidden_states)?;
         let hidden_states = self.normalization.forward_t(&hidden_states, false)?;
         activate(hidden_states, &self.activation)
@@ -141,30 +139,31 @@ impl Attention {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let size = hidden_states.size();
         let (batch_size, sequence_length, embed_dim) = (size[0], size[1], size[2]);
         let mixed_qkv = self
             .qkv
             .forward(hidden_states)?
-            .view([
+            .f_view([
                 batch_size,
                 sequence_length,
                 3,
                 self.num_heads,
                 self.head_dim,
             ])?
-            .permute([2, 0, 3, 1, 4])?;
-        let query = mixed_qkv.get(0)?;
-        let key = mixed_qkv.get(1)?;
-        let value = mixed_qkv.get(2)?;
-        let weights =
-            (query.matmul(&key.transpose(-1, -2)?)? * self.scale)?.softmax(-1, None::<Kind>)?;
+            .f_permute([2, 0, 3, 1, 4])?;
+        let query = mixed_qkv.f_get(0)?;
+        let key = mixed_qkv.f_get(1)?;
+        let value = mixed_qkv.f_get(2)?;
+        let weights = (query.f_matmul(&key.f_transpose(-1, -2)?)?)
+            .f_mul_scalar(self.scale)?
+            .f_softmax(-1, None::<Kind>)?;
         let hidden_states = weights
-            .matmul(&value)?
-            .transpose(1, 2)?
-            .contiguous()?
-            .view([batch_size, sequence_length, embed_dim])?;
+            .f_matmul(&value)?
+            .f_transpose(1, 2)?
+            .f_contiguous()?
+            .f_view([batch_size, sequence_length, embed_dim])?;
         self.projection.forward(&hidden_states)
     }
 }
@@ -196,7 +195,7 @@ impl Mlp {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = activate(self.fc1.forward(hidden_states)?, &self.activation)?;
         self.fc2.forward(&hidden_states)
     }
@@ -232,15 +231,17 @@ impl Block {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
-        let hidden_states = (hidden_states
-            + self
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+        let hidden_states = hidden_states.f_add(
+            &self
                 .self_attn
-                .forward(&self.layer_norm1.forward(hidden_states)?)?)?;
-        &hidden_states
-            + self
+                .forward(&self.layer_norm1.forward(hidden_states)?)?,
+        )?;
+        hidden_states.f_add(
+            &self
                 .mlp
-                .forward(&self.layer_norm2.forward(&hidden_states)?)?
+                .forward(&self.layer_norm2.forward(&hidden_states)?)?,
+        )
     }
 }
 
@@ -303,22 +304,25 @@ impl EncoderWithSvtr {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let residual = self.conv_block[0].forward(hidden_states)?;
         let mut hidden_states = self.conv_block[1].forward(hidden_states)?;
-        hidden_states = (&hidden_states + self.conv_block[2].forward(&hidden_states)?)?;
+        hidden_states = hidden_states.f_add(&self.conv_block[2].forward(&hidden_states)?)?;
 
         let size = hidden_states.size();
         let (batch_size, channels, height, width) = (size[0], size[1], size[2], size[3]);
-        hidden_states = hidden_states.flatten(2, -1)?.transpose(1, 2)?;
+        hidden_states = hidden_states.f_flatten(2, -1)?.f_transpose(1, 2)?;
         for block in &self.svtr_block {
             hidden_states = block.forward(&hidden_states)?;
         }
         hidden_states = self.norm.forward(&hidden_states)?;
         hidden_states = hidden_states
-            .view([batch_size, height, width, channels])?
-            .permute([0, 3, 1, 2])?;
-        (hidden_states + residual)?.squeeze_dim(2)?.transpose(1, 2)
+            .f_view([batch_size, height, width, channels])?
+            .f_permute([0, 3, 1, 2])?;
+        hidden_states
+            .f_add(&residual)?
+            .f_squeeze_dim(2)?
+            .f_transpose(1, 2)
     }
 }
 
@@ -341,9 +345,9 @@ impl Head {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         self.head
             .forward(&self.encoder.forward(hidden_states)?)?
-            .softmax(2, Some(Kind::Float))
+            .f_softmax(2, Some(Kind::Float))
     }
 }

@@ -264,7 +264,7 @@ needs is in local LLM inference, wherever it lives.
   back to the device only when one of its own allocations would otherwise
   fail, on CUDA and HIP [libtorch CUDA memory] [libtorch HIP memory] [libtorch
   CUDA retry] as on Metal [libtorch Metal retry]. The shim release Koharu
-  binds has no `empty_cache` (`koharu-torch`'s README), so libtorch's share of
+  binds has no `empty_cache` (`torch-sys`'s README), so libtorch's share of
   the device grows to the most its models have needed, and llama.cpp and
   stable-diffusion.cpp don't get it back while Koharu runs.
 - **Footprint.** A model's footprint is how much free memory drops from an
@@ -292,7 +292,7 @@ needs is in local LLM inference, wherever it lives.
   ggml's CUDA pool aborts the process when it runs out [ggml pool], which
   covers llama.cpp and stable-diffusion.cpp; stable-diffusion.cpp reports
   other failures only in its log, and libtorch's errors reach Koharu only as
-  messages (`koharu-torch`'s README). So nothing tells the lane that a failure was
+  messages (`torch-sys`'s README). So nothing tells the lane that a failure was
   memory, and a retry would repeat any other failure: stable-diffusion.cpp
   retries with smaller tiles only on its typed allocation failure, as
   "Execution failures can leave the device unusable" [sd.cpp retry]. The lane

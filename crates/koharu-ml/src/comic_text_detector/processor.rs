@@ -11,9 +11,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GenericImageView, GrayImage, Luma, RgbImage, imageops::crop_imm};
 use imageproc::{contours::find_contours_with_threshold, contrast::otsu_level, point::Point};
-use koharu_torch::{Device, Kind, Tensor};
 use rayon::prelude::*;
 use serde::Serialize;
+use tch::{Device, Kind, Tensor};
 
 use super::model::Output;
 
@@ -83,12 +83,12 @@ pub fn postprocess(
         resized_width,
         resized_height,
     ] = dimensions;
-    let maps = Tensor::cat(&[outputs.mask, outputs.line_maps], 1)?
-        .narrow(2, 0, resized_height as i64)?
-        .narrow(3, 0, resized_width as i64)?;
+    let maps = Tensor::f_cat(&[outputs.mask, outputs.line_maps], 1)?
+        .f_narrow(2, 0, resized_height as i64)?
+        .f_narrow(3, 0, resized_width as i64)?;
     // Upstream converts the cropped maps to uint8 before resizing the mask
     // back to the caller's dimensions.
-    let values = tensor_to_u8_vec(maps.narrow(1, 0, 1)?.contiguous()?.view([-1])?)?;
+    let values = tensor_to_u8_vec(maps.f_narrow(1, 0, 1)?.f_contiguous()?.f_view([-1])?)?;
     let resized_plane = resized_width as usize * resized_height as usize;
     let map = gray_from_slice(resized_width, resized_height, &values[..resized_plane])?;
     let mut raw_mask = GrayImage::new(original_width, original_height);
@@ -99,7 +99,7 @@ pub fn postprocess(
             &ResizeOptions::new().resize_alg(ResizeAlg::Interpolation(FilterType::Bilinear)),
         )
         .map_err(|error| anyhow!("failed to resize comic text detector map: {error}"))?;
-    let shrink = tensor_to_f32_vec(maps.narrow(1, 1, 1)?.contiguous()?.view([-1])?)?;
+    let shrink = tensor_to_f32_vec(maps.f_narrow(1, 1, 1)?.f_contiguous()?.f_view([-1])?)?;
 
     let lines = extract_line_polygons(
         &shrink,
@@ -212,18 +212,18 @@ where
             tensors.push(image_to_tensor(&DynamicImage::ImageRgb8(resized), device)?);
             padding.push(1280u32.saturating_sub(patch_height));
         }
-        let batch = Tensor::cat(&tensors, 0)?;
+        let batch = Tensor::f_cat(&tensors, 0)?;
         let outputs = forward(&batch)?;
-        let maps = Tensor::cat(&[outputs.mask, outputs.line_maps], 1)?;
+        let maps = Tensor::f_cat(&[outputs.mask, outputs.line_maps], 1)?;
         for (local_index, &pad) in padding.iter().enumerate() {
-            let mut map = maps.narrow(0, local_index as i64, 1)?;
+            let mut map = maps.f_narrow(0, local_index as i64, 1)?;
             if pad > 0 {
                 let output_pad = map.size()[3] as u32 * pad / 1280;
                 let keep = map.size()[3] - output_pad as i64;
-                map = map.narrow(2, 0, keep)?.narrow(3, 0, keep)?;
+                map = map.f_narrow(2, 0, keep)?.f_narrow(3, 0, keep)?;
             }
             map_size = map.size()[3] as u32;
-            composite_maps.push(tensor_to_f32_vec(map.contiguous()?.view([-1])?)?);
+            composite_maps.push(tensor_to_f32_vec(map.f_contiguous()?.f_view([-1])?)?);
         }
     }
 
@@ -332,31 +332,31 @@ fn finalize_detection(
 fn image_to_tensor(image: &DynamicImage, device: Device) -> Result<Tensor> {
     let rgb = image.to_rgb8();
     let (width, height) = rgb.dimensions();
-    Ok((Tensor::from_slice(rgb.as_raw())?
-        .view([height as i64, width as i64, 3])?
-        .permute([2, 0, 1])?
-        .unsqueeze(0)?
-        .to_device(device)?
-        .to_kind(Kind::Float)?
-        / 255.0)?)
+    Ok((Tensor::f_from_slice(rgb.as_raw())?
+        .f_view([height as i64, width as i64, 3])?
+        .f_permute([2, 0, 1])?
+        .f_unsqueeze(0)?
+        .f_to_device(device)?
+        .f_to_kind(Kind::Float)?)
+    .f_div_scalar(255.0)?)
 }
 
 fn tensor_to_u8_vec(tensor: Tensor) -> Result<Vec<u8>> {
-    let tensor = (tensor.clamp(0.0, 1.0)? * 255.0)?;
+    let tensor = (tensor.f_clamp(0.0, 1.0)?).f_mul_scalar(255.0)?;
     let tensor = tensor
-        .to_kind(Kind::Uint8)?
-        .to_device(Device::Cpu)?
-        .contiguous()?
-        .view([-1])?;
+        .f_to_kind(Kind::Uint8)?
+        .f_to_device(Device::Cpu)?
+        .f_contiguous()?
+        .f_view([-1])?;
     Ok(Vec::<u8>::try_from(&tensor)?)
 }
 
 fn tensor_to_f32_vec(tensor: Tensor) -> Result<Vec<f32>> {
     let tensor = tensor
-        .to_kind(Kind::Float)?
-        .to_device(Device::Cpu)?
-        .contiguous()?
-        .view([-1])?;
+        .f_to_kind(Kind::Float)?
+        .f_to_device(Device::Cpu)?
+        .f_contiguous()?
+        .f_view([-1])?;
     Ok(Vec::<f32>::try_from(&tensor)?)
 }
 

@@ -7,8 +7,8 @@ use anyhow::{Context, Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GrayImage, Luma, RgbImage};
 use imageproc::contours::find_contours_with_threshold;
-use koharu_torch::{Device, Tensor};
 use serde::{Deserialize, Serialize};
+use tch::{Device, Tensor};
 
 use super::config::Config;
 
@@ -86,9 +86,9 @@ impl Processor {
             values[plane + index] = f32::from(pixel[1]) - self.config.pixel_mean[1];
             values[plane * 2 + index] = f32::from(pixel[0]) - self.config.pixel_mean[2];
         }
-        let tensor = Tensor::from_slice(&values)?
-            .view([1, 3, padded_height as i64, padded_width as i64])?
-            .to_device(device)?;
+        let tensor = Tensor::f_from_slice(&values)?
+            .f_view([1, 3, padded_height as i64, padded_width as i64])?
+            .f_to_device(device)?;
         Ok((
             tensor,
             ImageSize {
@@ -111,9 +111,9 @@ impl Processor {
             prediction.size()
         );
         let map = prediction
-            .squeeze_dim(0)?
-            .squeeze_dim(0)?
-            .to_device(Device::Cpu)?;
+            .f_squeeze_dim(0)?
+            .f_squeeze_dim(0)?
+            .f_to_device(Device::Cpu)?;
         let rows: Vec<Vec<f32>> = Vec::<Vec<f32>>::try_from(&map)
             .context("failed to copy MTSv3 segmentation map to CPU")?;
         let height = rows.len() as u32;

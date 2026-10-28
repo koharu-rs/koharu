@@ -7,8 +7,8 @@
 use anyhow::{Result, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, Rgb, RgbImage, imageops};
-use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::Serialize;
+use tch::{Device, IndexOp, Kind, Tensor};
 
 use super::{config::YoloV8mSpeechBubbleConfig, model::Output};
 
@@ -80,17 +80,17 @@ impl YoloV8mSegImageProcessor {
             letterbox.pad_y as i64,
         );
 
-        let pixel_values = (Tensor::from_slice(padded.as_raw())?
-            .view([
+        let pixel_values = (Tensor::f_from_slice(padded.as_raw())?
+            .f_view([
                 1,
                 letterbox.output_height as i64,
                 letterbox.output_width as i64,
                 3,
             ])?
-            .permute([0, 3, 1, 2])?
-            .to_device(device)?
-            .to_kind(Kind::Float)?
-            / 255.0)?;
+            .f_permute([0, 3, 1, 2])?
+            .f_to_device(device)?
+            .f_to_kind(Kind::Float)?)
+        .f_div_scalar(255.0)?;
         Ok((pixel_values, letterbox))
     }
 
@@ -127,31 +127,31 @@ impl YoloV8mSegImageProcessor {
             .iter()
             .map(|candidate| candidate.anchor)
             .collect::<Vec<_>>();
-        let selected = Tensor::from_slice(&selected)?.to_device(outputs.pred.device())?;
+        let selected = Tensor::f_from_slice(&selected)?.f_to_device(outputs.pred.device())?;
         let mask_coefficients = outputs
             .pred
-            .i((
+            .f_i((
                 0,
                 4 + self.num_classes..4 + self.num_classes + self.num_masks,
                 ..,
             ))?
-            .transpose(0, 1)?
-            .index_select(0, &selected)?
-            .to_kind(Kind::Float)?;
+            .f_transpose(0, 1)?
+            .f_index_select(0, &selected)?
+            .f_to_kind(Kind::Float)?;
 
-        let proto = outputs.proto.i(0)?.to_kind(Kind::Float)?;
+        let proto = outputs.proto.f_i(0)?.f_to_kind(Kind::Float)?;
         let proto_size = proto.size();
         if proto_size.len() != 3 || proto_size[0] != self.num_masks {
             bail!("unexpected YOLOv8 prototype shape {:?}", proto_size);
         }
         let masks = mask_coefficients
-            .matmul(&proto.view([self.num_masks, -1])?)?
-            .view([candidates.len() as i64, 1, proto_size[1], proto_size[2]])?;
+            .f_matmul(&proto.f_view([self.num_masks, -1])?)?
+            .f_view([candidates.len() as i64, 1, proto_size[1], proto_size[2]])?;
         let masks = scale_masks(
             &masks,
             (letterbox.original_height, letterbox.original_width),
         )?
-        .sigmoid()?;
+        .f_sigmoid()?;
 
         let mut instances = Vec::with_capacity(candidates.len());
         for (index, candidate) in candidates.into_iter().enumerate() {
@@ -165,9 +165,9 @@ impl YoloV8mSegImageProcessor {
             }
 
             let mask = masks
-                .i((index as i64, 0, y1..y2, x1..x2))?
-                .gt(self.mask_threshold as f64)?;
-            let pixels = Vec::<u8>::try_from(mask.reshape([-1])?)?;
+                .f_i((index as i64, 0, y1..y2, x1..x2))?
+                .f_gt(self.mask_threshold as f64)?;
+            let pixels = Vec::<u8>::try_from(mask.f_reshape([-1])?)?;
             let area = pixels.iter().map(|&value| u32::from(value != 0)).sum();
             if area == 0 {
                 tracing::debug!(
@@ -324,7 +324,7 @@ fn non_max_suppression(
         );
     }
     let anchors = size[2] as usize;
-    let values = Vec::<f32>::try_from(pred.i(0)?.reshape([-1])?)?;
+    let values = Vec::<f32>::try_from(pred.f_i(0)?.f_reshape([-1])?)?;
     let mut grouped = (0..num_classes)
         .map(|_| Vec::<Candidate>::new())
         .collect::<Vec<_>>();
@@ -386,14 +386,14 @@ fn scale_boxes(mut bbox: [f32; 4], letterbox: &LetterBox) -> [f32; 4] {
     bbox
 }
 
-fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> koharu_torch::Result<Tensor> {
+fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> tch::Result<Tensor> {
     let size = masks.size();
     let input_height = size[2];
     let input_width = size[3];
     let output_height = shape.0 as i64;
     let output_width = shape.1 as i64;
     if input_height == output_height && input_width == output_width {
-        return masks.alias();
+        return masks.f_alias();
     }
 
     let gain = f64::min(
@@ -409,9 +409,9 @@ fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> koharu_torch::Result<Tensor
     let bottom = ((input_height as f64 - pad_height) as i64).clamp(top + 1, input_height);
     let right = ((input_width as f64 - pad_width) as i64).clamp(left + 1, input_width);
     masks
-        .slice(2, top, bottom, 1)?
-        .slice(3, left, right, 1)?
-        .upsample_bilinear2d(
+        .f_slice(2, top, bottom, 1)?
+        .f_slice(3, left, right, 1)?
+        .f_upsample_bilinear2d(
             [output_height, output_width],
             false,
             None::<f64>,

@@ -3,13 +3,12 @@
 //! Original implementation:
 //! https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py
 
+use crate::nn::Apply;
 use std::path::Path;
 
+use crate::nn::{self, Module};
 use anyhow::Result;
-use koharu_torch::{
-    Device, IndexOp, Kind, Tensor,
-    nn::{self, Module},
-};
+use tch::{Device, IndexOp, Kind, Tensor};
 
 use super::config::{HGNetV2Config, PPDocLayoutV3Config};
 
@@ -39,12 +38,14 @@ impl Model {
         Ok(())
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Output> {
-        let outputs = self.model.forward(&pixel_values.to_kind(self.vs.kind())?)?;
-        let pred_boxes = outputs.intermediate_reference_points.select(1, -1)?;
-        let logits = outputs.intermediate_logits.select(1, -1)?;
-        let order_logits = outputs.out_order_logits.select(1, -1)?;
-        let out_masks = outputs.out_masks.select(1, -1)?;
+    pub fn forward(&self, pixel_values: &Tensor) -> tch::Result<Output> {
+        let outputs = self
+            .model
+            .forward(&pixel_values.f_to_kind(self.vs.kind())?)?;
+        let pred_boxes = outputs.intermediate_reference_points.f_select(1, -1)?;
+        let logits = outputs.intermediate_logits.f_select(1, -1)?;
+        let order_logits = outputs.out_order_logits.f_select(1, -1)?;
+        let out_masks = outputs.out_masks.f_select(1, -1)?;
         Ok(Output {
             logits,
             pred_boxes,
@@ -91,7 +92,7 @@ impl PPDocLayoutV3Model {
             .and_then(|image_size| {
                 fixed_spatial_shapes(image_size, &config.feat_strides, config.num_feature_levels)
             })
-            .map(|spatial_shapes| -> koharu_torch::Result<AnchorCache> {
+            .map(|spatial_shapes| -> tch::Result<AnchorCache> {
                 let (anchors, valid_mask) =
                     generate_anchors(&spatial_shapes, path.device(), path.kind())?;
                 Ok(AnchorCache {
@@ -199,7 +200,7 @@ impl PPDocLayoutV3Model {
                     Default::default(),
                 )
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         let decoder_global_pointer =
             PPDocLayoutV3GlobalPointer::new(&(path / "decoder_global_pointer"), config)?;
         let decoder_norm = nn::layer_norm(
@@ -238,15 +239,15 @@ impl PPDocLayoutV3Model {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<PPDocLayoutV3ModelOutput> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<PPDocLayoutV3ModelOutput> {
         let features = self.backbone.forward(pixel_values)?;
-        let x4_feat = vec![features[0].alias()?];
+        let x4_feat = vec![features[0].f_alias()?];
         let proj_feats = features
             .iter()
             .skip(1)
             .enumerate()
             .map(|(level, source)| self.encoder_input_proj[level].forward(source))
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         let encoder_outputs = self.encoder.forward(proj_feats, &x4_feat)?;
 
         let mut sources = Vec::with_capacity(self.config.num_feature_levels);
@@ -282,17 +283,17 @@ impl PPDocLayoutV3Model {
             let height = size[2];
             let width = size[3];
             spatial_shapes.push((height, width));
-            source_flatten.push(source.flatten(2, -1)?.transpose(1, 2)?);
+            source_flatten.push(source.f_flatten(2, -1)?.f_transpose(1, 2)?);
         }
-        let source_flatten = Tensor::cat(&source_flatten, 1)?;
+        let source_flatten = Tensor::f_cat(&source_flatten, 1)?;
         // Transformers caches these tensors when `anchor_image_size` is fixed.
         // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py#L1611-L1640
         let (anchors, valid_mask) = self
             .anchor_cache
             .as_ref()
             .filter(|cache| cache.spatial_shapes == spatial_shapes)
-            .map(|cache| -> koharu_torch::Result<(Tensor, Tensor)> {
-                Ok((cache.anchors.alias()?, cache.valid_mask.alias()?))
+            .map(|cache| -> tch::Result<(Tensor, Tensor)> {
+                Ok((cache.anchors.f_alias()?, cache.valid_mask.f_alias()?))
             })
             .unwrap_or_else(|| {
                 generate_anchors(
@@ -302,28 +303,32 @@ impl PPDocLayoutV3Model {
                 )
             })?;
 
-        let memory = (valid_mask.to_kind(source_flatten.kind())? * &source_flatten)?;
+        let memory = valid_mask
+            .f_to_kind(source_flatten.kind())?
+            .f_mul(&source_flatten)?;
         let output_memory = self.enc_output.forward(&memory)?;
         let enc_outputs_class = self.enc_score_head.forward(&output_memory)?;
-        let enc_outputs_coord_logits = (self.enc_bbox_head.forward(&output_memory)? + &anchors)?;
+        let enc_outputs_coord_logits =
+            (self.enc_bbox_head.forward(&output_memory)?).f_add(&anchors)?;
 
-        let (_, topk_ind) =
-            enc_outputs_class
-                .max_dim(-1, false)?
-                .0
-                .topk(self.config.num_queries, 1, true, true)?;
-        let reference_points_unact = enc_outputs_coord_logits.gather(
+        let (_, topk_ind) = enc_outputs_class.f_max_dim(-1, false)?.0.f_topk(
+            self.config.num_queries,
+            1,
+            true,
+            true,
+        )?;
+        let reference_points_unact = enc_outputs_coord_logits.f_gather(
             1,
             &topk_ind
-                .unsqueeze(-1)?
-                .repeat([1, 1, enc_outputs_coord_logits.size()[2]])?,
+                .f_unsqueeze(-1)?
+                .f_repeat([1, 1, enc_outputs_coord_logits.size()[2]])?,
             false,
         )?;
-        let target = output_memory.gather(
+        let target = output_memory.f_gather(
             1,
             &topk_ind
-                .unsqueeze(-1)?
-                .repeat([1, 1, output_memory.size()[2]])?,
+                .f_unsqueeze(-1)?
+                .f_repeat([1, 1, output_memory.size()[2]])?,
             false,
         )?;
         let out_query = self.decoder_norm.forward(&target)?;
@@ -331,23 +336,23 @@ impl PPDocLayoutV3Model {
         let target = if let Some(weight_embedding) = &self.weight_embedding {
             weight_embedding
                 .ws
-                .unsqueeze(0)?
-                .repeat([source_flatten.size()[0], 1, 1])?
+                .f_unsqueeze(0)?
+                .f_repeat([source_flatten.size()[0], 1, 1])?
         } else {
-            target.detach()?
+            target.f_detach()?
         };
 
         let mut init_reference_points = reference_points_unact;
         if self.config.mask_enhanced {
             let size = encoder_outputs.mask_feat.size();
             let enc_out_masks = mask_query_embed
-                .bmm(&encoder_outputs.mask_feat.flatten(2, -1)?)?
-                .reshape([size[0], mask_query_embed.size()[1], size[2], size[3]])?;
+                .f_bmm(&encoder_outputs.mask_feat.f_flatten(2, -1)?)?
+                .f_reshape([size[0], mask_query_embed.size()[1], size[2], size[3]])?;
             let reference_points =
-                mask_to_box_coordinate(&enc_out_masks.gt(0.0)?, init_reference_points.kind())?;
+                mask_to_box_coordinate(&enc_out_masks.f_gt(0.0)?, init_reference_points.kind())?;
             init_reference_points = inverse_sigmoid(&reference_points)?;
         }
-        init_reference_points = init_reference_points.detach()?;
+        init_reference_points = init_reference_points.f_detach()?;
 
         let spatial_shapes_tensor =
             spatial_shapes_tensor(&spatial_shapes, source_flatten.device())?;
@@ -404,7 +409,7 @@ impl HGNetV2Backbone {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Vec<Tensor>> {
         let embedding = self.embedder.forward(pixel_values)?;
         let hidden_states = self.encoder.forward(&embedding)?;
         let mut feature_maps = Vec::new();
@@ -417,7 +422,7 @@ impl HGNetV2Backbone {
                 "stage4" => 4,
                 _ => continue,
             };
-            feature_maps.push(hidden_states[idx].alias()?);
+            feature_maps.push(hidden_states[idx].f_alias()?);
         }
         Ok(feature_maps)
     }
@@ -489,18 +494,18 @@ impl HGNetV2Embeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         let embedding = self
             .stem1
             .forward(pixel_values)?
-            .constant_pad_nd([0, 1, 0, 1])?;
+            .f_constant_pad_nd([0, 1, 0, 1])?;
         let stem_2a = self
             .stem2a
             .forward(&embedding)?
-            .constant_pad_nd([0, 1, 0, 1])?;
+            .f_constant_pad_nd([0, 1, 0, 1])?;
         let stem_2a = self.stem2b.forward(&stem_2a)?;
-        let pooled = embedding.max_pool2d([2, 2], [1, 1], [0, 0], [1, 1], true)?;
-        let embedding = Tensor::cat(&[pooled, stem_2a], 1)?;
+        let pooled = embedding.f_max_pool2d([2, 2], [1, 1], [0, 0], [1, 1], true)?;
+        let embedding = Tensor::f_cat(&[pooled, stem_2a], 1)?;
         let embedding = self.stem3.forward(&embedding)?;
         self.stem4.forward(&embedding)
     }
@@ -519,11 +524,11 @@ impl HGNetV2Encoder {
         Ok(Self { stages })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Vec<Tensor>> {
         let mut hidden_states = Vec::with_capacity(self.stages.len() + 1);
-        let mut hidden_state = hidden_state.alias()?;
+        let mut hidden_state = hidden_state.f_alias()?;
         for stage in &self.stages {
-            hidden_states.push(hidden_state.alias()?);
+            hidden_states.push(hidden_state.f_alias()?);
             hidden_state = stage.forward(&hidden_state)?;
         }
         hidden_states.push(hidden_state);
@@ -573,12 +578,12 @@ impl HGNetV2Stage {
         Ok(Self { downsample, blocks })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
         let mut hidden_state = self
             .downsample
             .as_ref()
             .map(|downsample| downsample.forward(hidden_state))
-            .unwrap_or_else(|| hidden_state.alias())?;
+            .unwrap_or_else(|| hidden_state.f_alias())?;
         for block in &self.blocks {
             hidden_state = block.forward(&hidden_state)?;
         }
@@ -665,20 +670,20 @@ impl HGNetV2BasicLayer {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
-        let identity = hidden_state.alias()?;
-        let mut output = vec![hidden_state.alias()?];
-        let mut hidden_state = hidden_state.alias()?;
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
+        let identity = hidden_state.f_alias()?;
+        let mut output = vec![hidden_state.f_alias()?];
+        let mut hidden_state = hidden_state.f_alias()?;
         for layer in &self.layers {
             hidden_state = layer.forward(&hidden_state)?;
-            output.push(hidden_state.alias()?);
+            output.push(hidden_state.f_alias()?);
         }
-        let mut hidden_state = Tensor::cat(&output, 1)?;
+        let mut hidden_state = Tensor::f_cat(&output, 1)?;
         for layer in &self.aggregation {
             hidden_state = layer.forward(&hidden_state)?;
         }
         if self.residual {
-            hidden_state + identity
+            hidden_state.f_add(&identity)
         } else {
             Ok(hidden_state)
         }
@@ -692,7 +697,7 @@ enum HGNetV2Block {
 }
 
 impl HGNetV2Block {
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
         match self {
             Self::Conv(layer) => layer.forward(hidden_state),
             Self::Light(layer) => layer.forward(hidden_state),
@@ -738,7 +743,7 @@ impl HGNetV2ConvLayerLight {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
         let hidden_state = self.conv1.forward(hidden_state)?;
         self.conv2.forward(&hidden_state)
     }
@@ -790,10 +795,10 @@ impl HGNetV2ConvLayer {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let hidden_state = input
-            .apply(&self.convolution)?
-            .apply_t(&self.normalization, false)?;
+            .f_apply(&self.convolution)?
+            .f_apply_t(&self.normalization, false)?;
         let hidden_state = self.activation.apply(hidden_state)?;
         self.lab
             .as_ref()
@@ -816,8 +821,8 @@ impl HGNetV2LearnableAffineBlock {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
-        (hidden_state * &self.scale)? + &self.bias
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
+        (hidden_state.f_mul(&self.scale)?).f_add(&self.bias)
     }
 }
 
@@ -917,7 +922,7 @@ impl PPDocLayoutV3HybridEncoder {
         &self,
         mut feature_maps: Vec<Tensor>,
         x4_feat: &[Tensor],
-    ) -> koharu_torch::Result<PPDocLayoutV3HybridEncoderOutput> {
+    ) -> tch::Result<PPDocLayoutV3HybridEncoderOutput> {
         if self.config.encoder_layers > 0 {
             for (idx, &enc_ind) in self.config.encode_proj_layers.iter().enumerate() {
                 feature_maps[enc_ind] = self.encoder[idx].forward(&feature_maps[enc_ind])?;
@@ -927,36 +932,37 @@ impl PPDocLayoutV3HybridEncoder {
         // PP-DocLayout extends RT-DETR's AIFI/FPN/PAN encoder with a mask head;
         // keep the resolution traversal identical to Transformers.
         // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/modeling_pp_doclayout_v3.py#L953-L995
-        let mut fpn_feature_maps = vec![feature_maps.last().expect("feature map").alias()?];
+        let mut fpn_feature_maps = vec![feature_maps.last().expect("feature map").f_alias()?];
         for idx in 0..self.lateral_convs.len() {
-            let backbone_feature_map = feature_maps[self.lateral_convs.len() - idx - 1].alias()?;
+            let backbone_feature_map =
+                feature_maps[self.lateral_convs.len() - idx - 1].f_alias()?;
             let top = self.lateral_convs[idx].forward(fpn_feature_maps.last().expect("fpn"))?;
-            *fpn_feature_maps.last_mut().expect("fpn") = top.alias()?;
+            *fpn_feature_maps.last_mut().expect("fpn") = top.f_alias()?;
             let size = top.size();
             let upsampled =
-                top.upsample_nearest2d([size[2] * 2, size[3] * 2], None::<f64>, None::<f64>)?;
-            let fused = Tensor::cat(&[upsampled, backbone_feature_map], 1)?;
+                top.f_upsample_nearest2d([size[2] * 2, size[3] * 2], None::<f64>, None::<f64>)?;
+            let fused = Tensor::f_cat(&[upsampled, backbone_feature_map], 1)?;
             fpn_feature_maps.push(self.fpn_blocks[idx].forward(&fused)?);
         }
         fpn_feature_maps.reverse();
 
-        let mut pan_feature_maps = vec![fpn_feature_maps[0].alias()?];
+        let mut pan_feature_maps = vec![fpn_feature_maps[0].f_alias()?];
         for idx in 0..self.downsample_convs.len() {
             let downsampled =
                 self.downsample_convs[idx].forward(pan_feature_maps.last().expect("pan"))?;
-            let fused = Tensor::cat(&[downsampled, fpn_feature_maps[idx + 1].alias()?], 1)?;
+            let fused = Tensor::f_cat(&[downsampled, fpn_feature_maps[idx + 1].f_alias()?], 1)?;
             pan_feature_maps.push(self.pan_blocks[idx].forward(&fused)?);
         }
 
         let mut mask_feat = self.mask_feature_head.forward(&pan_feature_maps)?;
         let size = mask_feat.size();
-        mask_feat = mask_feat.upsample_bilinear2d(
+        mask_feat = mask_feat.f_upsample_bilinear2d(
             [size[2] * 2, size[3] * 2],
             false,
             None::<f64>,
             None::<f64>,
         )?;
-        mask_feat = (&mask_feat + self.encoder_mask_lateral.forward(&x4_feat[0])?)?;
+        mask_feat = mask_feat.f_add(&self.encoder_mask_lateral.forward(&x4_feat[0])?)?;
         mask_feat = self.encoder_mask_output.forward(&mask_feat)?;
 
         Ok(PPDocLayoutV3HybridEncoderOutput {
@@ -987,12 +993,12 @@ impl PPDocLayoutV3AIFILayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let height = size[2];
         let width = size[3];
-        let mut hidden_states = hidden_states.flatten(2, -1)?.permute([0, 2, 1])?;
+        let mut hidden_states = hidden_states.f_flatten(2, -1)?.f_permute([0, 2, 1])?;
         let pos_embed = self.position_embedding.forward(
             width,
             height,
@@ -1003,9 +1009,9 @@ impl PPDocLayoutV3AIFILayer {
             hidden_states = layer.forward(&hidden_states, Some(&pos_embed))?;
         }
         hidden_states
-            .permute([0, 2, 1])?
-            .reshape([batch_size, self.encoder_hidden_dim, height, width])?
-            .contiguous()
+            .f_permute([0, 2, 1])?
+            .f_reshape([batch_size, self.encoder_hidden_dim, height, width])?
+            .f_contiguous()
     }
 }
 
@@ -1051,17 +1057,17 @@ impl PPDocLayoutV3EncoderLayer {
         &self,
         hidden_states: &Tensor,
         position_embeddings: Option<&Tensor>,
-    ) -> koharu_torch::Result<Tensor> {
-        let residual = hidden_states.alias()?;
+    ) -> tch::Result<Tensor> {
+        let residual = hidden_states.f_alias()?;
         let hidden_states = if self.normalize_before {
             self.self_attn_layer_norm.forward(hidden_states)?
         } else {
-            hidden_states.alias()?
+            hidden_states.f_alias()?
         };
         let hidden_states = self
             .self_attn
             .forward(&hidden_states, position_embeddings)?;
-        let hidden_states = (residual + hidden_states)?;
+        let hidden_states = residual.f_add(&hidden_states)?;
         let hidden_states = if self.normalize_before {
             hidden_states
         } else {
@@ -1071,9 +1077,9 @@ impl PPDocLayoutV3EncoderLayer {
         let residual = if self.normalize_before {
             self.final_layer_norm.forward(&hidden_states)?
         } else {
-            hidden_states.alias()?
+            hidden_states.f_alias()?
         };
-        let hidden_states = (residual.alias()? + self.mlp.forward(&residual)?)?;
+        let hidden_states = residual.f_alias()?.f_add(&self.mlp.forward(&residual)?)?;
         if self.normalize_before {
             Ok(hidden_states)
         } else {
@@ -1114,19 +1120,16 @@ impl PPDocLayoutV3Decoder {
         })
     }
 
-    fn forward(
-        &self,
-        args: DecoderForwardArgs<'_>,
-    ) -> koharu_torch::Result<PPDocLayoutV3DecoderOutput> {
-        let mut hidden_states = args.inputs_embeds.alias()?;
-        let mut reference_points = args.reference_points.sigmoid()?;
+    fn forward(&self, args: DecoderForwardArgs<'_>) -> tch::Result<PPDocLayoutV3DecoderOutput> {
+        let mut hidden_states = args.inputs_embeds.f_alias()?;
+        let mut reference_points = args.reference_points.f_sigmoid()?;
         let mut intermediate_logits = Vec::with_capacity(self.layers.len());
         let mut intermediate_reference_points = Vec::with_capacity(self.layers.len());
         let mut decoder_out_order_logits = Vec::with_capacity(self.layers.len());
         let mut decoder_out_masks = Vec::with_capacity(self.layers.len());
 
         for (idx, decoder_layer) in self.layers.iter().enumerate() {
-            let reference_points_input = reference_points.unsqueeze(2)?;
+            let reference_points_input = reference_points.f_unsqueeze(2)?;
             let object_queries_position_embeddings =
                 self.query_pos_head.forward(&reference_points)?;
             hidden_states = decoder_layer.forward(DecoderLayerArgs {
@@ -1140,9 +1143,10 @@ impl PPDocLayoutV3Decoder {
             })?;
 
             let predicted_corners = args.bbox_embed.forward(&hidden_states)?;
-            let new_reference_points =
-                (predicted_corners + inverse_sigmoid(&reference_points)?)?.sigmoid()?;
-            reference_points = new_reference_points.detach()?;
+            let new_reference_points = predicted_corners
+                .f_add(&inverse_sigmoid(&reference_points)?)?
+                .f_sigmoid()?;
+            reference_points = new_reference_points.f_detach()?;
 
             // Each decoder layer emits masks and reading-order logits. Only the
             // configured detection queries participate in the order matrix.
@@ -1151,24 +1155,24 @@ impl PPDocLayoutV3Decoder {
             let mask_query_embed = args.mask_query_head.forward(&out_query)?;
             let size = args.mask_feat.size();
             let out_mask = mask_query_embed
-                .bmm(&args.mask_feat.flatten(2, -1)?)?
-                .reshape([size[0], mask_query_embed.size()[1], size[2], size[3]])?;
+                .f_bmm(&args.mask_feat.f_flatten(2, -1)?)?
+                .f_reshape([size[0], mask_query_embed.size()[1], size[2], size[3]])?;
             decoder_out_masks.push(out_mask);
 
             intermediate_logits.push(args.class_embed.forward(&out_query)?);
             intermediate_reference_points.push(new_reference_points);
 
             let valid_query_start = out_query.size()[1] - self.num_queries;
-            let valid_query = out_query.i((.., valid_query_start..))?;
+            let valid_query = out_query.f_i((.., valid_query_start..))?;
             let order_hidden = args.order_head[idx].forward(&valid_query)?;
             decoder_out_order_logits.push(args.global_pointer.forward(&order_hidden)?);
         }
 
         Ok(PPDocLayoutV3DecoderOutput {
-            intermediate_logits: Tensor::stack(&intermediate_logits, 1)?,
-            intermediate_reference_points: Tensor::stack(&intermediate_reference_points, 1)?,
-            decoder_out_order_logits: Tensor::stack(&decoder_out_order_logits, 1)?,
-            decoder_out_masks: Tensor::stack(&decoder_out_masks, 1)?,
+            intermediate_logits: Tensor::f_stack(&intermediate_logits, 1)?,
+            intermediate_reference_points: Tensor::f_stack(&intermediate_reference_points, 1)?,
+            decoder_out_order_logits: Tensor::f_stack(&decoder_out_order_logits, 1)?,
+            decoder_out_masks: Tensor::f_stack(&decoder_out_masks, 1)?,
         })
     }
 }
@@ -1238,17 +1242,17 @@ impl PPDocLayoutV3DecoderLayer {
         })
     }
 
-    fn forward(&self, args: DecoderLayerArgs<'_>) -> koharu_torch::Result<Tensor> {
-        let residual = args.hidden_states.alias()?;
+    fn forward(&self, args: DecoderLayerArgs<'_>) -> tch::Result<Tensor> {
+        let residual = args.hidden_states.f_alias()?;
         let hidden_states = self.self_attn.forward(
             args.hidden_states,
             Some(args.object_queries_position_embeddings),
         )?;
         let hidden_states = self
             .self_attn_layer_norm
-            .forward(&(residual + hidden_states)?)?;
+            .forward(&residual.f_add(&hidden_states)?)?;
 
-        let residual = hidden_states.alias()?;
+        let residual = hidden_states.f_alias()?;
         let hidden_states = self.encoder_attn.forward(MultiscaleAttentionArgs {
             hidden_states: &hidden_states,
             encoder_hidden_states: args.encoder_hidden_states,
@@ -1260,10 +1264,10 @@ impl PPDocLayoutV3DecoderLayer {
         })?;
         let hidden_states = self
             .encoder_attn_layer_norm
-            .forward(&(residual + hidden_states)?)?;
-        let residual = hidden_states.alias()?;
+            .forward(&residual.f_add(&hidden_states)?)?;
+        let residual = hidden_states.f_alias()?;
         self.final_layer_norm
-            .forward(&(residual.alias()? + self.mlp.forward(&residual)?)?)
+            .forward(&residual.f_alias()?.f_add(&self.mlp.forward(&residual)?)?)
     }
 }
 
@@ -1331,35 +1335,36 @@ impl PPDocLayoutV3SelfAttention {
         &self,
         hidden_states: &Tensor,
         position_embeddings: Option<&Tensor>,
-    ) -> koharu_torch::Result<Tensor> {
+    ) -> tch::Result<Tensor> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let sequence_length = size[1];
         let query_key_input = position_embeddings
-            .map(|position_embeddings| hidden_states + position_embeddings)
-            .unwrap_or_else(|| hidden_states.alias())?;
+            .map(|position_embeddings| hidden_states.f_add(position_embeddings))
+            .unwrap_or_else(|| hidden_states.f_alias())?;
         let query_states = self
             .q_proj
             .forward(&query_key_input)?
-            .view([batch_size, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
+            .f_view([batch_size, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
         let key_states = self
             .k_proj
             .forward(&query_key_input)?
-            .view([batch_size, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
+            .f_view([batch_size, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
         let value_states = self
             .v_proj
             .forward(hidden_states)?
-            .view([batch_size, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
-        let attn_weights = (query_states.matmul(&key_states.transpose(2, 3)?)? * self.scaling)?;
-        let attn_weights = attn_weights.softmax(-1, None::<Kind>)?;
+            .f_view([batch_size, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
+        let attn_weights =
+            (query_states.f_matmul(&key_states.f_transpose(2, 3)?)?).f_mul_scalar(self.scaling)?;
+        let attn_weights = attn_weights.f_softmax(-1, None::<Kind>)?;
         let attn_output = attn_weights
-            .matmul(&value_states)?
-            .transpose(1, 2)?
-            .contiguous()?;
-        self.out_proj.forward(&attn_output.reshape([
+            .f_matmul(&value_states)?
+            .f_transpose(1, 2)?
+            .f_contiguous()?;
+        self.out_proj.forward(&attn_output.f_reshape([
             batch_size,
             sequence_length,
             self.num_heads * self.head_dim,
@@ -1418,20 +1423,18 @@ impl PPDocLayoutV3MultiscaleDeformableAttention {
         })
     }
 
-    fn forward(&self, args: MultiscaleAttentionArgs<'_>) -> koharu_torch::Result<Tensor> {
-        let hidden_states = (args.hidden_states + args.position_embeddings)?;
+    fn forward(&self, args: MultiscaleAttentionArgs<'_>) -> tch::Result<Tensor> {
+        let hidden_states = args.hidden_states.f_add(args.position_embeddings)?;
         let batch_size = hidden_states.size()[0];
         let num_queries = hidden_states.size()[1];
         let sequence_length = args.encoder_hidden_states.size()[1];
         let dim_per_head = self.d_model / self.n_heads;
 
-        let value = self.value_proj.forward(args.encoder_hidden_states)?.view([
-            batch_size,
-            sequence_length,
-            self.n_heads,
-            dim_per_head,
-        ])?;
-        let sampling_offsets = self.sampling_offsets.forward(&hidden_states)?.view([
+        let value = self
+            .value_proj
+            .forward(args.encoder_hidden_states)?
+            .f_view([batch_size, sequence_length, self.n_heads, dim_per_head])?;
+        let sampling_offsets = self.sampling_offsets.forward(&hidden_states)?.f_view([
             batch_size,
             num_queries,
             self.n_heads,
@@ -1442,14 +1445,14 @@ impl PPDocLayoutV3MultiscaleDeformableAttention {
         let attention_weights = self
             .attention_weights
             .forward(&hidden_states)?
-            .view([
+            .f_view([
                 batch_size,
                 num_queries,
                 self.n_heads,
                 self.n_levels * self.n_points,
             ])?
-            .softmax(-1, None::<Kind>)?
-            .view([
+            .f_softmax(-1, None::<Kind>)?
+            .f_view([
                 batch_size,
                 num_queries,
                 self.n_heads,
@@ -1460,31 +1463,39 @@ impl PPDocLayoutV3MultiscaleDeformableAttention {
         let sampling_locations = if args.reference_points.size().last().copied() == Some(4) {
             let ref_xy = args
                 .reference_points
-                .slice(-1, 0, 2, 1)?
-                .unsqueeze(2)?
-                .unsqueeze(4)?;
+                .f_slice(-1, 0, 2, 1)?
+                .f_unsqueeze(2)?
+                .f_unsqueeze(4)?;
             let ref_wh = args
                 .reference_points
-                .slice(-1, 2, 4, 1)?
-                .unsqueeze(2)?
-                .unsqueeze(4)?;
-            (ref_xy + (((sampling_offsets / self.n_points as f64)? * ref_wh)? * 0.5)?)?
+                .f_slice(-1, 2, 4, 1)?
+                .f_unsqueeze(2)?
+                .f_unsqueeze(4)?;
+            ref_xy.f_add(
+                &((sampling_offsets.f_div_scalar(self.n_points as f64)?).f_mul(&ref_wh)?)
+                    .f_mul_scalar(0.5)?,
+            )?
         } else {
-            let normalizer = Tensor::stack(
+            let normalizer = Tensor::f_stack(
                 &[
-                    args.spatial_shapes.i((.., 1))?,
-                    args.spatial_shapes.i((.., 0))?,
+                    args.spatial_shapes.f_i((.., 1))?,
+                    args.spatial_shapes.f_i((.., 0))?,
                 ],
                 -1,
             )?
-            .to_kind(value.kind())?;
-            (args.reference_points.unsqueeze(2)?.unsqueeze(4)?
-                + (sampling_offsets
-                    / normalizer
-                        .unsqueeze(0)?
-                        .unsqueeze(0)?
-                        .unsqueeze(0)?
-                        .unsqueeze(4)?)?)?
+            .f_to_kind(value.kind())?;
+            args.reference_points
+                .f_unsqueeze(2)?
+                .f_unsqueeze(4)?
+                .f_add(
+                    &sampling_offsets.f_div(
+                        &normalizer
+                            .f_unsqueeze(0)?
+                            .f_unsqueeze(0)?
+                            .f_unsqueeze(0)?
+                            .f_unsqueeze(4)?,
+                    )?,
+                )?
         };
 
         let output = multiscale_deformable_attention(
@@ -1527,27 +1538,28 @@ impl PPDocLayoutV3GlobalPointer {
         })
     }
 
-    fn forward(&self, inputs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, inputs: &Tensor) -> tch::Result<Tensor> {
         let size = inputs.size();
         let batch_size = size[0];
         let sequence_length = size[1];
-        let query_key_projection = self.dense.forward(inputs)?.reshape([
+        let query_key_projection = self.dense.forward(inputs)?.f_reshape([
             batch_size,
             sequence_length,
             2,
             self.head_size,
         ])?;
-        let parts = query_key_projection.unbind(2)?;
+        let parts = query_key_projection.f_unbind(2)?;
         let queries = &parts[0];
         let keys = &parts[1];
-        let logits = (queries.matmul(&keys.transpose(-2, -1)?)? / (self.head_size as f64).sqrt())?;
-        let mask = Tensor::ones(
+        let logits = (queries.f_matmul(&keys.f_transpose(-2, -1)?)?)
+            .f_div_scalar((self.head_size as f64).sqrt())?;
+        let mask = Tensor::f_ones(
             [sequence_length, sequence_length],
             (Kind::Bool, logits.device()),
         )?
-        .tril(0)?
-        .unsqueeze(0)?;
-        logits.masked_fill(&mask, -1e4)
+        .f_tril(0)?
+        .f_unsqueeze(0)?;
+        logits.f_masked_fill(&mask, -1e4)
     }
 }
 
@@ -1582,7 +1594,7 @@ impl PPDocLayoutV3MLP {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = self.activation.apply(self.fc1.forward(hidden_states)?)?;
         self.fc2.forward(&hidden_states)
     }
@@ -1616,16 +1628,16 @@ impl PPDocLayoutV3MLPPredictionHead {
                     Default::default(),
                 )
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         Ok(Self { layers })
     }
 
-    fn forward(&self, x: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut x = x.alias()?;
+    fn forward(&self, x: &Tensor) -> tch::Result<Tensor> {
+        let mut x = x.f_alias()?;
         for (idx, layer) in self.layers.iter().enumerate() {
             x = layer.forward(&x)?;
             if idx + 1 != self.layers.len() {
-                x = x.relu()?;
+                x = x.f_relu()?;
             }
         }
         Ok(x)
@@ -1677,14 +1689,18 @@ impl PPDocLayoutV3MaskFeatFPN {
         })
     }
 
-    fn forward(&self, inputs: &[Tensor]) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, inputs: &[Tensor]) -> tch::Result<Tensor> {
         let mut output = self.scale_heads[0].forward(&inputs[self.reorder_index[0]])?;
         for (scale_head, &input_index) in self.scale_heads.iter().zip(&self.reorder_index).skip(1) {
             let scaled = scale_head.forward(&inputs[input_index])?;
             let size = output.size();
-            let scaled =
-                scaled.upsample_bilinear2d([size[2], size[3]], false, None::<f64>, None::<f64>)?;
-            output = (&output + scaled)?;
+            let scaled = scaled.f_upsample_bilinear2d(
+                [size[2], size[3]],
+                false,
+                None::<f64>,
+                None::<f64>,
+            )?;
+            output = output.f_add(&scaled)?;
         }
         self.output_conv.forward(&output)
     }
@@ -1732,14 +1748,14 @@ impl PPDocLayoutV3ScaleHead {
         Ok(Self { layers })
     }
 
-    fn forward(&self, x: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut x = x.alias()?;
+    fn forward(&self, x: &Tensor) -> tch::Result<Tensor> {
+        let mut x = x.f_alias()?;
         for layer in &self.layers {
             x = match layer {
                 ScaleHeadLayer::Conv(layer) => layer.forward(&x)?,
                 ScaleHeadLayer::Upsample2x => {
                     let size = x.size();
-                    x.upsample_bilinear2d(
+                    x.f_upsample_bilinear2d(
                         [size[2] * 2, size[3] * 2],
                         false,
                         None::<f64>,
@@ -1786,8 +1802,8 @@ impl PPDocLayoutV3EncoderMaskOutput {
         })
     }
 
-    fn forward(&self, x: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.base_conv.forward(x)?.apply(&self.conv)
+    fn forward(&self, x: &Tensor) -> tch::Result<Tensor> {
+        self.base_conv.forward(x)?.f_apply(&self.conv)
     }
 }
 
@@ -1845,13 +1861,13 @@ impl PPDocLayoutV3CSPRepLayer {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
         let mut hidden_state_1 = self.conv1.forward(hidden_state)?;
         for bottleneck in &self.bottlenecks {
             hidden_state_1 = bottleneck.forward(&hidden_state_1)?;
         }
         let hidden_state_2 = self.conv2.forward(hidden_state)?;
-        let out = (hidden_state_1 + hidden_state_2)?;
+        let out = hidden_state_1.f_add(&hidden_state_2)?;
         self.conv3
             .as_ref()
             .map(|conv3| conv3.forward(&out))
@@ -1894,9 +1910,9 @@ impl PPDocLayoutV3RepVggBlock {
         })
     }
 
-    fn forward(&self, x: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> tch::Result<Tensor> {
         self.activation
-            .apply((self.conv1.forward(x)? + self.conv2.forward(x)?)?)
+            .apply(self.conv1.forward(x)?.f_add(&self.conv2.forward(x)?)?)
     }
 }
 
@@ -1944,9 +1960,12 @@ impl PPDocLayoutV3ConvNormLayer {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.activation
-            .apply(hidden_state.apply(&self.conv)?.apply_t(&self.norm, false)?)
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
+        self.activation.apply(
+            hidden_state
+                .f_apply(&self.conv)?
+                .f_apply_t(&self.norm, false)?,
+        )
     }
 }
 
@@ -1992,11 +2011,11 @@ impl PPDocLayoutV3ConvLayer {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.activation.apply(
             input
-                .apply(&self.convolution)?
-                .apply_t(&self.normalization, false)?,
+                .f_apply(&self.convolution)?
+                .f_apply_t(&self.normalization, false)?,
         )
     }
 }
@@ -2044,8 +2063,8 @@ impl ConvBnSeq {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
-        xs.apply(&self.conv)?.apply_t(&self.bn, false)
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+        xs.f_apply(&self.conv)?.f_apply_t(&self.bn, false)
     }
 }
 
@@ -2063,7 +2082,7 @@ impl LinearNormSeq {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         self.norm.forward(&self.linear.forward(xs)?)
     }
 }
@@ -2075,24 +2094,30 @@ struct PPDocLayoutV3SinePositionEmbedding {
 }
 
 impl PPDocLayoutV3SinePositionEmbedding {
-    fn forward(
-        &self,
-        width: i64,
-        height: i64,
-        device: Device,
-        kind: Kind,
-    ) -> koharu_torch::Result<Tensor> {
-        let grid_w = Tensor::arange(width, (kind, device))?;
-        let grid_h = Tensor::arange(height, (kind, device))?;
-        let mesh = Tensor::meshgrid_indexing(&[grid_w, grid_h], "xy")?;
-        let grid_w = mesh[0].flatten(0, -1)?.unsqueeze(-1)?;
-        let grid_h = mesh[1].flatten(0, -1)?.unsqueeze(-1)?;
+    fn forward(&self, width: i64, height: i64, device: Device, kind: Kind) -> tch::Result<Tensor> {
+        let grid_w = Tensor::f_arange(width, (kind, device))?;
+        let grid_h = Tensor::f_arange(height, (kind, device))?;
+        let mesh = Tensor::f_meshgrid_indexing(&[grid_w, grid_h], "xy")?;
+        let grid_w = mesh[0].f_flatten(0, -1)?.f_unsqueeze(-1)?;
+        let grid_h = mesh[1].f_flatten(0, -1)?.f_unsqueeze(-1)?;
         let pos_dim = self.embed_dim / 4;
-        let omega = (Tensor::arange(pos_dim, (kind, device))? / pos_dim as f64)?;
-        let omega = (self.temperature.ln() * &omega)?.exp()?.reciprocal()?;
-        let out_w = grid_w.matmul(&omega.unsqueeze(0)?)?;
-        let out_h = grid_h.matmul(&omega.unsqueeze(0)?)?;
-        Tensor::cat(&[out_h.sin()?, out_h.cos()?, out_w.sin()?, out_w.cos()?], 1)?.unsqueeze(0)
+        let omega = (Tensor::f_arange(pos_dim, (kind, device))?).f_div_scalar(pos_dim as f64)?;
+        let omega = omega
+            .f_mul_scalar(self.temperature.ln())?
+            .f_exp()?
+            .f_reciprocal()?;
+        let out_w = grid_w.f_matmul(&omega.f_unsqueeze(0)?)?;
+        let out_h = grid_h.f_matmul(&omega.f_unsqueeze(0)?)?;
+        Tensor::f_cat(
+            &[
+                out_h.f_sin()?,
+                out_h.f_cos()?,
+                out_w.f_sin()?,
+                out_w.f_cos()?,
+            ],
+            1,
+        )?
+        .f_unsqueeze(0)
     }
 }
 
@@ -2114,12 +2139,12 @@ impl Activation {
         }
     }
 
-    fn apply(self, x: Tensor) -> koharu_torch::Result<Tensor> {
+    fn apply(self, x: Tensor) -> tch::Result<Tensor> {
         match self {
             Self::None => Ok(x),
-            Self::Relu => x.relu(),
-            Self::Silu => x.silu(),
-            Self::Gelu => x.gelu("none"),
+            Self::Relu => x.f_relu(),
+            Self::Silu => x.f_silu(),
+            Self::Gelu => x.f_gelu("none"),
         }
     }
 }
@@ -2140,7 +2165,7 @@ fn multiscale_deformable_attention(
     spatial_shapes_list: &[(i64, i64)],
     sampling_locations: &Tensor,
     attention_weights: &Tensor,
-) -> koharu_torch::Result<Tensor> {
+) -> tch::Result<Tensor> {
     let size = value.size();
     let batch_size = size[0];
     let num_heads = size[2];
@@ -2150,40 +2175,41 @@ fn multiscale_deformable_attention(
         .iter()
         .map(|(height, width)| height * width)
         .collect::<Vec<_>>();
-    let value_list = value.split_with_sizes(split_sizes, 1)?;
-    let sampling_grids = ((sampling_locations * 2.0)? - 1.0)?;
+    let value_list = value.f_split_with_sizes(split_sizes, 1)?;
+    let sampling_grids = sampling_locations.f_mul_scalar(2.0)?.f_sub_scalar(1.0)?;
 
     let mut sampling_values = Vec::with_capacity(spatial_shapes_list.len());
     for (level, (height, width)) in spatial_shapes_list.iter().copied().enumerate() {
         let value_l = value_list[level]
-            .flatten(2, -1)?
-            .transpose(1, 2)?
-            .reshape([batch_size * num_heads, hidden_dim, height, width])?;
+            .f_flatten(2, -1)?
+            .f_transpose(1, 2)?
+            .f_reshape([batch_size * num_heads, hidden_dim, height, width])?;
         let sampling_grid_l = sampling_grids
-            .i((.., .., .., level as i64))?
-            .transpose(1, 2)?
-            .flatten(0, 1)?;
-        sampling_values.push(value_l.grid_sampler_2d(&sampling_grid_l, 0, 0, false)?);
+            .f_i((.., .., .., level as i64))?
+            .f_transpose(1, 2)?
+            .f_flatten(0, 1)?;
+        sampling_values.push(value_l.f_grid_sampler_2d(&sampling_grid_l, 0, 0, false)?);
     }
 
-    let attention_weights = attention_weights.transpose(1, 2)?.reshape([
+    let attention_weights = attention_weights.f_transpose(1, 2)?.f_reshape([
         batch_size * num_heads,
         1,
         num_queries,
         spatial_shapes_list.len() as i64 * sampling_locations.size()[4],
     ])?;
-    (Tensor::stack(&sampling_values, -2)?.flatten(-2, -1)? * attention_weights)?
-        .sum_dim_intlist(&[-1i64][..], false, None::<Kind>)?
-        .view([batch_size, num_heads * hidden_dim, num_queries])?
-        .transpose(1, 2)?
-        .contiguous()
+    (Tensor::f_stack(&sampling_values, -2)?.f_flatten(-2, -1)?)
+        .f_mul(&attention_weights)?
+        .f_sum_dim_intlist(&[-1i64][..], false, None::<Kind>)?
+        .f_view([batch_size, num_heads * hidden_dim, num_queries])?
+        .f_transpose(1, 2)?
+        .f_contiguous()
 }
 
 fn generate_anchors(
     spatial_shapes: &[(i64, i64)],
     device: Device,
     kind: Kind,
-) -> koharu_torch::Result<(Tensor, Tensor)> {
+) -> tch::Result<(Tensor, Tensor)> {
     let mut anchors = Vec::new();
     let mut valid = Vec::new();
     let eps = 1e-2f32;
@@ -2200,17 +2226,17 @@ fn generate_anchors(
         }
     }
     let total = valid.len() as i64;
-    let anchors = Tensor::from_slice(&anchors)?
-        .view([1, total, 4])?
-        .to_device(device)?
-        .to_kind(kind)?;
-    let valid_mask = Tensor::from_slice(&valid)?
-        .view([1, total, 1])?
-        .to_device(device)?;
-    let one_minus_anchors = (anchors.ones_like()? - &anchors)?;
-    let logit = (&anchors / one_minus_anchors)?.log()?;
-    let max = Tensor::full([1, total, 4], 1.0e20, (kind, device))?;
-    let anchors = logit.where_self(&valid_mask.expand([1, total, 4], true)?, &max)?;
+    let anchors = Tensor::f_from_slice(&anchors)?
+        .f_view([1, total, 4])?
+        .f_to_device(device)?
+        .f_to_kind(kind)?;
+    let valid_mask = Tensor::f_from_slice(&valid)?
+        .f_view([1, total, 1])?
+        .f_to_device(device)?;
+    let one_minus_anchors = anchors.f_ones_like()?.f_sub(&anchors)?;
+    let logit = anchors.f_div(&one_minus_anchors)?.f_log()?;
+    let max = Tensor::f_full([1, total, 4], 1.0e20, (kind, device))?;
+    let anchors = logit.f_where_self(&valid_mask.f_expand([1, total, 4], true)?, &max)?;
     Ok((anchors, valid_mask))
 }
 
@@ -2235,94 +2261,90 @@ fn fixed_spatial_shapes(
     Some(spatial_shapes)
 }
 
-fn mask_to_box_coordinate(mask: &Tensor, kind: Kind) -> koharu_torch::Result<Tensor> {
-    let mask = mask.to_kind(Kind::Bool)?;
+fn mask_to_box_coordinate(mask: &Tensor, kind: Kind) -> tch::Result<Tensor> {
+    let mask = mask.f_to_kind(Kind::Bool)?;
     let size = mask.size();
     let batch_size = size[0];
     let queries = size[1];
     let height = size[2];
     let width = size[3];
     let device = mask.device();
-    let mask_f = mask.to_kind(kind)?;
-    let x_coords = Tensor::arange(width, (kind, device))?
-        .view([1, 1, 1, width])?
-        .expand([batch_size, queries, height, width], true)?;
-    let y_coords = Tensor::arange(height, (kind, device))?
-        .view([1, 1, height, 1])?
-        .expand([batch_size, queries, height, width], true)?;
-    let big = Tensor::full([batch_size, queries, height, width], 1.0e20, (kind, device))?;
+    let mask_f = mask.f_to_kind(kind)?;
+    let x_coords = Tensor::f_arange(width, (kind, device))?
+        .f_view([1, 1, 1, width])?
+        .f_expand([batch_size, queries, height, width], true)?;
+    let y_coords = Tensor::f_arange(height, (kind, device))?
+        .f_view([1, 1, height, 1])?
+        .f_expand([batch_size, queries, height, width], true)?;
+    let big = Tensor::f_full([batch_size, queries, height, width], 1.0e20, (kind, device))?;
 
-    let x_max = ((&x_coords * &mask_f)?
-        .flatten(-2, -1)?
-        .max_dim(-1, false)?
-        .0
-        + 1.0)?;
+    let x_max = (x_coords
+        .f_mul(&mask_f)?
+        .f_flatten(-2, -1)?
+        .f_max_dim(-1, false)?
+        .0)
+        .f_add_scalar(1.0)?;
     let x_min = x_coords
-        .where_self(&mask, &big)?
-        .flatten(-2, -1)?
-        .min_dim(-1, false)?
+        .f_where_self(&mask, &big)?
+        .f_flatten(-2, -1)?
+        .f_min_dim(-1, false)?
         .0;
-    let y_max = ((&y_coords * &mask_f)?
-        .flatten(-2, -1)?
-        .max_dim(-1, false)?
-        .0
-        + 1.0)?;
+    let y_max = (y_coords
+        .f_mul(&mask_f)?
+        .f_flatten(-2, -1)?
+        .f_max_dim(-1, false)?
+        .0)
+        .f_add_scalar(1.0)?;
     let y_min = y_coords
-        .where_self(&mask, &big)?
-        .flatten(-2, -1)?
-        .min_dim(-1, false)?
+        .f_where_self(&mask, &big)?
+        .f_flatten(-2, -1)?
+        .f_min_dim(-1, false)?
         .0;
 
-    let unnormalized_bbox = Tensor::stack(&[x_min, y_min, x_max, y_max], -1)?;
+    let unnormalized_bbox = Tensor::f_stack(&[x_min, y_min, x_max, y_max], -1)?;
     let is_non_empty = mask
-        .any_dims(&[-2i64, -1][..], false)?
-        .unsqueeze(-1)?
-        .to_kind(kind)?;
-    let norm = Tensor::from_slice(&[width as f32, height as f32, width as f32, height as f32])?
-        .to_kind(kind)?
-        .to_device(device)?
-        .view([1, 1, 4])?;
-    let bbox = ((unnormalized_bbox * is_non_empty)? / norm)?;
-    let x_min = bbox.i((.., .., 0))?;
-    let y_min = bbox.i((.., .., 1))?;
-    let x_max = bbox.i((.., .., 2))?;
-    let y_max = bbox.i((.., .., 3))?;
-    let center_x = ((&x_min + &x_max)? / 2.0)?;
-    let center_y = ((&y_min + &y_max)? / 2.0)?;
-    let box_width = (x_max - x_min)?;
-    let box_height = (y_max - y_min)?;
-    Tensor::stack(&[center_x, center_y, box_width, box_height], -1)
+        .f_any_dims(&[-2i64, -1][..], false)?
+        .f_unsqueeze(-1)?
+        .f_to_kind(kind)?;
+    let norm = Tensor::f_from_slice(&[width as f32, height as f32, width as f32, height as f32])?
+        .f_to_kind(kind)?
+        .f_to_device(device)?
+        .f_view([1, 1, 4])?;
+    let bbox = unnormalized_bbox.f_mul(&is_non_empty)?.f_div(&norm)?;
+    let x_min = bbox.f_i((.., .., 0))?;
+    let y_min = bbox.f_i((.., .., 1))?;
+    let x_max = bbox.f_i((.., .., 2))?;
+    let y_max = bbox.f_i((.., .., 3))?;
+    let center_x = (x_min.f_add(&x_max)?).f_div_scalar(2.0)?;
+    let center_y = (y_min.f_add(&y_max)?).f_div_scalar(2.0)?;
+    let box_width = x_max.f_sub(&x_min)?;
+    let box_height = y_max.f_sub(&y_min)?;
+    Tensor::f_stack(&[center_x, center_y, box_width, box_height], -1)
 }
 
-fn inverse_sigmoid(x: &Tensor) -> koharu_torch::Result<Tensor> {
-    let x = x.clamp(0.0, 1.0)?;
-    let x1 = x.clamp_min(1e-5)?;
-    let x2 = (x.ones_like()? - &x)?.clamp_min(1e-5)?;
-    (x1 / x2)?.log()
+fn inverse_sigmoid(x: &Tensor) -> tch::Result<Tensor> {
+    let x = x.f_clamp(0.0, 1.0)?;
+    let x1 = x.f_clamp_min(1e-5)?;
+    let x2 = x.f_ones_like()?.f_sub(&x)?.f_clamp_min(1e-5)?;
+    x1.f_div(&x2)?.f_log()
 }
 
-fn spatial_shapes_tensor(
-    spatial_shapes: &[(i64, i64)],
-    device: Device,
-) -> koharu_torch::Result<Tensor> {
+fn spatial_shapes_tensor(spatial_shapes: &[(i64, i64)], device: Device) -> tch::Result<Tensor> {
     let values = spatial_shapes
         .iter()
         .flat_map(|(h, w)| [*h, *w])
         .collect::<Vec<_>>();
-    Tensor::from_slice(&values)?
-        .view([spatial_shapes.len() as i64, 2])?
-        .to_device(device)
+    Tensor::f_from_slice(&values)?
+        .f_view([spatial_shapes.len() as i64, 2])?
+        .f_to_device(device)
 }
 
-fn level_start_index_tensor(
-    spatial_shapes: &[(i64, i64)],
-    device: Device,
-) -> koharu_torch::Result<Tensor> {
+fn level_start_index_tensor(spatial_shapes: &[(i64, i64)], device: Device) -> tch::Result<Tensor> {
     let mut offset = 0;
     let mut starts = Vec::with_capacity(spatial_shapes.len());
     for (height, width) in spatial_shapes {
         starts.push(offset);
         offset += height * width;
     }
-    Tensor::from_slice(&starts)?.to_device(device)
+    Tensor::f_from_slice(&starts)?.f_to_device(device)
 }

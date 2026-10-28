@@ -7,11 +7,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 #[derive(Debug)]
 pub(super) struct Model {
@@ -38,10 +36,10 @@ impl Model {
         Ok(())
     }
 
-    pub(super) fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    pub(super) fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         let features = self
             .backbone
-            .forward(&pixel_values.to_kind(self.vs.kind())?)?;
+            .forward(&pixel_values.f_to_kind(self.vs.kind())?)?;
         self.proposal.forward(&features)
     }
 }
@@ -60,7 +58,7 @@ impl Backbone {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Vec<Tensor>> {
         self.fpn.forward(&self.body.forward(input)?)
     }
 }
@@ -84,11 +82,11 @@ impl ResNet {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<[Tensor; 4]> {
+    fn forward(&self, input: &Tensor) -> tch::Result<[Tensor; 4]> {
         let mut hidden_states = self.stem.forward(input)?;
         let [c2, c3, c4, c5] = std::array::from_fn(|index| {
             hidden_states = self.layers[index].forward(&hidden_states)?;
-            hidden_states.alias()
+            hidden_states.f_alias()
         });
         Ok([c2?, c3?, c4?, c5?])
     }
@@ -108,11 +106,11 @@ impl Stem {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.bn1
             .forward(&self.conv1.forward(input)?)?
-            .relu()?
-            .max_pool2d([3, 3], [2, 2], [1, 1], [1, 1], false)
+            .f_relu()?
+            .f_max_pool2d([3, 3], [2, 2], [1, 1], [1, 1], false)
     }
 }
 
@@ -148,10 +146,10 @@ impl ResNetLayer {
         ))
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.0
             .iter()
-            .try_fold(input.alias()?, |input, block| block.forward(&input))
+            .try_fold(input.f_alias()?, |input, block| block.forward(&input))
     }
 }
 
@@ -224,18 +222,18 @@ impl Bottleneck {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let hidden_states = self.bn1.forward(&self.conv1.forward(input)?)?.relu()?;
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let hidden_states = self.bn1.forward(&self.conv1.forward(input)?)?.f_relu()?;
         let hidden_states = self
             .bn2
             .forward(&self.conv2.forward(&hidden_states)?)?
-            .relu()?;
+            .f_relu()?;
         let hidden_states = self.bn3.forward(&self.conv3.forward(&hidden_states)?)?;
         let residual = match &self.downsample {
             Some((conv, norm)) => norm.forward(&conv.forward(input)?)?,
-            None => input.alias()?,
+            None => input.f_alias()?,
         };
-        (hidden_states + residual)?.relu()
+        hidden_states.f_add(&residual)?.f_relu()
     }
 }
 
@@ -257,10 +255,10 @@ impl FrozenBatchNorm2d {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let scale = (&self.weight * self.running_var.rsqrt()?)?;
-        let bias = (&self.bias - (&self.running_mean * &scale)?)?;
-        (input * scale.view([1, -1, 1, 1])?)? + bias.view([1, -1, 1, 1])?
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let scale = self.weight.f_mul(&self.running_var.f_rsqrt()?)?;
+        let bias = self.bias.f_sub(&self.running_mean.f_mul(&scale)?)?;
+        (input.f_mul(&scale.f_view([1, -1, 1, 1])?)?).f_add(&bias.f_view([1, -1, 1, 1])?)
     }
 }
 
@@ -288,20 +286,20 @@ impl FeaturePyramidNetwork {
         })
     }
 
-    fn forward(&self, features: &[Tensor; 4]) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, features: &[Tensor; 4]) -> tch::Result<Vec<Tensor>> {
         let mut last_inner = self.inner[3].forward(&features[3])?;
         let mut results = vec![self.layer[3].forward(&last_inner)?];
         for index in (0..3).rev() {
             let size = last_inner.size();
-            let top_down = last_inner.upsample_nearest2d(
+            let top_down = last_inner.f_upsample_nearest2d(
                 [size[2] * 2, size[3] * 2],
                 None::<f64>,
                 None::<f64>,
             )?;
-            last_inner = (self.inner[index].forward(&features[index])? + top_down)?;
+            last_inner = (self.inner[index].forward(&features[index])?).f_add(&top_down)?;
             results.insert(0, self.layer[index].forward(&last_inner)?);
         }
-        let last = results[3].max_pool2d([1, 1], [2, 2], [0, 0], [1, 1], false)?;
+        let last = results[3].f_max_pool2d([1, 1], [2, 2], [0, 0], [1, 1], false)?;
         results.push(last);
         Ok(results)
     }
@@ -353,25 +351,25 @@ impl SegmentationHead {
         })
     }
 
-    fn forward(&self, features: &[Tensor]) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, features: &[Tensor]) -> tch::Result<Tensor> {
         let resize = |input: Tensor, scale: i64| {
             let size = input.size();
-            input.upsample_nearest2d([size[2] * scale, size[3] * scale], None::<f64>, None::<f64>)
+            input.f_upsample_nearest2d([size[2] * scale, size[3] * scale], None::<f64>, None::<f64>)
         };
         let p5 = resize(self.fpn_out5.forward(&features[3])?, 8)?;
         let p4 = resize(self.fpn_out4.forward(&features[2])?, 4)?;
         let p3 = resize(self.fpn_out3.forward(&features[1])?, 2)?;
         let p2 = self.fpn_out2.forward(&features[0])?;
-        let fused = Tensor::cat(&[p5, p4, p3, p2], 1)?;
+        let fused = Tensor::f_cat(&[p5, p4, p3, p2], 1)?;
         let hidden_states = self
             .seg_bn1
             .forward_t(&self.seg_conv.forward(&fused)?, false)?
-            .relu()?;
+            .f_relu()?;
         let hidden_states = self
             .seg_bn2
             .forward_t(&self.seg_deconv1.forward(&hidden_states)?, false)?
-            .relu()?;
-        self.seg_deconv2.forward(&hidden_states)?.sigmoid()
+            .f_relu()?;
+        self.seg_deconv2.forward(&hidden_states)?.f_sigmoid()
     }
 }
 
@@ -383,7 +381,7 @@ fn conv2d(
     stride: i64,
     padding: i64,
     bias: bool,
-) -> koharu_torch::Result<nn::Conv2D> {
+) -> tch::Result<nn::Conv2D> {
     nn::conv2d(
         path,
         input_channels,

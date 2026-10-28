@@ -6,7 +6,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GrayImage, RgbImage};
-use koharu_torch::{Device, Kind, Tensor};
+use tch::{Device, Kind, Tensor};
 
 use super::model::Model;
 
@@ -60,26 +60,26 @@ impl Processor {
 
         let pad_bottom = 128_u32.saturating_sub(input_height);
         let pad_right = 128_u32.saturating_sub(input_width);
-        let image_tensor = ((Tensor::from_slice(input_image.as_raw())?
-            .view([i64::from(input_height), i64::from(input_width), 3])?
-            .permute([2, 0, 1])?
-            .unsqueeze(0)?
-            .to_device(self.device)?
-            .to_kind(Kind::Float)?
-            / 127.5)?
-            - 1.0)?;
-        let mask_tensor = (Tensor::from_slice(input_mask.as_raw())?
-            .view([i64::from(input_height), i64::from(input_width)])?
-            .unsqueeze(0)?
-            .unsqueeze(0)?
-            .to_device(self.device)?
-            .to_kind(Kind::Float)?
-            / 255.0)?;
+        let image_tensor = ((Tensor::f_from_slice(input_image.as_raw())?
+            .f_view([i64::from(input_height), i64::from(input_width), 3])?
+            .f_permute([2, 0, 1])?
+            .f_unsqueeze(0)?
+            .f_to_device(self.device)?
+            .f_to_kind(Kind::Float)?)
+        .f_div_scalar(127.5)?)
+        .f_sub_scalar(1.0)?;
+        let mask_tensor = (Tensor::f_from_slice(input_mask.as_raw())?
+            .f_view([i64::from(input_height), i64::from(input_width)])?
+            .f_unsqueeze(0)?
+            .f_unsqueeze(0)?
+            .f_to_device(self.device)?
+            .f_to_kind(Kind::Float)?)
+        .f_div_scalar(255.0)?;
         let image_tensor = pad_bottom_right_reflect(image_tensor, pad_bottom, pad_right)?;
         let mask_tensor = pad_bottom_right_reflect(mask_tensor, pad_bottom, pad_right)?
-            .ge(0.5)?
-            .to_kind(Kind::Float)?;
-        let masked_image = (image_tensor * (mask_tensor.ones_like()? - &mask_tensor)?)?;
+            .f_ge(0.5)?
+            .f_to_kind(Kind::Float)?;
+        let masked_image = image_tensor.f_mul(&mask_tensor.f_ones_like()?.f_sub(&mask_tensor)?)?;
 
         let output = model.forward(&masked_image, &mask_tensor)?;
         let output_height = output.size()[2] - i64::from(pad_bottom);
@@ -91,8 +91,8 @@ impl Processor {
             );
         }
         let output = output
-            .narrow(2, 0, output_height)?
-            .narrow(3, 0, output_width)?;
+            .f_narrow(2, 0, output_height)?
+            .f_narrow(3, 0, output_width)?;
         let mut output = tensor_to_rgb(&output, output_width as u32, output_height as u32)?;
         if output.dimensions() != original.dimensions() {
             output = resize_rgb(&output, original.width(), original.height())?;
@@ -160,13 +160,13 @@ fn pad_bottom_right_reflect(tensor: Tensor, pad_bottom: u32, pad_right: u32) -> 
         .map(|index| i64::from(symmetric_index(index, width)))
         .collect::<Vec<_>>();
     Ok(tensor
-        .index_select(
+        .f_index_select(
             2,
-            &Tensor::from_slice(&height_indices)?.to_device(tensor.device())?,
+            &Tensor::f_from_slice(&height_indices)?.f_to_device(tensor.device())?,
         )?
-        .index_select(
+        .f_index_select(
             3,
-            &Tensor::from_slice(&width_indices)?.to_device(tensor.device())?,
+            &Tensor::f_from_slice(&width_indices)?.f_to_device(tensor.device())?,
         )?)
 }
 
@@ -180,15 +180,18 @@ fn symmetric_index(index: u32, length: u32) -> u32 {
 }
 
 fn tensor_to_rgb(tensor: &Tensor, width: u32, height: u32) -> Result<RgbImage> {
-    let tensor = ((tensor.to_kind(Kind::Float)? + 1.0)? * 127.5)?
-        .round()?
-        .clamp(0.0, 255.0)?
-        .to_kind(Kind::Uint8)?
-        .squeeze_dim(0)?
-        .permute([1, 2, 0])?
-        .contiguous()?
-        .to_device(Device::Cpu)?
-        .view([-1])?;
+    let tensor = tensor
+        .f_to_kind(Kind::Float)?
+        .f_add_scalar(1.0)?
+        .f_mul_scalar(127.5)?
+        .f_round()?
+        .f_clamp(0.0, 255.0)?
+        .f_to_kind(Kind::Uint8)?
+        .f_squeeze_dim(0)?
+        .f_permute([1, 2, 0])?
+        .f_contiguous()?
+        .f_to_device(Device::Cpu)?
+        .f_view([-1])?;
     let pixels = Vec::<u8>::try_from(&tensor)?;
     RgbImage::from_raw(width, height, pixels).context("failed to convert AOT output to RGB image")
 }

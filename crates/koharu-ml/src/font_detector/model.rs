@@ -5,11 +5,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 use super::{
     processor::{FONT_COUNT, OUTPUT_DIM, REGRESSION_DIM},
@@ -39,16 +37,16 @@ impl Model {
         Ok(())
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    pub fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         let output = self
             .model
-            .forward_t(&pixel_values.to_kind(self.vs.kind())?, false)?;
+            .forward_t(&pixel_values.f_to_kind(self.vs.kind())?, false)?;
         // Upstream leaves classification logits untouched and applies sigmoid
         // only to the ten regression values.
-        let classification = output.narrow(-1, 0, FONT_COUNT + 2)?;
+        let classification = output.f_narrow(-1, 0, FONT_COUNT + 2)?;
         let regression = output
-            .narrow(-1, FONT_COUNT + 2, REGRESSION_DIM)?
-            .sigmoid()?;
-        Tensor::cat(&[classification, regression], -1)
+            .f_narrow(-1, FONT_COUNT + 2, REGRESSION_DIM)?
+            .f_sigmoid()?;
+        Tensor::f_cat(&[classification, regression], -1)
     }
 }

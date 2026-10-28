@@ -7,8 +7,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use image::DynamicImage;
-use koharu_torch::{Device, Kind, Tensor};
 use serde::{Deserialize, Serialize};
+use tch::{Device, Kind, Tensor};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -79,28 +79,28 @@ impl PPOCRV6MediumRecImageProcessor {
         }
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
-        let mut pixel_values = Tensor::from_slice(rgb.as_raw())?
-            .view([1, height as i64, width as i64, 3])?
-            .permute([0, 3, 1, 2])?
-            .to_kind(Kind::Float)?
-            .to_device(device)?;
+        let mut pixel_values = Tensor::f_from_slice(rgb.as_raw())?
+            .f_view([1, height as i64, width as i64, 3])?
+            .f_permute([0, 3, 1, 2])?
+            .f_to_kind(Kind::Float)?
+            .f_to_device(device)?;
 
         let target_width = self.target_width(height as i64, width as i64);
         if self.do_resize {
             // Transformers explicitly disables antialiasing here to match cv2.resize.
             pixel_values = match self.resample {
-                0 => pixel_values.upsample_nearest2d(
+                0 => pixel_values.f_upsample_nearest2d(
                     [self.size.height, target_width],
                     None::<f64>,
                     None::<f64>,
                 )?,
-                2 => pixel_values.upsample_bilinear2d(
+                2 => pixel_values.f_upsample_bilinear2d(
                     [self.size.height, target_width],
                     false,
                     None::<f64>,
                     None::<f64>,
                 )?,
-                3 => pixel_values.upsample_bicubic2d(
+                3 => pixel_values.f_upsample_bicubic2d(
                     [self.size.height, target_width],
                     false,
                     None::<f64>,
@@ -110,25 +110,25 @@ impl PPOCRV6MediumRecImageProcessor {
             };
         }
         // Transformers converts RGB input to BGR before normalization.
-        pixel_values = pixel_values.flip([1])?;
+        pixel_values = pixel_values.f_flip([1])?;
         if self.do_rescale {
-            pixel_values = (pixel_values * self.rescale_factor)?;
+            pixel_values = pixel_values.f_mul_scalar(self.rescale_factor)?;
         }
         if self.do_normalize {
             if self.image_mean.len() != 3 || self.image_std.len() != 3 {
                 bail!("PP-OCRv6 recognition image_mean and image_std must contain three values");
             }
-            let mean = Tensor::from_slice(&self.image_mean)?
-                .view([1, 3, 1, 1])?
-                .to_device(device)?;
-            let std = Tensor::from_slice(&self.image_std)?
-                .view([1, 3, 1, 1])?
-                .to_device(device)?;
-            pixel_values = ((pixel_values - mean)? / std)?;
+            let mean = Tensor::f_from_slice(&self.image_mean)?
+                .f_view([1, 3, 1, 1])?
+                .f_to_device(device)?;
+            let std = Tensor::f_from_slice(&self.image_std)?
+                .f_view([1, 3, 1, 1])?
+                .f_to_device(device)?;
+            pixel_values = pixel_values.f_sub(&mean)?.f_div(&std)?;
         }
         if self.do_pad && target_width < self.pad_size.width {
             pixel_values =
-                pixel_values.constant_pad_nd([0, self.pad_size.width - target_width, 0, 0])?;
+                pixel_values.f_constant_pad_nd([0, self.pad_size.width - target_width, 0, 0])?;
         }
         Ok(pixel_values)
     }
@@ -138,14 +138,14 @@ impl PPOCRV6MediumRecImageProcessor {
         if size.len() != 3 || size[0] != 1 {
             bail!("expected PP-OCRv6 recognition output [1, T, C], got {size:?}");
         }
-        let (scores, indices) = probabilities.max_dim(-1, false)?;
+        let (scores, indices) = probabilities.f_max_dim(-1, false)?;
         let scores = Vec::<f32>::try_from(
             &scores
-                .to_device(Device::Cpu)?
-                .to_kind(Kind::Float)?
-                .view([-1])?,
+                .f_to_device(Device::Cpu)?
+                .f_to_kind(Kind::Float)?
+                .f_view([-1])?,
         )?;
-        let indices = Vec::<i64>::try_from(&indices.to_device(Device::Cpu)?.view([-1])?)?;
+        let indices = Vec::<i64>::try_from(&indices.f_to_device(Device::Cpu)?.f_view([-1])?)?;
         let mut text = String::new();
         let mut selected_scores = Vec::new();
         for (position, (&index, &score)) in indices.iter().zip(&scores).enumerate() {

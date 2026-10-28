@@ -3,10 +3,9 @@
 //! Upstream implementation:
 //! https://github.com/LaurentMazare/tch-rs/blob/4227b89b72059b0651ff83a38637693574e0a2d6/src/vision/resnet.rs
 
-use koharu_torch::{
-    Result, Tensor,
-    nn::{self, Conv2D, ModuleT},
-};
+use crate::nn::Apply;
+use crate::nn::{self, Conv2D, ModuleT};
+use tch::{Result, Tensor};
 
 fn conv2d(
     p: nn::Path,
@@ -53,15 +52,17 @@ struct BottleneckBlock {
 impl ModuleT for BottleneckBlock {
     fn forward_t(&self, xs: &Tensor, train: bool) -> Result<Tensor> {
         let ys = xs
-            .apply(&self.conv1)?
-            .apply_t(&self.bn1, train)?
-            .relu()?
-            .apply(&self.conv2)?
-            .apply_t(&self.bn2, train)?
-            .relu()?
-            .apply(&self.conv3)?
-            .apply_t(&self.bn3, train)?;
-        (xs.apply_t(&self.downsample, train)? + ys)?.relu()
+            .f_apply(&self.conv1)?
+            .f_apply_t(&self.bn1, train)?
+            .f_relu()?
+            .f_apply(&self.conv2)?
+            .f_apply_t(&self.bn2, train)?
+            .f_relu()?
+            .f_apply(&self.conv3)?
+            .f_apply_t(&self.bn3, train)?;
+        (xs.f_apply_t(&self.downsample, train)?)
+            .f_add(&ys)?
+            .f_relu()
     }
 }
 
@@ -124,19 +125,19 @@ struct BottleneckResnet {
 
 impl ModuleT for BottleneckResnet {
     fn forward_t(&self, xs: &Tensor, train: bool) -> Result<Tensor> {
-        xs.apply(&self.conv1)?
-            .apply_t(&self.bn1, train)?
-            .relu()?
-            .max_pool2d([3, 3], [2, 2], [1, 1], [1, 1], false)?
-            .apply_t(&self.layer1, train)?
-            .apply_t(&self.layer2, train)?
-            .apply_t(&self.layer3, train)?
-            .apply_t(&self.layer4, train)?
-            .adaptive_avg_pool2d([1, 1])?
+        xs.f_apply(&self.conv1)?
+            .f_apply_t(&self.bn1, train)?
+            .f_relu()?
+            .f_max_pool2d([3, 3], [2, 2], [1, 1], [1, 1], false)?
+            .f_apply_t(&self.layer1, train)?
+            .f_apply_t(&self.layer2, train)?
+            .f_apply_t(&self.layer3, train)?
+            .f_apply_t(&self.layer4, train)?
+            .f_adaptive_avg_pool2d([1, 1])?
             // Upstream's `flat_view`, `view((batch, -1))`, is not in koharu-torch;
             // `flatten(1, -1)` is the same reshape, as torchvision writes it.
-            .flatten(1, -1)?
-            .apply_opt(&self.fc)
+            .f_flatten(1, -1)?
+            .f_apply_opt(&self.fc)
     }
 }
 

@@ -9,11 +9,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT, RNN};
 use anyhow::{Context, Result};
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT, RNN},
-};
+use tch::{Device, Kind, Tensor};
 
 use super::config::Config;
 
@@ -81,22 +79,22 @@ impl Model {
         Ok(())
     }
 
-    pub(super) fn forward(&self, image: &Tensor) -> koharu_torch::Result<Tensor> {
+    pub(super) fn forward(&self, image: &Tensor) -> tch::Result<Tensor> {
         let image = self
             .transformation
-            .forward(&image.to_kind(self.vs.kind())?)?;
+            .forward(&image.f_to_kind(self.vs.kind())?)?;
         let visual_feature = self.feature_extraction.forward(&image)?;
         let visual_feature = if self.two_dimensional {
             let size = visual_feature.size();
             visual_feature
-                .view([size[0], size[1], -1])?
-                .permute([0, 2, 1])?
+                .f_view([size[0], size[1], -1])?
+                .f_permute([0, 2, 1])?
         } else {
-            let visual_feature = visual_feature.permute([0, 3, 1, 2])?;
+            let visual_feature = visual_feature.f_permute([0, 3, 1, 2])?;
             let channels = visual_feature.size()[2];
             visual_feature
-                .adaptive_avg_pool2d([channels, 1])?
-                .squeeze_dim(3)?
+                .f_adaptive_avg_pool2d([channels, 1])?
+                .f_squeeze_dim(3)?
         };
         let contextual_feature = self
             .sequence_modeling
@@ -142,16 +140,16 @@ impl TpsSpatialTransformerNetwork {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let control_points = self.localization_network.forward(input)?;
-        let grid = self.grid_generator.forward(&control_points)?.view([
+        let grid = self.grid_generator.forward(&control_points)?.f_view([
             input.size()[0],
             self.image_height,
             self.image_width,
             2,
         ])?;
         // interpolation=bilinear, padding=border, align_corners=True.
-        input.grid_sampler_2d(&grid, 0, 1, true)
+        input.f_grid_sampler_2d(&grid, 0, 1, true)
     }
 }
 
@@ -198,34 +196,36 @@ impl LocalizationNetwork {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let mut hidden_states = self
             .bn1
             .forward_t(&self.conv1.forward(input)?, false)?
-            .relu()?;
-        hidden_states = hidden_states.max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
+            .f_relu()?;
+        hidden_states = hidden_states.f_max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
         hidden_states = self
             .bn2
             .forward_t(&self.conv2.forward(&hidden_states)?, false)?
-            .relu()?;
-        hidden_states = hidden_states.max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
+            .f_relu()?;
+        hidden_states = hidden_states.f_max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
         hidden_states = self
             .bn3
             .forward_t(&self.conv3.forward(&hidden_states)?, false)?
-            .relu()?;
-        hidden_states = hidden_states.max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
+            .f_relu()?;
+        hidden_states = hidden_states.f_max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
         hidden_states = self
             .bn4
             .forward_t(&self.conv4.forward(&hidden_states)?, false)?
-            .relu()?
-            .adaptive_avg_pool2d([1, 1])?;
+            .f_relu()?
+            .f_adaptive_avg_pool2d([1, 1])?;
         let hidden_states = self
             .localization_fc1
-            .forward(&hidden_states.flatten(1, -1)?)?
-            .relu()?;
-        self.localization_fc2
-            .forward(&hidden_states)?
-            .view([input.size()[0], self.num_fiducial, 2])
+            .forward(&hidden_states.f_flatten(1, -1)?)?
+            .f_relu()?;
+        self.localization_fc2.forward(&hidden_states)?.f_view([
+            input.size()[0],
+            self.num_fiducial,
+            2,
+        ])
     }
 }
 
@@ -295,10 +295,10 @@ impl GridGenerator {
         let inverse_delta_c = nalgebra::DMatrix::from_row_slice(size, size, &delta_c)
             .try_inverse()
             .context("the TPS fiducial matrix is singular")?;
-        let inverse_delta_c = Tensor::from_slice(inverse_delta_c.transpose().as_slice())?
-            .view([delta_size, delta_size])?
-            .to_kind(kind)?
-            .to_device(device)?;
+        let inverse_delta_c = Tensor::f_from_slice(inverse_delta_c.transpose().as_slice())?
+            .f_view([delta_size, delta_size])?
+            .f_to_kind(kind)?
+            .f_to_device(device)?;
 
         let mut p_hat = Vec::with_capacity((image_height * image_width * delta_size) as usize);
         for y in 0..image_height {
@@ -314,32 +314,32 @@ impl GridGenerator {
                 }
             }
         }
-        let p_hat = Tensor::from_slice(&p_hat)?
-            .view([image_height * image_width, delta_size])?
-            .to_kind(kind)?
-            .to_device(device)?;
+        let p_hat = Tensor::f_from_slice(&p_hat)?
+            .f_view([image_height * image_width, delta_size])?
+            .f_to_kind(kind)?
+            .f_to_device(device)?;
         Ok(Self {
             inverse_delta_c,
             p_hat,
         })
     }
 
-    fn forward(&self, control_points: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, control_points: &Tensor) -> tch::Result<Tensor> {
         let batch_size = control_points.size()[0];
-        let zeros = Tensor::zeros(
+        let zeros = Tensor::f_zeros(
             [batch_size, 3, 2],
             (control_points.kind(), control_points.device()),
         )?;
-        let control_points = Tensor::cat(&[control_points.alias()?, zeros], 1)?;
+        let control_points = Tensor::f_cat(&[control_points.f_alias()?, zeros], 1)?;
         let transform = self
             .inverse_delta_c
-            .unsqueeze(0)?
-            .repeat([batch_size, 1, 1])?
-            .bmm(&control_points)?;
+            .f_unsqueeze(0)?
+            .f_repeat([batch_size, 1, 1])?
+            .f_bmm(&control_points)?;
         self.p_hat
-            .unsqueeze(0)?
-            .repeat([batch_size, 1, 1])?
-            .bmm(&transform)
+            .f_unsqueeze(0)?
+            .f_repeat([batch_size, 1, 1])?
+            .f_bmm(&transform)
     }
 }
 
@@ -455,41 +455,41 @@ impl ResNet {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let mut hidden_states = self
             .bn0_1
             .forward_t(&self.conv0_1.forward(input)?, false)?
-            .relu()?;
+            .f_relu()?;
         hidden_states = self
             .bn0_2
             .forward_t(&self.conv0_2.forward(&hidden_states)?, false)?
-            .relu()?;
-        hidden_states = hidden_states.max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
+            .f_relu()?;
+        hidden_states = hidden_states.f_max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
         hidden_states = self.layer1.forward(&hidden_states)?;
         hidden_states = self
             .bn1
             .forward_t(&self.conv1.forward(&hidden_states)?, false)?
-            .relu()?;
-        hidden_states = hidden_states.max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
+            .f_relu()?;
+        hidden_states = hidden_states.f_max_pool2d([2, 2], [2, 2], [0, 0], [1, 1], false)?;
         hidden_states = self.layer2.forward(&hidden_states)?;
         hidden_states = self
             .bn2
             .forward_t(&self.conv2.forward(&hidden_states)?, false)?
-            .relu()?;
-        hidden_states = hidden_states.max_pool2d([2, 2], [2, 1], [0, 1], [1, 1], false)?;
+            .f_relu()?;
+        hidden_states = hidden_states.f_max_pool2d([2, 2], [2, 1], [0, 1], [1, 1], false)?;
         hidden_states = self.layer3.forward(&hidden_states)?;
         hidden_states = self
             .bn3
             .forward_t(&self.conv3.forward(&hidden_states)?, false)?
-            .relu()?;
+            .f_relu()?;
         hidden_states = self.layer4.forward(&hidden_states)?;
         hidden_states = self
             .bn4_1
             .forward_t(&self.conv4_1.forward(&hidden_states)?, false)?
-            .relu()?;
+            .f_relu()?;
         self.bn4_2
             .forward_t(&self.conv4_2.forward(&hidden_states)?, false)?
-            .relu()
+            .f_relu()
     }
 }
 
@@ -520,10 +520,10 @@ impl ResNetLayer {
         ))
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.0
             .iter()
-            .try_fold(input.alias()?, |input, block| block.forward(&input))
+            .try_fold(input.f_alias()?, |input, block| block.forward(&input))
     }
 }
 
@@ -578,19 +578,19 @@ impl BasicBlock {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = self
             .bn1
             .forward_t(&self.conv1.forward(input)?, false)?
-            .relu()?;
+            .f_relu()?;
         let hidden_states = self
             .bn2
             .forward_t(&self.conv2.forward(&hidden_states)?, false)?;
         let residual = match &self.downsample {
             Some((conv, norm)) => norm.forward_t(&conv.forward(input)?, false)?,
-            None => input.alias()?,
+            None => input.f_alias()?,
         };
-        (hidden_states + residual)?.relu()
+        hidden_states.f_add(&residual)?.f_relu()
     }
 }
 
@@ -627,7 +627,7 @@ impl BidirectionalLstm {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let (recurrent, _) = self.rnn.seq(input)?;
         self.linear.forward(&recurrent)
     }
@@ -674,14 +674,14 @@ impl Attention {
         })
     }
 
-    fn forward(&self, batch_h: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, batch_h: &Tensor) -> tch::Result<Tensor> {
         let batch_size = batch_h.size()[0];
-        let mut hidden = Tensor::zeros(
+        let mut hidden = Tensor::f_zeros(
             [batch_size, self.hidden_size],
             (batch_h.kind(), batch_h.device()),
         )?;
-        let mut cell = hidden.alias()?;
-        let mut targets = Tensor::full([batch_size], 2, (Kind::Int64, batch_h.device()))?;
+        let mut cell = hidden.f_alias()?;
+        let mut targets = Tensor::f_full([batch_size], 2, (Kind::Int64, batch_h.device()))?;
         let mut probabilities = Vec::with_capacity(self.num_steps as usize);
         for _ in 0..self.num_steps {
             let embeddings = self.char_embeddings.forward(&targets)?;
@@ -689,10 +689,10 @@ impl Attention {
                 .attention_cell
                 .forward(&hidden, &cell, batch_h, &embeddings)?;
             let step = self.generator.forward(&hidden)?;
-            targets = step.argmax(-1, false)?;
+            targets = step.f_argmax(-1, false)?;
             probabilities.push(step);
         }
-        Tensor::stack(&probabilities, 1)
+        Tensor::f_stack(&probabilities, 1)
     }
 }
 
@@ -742,16 +742,23 @@ impl AttentionCell {
         previous_cell: &Tensor,
         batch_h: &Tensor,
         char_embeddings: &Tensor,
-    ) -> koharu_torch::Result<(Tensor, Tensor)> {
+    ) -> tch::Result<(Tensor, Tensor)> {
         let batch_h_projection = self.i2h.forward(batch_h)?;
-        let previous_hidden_projection = self.h2h.forward(previous_hidden)?.unsqueeze(1)?;
-        let energy = self
-            .score
-            .forward(&(batch_h_projection + previous_hidden_projection)?.tanh()?)?;
-        let alpha = energy.softmax(1, Kind::Float)?.to_kind(batch_h.kind())?;
-        let context = alpha.permute([0, 2, 1])?.bmm(batch_h)?.squeeze_dim(1)?;
-        let input = Tensor::cat(&[context, char_embeddings.alias()?], 1)?;
-        input.lstm_cell(
+        let previous_hidden_projection = self.h2h.forward(previous_hidden)?.f_unsqueeze(1)?;
+        let energy = self.score.forward(
+            &batch_h_projection
+                .f_add(&previous_hidden_projection)?
+                .f_tanh()?,
+        )?;
+        let alpha = energy
+            .f_softmax(1, Kind::Float)?
+            .f_to_kind(batch_h.kind())?;
+        let context = alpha
+            .f_permute([0, 2, 1])?
+            .f_bmm(batch_h)?
+            .f_squeeze_dim(1)?;
+        let input = Tensor::f_cat(&[context, char_embeddings.f_alias()?], 1)?;
+        input.f_lstm_cell(
             &[previous_hidden, previous_cell],
             &self.rnn_weight_ih,
             &self.rnn_weight_hh,
@@ -769,7 +776,7 @@ fn conv2d(
     stride: i64,
     padding: i64,
     bias: bool,
-) -> koharu_torch::Result<nn::Conv2D> {
+) -> tch::Result<nn::Conv2D> {
     nn::conv2d(
         path,
         input_channels,
@@ -792,7 +799,7 @@ fn conv2d_nd(
     stride: [i64; 2],
     padding: [i64; 2],
     bias: bool,
-) -> koharu_torch::Result<nn::Conv2D> {
+) -> tch::Result<nn::Conv2D> {
     nn::conv(
         path,
         input_channels,
@@ -807,6 +814,6 @@ fn conv2d_nd(
     )
 }
 
-fn batch_norm(path: &nn::Path<'_>, channels: i64) -> koharu_torch::Result<nn::BatchNorm> {
+fn batch_norm(path: &nn::Path<'_>, channels: i64) -> tch::Result<nn::BatchNorm> {
     nn::batch_norm2d(path, channels, Default::default())
 }
