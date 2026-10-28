@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="560" viewBox="0 0 860 560" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <rect width="860" height="560" fill="#ffffff"/>
+  <defs>
+    <!-- A page in its own coordinates, 240 by 150, laid flat as a sheet. -->
+    <g id="balloons">
+      <ellipse cx="70" cy="62" rx="42" ry="46"/>
+      <ellipse cx="172" cy="66" rx="40" ry="44"/>
+    </g>
+    <g id="source-lines" stroke-linecap="round">
+      <line x1="84" y1="34" x2="84" y2="90"/>
+      <line x1="72" y1="30" x2="72" y2="96"/>
+      <line x1="60" y1="36" x2="60" y2="84"/>
+      <line x1="186" y1="36" x2="186" y2="94"/>
+      <line x1="174" y1="34" x2="174" y2="98"/>
+      <line x1="162" y1="40" x2="162" y2="86"/>
+    </g>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#e45756" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <text x="20" y="30" font-size="16" font-weight="600" fill="#222">What a run adds to a page</text>
+
+  <!-- Scan: the imported image. -->
+  <g transform="matrix(1 0 -0.4 0.4 120 420)">
+    <rect width="240" height="150" fill="#ece7dc" stroke="#888"/>
+    <line x1="120" y1="0" x2="120" y2="150" stroke="#b9b2a4"/>
+    <g fill="#ffffff" stroke="#333" stroke-width="2"><use href="#balloons"/></g>
+    <g stroke="#333" stroke-width="3"><use href="#source-lines"/></g>
+    <rect x="24" y="112" width="70" height="26" fill="#cfc7b6"/>
+    <rect x="140" y="116" width="80" height="22" fill="#cfc7b6"/>
+  </g>
+
+  <!-- Cleanup: a raster painted under the text mask. -->
+  <g transform="matrix(1 0 -0.4 0.4 120 335)">
+    <rect width="240" height="150" fill="none" stroke="#999" stroke-dasharray="4 4"/>
+    <g fill="url(#hatch)" stroke="#e45756">
+      <rect x="54" y="28" width="36" height="70"/>
+      <rect x="156" y="32" width="36" height="70"/>
+    </g>
+    <g fill="#ffffff" stroke="#54a24b" stroke-width="2">
+      <rect x="54" y="28" width="36" height="70" fill-opacity="0.7"/>
+      <rect x="156" y="32" width="36" height="70" fill-opacity="0.7"/>
+    </g>
+  </g>
+
+  <!-- Balloons: outlines only. -->
+  <g transform="matrix(1 0 -0.4 0.4 120 250)">
+    <rect width="240" height="150" fill="none" stroke="#999" stroke-dasharray="4 4"/>
+    <g fill="none" stroke="#4c78a8" stroke-width="3"><use href="#balloons"/></g>
+  </g>
+
+  <!-- Source blocks: hidden text. -->
+  <g transform="matrix(1 0 -0.4 0.4 120 165)">
+    <rect width="240" height="150" fill="none" stroke="#999" stroke-dasharray="4 4"/>
+    <g fill="none" stroke="#f58518" stroke-width="2" stroke-dasharray="6 3">
+      <rect x="54" y="28" width="36" height="70"/>
+      <rect x="156" y="32" width="36" height="70"/>
+    </g>
+    <g stroke="#f58518" stroke-width="3" opacity="0.45"><use href="#source-lines"/></g>
+  </g>
+
+  <!-- Translations: visible text, set in the balloons. -->
+  <g transform="matrix(1 0 -0.4 0.4 120 80)">
+    <rect width="240" height="150" fill="none" stroke="#999" stroke-dasharray="4 4"/>
+    <g stroke="#b279a2" stroke-width="5" stroke-linecap="round">
+      <line x1="50" y1="46" x2="90" y2="46"/>
+      <line x1="44" y1="62" x2="96" y2="62"/>
+      <line x1="54" y1="78" x2="86" y2="78"/>
+      <line x1="152" y1="54" x2="192" y2="54"/>
+      <line x1="148" y1="70" x2="196" y2="70"/>
+      <line x1="156" y1="86" x2="188" y2="86"/>
+    </g>
+  </g>
+
+  <!-- Labels, one per sheet, top to bottom. -->
+  <g fill="#222">
+    <text x="410" y="104" font-weight="600">Translation · text, one per thought</text>
+    <text x="410" y="122" fill="#555">translation writes its content; typesetting sets its frame</text>
+    <text x="410" y="140" fill="#555">(its region of the balloon) and the Dialogue style</text>
+
+    <text x="410" y="189" font-weight="600">Source block · text, hidden</text>
+    <text x="410" y="207" fill="#555">detection makes it with its box and style;</text>
+    <text x="410" y="225" fill="#555">OCR fills in its text</text>
+
+    <text x="410" y="274" font-weight="600">Balloon · shape, outline only</text>
+    <text x="410" y="292" fill="#555">detection; typesetting cuts it into one region per text</text>
+
+    <text x="410" y="359" font-weight="600">Cleanup · raster, with Text mask</text>
+    <text x="410" y="377" fill="#555">detection makes both and paints the mask (hatched);</text>
+    <text x="410" y="395" fill="#555">inpainting paints the cleanup under it</text>
+
+    <text x="410" y="444" font-weight="600">Scan · image</text>
+    <text x="410" y="462" fill="#555">imported; never written</text>
+  </g>
+
+  <g>
+    <rect x="410" y="490" width="430" height="46" rx="6" fill="#f6f1f5" stroke="#b279a2"/>
+    <text x="424" y="510" font-weight="600" fill="#222">In the project: “Dialogue” text style</text>
+    <text x="424" y="527" fill="#555">typesetting, from the source blocks' size; your changes stay</text>
+  </g>
+</svg>

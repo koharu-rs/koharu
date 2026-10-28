@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="404" viewBox="0 0 900 404" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+<rect width="900" height="404" fill="#ffffff"/>
+<text x="20" y="30" font-size="16" font-weight="600" fill="#222">Eight spreads through the pipeline</text>
+<text x="20" y="62" font-weight="600" fill="#222">Today, measured</text>
+<text x="20" y="80" fill="#555">one job at a time</text>
+<rect x="150.6" y="52" width="3.1" height="30" rx="2" fill="#bab0ac" stroke="#ffffff" stroke-width="1"><title>load page 0: 0.23 s</title></rect>
+<rect x="153.7" y="52" width="8.3" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 0: 0.61 s</title></rect>
+<rect x="162.0" y="52" width="13.2" height="30" rx="2" fill="#bab0ac" stroke="#ffffff" stroke-width="1"><title>load page 0: 0.97 s</title></rect>
+<rect x="175.2" y="52" width="17.7" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 0: 1.31 s</title></rect>
+<rect x="192.9" y="52" width="2.2" height="30" rx="2" fill="#bab0ac" stroke="#ffffff" stroke-width="1"><title>load page 0: 0.16 s</title></rect>
+<rect x="195.1" y="52" width="9.2" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 0: 0.68 s</title></rect>
+<rect x="204.2" y="52" width="1.0" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 1: 0.07 s</title></rect>
+<rect x="205.3" y="52" width="45.4" height="30" rx="2" fill="#bab0ac" stroke="#ffffff" stroke-width="1"><title>load page 0: 3.35 s</title></rect>
+<rect x="250.6" y="52" width="63.1" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 0: 4.66 s</title></rect>
+<rect x="313.7" y="52" width="13.6" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 1: 1.00 s</title></rect>
+<rect x="327.3" y="52" width="6.3" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 1: 0.46 s</title></rect>
+<rect x="333.6" y="52" width="1.0" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 2: 0.07 s</title></rect>
+<rect x="334.5" y="52" width="46.0" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 1: 3.40 s</title></rect>
+<rect x="380.5" y="52" width="14.2" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 2: 1.05 s</title></rect>
+<rect x="394.7" y="52" width="8.1" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 2: 0.60 s</title></rect>
+<rect x="402.8" y="52" width="1.1" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 3: 0.08 s</title></rect>
+<rect x="403.8" y="52" width="51.1" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 2: 3.78 s</title></rect>
+<rect x="454.9" y="52" width="12.2" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 3: 0.90 s</title></rect>
+<rect x="467.2" y="52" width="3.2" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 3: 0.24 s</title></rect>
+<rect x="470.4" y="52" width="1.0" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 4: 0.07 s</title></rect>
+<rect x="471.4" y="52" width="42.3" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 3: 3.13 s</title></rect>
+<rect x="513.7" y="52" width="12.8" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 4: 0.95 s</title></rect>
+<rect x="526.5" y="52" width="5.3" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 4: 0.39 s</title></rect>
+<rect x="531.8" y="52" width="1.6" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 5: 0.12 s</title></rect>
+<rect x="533.4" y="52" width="44.1" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 4: 3.26 s</title></rect>
+<rect x="577.4" y="52" width="24.1" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 5: 1.78 s</title></rect>
+<rect x="601.5" y="52" width="8.6" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 5: 0.63 s</title></rect>
+<rect x="610.1" y="52" width="1.3" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 6: 0.09 s</title></rect>
+<rect x="611.4" y="52" width="79.0" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 5: 5.84 s</title></rect>
+<rect x="690.4" y="52" width="15.1" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 6: 1.12 s</title></rect>
+<rect x="705.5" y="52" width="7.5" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 6: 0.55 s</title></rect>
+<rect x="713.0" y="52" width="1.5" height="30" rx="2" fill="#4c78a8" stroke="#ffffff" stroke-width="1"><title>detection page 7: 0.11 s</title></rect>
+<rect x="714.4" y="52" width="52.0" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 6: 3.84 s</title></rect>
+<rect x="766.4" y="52" width="24.6" height="30" rx="2" fill="#f58518" stroke="#ffffff" stroke-width="1"><title>ocr page 7: 1.82 s</title></rect>
+<rect x="791.0" y="52" width="9.2" height="30" rx="2" fill="#54a24b" stroke="#ffffff" stroke-width="1"><title>inpainting page 7: 0.68 s</title></rect>
+<rect x="800.2" y="52" width="79.8" height="30" rx="2" fill="#b279a2" stroke="#ffffff" stroke-width="1"><title>translation page 7: 5.89 s</title></rect>
+<line x1="150.0" y1="86" x2="150.0" y2="92" stroke="#888"/>
+<text x="150.0" y="106" text-anchor="middle" fill="#555">0 s</text>
+<line x1="285.3" y1="86" x2="285.3" y2="92" stroke="#888"/>
+<text x="285.3" y="106" text-anchor="middle" fill="#555">10 s</text>
+<line x1="420.6" y1="86" x2="420.6" y2="92" stroke="#888"/>
+<text x="420.6" y="106" text-anchor="middle" fill="#555">20 s</text>
+<line x1="555.9" y1="86" x2="555.9" y2="92" stroke="#888"/>
+<text x="555.9" y="106" text-anchor="middle" fill="#555">30 s</text>
+<line x1="691.2" y1="86" x2="691.2" y2="92" stroke="#888"/>
+<text x="691.2" y="106" text-anchor="middle" fill="#555">40 s</text>
+<line x1="826.6" y1="86" x2="826.6" y2="92" stroke="#888"/>
+<text x="826.6" y="106" text-anchor="middle" fill="#555">50 s</text>
+<text x="880.0" y="124" text-anchor="end" fill="#555">53.95 s</text>
+<line x1="20" y1="146" x2="880" y2="146" stroke="#ddd"/>
+<text x="20" y="172" font-weight="600" fill="#222">Planned<tspan font-weight="400" fill="#555"> · one window of pages, order not to scale</tspan></text>
+<text x="138" y="205" text-anchor="end" fill="#333">device</text>
+<line x1="150" y1="216" x2="880" y2="216" stroke="#eee"/>
+<rect x="150" y="188" width="60" height="26" rx="2" fill="#4c78a8" stroke="#4c78a8"/>
+<text x="156" y="206" fill="#fff">pages</text>
+<rect x="214" y="188" width="130" height="26" rx="2" fill="#f58518" stroke="#f58518"/>
+<text x="220" y="206" fill="#fff">all blocks at once</text>
+<rect x="348" y="188" width="150" height="26" rx="2" fill="#b279a2" stroke="#b279a2"/>
+<text x="354" y="206" fill="#fff">pages decode together</text>
+<rect x="502" y="188" width="110" height="26" rx="2" fill="#54a24b" stroke="#54a24b"/>
+<text x="508" y="206" fill="#fff">pages</text>
+<text x="138" y="251" text-anchor="end" fill="#333">CPU pool</text>
+<line x1="150" y1="262" x2="880" y2="262" stroke="#eee"/>
+<rect x="180" y="234" width="40" height="26" rx="2" fill="#4c78a8" stroke="#4c78a8"/>
+<rect x="224" y="234" width="40" height="26" rx="2" fill="#4c78a8" stroke="#4c78a8"/>
+<rect x="350" y="234" width="30" height="26" rx="2" fill="#f58518" stroke="#f58518"/>
+<rect x="502" y="234" width="62" height="26" rx="2" fill="#b279a2" stroke="#b279a2"/>
+<text x="508" y="252" fill="#fff">typeset</text>
+<rect x="570" y="234" width="40" height="26" rx="2" fill="#54a24b" stroke="#54a24b"/>
+<rect x="616" y="234" width="40" height="26" rx="2" fill="#54a24b" stroke="#54a24b"/>
+<text x="138" y="297" text-anchor="end" fill="#333">network</text>
+<line x1="150" y1="308" x2="880" y2="308" stroke="#eee"/>
+<rect x="214" y="280" width="240" height="26" rx="2" fill="#b279a2" stroke="#b279a2" stroke-dasharray="5 3" fill-opacity="0.35"/>
+<text x="220" y="298" fill="#222">hosted translation, when chosen</text>
+<text x="138" y="343" text-anchor="end" fill="#333">edits</text>
+<line x1="150" y1="354" x2="880" y2="354" stroke="#eee"/>
+<line x1="216" y1="328" x2="216" y2="350" stroke="#555" stroke-width="2"/>
+<line x1="270" y1="328" x2="270" y2="350" stroke="#555" stroke-width="2"/>
+<line x1="386" y1="328" x2="386" y2="350" stroke="#555" stroke-width="2"/>
+<line x1="560" y1="328" x2="560" y2="350" stroke="#555" stroke-width="2"/>
+<line x1="600" y1="328" x2="600" y2="350" stroke="#555" stroke-width="2"/>
+<line x1="670" y1="328" x2="670" y2="350" stroke="#555" stroke-width="2"/>
+<text x="690" y="344" fill="#555">applied as each finishes</text>
+<rect x="20" y="374" width="14" height="14" rx="2" fill="#4c78a8"/>
+<text x="40" y="386" fill="#333">detection</text>
+<rect x="123" y="374" width="14" height="14" rx="2" fill="#f58518"/>
+<text x="143" y="386" fill="#333">OCR</text>
+<rect x="184" y="374" width="14" height="14" rx="2" fill="#b279a2"/>
+<text x="204" y="386" fill="#333">translation</text>
+<rect x="301" y="374" width="14" height="14" rx="2" fill="#54a24b"/>
+<text x="321" y="386" fill="#333">inpainting</text>
+<rect x="411" y="374" width="14" height="14" rx="2" fill="#bab0ac"/>
+<text x="431" y="386" fill="#333">loading a model</text>
+</svg>
