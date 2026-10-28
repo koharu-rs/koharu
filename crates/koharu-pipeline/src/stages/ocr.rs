@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use image::DynamicImage;
 use koharu_ml::{
     baberu_ocr::BaberuOcr, hayai_ocr::HayaiOcr, manga_ocr::MangaOcr,
-    paddle_ocr_vl::PaddleOCRVLTask, paddle_ocr_vl_quantized::PaddleOCRVLQuantized,
+    paddle_ocr_vl_quantized::{PaddleOCRVLQuantized, PaddleOCRVLTask},
 };
 use koharu_scene::{
     Authored, EntityId, Geometry, LanguageTag, OcrAnalysis, Origin, RecognizedFrom, Region,

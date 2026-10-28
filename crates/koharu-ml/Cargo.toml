@@ -21,16 +21,13 @@ futures = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
 memmap2 = { workspace = true }
-nalgebra = { workspace = true }
 icu_properties = { workspace = true }
 fast_image_resize = { workspace = true }
-rayon = { workspace = true }
 safetensors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tokenizers = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 ab_glyph = { workspace = true }
@@ -38,18 +35,6 @@ clap = { workspace = true }
 criterion = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-[[bench]]
-name = "pp_doclayout_v3"
-harness = false
-
-[[bench]]
-name = "pp_ocr_v6_det"
-harness = false
-
-[[bench]]
-name = "pp_ocr_v6_rec"
-harness = false
 
 [[bench]]
 name = "aot_inpainting"
@@ -60,35 +45,7 @@ name = "lama"
 harness = false
 
 [[bench]]
-name = "comic_text_detector"
-harness = false
-
-[[bench]]
-name = "comic_text_bubble_detector"
-harness = false
-
-[[bench]]
-name = "comic_onomatopoeia"
-harness = false
-
-[[bench]]
-name = "speech_bubble_yolov8m"
-harness = false
-
-[[bench]]
-name = "speech_bubble_yolo11n"
-harness = false
-
-[[bench]]
-name = "comic_layout_yolo26s"
-harness = false
-
-[[bench]]
 name = "flux2_klein"
-harness = false
-
-[[bench]]
-name = "paddle_ocr_vl"
 harness = false
 
 [[bench]]
@@ -101,14 +58,6 @@ harness = false
 
 [[bench]]
 name = "hayai_ocr"
-harness = false
-
-[[bench]]
-name = "manga_text_mask"
-harness = false
-
-[[bench]]
-name = "font_detector"
 harness = false
 
 [[bench]]
