@@ -5275,8 +5275,6 @@ dependencies = [
  "koharu-llm",
  "koharu-runtime",
  "memmap2",
- "nalgebra",
- "rayon",
  "safetensors 0.8.0",
  "serde",
  "serde_json",
@@ -5284,7 +5282,6 @@ dependencies = [
  "tempfile",
  "tokenizers",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -6168,23 +6165,11 @@ dependencies = [
  "glam 0.32.1",
  "glam 0.33.12",
  "matrixmultiply",
- "nalgebra-macros",
  "num-complex",
  "num-rational",
  "num-traits",
  "simba",
  "typenum",
-]
-
-[[package]]
-name = "nalgebra-macros"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "973e7178a678cfd059ccec50887658d482ce16b0aa9da3888ddeab5cd5eb4889"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]

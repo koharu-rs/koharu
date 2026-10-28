@@ -17,28 +17,3 @@ impl<T: Module> ModuleT for T {
         self.forward(xs)
     }
 }
-
-/// `tch`'s `apply` for these modules, which return a `Result`; `tch` names a
-/// method's fallible form with `f_`.
-pub trait Apply {
-    fn f_apply<M: Module>(&self, m: &M) -> Result<Tensor>;
-    fn f_apply_t<M: ModuleT>(&self, m: &M, train: bool) -> Result<Tensor>;
-    fn f_apply_opt<M: Module>(&self, m: &Option<M>) -> Result<Tensor>;
-}
-
-impl Apply for Tensor {
-    fn f_apply<M: Module>(&self, m: &M) -> Result<Tensor> {
-        m.forward(self)
-    }
-
-    fn f_apply_t<M: ModuleT>(&self, m: &M, train: bool) -> Result<Tensor> {
-        m.forward_t(self, train)
-    }
-
-    fn f_apply_opt<M: Module>(&self, m: &Option<M>) -> Result<Tensor> {
-        match m {
-            Some(m) => m.forward(self),
-            None => self.f_alias(),
-        }
-    }
-}

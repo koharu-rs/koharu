@@ -44,7 +44,6 @@ fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
 anyhow = "1.0.104"
 async-trait = "0.1.92"
 backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
-nalgebra = "0.35.0"
 imageproc = "0.27.0"
 ab_glyph = "0.2.32"
 clap = { version = "4.6.7", features = ["derive"] }
