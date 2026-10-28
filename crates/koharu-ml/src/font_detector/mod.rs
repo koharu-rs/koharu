@@ -9,7 +9,7 @@ mod resnet;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use processor::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 
@@ -57,7 +57,7 @@ impl FontDetector {
             return Ok(Vec::new());
         }
 
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let (pixel_values, image_widths) = self.processor.preprocess(images, self.device)?;
             let output = self.model.forward(&pixel_values)?;
             self.processor.postprocess(&output, &image_widths, top_k)

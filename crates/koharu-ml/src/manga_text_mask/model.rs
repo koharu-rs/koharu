@@ -10,11 +10,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 #[derive(Debug)]
 pub(super) struct Model {
@@ -44,8 +42,8 @@ impl Model {
         Ok(())
     }
 
-    pub(super) fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let features = self.encoder.forward(&input.to_kind(self.vs.kind())?)?;
+    pub(super) fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let features = self.encoder.forward(&input.f_to_kind(self.vs.kind())?)?;
         self.segmentation_head
             .forward(&self.decoder.forward(&features)?)
     }
@@ -88,14 +86,14 @@ impl EfficientNetEncoder {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<EncoderFeatures> {
+    fn forward(&self, input: &Tensor) -> tch::Result<EncoderFeatures> {
         let mut hidden_states = silu(self.bn1.forward_t(&self.conv_stem.forward(input)?, false)?)?;
         let mut selected = Vec::with_capacity(5);
         for (stage_index, stage) in self.blocks.iter().enumerate() {
             hidden_states = stage.forward(hidden_states)?;
             // timm coalesces the two stride-16 stages and exposes the latter.
             if matches!(stage_index, 0 | 1 | 2 | 4 | 5) {
-                selected.push(hidden_states.alias()?);
+                selected.push(hidden_states.f_alias()?);
             }
         }
         Ok(EncoderFeatures {
@@ -215,7 +213,7 @@ enum EfficientNetStage {
 }
 
 impl EfficientNetStage {
-    fn forward(&self, input: Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: Tensor) -> tch::Result<Tensor> {
         match self {
             Self::Edge(blocks) => blocks
                 .iter()
@@ -272,13 +270,13 @@ impl EdgeResidual {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = silu(self.bn1.forward_t(&self.conv_exp.forward(input)?, false)?)?;
         let hidden_states = self
             .bn2
             .forward_t(&self.conv_pwl.forward(&hidden_states)?, false)?;
         if self.has_skip {
-            hidden_states + input
+            hidden_states.f_add(input)
         } else {
             Ok(hidden_states)
         }
@@ -349,7 +347,7 @@ impl InvertedResidual {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = silu(self.bn1.forward_t(&self.conv_pw.forward(input)?, false)?)?;
         let hidden_states = silu(
             self.bn2
@@ -360,7 +358,7 @@ impl InvertedResidual {
             .bn3
             .forward_t(&self.conv_pwl.forward(&hidden_states)?, false)?;
         if self.has_skip {
-            hidden_states + input
+            hidden_states.f_add(input)
         } else {
             Ok(hidden_states)
         }
@@ -397,10 +395,10 @@ impl SqueezeExcite {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let scale = input.mean_dim([2_i64, 3].as_slice(), true, None)?;
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let scale = input.f_mean_dim([2_i64, 3].as_slice(), true, None)?;
         let scale = silu(self.conv_reduce.forward(&scale)?)?;
-        input * self.conv_expand.forward(&scale)?.sigmoid()?
+        input.f_mul(&self.conv_expand.forward(&scale)?.f_sigmoid()?)
     }
 }
 
@@ -437,7 +435,7 @@ impl UnetPlusPlusDecoder {
         })
     }
 
-    fn forward(&self, features: &EncoderFeatures) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, features: &EncoderFeatures) -> tch::Result<Tensor> {
         let x_0_0 = self
             .x_0_0
             .forward(&features.stage5, Some(&features.stage4))?;
@@ -451,25 +449,33 @@ impl UnetPlusPlusDecoder {
             .x_3_3
             .forward(&features.stage1, Some(&features.stage0))?;
 
-        let skip = Tensor::cat(&[x_1_1.alias()?, features.stage2.alias()?], 1)?;
+        let skip = Tensor::f_cat(&[x_1_1.f_alias()?, features.stage2.f_alias()?], 1)?;
         let x_0_1 = self.x_0_1.forward(&x_0_0, Some(&skip))?;
-        let skip = Tensor::cat(&[x_2_2.alias()?, features.stage1.alias()?], 1)?;
+        let skip = Tensor::f_cat(&[x_2_2.f_alias()?, features.stage1.f_alias()?], 1)?;
         let x_1_2 = self.x_1_2.forward(&x_1_1, Some(&skip))?;
-        let skip = Tensor::cat(&[x_3_3.alias()?, features.stage0.alias()?], 1)?;
+        let skip = Tensor::f_cat(&[x_3_3.f_alias()?, features.stage0.f_alias()?], 1)?;
         let x_2_3 = self.x_2_3.forward(&x_2_2, Some(&skip))?;
 
-        let skip = Tensor::cat(
-            &[x_1_2.alias()?, x_2_2.alias()?, features.stage1.alias()?],
+        let skip = Tensor::f_cat(
+            &[
+                x_1_2.f_alias()?,
+                x_2_2.f_alias()?,
+                features.stage1.f_alias()?,
+            ],
             1,
         )?;
         let x_0_2 = self.x_0_2.forward(&x_0_1, Some(&skip))?;
-        let skip = Tensor::cat(
-            &[x_2_3.alias()?, x_3_3.alias()?, features.stage0.alias()?],
+        let skip = Tensor::f_cat(
+            &[
+                x_2_3.f_alias()?,
+                x_3_3.f_alias()?,
+                features.stage0.f_alias()?,
+            ],
             1,
         )?;
         let x_1_3 = self.x_1_3.forward(&x_1_2, Some(&skip))?;
 
-        let skip = Tensor::cat(&[x_1_3, x_2_3, x_3_3, features.stage0.alias()?], 1)?;
+        let skip = Tensor::f_cat(&[x_1_3, x_2_3, x_3_3, features.stage0.f_alias()?], 1)?;
         let x_0_3 = self.x_0_3.forward(&x_0_2, Some(&skip))?;
         self.x_0_4.forward(&x_0_3, None)
     }
@@ -499,14 +505,14 @@ impl DecoderBlock {
         })
     }
 
-    fn forward(&self, input: &Tensor, skip: Option<&Tensor>) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor, skip: Option<&Tensor>) -> tch::Result<Tensor> {
         let size = input.size();
         let mut hidden_states =
-            input.upsample_nearest2d([size[2] * 2, size[3] * 2], None::<f64>, None::<f64>)?;
+            input.f_upsample_nearest2d([size[2] * 2, size[3] * 2], None::<f64>, None::<f64>)?;
         if let Some(skip) = skip {
             hidden_states = self
                 .attention1
-                .forward(&Tensor::cat(&[hidden_states, skip.alias()?], 1)?)?;
+                .forward(&Tensor::f_cat(&[hidden_states, skip.f_alias()?], 1)?)?;
         }
         let hidden_states = self.conv1.forward(&hidden_states)?;
         let hidden_states = self.conv2.forward(&hidden_states)?;
@@ -530,8 +536,8 @@ impl ConvGroupNormRelu {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.norm.forward(&self.conv.forward(input)?)?.relu()
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        self.norm.forward(&self.conv.forward(input)?)?.f_relu()
     }
 }
 
@@ -553,12 +559,12 @@ impl Scse {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let channel = input.adaptive_avg_pool2d([1, 1])?;
-        let channel = self.channel_reduce.forward(&channel)?.relu()?;
-        let channel = self.channel_expand.forward(&channel)?.sigmoid()?;
-        let spatial = self.spatial.forward(input)?.sigmoid()?;
-        (input * channel)? + (input * spatial)?
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let channel = input.f_adaptive_avg_pool2d([1, 1])?;
+        let channel = self.channel_reduce.forward(&channel)?.f_relu()?;
+        let channel = self.channel_expand.forward(&channel)?.f_sigmoid()?;
+        let spatial = self.spatial.forward(input)?.f_sigmoid()?;
+        (input.f_mul(&channel)?).f_add(&input.f_mul(&spatial)?)
     }
 }
 
@@ -589,6 +595,6 @@ fn batch_norm(path: &nn::Path<'_>, channels: i64) -> Result<nn::BatchNorm> {
     Ok(nn::batch_norm2d(path, channels, Default::default())?)
 }
 
-fn silu(input: Tensor) -> koharu_torch::Result<Tensor> {
-    input.silu()
+fn silu(input: Tensor) -> tch::Result<Tensor> {
+    input.f_silu()
 }

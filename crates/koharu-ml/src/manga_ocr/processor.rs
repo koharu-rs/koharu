@@ -10,8 +10,8 @@ use std::{collections::HashSet, fs, path::Path};
 use anyhow::{Result, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, RgbImage};
-use koharu_torch::{Device, Kind, Tensor};
 use serde::Deserialize;
+use tch::{Device, Kind, Tensor};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ViTImageProcessor {
@@ -49,20 +49,20 @@ impl ViTImageProcessor {
         };
         let height = image.height() as i64;
         let width = image.width() as i64;
-        let mut pixel_values = (Tensor::from_slice(image.as_raw())?
-            .view([1, height, width, 3])?
-            .permute([0, 3, 1, 2])?
-            .to_device(device)?
-            .to_kind(Kind::Float)?
-            / 255.0)?;
+        let mut pixel_values = (Tensor::f_from_slice(image.as_raw())?
+            .f_view([1, height, width, 3])?
+            .f_permute([0, 3, 1, 2])?
+            .f_to_device(device)?
+            .f_to_kind(Kind::Float)?)
+        .f_div_scalar(255.0)?;
         if self.do_normalize {
-            let mean = Tensor::from_slice(&self.image_mean)?
-                .view([1, 3, 1, 1])?
-                .to_device(device)?;
-            let std = Tensor::from_slice(&self.image_std)?
-                .view([1, 3, 1, 1])?
-                .to_device(device)?;
-            pixel_values = ((pixel_values - mean)? / std)?;
+            let mean = Tensor::f_from_slice(&self.image_mean)?
+                .f_view([1, 3, 1, 1])?
+                .f_to_device(device)?;
+            let std = Tensor::f_from_slice(&self.image_std)?
+                .f_view([1, 3, 1, 1])?
+                .f_to_device(device)?;
+            pixel_values = pixel_values.f_sub(&mean)?.f_div(&std)?;
         }
         Ok(pixel_values)
     }

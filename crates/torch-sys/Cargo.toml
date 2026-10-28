@@ -1,0 +1,30 @@
+[package]
+name = "torch-sys"
+# The version `tch` asks for, so the workspace's `[patch.crates-io]` replaces
+# upstream's crate with this one.
+version = "0.26.0"
+# Upstream's sources compile unchanged under upstream's edition.
+edition = "2021"
+description = "torch-sys's declarations, bound to the koharu-rs/torch shim Koharu's runtime loads."
+license = "MIT OR Apache-2.0"
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
+build = "build.rs"
+
+# Upstream's features, which `tch` forwards; the build doesn't change with
+# them, as libtorch comes from the runtime. `python-extension` stays off: the
+# shim doesn't export libtorch's Python functions.
+[features]
+doc-only = []
+download-libtorch = []
+python-extension = []
+
+[dependencies]
+libc = { workspace = true }
+libloading = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+koharu-bindgen = { workspace = true }

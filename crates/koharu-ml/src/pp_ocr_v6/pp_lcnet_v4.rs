@@ -3,11 +3,9 @@
 //! Original implementation:
 //! https://github.com/huggingface/transformers/blob/63f32a8782cb70da3365acab16f2b67947737985/src/transformers/models/pp_lcnet_v4/modeling_pp_lcnet_v4.py
 
-use koharu_torch::{
-    Tensor,
-    nn::{self, Module, ModuleT},
-};
+use crate::nn::{self, Module, ModuleT};
 use serde::{Deserialize, Deserializer};
+use tch::Tensor;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(untagged)]
@@ -247,12 +245,12 @@ impl PPLCNetV4Config {
     }
 }
 
-fn activate(hidden_states: Tensor, activation: Option<&str>) -> koharu_torch::Result<Tensor> {
+fn activate(hidden_states: Tensor, activation: Option<&str>) -> tch::Result<Tensor> {
     match activation {
         None => Ok(hidden_states),
-        Some("relu") => hidden_states.relu(),
-        Some("gelu") => hidden_states.gelu("none"),
-        Some("silu") => hidden_states.silu(),
+        Some("relu") => hidden_states.f_relu(),
+        Some("gelu") => hidden_states.f_gelu("none"),
+        Some("silu") => hidden_states.f_silu(),
         Some(name) => panic!("unsupported PP-LCNetV4 activation {name}"),
     }
 }
@@ -272,15 +270,15 @@ struct LearnableAffineBlock {
 }
 
 impl LearnableAffineBlock {
-    fn new(path: &nn::Path<'_>) -> koharu_torch::Result<Self> {
+    fn new(path: &nn::Path<'_>) -> tch::Result<Self> {
         Ok(Self {
             scale: path.var("scale", &[1])?,
             bias: path.var("bias", &[1])?,
         })
     }
 
-    fn forward(&self, hidden_states: Tensor) -> koharu_torch::Result<Tensor> {
-        (&self.scale * hidden_states)? + &self.bias
+    fn forward(&self, hidden_states: Tensor) -> tch::Result<Tensor> {
+        (self.scale.f_mul(&hidden_states)?).f_add(&self.bias)
     }
 }
 
@@ -295,7 +293,7 @@ impl ConvLayer {
         groups: i64,
         activation: Option<&str>,
         use_learnable_affine_block: bool,
-    ) -> koharu_torch::Result<Self> {
+    ) -> tch::Result<Self> {
         Ok(Self {
             convolution: nn::conv(
                 path / "convolution",
@@ -322,7 +320,7 @@ impl ConvLayer {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = self.convolution.forward(input)?;
         let hidden_states = self.normalization.forward_t(&hidden_states, false)?;
         let hidden_states = activate(hidden_states, self.activation.as_deref())?;
@@ -340,7 +338,7 @@ struct SqueezeExcitationModule {
 }
 
 impl SqueezeExcitationModule {
-    fn new(path: &nn::Path<'_>, channels: i64, reduction: i64) -> koharu_torch::Result<Self> {
+    fn new(path: &nn::Path<'_>, channels: i64, reduction: i64) -> tch::Result<Self> {
         Ok(Self {
             convolution_0: nn::conv2d(
                 path / "convolutions" / 0,
@@ -359,11 +357,11 @@ impl SqueezeExcitationModule {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
-        let weights = hidden_states.adaptive_avg_pool2d([1, 1])?;
-        let weights = self.convolution_0.forward(&weights)?.relu()?;
-        let weights = self.convolution_2.forward(&weights)?.hardsigmoid()?;
-        hidden_states * weights
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+        let weights = hidden_states.f_adaptive_avg_pool2d([1, 1])?;
+        let weights = self.convolution_0.forward(&weights)?.f_relu()?;
+        let weights = self.convolution_2.forward(&weights)?.f_hardsigmoid()?;
+        hidden_states.f_mul(&weights)
     }
 }
 
@@ -374,7 +372,7 @@ enum TokenConv {
 }
 
 impl TokenConv {
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         match self {
             Self::Reparameterized(convolution) => convolution.forward(hidden_states),
             Self::Layer(layer) => layer.forward(hidden_states),
@@ -396,7 +394,7 @@ impl DepthwiseSeparableConvLayer {
         path: &nn::Path<'_>,
         block: &BlockConfig,
         config: &PPLCNetV4Config,
-    ) -> koharu_torch::Result<Self> {
+    ) -> tch::Result<Self> {
         let stride = block.stride.pair();
         let in_channels = block.in_channels;
         let out_channels = block.out_channels;
@@ -462,16 +460,16 @@ impl DepthwiseSeparableConvLayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let mut hidden_states = self.token_conv.forward(hidden_states)?;
         if let Some(squeeze_excitation) = &self.token_squeeze_excitation {
             hidden_states = squeeze_excitation.forward(&hidden_states)?;
         }
-        let residual = hidden_states.alias()?;
-        hidden_states = self.channel_conv1.forward(&hidden_states)?.gelu("none")?;
+        let residual = hidden_states.f_alias()?;
+        hidden_states = self.channel_conv1.forward(&hidden_states)?.f_gelu("none")?;
         hidden_states = self.channel_conv2.forward(&hidden_states)?;
         if self.has_residual {
-            hidden_states + residual
+            hidden_states.f_add(&residual)
         } else {
             Ok(hidden_states)
         }
@@ -488,7 +486,7 @@ struct LargeStem {
 }
 
 impl LargeStem {
-    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> koharu_torch::Result<Self> {
+    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> tch::Result<Self> {
         let channels = &config.stem_channels;
         let strides = &config.stem_strides;
         Ok(Self {
@@ -545,15 +543,15 @@ impl LargeStem {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         let embedding = self.stem1.forward(pixel_values)?;
-        let padded = embedding.constant_pad_nd([0, 1, 0, 1])?;
+        let padded = embedding.f_constant_pad_nd([0, 1, 0, 1])?;
         let stem_2a = self.stem2a.forward(&padded)?;
         let stem_2a = self
             .stem2b
-            .forward(&stem_2a.constant_pad_nd([0, 1, 0, 1])?)?;
-        let pooled = padded.max_pool2d([2, 2], [1, 1], [0, 0], [1, 1], true)?;
-        let embedding = Tensor::cat(&[pooled, stem_2a], 1)?;
+            .forward(&stem_2a.f_constant_pad_nd([0, 1, 0, 1])?)?;
+        let pooled = padded.f_max_pool2d([2, 2], [1, 1], [0, 0], [1, 1], true)?;
+        let embedding = Tensor::f_cat(&[pooled, stem_2a], 1)?;
         self.stem4.forward(&self.stem3.forward(&embedding)?)
     }
 }
@@ -565,7 +563,7 @@ struct SmallStem {
 }
 
 impl SmallStem {
-    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> koharu_torch::Result<Self> {
+    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> tch::Result<Self> {
         let channels = &config.stem_channels;
         Ok(Self {
             conv1: ConvLayer::new(
@@ -591,9 +589,9 @@ impl SmallStem {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         self.conv2
-            .forward(&self.conv1.forward(pixel_values)?.gelu("none")?)
+            .forward(&self.conv1.forward(pixel_values)?.f_gelu("none")?)
     }
 }
 
@@ -604,7 +602,7 @@ enum Stem {
 }
 
 impl Stem {
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         match self {
             Self::Large(stem) => stem.forward(pixel_values),
             Self::Small(stem) => stem.forward(pixel_values),
@@ -621,7 +619,7 @@ pub(crate) struct PPLCNetV4Backbone {
 }
 
 impl PPLCNetV4Backbone {
-    pub(crate) fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> koharu_torch::Result<Self> {
+    pub(crate) fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> tch::Result<Self> {
         let stem_path = path / "encoder" / "convolution";
         let stem = match config.stem_type.as_str() {
             "large" => Stem::Large(Box::new(LargeStem::new(&stem_path, config)?)),
@@ -643,9 +641,9 @@ impl PPLCNetV4Backbone {
                             config,
                         )
                     })
-                    .collect::<koharu_torch::Result<_>>()
+                    .collect::<tch::Result<_>>()
             })
-            .collect::<koharu_torch::Result<_>>()?;
+            .collect::<tch::Result<_>>()?;
         Ok(Self {
             stem,
             blocks,
@@ -654,7 +652,7 @@ impl PPLCNetV4Backbone {
         })
     }
 
-    pub(crate) fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
+    pub(crate) fn forward(&self, pixel_values: &Tensor) -> tch::Result<Vec<Tensor>> {
         assert_eq!(
             pixel_values.size().get(1).copied(),
             Some(self.num_channels),
@@ -663,7 +661,7 @@ impl PPLCNetV4Backbone {
         let mut hidden_states = self.stem.forward(pixel_values)?;
         let mut feature_maps = Vec::new();
         if self.out_features.iter().any(|feature| feature == "stem") {
-            feature_maps.push(hidden_states.alias()?);
+            feature_maps.push(hidden_states.f_alias()?);
         }
         for (stage_index, blocks) in self.blocks.iter().enumerate() {
             for block in blocks {
@@ -671,7 +669,7 @@ impl PPLCNetV4Backbone {
             }
             let stage = format!("stage{}", stage_index + 1);
             if self.out_features.iter().any(|feature| feature == &stage) {
-                feature_maps.push(hidden_states.alias()?);
+                feature_maps.push(hidden_states.f_alias()?);
             }
         }
         Ok(feature_maps)

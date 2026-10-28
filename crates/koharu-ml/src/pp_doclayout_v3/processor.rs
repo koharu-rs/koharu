@@ -12,8 +12,8 @@ use imageproc::{
     contours::{BorderType, find_contours_with_threshold},
     geometry::{approximate_polygon_dp, arc_length, contour_area},
 };
-use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::{Deserialize, Serialize};
+use tch::{Device, IndexOp, Kind, Tensor};
 
 use super::model::Output;
 
@@ -66,26 +66,26 @@ impl PPDocLayoutV3ImageProcessor {
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
 
-        let mut pixel_values = Tensor::from_slice(rgb.as_raw())?
-            .view([1, height as i64, width as i64, 3])?
-            .permute([0, 3, 1, 2])?
-            .to_kind(Kind::Float)?;
+        let mut pixel_values = Tensor::f_from_slice(rgb.as_raw())?
+            .f_view([1, height as i64, width as i64, 3])?
+            .f_permute([0, 3, 1, 2])?
+            .f_to_kind(Kind::Float)?;
 
         if self.do_resize {
             pixel_values = match self.resample {
-                0 => pixel_values.upsample_nearest2d(
+                0 => pixel_values.f_upsample_nearest2d(
                     [self.size.height, self.size.width],
                     None::<f64>,
                     None::<f64>,
                 )?,
-                2 => pixel_values.upsample_bilinear2d(
+                2 => pixel_values.f_upsample_bilinear2d(
                     [self.size.height, self.size.width],
                     false,
                     None::<f64>,
                     None::<f64>,
                 )?,
                 // Torchvision falls back from Lanczos to bicubic for tensor inputs.
-                1 | 3 => pixel_values.upsample_bicubic2d(
+                1 | 3 => pixel_values.f_upsample_bicubic2d(
                     [self.size.height, self.size.width],
                     false,
                     None::<f64>,
@@ -93,23 +93,23 @@ impl PPDocLayoutV3ImageProcessor {
                 )?,
                 resample => bail!("unsupported PP-DocLayout-V3 resampling mode {resample}"),
             }
-            .clamp(0.0, 255.0)?
-            .round()?;
+            .f_clamp(0.0, 255.0)?
+            .f_round()?;
         }
 
         if self.do_rescale {
-            pixel_values = (&pixel_values * self.rescale_factor)?;
+            pixel_values = pixel_values.f_mul_scalar(self.rescale_factor)?;
         }
         if self.do_normalize {
             if self.image_mean.len() != 3 || self.image_std.len() != 3 {
                 bail!("PP-DocLayout-V3 image_mean and image_std must contain three values");
             }
-            let mean = Tensor::from_slice(&self.image_mean)?.view([1, 3, 1, 1])?;
-            let std = Tensor::from_slice(&self.image_std)?.view([1, 3, 1, 1])?;
-            pixel_values = ((pixel_values - mean)? / std)?;
+            let mean = Tensor::f_from_slice(&self.image_mean)?.f_view([1, 3, 1, 1])?;
+            let std = Tensor::f_from_slice(&self.image_std)?.f_view([1, 3, 1, 1])?;
+            pixel_values = pixel_values.f_sub(&mean)?.f_div(&std)?;
         }
 
-        Ok(pixel_values.to_device(device)?)
+        Ok(pixel_values.f_to_device(device)?)
     }
 
     pub fn postprocess(
@@ -154,39 +154,41 @@ impl PPDocLayoutV3ImageProcessor {
                 target_height as f32,
             ]);
         }
-        let scale = Tensor::from_slice(&scale_values)?
-            .view([batch_size as i64, 1, 4])?
-            .to_device(pred_boxes.device())?;
-        let pred_boxes = (pred_boxes * scale)?;
+        let scale = Tensor::f_from_slice(&scale_values)?
+            .f_view([batch_size as i64, 1, 4])?
+            .f_to_device(pred_boxes.device())?;
+        let pred_boxes = pred_boxes.f_mul(&scale)?;
 
-        let scores_all = logits.sigmoid()?;
-        let (scores, flat_index) = scores_all
-            .flatten(1, -1)?
-            .topk(num_queries, -1, true, true)?;
-        let labels = flat_index.remainder(num_classes)?;
-        let query_index = flat_index.floor_divide_scalar(num_classes)?;
+        let scores_all = logits.f_sigmoid()?;
+        let (scores, flat_index) =
+            scores_all
+                .f_flatten(1, -1)?
+                .f_topk(num_queries, -1, true, true)?;
+        let labels = flat_index.f_remainder(num_classes)?;
+        let query_index = flat_index.f_floor_divide_scalar(num_classes)?;
 
-        let boxes = pred_boxes.gather(
+        let boxes = pred_boxes.f_gather(
             1,
             &query_index
-                .unsqueeze(-1)?
-                .repeat([1, 1, pred_boxes.size()[2]])?,
+                .f_unsqueeze(-1)?
+                .f_repeat([1, 1, pred_boxes.size()[2]])?,
             false,
         )?;
 
         let mask_size = outputs.out_masks.size();
         let mask_height = mask_size[2] as usize;
         let mask_width = mask_size[3] as usize;
-        let order_seq = get_order_seq(&outputs.order_logits)?.gather(1, &query_index, false)?;
+        let order_seq = get_order_seq(&outputs.order_logits)?.f_gather(1, &query_index, false)?;
 
         let mut results = Vec::with_capacity(batch_size);
         let mask_area = mask_height * mask_width;
         for (batch, &(target_height, target_width)) in target_sizes.iter().enumerate() {
-            let scores = Vec::<f32>::try_from(scores.i(batch as i64)?)?;
-            let labels = Vec::<i64>::try_from(labels.i(batch as i64)?)?;
-            let boxes = Vec::<f32>::try_from(boxes.i(batch as i64)?.contiguous()?.view([-1])?)?;
-            let orders = Vec::<i64>::try_from(order_seq.i(batch as i64)?)?;
-            let query_indices = Vec::<i64>::try_from(query_index.i(batch as i64)?)?;
+            let scores = Vec::<f32>::try_from(scores.f_i(batch as i64)?)?;
+            let labels = Vec::<i64>::try_from(labels.f_i(batch as i64)?)?;
+            let boxes =
+                Vec::<f32>::try_from(boxes.f_i(batch as i64)?.f_contiguous()?.f_view([-1])?)?;
+            let orders = Vec::<i64>::try_from(order_seq.f_i(batch as i64)?)?;
+            let query_indices = Vec::<i64>::try_from(query_index.f_i(batch as i64)?)?;
 
             let mut candidates = Vec::new();
             for query in 0..scores.len() {
@@ -217,17 +219,17 @@ impl PPDocLayoutV3ImageProcessor {
             let masks = if selected_queries.is_empty() {
                 Vec::new()
             } else {
-                let selected_queries =
-                    Tensor::from_slice(&selected_queries)?.to_device(outputs.out_masks.device())?;
+                let selected_queries = Tensor::f_from_slice(&selected_queries)?
+                    .f_to_device(outputs.out_masks.device())?;
                 Vec::<u8>::try_from(
                     outputs
                         .out_masks
-                        .i(batch as i64)?
-                        .index_select(0, &selected_queries)?
-                        .sigmoid()?
-                        .gt(threshold as f64)?
-                        .contiguous()?
-                        .view([-1])?,
+                        .f_i(batch as i64)?
+                        .f_index_select(0, &selected_queries)?
+                        .f_sigmoid()?
+                        .f_gt(threshold as f64)?
+                        .f_contiguous()?
+                        .f_view([-1])?,
                 )?
             };
 
@@ -303,34 +305,37 @@ struct CandidateRegion {
     bbox: [f32; 4],
 }
 
-fn center_to_corners(boxes: &Tensor) -> koharu_torch::Result<Tensor> {
-    let centers = boxes.slice(-1, 0, 2, 1)?;
-    let dims = boxes.slice(-1, 2, 4, 1)?;
-    let top_left = (&centers - (&dims * 0.5)?)?;
-    let bottom_right = (centers + (dims * 0.5)?)?;
-    Tensor::cat(&[top_left, bottom_right], -1)
+fn center_to_corners(boxes: &Tensor) -> tch::Result<Tensor> {
+    let centers = boxes.f_slice(-1, 0, 2, 1)?;
+    let dims = boxes.f_slice(-1, 2, 4, 1)?;
+    let top_left = centers.f_sub(&dims.f_mul_scalar(0.5)?)?;
+    let bottom_right = centers.f_add(&dims.f_mul_scalar(0.5)?)?;
+    Tensor::f_cat(&[top_left, bottom_right], -1)
 }
 
 // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/image_processing_pp_doclayout_v3.py#L98-L127
-fn get_order_seq(order_logits: &Tensor) -> koharu_torch::Result<Tensor> {
-    let order_scores = order_logits.sigmoid()?;
+fn get_order_seq(order_logits: &Tensor) -> tch::Result<Tensor> {
+    let order_scores = order_logits.f_sigmoid()?;
     let size = order_scores.size();
     let batch_size = size[0];
     let sequence_length = size[1];
 
-    let upper_votes = order_scores
-        .triu(1)?
-        .sum_dim_intlist(&[1i64][..], false, None::<Kind>)?;
-    let transposed_scores = order_scores.transpose(1, 2)?;
-    let lower_votes = (transposed_scores.ones_like()? - transposed_scores)?
-        .tril(-1)?
-        .sum_dim_intlist(&[1i64][..], false, None::<Kind>)?;
-    let order_votes = (upper_votes + lower_votes)?;
-    let order_pointers = order_votes.argsort(1, false)?;
-    let ranks = Tensor::arange(sequence_length, (Kind::Int64, order_logits.device()))?
-        .expand([batch_size, sequence_length], true)?;
-    let mut order_seq = order_pointers.empty_like()?;
-    order_seq.scatter_(1, &order_pointers, &ranks)
+    let upper_votes =
+        order_scores
+            .f_triu(1)?
+            .f_sum_dim_intlist(&[1i64][..], false, None::<Kind>)?;
+    let transposed_scores = order_scores.f_transpose(1, 2)?;
+    let lower_votes = transposed_scores
+        .f_ones_like()?
+        .f_sub(&transposed_scores)?
+        .f_tril(-1)?
+        .f_sum_dim_intlist(&[1i64][..], false, None::<Kind>)?;
+    let order_votes = upper_votes.f_add(&lower_votes)?;
+    let order_pointers = order_votes.f_argsort(1, false)?;
+    let ranks = Tensor::f_arange(sequence_length, (Kind::Int64, order_logits.device()))?
+        .f_expand([batch_size, sequence_length], true)?;
+    let mut order_seq = order_pointers.f_empty_like()?;
+    order_seq.f_scatter_(1, &order_pointers, &ranks)
 }
 
 // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/pp_doclayout_v3/image_processing_pp_doclayout_v3.py#L129-L220

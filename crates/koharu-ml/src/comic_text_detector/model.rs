@@ -6,11 +6,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 #[derive(Debug)]
 pub struct Output {
@@ -67,7 +65,7 @@ impl Model {
         // and head registered for checkpoint compatibility, but do not execute
         // that dead branch during inference.
         // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L343-L348
-        let input = input.to_kind(self.blk_det_vs.kind())?;
+        let input = input.f_to_kind(self.blk_det_vs.kind())?;
         let features = self.blk_det.forward(&input)?;
         let (mask, db_features) = self.text_seg.forward(
             &features[0],
@@ -90,14 +88,14 @@ enum Activation {
     Relu,
 }
 
-fn activate(input: Tensor, activation: Activation) -> koharu_torch::Result<Tensor> {
+fn activate(input: Tensor, activation: Activation) -> tch::Result<Tensor> {
     match activation {
-        Activation::Silu => input.silu(),
+        Activation::Silu => input.f_silu(),
         Activation::Leaky(slope) => {
-            let positive = input.relu()?;
-            positive - ((-input)?.relu()? * slope)?
+            let positive = input.f_relu()?;
+            positive.f_sub(&input.f_neg()?.f_relu()?.f_mul_scalar(slope)?)
         }
-        Activation::Relu => input.relu(),
+        Activation::Relu => input.f_relu(),
     }
 }
 
@@ -137,7 +135,7 @@ impl ConvBnAct {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         activate(
             self.bn.forward_t(&self.conv.forward(input)?, false)?,
             self.activation,
@@ -185,9 +183,13 @@ impl Bottleneck {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let output = self.cv2.forward(&self.cv1.forward(input)?)?;
-        if self.add { input + output } else { Ok(output) }
+        if self.add {
+            input.f_add(&output)
+        } else {
+            Ok(output)
+        }
     }
 }
 
@@ -247,13 +249,13 @@ impl C3 {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let mut y1 = self.cv1.forward(input)?;
         for block in &self.blocks {
             y1 = block.forward(&y1)?;
         }
         let y2 = self.cv2.forward(input)?;
-        self.cv3.forward(&Tensor::cat(&[y1, y2], 1)?)
+        self.cv3.forward(&Tensor::f_cat(&[y1, y2], 1)?)
     }
 }
 
@@ -292,8 +294,8 @@ impl Sppf {
         })
     }
 
-    fn pooled(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        input.max_pool2d(
+    fn pooled(&self, input: &Tensor) -> tch::Result<Tensor> {
+        input.f_max_pool2d(
             [self.kernel, self.kernel],
             [1, 1],
             [self.kernel / 2, self.kernel / 2],
@@ -302,12 +304,12 @@ impl Sppf {
         )
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let x1 = self.cv1.forward(input)?;
         let x2 = self.pooled(&x1)?;
         let x3 = self.pooled(&x2)?;
         let x4 = self.pooled(&x3)?;
-        self.cv2.forward(&Tensor::cat(&[x1, x2, x3, x4], 1)?)
+        self.cv2.forward(&Tensor::f_cat(&[x1, x2, x3, x4], 1)?)
     }
 }
 
@@ -550,28 +552,34 @@ impl YoloHead {
             let height = prediction.size()[2];
             let width = prediction.size()[3];
             let prediction = prediction
-                .view([batch, 3, 7, height, width])?
-                .permute([0, 1, 3, 4, 2])?
-                .contiguous()?
-                .sigmoid()?;
-            let grid_x = Tensor::arange(width, (prediction.kind(), prediction.device()))?;
-            let grid_y = Tensor::arange(height, (prediction.kind(), prediction.device()))?;
-            let grid = Tensor::meshgrid_indexing(&[grid_x, grid_y], "xy")?;
-            let grid = Tensor::stack(&[grid[0].alias()?, grid[1].alias()?], 2)?
-                .view([1, 1, height, width, 2])?;
+                .f_view([batch, 3, 7, height, width])?
+                .f_permute([0, 1, 3, 4, 2])?
+                .f_contiguous()?
+                .f_sigmoid()?;
+            let grid_x = Tensor::f_arange(width, (prediction.kind(), prediction.device()))?;
+            let grid_y = Tensor::f_arange(height, (prediction.kind(), prediction.device()))?;
+            let grid = Tensor::f_meshgrid_indexing(&[grid_x, grid_y], "xy")?;
+            let grid = Tensor::f_stack(&[grid[0].f_alias()?, grid[1].f_alias()?], 2)?
+                .f_view([1, 1, height, width, 2])?;
             let stride = [8.0, 16.0, 32.0][index];
             let anchor_grid = (self
                 .anchors
-                .narrow(0, index as i64, 1)?
-                .view([1, 3, 1, 1, 2])?
-                * stride)?;
-            let xy = ((((prediction.narrow(4, 0, 2)? * 2.0)? - 0.5)? + grid)? * stride)?;
-            let wh = ((prediction.narrow(4, 2, 2)? * 2.0)?.square()? * anchor_grid)?;
+                .f_narrow(0, index as i64, 1)?
+                .f_view([1, 3, 1, 1, 2])?)
+            .f_mul_scalar(stride)?;
+            let xy = ((((prediction.f_narrow(4, 0, 2)?).f_mul_scalar(2.0)?).f_sub_scalar(0.5)?)
+                .f_add(&grid)?)
+            .f_mul_scalar(stride)?;
+            let wh = ((prediction.f_narrow(4, 2, 2)?)
+                .f_mul_scalar(2.0)?
+                .f_square()?)
+            .f_mul(&anchor_grid)?;
             outputs.push(
-                Tensor::cat(&[xy, wh, prediction.narrow(4, 4, 3)?], 4)?.view([batch, -1, 7])?,
+                Tensor::f_cat(&[xy, wh, prediction.f_narrow(4, 4, 3)?], 4)?
+                    .f_view([batch, -1, 7])?,
             );
         }
-        Ok(Tensor::cat(&outputs, 1)?)
+        Ok(Tensor::f_cat(&outputs, 1)?)
     }
 }
 
@@ -597,11 +605,11 @@ impl DoubleConvC3 {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let input = if self.down {
-            input.avg_pool2d([2, 2], [2, 2], [0, 0], false, true, None)?
+            input.f_avg_pool2d([2, 2], [2, 2], [0, 0], false, true, None)?
         } else {
-            input.alias()?
+            input.f_alias()?
         };
         self.conv.forward(&input)
     }
@@ -645,7 +653,7 @@ impl DoubleConvUpC3 {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         activate(
             self.bn
                 .forward_t(&self.deconv.forward(&self.c3.forward(input)?)?, false)?,
@@ -690,18 +698,18 @@ impl UnetHead {
         let u20 = self.upconv0.forward(&d10)?;
         let u40 = self
             .upconv2
-            .forward(&Tensor::cat(&[f20.alias()?, u20], 1)?)?;
+            .forward(&Tensor::f_cat(&[f20.f_alias()?, u20], 1)?)?;
         let u80 = self
             .upconv3
-            .forward(&Tensor::cat(&[f40.alias()?, u40.alias()?], 1)?)?;
+            .forward(&Tensor::f_cat(&[f40.f_alias()?, u40.f_alias()?], 1)?)?;
         let u160 = self
             .upconv4
-            .forward(&Tensor::cat(&[f80.alias()?, u80], 1)?)?;
+            .forward(&Tensor::f_cat(&[f80.f_alias()?, u80], 1)?)?;
         let u320 = self
             .upconv5
-            .forward(&Tensor::cat(&[f160.alias()?, u160], 1)?)?;
-        let mask = self.upconv6.forward(&u320)?.sigmoid()?;
-        Ok((mask, [f80.alias()?, f40.alias()?, u40]))
+            .forward(&Tensor::f_cat(&[f160.f_alias()?, u160], 1)?)?;
+        let mask = self.upconv6.forward(&u320)?.f_sigmoid()?;
+        Ok((mask, [f80.f_alias()?, f40.f_alias()?, u40]))
     }
 }
 
@@ -735,8 +743,10 @@ impl ConvBnReluSeq {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.bn.forward_t(&self.conv.forward(input)?, false)?.relu()
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        self.bn
+            .forward_t(&self.conv.forward(input)?, false)?
+            .f_relu()
     }
 }
 
@@ -758,15 +768,15 @@ impl BinarizeHead {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.deconv2
             .forward(
                 &self
                     .bn1
                     .forward_t(&self.deconv1.forward(&self.conv1.forward(input)?)?, false)?
-                    .relu()?,
+                    .f_relu()?,
             )?
-            .sigmoid()
+            .f_sigmoid()
     }
 }
 
@@ -788,15 +798,15 @@ impl ThreshHead {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.deconv2
             .forward(
                 &self
                     .bn1
                     .forward_t(&self.deconv1.forward(&self.conv1.forward(input)?)?, false)?
-                    .relu()?,
+                    .f_relu()?,
             )?
-            .sigmoid()
+            .f_sigmoid()
     }
 }
 
@@ -823,14 +833,14 @@ impl DBHead {
     fn forward(&self, f80: &Tensor, f40: &Tensor, u40: &Tensor) -> Result<Tensor> {
         let u80 = self
             .upconv3
-            .forward(&Tensor::cat(&[f40.alias()?, u40.alias()?], 1)?)?;
+            .forward(&Tensor::f_cat(&[f40.f_alias()?, u40.f_alias()?], 1)?)?;
         let x = self
             .upconv4
-            .forward(&Tensor::cat(&[f80.alias()?, u80], 1)?)?;
+            .forward(&Tensor::f_cat(&[f80.f_alias()?, u80], 1)?)?;
         let x = self.conv.forward(&x)?;
         let shrink = self.binarize.forward(&x)?;
         let thresh = self.thresh.forward(&x)?;
-        Ok(Tensor::cat(&[shrink, thresh], 1)?)
+        Ok(Tensor::f_cat(&[shrink, thresh], 1)?)
     }
 }
 

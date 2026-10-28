@@ -4,7 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::{
     config::{HGNetV2Config, PPDocLayoutV3Config},
@@ -73,7 +73,7 @@ impl PPDocLayoutV3 {
         image: &DynamicImage,
         threshold: f32,
     ) -> Result<PPDocLayoutV3Detections> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
             let outputs = self.model.forward(&pixel_values)?;
             self.processor.postprocess(&outputs, image, threshold)

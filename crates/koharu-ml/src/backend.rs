@@ -3,11 +3,11 @@
 
 use anyhow::{Result, bail};
 use koharu_runtime::{Backend, Device};
-use koharu_torch::Kind;
+use tch::Kind;
 
 /// `device` as a libtorch device, and the precision its models run in:
 /// BF16 where the device computes in it, F32 elsewhere.
-pub(crate) fn torch(device: &Device) -> Result<(koharu_torch::Device, Kind)> {
+pub(crate) fn torch(device: &Device) -> Result<(tch::Device, Kind)> {
     let bfloat16 = match device.backend {
         Backend::Cuda => device.compute_capability() >= 80,
         Backend::Rocm => device.target().is_some_and(|target| {
@@ -28,8 +28,8 @@ pub(crate) fn torch(device: &Device) -> Result<(koharu_torch::Device, Kind)> {
     };
     Ok(match device.backend {
         // libtorch addresses HIP devices as CUDA ones.
-        Backend::Cuda | Backend::Rocm => (koharu_torch::Device::Cuda(device.index), kind),
-        Backend::Metal => (koharu_torch::Device::Mps, kind),
+        Backend::Cuda | Backend::Rocm => (tch::Device::Cuda(device.index), kind),
+        Backend::Metal => (tch::Device::Mps, kind),
         Backend::Vulkan => unreachable!("refused above"),
     })
 }
