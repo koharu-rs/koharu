@@ -15,8 +15,6 @@ impl Default for TypesettingConfig {
     }
 }
 
-impl TypesettingConfig {
-    pub fn load() -> anyhow::Result<koharu_config::Config<Self>> {
-        koharu_config::load("typesetting")
-    }
+impl koharu_config::Section for TypesettingConfig {
+    const NAME: &'static str = "typesetting";
 }

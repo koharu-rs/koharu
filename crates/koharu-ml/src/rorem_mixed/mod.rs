@@ -10,9 +10,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::{DynamicImage, GrayImage, RgbImage};
-use koharu_diffusion::{
-    GuidanceParams, ImageGenerationParams, SampleMethod, SampleParams, Scheduler,
-};
+use koharu_diffusion::{ImageParams, SampleMethod, Scheduler};
 
 use self::{
     model::{Model, ModelPaths},
@@ -40,7 +38,9 @@ pub struct RoremMixed {
 }
 
 impl RoremMixed {
-    pub async fn load(device: crate::Device) -> Result<Self> {
+    /// Loads the model, its weights placed to fit `max_vram` bytes of the
+    /// device.
+    pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
         let (diffusion_model, version_marker, vae, clip_l, clip_g) = tokio::try_join!(
             DIFFUSION_MODEL.resolve(),
             SDXL_VERSION_MARKER.resolve(),
@@ -50,8 +50,9 @@ impl RoremMixed {
         )
         .context("failed to resolve RORem mixed model assets")?;
         let model = Model::new(
-            &device,
-            ModelPaths {
+            device,
+            max_vram,
+            &ModelPaths {
                 diffusion_model,
                 version_marker,
                 vae,
@@ -81,27 +82,21 @@ impl RoremMixed {
 
         let generated = self
             .model
-            .forward(&ImageGenerationParams {
-                prompt: prompt.to_owned(),
-                negative_prompt: negative_prompt.to_owned(),
-                init_image: Some(init_image),
-                mask_image: Some(native_mask.clone()),
-                width: i32::try_from(options.resolution)?,
-                height: i32::try_from(options.resolution)?,
-                sample: SampleParams {
-                    guidance: GuidanceParams {
-                        text_cfg: options.guidance_scale,
-                        ..GuidanceParams::default()
-                    },
-                    scheduler: Scheduler::Discrete,
-                    sample_method: SampleMethod::Euler,
-                    sample_steps: options.num_inference_steps,
-                    ..SampleParams::default()
-                },
-                strength: options.strength,
-                seed: options.seed,
-                batch_count: 1,
-                ..ImageGenerationParams::default()
+            .forward(&ImageParams {
+                prompt,
+                negative_prompt,
+                init: Some(&init_image),
+                mask: Some(&native_mask),
+                width: Some(options.resolution),
+                height: Some(options.resolution),
+                cfg: Some(options.guidance_scale),
+                scheduler: Some(Scheduler::Discrete),
+                sample_method: Some(SampleMethod::Euler),
+                steps: Some(u32::try_from(options.num_inference_steps)?),
+                strength: Some(options.strength),
+                seed: Some(options.seed),
+                count: Some(1),
+                ..ImageParams::default()
             })?
             .into_iter()
             .next()

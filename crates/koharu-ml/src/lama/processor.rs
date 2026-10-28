@@ -111,32 +111,32 @@ impl InpaintModel {
     ) -> Result<RgbImage> {
         let width = image.width();
         let height = image.height();
-        let image_tensor = Tensor::from_slice(image.as_raw())
-            .view([i64::from(height), i64::from(width), 3])
-            .to_device(self.device)
-            .permute([2, 0, 1])
-            .unsqueeze(0)
-            .contiguous();
-        let mask_tensor = Tensor::from_slice(mask.as_raw())
-            .view([i64::from(height), i64::from(width)])
-            .to_device(self.device)
-            .unsqueeze(0)
-            .unsqueeze(0)
-            .contiguous();
-        let model_image = pad_img_to_modulo(image_tensor.to_kind(Kind::Float) / 255.0, 8);
-        let model_mask = pad_img_to_modulo(mask_tensor.gt(0.0).to_kind(Kind::Float), 8);
-        let output = model
-            .forward(&model_image, &model_mask)
-            .narrow(2, 0, i64::from(height))
-            .narrow(3, 0, i64::from(width))
-            .clamp(0.0, 1.0)
-            * 255.0;
-        let output = output.to_kind(Kind::Uint8);
+        let image_tensor = Tensor::from_slice(image.as_raw())?
+            .view([i64::from(height), i64::from(width), 3])?
+            .to_device(self.device)?
+            .permute([2, 0, 1])?
+            .unsqueeze(0)?
+            .contiguous()?;
+        let mask_tensor = Tensor::from_slice(mask.as_raw())?
+            .view([i64::from(height), i64::from(width)])?
+            .to_device(self.device)?
+            .unsqueeze(0)?
+            .unsqueeze(0)?
+            .contiguous()?;
+        let model_image = pad_img_to_modulo((image_tensor.to_kind(Kind::Float)? / 255.0)?, 8)?;
+        let model_mask = pad_img_to_modulo(mask_tensor.gt(0.0)?.to_kind(Kind::Float)?, 8)?;
+        let output = (model
+            .forward(&model_image, &model_mask)?
+            .narrow(2, 0, i64::from(height))?
+            .narrow(3, 0, i64::from(width))?
+            .clamp(0.0, 1.0)?
+            * 255.0)?;
+        let output = output.to_kind(Kind::Uint8)?;
         let output = if config.sd_keep_unmasked_area {
-            let alpha = mask_tensor.to_kind(Kind::Float) / 255.0;
-            (output.to_kind(Kind::Float) * &alpha
-                + image_tensor.to_kind(Kind::Float) * (alpha.ones_like() - alpha))
-                .to_kind(Kind::Uint8)
+            let alpha = (mask_tensor.to_kind(Kind::Float)? / 255.0)?;
+            ((output.to_kind(Kind::Float)? * &alpha)?
+                + (image_tensor.to_kind(Kind::Float)? * (alpha.ones_like()? - alpha)?)?)?
+                .to_kind(Kind::Uint8)?
         } else {
             output
         };
@@ -284,25 +284,25 @@ fn crop_box(
 
 fn post_process(tensor: &Tensor, width: u32, height: u32) -> Result<RgbImage> {
     let tensor = tensor
-        .squeeze_dim(0)
-        .permute([1, 2, 0])
-        .contiguous()
-        .to_device(Device::Cpu)
-        .view([-1]);
+        .squeeze_dim(0)?
+        .permute([1, 2, 0])?
+        .contiguous()?
+        .to_device(Device::Cpu)?
+        .view([-1])?;
     let rgb = Vec::<u8>::try_from(&tensor)?;
     RgbImage::from_raw(width, height, rgb).context("failed to convert LaMa tensor to RGB image")
 }
 
-fn pad_img_to_modulo(tensor: Tensor, modulo: u32) -> Tensor {
+fn pad_img_to_modulo(tensor: Tensor, modulo: u32) -> Result<Tensor> {
     let height = tensor.size()[2] as u32;
     let width = tensor.size()[3] as u32;
     let out_height = ceil_modulo(height, modulo);
     let out_width = ceil_modulo(width, modulo);
-    let height_indices = symmetric_indices(height, out_height, tensor.device());
-    let width_indices = symmetric_indices(width, out_width, tensor.device());
-    tensor
-        .index_select(2, &height_indices)
-        .index_select(3, &width_indices)
+    let height_indices = symmetric_indices(height, out_height, tensor.device())?;
+    let width_indices = symmetric_indices(width, out_width, tensor.device())?;
+    Ok(tensor
+        .index_select(2, &height_indices)?
+        .index_select(3, &width_indices)?)
 }
 
 fn ceil_modulo(value: u32, modulo: u32) -> u32 {
@@ -313,18 +313,18 @@ fn ceil_modulo(value: u32, modulo: u32) -> u32 {
     }
 }
 
-fn symmetric_indices(length: u32, output_length: u32, device: Device) -> Tensor {
+fn symmetric_indices(length: u32, output_length: u32, device: Device) -> Result<Tensor> {
     if !device.is_cuda() {
         let indices = (0..output_length)
             .map(|index| i64::from(symmetric_index(index, length)))
             .collect::<Vec<_>>();
-        return Tensor::from_slice(&indices).to_device(device);
+        return Ok(Tensor::from_slice(&indices)?.to_device(device)?);
     }
     let length = i64::from(length);
     let period = length * 2;
-    let indices = Tensor::arange(i64::from(output_length), (Kind::Int64, device));
-    let indices = &indices - indices.floor_divide_scalar(period) * period;
-    indices.where_self(&indices.lt(length), &(period - &indices - 1))
+    let indices = Tensor::arange(i64::from(output_length), (Kind::Int64, device))?;
+    let indices = (&indices - (indices.floor_divide_scalar(period)? * period)?)?;
+    Ok(indices.where_self(&indices.lt(length)?, &((period - &indices)? - 1)?)?)
 }
 
 fn symmetric_index(index: u32, length: u32) -> u32 {

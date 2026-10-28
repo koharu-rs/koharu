@@ -139,9 +139,9 @@ impl Processor {
             max_pixels,
         )?;
 
-        let mut pixels = Tensor::from_slice(rgb.as_raw())
-            .view([1, i64::from(rgb.height()), i64::from(rgb.width()), 3])
-            .permute([0, 3, 1, 2]);
+        let mut pixels = Tensor::from_slice(rgb.as_raw())?
+            .view([1, i64::from(rgb.height()), i64::from(rgb.width()), 3])?
+            .permute([0, 3, 1, 2])?;
         if self.image_processor.do_resize {
             if self.image_processor.resample != 3 {
                 bail!("PaddleOCR-VL only supports Transformers' bicubic resampling mode");
@@ -153,11 +153,11 @@ impl Processor {
                 false,
                 None::<f64>,
                 None::<f64>,
-            );
+            )?;
         }
-        pixels = pixels.to_device(device).to_kind(Kind::Float);
+        pixels = pixels.to_device(device)?.to_kind(Kind::Float)?;
         if self.image_processor.do_rescale {
-            pixels *= self.image_processor.rescale_factor;
+            pixels = (pixels * self.image_processor.rescale_factor)?;
         }
         if self.image_processor.do_normalize {
             ensure!(
@@ -165,13 +165,13 @@ impl Processor {
                     && self.image_processor.image_std.len() == 3,
                 "PaddleOCR-VL image_mean and image_std must contain three values"
             );
-            let mean = Tensor::from_slice(&self.image_processor.image_mean)
-                .view([1, 3, 1, 1])
-                .to_device(device);
-            let std = Tensor::from_slice(&self.image_processor.image_std)
-                .view([1, 3, 1, 1])
-                .to_device(device);
-            pixels = (pixels - mean) / std;
+            let mean = Tensor::from_slice(&self.image_processor.image_mean)?
+                .view([1, 3, 1, 1])?
+                .to_device(device)?;
+            let std = Tensor::from_slice(&self.image_processor.image_std)?
+                .view([1, 3, 1, 1])?
+                .to_device(device)?;
+            pixels = ((pixels - mean)? / std)?;
         }
 
         let grid_t = 1;
@@ -179,9 +179,9 @@ impl Processor {
         let grid_w = width / self.image_processor.patch_size;
         let patch = self.image_processor.patch_size;
         let pixel_values = pixels
-            .view(&[1, grid_t, 3, grid_h, patch, grid_w, patch][..])
-            .permute([0, 1, 3, 5, 2, 4, 6])
-            .reshape([grid_t * grid_h * grid_w, 3, patch, patch]);
+            .view(&[1, grid_t, 3, grid_h, patch, grid_w, patch][..])?
+            .permute([0, 1, 3, 5, 2, 4, 6])?
+            .reshape([grid_t * grid_h * grid_w, 3, patch, patch])?;
 
         Ok((pixel_values, [grid_t, grid_h, grid_w]))
     }

@@ -9,8 +9,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::{PaddleOCRVLConfig, PaddleOCRVisionConfig, RopeScaling},
     processor::{PaddleOCRVLImageProcessor, PaddleOCRVLResult, PaddleOCRVLTask},
@@ -36,8 +34,8 @@ pub struct PaddleOCRVL {
 }
 
 impl PaddleOCRVL {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -59,7 +57,7 @@ impl PaddleOCRVL {
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let processor =
             Processor::from_files(&processor_path, &tokenizer_path, config.image_token_id)?;
-        let mut model = Model::new(config, device);
+        let mut model = Model::new(config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;

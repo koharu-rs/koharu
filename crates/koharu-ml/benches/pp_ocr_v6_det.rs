@@ -12,10 +12,10 @@ async fn main() -> Result<()> {
         .join("object_detection")
         .join("1.jpg");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
 
     let image = image::open(&input)?;
-    let model = PPOCRV6MediumDet::load(koharu_ml::Device::default()).await?;
+    let model = PPOCRV6MediumDet::load(runtime.device()).await?;
 
     black_box(model.inference(&image)?);
 

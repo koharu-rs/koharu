@@ -86,9 +86,9 @@ impl Processor {
             values[plane + index] = f32::from(pixel[1]) - self.config.pixel_mean[1];
             values[plane * 2 + index] = f32::from(pixel[0]) - self.config.pixel_mean[2];
         }
-        let tensor = Tensor::from_slice(&values)
-            .view([1, 3, padded_height as i64, padded_width as i64])
-            .to_device(device);
+        let tensor = Tensor::from_slice(&values)?
+            .view([1, 3, padded_height as i64, padded_width as i64])?
+            .to_device(device)?;
         Ok((
             tensor,
             ImageSize {
@@ -111,9 +111,9 @@ impl Processor {
             prediction.size()
         );
         let map = prediction
-            .squeeze_dim(0)
-            .squeeze_dim(0)
-            .to_device(Device::Cpu);
+            .squeeze_dim(0)?
+            .squeeze_dim(0)?
+            .to_device(Device::Cpu)?;
         let rows: Vec<Vec<f32>> = Vec::<Vec<f32>>::try_from(&map)
             .context("failed to copy MTSv3 segmentation map to CPU")?;
         let height = rows.len() as u32;
@@ -496,7 +496,7 @@ struct PolygonEdge {
 }
 
 // OpenCV's integer fillPoly scan conversion is used by box_score_fast.
-// https://github.com/opencv/opencv/blob/4.13.0/modules/imgproc/src/drawing.cpp#L1262-L1493
+// https://github.com/opencv/opencv/blob/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/imgproc/src/drawing.cpp#L1262-L1493
 fn fill_polygon(width: usize, height: usize, polygon: &[[i32; 2]]) -> Vec<bool> {
     const XY_SHIFT: u32 = 16;
     const XY_ONE: i64 = 1 << XY_SHIFT;

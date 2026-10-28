@@ -1,77 +1,35 @@
-use std::ffi::NulError;
 use std::io;
-use std::num::ParseIntError;
 
-use thiserror::Error;
-use zip::result::ZipError;
-
-/// Main library error type.
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum TchError {
-    /// Conversion error.
+    /// An error libtorch threw.
+    #[error("libtorch: {0}")]
+    Torch(String),
+
     #[error("conversion error: {0}")]
     Convert(String),
 
-    /// Invalid file format.
-    #[error("invalid file format: {0}")]
-    FileFormat(String),
-
-    /// Missing tensor with name.
-    #[error("cannot find the tensor named {0} in {1}")]
-    TensorNameNotFound(String, String),
-
-    /// I/O error.
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
-    /// Tensor kind error.
     #[error("tensor kind error: {0}")]
     Kind(String),
 
-    /// Missing image.
-    #[error("no image found in {0}")]
-    MissingImage(String),
-
-    /// Null pointer.
-    #[error(transparent)]
-    Nul(#[from] NulError),
-
-    /// Integer parse error.
-    #[error(transparent)]
-    ParseInt(#[from] ParseIntError),
-
-    /// Invalid shape.
     #[error("invalid shape: {0}")]
     Shape(String),
 
-    /// Unknown kind
-    #[error("unknown kind: {0}")]
-    UnknownKind(libc::c_int),
-
-    /// Errors returned by the Torch C++ API.
-    #[error("Internal torch error: {0}")]
-    Torch(String),
-
-    /// Zip file format error.
     #[error(transparent)]
-    Zip(#[from] ZipError),
+    Io(#[from] io::Error),
 
-    #[error(transparent)]
-    NdArray(#[from] ndarray::ShapeError),
-
-    /// Errors returned by the safetensors library.
-    #[error("safetensors error {path}: {err}")]
-    SafeTensorError {
+    #[error("{path}: {err}")]
+    SafeTensors {
         path: String,
         err: safetensors::SafeTensorError,
     },
-}
 
-impl TchError {
-    pub fn path_context(&self, path_name: &str) -> Self {
-        match self {
-            TchError::Torch(error) => TchError::Torch(format!("{path_name}: {error}")),
-            _ => unimplemented!(),
-        }
-    }
+    /// A weight the model has and the file doesn't: the port's names don't
+    /// match the checkpoint's.
+    #[error("{path} has no `{name}`")]
+    MissingWeight { name: String, path: String },
+
+    /// Weights the file has and the model doesn't, for the same reason.
+    #[error("{path} has weights the model doesn't: {names}")]
+    UnexpectedWeights { names: String, path: String },
 }

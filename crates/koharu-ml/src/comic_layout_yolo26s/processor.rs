@@ -77,17 +77,17 @@ impl ComicLayoutYolo26sImageProcessor {
             i64::from(letterbox.pad_y),
         );
 
-        let pixel_values = Tensor::from_slice(padded.as_raw())
+        let pixel_values = (Tensor::from_slice(padded.as_raw())?
             .view([
                 1,
                 i64::from(letterbox.output_height),
                 i64::from(letterbox.output_width),
                 3,
-            ])
-            .permute([0, 3, 1, 2])
-            .to_device(device)
-            .to_kind(Kind::Float)
-            / 255.0;
+            ])?
+            .permute([0, 3, 1, 2])?
+            .to_device(device)?
+            .to_kind(Kind::Float)?
+            / 255.0)?;
         Ok((pixel_values, letterbox))
     }
 
@@ -115,47 +115,49 @@ impl ComicLayoutYolo26sImageProcessor {
             .iter()
             .map(|candidate| candidate.row)
             .collect::<Vec<_>>();
-        let selected = Tensor::from_slice(&selected).to_device(output.pred.device());
+        let selected = Tensor::from_slice(&selected)?.to_device(output.pred.device())?;
         let mask_coefficients = output
             .pred
-            .i((0, .., 6..38))
-            .index_select(0, &selected)
-            .to_kind(Kind::Float);
+            .i((0, .., 6..38))?
+            .index_select(0, &selected)?
+            .to_kind(Kind::Float)?;
 
-        let proto = output.proto.i(0).to_kind(Kind::Float);
+        let proto = output.proto.i(0)?.to_kind(Kind::Float)?;
         let proto_size = proto.size();
         ensure!(
             proto_size.len() == 3 && proto_size[0] == 32,
             "unexpected YOLO26 prototype shape {proto_size:?}"
         );
-        let masks = mask_coefficients.matmul(&proto.view([32, -1])).view([
+        let masks = mask_coefficients.matmul(&proto.view([32, -1])?)?.view([
             candidates.len() as i64,
             1,
             proto_size[1],
             proto_size[2],
-        ]);
+        ])?;
         // Public masks use the original image resolution, matching
         // `retina_masks=True` and `process_mask_native` in Ultralytics.
         let masks = scale_masks(
             &masks,
             (letterbox.original_height, letterbox.original_width),
-        );
+        )?;
 
         let mut instances = Vec::with_capacity(candidates.len());
         for (index, candidate) in candidates.into_iter().enumerate() {
             let bbox = scale_boxes(candidate.bbox, letterbox);
-            let x1 = python_round(f64::from(bbox[0])).clamp(0, i64::from(letterbox.original_width));
-            let y1 =
-                python_round(f64::from(bbox[1])).clamp(0, i64::from(letterbox.original_height));
-            let x2 = python_round(f64::from(bbox[2])).clamp(0, i64::from(letterbox.original_width));
-            let y2 =
-                python_round(f64::from(bbox[3])).clamp(0, i64::from(letterbox.original_height));
+            let x1 = ((f64::from(bbox[0])).round_ties_even() as i64)
+                .clamp(0, i64::from(letterbox.original_width));
+            let y1 = ((f64::from(bbox[1])).round_ties_even() as i64)
+                .clamp(0, i64::from(letterbox.original_height));
+            let x2 = ((f64::from(bbox[2])).round_ties_even() as i64)
+                .clamp(0, i64::from(letterbox.original_width));
+            let y2 = ((f64::from(bbox[3])).round_ties_even() as i64)
+                .clamp(0, i64::from(letterbox.original_height));
             if x2 <= x1 || y2 <= y1 {
                 continue;
             }
 
-            let mask = masks.i((index as i64, 0, y1..y2, x1..x2)).gt(0.0);
-            let pixels = tensor_to_vec_u8(&mask)?;
+            let mask = masks.i((index as i64, 0, y1..y2, x1..x2))?.gt(0.0)?;
+            let pixels = Vec::<u8>::try_from(mask.reshape([-1])?)?;
             let area = pixels.iter().map(|&value| u32::from(value != 0)).sum();
             if area == 0 {
                 continue;
@@ -210,15 +212,15 @@ impl LetterBox {
             f64::from(input_size) / f64::from(original_height),
             f64::from(input_size) / f64::from(original_width),
         );
-        let resized_width =
-            python_round(f64::from(original_width) * gain).clamp(1, i64::from(input_size)) as u32;
-        let resized_height =
-            python_round(f64::from(original_height) * gain).clamp(1, i64::from(input_size)) as u32;
+        let resized_width = ((f64::from(original_width) * gain).round_ties_even() as i64)
+            .clamp(1, i64::from(input_size)) as u32;
+        let resized_height = ((f64::from(original_height) * gain).round_ties_even() as i64)
+            .clamp(1, i64::from(input_size)) as u32;
         // A one-image prediction uses `LetterBox(auto=True, stride=32)`.
         let padding_width = (input_size - resized_width) % 32;
         let padding_height = (input_size - resized_height) % 32;
-        let pad_x = python_round(f64::from(padding_width) / 2.0 - 0.1) as u32;
-        let pad_y = python_round(f64::from(padding_height) / 2.0 - 0.1) as u32;
+        let pad_x = (f64::from(padding_width) / 2.0 - 0.1).round_ties_even() as i64 as u32;
+        let pad_y = (f64::from(padding_height) / 2.0 - 0.1).round_ties_even() as i64 as u32;
         Ok(Self {
             original_width,
             original_height,
@@ -289,7 +291,7 @@ fn filter_end_to_end_predictions(
         size[2]
     );
     let rows = size[1] as usize;
-    let values = tensor_to_vec_f32(&pred.i(0))?;
+    let values = Vec::<f32>::try_from(pred.i(0)?.reshape([-1])?)?;
     let mut candidates = Vec::new();
     for row in 0..rows {
         let offset = row * 38;
@@ -322,18 +324,16 @@ fn scale_boxes(mut bbox: [f32; 4], letterbox: &LetterBox) -> [f32; 4] {
         f64::from(letterbox.output_height) / f64::from(letterbox.original_height),
         f64::from(letterbox.output_width) / f64::from(letterbox.original_width),
     );
-    let pad_x = python_round(
-        (f64::from(letterbox.output_width)
-            - python_round(f64::from(letterbox.original_width) * gain) as f64)
-            / 2.0
-            - 0.1,
-    ) as f32;
-    let pad_y = python_round(
-        (f64::from(letterbox.output_height)
-            - python_round(f64::from(letterbox.original_height) * gain) as f64)
-            / 2.0
-            - 0.1,
-    ) as f32;
+    let pad_x = ((f64::from(letterbox.output_width)
+        - (f64::from(letterbox.original_width) * gain).round_ties_even() as i64 as f64)
+        / 2.0
+        - 0.1)
+        .round_ties_even() as i64 as f32;
+    let pad_y = ((f64::from(letterbox.output_height)
+        - (f64::from(letterbox.original_height) * gain).round_ties_even() as i64 as f64)
+        / 2.0
+        - 0.1)
+        .round_ties_even() as i64 as f32;
     let gain = gain as f32;
     bbox[0] = ((bbox[0] - pad_x) / gain).clamp(0.0, letterbox.original_width as f32);
     bbox[1] = ((bbox[1] - pad_y) / gain).clamp(0.0, letterbox.original_height as f32);
@@ -342,7 +342,7 @@ fn scale_boxes(mut bbox: [f32; 4], letterbox: &LetterBox) -> [f32; 4] {
     bbox
 }
 
-fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> Tensor {
+fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> koharu_torch::Result<Tensor> {
     let size = masks.size();
     let input_height = size[2];
     let input_width = size[3];
@@ -352,57 +352,25 @@ fn scale_masks(masks: &Tensor, shape: (u32, u32)) -> Tensor {
         input_height as f64 / output_height as f64,
         input_width as f64 / output_width as f64,
     );
-    let pad_width = (input_width as f64 - python_round(output_width as f64 * gain) as f64) / 2.0;
-    let pad_height = (input_height as f64 - python_round(output_height as f64 * gain) as f64) / 2.0;
-    let top = python_round(pad_height - 0.1).clamp(0, input_height);
-    let left = python_round(pad_width - 0.1).clamp(0, input_width);
-    let bottom = (input_height - python_round(pad_height + 0.1)).clamp(top + 1, input_height);
-    let right = (input_width - python_round(pad_width + 0.1)).clamp(left + 1, input_width);
+    let pad_width =
+        (input_width as f64 - (output_width as f64 * gain).round_ties_even() as i64 as f64) / 2.0;
+    let pad_height =
+        (input_height as f64 - (output_height as f64 * gain).round_ties_even() as i64 as f64) / 2.0;
+    let top = ((pad_height - 0.1).round_ties_even() as i64).clamp(0, input_height);
+    let left = ((pad_width - 0.1).round_ties_even() as i64).clamp(0, input_width);
+    let bottom =
+        (input_height - (pad_height + 0.1).round_ties_even() as i64).clamp(top + 1, input_height);
+    let right =
+        (input_width - (pad_width + 0.1).round_ties_even() as i64).clamp(left + 1, input_width);
     masks
-        .slice(2, top, bottom, 1)
-        .slice(3, left, right, 1)
+        .slice(2, top, bottom, 1)?
+        .slice(3, left, right, 1)?
         .upsample_bilinear2d(
             [output_height, output_width],
             false,
             None::<f64>,
             None::<f64>,
         )
-}
-
-fn python_round(value: f64) -> i64 {
-    let floor = value.floor();
-    let fraction = value - floor;
-    if (fraction - 0.5).abs() < f64::EPSILON {
-        if floor as i64 % 2 == 0 {
-            floor as i64
-        } else {
-            floor as i64 + 1
-        }
-    } else {
-        value.round() as i64
-    }
-}
-
-fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {
-    let tensor = tensor
-        .to_kind(Kind::Float)
-        .contiguous()
-        .to_device(Device::Cpu);
-    let mut values = vec![0.0f32; tensor.numel()];
-    let length = values.len();
-    tensor.f_copy_data(&mut values, length)?;
-    Ok(values)
-}
-
-fn tensor_to_vec_u8(tensor: &Tensor) -> Result<Vec<u8>> {
-    let tensor = tensor
-        .to_kind(Kind::Uint8)
-        .contiguous()
-        .to_device(Device::Cpu);
-    let mut values = vec![0u8; tensor.numel()];
-    let length = values.len();
-    tensor.f_copy_data(&mut values, length)?;
-    Ok(values)
 }
 
 #[cfg(test)]

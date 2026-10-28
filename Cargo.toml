@@ -26,19 +26,15 @@ koharu-storage = { path = "crates/koharu-storage" }
 koharu-scene = { path = "crates/koharu-scene" }
 koharu-diffusion = { path = "crates/koharu-diffusion" }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys" }
-koharu-llama = { path = "crates/koharu-llama" }
-koharu-llama-sys = { path = "crates/koharu-llama-sys" }
 koharu-runtime = { path = "crates/koharu-runtime" }
 koharu-torch = { path = "crates/koharu-torch" }
 koharu-torch-sys = { path = "crates/koharu-torch-sys" }
-koharu-agent = { path = "crates/koharu-agent" }
+koharu-llm = { path = "crates/koharu-llm" }
 koharu-ml = { path = "crates/koharu-ml" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
-koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
 koharu-desktop = { path = "crates/koharu-desktop" }
-koharu-secrets = { path = "crates/koharu-secrets" }
 
 # external dependencies
 alphanumeric-sort = "1.5.8"
@@ -50,6 +46,7 @@ fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
 anyhow = "1.0.104"
 async-trait = "0.1.92"
 backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
+nalgebra = "0.35.0"
 imageproc = "0.27.0"
 ab_glyph = "0.2.32"
 clap = { version = "4.6.7", features = ["derive"] }
@@ -61,14 +58,12 @@ tokio = { version = "1.53.1", features = ["full"] }
 tokio-rayon = "2.1.0"
 log = "0.4.34"
 tracing = "0.1.44"
-tracing-core = "0.1.36"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "registry"] }
 console = "0.16.6"
 open = "5.4.4"
 rfd = "0.17.2"
 thiserror = "2.0.21"
 blake3 = "1.8.7"
-dunce = "1.0.5"
 rayon = "1.12.0"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23.2", features = ["onig"] }
@@ -79,17 +74,12 @@ zip = { version = "9.0.2", features = ["deflate"] }
 dirs = "7.0.0"
 futures = "0.3.34"
 futures-channel = "0.3.34"
-hf-hub = { git = "https://github.com/huggingface/hf-hub", branch = "main" }
-eventsource-stream = "0.2.3"
-encoding_rs = "0.8.42"
-enumflags2 = "0.7.12"
 reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
-reqwest-middleware = "0.5.2"
-reqwest-retry = "0.9.1"
-secrecy = { version = "0.10.3", features = ["serde"] }
+secrecy = "0.10.3"
 toml = "1.1.6"
+toml_edit = "0.25.17"
+serde_ignored = "0.1.14"
 url = { version = "2.5.8", features = ["serde"] }
-petgraph = "0.8.3"
 imbl = "7.0.2"
 hashbrown = "0.17.1"
 slotmap = "1.1.1"
@@ -109,7 +99,6 @@ serde_json_canonicalizer = "0.3.2"
 nvml-wrapper = "0.13.0"
 minijinja = "3.0.0"
 minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
-indoc = "2.0.7"
 windows = { version = "0.62.2", features = [
     "Win32",
     "Win32_System",
@@ -145,27 +134,24 @@ tauri-specta = { git = "https://github.com/tauri-apps/tauri-specta", rev = "6bce
 schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.26.1", features = ["v4", "v7", "serde"] }
 atomicwrites = "0.4.4"
-fs4 = "1.1.0"
+sha1 = "0.11.0"
+sha2 = "0.11.1"
 parking_lot = "0.12.5"
 postcard = { version = "1.1.3", features = ["use-std"] }
 walkdir = "2.5.0"
 base64 = "0.23.1"
 unicode-bidi = "0.3.18"
 criterion = { version = "0.8.2", features = ["html_reports"] }
-keyring = { version = "4.2.0", features = ["linux-keyutils-keyring-store"] }
-keyring-core = "1.0.0"
-linux-keyutils-keyring-store = "1.0.0"
+keyring = "4.2.0"
+age = "0.12.1"
 llguidance = "1.9.1"
 sentry = { version = "0.49.3", features = ["tracing"] }
 fast-glob = "1.1.2"
 tar = "0.4.46"
-toktrie = "1.9.1"
 bytes = "1.12.1"
+http = "1.5.0"
 half = "2.7.1"
 js-sys = "0.3.106"
-lazy_static = "1.5.1"
-ndarray = "0.17.2"
-rand = "0.10.3"
 safetensors = "0.8.0"
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.129"
@@ -177,9 +163,17 @@ proc-macro2 = "1.0.107"
 quote = "1.0.47"
 syn = { version = "3.0.6", features = ["full"] }
 libc = "0.2.189"
+llama-cpp-2 = { version = "0.1.160", default-features = false, features = ["mtmd", "llguidance"] }
+llama-cpp-sys-2 = "0.1.160"
+# rig breaks its API in every release; see koharu-llm's README.
+rig-agent = { version = "=0.45.0", default-features = false }
+rig-core = { version = "=0.45.0", default-features = false }
+rig-reqwest = { version = "=0.45.0", default-features = false }
 memmap2 = "0.9.11"
 
 [patch.crates-io]
+# Koharu's llama.cpp bindings, loaded from the runtime's build; see its README.
+llama-cpp-sys-2 = { path = "crates/llama-cpp-sys-2" }
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }

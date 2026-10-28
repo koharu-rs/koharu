@@ -69,11 +69,11 @@ impl PPOCRV6MediumDetImageProcessor {
         }
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
-        let mut pixel_values = Tensor::from_slice(rgb.as_raw())
-            .view([1, height as i64, width as i64, 3])
-            .permute([0, 3, 1, 2])
-            .to_kind(Kind::Float)
-            .to_device(device);
+        let mut pixel_values = Tensor::from_slice(rgb.as_raw())?
+            .view([1, height as i64, width as i64, 3])?
+            .permute([0, 3, 1, 2])?
+            .to_kind(Kind::Float)?
+            .to_device(device)?;
 
         if self.do_resize {
             let [target_height, target_width] = self.image_size(height as i64, width as i64)?;
@@ -82,33 +82,33 @@ impl PPOCRV6MediumDetImageProcessor {
                     [target_height, target_width],
                     None::<f64>,
                     None::<f64>,
-                ),
+                )?,
                 2 => pixel_values.internal_upsample_bilinear2d_aa(
                     [target_height, target_width],
                     false,
                     None::<f64>,
                     None::<f64>,
-                ),
+                )?,
                 resample => bail!("unsupported PP-OCRv6 detection resampling mode {resample}"),
             };
         }
         if self.do_rescale {
-            pixel_values *= self.rescale_factor;
+            pixel_values = (pixel_values * self.rescale_factor)?;
         }
         if self.do_normalize {
             if self.image_mean.len() != 3 || self.image_std.len() != 3 {
                 bail!("PP-OCRv6 detection image_mean and image_std must contain three values");
             }
-            let mean = Tensor::from_slice(&self.image_mean)
-                .view([1, 3, 1, 1])
-                .to_device(device);
-            let std = Tensor::from_slice(&self.image_std)
-                .view([1, 3, 1, 1])
-                .to_device(device);
-            pixel_values = (pixel_values - mean) / std;
+            let mean = Tensor::from_slice(&self.image_mean)?
+                .view([1, 3, 1, 1])?
+                .to_device(device)?;
+            let std = Tensor::from_slice(&self.image_std)?
+                .view([1, 3, 1, 1])?
+                .to_device(device)?;
+            pixel_values = ((pixel_values - mean)? / std)?;
         }
         // This channel reversal is performed after normalization in the Transformers processor.
-        pixel_values = pixel_values.flip([1]);
+        pixel_values = pixel_values.flip([1])?;
         Ok(pixel_values)
     }
 
@@ -139,10 +139,10 @@ impl PPOCRV6MediumDetImageProcessor {
         let map_height = size[2] as u32;
         let values = Vec::<f32>::try_from(
             &output
-                .to_device(Device::Cpu)
-                .to_kind(Kind::Float)
-                .contiguous()
-                .view([-1]),
+                .to_device(Device::Cpu)?
+                .to_kind(Kind::Float)?
+                .contiguous()?
+                .view([-1])?,
         )?;
         let (dest_width, dest_height) = image.dimensions();
         Ok(TextDetections {
@@ -445,7 +445,7 @@ struct PolygonEdge {
 
 // Port of OpenCV's integer fillPoly scan conversion. OpenCV first draws every
 // polygon edge and then fills inclusive spans between fixed-point edge pairs.
-// https://github.com/opencv/opencv/blob/4.13.0/modules/imgproc/src/drawing.cpp#L1262-L1493
+// https://github.com/opencv/opencv/blob/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/imgproc/src/drawing.cpp#L1262-L1493
 fn opencv_fill_polygon(width: usize, height: usize, polygon: &[[i32; 2]]) -> Vec<bool> {
     const XY_SHIFT: u32 = 16;
     const XY_ONE: i64 = 1 << XY_SHIFT;
@@ -512,7 +512,7 @@ fn draw_line_8_connected(
     [x1, y1]: [i32; 2],
 ) {
     // cv::Line uses LineIterator with 8-connectivity and leftToRight=true.
-    // https://github.com/opencv/opencv/blob/4.13.0/modules/imgproc/src/drawing.cpp#L159-L260
+    // https://github.com/opencv/opencv/blob/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/imgproc/src/drawing.cpp#L159-L260
     let mut delta_x = 1;
     let mut delta_y = 1;
     let mut dx = x1 - x0;

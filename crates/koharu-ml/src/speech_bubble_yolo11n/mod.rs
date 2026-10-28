@@ -6,8 +6,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::Yolo11nSpeechBubbleConfig,
     processor::{
@@ -32,8 +30,8 @@ pub struct Yolo11nSpeechBubbleSegmenter {
 }
 
 impl Yolo11nSpeechBubbleSegmenter {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -45,7 +43,7 @@ impl Yolo11nSpeechBubbleSegmenter {
         let config = Yolo11nSpeechBubbleConfig::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let processor = Yolo11nSegImageProcessor::new(&config)?;
-        let mut model = Model::new(&config, device)?;
+        let mut model = Model::new(&config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -73,7 +71,7 @@ impl Yolo11nSpeechBubbleSegmenter {
     ) -> Result<Yolo11nSpeechBubbleInstances> {
         koharu_torch::no_grad(|| {
             let (pixel_values, letterbox) = self.processor.preprocess(image, self.device)?;
-            let output = self.model.forward(&pixel_values);
+            let output = self.model.forward(&pixel_values)?;
             self.processor
                 .postprocess(&output, &letterbox, confidence_threshold, nms_threshold)
         })
@@ -91,12 +89,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_ultralytics_structured_output() -> Result<()> {
-        crate::init().await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
         let image = image::open(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("benches/fixtures/object_detection/1.jpg"),
         )?;
-        let model = Yolo11nSpeechBubbleSegmenter::load(crate::Device::cpu()).await?;
+        let model = Yolo11nSpeechBubbleSegmenter::load(runtime.device()).await?;
         let result = model.inference(&image)?;
 
         // Ultralytics 8.3.227, `imgsz=1600`, `retina_masks=True`, CPU.

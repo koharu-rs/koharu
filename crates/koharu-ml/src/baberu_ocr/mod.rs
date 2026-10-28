@@ -4,9 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::Device;
-
-use crate::backend::TryIntoDevice;
+use koharu_torch::Tensor;
 
 pub use self::config::BaberuOcrConfig;
 
@@ -36,8 +34,8 @@ pub struct BaberuOcr {
 }
 
 impl BaberuOcr {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let (
             config_path,
             generation_path,
@@ -110,7 +108,7 @@ impl BaberuOcr {
 
         // The complete DINOv2/projector/decoder tree must exist before loading
         // checkpoint names, including the unused DINOv2 mask token.
-        let mut model = Model::new(&config, &vision_config, device)?;
+        let mut model = Model::new(&config, &vision_config, device, kind)?;
         model
             .load(&weights_path, config.vision_image_size)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -123,17 +121,27 @@ impl BaberuOcr {
         })
     }
 
-    pub fn inference(&self, image: &DynamicImage) -> Result<String> {
+    /// The text of each crop, the crops decoded together.
+    pub fn inference(&self, images: &[DynamicImage]) -> Result<Vec<String>> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
         koharu_torch::no_grad(|| {
-            let pixel_values = self.processor.preprocess(image)?;
+            let pixel_values = images
+                .iter()
+                .map(|image| self.processor.preprocess(image))
+                .collect::<Result<Vec<_>>>()?;
             let token_ids = self.model.forward(
-                &pixel_values,
+                &Tensor::cat(&pixel_values, 0)?,
                 &self.tokenizer,
                 self.generation.max_new_tokens,
                 self.generation.repetition_penalty,
                 12,
             )?;
-            self.tokenizer.decode(&token_ids)
+            token_ids
+                .iter()
+                .map(|token_ids| self.tokenizer.decode(token_ids))
+                .collect()
         })
     }
 }
@@ -147,12 +155,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        crate::init().await?;
-        let model = BaberuOcr::load(crate::Device::cpu()).await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
+        let model = BaberuOcr::load(runtime.device()).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");
-        let text = model.inference(&image::open(input)?)?;
-        assert_eq!(text, "対策委員会です！");
+        let text = model.inference(&[image::open(input)?])?;
+        assert_eq!(text, ["対策委員会です！"]);
         Ok(())
     }
 }

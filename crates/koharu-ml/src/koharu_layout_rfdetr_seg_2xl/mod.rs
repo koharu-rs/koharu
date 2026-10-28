@@ -13,8 +13,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::{KoharuLayoutRFDetrSeg2XLConfig, KoharuLayoutThresholds},
     processor::{
@@ -38,8 +36,8 @@ pub struct KoharuLayoutRFDetrSeg2XL {
 }
 
 impl KoharuLayoutRFDetrSeg2XL {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -50,7 +48,7 @@ impl KoharuLayoutRFDetrSeg2XL {
             .context("failed to resolve KoharuLayout RF-DETR weights")?;
         let config = KoharuLayoutRFDetrSeg2XLConfig::from_file(&config_path)?;
         let processor = KoharuLayoutRFDetrImageProcessor::new(&config)?;
-        let mut model = Model::new(device);
+        let mut model = Model::new(device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -72,7 +70,7 @@ impl KoharuLayoutRFDetrSeg2XL {
     ) -> Result<KoharuLayoutDetections> {
         koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
-            let output = self.model.forward(&pixel_values);
+            let output = self.model.forward(&pixel_values)?;
             self.processor
                 .postprocess(&output, image.width(), image.height(), thresholds)
         })
@@ -94,12 +92,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires CUDA"]
     async fn checkpoint_matches_rfdetr_upstream_structured_output() -> Result<()> {
-        crate::init().await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
         let image = image::open(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("benches/fixtures/object_detection/1.jpg"),
         )?;
-        let model = KoharuLayoutRFDetrSeg2XL::load(crate::Device::cuda(0)).await?;
+        let model = KoharuLayoutRFDetrSeg2XL::load(runtime.device()).await?;
         let result = model.inference(&image)?;
 
         // RF-DETR 4ab7c18, CUDA BF16, shape=(1152, 1152), antialias disabled.
@@ -129,10 +127,11 @@ mod tests {
                 detection.label == "panel" && detection.bbox[1] > 500.0 && detection.bbox[1] < 700.0
             })
             .expect("middle page panel");
-        for (actual, expected) in lower_panel
-            .bbox
-            .into_iter()
-            .zip([69.179_69, 799.453_1, 700.820_3, 1006.171_9])
+        for (actual, expected) in
+            lower_panel
+                .bbox
+                .into_iter()
+                .zip([69.179_69, 799.453_1, 700.820_3, 1_006.171_9])
         {
             assert!((actual - expected).abs() < 7.0);
         }

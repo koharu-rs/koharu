@@ -13,8 +13,8 @@ flowchart TB
   bridge -->|"命令与通道"| app
   app --> scene["koharu-scene"] --> storage["koharu-storage"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["原生运行时"]
-  app --> translator["koharu-translator"]
-  app --> agent["koharu-agent"]
+  app --> llm["koharu-llm"]
+  pipeline --> llm
   app --> desktop["koharu-desktop"] --> renderer["koharu-renderer"] --> rasterizer["koharu-rasterizer"]
   bridge --> canvas["koharu-canvas"] --> rasterizer
   app --> psd["koharu-psd"] --> renderer
@@ -42,7 +42,7 @@ flowchart TB
 
 `koharu-scene` 拥有权威项目、层级、组件、关系、补丁、修订和会话撤销。`koharu-storage` 持久化不透明的完整状态与不可变 blob。
 
-`koharu-pipeline` 负责页面阶段调度、模型生命周期、进度、取消和增量提交。`koharu-ml` 拥有模型与共享设备抽象；`koharu-translator` 负责本地和托管翻译连接。
+`koharu-pipeline` 负责页面阶段调度、模型生命周期、进度、取消和增量提交。`koharu-ml` 拥有视觉模型；`koharu-llm` 负责本地和托管语言模型以及智能体。
 
 ## 渲染与传输
 
@@ -54,9 +54,9 @@ flowchart TB
 
 ## 原生运行时边界
 
-安全包装层 `koharu-torch`、`koharu-llama`、`koharu-diffusion` 与 unsafe `-sys` 动态加载 crate 分离。`koharu-runtime` 负责发现、下载、验证和加载软件包。
+安全包装层 `koharu-torch`、`llama-cpp-2`、`koharu-diffusion` 与 unsafe `-sys` 动态加载 crate（包括 Koharu 自己的 `llama-cpp-sys-2`）分离。`koharu-runtime` 负责发现、下载、验证和加载软件包。
 
-有两个 crate 被图中各组件共用，因此未在图中标出：`koharu-config` 拥有 `config.toml` 的类型化配置节，`koharu-secrets` 封装操作系统凭据存储。
+有一个 crate 被图中各组件共用，因此未在图中标出：`koharu-config` 拥有 `config.toml` 的类型化配置节和加密的密钥，其加密密钥保存在操作系统凭据存储中。
 
 <CardGroup cols={2}>
   <Card title="场景与存储" icon="database" href="/zh/development/scene">

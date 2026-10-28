@@ -168,7 +168,6 @@ pub(crate) struct Dinov2Config {
     pub(crate) patch_size: i64,
     pub(crate) num_channels: i64,
     pub(crate) qkv_bias: bool,
-    pub(crate) layerscale_value: f64,
     pub(crate) use_swiglu_ffn: bool,
     pub(crate) use_mask_token: bool,
 }
@@ -192,7 +191,6 @@ impl Default for Dinov2Config {
             patch_size: 14,
             num_channels: 3,
             qkv_bias: true,
-            layerscale_value: 1.0,
             use_swiglu_ffn: false,
             use_mask_token: true,
         }

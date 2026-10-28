@@ -3,9 +3,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
-
-use crate::backend::TryIntoDevice;
 
 pub use self::processor::{MangaTextMask, MangaTextMaskCleaningOptions};
 
@@ -22,19 +19,19 @@ pub struct MangaTextMaskGenerator {
 }
 
 impl MangaTextMaskGenerator {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let weights_path = WEIGHTS
             .resolve()
             .await
             .context("failed to resolve manga text segmentation weights")?;
-        let mut model = Model::new(device);
+        let mut model = Model::new(device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
         Ok(Self {
             model,
-            processor: Processor::new(device),
+            processor: Processor::new(device)?,
         })
     }
 
@@ -88,8 +85,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_loads_and_runs() -> anyhow::Result<()> {
-        crate::init().await?;
-        let model = MangaTextMaskGenerator::load(crate::Device::cpu()).await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
+        let model = MangaTextMaskGenerator::load(runtime.device()).await?;
         let image = DynamicImage::ImageRgb8(RgbImage::from_fn(96, 64, |x, y| {
             Rgb([
                 ((x * 7 + y * 3) % 256) as u8,

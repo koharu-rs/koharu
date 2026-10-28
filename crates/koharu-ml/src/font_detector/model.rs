@@ -7,11 +7,14 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, ModuleT},
 };
 
-use super::processor::{FONT_COUNT, OUTPUT_DIM, REGRESSION_DIM};
+use super::{
+    processor::{FONT_COUNT, OUTPUT_DIM, REGRESSION_DIM},
+    resnet::resnet50,
+};
 
 #[derive(Debug)]
 pub(super) struct Model {
@@ -20,36 +23,32 @@ pub(super) struct Model {
 }
 
 impl Model {
-    pub fn new(device: Device) -> Self {
-        let mut vs = nn::VarStore::new(device);
-        crate::backend::set_precision(&mut vs);
+    pub fn new(device: Device, kind: Kind) -> Result<Self> {
+        let vs = nn::VarStore::new(device, kind);
         // The published safetensors retain Lightning's `model` wrapper and
         // torch.compile's `_orig_mod` wrapper from the upstream checkpoint.
-        let model = koharu_torch::vision::resnet::resnet50(
-            &(&vs.root() / "model" / "_orig_mod" / "model"),
-            OUTPUT_DIM,
-        );
-        vs.freeze();
-        Self {
+        let model = resnet50(&(&vs.root() / "model" / "_orig_mod" / "model"), OUTPUT_DIM)?;
+        Ok(Self {
             vs,
             model: Box::new(model),
-        }
+        })
     }
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 
-    pub fn forward(&self, pixel_values: &Tensor) -> Tensor {
+    pub fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let output = self
             .model
-            .forward_t(&pixel_values.to_kind(self.vs.kind()), false);
+            .forward_t(&pixel_values.to_kind(self.vs.kind())?, false)?;
         // Upstream leaves classification logits untouched and applies sigmoid
         // only to the ten regression values.
-        let classification = output.narrow(-1, 0, FONT_COUNT + 2);
-        let regression = output.narrow(-1, FONT_COUNT + 2, REGRESSION_DIM).sigmoid();
+        let classification = output.narrow(-1, 0, FONT_COUNT + 2)?;
+        let regression = output
+            .narrow(-1, FONT_COUNT + 2, REGRESSION_DIM)?
+            .sigmoid()?;
         Tensor::cat(&[classification, regression], -1)
     }
 }

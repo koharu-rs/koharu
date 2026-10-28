@@ -5,12 +5,11 @@
 
 mod model;
 mod processor;
+mod resnet;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
-
-use crate::backend::TryIntoDevice;
 
 pub use processor::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 
@@ -29,8 +28,8 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let weights_path = WEIGHTS
             .resolve()
             .await
@@ -40,7 +39,7 @@ impl FontDetector {
             .await
             .context("failed to resolve YuzuMarker font labels")?;
 
-        let mut model = Model::new(device);
+        let mut model = Model::new(device, kind)?;
         model
             .load(&weights_path)
             .context("failed to load YuzuMarker font detector weights")?;
@@ -60,7 +59,7 @@ impl FontDetector {
 
         koharu_torch::no_grad(|| {
             let (pixel_values, image_widths) = self.processor.preprocess(images, self.device)?;
-            let output = self.model.forward(&pixel_values);
+            let output = self.model.forward(&pixel_values)?;
             self.processor.postprocess(&output, &image_widths, top_k)
         })
     }
@@ -75,8 +74,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_structured_output() -> anyhow::Result<()> {
-        crate::init().await?;
-        let model = FontDetector::load(crate::Device::cpu()).await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
+        let model = FontDetector::load(runtime.device()).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");
         let predictions = model.inference(&[image::open(input)?], 3)?;

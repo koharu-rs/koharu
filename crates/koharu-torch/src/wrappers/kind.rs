@@ -1,7 +1,5 @@
 //! The different kind of elements supported in Torch.
 
-use half;
-
 /// The different kind of elements that a Tensor can hold.
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -29,7 +27,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub(super) fn c_int(self) -> libc::c_int {
+    pub(crate) fn c_int(self) -> libc::c_int {
         // These values should be in sync with include/c10/core/ScalarType.h
         // https://github.com/pytorch/pytorch/blob/a8d6afb511a69687bbb2b7e88a3cf67917e1697e/c10/core/ScalarType.h#L57
         match self {
@@ -56,7 +54,7 @@ impl Kind {
         }
     }
 
-    pub(super) fn from_c_int(v: libc::c_int) -> Result<Kind, crate::TchError> {
+    pub(crate) fn from_c_int(v: libc::c_int) -> Result<Kind, crate::TchError> {
         match v {
             0 => Ok(Kind::Uint8),
             1 => Ok(Kind::Int8),
@@ -78,7 +76,9 @@ impl Kind {
             24 => Ok(Kind::Float8e4m3fn),
             25 => Ok(Kind::Float8e5m2fnuz),
             26 => Ok(Kind::Float8e4m3fnuz),
-            _ => Err(crate::TchError::UnknownKind(v)),
+            _ => Err(crate::TchError::Kind(format!(
+                "libtorch kind {v} is unknown"
+            ))),
         }
     }
 
@@ -107,14 +107,6 @@ impl Kind {
         }
     }
 }
-
-pub const FLOAT_CPU: (Kind, crate::Device) = (Kind::Float, crate::Device::Cpu);
-pub const DOUBLE_CPU: (Kind, crate::Device) = (Kind::Double, crate::Device::Cpu);
-pub const INT64_CPU: (Kind, crate::Device) = (Kind::Int64, crate::Device::Cpu);
-
-pub const FLOAT_CUDA: (Kind, crate::Device) = (Kind::Float, crate::Device::Cuda(0));
-pub const DOUBLE_CUDA: (Kind, crate::Device) = (Kind::Double, crate::Device::Cuda(0));
-pub const INT64_CUDA: (Kind, crate::Device) = (Kind::Int64, crate::Device::Cuda(0));
 
 /// Kinds for tensor elements
 ///

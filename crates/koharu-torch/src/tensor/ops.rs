@@ -1,24 +1,15 @@
-//! Implement various ops traits for tensors
-use super::Tensor;
-use crate::Scalar;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+//! Arithmetic operators. Each returns a `Result`, as the op can fail, so an
+//! expression reads `(&a + &b)?`; the assigning operators, which can't
+//! return one, aren't implemented.
 
-fn id<T>(v: T) -> T {
-    v
-}
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-fn neg(t: Tensor) -> Tensor {
-    t.neg()
-}
-
-fn inv(t: Tensor) -> Tensor {
-    t.pow_tensor_scalar(-1)
-}
+use crate::{Result, Scalar, Tensor};
 
 macro_rules! impl_op {
-    ($trait:ident, $func:ident, $op:ident) => {
+    ($trait:ident, $func:ident, $op:ident, $scalar_op:ident, $reversed:expr) => {
         impl $trait<Tensor> for Tensor {
-            type Output = Tensor;
+            type Output = Result<Tensor>;
 
             fn $func(self, rhs: Tensor) -> Self::Output {
                 self.$op(&rhs)
@@ -26,15 +17,15 @@ macro_rules! impl_op {
         }
 
         impl $trait<&Tensor> for Tensor {
-            type Output = Tensor;
+            type Output = Result<Tensor>;
 
             fn $func(self, rhs: &Tensor) -> Self::Output {
                 self.$op(rhs)
             }
         }
 
-        impl<'a> $trait<&Tensor> for &'a Tensor {
-            type Output = Tensor;
+        impl $trait<&Tensor> for &Tensor {
+            type Output = Result<Tensor>;
 
             fn $func(self, rhs: &Tensor) -> Self::Output {
                 self.$op(rhs)
@@ -42,266 +33,113 @@ macro_rules! impl_op {
         }
 
         impl $trait<Tensor> for &Tensor {
-            type Output = Tensor;
+            type Output = Result<Tensor>;
 
             fn $func(self, rhs: Tensor) -> Self::Output {
                 self.$op(&rhs)
             }
         }
+
+        impl<S: Into<Scalar>> $trait<S> for &Tensor {
+            type Output = Result<Tensor>;
+
+            fn $func(self, rhs: S) -> Self::Output {
+                self.$scalar_op(rhs)
+            }
+        }
+
+        impl<S: Into<Scalar>> $trait<S> for Tensor {
+            type Output = Result<Tensor>;
+
+            fn $func(self, rhs: S) -> Self::Output {
+                self.$scalar_op(rhs)
+            }
+        }
+
+        impl_scalar_lhs!($trait, $func, $scalar_op, $reversed, i64, f64);
     };
 }
 
-impl<S> Add<S> for &Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
+// A scalar on the left: the op with the operands swapped, then undone, as
+// `2 - t` is `-(t - 2)` and `2 / t` is `1 / (t / 2)`. Only `i64` and `f64`,
+// so a literal there has one type to take.
+macro_rules! impl_scalar_lhs {
+    ($trait:ident, $func:ident, $scalar_op:ident, $reversed:expr, $($scalar:ty),+) => {
+        $(
+            impl $trait<Tensor> for $scalar {
+                type Output = Result<Tensor>;
 
-    fn add(self, rhs: S) -> Self::Output {
-        self.g_add_scalar(rhs)
-    }
-}
-
-impl<S> Add<S> for Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn add(self, rhs: S) -> Self::Output {
-        (&self).add(rhs)
-    }
-}
-
-impl<S> Sub<S> for &Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn sub(self, rhs: S) -> Self::Output {
-        self.g_sub_scalar(rhs)
-    }
-}
-
-impl<S> Sub<S> for Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn sub(self, rhs: S) -> Self::Output {
-        (&self).sub(rhs)
-    }
-}
-
-impl<S> Mul<S> for &Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn mul(self, rhs: S) -> Self::Output {
-        self.g_mul_scalar(rhs)
-    }
-}
-
-impl<S> Mul<S> for Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn mul(self, rhs: S) -> Self::Output {
-        (&self).mul(rhs)
-    }
-}
-
-impl<S> Div<S> for &Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn div(self, rhs: S) -> Self::Output {
-        self.g_div_scalar(rhs)
-    }
-}
-
-impl<S> Div<S> for Tensor
-where
-    S: Into<Scalar>,
-{
-    type Output = Tensor;
-
-    fn div(self, rhs: S) -> Self::Output {
-        (&self).div(rhs)
-    }
-}
-
-macro_rules! impl_op_basic {
-    /* rev such that rev(op(b, a)) = op(a, b) */
-    ($trait:ident, $func:ident, $op:ident, $rev:ident) => {
-        impl $trait<Tensor> for i32 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: Tensor) -> Self::Output {
-                self.$func(&rhs)
+                fn $func(self, rhs: Tensor) -> Self::Output {
+                    rhs.$scalar_op(self).and_then($reversed)
+                }
             }
-        }
 
-        impl $trait<Tensor> for i64 {
-            type Output = Tensor;
+            impl $trait<&Tensor> for $scalar {
+                type Output = Result<Tensor>;
 
-            fn $func(self, rhs: Tensor) -> Self::Output {
-                self.$func(&rhs)
+                fn $func(self, rhs: &Tensor) -> Self::Output {
+                    rhs.$scalar_op(self).and_then($reversed)
+                }
             }
-        }
-
-        impl $trait<Tensor> for f32 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: Tensor) -> Self::Output {
-                self.$func(&rhs)
-            }
-        }
-
-        impl $trait<Tensor> for f64 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: Tensor) -> Self::Output {
-                self.$func(&rhs)
-            }
-        }
-
-        impl $trait<&Tensor> for i32 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: &Tensor) -> Self::Output {
-                $rev(rhs.$op(self as i64))
-            }
-        }
-
-        impl $trait<&Tensor> for i64 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: &Tensor) -> Self::Output {
-                $rev(rhs.$op(self))
-            }
-        }
-
-        impl $trait<&Tensor> for f32 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: &Tensor) -> Self::Output {
-                $rev(rhs.$op(self as f64))
-            }
-        }
-
-        impl $trait<&Tensor> for f64 {
-            type Output = Tensor;
-
-            fn $func(self, rhs: &Tensor) -> Self::Output {
-                $rev(rhs.$op(self))
-            }
-        }
+        )+
     };
 }
 
-macro_rules! impl_op_assign {
-    ($trait:ident, $func:ident, $op:ident) => {
-        impl $trait<Tensor> for Tensor {
-            fn $func(&mut self, rhs: Tensor) {
-                let _ = self.$op(&rhs);
-            }
-        }
-
-        impl $trait<&Tensor> for Tensor {
-            fn $func(&mut self, rhs: &Tensor) {
-                let _ = self.$op(rhs);
-            }
-        }
-    };
+fn same(t: Tensor) -> Result<Tensor> {
+    Ok(t)
 }
 
-macro_rules! impl_op_assign_basic {
-    ($trait:ident, $func:ident, $op:ident) => {
-        impl $trait<i32> for Tensor {
-            fn $func(&mut self, rhs: i32) {
-                let _ = self.$op(rhs as i64);
-            }
-        }
-
-        impl $trait<i64> for Tensor {
-            fn $func(&mut self, rhs: i64) {
-                let _ = self.$op(rhs);
-            }
-        }
-
-        impl $trait<f32> for Tensor {
-            fn $func(&mut self, rhs: f32) {
-                let _ = self.$op(rhs as f64);
-            }
-        }
-
-        impl $trait<f64> for Tensor {
-            fn $func(&mut self, rhs: f64) {
-                let _ = self.$op(rhs);
-            }
-        }
-    };
+fn negated(t: Tensor) -> Result<Tensor> {
+    t.neg()
 }
 
-impl_op!(Add, add, g_add);
-impl_op_basic!(Add, add, g_add_scalar, id);
-impl_op_assign!(AddAssign, add_assign, g_add_);
-impl_op_assign_basic!(AddAssign, add_assign, g_add_scalar_);
+fn inverted(t: Tensor) -> Result<Tensor> {
+    t.reciprocal()
+}
 
-impl_op!(Mul, mul, g_mul);
-impl_op_basic!(Mul, mul, g_mul_scalar, id);
-impl_op_assign!(MulAssign, mul_assign, g_mul_);
-impl_op_assign_basic!(MulAssign, mul_assign, g_mul_scalar_);
-
-impl_op!(Div, div, g_div);
-impl_op_basic!(Div, div, g_div_scalar, inv);
-impl_op_assign!(DivAssign, div_assign, g_div_);
-impl_op_assign_basic!(DivAssign, div_assign, g_div_scalar_);
-
-impl_op!(Sub, sub, g_sub);
-impl_op_basic!(Sub, sub, g_sub_scalar, neg);
-impl_op_assign!(SubAssign, sub_assign, g_sub_);
-impl_op_assign_basic!(SubAssign, sub_assign, g_sub_scalar_);
+impl_op!(Add, add, g_add, g_add_scalar, same);
+impl_op!(Sub, sub, g_sub, g_sub_scalar, negated);
+impl_op!(Mul, mul, g_mul, g_mul_scalar, same);
+impl_op!(Div, div, g_div, g_div_scalar, inverted);
 
 impl Neg for Tensor {
-    type Output = Tensor;
+    type Output = Result<Tensor>;
 
-    fn neg(self) -> Tensor {
-        self.f_neg().unwrap()
+    fn neg(self) -> Result<Tensor> {
+        Tensor::neg(&self)
     }
 }
 
 impl Neg for &Tensor {
-    type Output = Tensor;
+    type Output = Result<Tensor>;
 
-    fn neg(self) -> Tensor {
-        self.f_neg().unwrap()
+    fn neg(self) -> Result<Tensor> {
+        Tensor::neg(self)
     }
 }
 
-impl PartialEq for Tensor {
-    fn eq(&self, other: &Tensor) -> bool {
-        if self.size() != other.size() {
-            return false;
-        }
-        match self.f_eq_tensor(other) {
-            Err(_) => false,
-            Ok(v) => match v.f_all() {
-                Err(_) => false,
-                Ok(v) => match i64::try_from(v) {
-                    Err(_) => false,
-                    Ok(v) => v > 0,
-                },
-            },
-        }
+impl From<i64> for Scalar {
+    fn from(v: i64) -> Scalar {
+        // An integer scalar allocates a few bytes; failing to is out of
+        // memory before any tensor could be.
+        Scalar::int(v).expect("allocating a scalar")
+    }
+}
+
+impl From<f64> for Scalar {
+    fn from(v: f64) -> Scalar {
+        Scalar::float(v).expect("allocating a scalar")
+    }
+}
+
+impl From<i32> for Scalar {
+    fn from(v: i32) -> Scalar {
+        Scalar::from(i64::from(v))
+    }
+}
+
+impl From<f32> for Scalar {
+    fn from(v: f32) -> Scalar {
+        Scalar::from(f64::from(v))
     }
 }

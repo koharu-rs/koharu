@@ -1,30 +1,20 @@
+//! libtorch for Koharu's models: a fork of `tch` 0.26 whose libtorch loads
+//! when the runtime starts. Ops return `Result`; the README is the design.
+
+// The shim-calling macros come first, for every module after.
 #[macro_use]
-extern crate lazy_static;
-
-pub mod data;
-
+mod wrappers;
 mod error;
-pub use error::TchError;
-pub type Result<T> = std::result::Result<T, error::TchError>;
+pub mod nn;
+mod tensor;
 
-pub(crate) mod wrappers;
-pub use wrappers::device::{Cuda, Device};
-pub use wrappers::jit::{self, CModule, IValue, TrainableCModule};
+pub use error::TchError;
+pub type Result<T, E = TchError> = std::result::Result<T, E>;
+
+pub use tensor::{IndexOp, NewAxis, Shape, TensorIndexer};
+pub use wrappers::device::Device;
 pub use wrappers::kind::{self, Kind};
 pub use wrappers::layout::Layout;
-pub use wrappers::optimizer::COptimizer;
 pub use wrappers::scalar::Scalar;
-pub use wrappers::utils;
-pub use wrappers::{
-    get_num_interop_threads, get_num_threads, manual_seed, set_num_interop_threads,
-    set_num_threads, QEngine,
-};
-
-mod tensor;
-pub use tensor::{
-    autocast, display, index, no_grad, no_grad_guard, with_grad, IndexOp, NewAxis, NoGradGuard,
-    Reduction, Shape, Tensor, TensorIndexer,
-};
-
-pub mod nn;
-pub mod vision;
+pub use wrappers::tensor::{NoGradGuard, Reduction, Tensor, no_grad, no_grad_guard};
+pub use wrappers::utils::manual_seed;

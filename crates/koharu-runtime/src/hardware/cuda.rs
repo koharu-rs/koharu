@@ -5,7 +5,7 @@ use std::{
 
 use libloading::Library;
 
-use crate::{Backend, Device, DeviceType};
+use crate::{Backend, Device};
 
 const ATTRIBUTE_INTEGRATED: c_int = 18;
 const ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
@@ -100,7 +100,8 @@ impl Cuda {
         Some(name.to_string_lossy().into_owned())
     }
 
-    fn device(&self, index: c_int) -> Option<Device> {
+    /// The device and its total memory, which ranks it.
+    fn device(&self, index: c_int) -> Option<(Device, u64)> {
         let mut handle = 0;
         if unsafe { (self.get_device)(&mut handle, index) } != 0 {
             return None;
@@ -115,31 +116,24 @@ impl Cuda {
 
         let name = format!("CUDA{index}");
         let description = self.description(handle).unwrap_or_else(|| name.clone());
-        let mut memory_total = 0;
-        if unsafe { (self.get_device_memory)(&mut memory_total, handle) } != 0 {
-            memory_total = 0;
+        let mut memory = 0;
+        if unsafe { (self.get_device_memory)(&mut memory, handle) } != 0 {
+            memory = 0;
         }
-        let integrated = self.attribute(handle, ATTRIBUTE_INTEGRATED).unwrap_or(0);
-
-        Some(Device {
-            index: index as usize,
+        let device = Device {
             name,
             description,
             backend: Backend::Cuda,
-            device_type: if integrated != 0 {
-                DeviceType::IntegratedGpu
-            } else {
-                DeviceType::Gpu
-            },
-            memory_total,
-            memory_free: 0,
+            index: usize::try_from(index).ok()?,
+            integrated: self.attribute(handle, ATTRIBUTE_INTEGRATED).unwrap_or(0) != 0,
             compute_capability,
             target: None,
-        })
+        };
+        Some((device, memory as u64))
     }
 }
 
-pub(super) fn probe() -> Vec<Device> {
+pub(super) fn probe() -> Vec<(Device, u64)> {
     static DRIVER: OnceLock<Option<Cuda>> = OnceLock::new();
     let Some(driver) = DRIVER.get_or_init(Cuda::load) else {
         return Vec::new();
