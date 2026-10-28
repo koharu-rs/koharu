@@ -12,16 +12,46 @@ use koharu_llm::{
         message::{DocumentSourceKind, Image, ImageMediaType, UserContent},
     },
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-use crate::paddle_ocr_vl::{
-    MAX_NEW_TOKENS, PaddleOCRVLResult, PaddleOCRVLTask, REPETITION_PENALTY,
-};
 
 crate::model_repository!("PaddlePaddle/PaddleOCR-VL-1.6-GGUF" @ "511b09642bb324401f15f97cc23bc67e8f0a291d" {
     MODEL = "PaddleOCR-VL-1.6-GGUF.gguf",
     PROJECTOR = "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
 });
+
+const MAX_NEW_TOKENS: usize = 512;
+const REPETITION_PENALTY: f32 = 1.2;
+
+/// The task prompts the model card lists:
+/// https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6/blob/66317acc4c9fc17bd154591ce650735cd2855f3e/README.md
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PaddleOCRVLTask {
+    Ocr,
+    Table,
+    Formula,
+    Chart,
+    Spotting,
+    Seal,
+}
+
+impl PaddleOCRVLTask {
+    fn prompt(self) -> &'static str {
+        match self {
+            Self::Ocr => "OCR:",
+            Self::Table => "Table Recognition:",
+            Self::Formula => "Formula Recognition:",
+            Self::Chart => "Chart Recognition:",
+            Self::Spotting => "Spotting:",
+            Self::Seal => "Seal Recognition:",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PaddleOCRVLResult {
+    pub text: String,
+}
 
 /// The tokens one crop's request holds: the largest image PaddleOCR-VL
 /// reads, 1,280 tokens at its processor's `max_pixels`, the task prompt, and
