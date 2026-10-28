@@ -2,7 +2,7 @@
 name = "koharu-config"
 version.workspace = true
 edition.workspace = true
-description = "Extensible typed configuration storage for Koharu."
+description = "Koharu's settings and secrets."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
@@ -12,12 +12,17 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
+age = { workspace = true }
 atomicwrites = { workspace = true }
 dirs = { workspace = true }
+keyring = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
-tokio = { workspace = true }
+serde_ignored = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 toml = { workspace = true }
+toml_edit = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

@@ -13,33 +13,29 @@ publish.workspace = true
 
 [dependencies]
 koharu-diffusion = { workspace = true }
-koharu-llama = { workspace = true, features = ["llguidance"] }
+koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
-llguidance = { workspace = true }
-ab_glyph = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true }
+futures = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
+nalgebra = { workspace = true }
 icu_properties = { workspace = true }
-encoding_rs = { workspace = true }
 fast_image_resize = { workspace = true }
-minijinja = { workspace = true }
-minijinja-contrib = { workspace = true }
 rayon = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tokio-rayon = { workspace = true }
 tokenizers = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
+ab_glyph = { workspace = true }
+clap = { workspace = true }
 criterion = { workspace = true }
 tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [[bench]]
 name = "pp_doclayout_v3"

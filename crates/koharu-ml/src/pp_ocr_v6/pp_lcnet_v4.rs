@@ -247,9 +247,9 @@ impl PPLCNetV4Config {
     }
 }
 
-fn activate(hidden_states: Tensor, activation: Option<&str>) -> Tensor {
+fn activate(hidden_states: Tensor, activation: Option<&str>) -> koharu_torch::Result<Tensor> {
     match activation {
-        None => hidden_states,
+        None => Ok(hidden_states),
         Some("relu") => hidden_states.relu(),
         Some("gelu") => hidden_states.gelu("none"),
         Some("silu") => hidden_states.silu(),
@@ -272,15 +272,15 @@ struct LearnableAffineBlock {
 }
 
 impl LearnableAffineBlock {
-    fn new(path: &nn::Path<'_>) -> Self {
-        Self {
-            scale: path.var("scale", &[1], nn::Init::Const(1.0)),
-            bias: path.var("bias", &[1], nn::Init::Const(0.0)),
-        }
+    fn new(path: &nn::Path<'_>) -> koharu_torch::Result<Self> {
+        Ok(Self {
+            scale: path.var("scale", &[1])?,
+            bias: path.var("bias", &[1])?,
+        })
     }
 
-    fn forward(&self, hidden_states: Tensor) -> Tensor {
-        &self.scale * hidden_states + &self.bias
+    fn forward(&self, hidden_states: Tensor) -> koharu_torch::Result<Tensor> {
+        (&self.scale * hidden_states)? + &self.bias
     }
 }
 
@@ -295,8 +295,8 @@ impl ConvLayer {
         groups: i64,
         activation: Option<&str>,
         use_learnable_affine_block: bool,
-    ) -> Self {
-        Self {
+    ) -> koharu_torch::Result<Self> {
+        Ok(Self {
             convolution: nn::conv(
                 path / "convolution",
                 in_channels,
@@ -309,25 +309,26 @@ impl ConvLayer {
                     bias: false,
                     ..Default::default()
                 },
-            ),
+            )?,
             normalization: nn::batch_norm2d(
                 path / "normalization",
                 out_channels,
                 Default::default(),
-            ),
+            )?,
             activation: activation.map(str::to_owned),
             learnable_affine: (activation.is_some() && use_learnable_affine_block)
-                .then(|| LearnableAffineBlock::new(&(path / "lab"))),
-        }
+                .then(|| LearnableAffineBlock::new(&(path / "lab")))
+                .transpose()?,
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
-        let hidden_states = self.convolution.forward(input);
-        let hidden_states = self.normalization.forward_t(&hidden_states, false);
-        let hidden_states = activate(hidden_states, self.activation.as_deref());
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+        let hidden_states = self.convolution.forward(input)?;
+        let hidden_states = self.normalization.forward_t(&hidden_states, false)?;
+        let hidden_states = activate(hidden_states, self.activation.as_deref())?;
         match &self.learnable_affine {
             Some(learnable_affine) => learnable_affine.forward(hidden_states),
-            None => hidden_states,
+            None => Ok(hidden_states),
         }
     }
 }
@@ -339,29 +340,29 @@ struct SqueezeExcitationModule {
 }
 
 impl SqueezeExcitationModule {
-    fn new(path: &nn::Path<'_>, channels: i64, reduction: i64) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, channels: i64, reduction: i64) -> koharu_torch::Result<Self> {
+        Ok(Self {
             convolution_0: nn::conv2d(
                 path / "convolutions" / 0,
                 channels,
                 channels / reduction,
                 1,
                 Default::default(),
-            ),
+            )?,
             convolution_2: nn::conv2d(
                 path / "convolutions" / 2,
                 channels / reduction,
                 channels,
                 1,
                 Default::default(),
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let weights = hidden_states.adaptive_avg_pool2d([1, 1]);
-        let weights = self.convolution_0.forward(&weights).relu();
-        let weights = self.convolution_2.forward(&weights).hardsigmoid();
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let weights = hidden_states.adaptive_avg_pool2d([1, 1])?;
+        let weights = self.convolution_0.forward(&weights)?.relu()?;
+        let weights = self.convolution_2.forward(&weights)?.hardsigmoid()?;
         hidden_states * weights
     }
 }
@@ -373,7 +374,7 @@ enum TokenConv {
 }
 
 impl TokenConv {
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         match self {
             Self::Reparameterized(convolution) => convolution.forward(hidden_states),
             Self::Layer(layer) => layer.forward(hidden_states),
@@ -391,7 +392,11 @@ struct DepthwiseSeparableConvLayer {
 }
 
 impl DepthwiseSeparableConvLayer {
-    fn new(path: &nn::Path<'_>, block: &BlockConfig, config: &PPLCNetV4Config) -> Self {
+    fn new(
+        path: &nn::Path<'_>,
+        block: &BlockConfig,
+        config: &PPLCNetV4Config,
+    ) -> koharu_torch::Result<Self> {
         let stride = block.stride.pair();
         let in_channels = block.in_channels;
         let out_channels = block.out_channels;
@@ -408,7 +413,7 @@ impl DepthwiseSeparableConvLayer {
                     groups: in_channels,
                     ..Default::default()
                 },
-            ))
+            )?)
         } else {
             TokenConv::Layer(ConvLayer::new(
                 &(path / "token_conv"),
@@ -419,17 +424,20 @@ impl DepthwiseSeparableConvLayer {
                 in_channels,
                 None,
                 false,
-            ))
+            )?)
         };
-        Self {
+        Ok(Self {
             token_conv,
-            token_squeeze_excitation: block.use_squeeze_excitation.then(|| {
-                SqueezeExcitationModule::new(
-                    &(path / "token_squeeze_excitation"),
-                    in_channels,
-                    config.reduction,
-                )
-            }),
+            token_squeeze_excitation: block
+                .use_squeeze_excitation
+                .then(|| {
+                    SqueezeExcitationModule::new(
+                        &(path / "token_squeeze_excitation"),
+                        in_channels,
+                        config.reduction,
+                    )
+                })
+                .transpose()?,
             channel_conv1: ConvLayer::new(
                 &(path / "channel_conv1"),
                 in_channels,
@@ -439,7 +447,7 @@ impl DepthwiseSeparableConvLayer {
                 1,
                 None,
                 false,
-            ),
+            )?,
             channel_conv2: ConvLayer::new(
                 &(path / "channel_conv2"),
                 in_channels * 2,
@@ -449,23 +457,23 @@ impl DepthwiseSeparableConvLayer {
                 1,
                 None,
                 false,
-            ),
+            )?,
             has_residual: in_channels == out_channels && stride == [1, 1],
-        }
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let mut hidden_states = self.token_conv.forward(hidden_states);
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let mut hidden_states = self.token_conv.forward(hidden_states)?;
         if let Some(squeeze_excitation) = &self.token_squeeze_excitation {
-            hidden_states = squeeze_excitation.forward(&hidden_states);
+            hidden_states = squeeze_excitation.forward(&hidden_states)?;
         }
-        let residual = hidden_states.shallow_clone();
-        hidden_states = self.channel_conv1.forward(&hidden_states).gelu("none");
-        hidden_states = self.channel_conv2.forward(&hidden_states);
+        let residual = hidden_states.alias()?;
+        hidden_states = self.channel_conv1.forward(&hidden_states)?.gelu("none")?;
+        hidden_states = self.channel_conv2.forward(&hidden_states)?;
         if self.has_residual {
             hidden_states + residual
         } else {
-            hidden_states
+            Ok(hidden_states)
         }
     }
 }
@@ -480,10 +488,10 @@ struct LargeStem {
 }
 
 impl LargeStem {
-    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> Self {
+    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> koharu_torch::Result<Self> {
         let channels = &config.stem_channels;
         let strides = &config.stem_strides;
-        Self {
+        Ok(Self {
             stem1: ConvLayer::new(
                 &(path / "stem1"),
                 channels[0],
@@ -493,7 +501,7 @@ impl LargeStem {
                 1,
                 Some(&config.hidden_act),
                 config.use_learnable_affine_block,
-            ),
+            )?,
             stem2a: ConvLayer::new(
                 &(path / "stem2a"),
                 channels[1],
@@ -503,7 +511,7 @@ impl LargeStem {
                 1,
                 Some(&config.hidden_act),
                 config.use_learnable_affine_block,
-            ),
+            )?,
             stem2b: ConvLayer::new(
                 &(path / "stem2b"),
                 channels[1] / 2,
@@ -513,7 +521,7 @@ impl LargeStem {
                 1,
                 Some(&config.hidden_act),
                 config.use_learnable_affine_block,
-            ),
+            )?,
             stem3: ConvLayer::new(
                 &(path / "stem3"),
                 channels[1] * 2,
@@ -523,7 +531,7 @@ impl LargeStem {
                 1,
                 Some(&config.hidden_act),
                 config.use_learnable_affine_block,
-            ),
+            )?,
             stem4: ConvLayer::new(
                 &(path / "stem4"),
                 channels[1],
@@ -533,18 +541,20 @@ impl LargeStem {
                 1,
                 Some(&config.hidden_act),
                 config.use_learnable_affine_block,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Tensor {
-        let embedding = self.stem1.forward(pixel_values);
-        let padded = embedding.constant_pad_nd([0, 1, 0, 1]);
-        let stem_2a = self.stem2a.forward(&padded);
-        let stem_2a = self.stem2b.forward(&stem_2a.constant_pad_nd([0, 1, 0, 1]));
-        let pooled = padded.max_pool2d([2, 2], [1, 1], [0, 0], [1, 1], true);
-        let embedding = Tensor::cat(&[pooled, stem_2a], 1);
-        self.stem4.forward(&self.stem3.forward(&embedding))
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+        let embedding = self.stem1.forward(pixel_values)?;
+        let padded = embedding.constant_pad_nd([0, 1, 0, 1])?;
+        let stem_2a = self.stem2a.forward(&padded)?;
+        let stem_2a = self
+            .stem2b
+            .forward(&stem_2a.constant_pad_nd([0, 1, 0, 1])?)?;
+        let pooled = padded.max_pool2d([2, 2], [1, 1], [0, 0], [1, 1], true)?;
+        let embedding = Tensor::cat(&[pooled, stem_2a], 1)?;
+        self.stem4.forward(&self.stem3.forward(&embedding)?)
     }
 }
 
@@ -555,9 +565,9 @@ struct SmallStem {
 }
 
 impl SmallStem {
-    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> Self {
+    fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> koharu_torch::Result<Self> {
         let channels = &config.stem_channels;
-        Self {
+        Ok(Self {
             conv1: ConvLayer::new(
                 &(path / "conv1"),
                 channels[0],
@@ -567,7 +577,7 @@ impl SmallStem {
                 1,
                 None,
                 false,
-            ),
+            )?,
             conv2: ConvLayer::new(
                 &(path / "conv2"),
                 channels[1],
@@ -577,13 +587,13 @@ impl SmallStem {
                 1,
                 None,
                 false,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Tensor {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         self.conv2
-            .forward(&self.conv1.forward(pixel_values).gelu("none"))
+            .forward(&self.conv1.forward(pixel_values)?.gelu("none")?)
     }
 }
 
@@ -594,7 +604,7 @@ enum Stem {
 }
 
 impl Stem {
-    fn forward(&self, pixel_values: &Tensor) -> Tensor {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         match self {
             Self::Large(stem) => stem.forward(pixel_values),
             Self::Small(stem) => stem.forward(pixel_values),
@@ -611,11 +621,11 @@ pub(crate) struct PPLCNetV4Backbone {
 }
 
 impl PPLCNetV4Backbone {
-    pub(crate) fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> Self {
+    pub(crate) fn new(path: &nn::Path<'_>, config: &PPLCNetV4Config) -> koharu_torch::Result<Self> {
         let stem_path = path / "encoder" / "convolution";
         let stem = match config.stem_type.as_str() {
-            "large" => Stem::Large(Box::new(LargeStem::new(&stem_path, config))),
-            "small" => Stem::Small(Box::new(SmallStem::new(&stem_path, config))),
+            "large" => Stem::Large(Box::new(LargeStem::new(&stem_path, config)?)),
+            "small" => Stem::Small(Box::new(SmallStem::new(&stem_path, config)?)),
             stem_type => panic!("unsupported PP-LCNetV4 stem type {stem_type}"),
         };
         let blocks = config
@@ -633,38 +643,38 @@ impl PPLCNetV4Backbone {
                             config,
                         )
                     })
-                    .collect()
+                    .collect::<koharu_torch::Result<_>>()
             })
-            .collect();
-        Self {
+            .collect::<koharu_torch::Result<_>>()?;
+        Ok(Self {
             stem,
             blocks,
             out_features: config.out_features.clone(),
             num_channels: config.num_channels,
-        }
+        })
     }
 
-    pub(crate) fn forward(&self, pixel_values: &Tensor) -> Vec<Tensor> {
+    pub(crate) fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
         assert_eq!(
             pixel_values.size().get(1).copied(),
             Some(self.num_channels),
             "PP-LCNetV4 input channel count does not match the configuration"
         );
-        let mut hidden_states = self.stem.forward(pixel_values);
+        let mut hidden_states = self.stem.forward(pixel_values)?;
         let mut feature_maps = Vec::new();
         if self.out_features.iter().any(|feature| feature == "stem") {
-            feature_maps.push(hidden_states.shallow_clone());
+            feature_maps.push(hidden_states.alias()?);
         }
         for (stage_index, blocks) in self.blocks.iter().enumerate() {
             for block in blocks {
-                hidden_states = block.forward(&hidden_states);
+                hidden_states = block.forward(&hidden_states)?;
             }
             let stage = format!("stage{}", stage_index + 1);
             if self.out_features.iter().any(|feature| feature == &stage) {
-                feature_maps.push(hidden_states.shallow_clone());
+                feature_maps.push(hidden_states.alias()?);
             }
         }
-        feature_maps
+        Ok(feature_maps)
     }
 }
 

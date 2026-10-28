@@ -13,8 +13,8 @@ flowchart TB
   bridge -->|"コマンドとチャンネル"| app
   app --> scene["koharu-scene"] --> storage["koharu-storage"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["ネイティブランタイム"]
-  app --> translator["koharu-translator"]
-  app --> agent["koharu-agent"]
+  app --> llm["koharu-llm"]
+  pipeline --> llm
   app --> desktop["koharu-desktop"] --> renderer["koharu-renderer"] --> rasterizer["koharu-rasterizer"]
   bridge --> canvas["koharu-canvas"] --> rasterizer
   app --> psd["koharu-psd"] --> renderer
@@ -42,7 +42,7 @@ flowchart TB
 
 `koharu-scene` は正規プロジェクト、階層、コンポーネント、関係、パッチ、リビジョン、セッション undo を所有します。`koharu-storage` は不透明な完全状態と不変 blob を永続化します。
 
-`koharu-pipeline` はページ・段階のスケジューリング、モデル寿命、進捗、停止、逐次コミットを担当します。`koharu-ml` はモデルと共通デバイス抽象、`koharu-translator` はローカル・ホスト型の翻訳接続を担当します。
+`koharu-pipeline` はページ・段階のスケジューリング、モデル寿命、進捗、停止、逐次コミットを担当します。`koharu-ml` は画像モデル、`koharu-llm` はローカル・ホスト型の言語モデルとエージェントを担当します。
 
 ## 描画と転送
 
@@ -54,9 +54,9 @@ flowchart TB
 
 ## ネイティブランタイム
 
-安全な `koharu-torch`、`koharu-llama`、`koharu-diffusion` は unsafe な `-sys` 動的ロード crate から分離します。`koharu-runtime` がパッケージの検出、取得、検証、ロードを担当します。
+安全な `koharu-torch`、`llama-cpp-2`、`koharu-diffusion` は、Koharu 独自の `llama-cpp-sys-2` を含む unsafe な `-sys` 動的ロード crate から分離します。`koharu-runtime` がパッケージの検出、取得、検証、ロードを担当します。
 
-図には載せていない共通の crate が 2 つあります。`koharu-config` は `config.toml` の型付きセクションを所有し、`koharu-secrets` は OS の資格情報ストアをラップします。
+図には載せていない共通の crate が 1 つあります。`koharu-config` は `config.toml` の型付きセクションと暗号化されたシークレットを所有し、その鍵は OS の資格情報ストアに保管されます。
 
 <CardGroup cols={2}>
   <Card title="シーンと保存" icon="database" href="/ja/development/scene">

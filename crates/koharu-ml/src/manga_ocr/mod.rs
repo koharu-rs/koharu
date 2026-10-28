@@ -4,9 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::Device;
-
-use crate::backend::TryIntoDevice;
+use koharu_torch::{Device, Tensor};
 
 pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
 
@@ -28,8 +26,8 @@ pub struct MangaOcr {
 }
 
 impl MangaOcr {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -61,7 +59,7 @@ impl MangaOcr {
         );
 
         // The full ViT/BERT module tree must exist before VarStore loads checkpoint names.
-        let mut model = Model::new(&config, device)?;
+        let mut model = Model::new(&config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -74,11 +72,21 @@ impl MangaOcr {
         })
     }
 
-    pub fn inference(&self, image: &DynamicImage) -> Result<String> {
+    /// The text of each crop, the crops decoded together.
+    pub fn inference(&self, images: &[DynamicImage]) -> Result<Vec<String>> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
         koharu_torch::no_grad(|| {
-            let pixel_values = self.processor.preprocess(image, self.device)?;
-            let token_ids = self.model.forward(&pixel_values)?;
-            self.tokenizer.decode(&token_ids)
+            let pixel_values = images
+                .iter()
+                .map(|image| self.processor.preprocess(image, self.device))
+                .collect::<Result<Vec<_>>>()?;
+            let token_ids = self.model.forward(&Tensor::cat(&pixel_values, 0)?)?;
+            token_ids
+                .iter()
+                .map(|token_ids| self.tokenizer.decode(token_ids))
+                .collect()
         })
     }
 }

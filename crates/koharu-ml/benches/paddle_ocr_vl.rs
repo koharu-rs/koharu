@@ -17,9 +17,9 @@ async fn main() -> Result<()> {
         .join("ocr")
         .join("title.png");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let image = image::open(&input)?;
-    let model = PaddleOCRVL::load(koharu_ml::Device::default()).await?;
+    let model = PaddleOCRVL::load(runtime.device()).await?;
 
     let warmup = model.inference(&image, PaddleOCRVLTask::Ocr)?;
     assert_eq!(warmup.text, "対策委員会です！");

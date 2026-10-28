@@ -11,8 +11,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::ComicLayoutYolo26sConfig,
     processor::{
@@ -36,8 +34,8 @@ pub struct ComicLayoutYolo26sSegmenter {
 }
 
 impl ComicLayoutYolo26sSegmenter {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -49,7 +47,7 @@ impl ComicLayoutYolo26sSegmenter {
         let config = ComicLayoutYolo26sConfig::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let processor = ComicLayoutYolo26sImageProcessor::new(&config)?;
-        let mut model = Model::new(&config, device)?;
+        let mut model = Model::new(&config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -71,7 +69,7 @@ impl ComicLayoutYolo26sSegmenter {
     ) -> Result<ComicLayoutYolo26sInstances> {
         koharu_torch::no_grad(|| {
             let (pixel_values, letterbox) = self.processor.preprocess(image, self.device)?;
-            let output = self.model.forward(&pixel_values);
+            let output = self.model.forward(&pixel_values)?;
             self.processor
                 .postprocess(&output, &letterbox, confidence_threshold)
         })
@@ -89,12 +87,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_ultralytics_structured_output() -> Result<()> {
-        crate::init().await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
         let image = image::open(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("benches/fixtures/object_detection/1.jpg"),
         )?;
-        let model = ComicLayoutYolo26sSegmenter::load(crate::Device::cuda(0)).await?;
+        let model = ComicLayoutYolo26sSegmenter::load(runtime.device()).await?;
         let result = model.inference(&image)?;
 
         // Ultralytics 8.4.43, `imgsz=1280`, `retina_masks=True`, CUDA.

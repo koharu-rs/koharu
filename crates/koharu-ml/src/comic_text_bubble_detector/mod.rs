@@ -11,8 +11,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::{RTDetrResNetConfig, RTDetrV2Config},
     processor::{RTDetrImageProcessor, SizeDict, TextBlock},
@@ -39,8 +37,8 @@ pub struct RTDetrV2Detection {
 }
 
 impl RTDetrV2Detection {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -69,7 +67,7 @@ impl RTDetrV2Detection {
         // its fixed anchors rather than rebuilding and uploading them per slice.
         config.anchor_image_size = Some(vec![processor.size.height, processor.size.width]);
 
-        let mut model = Model::new(config.clone(), device);
+        let mut model = Model::new(config.clone(), device, kind)?;
         model
             .load(&weights_path)
             .context("failed to load comic text/bubble detector safetensors")?;
@@ -105,7 +103,7 @@ impl RTDetrV2Detection {
         confidence_threshold: f32,
     ) -> Result<(Vec<[f32; 4]>, Vec<[f32; 4]>)> {
         let pixel_values = self.processor.preprocess(image, self.device)?;
-        let outputs = self.model.forward(&pixel_values);
+        let outputs = self.model.forward(&pixel_values)?;
         let results = self.processor.post_process_object_detection(
             &outputs,
             confidence_threshold,

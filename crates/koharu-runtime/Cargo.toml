@@ -2,7 +2,7 @@
 name = "koharu-runtime"
 version.workspace = true
 edition.workspace = true
-description = "Runtime package discovery, downloading, and dynamic library loading for Koharu."
+description = "Gets Koharu ready to run models on this machine's GPU."
 license = "MIT OR Apache-2.0"
 authors.workspace = true
 readme.workspace = true
@@ -10,33 +10,29 @@ homepage.workspace = true
 repository.workspace = true
 keywords = ["koharu", "runtime", "cuda", "libtorch", "machine-learning"]
 categories = ["development-tools", "science"]
-publish = true
+publish = false
 
 [dependencies]
 anyhow = { workspace = true }
 backon = { workspace = true }
 dirs = { workspace = true }
-dunce = { workspace = true }
-futures = { workspace = true }
-fs4 = { workspace = true }
-hf-hub = { workspace = true }
-koharu-config = { workspace = true }
-petgraph = { workspace = true }
-reqwest = { workspace = true }
-reqwest-middleware = { workspace = true }
-reqwest-retry = { workspace = true }
-serde = { workspace = true }
-zip = { workspace = true }
-tokio = { workspace = true }
-walkdir = { workspace = true }
-libloading = { workspace = true }
-libc = { workspace = true }
-flate2 = { workspace = true }
-tar = { workspace = true }
 fast-glob = { workspace = true }
-tempfile = { workspace = true }
-tracing = { workspace = true }
+flate2 = { workspace = true }
+futures = { workspace = true }
+koharu-config = { workspace = true }
+koharu-diffusion-sys = { workspace = true }
+koharu-torch-sys = { workspace = true }
+libloading = { workspace = true }
+llama-cpp-sys-2 = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
 strum = { workspace = true }
-
-[dev-dependencies]
-toml = { workspace = true }
+tar = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }

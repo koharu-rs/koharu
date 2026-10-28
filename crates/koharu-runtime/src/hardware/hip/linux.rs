@@ -73,9 +73,7 @@ pub(super) fn probe() -> Result<Vec<Device>> {
             name: format!("ROCm{index}"),
             description: name.clone(),
             backend: Backend::Rocm,
-            device_type: target.device_type(),
-            memory_total: 0,
-            memory_free: 0,
+            integrated: target.integrated(),
             compute_capability: 0,
             target: Some(name),
         });

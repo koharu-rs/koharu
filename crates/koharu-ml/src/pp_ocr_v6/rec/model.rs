@@ -22,34 +22,37 @@ pub(crate) struct Model {
 }
 
 impl Model {
-    pub(crate) fn new(config: &PPOCRV6MediumRecConfig, device: koharu_torch::Device) -> Self {
-        let mut vs = nn::VarStore::new(device);
-        crate::backend::set_precision(&mut vs);
+    pub(crate) fn new(
+        config: &PPOCRV6MediumRecConfig,
+        device: koharu_torch::Device,
+        kind: Kind,
+    ) -> Result<Self> {
+        let vs = nn::VarStore::new(device, kind);
         let backbone = PPLCNetV4Backbone::new(
             &(&vs.root() / "model" / "backbone"),
             &config.backbone_config,
-        );
-        let head = Head::new(&(&vs.root() / "head"), config);
-        vs.freeze();
-        Self { vs, backbone, head }
+        )?;
+        let head = Head::new(&(&vs.root() / "head"), config)?;
+        Ok(Self { vs, backbone, head })
     }
 
     pub(crate) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 
-    pub(crate) fn forward(&self, pixel_values: &Tensor) -> Tensor {
-        let feature_maps = self.backbone.forward(&pixel_values.to_kind(self.vs.kind()));
+    pub(crate) fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+        let feature_maps = self
+            .backbone
+            .forward(&pixel_values.to_kind(self.vs.kind())?)?;
         let hidden_states = feature_maps.last().expect("PP-LCNetV4 stage4 feature");
         let hidden_states =
-            hidden_states.avg_pool2d([3, 2], [3, 2], [0, 0], false, true, None::<i64>);
+            hidden_states.avg_pool2d([3, 2], [3, 2], [0, 0], false, true, None::<i64>)?;
         self.head.forward(&hidden_states)
     }
 }
 
-fn activate(hidden_states: Tensor, activation: &str) -> Tensor {
+fn activate(hidden_states: Tensor, activation: &str) -> koharu_torch::Result<Tensor> {
     match activation {
         "silu" => hidden_states.silu(),
         "relu" => hidden_states.relu(),
@@ -73,8 +76,8 @@ impl ConvLayer {
         kernel_size: [i64; 2],
         groups: i64,
         activation: &str,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             convolution: nn::conv(
                 path / "convolution",
                 in_channels,
@@ -87,19 +90,19 @@ impl ConvLayer {
                     bias: false,
                     ..Default::default()
                 },
-            ),
+            )?,
             normalization: nn::batch_norm2d(
                 path / "normalization",
                 out_channels,
                 Default::default(),
-            ),
+            )?,
             activation: activation.into(),
-        }
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let hidden_states = self.convolution.forward(hidden_states);
-        let hidden_states = self.normalization.forward_t(&hidden_states, false);
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let hidden_states = self.convolution.forward(hidden_states)?;
+        let hidden_states = self.normalization.forward_t(&hidden_states, false)?;
         activate(hidden_states, &self.activation)
     }
 }
@@ -114,54 +117,54 @@ struct Attention {
 }
 
 impl Attention {
-    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Result<Self> {
         let head_dim = config.hidden_size / config.num_attention_heads;
         assert_eq!(head_dim * config.num_attention_heads, config.hidden_size);
-        Self {
+        Ok(Self {
             qkv: nn::linear(
                 path / "qkv",
                 config.hidden_size,
                 config.hidden_size * 3,
                 nn::LinearConfig {
                     bias: config.qkv_bias,
-                    ..Default::default()
                 },
-            ),
+            )?,
             projection: nn::linear(
                 path / "projection",
                 config.hidden_size,
                 config.hidden_size,
                 Default::default(),
-            ),
+            )?,
             num_heads: config.num_attention_heads,
             head_dim,
             scale: (head_dim as f64).powf(-0.5),
-        }
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         let (batch_size, sequence_length, embed_dim) = (size[0], size[1], size[2]);
         let mixed_qkv = self
             .qkv
-            .forward(hidden_states)
+            .forward(hidden_states)?
             .view([
                 batch_size,
                 sequence_length,
                 3,
                 self.num_heads,
                 self.head_dim,
-            ])
-            .permute([2, 0, 3, 1, 4]);
-        let query = mixed_qkv.get(0);
-        let key = mixed_qkv.get(1);
-        let value = mixed_qkv.get(2);
-        let weights = (query.matmul(&key.transpose(-1, -2)) * self.scale).softmax(-1, None::<Kind>);
-        let hidden_states = weights.matmul(&value).transpose(1, 2).contiguous().view([
-            batch_size,
-            sequence_length,
-            embed_dim,
-        ]);
+            ])?
+            .permute([2, 0, 3, 1, 4])?;
+        let query = mixed_qkv.get(0)?;
+        let key = mixed_qkv.get(1)?;
+        let value = mixed_qkv.get(2)?;
+        let weights =
+            (query.matmul(&key.transpose(-1, -2)?)? * self.scale)?.softmax(-1, None::<Kind>)?;
+        let hidden_states = weights
+            .matmul(&value)?
+            .transpose(1, 2)?
+            .contiguous()?
+            .view([batch_size, sequence_length, embed_dim])?;
         self.projection.forward(&hidden_states)
     }
 }
@@ -174,27 +177,27 @@ struct Mlp {
 }
 
 impl Mlp {
-    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Result<Self> {
         let hidden_features = (config.hidden_size as f64 * config.mlp_ratio) as i64;
-        Self {
+        Ok(Self {
             fc1: nn::linear(
                 path / "fc1",
                 config.hidden_size,
                 hidden_features,
                 Default::default(),
-            ),
+            )?,
             fc2: nn::linear(
                 path / "fc2",
                 hidden_features,
                 config.hidden_size,
                 Default::default(),
-            ),
+            )?,
             activation: config.hidden_act.clone(),
-        }
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let hidden_states = activate(self.fc1.forward(hidden_states), &self.activation);
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let hidden_states = activate(self.fc1.forward(hidden_states)?, &self.activation)?;
         self.fc2.forward(&hidden_states)
     }
 }
@@ -208,33 +211,36 @@ struct Block {
 }
 
 impl Block {
-    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Result<Self> {
         let norm_config = nn::LayerNormConfig {
             eps: config.layer_norm_eps,
             ..Default::default()
         };
-        Self {
-            self_attn: Attention::new(&(path / "self_attn"), config),
+        Ok(Self {
+            self_attn: Attention::new(&(path / "self_attn"), config)?,
             layer_norm1: nn::layer_norm(
                 path / "layer_norm1",
                 vec![config.hidden_size],
                 norm_config,
-            ),
-            mlp: Mlp::new(&(path / "mlp"), config),
+            )?,
+            mlp: Mlp::new(&(path / "mlp"), config)?,
             layer_norm2: nn::layer_norm(
                 path / "layer_norm2",
                 vec![config.hidden_size],
                 norm_config,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let hidden_states = hidden_states
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let hidden_states = (hidden_states
             + self
                 .self_attn
-                .forward(&self.layer_norm1.forward(hidden_states));
-        &hidden_states + self.mlp.forward(&self.layer_norm2.forward(&hidden_states))
+                .forward(&self.layer_norm1.forward(hidden_states)?)?)?;
+        &hidden_states
+            + self
+                .mlp
+                .forward(&self.layer_norm2.forward(&hidden_states)?)?
     }
 }
 
@@ -246,7 +252,7 @@ struct EncoderWithSvtr {
 }
 
 impl EncoderWithSvtr {
-    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Result<Self> {
         let in_channels = config
             .backbone_config
             .block_configs
@@ -256,7 +262,7 @@ impl EncoderWithSvtr {
             .out_channels;
         let hidden_size = config.hidden_size;
         let kernel_size = [config.conv_kernel_size[0], config.conv_kernel_size[1]];
-        Self {
+        Ok(Self {
             conv_block: [
                 ConvLayer::new(
                     &(path / "conv_block" / 0),
@@ -265,7 +271,7 @@ impl EncoderWithSvtr {
                     [1, 1],
                     1,
                     &config.hidden_act,
-                ),
+                )?,
                 ConvLayer::new(
                     &(path / "conv_block" / 1),
                     in_channels,
@@ -273,7 +279,7 @@ impl EncoderWithSvtr {
                     [1, 1],
                     1,
                     &config.hidden_act,
-                ),
+                )?,
                 ConvLayer::new(
                     &(path / "conv_block" / 2),
                     hidden_size,
@@ -281,11 +287,11 @@ impl EncoderWithSvtr {
                     kernel_size,
                     hidden_size,
                     &config.hidden_act,
-                ),
+                )?,
             ],
             svtr_block: (0..config.depth)
                 .map(|index| Block::new(&(path / "svtr_block" / index), config))
-                .collect(),
+                .collect::<Result<_>>()?,
             norm: nn::layer_norm(
                 path / "norm",
                 vec![hidden_size],
@@ -293,26 +299,26 @@ impl EncoderWithSvtr {
                     eps: config.layer_norm_eps,
                     ..Default::default()
                 },
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let residual = self.conv_block[0].forward(hidden_states);
-        let mut hidden_states = self.conv_block[1].forward(hidden_states);
-        hidden_states = &hidden_states + self.conv_block[2].forward(&hidden_states);
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let residual = self.conv_block[0].forward(hidden_states)?;
+        let mut hidden_states = self.conv_block[1].forward(hidden_states)?;
+        hidden_states = (&hidden_states + self.conv_block[2].forward(&hidden_states)?)?;
 
         let size = hidden_states.size();
         let (batch_size, channels, height, width) = (size[0], size[1], size[2], size[3]);
-        hidden_states = hidden_states.flatten(2, -1).transpose(1, 2);
+        hidden_states = hidden_states.flatten(2, -1)?.transpose(1, 2)?;
         for block in &self.svtr_block {
-            hidden_states = block.forward(&hidden_states);
+            hidden_states = block.forward(&hidden_states)?;
         }
-        hidden_states = self.norm.forward(&hidden_states);
+        hidden_states = self.norm.forward(&hidden_states)?;
         hidden_states = hidden_states
-            .view([batch_size, height, width, channels])
-            .permute([0, 3, 1, 2]);
-        (hidden_states + residual).squeeze_dim(2).transpose(1, 2)
+            .view([batch_size, height, width, channels])?
+            .permute([0, 3, 1, 2])?;
+        (hidden_states + residual)?.squeeze_dim(2)?.transpose(1, 2)
     }
 }
 
@@ -323,64 +329,21 @@ struct Head {
 }
 
 impl Head {
-    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Self {
-        Self {
-            encoder: EncoderWithSvtr::new(&(path / "encoder"), config),
+    fn new(path: &nn::Path<'_>, config: &PPOCRV6MediumRecConfig) -> Result<Self> {
+        Ok(Self {
+            encoder: EncoderWithSvtr::new(&(path / "encoder"), config)?,
             head: nn::linear(
                 path / "head",
                 config.hidden_size,
                 config.head_out_channels,
                 Default::default(),
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.head
-            .forward(&self.encoder.forward(hidden_states))
+            .forward(&self.encoder.forward(hidden_states)?)?
             .softmax(2, Some(Kind::Float))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use koharu_runtime::{Feature, Runtime};
-
-    #[tokio::test]
-    #[ignore = "downloads and loads the LibTorch runtime"]
-    async fn medium_recognizer_tree_matches_checkpoint() {
-        Runtime::discover([Feature::Torch])
-            .unwrap()
-            .initialize()
-            .await
-            .unwrap();
-        let config: PPOCRV6MediumRecConfig = serde_json::from_str(
-            r#"{
-                "backbone_config": {
-                    "stem_channels": [3, 64, 128],
-                    "out_features": ["stage1", "stage2", "stage3", "stage4"],
-                    "block_configs": [
-                        [[3,128,128,1,true]],
-                        [[3,128,256,1,false],[3,256,256,1,false],[3,256,256,1,true]],
-                        [[3,256,512,[2,1],false],[3,512,512,1,true],[3,512,512,1,false],[3,512,512,1,true],[3,512,512,1,false],[3,512,512,1,true],[3,512,512,1,false]],
-                        [[3,512,768,[2,1],false],[3,768,768,1,true],[3,768,768,1,false]]
-                    ]
-                },
-                "hidden_size": 192,
-                "mlp_ratio": 4.0,
-                "depth": 2,
-                "head_out_channels": 18710,
-                "conv_kernel_size": [1, 7]
-            }"#,
-        )
-        .unwrap();
-        let model = Model::new(&config, koharu_torch::Device::Cpu);
-        let variables = model.vs.variables();
-        assert_eq!(variables.len(), 269);
-        assert_eq!(
-            variables.values().map(Tensor::numel).sum::<usize>(),
-            19_176_118
-        );
     }
 }

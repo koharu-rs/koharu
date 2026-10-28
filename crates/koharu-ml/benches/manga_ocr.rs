@@ -12,12 +12,12 @@ async fn main() -> Result<()> {
         .join("ocr")
         .join("title.png");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let image = image::open(&input)?;
-    let model = MangaOcr::load(koharu_ml::Device::default()).await?;
+    let model = MangaOcr::load(runtime.device()).await?;
 
-    let warmup = model.inference(&image)?;
-    assert_eq!(warmup, "対策委員会です！");
+    let warmup = model.inference(std::slice::from_ref(&image))?;
+    assert_eq!(warmup, ["対策委員会です！"]);
     black_box(warmup);
 
     let mut criterion = Criterion::default()
@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
     criterion.bench_function(&benchmark, |bencher| {
         bencher.iter(|| {
             let text = model
-                .inference(black_box(&image))
+                .inference(black_box(std::slice::from_ref(&image)))
                 .expect("Manga OCR inference failed");
             black_box(text);
         });

@@ -1,117 +1,72 @@
-use serde::{Deserialize, Serialize};
+use std::ffi::CString;
 
-/// Compute backend used by a machine-learning device.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize, strum::Display)]
+use anyhow::{Context, Result};
+use serde::Serialize;
+
+/// The GPU API a device runs on.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, strum::Display)]
 pub enum Backend {
-    #[strum(serialize = "CPU")]
-    Cpu,
     #[strum(serialize = "CUDA")]
     Cuda,
     #[strum(serialize = "ROCm")]
     Rocm,
     #[strum(serialize = "Vulkan")]
     Vulkan,
-    #[strum(serialize = "MTL")]
+    #[strum(serialize = "Metal")]
     Metal,
-    #[strum(transparent)]
-    Other(String),
 }
 
-/// Broad device category shared by native model backends.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash, Serialize)]
-pub enum DeviceType {
-    Cpu,
-    Accelerator,
-    Gpu,
-    IntegratedGpu,
-    Unknown,
-}
-
-/// The process-wide device selected for Torch, llama.cpp, and stable-diffusion.cpp.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize)]
+/// The GPU the runtime started on.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct Device {
-    pub index: usize,
+    /// llama.cpp's name for it, such as `CUDA0`.
     pub name: String,
+    /// The name its driver gives, such as `NVIDIA GeForce RTX 5090`.
     pub description: String,
     pub backend: Backend,
-    pub device_type: DeviceType,
-    pub memory_total: usize,
-    pub memory_free: usize,
+    /// Its index among its backend's devices, as CUDA, HIP, and libtorch
+    /// count them.
+    pub index: usize,
+    pub integrated: bool,
     #[serde(skip)]
     pub(crate) compute_capability: u32,
     #[serde(skip)]
     pub(crate) target: Option<String>,
 }
 
+/// A device's memory, in bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct Memory {
+    pub free: u64,
+    pub total: u64,
+}
+
 impl Device {
-    #[must_use]
-    pub fn cpu() -> Self {
-        Self {
-            index: 0,
-            name: "CPU".to_owned(),
-            description: "CPU".to_owned(),
-            backend: Backend::Cpu,
-            device_type: DeviceType::Cpu,
-            memory_total: 0,
-            memory_free: 0,
-            compute_capability: 0,
-            target: None,
-        }
+    /// The device's free and total memory now, as llama.cpp's backend reads
+    /// them from the driver.
+    pub fn memory(&self) -> Result<Memory> {
+        let name = CString::new(self.name.as_str())?;
+        // The runtime hands out a device only after llama.cpp loaded and
+        // listed it.
+        let device = unsafe { llama_cpp_sys_2::ggml_backend_dev_by_name(name.as_ptr()) };
+        anyhow::ensure!(!device.is_null(), "llama.cpp doesn't list {}", self.name);
+        let (mut free, mut total) = (0, 0);
+        unsafe { llama_cpp_sys_2::ggml_backend_dev_memory(device, &mut free, &mut total) };
+        Ok(Memory {
+            free: u64::try_from(free).context("free memory doesn't fit in 64 bits")?,
+            total: u64::try_from(total).context("total memory doesn't fit in 64 bits")?,
+        })
     }
 
-    #[must_use]
-    pub fn cuda(index: usize) -> Self {
-        Self::gpu(Backend::Cuda, index)
-    }
-
-    #[must_use]
-    pub fn rocm(index: usize) -> Self {
-        Self::gpu(Backend::Rocm, index)
-    }
-
-    #[must_use]
-    pub fn vulkan(index: usize) -> Self {
-        Self::gpu(Backend::Vulkan, index)
-    }
-
-    #[must_use]
-    pub fn metal(index: usize) -> Self {
-        Self::gpu(Backend::Metal, index)
-    }
-
-    fn gpu(backend: Backend, index: usize) -> Self {
-        let name = format!("{backend}{index}");
-        Self {
-            index,
-            description: name.clone(),
-            name,
-            backend,
-            device_type: DeviceType::Gpu,
-            memory_total: 0,
-            memory_free: 0,
-            compute_capability: 0,
-            target: None,
-        }
-    }
-
-    #[must_use]
-    pub fn is_integrated(&self) -> bool {
-        self.device_type == DeviceType::IntegratedGpu
-    }
-
+    /// The CUDA compute capability, such as 120 for 12.0; 0 off CUDA.
     #[must_use]
     pub fn compute_capability(&self) -> u32 {
         self.compute_capability
     }
 
+    /// The AMD GPU's LLVM target, such as `gfx1100`; nothing off ROCm.
     #[must_use]
     pub fn target(&self) -> Option<&str> {
         self.target.as_deref()
-    }
-}
-
-impl Default for Device {
-    fn default() -> Self {
-        Self::cpu()
     }
 }

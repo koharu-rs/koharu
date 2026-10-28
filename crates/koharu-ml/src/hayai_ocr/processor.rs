@@ -3,8 +3,8 @@
 //! Canonical image preprocessing is the SigLIP2 NaFlex image processor
 //! (`Siglip2ImageProcessor`) with the released settings of
 //! `google/siglip2-base-patch16-naflex`:
-//! https://huggingface.co/google/siglip2-base-patch16-naflex/blob/main/preprocessor_config.json
-//! https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip2/image_processing_siglip2.py
+//! https://huggingface.co/google/siglip2-base-patch16-naflex/blob/b53b807d3a2d5e2b3911292f2d69e5341cdc064c/preprocessor_config.json
+//! https://github.com/huggingface/transformers/blob/598d8ba8baaec7fec5a22da0e2844c7bf4ea20e1/src/transformers/models/siglip2/image_processing_siglip2.py
 
 use std::path::Path;
 
@@ -41,12 +41,12 @@ pub(super) struct ImageInput {
 
 impl ImageProcessor {
     pub(super) fn new(device: Device) -> Result<Self> {
-        let mean = Tensor::from_slice(&IMAGE_MEAN)
-            .view([1, 3, 1, 1])
-            .to_device(device);
-        let std = Tensor::from_slice(&IMAGE_STD)
-            .view([1, 3, 1, 1])
-            .to_device(device);
+        let mean = Tensor::from_slice(&IMAGE_MEAN)?
+            .view([1, 3, 1, 1])?
+            .to_device(device)?;
+        let std = Tensor::from_slice(&IMAGE_STD)?
+            .view([1, 3, 1, 1])?
+            .to_device(device)?;
         Ok(Self { mean, std, device })
     }
 
@@ -83,21 +83,21 @@ impl ImageProcessor {
             resize_bilinear(&image, width, height)?
         };
 
-        let mut pixel_values = Tensor::from_slice(image.as_raw())
-            .view([1, i64::from(height), i64::from(width), 3])
-            .permute([0, 3, 1, 2])
-            .to_device(self.device)
-            .to_kind(Kind::Float);
-        pixel_values *= RESCALE_FACTOR;
-        pixel_values = (&pixel_values - &self.mean) / &self.std;
+        let mut pixel_values = Tensor::from_slice(image.as_raw())?
+            .view([1, i64::from(height), i64::from(width), 3])?
+            .permute([0, 3, 1, 2])?
+            .to_device(self.device)?
+            .to_kind(Kind::Float)?;
+        pixel_values = (pixel_values * RESCALE_FACTOR)?;
+        pixel_values = ((&pixel_values - &self.mean)? / &self.std)?;
 
         // (1, channels, height, width) -> (1, patches, patch_size^2 * channels)
         // with patch order (patch row, patch column, pixel row, pixel column).
         let patch = patch_size;
         let mut pixel_values = pixel_values
-            .reshape([1, 3, patch_height, patch, patch_width, patch])
-            .permute([0, 2, 4, 3, 5, 1])
-            .reshape([1, num_patches, -1]);
+            .reshape([1, 3, patch_height, patch, patch_width, patch])?
+            .permute([0, 2, 4, 3, 5, 1])?
+            .reshape([1, num_patches, -1])?;
 
         // The upstream processor pads every batch entry to `max_num_patches`;
         // those padded prefix tokens are consumed by the encoder and decoder.
@@ -105,25 +105,25 @@ impl ImageProcessor {
             let padding = Tensor::zeros(
                 [1, max_patches - num_patches, pixel_values.size()[2]],
                 (Kind::Float, self.device),
-            );
-            pixel_values = Tensor::cat(&[pixel_values, padding], 1);
+            )?;
+            pixel_values = Tensor::cat(&[pixel_values, padding], 1)?;
         }
 
         let attention_mask = if num_patches < max_patches {
             Tensor::cat(
                 &[
-                    Tensor::ones([num_patches], (Kind::Int, self.device)),
-                    Tensor::zeros([max_patches - num_patches], (Kind::Int, self.device)),
+                    Tensor::ones([num_patches], (Kind::Int, self.device))?,
+                    Tensor::zeros([max_patches - num_patches], (Kind::Int, self.device))?,
                 ],
                 0,
             )
         } else {
             Tensor::ones([max_patches], (Kind::Int, self.device))
-        };
+        }?;
 
         Ok(ImageInput {
             pixel_values,
-            attention_mask: attention_mask.view([1, max_patches]),
+            attention_mask: attention_mask.view([1, max_patches])?,
             spatial_shape: [patch_height, patch_width],
         })
     }

@@ -1,8 +1,3 @@
-use anyhow::Context;
-use koharu_llama::llama_backend::LlamaBackend;
-use koharu_runtime::{Feature, Hardware, Runtime};
-use tokio::sync::OnceCell;
-
 mod backend;
 
 pub mod aot_inpainting;
@@ -16,7 +11,6 @@ pub mod font_detector;
 pub mod hayai_ocr;
 pub mod koharu_layout_rfdetr_seg_2xl;
 pub mod lama;
-pub mod llm;
 pub mod manga_ocr;
 pub mod manga_text_mask;
 pub mod paddle_ocr_vl;
@@ -27,69 +21,46 @@ pub mod rorem_mixed;
 pub mod speech_bubble_yolo11n;
 pub mod speech_bubble_yolov8m;
 
-pub use koharu_diffusion as diffusion;
-pub use koharu_llama as llama;
-pub use koharu_runtime::{Backend, Device, DeviceType};
-pub use koharu_torch as torch;
+pub use koharu_runtime::Device;
 
-static LLAMA: OnceCell<LlamaBackend> = OnceCell::const_new();
-static DIFFUSION: OnceCell<()> = OnceCell::const_new();
-static READY: OnceCell<Device> = OnceCell::const_new();
+use koharu_torch::Tensor;
 
-/// Initializes every process-wide native runtime used by Koharu.
-///
-/// Concurrent callers share one attempt. A failed attempt may be retried; any
-/// backend that completed successfully is retained and is not initialized
-/// again. Retry timing belongs to the application bootstrap rather than this
-/// deterministic, single-attempt API.
-#[tracing::instrument(skip_all)]
-pub async fn init() -> anyhow::Result<()> {
-    READY
-        .get_or_try_init(|| async {
-            let runtime = Runtime::discover([Feature::Torch, Feature::Llama, Feature::Diffusion])?;
-            let device = runtime
-                .initialize()
-                .await
-                .context("failed to initialize runtimes")?;
-
-            LLAMA
-                .get_or_try_init(|| async {
-                    koharu_llama::send_logs_to_tracing(koharu_llama::LogOptions::default());
-                    LlamaBackend::init().context("failed to initialize llama.cpp backend")
-                })
-                .await?;
-            DIFFUSION
-                .get_or_try_init(|| async {
-                    koharu_diffusion::send_logs_to_tracing()
-                        .context("failed to redirect stable-diffusion.cpp logs")?;
-                    Ok::<(), anyhow::Error>(())
-                })
-                .await?;
-            Ok::<Device, anyhow::Error>(device)
-        })
-        .await?;
-    Ok(())
+/// Transformers' `RepetitionPenaltyLogitsProcessor`: each score of a token in
+/// its row of `ids`, `[batch, n]` on `scores`' device, is multiplied by
+/// `penalty` when negative and divided by it otherwise.
+/// https://github.com/huggingface/transformers/blob/598d8ba8baaec7fec5a22da0e2844c7bf4ea20e1/src/transformers/generation/logits_process.py#L409-L412
+pub(crate) fn repetition_penalty(
+    scores: &Tensor,
+    ids: &Tensor,
+    penalty: f64,
+) -> koharu_torch::Result<Tensor> {
+    let score = scores.gather(1, ids, false)?;
+    let score = (&score * penalty)?.where_self(&score.lt(0.0)?, &(&score / penalty)?)?;
+    scores.scatter(1, ids, &score)
 }
 
-/// Returns the runtime-owned device selected for every model backend.
-#[must_use]
-pub fn device(cpu: bool) -> Device {
-    if cpu {
-        Device::cpu()
-    } else if let Some(device) = READY.get() {
-        device.clone()
-    } else if let Some(device) = Hardware::discover().device() {
-        device.clone()
-    } else {
-        tracing::warn!("GPU is not available, falling back to CPU");
-        Device::cpu()
+/// The rows' ids as one `[rows, n]` tensor on `device` for
+/// [`repetition_penalty`], each row padded with its first id, which the
+/// penalty then reads twice to the same effect.
+pub(crate) fn penalty_ids(
+    rows: &[Vec<i64>],
+    device: koharu_torch::Device,
+) -> koharu_torch::Result<Tensor> {
+    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let mut padded = Vec::with_capacity(rows.len() * width);
+    for row in rows {
+        let first = *row.first().ok_or_else(|| {
+            koharu_torch::TchError::Shape("a repetition penalty row has no ids".to_owned())
+        })?;
+        padded.extend(
+            row.iter()
+                .copied()
+                .chain(std::iter::repeat_n(first, width - row.len())),
+        );
     }
-}
-
-/// Returns the initialized process-wide llama.cpp backend.
-#[must_use]
-pub fn llama_backend() -> Option<&'static LlamaBackend> {
-    LLAMA.get()
+    Tensor::from_slice(&padded)?
+        .view([rows.len() as i64, width as i64])?
+        .to_device(device)
 }
 
 macro_rules! model_repository {

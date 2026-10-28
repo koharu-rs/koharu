@@ -6,8 +6,6 @@ use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 use self::{
     config::HayaiConfig,
     model::Model,
@@ -34,8 +32,8 @@ pub struct HayaiOcr {
 }
 
 impl HayaiOcr {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let (config_path, weights_path, tokenizer_path) = tokio::try_join!(
             async {
                 CONFIG
@@ -67,7 +65,7 @@ impl HayaiOcr {
             config.vocab_size
         );
 
-        let mut model = Model::new(&config, &tokenizer, device)?;
+        let mut model = Model::new(&config, &tokenizer, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -81,11 +79,21 @@ impl HayaiOcr {
         })
     }
 
-    pub fn inference(&self, image: &DynamicImage) -> Result<String> {
+    /// The text of each crop, the crops decoded together.
+    pub fn inference(&self, images: &[DynamicImage]) -> Result<Vec<String>> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
         koharu_torch::no_grad(|| {
-            let input = self.processor.preprocess(image)?;
-            let token_ids = self.model.generate(&input, &self.tokenizer, self.device)?;
-            self.tokenizer.decode(&token_ids)
+            let inputs = images
+                .iter()
+                .map(|image| self.processor.preprocess(image))
+                .collect::<Result<Vec<_>>>()?;
+            let token_ids = self.model.generate(&inputs, &self.tokenizer, self.device)?;
+            token_ids
+                .iter()
+                .map(|token_ids| self.tokenizer.decode(token_ids))
+                .collect()
         })
     }
 }
@@ -99,14 +107,14 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        crate::init().await?;
-        let model = HayaiOcr::load(crate::Device::cpu()).await?;
+        let runtime = koharu_runtime::Runtime::start().await?;
+        let model = HayaiOcr::load(runtime.device()).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");
-        let text = model.inference(&image::open(input)?)?;
+        let text = model.inference(&[image::open(input)?])?;
         // Verified against the pinned upstream `HayaiModel.generate` in greedy
         // mode on the identical fixture crop.
-        assert_eq!(text, "対策委員会です!");
+        assert_eq!(text, ["対策委員会です!"]);
         Ok(())
     }
 }
