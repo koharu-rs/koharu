@@ -33,7 +33,7 @@
     "react-i18next": "^17.1.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
