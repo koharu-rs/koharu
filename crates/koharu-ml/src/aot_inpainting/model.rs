@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, Module},
 };
 
@@ -22,45 +22,42 @@ pub(super) struct Model {
 }
 
 impl Model {
-    pub(super) fn new(device: Device) -> Self {
-        let mut vs = nn::VarStore::new(device);
-        crate::backend::set_precision(&mut vs);
+    pub(super) fn new(device: Device, kind: Kind) -> Result<Self> {
+        let vs = nn::VarStore::new(device, kind);
         let root = vs.root();
         let head = [
-            GatedWSConvPadded::new(&(&root / "head" / 0), 4, 32, 3, 1, 1),
-            GatedWSConvPadded::new(&(&root / "head" / 2), 32, 64, 4, 2, 1),
-            GatedWSConvPadded::new(&(&root / "head" / 4), 64, 128, 4, 2, 1),
+            GatedWSConvPadded::new(&(&root / "head" / 0), 4, 32, 3, 1, 1)?,
+            GatedWSConvPadded::new(&(&root / "head" / 2), 32, 64, 4, 2, 1)?,
+            GatedWSConvPadded::new(&(&root / "head" / 4), 64, 128, 4, 2, 1)?,
         ];
         let body_conv = (0..10)
             .map(|index| AOTBlock::new(&(&root / "body_conv" / index), 128))
-            .collect();
-        let tail = Tail::new(&(&root / "tail"));
-        vs.freeze();
-        Self {
+            .collect::<Result<_>>()?;
+        let tail = Tail::new(&(&root / "tail"))?;
+        Ok(Self {
             vs,
             head,
             body_conv,
             tail,
-        }
+        })
     }
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 
-    pub(super) fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {
-        let image = image.to_kind(self.vs.kind());
-        let mask = mask.to_kind(self.vs.kind());
-        let x = Tensor::cat(&[mask, image], 1);
-        let x = relu_nf(self.head[0].forward(&x));
-        let x = relu_nf(self.head[1].forward(&x));
-        let mut x = self.head[2].forward(&x);
+    pub(super) fn forward(&self, image: &Tensor, mask: &Tensor) -> Result<Tensor> {
+        let image = image.to_kind(self.vs.kind())?;
+        let mask = mask.to_kind(self.vs.kind())?;
+        let x = Tensor::cat(&[mask, image], 1)?;
+        let x = relu_nf(self.head[0].forward(&x)?)?;
+        let x = relu_nf(self.head[1].forward(&x)?)?;
+        let mut x = self.head[2].forward(&x)?;
         for block in &self.body_conv {
-            x = block.forward(&x);
+            x = block.forward(&x)?;
         }
-        self.tail.forward(&x).clamp(-1.0, 1.0)
+        Ok(self.tail.forward(&x)?.clamp(-1.0, 1.0)?)
     }
 }
 
@@ -80,7 +77,7 @@ impl ScaledWSConv2d {
         kernel_size: i64,
         stride: i64,
         dilation: i64,
-    ) -> Self {
+    ) -> Result<Self> {
         let conv = nn::conv2d(
             path,
             in_channels,
@@ -91,19 +88,19 @@ impl ScaledWSConv2d {
                 dilation,
                 ..Default::default()
             },
-        );
-        let gain = path.var("gain", &[out_channels, 1, 1, 1], nn::Init::Const(1.0));
-        Self {
+        )?;
+        let gain = path.var("gain", &[out_channels, 1, 1, 1])?;
+        Ok(Self {
             conv,
             gain,
             stride,
             dilation,
-        }
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         input.conv2d(
-            &standardized_weight(&self.conv.ws, &self.gain),
+            &standardized_weight(&self.conv.ws, &self.gain)?,
             self.conv.bs.as_ref(),
             [self.stride, self.stride],
             [0, 0],
@@ -128,7 +125,7 @@ impl ScaledWSTransposeConv2d {
         out_channels: i64,
         kernel_size: i64,
         stride: i64,
-    ) -> Self {
+    ) -> Result<Self> {
         let padding = (kernel_size - 1) / 2;
         let conv = nn::conv_transpose2d(
             path,
@@ -140,19 +137,19 @@ impl ScaledWSTransposeConv2d {
                 padding,
                 ..Default::default()
             },
-        );
-        let gain = path.var("gain", &[in_channels, 1, 1, 1], nn::Init::Const(1.0));
-        Self {
+        )?;
+        let gain = path.var("gain", &[in_channels, 1, 1, 1])?;
+        Ok(Self {
             conv,
             gain,
             stride,
             padding,
-        }
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         input.conv_transpose2d(
-            &standardized_weight(&self.conv.ws, &self.gain),
+            &standardized_weight(&self.conv.ws, &self.gain)?,
             self.conv.bs.as_ref(),
             [self.stride, self.stride],
             [self.padding, self.padding],
@@ -178,8 +175,8 @@ impl GatedWSConvPadded {
         kernel_size: i64,
         stride: i64,
         dilation: i64,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             conv: ScaledWSConv2d::new(
                 &(path / "conv"),
                 in_channels,
@@ -187,7 +184,7 @@ impl GatedWSConvPadded {
                 kernel_size,
                 stride,
                 dilation,
-            ),
+            )?,
             conv_gate: ScaledWSConv2d::new(
                 &(path / "conv_gate"),
                 in_channels,
@@ -195,15 +192,15 @@ impl GatedWSConvPadded {
                 kernel_size,
                 stride,
                 dilation,
-            ),
+            )?,
             padding: ((kernel_size - 1) * dilation) / 2,
-        }
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let input =
-            input.reflection_pad2d([self.padding, self.padding, self.padding, self.padding]);
-        self.conv.forward(&input) * self.conv_gate.forward(&input).sigmoid() * 1.8
+            input.reflection_pad2d([self.padding, self.padding, self.padding, self.padding])?;
+        (self.conv.forward(&input)? * self.conv_gate.forward(&input)?.sigmoid()?)? * 1.8
     }
 }
 
@@ -220,27 +217,27 @@ impl GatedWSTransposeConvPadded {
         out_channels: i64,
         kernel_size: i64,
         stride: i64,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             conv: ScaledWSTransposeConv2d::new(
                 &(path / "conv"),
                 in_channels,
                 out_channels,
                 kernel_size,
                 stride,
-            ),
+            )?,
             conv_gate: ScaledWSTransposeConv2d::new(
                 &(path / "conv_gate"),
                 in_channels,
                 out_channels,
                 kernel_size,
                 stride,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
-        self.conv.forward(input) * self.conv_gate.forward(input).sigmoid() * 1.8
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+        (self.conv.forward(input)? * self.conv_gate.forward(input)?.sigmoid()?)? * 1.8
     }
 }
 
@@ -251,8 +248,8 @@ struct PaddedConvRelu {
 }
 
 impl PaddedConvRelu {
-    fn new(path: &nn::Path<'_>, channels: i64, dilation: i64) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, channels: i64, dilation: i64) -> Result<Self> {
+        Ok(Self {
             conv: nn::conv2d(
                 path,
                 channels,
@@ -262,19 +259,19 @@ impl PaddedConvRelu {
                     dilation,
                     ..Default::default()
                 },
-            ),
+            )?,
             padding: dilation,
-        }
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         self.conv
             .forward(&input.reflection_pad2d([
                 self.padding,
                 self.padding,
                 self.padding,
                 self.padding,
-            ]))
+            ])?)?
             .relu()
     }
 }
@@ -285,14 +282,14 @@ struct PaddedConv {
 }
 
 impl PaddedConv {
-    fn new(path: &nn::Path<'_>, channels: i64) -> Self {
-        Self {
-            conv: nn::conv2d(path, channels, channels, 3, Default::default()),
-        }
+    fn new(path: &nn::Path<'_>, channels: i64) -> Result<Self> {
+        Ok(Self {
+            conv: nn::conv2d(path, channels, channels, 3, Default::default())?,
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
-        self.conv.forward(&input.reflection_pad2d([1, 1, 1, 1]))
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+        self.conv.forward(&input.reflection_pad2d([1, 1, 1, 1])?)
     }
 }
 
@@ -305,29 +302,30 @@ struct AOTBlock {
 }
 
 impl AOTBlock {
-    fn new(path: &nn::Path<'_>, channels: i64) -> Self {
-        Self {
-            blocks: std::array::from_fn(|index| {
-                PaddedConvRelu::new(
-                    &(path / format!("block{index:02}") / 1),
-                    channels,
-                    [2, 4, 8, 16][index],
-                )
-            }),
-            fuse: PaddedConv::new(&(path / "fuse" / 1), channels),
-            gate: PaddedConv::new(&(path / "gate" / 1), channels),
-        }
+    fn new(path: &nn::Path<'_>, channels: i64) -> Result<Self> {
+        let [block00, block01, block02, block03] = std::array::from_fn(|index| {
+            PaddedConvRelu::new(
+                &(path / format!("block{index:02}") / 1),
+                channels,
+                [2, 4, 8, 16][index],
+            )
+        });
+        Ok(Self {
+            blocks: [block00?, block01?, block02?, block03?],
+            fuse: PaddedConv::new(&(path / "fuse" / 1), channels)?,
+            gate: PaddedConv::new(&(path / "gate" / 1), channels)?,
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let branches = self
             .blocks
             .iter()
             .map(|block| block.forward(input))
-            .collect::<Vec<_>>();
-        let fused = self.fuse.forward(&Tensor::cat(&branches, 1));
-        let mask = my_layer_norm(&self.gate.forward(input)).sigmoid();
-        input * (mask.ones_like() - &mask) + fused * mask
+            .collect::<koharu_torch::Result<Vec<_>>>()?;
+        let fused = self.fuse.forward(&Tensor::cat(&branches, 1)?)?;
+        let mask = my_layer_norm(&self.gate.forward(input)?)?.sigmoid()?;
+        (input * (mask.ones_like()? - &mask)?)? + (fused * mask)?
     }
 }
 
@@ -341,42 +339,42 @@ struct Tail {
 }
 
 impl Tail {
-    fn new(path: &nn::Path<'_>) -> Self {
-        Self {
-            conv0: GatedWSConvPadded::new(&(path / 0), 128, 128, 3, 1, 1),
-            conv1: GatedWSConvPadded::new(&(path / 2), 128, 128, 3, 1, 1),
-            up0: GatedWSTransposeConvPadded::new(&(path / 4), 128, 64, 4, 2),
-            up1: GatedWSTransposeConvPadded::new(&(path / 6), 64, 32, 4, 2),
-            output: GatedWSConvPadded::new(&(path / 8), 32, 3, 3, 1, 1),
-        }
+    fn new(path: &nn::Path<'_>) -> Result<Self> {
+        Ok(Self {
+            conv0: GatedWSConvPadded::new(&(path / 0), 128, 128, 3, 1, 1)?,
+            conv1: GatedWSConvPadded::new(&(path / 2), 128, 128, 3, 1, 1)?,
+            up0: GatedWSTransposeConvPadded::new(&(path / 4), 128, 64, 4, 2)?,
+            up1: GatedWSTransposeConvPadded::new(&(path / 6), 64, 32, 4, 2)?,
+            output: GatedWSConvPadded::new(&(path / 8), 32, 3, 3, 1, 1)?,
+        })
     }
 
-    fn forward(&self, input: &Tensor) -> Tensor {
-        let x = relu_nf(self.conv0.forward(input));
-        let x = relu_nf(self.conv1.forward(&x));
-        let x = relu_nf(self.up0.forward(&x));
-        let x = relu_nf(self.up1.forward(&x));
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+        let x = relu_nf(self.conv0.forward(input)?)?;
+        let x = relu_nf(self.conv1.forward(&x)?)?;
+        let x = relu_nf(self.up0.forward(&x)?)?;
+        let x = relu_nf(self.up1.forward(&x)?)?;
         self.output.forward(&x)
     }
 }
 
-fn standardized_weight(weight: &Tensor, gain: &Tensor) -> Tensor {
-    let (variance, mean) = weight.var_mean_dim([1_i64, 2, 3].as_slice(), true, true);
+fn standardized_weight(weight: &Tensor, gain: &Tensor) -> koharu_torch::Result<Tensor> {
+    let (variance, mean) = weight.var_mean_dim([1_i64, 2, 3].as_slice(), true, true)?;
     let fan_in = weight.size()[1..].iter().product::<i64>() as f64;
-    let scale = (variance * fan_in)
-        .clamp_min(WEIGHT_STANDARDIZATION_EPS)
-        .rsqrt()
-        * gain;
-    weight * &scale - mean * scale
+    let scale = ((variance * fan_in)?
+        .clamp_min(WEIGHT_STANDARDIZATION_EPS)?
+        .rsqrt()?
+        * gain)?;
+    (weight * &scale)? - (mean * scale)?
 }
 
-fn relu_nf(input: Tensor) -> Tensor {
-    input.relu() * RELU_NF_SCALE
+fn relu_nf(input: Tensor) -> koharu_torch::Result<Tensor> {
+    input.relu()? * RELU_NF_SCALE
 }
 
-fn my_layer_norm(input: &Tensor) -> Tensor {
+fn my_layer_norm(input: &Tensor) -> koharu_torch::Result<Tensor> {
     let dimensions = [2_i64, 3];
-    let mean = input.mean_dim(dimensions.as_slice(), true, None);
-    let std = input.std_dim(dimensions.as_slice(), true, true) + 1e-9;
-    ((input - mean) * 2.0 / std - 1.0) * 5.0
+    let mean = input.mean_dim(dimensions.as_slice(), true, None)?;
+    let std = (input.std_dim(dimensions.as_slice(), true, true)? + 1e-9)?;
+    ((((input - mean)? * 2.0)? / std)? - 1.0)? * 5.0
 }

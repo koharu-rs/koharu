@@ -23,7 +23,6 @@ koharu-ml = { workspace = true }
 koharu-config = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
-koharu-translator = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }

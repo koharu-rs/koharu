@@ -60,28 +60,28 @@ impl Processor {
 
         let pad_bottom = 128_u32.saturating_sub(input_height);
         let pad_right = 128_u32.saturating_sub(input_width);
-        let image_tensor = Tensor::from_slice(input_image.as_raw())
-            .view([i64::from(input_height), i64::from(input_width), 3])
-            .permute([2, 0, 1])
-            .unsqueeze(0)
-            .to_device(self.device)
-            .to_kind(Kind::Float)
-            / 127.5
-            - 1.0;
-        let mask_tensor = Tensor::from_slice(input_mask.as_raw())
-            .view([i64::from(input_height), i64::from(input_width)])
-            .unsqueeze(0)
-            .unsqueeze(0)
-            .to_device(self.device)
-            .to_kind(Kind::Float)
-            / 255.0;
-        let image_tensor = pad_bottom_right_reflect(image_tensor, pad_bottom, pad_right);
-        let mask_tensor = pad_bottom_right_reflect(mask_tensor, pad_bottom, pad_right)
-            .ge(0.5)
-            .to_kind(Kind::Float);
-        let masked_image = image_tensor * (mask_tensor.ones_like() - &mask_tensor);
+        let image_tensor = ((Tensor::from_slice(input_image.as_raw())?
+            .view([i64::from(input_height), i64::from(input_width), 3])?
+            .permute([2, 0, 1])?
+            .unsqueeze(0)?
+            .to_device(self.device)?
+            .to_kind(Kind::Float)?
+            / 127.5)?
+            - 1.0)?;
+        let mask_tensor = (Tensor::from_slice(input_mask.as_raw())?
+            .view([i64::from(input_height), i64::from(input_width)])?
+            .unsqueeze(0)?
+            .unsqueeze(0)?
+            .to_device(self.device)?
+            .to_kind(Kind::Float)?
+            / 255.0)?;
+        let image_tensor = pad_bottom_right_reflect(image_tensor, pad_bottom, pad_right)?;
+        let mask_tensor = pad_bottom_right_reflect(mask_tensor, pad_bottom, pad_right)?
+            .ge(0.5)?
+            .to_kind(Kind::Float)?;
+        let masked_image = (image_tensor * (mask_tensor.ones_like()? - &mask_tensor)?)?;
 
-        let output = model.forward(&masked_image, &mask_tensor);
+        let output = model.forward(&masked_image, &mask_tensor)?;
         let output_height = output.size()[2] - i64::from(pad_bottom);
         let output_width = output.size()[3] - i64::from(pad_right);
         if output_height <= 0 || output_width <= 0 {
@@ -91,8 +91,8 @@ impl Processor {
             );
         }
         let output = output
-            .narrow(2, 0, output_height)
-            .narrow(3, 0, output_width);
+            .narrow(2, 0, output_height)?
+            .narrow(3, 0, output_width)?;
         let mut output = tensor_to_rgb(&output, output_width as u32, output_height as u32)?;
         if output.dimensions() != original.dimensions() {
             output = resize_rgb(&output, original.width(), original.height())?;
@@ -112,8 +112,8 @@ impl Processor {
 fn resize_dimensions(width: u32, height: u32, max_side: u32) -> (u32, u32) {
     let ratio = max_side as f64 / width.max(height) as f64;
     (
-        python_round(width as f64 * ratio).max(1) as u32,
-        python_round(height as f64 * ratio).max(1) as u32,
+        ((width as f64 * ratio).round_ties_even() as i64).max(1) as u32,
+        ((height as f64 * ratio).round_ties_even() as i64).max(1) as u32,
     )
 }
 
@@ -147,9 +147,9 @@ fn resize_gray(image: &GrayImage, width: u32, height: u32) -> Result<GrayImage> 
     Ok(output)
 }
 
-fn pad_bottom_right_reflect(tensor: Tensor, pad_bottom: u32, pad_right: u32) -> Tensor {
+fn pad_bottom_right_reflect(tensor: Tensor, pad_bottom: u32, pad_right: u32) -> Result<Tensor> {
     if pad_bottom == 0 && pad_right == 0 {
-        return tensor;
+        return Ok(tensor);
     }
     let height = tensor.size()[2] as u32;
     let width = tensor.size()[3] as u32;
@@ -159,15 +159,15 @@ fn pad_bottom_right_reflect(tensor: Tensor, pad_bottom: u32, pad_right: u32) -> 
     let width_indices = (0..width + pad_right)
         .map(|index| i64::from(symmetric_index(index, width)))
         .collect::<Vec<_>>();
-    tensor
+    Ok(tensor
         .index_select(
             2,
-            &Tensor::from_slice(&height_indices).to_device(tensor.device()),
-        )
+            &Tensor::from_slice(&height_indices)?.to_device(tensor.device())?,
+        )?
         .index_select(
             3,
-            &Tensor::from_slice(&width_indices).to_device(tensor.device()),
-        )
+            &Tensor::from_slice(&width_indices)?.to_device(tensor.device())?,
+        )?)
 }
 
 fn symmetric_index(index: u32, length: u32) -> u32 {
@@ -180,29 +180,15 @@ fn symmetric_index(index: u32, length: u32) -> u32 {
 }
 
 fn tensor_to_rgb(tensor: &Tensor, width: u32, height: u32) -> Result<RgbImage> {
-    let tensor = ((tensor.to_kind(Kind::Float) + 1.0) * 127.5)
-        .round()
-        .clamp(0.0, 255.0)
-        .to_kind(Kind::Uint8)
-        .squeeze_dim(0)
-        .permute([1, 2, 0])
-        .contiguous()
-        .to_device(Device::Cpu)
-        .view([-1]);
+    let tensor = ((tensor.to_kind(Kind::Float)? + 1.0)? * 127.5)?
+        .round()?
+        .clamp(0.0, 255.0)?
+        .to_kind(Kind::Uint8)?
+        .squeeze_dim(0)?
+        .permute([1, 2, 0])?
+        .contiguous()?
+        .to_device(Device::Cpu)?
+        .view([-1])?;
     let pixels = Vec::<u8>::try_from(&tensor)?;
     RgbImage::from_raw(width, height, pixels).context("failed to convert AOT output to RGB image")
-}
-
-fn python_round(value: f64) -> i64 {
-    let floor = value.floor();
-    let fraction = value - floor;
-    if (fraction - 0.5).abs() < f64::EPSILON {
-        if floor as i64 % 2 == 0 {
-            floor as i64
-        } else {
-            floor as i64 + 1
-        }
-    } else {
-        value.round() as i64
-    }
 }

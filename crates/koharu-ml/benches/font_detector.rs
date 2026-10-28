@@ -12,9 +12,9 @@ async fn main() -> Result<()> {
         .join("ocr")
         .join("title.png");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let image = image::open(input)?;
-    let model = FontDetector::load(koharu_ml::Device::default()).await?;
+    let model = FontDetector::load(runtime.device()).await?;
 
     // Load, decode, and warm up outside the measured loop.
     let _ = model.inference(std::slice::from_ref(&image), 5)?;

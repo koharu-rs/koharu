@@ -6,8 +6,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::PPOCRV6MediumDetConfig,
     processor::{PPOCRV6MediumDetImageProcessor, TextDetection, TextDetections},
@@ -29,8 +27,8 @@ pub struct PPOCRV6MediumDet {
 }
 
 impl PPOCRV6MediumDet {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -48,7 +46,7 @@ impl PPOCRV6MediumDet {
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let processor = PPOCRV6MediumDetImageProcessor::from_file(&processor_path)
             .with_context(|| format!("failed to read {}", processor_path.display()))?;
-        let mut model = Model::new(&config, device);
+        let mut model = Model::new(&config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -63,7 +61,7 @@ impl PPOCRV6MediumDet {
     pub fn inference(&self, image: &DynamicImage) -> Result<TextDetections> {
         koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
-            let output = self.model.forward(&pixel_values);
+            let output = self.model.forward(&pixel_values)?;
             self.processor.postprocess(&output, image)
         })
     }
@@ -71,19 +69,16 @@ impl PPOCRV6MediumDet {
 
 #[cfg(test)]
 mod tests {
-    use koharu_runtime::{Feature, Runtime};
+    use koharu_runtime::Runtime;
 
     use super::*;
 
     #[tokio::test]
     #[ignore = "downloads the checkpoint and LibTorch runtime"]
-    async fn loads_medium_detector_checkpoint() {
-        Runtime::discover([Feature::Torch])
-            .unwrap()
-            .initialize()
-            .await
-            .unwrap();
-        let model = PPOCRV6MediumDet::load(crate::Device::cpu()).await.unwrap();
-        model.inference(&DynamicImage::new_rgb8(64, 64)).unwrap();
+    async fn loads_medium_detector_checkpoint() -> anyhow::Result<()> {
+        let runtime = Runtime::start().await?;
+        let model = PPOCRV6MediumDet::load(runtime.device()).await.unwrap();
+        model.inference(&DynamicImage::new_rgb8(64, 64))?;
+        Ok(())
     }
 }

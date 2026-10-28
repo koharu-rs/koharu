@@ -7,11 +7,11 @@ use koharu_ml::comic_onomatopoeia::{ComicOnomatopoeiaDetector, ComicOnomatopoeia
 #[tokio::main]
 async fn main() -> Result<()> {
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures");
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let detector_image = image::open(fixtures.join("object_detection/1.jpg"))?;
     let recognizer_image = image::open(fixtures.join("ocr/title.png"))?;
-    let detector = ComicOnomatopoeiaDetector::load(koharu_ml::Device::default()).await?;
-    let recognizer = ComicOnomatopoeiaRecognizer::load(koharu_ml::Device::default()).await?;
+    let detector = ComicOnomatopoeiaDetector::load(runtime.device()).await?;
+    let recognizer = ComicOnomatopoeiaRecognizer::load(runtime.device()).await?;
 
     // Resolution, decoding, model construction, and one real warm-up stay outside timing.
     black_box(detector.inference(black_box(&detector_image))?);

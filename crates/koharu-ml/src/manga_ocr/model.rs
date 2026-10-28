@@ -25,7 +25,7 @@ pub(super) struct Model {
 }
 
 impl Model {
-    pub(super) fn new(config: &MangaOcrConfig, device: Device) -> Result<Self> {
+    pub(super) fn new(config: &MangaOcrConfig, device: Device, kind: Kind) -> Result<Self> {
         ensure!(
             config.encoder.hidden_size == config.decoder.hidden_size,
             "Manga OCR encoder and decoder hidden sizes must match"
@@ -40,11 +40,9 @@ impl Model {
             "Manga OCR model and decoder pad token IDs must match"
         );
 
-        let mut vs = nn::VarStore::new(device);
-        crate::backend::set_precision(&mut vs);
-        let encoder = ViTModel::new(&(&vs.root() / "encoder"), &config.encoder);
-        let decoder = BertLMHeadModel::new(&(&vs.root() / "decoder"), &config.decoder);
-        vs.freeze();
+        let vs = nn::VarStore::new(device, kind);
+        let encoder = ViTModel::new(&(&vs.root() / "encoder"), &config.encoder)?;
+        let decoder = BertLMHeadModel::new(&(&vs.root() / "decoder"), &config.decoder)?;
         Ok(Self {
             vs,
             encoder,
@@ -52,6 +50,7 @@ impl Model {
             generation: GenerationConfig {
                 decoder_start_token_id: config.decoder_start_token_id,
                 eos_token_id: config.eos_token_id,
+                pad_token_id: config.pad_token_id,
                 max_length: config.max_length,
                 num_beams: config.num_beams,
                 length_penalty: config.length_penalty,
@@ -64,41 +63,53 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 
-    pub(super) fn forward(&self, pixel_values: &Tensor) -> Result<Vec<i64>> {
+    /// The token ids for each image of `pixel_values`, `[batch, 3, height,
+    /// width]`.
+    pub(super) fn forward(&self, pixel_values: &Tensor) -> Result<Vec<Vec<i64>>> {
         let size = pixel_values.size();
         ensure!(
-            size.len() == 4 && size[0] == 1,
-            "Manga OCR expects one image"
+            size.len() == 4 && size[0] > 0,
+            "Manga OCR expects a batch of images, got {size:?}"
         );
-        let encoder_hidden_states = self.encoder.forward(&pixel_values.to_kind(self.vs.kind()));
+        let encoder_hidden_states = self
+            .encoder
+            .forward(&pixel_values.to_kind(self.vs.kind())?)?;
         self.beam_search(&encoder_hidden_states)
     }
 
-    fn beam_search(&self, encoder_hidden_states: &Tensor) -> Result<Vec<i64>> {
+    /// `generation_utils.beam_search` with a `BeamSearchScorer` for every
+    /// image of the batch: an image whose hypotheses are done has its beams
+    /// padded while the others go on.
+    fn beam_search(&self, encoder_hidden_states: &Tensor) -> Result<Vec<Vec<i64>>> {
         let config = &self.generation;
         let device = encoder_hidden_states.device();
         let num_beams = config.num_beams;
         let encoder_size = encoder_hidden_states.size();
+        let batch_size = encoder_size[0] as usize;
+        let rows = batch_size * num_beams;
         let encoder_hidden_states = encoder_hidden_states
-            .unsqueeze(1)
-            .repeat([1, num_beams as i64, 1, 1])
-            .view([num_beams as i64, encoder_size[1], encoder_size[2]]);
+            .unsqueeze(1)?
+            .repeat([1, num_beams as i64, 1, 1])?
+            .view([rows as i64, encoder_size[1], encoder_size[2]])?;
 
-        let mut sequences = vec![vec![config.decoder_start_token_id]; num_beams];
-        let mut beam_scores = vec![-1.0e9f32; num_beams];
-        beam_scores[0] = 0.0;
+        let mut sequences = vec![vec![config.decoder_start_token_id]; rows];
+        // Only each image's first beam is live at the start, so the first
+        // step doesn't pick one token num_beams times.
+        let mut beam_scores = (0..rows)
+            .map(|row| if row % num_beams == 0 { 0.0 } else { -1.0e9f32 })
+            .collect::<Vec<_>>();
         let mut input_ids = Tensor::full(
-            [num_beams as i64, 1],
+            [rows as i64, 1],
             config.decoder_start_token_id,
             (Kind::Int64, device),
-        );
+        )?;
         let mut cache: Option<Vec<LayerCache>> = None;
-        let mut hypotheses =
-            BeamHypotheses::new(num_beams, config.length_penalty, config.early_stopping);
+        let mut hypotheses = (0..batch_size)
+            .map(|_| BeamHypotheses::new(num_beams, config.length_penalty, config.early_stopping))
+            .collect::<Vec<_>>();
 
         while sequences[0].len() < config.max_length {
             // BeamSearchScorer evaluates its completion bound against input_ids before
@@ -106,81 +117,109 @@ impl Model {
             let current_length = sequences[0].len();
             let (logits, next_cache) =
                 self.decoder
-                    .forward(&input_ids, &encoder_hidden_states, cache.as_deref());
+                    .forward(&input_ids, &encoder_hidden_states, cache.as_deref())?;
             let mut next_token_scores = logits
-                .select(1, logits.size()[1] - 1)
-                .log_softmax(-1, Kind::Float);
+                .select(1, logits.size()[1] - 1)?
+                .log_softmax(-1, Kind::Float)?;
             let banned = no_repeat_ngram_mask(
                 &sequences,
                 config.no_repeat_ngram_size,
                 config.vocab_size as usize,
                 device,
-            );
-            next_token_scores = next_token_scores.masked_fill(&banned, f64::NEG_INFINITY);
-            next_token_scores += Tensor::from_slice(&beam_scores)
-                .to_device(device)
-                .unsqueeze(1);
+            )?;
+            next_token_scores = next_token_scores.masked_fill(&banned, f64::NEG_INFINITY)?;
+            next_token_scores = (next_token_scores
+                + Tensor::from_slice(&beam_scores)?
+                    .to_device(device)?
+                    .unsqueeze(1)?)?;
 
+            let candidates = 2 * num_beams;
             let (candidate_scores, candidate_indices) = next_token_scores
-                .view([1, num_beams as i64 * config.vocab_size])
-                .topk(2 * num_beams as i64, 1, true, true);
-            let candidate_scores = tensor_to_vec_f32(&candidate_scores)?;
-            let candidate_indices = tensor_to_vec_i64(&candidate_indices)?;
+                .view([batch_size as i64, num_beams as i64 * config.vocab_size])?
+                .topk(candidates as i64, 1, true, true)?;
+            let candidate_scores = Vec::<f32>::try_from(candidate_scores.reshape([-1])?)?;
+            let candidate_indices = Vec::<i64>::try_from(candidate_indices.reshape([-1])?)?;
 
-            let mut next_sequences = Vec::with_capacity(num_beams);
-            let mut next_scores = Vec::with_capacity(num_beams);
-            let mut next_tokens = Vec::with_capacity(num_beams);
-            let mut beam_indices = Vec::with_capacity(num_beams);
-            for (rank, (&score, &flat_index)) in
-                candidate_scores.iter().zip(&candidate_indices).enumerate()
-            {
-                let beam_index = flat_index / config.vocab_size;
-                let token_id = flat_index % config.vocab_size;
-                if token_id == config.eos_token_id {
-                    if rank < num_beams {
-                        hypotheses.add(sequences[beam_index as usize].clone(), score as f64);
+            let mut next_sequences = Vec::with_capacity(rows);
+            let mut next_scores = Vec::with_capacity(rows);
+            let mut next_tokens = Vec::with_capacity(rows);
+            let mut beam_indices = Vec::with_capacity(rows);
+            for (batch, hypotheses) in hypotheses.iter_mut().enumerate() {
+                let first = batch * num_beams;
+                if hypotheses.done {
+                    for (beam, sequence) in sequences.iter().enumerate().skip(first).take(num_beams)
+                    {
+                        let mut sequence = sequence.clone();
+                        sequence.push(config.pad_token_id);
+                        next_sequences.push(sequence);
+                        next_scores.push(0.0);
+                        next_tokens.push(config.pad_token_id);
+                        beam_indices.push(beam as i64);
                     }
                     continue;
                 }
+                let filled = next_sequences.len();
+                let ranked = batch * candidates..(batch + 1) * candidates;
+                for (rank, (&score, &flat_index)) in candidate_scores[ranked.clone()]
+                    .iter()
+                    .zip(&candidate_indices[ranked])
+                    .enumerate()
+                {
+                    let beam_index = first as i64 + flat_index / config.vocab_size;
+                    let token_id = flat_index % config.vocab_size;
+                    if token_id == config.eos_token_id {
+                        if rank < num_beams {
+                            hypotheses.add(sequences[beam_index as usize].clone(), score as f64);
+                        }
+                        continue;
+                    }
 
-                let mut sequence = sequences[beam_index as usize].clone();
-                sequence.push(token_id);
-                next_sequences.push(sequence);
-                next_scores.push(score);
-                next_tokens.push(token_id);
-                beam_indices.push(beam_index);
-                if next_sequences.len() == num_beams {
-                    break;
+                    let mut sequence = sequences[beam_index as usize].clone();
+                    sequence.push(token_id);
+                    next_sequences.push(sequence);
+                    next_scores.push(score);
+                    next_tokens.push(token_id);
+                    beam_indices.push(beam_index);
+                    if next_sequences.len() - filled == num_beams {
+                        break;
+                    }
                 }
+                ensure!(
+                    next_sequences.len() - filled == num_beams,
+                    "Manga OCR beam search could not fill the next beam"
+                );
+                hypotheses.is_done(next_scores[filled] as f64, current_length);
             }
-            ensure!(
-                next_sequences.len() == num_beams,
-                "Manga OCR beam search could not fill the next beam"
-            );
 
             sequences = next_sequences;
             beam_scores = next_scores;
-            let beam_indices = Tensor::from_slice(&beam_indices).to_device(device);
-            cache = Some(reorder_cache(next_cache, &beam_indices));
-            input_ids = Tensor::from_slice(&next_tokens)
-                .to_device(device)
-                .view([num_beams as i64, 1]);
+            let beam_indices = Tensor::from_slice(&beam_indices)?.to_device(device)?;
+            cache = Some(reorder_cache(next_cache, &beam_indices)?);
+            input_ids = Tensor::from_slice(&next_tokens)?
+                .to_device(device)?
+                .view([rows as i64, 1])?;
 
-            if hypotheses.is_done(beam_scores[0] as f64, current_length) {
+            if hypotheses.iter().all(|hypotheses| hypotheses.done) {
                 break;
             }
         }
 
-        if !hypotheses.done {
-            for (sequence, score) in sequences.into_iter().zip(beam_scores) {
-                hypotheses.add(sequence, score as f64);
-            }
-        }
-        let mut best = hypotheses.best()?;
-        if best.len() < config.max_length {
-            best.push(config.eos_token_id);
-        }
-        Ok(best)
+        hypotheses
+            .into_iter()
+            .enumerate()
+            .map(|(batch, mut hypotheses)| {
+                if !hypotheses.done {
+                    for row in batch * num_beams..(batch + 1) * num_beams {
+                        hypotheses.add(sequences[row].clone(), beam_scores[row] as f64);
+                    }
+                }
+                let mut best = hypotheses.best()?;
+                if best.len() < config.max_length {
+                    best.push(config.eos_token_id);
+                }
+                Ok(best)
+            })
+            .collect()
     }
 }
 
@@ -188,6 +227,7 @@ impl Model {
 struct GenerationConfig {
     decoder_start_token_id: i64,
     eos_token_id: i64,
+    pad_token_id: i64,
     max_length: usize,
     num_beams: usize,
     length_penalty: f64,
@@ -266,12 +306,12 @@ fn no_repeat_ngram_mask(
     ngram_size: usize,
     vocab_size: usize,
     device: Device,
-) -> Tensor {
+) -> koharu_torch::Result<Tensor> {
     let mut mask = vec![0u8; sequences.len() * vocab_size];
     if ngram_size == 0 {
-        return Tensor::from_slice(&mask)
-            .view([sequences.len() as i64, vocab_size as i64])
-            .to_device(device)
+        return Tensor::from_slice(&mask)?
+            .view([sequences.len() as i64, vocab_size as i64])?
+            .to_device(device)?
             .to_kind(Kind::Bool);
     }
     for (row, sequence) in sequences.iter().enumerate() {
@@ -279,9 +319,9 @@ fn no_repeat_ngram_mask(
             mask[row * vocab_size + token as usize] = 1;
         }
     }
-    Tensor::from_slice(&mask)
-        .view([sequences.len() as i64, vocab_size as i64])
-        .to_device(device)
+    Tensor::from_slice(&mask)?
+        .view([sequences.len() as i64, vocab_size as i64])?
+        .to_device(device)?
         .to_kind(Kind::Bool)
 }
 
@@ -298,30 +338,19 @@ fn banned_ngram_tokens(sequence: &[i64], ngram_size: usize) -> Vec<i64> {
         .collect()
 }
 
-fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {
-    let tensor = tensor.to_device(Device::Cpu).contiguous();
-    let mut values = vec![0.0; tensor.numel()];
-    let length = values.len();
-    tensor.f_copy_data(&mut values, length)?;
-    Ok(values)
-}
-
-fn tensor_to_vec_i64(tensor: &Tensor) -> Result<Vec<i64>> {
-    let tensor = tensor.to_device(Device::Cpu).contiguous();
-    let mut values = vec![0; tensor.numel()];
-    let length = values.len();
-    tensor.f_copy_data(&mut values, length)?;
-    Ok(values)
-}
-
-fn reorder_cache(cache: Vec<LayerCache>, beam_indices: &Tensor) -> Vec<LayerCache> {
+fn reorder_cache(
+    cache: Vec<LayerCache>,
+    beam_indices: &Tensor,
+) -> koharu_torch::Result<Vec<LayerCache>> {
     cache
         .into_iter()
-        .map(|layer| LayerCache {
-            self_key: layer.self_key.index_select(0, beam_indices),
-            self_value: layer.self_value.index_select(0, beam_indices),
-            cross_key: layer.cross_key.index_select(0, beam_indices),
-            cross_value: layer.cross_value.index_select(0, beam_indices),
+        .map(|layer| {
+            Ok(LayerCache {
+                self_key: layer.self_key.index_select(0, beam_indices)?,
+                self_value: layer.self_value.index_select(0, beam_indices)?,
+                cross_key: layer.cross_key.index_select(0, beam_indices)?,
+                cross_value: layer.cross_value.index_select(0, beam_indices)?,
+            })
         })
         .collect()
 }
@@ -335,25 +364,25 @@ struct ViTModel {
 }
 
 impl ViTModel {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
-        Self {
-            embeddings: ViTEmbeddings::new(&(path / "embeddings"), config),
-            encoder: ViTEncoder::new(&(path / "encoder"), config),
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
+        Ok(Self {
+            embeddings: ViTEmbeddings::new(&(path / "embeddings"), config)?,
+            encoder: ViTEncoder::new(&(path / "encoder"), config)?,
             layernorm: layer_norm(
                 &(path / "layernorm"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
-            pooler: ViTPooler::new(&(path / "pooler"), config),
-        }
+            )?,
+            pooler: ViTPooler::new(&(path / "pooler"), config)?,
+        })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Tensor {
-        let hidden_states = self.embeddings.forward(pixel_values);
-        let hidden_states = self.encoder.forward(&hidden_states);
-        let hidden_states = self.layernorm.forward(&hidden_states);
-        let _pooled_output = self.pooler.forward(&hidden_states);
-        hidden_states
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+        let hidden_states = self.embeddings.forward(pixel_values)?;
+        let hidden_states = self.encoder.forward(&hidden_states)?;
+        let hidden_states = self.layernorm.forward(&hidden_states)?;
+        let _pooled_output = self.pooler.forward(&hidden_states)?;
+        Ok(hidden_states)
     }
 }
 
@@ -365,28 +394,21 @@ struct ViTEmbeddings {
 }
 
 impl ViTEmbeddings {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
         let patches = (config.image_size / config.patch_size).pow(2);
-        Self {
-            cls_token: path.var(
-                "cls_token",
-                &[1, 1, config.hidden_size],
-                nn::Init::Const(0.0),
-            ),
-            position_embeddings: path.var(
-                "position_embeddings",
-                &[1, patches + 1, config.hidden_size],
-                nn::Init::Const(0.0),
-            ),
-            patch_embeddings: PatchEmbeddings::new(&(path / "patch_embeddings"), config),
-        }
+        Ok(Self {
+            cls_token: path.var("cls_token", &[1, 1, config.hidden_size])?,
+            position_embeddings: path
+                .var("position_embeddings", &[1, patches + 1, config.hidden_size])?,
+            patch_embeddings: PatchEmbeddings::new(&(path / "patch_embeddings"), config)?,
+        })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Tensor {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let batch_size = pixel_values.size()[0];
-        let embeddings = self.patch_embeddings.forward(pixel_values);
-        let cls_tokens = self.cls_token.expand([batch_size, -1, -1], true);
-        Tensor::cat(&[cls_tokens, embeddings], 1) + &self.position_embeddings
+        let embeddings = self.patch_embeddings.forward(pixel_values)?;
+        let cls_tokens = self.cls_token.expand([batch_size, -1, -1], true)?;
+        Tensor::cat(&[cls_tokens, embeddings], 1)? + &self.position_embeddings
     }
 }
 
@@ -397,8 +419,8 @@ struct PatchEmbeddings {
 }
 
 impl PatchEmbeddings {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
+        Ok(Self {
             projection: nn::conv2d(
                 path / "projection",
                 config.num_channels,
@@ -408,19 +430,19 @@ impl PatchEmbeddings {
                     stride: config.patch_size,
                     ..Default::default()
                 },
-            ),
+            )?,
             image_size: config.image_size,
-        }
+        })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> Tensor {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         assert_eq!(
             &pixel_values.size()[2..],
             &[self.image_size, self.image_size]
         );
         self.projection
-            .forward(pixel_values)
-            .flatten(2, 3)
+            .forward(pixel_values)?
+            .flatten(2, 3)?
             .transpose(1, 2)
     }
 }
@@ -431,18 +453,18 @@ struct ViTEncoder {
 }
 
 impl ViTEncoder {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
+        Ok(Self {
             layer: (0..config.num_hidden_layers)
                 .map(|index| ViTLayer::new(&(path / "layer" / index), config))
-                .collect(),
-        }
+                .collect::<Result<_>>()?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.layer
             .iter()
-            .fold(hidden_states.shallow_clone(), |hidden, layer| {
+            .try_fold(hidden_states.alias()?, |hidden, layer| {
                 layer.forward(&hidden)
             })
     }
@@ -458,44 +480,44 @@ struct ViTLayer {
 }
 
 impl ViTLayer {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
-        Self {
-            attention: ViTAttention::new(&(path / "attention"), config),
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
+        Ok(Self {
+            attention: ViTAttention::new(&(path / "attention"), config)?,
             intermediate: linear(
                 &(path / "intermediate" / "dense"),
                 config.hidden_size,
                 config.intermediate_size,
                 true,
-            ),
+            )?,
             output: linear(
                 &(path / "output" / "dense"),
                 config.intermediate_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             layernorm_before: layer_norm(
                 &(path / "layernorm_before"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
+            )?,
             layernorm_after: layer_norm(
                 &(path / "layernorm_after"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let hidden_states = hidden_states
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let hidden_states = (hidden_states
             + self
                 .attention
-                .forward(&self.layernorm_before.forward(hidden_states));
+                .forward(&self.layernorm_before.forward(hidden_states)?)?)?;
         let intermediate = self
             .intermediate
-            .forward(&self.layernorm_after.forward(&hidden_states))
-            .gelu("none");
-        hidden_states + self.output.forward(&intermediate)
+            .forward(&self.layernorm_after.forward(&hidden_states)?)?
+            .gelu("none")?;
+        hidden_states + self.output.forward(&intermediate)?
     }
 }
 
@@ -510,59 +532,60 @@ struct ViTAttention {
 }
 
 impl ViTAttention {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
         let head_dim = config.hidden_size / config.num_attention_heads;
         let attention = path / "attention";
-        Self {
+        Ok(Self {
             query: linear(
                 &(&attention / "query"),
                 config.hidden_size,
                 config.hidden_size,
                 config.qkv_bias,
-            ),
+            )?,
             key: linear(
                 &(&attention / "key"),
                 config.hidden_size,
                 config.hidden_size,
                 config.qkv_bias,
-            ),
+            )?,
             value: linear(
                 &(&attention / "value"),
                 config.hidden_size,
                 config.hidden_size,
                 config.qkv_bias,
-            ),
+            )?,
             output: linear(
                 &(path / "output" / "dense"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             num_heads: config.num_attention_heads,
             head_dim,
-        }
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let query = self.transpose_for_scores(&self.query.forward(hidden_states));
-        let key = self.transpose_for_scores(&self.key.forward(hidden_states));
-        let value = self.transpose_for_scores(&self.value.forward(hidden_states));
-        let probabilities = (query.matmul(&key.transpose(-1, -2)) / (self.head_dim as f64).sqrt())
-            .softmax(-1, Kind::Float)
-            .to_kind(value.kind());
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        let query = self.transpose_for_scores(&self.query.forward(hidden_states)?)?;
+        let key = self.transpose_for_scores(&self.key.forward(hidden_states)?)?;
+        let value = self.transpose_for_scores(&self.value.forward(hidden_states)?)?;
+        let probabilities = (query.matmul(&key.transpose(-1, -2)?)?
+            / (self.head_dim as f64).sqrt())?
+        .softmax(-1, Kind::Float)?
+        .to_kind(value.kind())?;
         let size = hidden_states.size();
         let context = probabilities
-            .matmul(&value)
-            .transpose(1, 2)
-            .contiguous()
-            .view([size[0], size[1], self.num_heads * self.head_dim]);
+            .matmul(&value)?
+            .transpose(1, 2)?
+            .contiguous()?
+            .view([size[0], size[1], self.num_heads * self.head_dim])?;
         self.output.forward(&context)
     }
 
-    fn transpose_for_scores(&self, hidden_states: &Tensor) -> Tensor {
+    fn transpose_for_scores(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         hidden_states
-            .view([size[0], size[1], self.num_heads, self.head_dim])
+            .view([size[0], size[1], self.num_heads, self.head_dim])?
             .permute([0, 2, 1, 3])
     }
 }
@@ -573,19 +596,19 @@ struct ViTPooler {
 }
 
 impl ViTPooler {
-    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, config: &ViTConfig) -> Result<Self> {
+        Ok(Self {
             dense: linear(
                 &(path / "dense"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        self.dense.forward(&hidden_states.select(1, 0)).tanh()
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        self.dense.forward(&hidden_states.select(1, 0)?)?.tanh()
     }
 }
 
@@ -596,11 +619,11 @@ struct BertLMHeadModel {
 }
 
 impl BertLMHeadModel {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        Self {
-            bert: BertModel::new(&(path / "bert"), config),
-            cls: BertOnlyMLMHead::new(&(path / "cls"), config),
-        }
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        Ok(Self {
+            bert: BertModel::new(&(path / "bert"), config)?,
+            cls: BertOnlyMLMHead::new(&(path / "cls"), config)?,
+        })
     }
 
     fn forward(
@@ -608,9 +631,10 @@ impl BertLMHeadModel {
         input_ids: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&[LayerCache]>,
-    ) -> (Tensor, Vec<LayerCache>) {
-        let (sequence_output, cache) = self.bert.forward(input_ids, encoder_hidden_states, cache);
-        (self.cls.forward(&sequence_output), cache)
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
+        let (sequence_output, cache) =
+            self.bert.forward(input_ids, encoder_hidden_states, cache)?;
+        Ok((self.cls.forward(&sequence_output)?, cache))
     }
 }
 
@@ -621,11 +645,11 @@ struct BertModel {
 }
 
 impl BertModel {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        Self {
-            embeddings: BertEmbeddings::new(&(path / "embeddings"), config),
-            encoder: BertEncoder::new(&(path / "encoder"), config),
-        }
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        Ok(Self {
+            embeddings: BertEmbeddings::new(&(path / "embeddings"), config)?,
+            encoder: BertEncoder::new(&(path / "encoder"), config)?,
+        })
     }
 
     fn forward(
@@ -633,9 +657,9 @@ impl BertModel {
         input_ids: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&[LayerCache]>,
-    ) -> (Tensor, Vec<LayerCache>) {
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
         let past_length = cache.map_or(0, |cache| cache[0].self_key.size()[2]);
-        let embeddings = self.embeddings.forward(input_ids, past_length);
+        let embeddings = self.embeddings.forward(input_ids, past_length)?;
         self.encoder
             .forward(&embeddings, encoder_hidden_states, cache)
     }
@@ -651,14 +675,13 @@ struct BertEmbeddings {
 }
 
 impl BertEmbeddings {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        let position_ids = path.add(
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        let position_ids = path.var_with_kind(
             "position_ids",
-            Tensor::arange(config.max_position_embeddings, (Kind::Int64, path.device()))
-                .unsqueeze(0),
-            false,
-        );
-        Self {
+            &[1, config.max_position_embeddings],
+            Kind::Int64,
+        )?;
+        Ok(Self {
             word_embeddings: nn::embedding(
                 path / "word_embeddings",
                 config.vocab_size,
@@ -667,36 +690,36 @@ impl BertEmbeddings {
                     padding_idx: config.pad_token_id,
                     ..Default::default()
                 },
-            ),
+            )?,
             position_embeddings: nn::embedding(
                 path / "position_embeddings",
                 config.max_position_embeddings,
                 config.hidden_size,
                 Default::default(),
-            ),
+            )?,
             token_type_embeddings: nn::embedding(
                 path / "token_type_embeddings",
                 config.type_vocab_size,
                 config.hidden_size,
                 Default::default(),
-            ),
+            )?,
             layer_norm: layer_norm(
                 &(path / "LayerNorm"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
+            )?,
             position_ids,
-        }
+        })
     }
 
-    fn forward(&self, input_ids: &Tensor, past_length: i64) -> Tensor {
+    fn forward(&self, input_ids: &Tensor, past_length: i64) -> koharu_torch::Result<Tensor> {
         let sequence_length = input_ids.size()[1];
-        let position_ids = self.position_ids.narrow(1, past_length, sequence_length);
-        let token_type_ids = Tensor::zeros_like(input_ids);
+        let position_ids = self.position_ids.narrow(1, past_length, sequence_length)?;
+        let token_type_ids = Tensor::zeros_like(input_ids)?;
         self.layer_norm.forward(
-            &(self.word_embeddings.forward(input_ids)
-                + self.token_type_embeddings.forward(&token_type_ids)
-                + self.position_embeddings.forward(&position_ids)),
+            &((self.word_embeddings.forward(input_ids)?
+                + self.token_type_embeddings.forward(&token_type_ids)?)?
+                + self.position_embeddings.forward(&position_ids)?)?,
         )
     }
 }
@@ -707,12 +730,12 @@ struct BertEncoder {
 }
 
 impl BertEncoder {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        Ok(Self {
             layer: (0..config.num_hidden_layers)
                 .map(|index| BertLayer::new(&(path / "layer" / index), config))
-                .collect(),
-        }
+                .collect::<Result<_>>()?,
+        })
     }
 
     fn forward(
@@ -720,19 +743,19 @@ impl BertEncoder {
         hidden_states: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&[LayerCache]>,
-    ) -> (Tensor, Vec<LayerCache>) {
-        let mut hidden_states = hidden_states.shallow_clone();
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
+        let mut hidden_states = hidden_states.alias()?;
         let mut next_cache = Vec::with_capacity(self.layer.len());
         for (index, layer) in self.layer.iter().enumerate() {
             let output = layer.forward(
                 &hidden_states,
                 encoder_hidden_states,
                 cache.map(|cache| &cache[index]),
-            );
+            )?;
             hidden_states = output.0;
             next_cache.push(output.1);
         }
-        (hidden_states, next_cache)
+        Ok((hidden_states, next_cache))
     }
 }
 
@@ -754,28 +777,28 @@ struct BertLayer {
 }
 
 impl BertLayer {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        Self {
-            attention: BertAttention::new(&(path / "attention"), config),
-            crossattention: BertAttention::new(&(path / "crossattention"), config),
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        Ok(Self {
+            attention: BertAttention::new(&(path / "attention"), config)?,
+            crossattention: BertAttention::new(&(path / "crossattention"), config)?,
             intermediate: linear(
                 &(path / "intermediate" / "dense"),
                 config.hidden_size,
                 config.intermediate_size,
                 true,
-            ),
+            )?,
             output: linear(
                 &(path / "output" / "dense"),
                 config.intermediate_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             output_layer_norm: layer_norm(
                 &(path / "output" / "LayerNorm"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
-        }
+            )?,
+        })
     }
 
     fn forward(
@@ -783,22 +806,22 @@ impl BertLayer {
         hidden_states: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&LayerCache>,
-    ) -> (Tensor, LayerCache) {
+    ) -> koharu_torch::Result<(Tensor, LayerCache)> {
         let (attention_output, self_key, self_value) = self.attention.forward(
             hidden_states,
             None,
             cache.map(|cache| (&cache.self_key, &cache.self_value)),
-        );
+        )?;
         let (attention_output, cross_key, cross_value) = self.crossattention.forward(
             &attention_output,
             Some(encoder_hidden_states),
             cache.map(|cache| (&cache.cross_key, &cache.cross_value)),
-        );
-        let intermediate = self.intermediate.forward(&attention_output).gelu("none");
+        )?;
+        let intermediate = self.intermediate.forward(&attention_output)?.gelu("none")?;
         let hidden_states = self
             .output_layer_norm
-            .forward(&(self.output.forward(&intermediate) + attention_output));
-        (
+            .forward(&(self.output.forward(&intermediate)? + attention_output)?)?;
+        Ok((
             hidden_states,
             LayerCache {
                 self_key,
@@ -806,7 +829,7 @@ impl BertLayer {
                 cross_key,
                 cross_value,
             },
-        )
+        ))
     }
 }
 
@@ -818,21 +841,21 @@ struct BertAttention {
 }
 
 impl BertAttention {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        Self {
-            self_attention: BertSelfAttention::new(&(path / "self"), config),
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        Ok(Self {
+            self_attention: BertSelfAttention::new(&(path / "self"), config)?,
             dense: linear(
                 &(path / "output" / "dense"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             layer_norm: layer_norm(
                 &(path / "output" / "LayerNorm"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
-        }
+            )?,
+        })
     }
 
     fn forward(
@@ -840,14 +863,14 @@ impl BertAttention {
         hidden_states: &Tensor,
         key_value_states: Option<&Tensor>,
         past: Option<(&Tensor, &Tensor)>,
-    ) -> (Tensor, Tensor, Tensor) {
+    ) -> koharu_torch::Result<(Tensor, Tensor, Tensor)> {
         let (context, key, value) =
             self.self_attention
-                .forward(hidden_states, key_value_states, past);
+                .forward(hidden_states, key_value_states, past)?;
         let output = self
             .layer_norm
-            .forward(&(self.dense.forward(&context) + hidden_states));
-        (output, key, value)
+            .forward(&(self.dense.forward(&context)? + hidden_states)?)?;
+        Ok((output, key, value))
     }
 }
 
@@ -861,30 +884,30 @@ struct BertSelfAttention {
 }
 
 impl BertSelfAttention {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
         let head_dim = config.hidden_size / config.num_attention_heads;
-        Self {
+        Ok(Self {
             query: linear(
                 &(path / "query"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             key: linear(
                 &(path / "key"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             value: linear(
                 &(path / "value"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             num_heads: config.num_attention_heads,
             head_dim,
-        }
+        })
     }
 
     fn forward(
@@ -892,42 +915,43 @@ impl BertSelfAttention {
         hidden_states: &Tensor,
         key_value_states: Option<&Tensor>,
         past: Option<(&Tensor, &Tensor)>,
-    ) -> (Tensor, Tensor, Tensor) {
-        let query = self.transpose_for_scores(&self.query.forward(hidden_states));
+    ) -> koharu_torch::Result<(Tensor, Tensor, Tensor)> {
+        let query = self.transpose_for_scores(&self.query.forward(hidden_states)?)?;
         let (key, value) = match (key_value_states, past) {
-            (Some(_), Some((key, value))) => (key.shallow_clone(), value.shallow_clone()),
+            (Some(_), Some((key, value))) => (key.alias()?, value.alias()?),
             (states, past) => {
                 let states = states.unwrap_or(hidden_states);
-                let key = self.transpose_for_scores(&self.key.forward(states));
-                let value = self.transpose_for_scores(&self.value.forward(states));
+                let key = self.transpose_for_scores(&self.key.forward(states)?)?;
+                let value = self.transpose_for_scores(&self.value.forward(states)?)?;
                 if key_value_states.is_none()
                     && let Some((past_key, past_value)) = past
                 {
                     (
-                        Tensor::cat(&[past_key.shallow_clone(), key], 2),
-                        Tensor::cat(&[past_value.shallow_clone(), value], 2),
+                        Tensor::cat(&[past_key.alias()?, key], 2)?,
+                        Tensor::cat(&[past_value.alias()?, value], 2)?,
                     )
                 } else {
                     (key, value)
                 }
             }
         };
-        let probabilities = (query.matmul(&key.transpose(-1, -2)) / (self.head_dim as f64).sqrt())
-            .softmax(-1, Kind::Float)
-            .to_kind(value.kind());
+        let probabilities = (query.matmul(&key.transpose(-1, -2)?)?
+            / (self.head_dim as f64).sqrt())?
+        .softmax(-1, Kind::Float)?
+        .to_kind(value.kind())?;
         let size = hidden_states.size();
         let context = probabilities
-            .matmul(&value)
-            .transpose(1, 2)
-            .contiguous()
-            .view([size[0], size[1], self.num_heads * self.head_dim]);
-        (context, key, value)
+            .matmul(&value)?
+            .transpose(1, 2)?
+            .contiguous()?
+            .view([size[0], size[1], self.num_heads * self.head_dim])?;
+        Ok((context, key, value))
     }
 
-    fn transpose_for_scores(&self, hidden_states: &Tensor) -> Tensor {
+    fn transpose_for_scores(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         hidden_states
-            .view([size[0], size[1], self.num_heads, self.head_dim])
+            .view([size[0], size[1], self.num_heads, self.head_dim])?
             .permute([0, 2, 1, 3])
     }
 }
@@ -940,26 +964,27 @@ struct BertOnlyMLMHead {
 }
 
 impl BertOnlyMLMHead {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
         let predictions = path / "predictions";
-        Self {
+        Ok(Self {
             transform: BertPredictionHeadTransform::new(
                 &(predictions.clone() / "transform"),
                 config,
-            ),
+            )?,
             decoder: linear(
                 &(predictions.clone() / "decoder"),
                 config.hidden_size,
                 config.vocab_size,
                 true,
-            ),
+            )?,
             // Transformers aliases this parameter to decoder.bias; both names are in this checkpoint.
-            _bias: predictions.var("bias", &[config.vocab_size], nn::Init::Const(0.0)),
-        }
+            _bias: predictions.var("bias", &[config.vocab_size])?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        self.decoder.forward(&self.transform.forward(hidden_states))
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+        self.decoder
+            .forward(&self.transform.forward(hidden_states)?)
     }
 }
 
@@ -970,49 +995,41 @@ struct BertPredictionHeadTransform {
 }
 
 impl BertPredictionHeadTransform {
-    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Self {
-        Self {
+    fn new(path: &nn::Path<'_>, config: &BertConfig) -> Result<Self> {
+        Ok(Self {
             dense: linear(
                 &(path / "dense"),
                 config.hidden_size,
                 config.hidden_size,
                 true,
-            ),
+            )?,
             layer_norm: layer_norm(
                 &(path / "LayerNorm"),
                 config.hidden_size,
                 config.layer_norm_eps,
-            ),
-        }
+            )?,
+        })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> Tensor {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.layer_norm
-            .forward(&self.dense.forward(hidden_states).gelu("none"))
+            .forward(&self.dense.forward(hidden_states)?.gelu("none")?)
     }
 }
 
-fn linear(path: &nn::Path<'_>, input: i64, output: i64, bias: bool) -> nn::Linear {
-    nn::linear(
-        path,
-        input,
-        output,
-        nn::LinearConfig {
-            bias,
-            ..Default::default()
-        },
-    )
+fn linear(path: &nn::Path<'_>, input: i64, output: i64, bias: bool) -> Result<nn::Linear> {
+    Ok(nn::linear(path, input, output, nn::LinearConfig { bias })?)
 }
 
-fn layer_norm(path: &nn::Path<'_>, hidden_size: i64, epsilon: f64) -> nn::LayerNorm {
-    nn::layer_norm(
+fn layer_norm(path: &nn::Path<'_>, hidden_size: i64, epsilon: f64) -> Result<nn::LayerNorm> {
+    Ok(nn::layer_norm(
         path,
         vec![hidden_size],
         nn::LayerNormConfig {
             eps: epsilon,
             ..Default::default()
         },
-    )
+    )?)
 }
 
 #[cfg(test)]

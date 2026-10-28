@@ -9,10 +9,10 @@
 
 use std::{path::PathBuf, sync::Mutex};
 
-use anyhow::{Context as _, Result, anyhow, ensure};
-use koharu_diffusion::{Context, ContextParams, ImageGenerationParams, RgbImage, VaeFormat};
-
-use crate::Backend;
+use anyhow::{Context as _, Result, anyhow};
+use image::RgbImage;
+use koharu_diffusion::{Context, ContextParams, ImageParams, VaeFormat};
+use koharu_runtime::Backend;
 
 #[derive(Debug)]
 pub(super) struct ModelPaths {
@@ -27,19 +27,28 @@ pub(super) struct Model {
 }
 
 impl Model {
-    pub fn new(device: &crate::Device, paths: ModelPaths) -> Result<Self> {
-        let context = Context::new(&context_params(device, paths))
-            .context("failed to load FLUX.2 Klein components")?;
-        ensure!(
-            context.supports_image_generation(),
-            "the loaded FLUX.2 Klein context does not support image generation"
-        );
+    /// The model on `device`, its weights placed to fit `max_vram` bytes.
+    pub fn new(device: &crate::Device, max_vram: u64, paths: &ModelPaths) -> Result<Self> {
+        let cuda = device.backend == Backend::Cuda;
+        let context = Context::new(&ContextParams {
+            diffusion_model: Some(&paths.transformer),
+            llm: Some(&paths.text_encoder),
+            vae: Some(&paths.vae),
+            vae_format: Some(VaeFormat::Flux2),
+            device: Some(&device.name),
+            max_vram: Some(max_vram),
+            mmap: true,
+            flash_attention: cuda,
+            conv_direct: cuda,
+            ..ContextParams::default()
+        })
+        .context("failed to load FLUX.2 Klein components")?;
         Ok(Self {
             context: Mutex::new(context),
         })
     }
 
-    pub fn forward(&self, params: &ImageGenerationParams) -> Result<Vec<RgbImage>> {
+    pub fn forward(&self, params: &ImageParams) -> Result<Vec<RgbImage>> {
         let mut context = self
             .context
             .lock()
@@ -47,28 +56,5 @@ impl Model {
         context
             .generate_image(params)
             .context("FLUX.2 Klein inference failed")
-    }
-}
-
-fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
-    let use_accelerator = device.backend != Backend::Cpu;
-    let use_cuda = device.backend == Backend::Cuda;
-    let keep_parameters_resident = use_accelerator && device.memory_free >= 20 * 1024 * 1024 * 1024;
-    ContextParams {
-        diffusion_model_path: Some(paths.transformer),
-        llm_path: Some(paths.text_encoder),
-        vae_path: Some(paths.vae),
-        enable_mmap: true,
-        flash_attention: use_cuda,
-        diffusion_flash_attention: use_cuda,
-        diffusion_conv_direct: use_cuda,
-        vae_conv_direct: use_cuda,
-        vae_format: VaeFormat::Flux2,
-        backend: Some(device.name.clone()),
-        // The text encoder and denoiser run in separate phases. Cards with less
-        // headroom keep source parameters in RAM; high-VRAM cards avoid repeated
-        // staging by retaining both quantized models on the accelerator.
-        params_backend: (use_accelerator && !keep_parameters_resident).then(|| "*=cpu".to_owned()),
-        ..ContextParams::default()
     }
 }

@@ -9,9 +9,7 @@ mod processor;
 use anyhow::{Context, Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, RgbImage};
-use koharu_diffusion::{
-    GuidanceParams, ImageGenerationParams, SampleMethod, SampleParams, Scheduler,
-};
+use koharu_diffusion::{ImageParams, SampleMethod, Scheduler};
 
 use self::{
     model::{Model, ModelPaths},
@@ -36,7 +34,9 @@ pub struct Flux2Klein {
 }
 
 impl Flux2Klein {
-    pub async fn load(device: crate::Device) -> Result<Self> {
+    /// Loads the model once for generation and inpainting, its weights
+    /// placed to fit `max_vram` bytes of the device.
+    pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
         let (transformer, text_encoder, vae) = tokio::try_join!(
             TRANSFORMER_WEIGHTS.resolve(),
             TEXT_ENCODER_WEIGHTS.resolve(),
@@ -44,8 +44,9 @@ impl Flux2Klein {
         )
         .context("failed to resolve FLUX.2 Klein model assets")?;
         let model = Model::new(
-            &device,
-            ModelPaths {
+            device,
+            max_vram,
+            &ModelPaths {
                 transformer,
                 text_encoder,
                 vae,
@@ -99,54 +100,25 @@ impl Flux2Klein {
         let width = (width / 16) * 16;
         ensure!(width > 0 && height > 0);
 
-        self.model.forward(&ImageGenerationParams {
-            prompt: prompt.to_owned(),
-            width: i32::try_from(width)?,
-            height: i32::try_from(height)?,
-            reference_images: condition_images,
-            reference_image_args: Some("resize_before_vae=0".into()),
-            sample: SampleParams {
-                guidance: GuidanceParams {
-                    text_cfg: 1.0,
-                    ..GuidanceParams::default()
-                },
-                scheduler: Scheduler::Flux2,
-                sample_method: SampleMethod::Euler,
-                sample_steps: options.num_inference_steps,
-                ..SampleParams::default()
-            },
-            seed: options.seed,
-            batch_count: options.num_images_per_prompt,
-            ..ImageGenerationParams::default()
+        self.model.forward(&ImageParams {
+            prompt,
+            width: Some(width),
+            height: Some(height),
+            references: &condition_images,
+            reference_args: Some("resize_before_vae=0"),
+            cfg: Some(1.0),
+            scheduler: Some(Scheduler::Flux2),
+            sample_method: Some(SampleMethod::Euler),
+            steps: Some(u32::try_from(options.num_inference_steps)?),
+            seed: Some(options.seed),
+            count: Some(u32::try_from(options.num_images_per_prompt)?),
+            ..ImageParams::default()
         })
     }
-}
 
-#[derive(Debug)]
-pub struct Flux2KleinInpaint {
-    model: Model,
-}
-
-impl Flux2KleinInpaint {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let (transformer, text_encoder, vae) = tokio::try_join!(
-            TRANSFORMER_WEIGHTS.resolve(),
-            TEXT_ENCODER_WEIGHTS.resolve(),
-            VAE_WEIGHTS.resolve(),
-        )
-        .context("failed to resolve FLUX.2 Klein model assets")?;
-        let model = Model::new(
-            &device,
-            ModelPaths {
-                transformer,
-                text_encoder,
-                vae,
-            },
-        )?;
-        Ok(Self { model })
-    }
-
-    pub fn inference(
+    /// Repaints where `mask_image` is white, as diffusers' inpainting
+    /// pipeline does.
+    pub fn inpaint(
         &self,
         prompt: &str,
         image: &DynamicImage,
@@ -257,28 +229,22 @@ impl Flux2KleinInpaint {
 
         let generated = self
             .model
-            .forward(&ImageGenerationParams {
-                prompt: prompt.to_owned(),
-                width: i32::try_from(width)?,
-                height: i32::try_from(height)?,
-                init_image: Some(init_image),
-                reference_images,
-                reference_image_args: Some("resize_before_vae=0".into()),
-                mask_image: Some(native_mask),
-                sample: SampleParams {
-                    guidance: GuidanceParams {
-                        text_cfg: 1.0,
-                        ..GuidanceParams::default()
-                    },
-                    scheduler: Scheduler::Flux2,
-                    sample_method: SampleMethod::Euler,
-                    sample_steps: i32::try_from(options.num_inference_steps)?,
-                    ..SampleParams::default()
-                },
-                seed: options.seed,
-                batch_count: 1,
-                strength,
-                ..ImageGenerationParams::default()
+            .forward(&ImageParams {
+                prompt,
+                width: Some(width),
+                height: Some(height),
+                init: Some(&init_image),
+                references: &reference_images,
+                reference_args: Some("resize_before_vae=0"),
+                mask: Some(&native_mask),
+                cfg: Some(1.0),
+                scheduler: Some(Scheduler::Flux2),
+                sample_method: Some(SampleMethod::Euler),
+                steps: Some(u32::try_from(options.num_inference_steps)?),
+                seed: Some(options.seed),
+                count: Some(1),
+                strength: Some(strength),
+                ..ImageParams::default()
             })?
             .into_iter()
             .next()

@@ -23,14 +23,14 @@ pub(super) struct Processor {
 }
 
 impl Processor {
-    pub(super) fn new(device: Device) -> Self {
-        let mean = Tensor::from_slice(&[0.485f32, 0.456, 0.406])
-            .view([1, 3, 1, 1])
-            .to_device(device);
-        let std = Tensor::from_slice(&[0.229f32, 0.224, 0.225])
-            .view([1, 3, 1, 1])
-            .to_device(device);
-        Self { device, mean, std }
+    pub(super) fn new(device: Device) -> Result<Self> {
+        let mean = Tensor::from_slice(&[0.485f32, 0.456, 0.406])?
+            .view([1, 3, 1, 1])?
+            .to_device(device)?;
+        let std = Tensor::from_slice(&[0.229f32, 0.224, 0.225])?
+            .view([1, 3, 1, 1])?
+            .to_device(device)?;
+        Ok(Self { device, mean, std })
     }
 
     pub(super) fn call(
@@ -42,23 +42,23 @@ impl Processor {
         max_side: Option<u32>,
     ) -> Result<MangaTextMask> {
         let (input, geometry) = self.preprocess(image, max_side)?;
-        let infer = |input: &Tensor| model.forward(input).sigmoid();
+        let infer = |input: &Tensor| model.forward(input)?.sigmoid();
 
-        let mut probabilities = infer(&input);
+        let mut probabilities = infer(&input)?;
         let mut steps = 1;
         if horizontal_flip {
-            probabilities += infer(&input.flip([3])).flip([3]);
+            probabilities = (&probabilities + infer(&input.flip([3])?)?.flip([3])?)?;
             steps += 1;
         }
         if vertical_flip {
-            probabilities += infer(&input.flip([2])).flip([2]);
+            probabilities = (&probabilities + infer(&input.flip([2])?)?.flip([2])?)?;
             steps += 1;
         }
-        probabilities /= steps as f64;
+        probabilities = (&probabilities / steps as f64)?;
 
         let mut probabilities = probabilities
-            .narrow(2, 0, i64::from(geometry.input_height))
-            .narrow(3, 0, i64::from(geometry.input_width));
+            .narrow(2, 0, i64::from(geometry.input_height))?
+            .narrow(3, 0, i64::from(geometry.input_width))?;
         if geometry.input_width != geometry.original_width
             || geometry.input_height != geometry.original_height
         {
@@ -72,14 +72,14 @@ impl Processor {
                 false,
                 None::<f64>,
                 None::<f64>,
-            );
+            )?;
         }
 
         let probabilities = probabilities
-            .to_kind(Kind::Float)
-            .contiguous()
-            .to_device(Device::Cpu)
-            .view([-1]);
+            .to_kind(Kind::Float)?
+            .contiguous()?
+            .to_device(Device::Cpu)?
+            .view([-1])?;
         let probabilities = Vec::<f32>::try_from(&probabilities)?;
         Ok(MangaTextMask {
             width: geometry.original_width,
@@ -114,13 +114,13 @@ impl Processor {
         let input_width = image.width();
         let input_height = image.height();
 
-        let input = Tensor::from_slice(image.as_raw())
-            .view([1, i64::from(input_height), i64::from(input_width), 3])
-            .permute([0, 3, 1, 2])
-            .to_device(self.device)
-            .to_kind(Kind::Float)
-            / 255.0;
-        let input = (input - &self.mean) / &self.std;
+        let input = (Tensor::from_slice(image.as_raw())?
+            .view([1, i64::from(input_height), i64::from(input_width), 3])?
+            .permute([0, 3, 1, 2])?
+            .to_device(self.device)?
+            .to_kind(Kind::Float)?
+            / 255.0)?;
+        let input = ((input - &self.mean)? / &self.std)?;
 
         // F.pad(tensor, (0, pad_w, 0, pad_h), mode="constant", value=0)
         // pads normalized zeros only on the bottom and right edges.
@@ -129,7 +129,7 @@ impl Processor {
         let input = if pad_height == 0 && pad_width == 0 {
             input
         } else {
-            input.constant_pad_nd([0, i64::from(pad_width), 0, i64::from(pad_height)])
+            input.constant_pad_nd([0, i64::from(pad_width), 0, i64::from(pad_height)])?
         };
 
         Ok((

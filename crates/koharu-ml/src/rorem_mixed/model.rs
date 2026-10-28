@@ -7,10 +7,10 @@
 
 use std::{path::PathBuf, sync::Mutex};
 
-use anyhow::{Context as _, Result, anyhow, ensure};
-use koharu_diffusion::{Context, ContextParams, ImageGenerationParams, RgbImage};
-
-use crate::Backend;
+use anyhow::{Context as _, Result, anyhow};
+use image::RgbImage;
+use koharu_diffusion::{Context, ContextParams, ImageParams};
+use koharu_runtime::Backend;
 
 #[derive(Debug)]
 pub(super) struct ModelPaths {
@@ -27,19 +27,29 @@ pub(super) struct Model {
 }
 
 impl Model {
-    pub(super) fn new(device: &crate::Device, paths: ModelPaths) -> Result<Self> {
-        let context = Context::new(&context_params(device, paths))
-            .context("failed to load RORem mixed components")?;
-        ensure!(
-            context.supports_image_generation(),
-            "the loaded RORem mixed context does not support image generation"
-        );
+    /// The model on `device`, its weights placed to fit `max_vram` bytes.
+    pub(super) fn new(device: &crate::Device, max_vram: u64, paths: &ModelPaths) -> Result<Self> {
+        let cuda = device.backend == Backend::Cuda;
+        let context = Context::new(&ContextParams {
+            model: Some(&paths.version_marker),
+            diffusion_model: Some(&paths.diffusion_model),
+            vae: Some(&paths.vae),
+            clip_l: Some(&paths.clip_l),
+            clip_g: Some(&paths.clip_g),
+            device: Some(&device.name),
+            max_vram: Some(max_vram),
+            mmap: true,
+            flash_attention: cuda,
+            conv_direct: cuda,
+            ..ContextParams::default()
+        })
+        .context("failed to load RORem mixed components")?;
         Ok(Self {
             context: Mutex::new(context),
         })
     }
 
-    pub(super) fn forward(&self, params: &ImageGenerationParams) -> Result<Vec<RgbImage>> {
+    pub(super) fn forward(&self, params: &ImageParams) -> Result<Vec<RgbImage>> {
         let mut context = self
             .context
             .lock()
@@ -47,23 +57,5 @@ impl Model {
         context
             .generate_image(params)
             .context("RORem mixed inference failed")
-    }
-}
-
-fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
-    let use_cuda = device.backend == Backend::Cuda;
-    ContextParams {
-        model_path: Some(paths.version_marker),
-        diffusion_model_path: Some(paths.diffusion_model),
-        vae_path: Some(paths.vae),
-        clip_l_path: Some(paths.clip_l),
-        clip_g_path: Some(paths.clip_g),
-        enable_mmap: true,
-        flash_attention: use_cuda,
-        diffusion_flash_attention: use_cuda,
-        diffusion_conv_direct: use_cuda,
-        vae_conv_direct: use_cuda,
-        backend: Some(device.name.clone()),
-        ..ContextParams::default()
     }
 }

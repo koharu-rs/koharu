@@ -6,8 +6,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::{
     config::YoloV8mSpeechBubbleConfig,
     processor::{
@@ -32,8 +30,8 @@ pub struct YoloV8mSpeechBubbleSegmenter {
 }
 
 impl YoloV8mSpeechBubbleSegmenter {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let config_path = CONFIG
             .resolve()
             .await
@@ -45,7 +43,7 @@ impl YoloV8mSpeechBubbleSegmenter {
         let config = YoloV8mSpeechBubbleConfig::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
         let processor = YoloV8mSegImageProcessor::new(&config)?;
-        let mut model = Model::new(&config, device)?;
+        let mut model = Model::new(&config, device, kind)?;
         model
             .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
@@ -73,7 +71,7 @@ impl YoloV8mSpeechBubbleSegmenter {
     ) -> Result<YoloV8mSpeechBubbleInstances> {
         koharu_torch::no_grad(|| {
             let (pixel_values, letterbox) = self.processor.preprocess(image, self.device)?;
-            let outputs = self.model.forward(&pixel_values);
+            let outputs = self.model.forward(&pixel_values)?;
             self.processor
                 .postprocess(&outputs, &letterbox, confidence_threshold, nms_threshold)
         })

@@ -12,10 +12,10 @@ async fn main() -> Result<()> {
         .join("object_detection")
         .join("1.jpg");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
 
     let image = image::open(input)?;
-    let model = MangaTextMaskGenerator::load(koharu_ml::Device::default()).await?;
+    let model = MangaTextMaskGenerator::load(runtime.device()).await?;
 
     model.inference(&image)?;
 

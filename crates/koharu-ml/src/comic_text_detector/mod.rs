@@ -5,8 +5,6 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
-use crate::backend::TryIntoDevice;
-
 pub use self::processor::{Quad, TextBlock};
 
 use self::{
@@ -27,8 +25,8 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into_device()?;
+    pub async fn load(device: &crate::Device) -> Result<Self> {
+        let (device, kind) = crate::backend::torch(device)?;
         let yolo_path = YOLO_WEIGHTS
             .resolve()
             .await
@@ -42,7 +40,7 @@ impl ComicTextDetector {
             .await
             .context("failed to resolve comic-text-detector DBNet weights")?;
 
-        let mut model = Model::new(device);
+        let mut model = Model::new(device, kind)?;
         model
             .load(&yolo_path, &unet_path, &dbnet_path)
             .context("failed to load comic-text-detector safetensors")?;
@@ -58,7 +56,7 @@ impl ComicTextDetector {
                 return Ok(detection);
             }
             let (pixel_values, dimensions) = preprocess(image, self.device)?;
-            let outputs = self.model.forward(&pixel_values);
+            let outputs = self.model.forward(&pixel_values)?;
             postprocess(outputs, dimensions, image)
         })
     }

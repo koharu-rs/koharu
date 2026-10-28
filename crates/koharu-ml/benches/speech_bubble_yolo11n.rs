@@ -12,9 +12,9 @@ async fn main() -> Result<()> {
         .join("object_detection")
         .join("1.jpg");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let image = image::open(&input)?;
-    let model = Yolo11nSpeechBubbleSegmenter::load(koharu_ml::Device::default()).await?;
+    let model = Yolo11nSpeechBubbleSegmenter::load(runtime.device()).await?;
 
     model.inference(&image)?;
 

@@ -14,9 +14,9 @@ async fn main() -> Result<()> {
         .join("object_detection")
         .join("1.jpg");
 
-    koharu_ml::init().await?;
+    let runtime = koharu_runtime::Runtime::start().await?;
     let image = image::open(&input)?;
-    let model = PPDocLayoutV3::load(koharu_ml::Device::default()).await?;
+    let model = PPDocLayoutV3::load(runtime.device()).await?;
 
     let mut criterion = Criterion::default()
         .sample_size(10)

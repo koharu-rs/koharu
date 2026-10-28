@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use fs4::FileExt;
 
 static ROOT: OnceLock<PathBuf> = OnceLock::new();
 
@@ -139,7 +138,9 @@ impl Store {
     }
 }
 
-struct Lock(File);
+/// Holds a target against every other install of it, in this process or
+/// another, until dropped; closing the file releases the lock.
+struct Lock(#[allow(dead_code)] File);
 
 impl Lock {
     async fn acquire(target: &Path) -> Result<Self> {
@@ -163,7 +164,8 @@ impl Lock {
                 .truncate(false)
                 .open(&path)
                 .with_context(|| format!("failed to open {}", path.display()))?;
-            FileExt::lock(&file).with_context(|| format!("failed to lock {}", path.display()))?;
+            file.lock()
+                .with_context(|| format!("failed to lock {}", path.display()))?;
             Ok(Self(file))
         })
         .await
@@ -171,9 +173,34 @@ impl Lock {
     }
 }
 
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.0);
+/// Removes the entries of `directory` named with `prefix`, other than
+/// `keep`: the builds a newer one replaced. A build another running Koharu
+/// still holds open stays, and a later start removes it.
+pub(crate) async fn remove_others(directory: PathBuf, prefix: String, keep: String) {
+    let removed = tokio::task::spawn_blocking(move || {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name == keep || !name.starts_with(&prefix) || name.starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            let result = if path.is_dir() {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+            match result {
+                Ok(()) => tracing::info!("removed {}", path.display()),
+                Err(error) => tracing::warn!("couldn't remove {}: {error}", path.display()),
+            }
+        }
+    })
+    .await;
+    if let Err(error) = removed {
+        tracing::warn!("removing older builds failed: {error}");
     }
 }
 
