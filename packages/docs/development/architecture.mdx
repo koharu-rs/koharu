@@ -54,7 +54,7 @@ Independent typed channels carry project, canvas, job, download, and resource up
 
 ## Native runtime boundary
 
-Safe wrappers `koharu-torch`, `llama-cpp-2`, and `koharu-diffusion` are separate from the unsafe `-sys` dynamic-loading crates, Koharu's own `llama-cpp-sys-2` among them. `koharu-runtime` discovers, downloads, validates, and loads their packages.
+Safe wrappers `tch`, `llama-cpp-2`, and `koharu-diffusion` are separate from the unsafe `-sys` dynamic-loading crates, Koharu's own `torch-sys` and `llama-cpp-sys-2` among them. `koharu-runtime` discovers, downloads, validates, and loads their packages.
 
 One crate is shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml` and the encrypted secrets, whose key is kept in the operating system credential store.
 

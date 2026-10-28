@@ -43,6 +43,6 @@ impl LaMa {
         mask: &GrayImage,
         config: &InpaintRequest,
     ) -> Result<RgbImage> {
-        koharu_torch::no_grad(|| self.processor.call(&self.model, image, mask, config))
+        tch::no_grad(|| self.processor.call(&self.model, image, mask, config))
     }
 }

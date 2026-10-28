@@ -9,7 +9,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::{
     config::ComicLayoutYolo26sConfig,
@@ -67,7 +67,7 @@ impl ComicLayoutYolo26sSegmenter {
         image: &DynamicImage,
         confidence_threshold: f32,
     ) -> Result<ComicLayoutYolo26sInstances> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let (pixel_values, letterbox) = self.processor.preprocess(image, self.device)?;
             let output = self.model.forward(&pixel_values)?;
             self.processor

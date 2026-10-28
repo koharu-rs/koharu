@@ -11,7 +11,7 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, RgbImage};
-use koharu_torch::{Device, Kind, Tensor};
+use tch::{Device, Kind, Tensor};
 use tokenizers::Tokenizer as HuggingFaceTokenizer;
 
 use super::config::siglip2;
@@ -41,12 +41,12 @@ pub(super) struct ImageInput {
 
 impl ImageProcessor {
     pub(super) fn new(device: Device) -> Result<Self> {
-        let mean = Tensor::from_slice(&IMAGE_MEAN)?
-            .view([1, 3, 1, 1])?
-            .to_device(device)?;
-        let std = Tensor::from_slice(&IMAGE_STD)?
-            .view([1, 3, 1, 1])?
-            .to_device(device)?;
+        let mean = Tensor::f_from_slice(&IMAGE_MEAN)?
+            .f_view([1, 3, 1, 1])?
+            .f_to_device(device)?;
+        let std = Tensor::f_from_slice(&IMAGE_STD)?
+            .f_view([1, 3, 1, 1])?
+            .f_to_device(device)?;
         Ok(Self { mean, std, device })
     }
 
@@ -83,47 +83,47 @@ impl ImageProcessor {
             resize_bilinear(&image, width, height)?
         };
 
-        let mut pixel_values = Tensor::from_slice(image.as_raw())?
-            .view([1, i64::from(height), i64::from(width), 3])?
-            .permute([0, 3, 1, 2])?
-            .to_device(self.device)?
-            .to_kind(Kind::Float)?;
-        pixel_values = (pixel_values * RESCALE_FACTOR)?;
-        pixel_values = ((&pixel_values - &self.mean)? / &self.std)?;
+        let mut pixel_values = Tensor::f_from_slice(image.as_raw())?
+            .f_view([1, i64::from(height), i64::from(width), 3])?
+            .f_permute([0, 3, 1, 2])?
+            .f_to_device(self.device)?
+            .f_to_kind(Kind::Float)?;
+        pixel_values = pixel_values.f_mul_scalar(RESCALE_FACTOR)?;
+        pixel_values = (pixel_values.f_sub(&self.mean)?).f_div(&self.std)?;
 
         // (1, channels, height, width) -> (1, patches, patch_size^2 * channels)
         // with patch order (patch row, patch column, pixel row, pixel column).
         let patch = patch_size;
         let mut pixel_values = pixel_values
-            .reshape([1, 3, patch_height, patch, patch_width, patch])?
-            .permute([0, 2, 4, 3, 5, 1])?
-            .reshape([1, num_patches, -1])?;
+            .f_reshape([1, 3, patch_height, patch, patch_width, patch])?
+            .f_permute([0, 2, 4, 3, 5, 1])?
+            .f_reshape([1, num_patches, -1])?;
 
         // The upstream processor pads every batch entry to `max_num_patches`;
         // those padded prefix tokens are consumed by the encoder and decoder.
         if num_patches < max_patches {
-            let padding = Tensor::zeros(
+            let padding = Tensor::f_zeros(
                 [1, max_patches - num_patches, pixel_values.size()[2]],
                 (Kind::Float, self.device),
             )?;
-            pixel_values = Tensor::cat(&[pixel_values, padding], 1)?;
+            pixel_values = Tensor::f_cat(&[pixel_values, padding], 1)?;
         }
 
         let attention_mask = if num_patches < max_patches {
-            Tensor::cat(
+            Tensor::f_cat(
                 &[
-                    Tensor::ones([num_patches], (Kind::Int, self.device))?,
-                    Tensor::zeros([max_patches - num_patches], (Kind::Int, self.device))?,
+                    Tensor::f_ones([num_patches], (Kind::Int, self.device))?,
+                    Tensor::f_zeros([max_patches - num_patches], (Kind::Int, self.device))?,
                 ],
                 0,
             )
         } else {
-            Tensor::ones([max_patches], (Kind::Int, self.device))
+            Tensor::f_ones([max_patches], (Kind::Int, self.device))
         }?;
 
         Ok(ImageInput {
             pixel_values,
-            attention_mask: attention_mask.view([1, max_patches])?,
+            attention_mask: attention_mask.f_view([1, max_patches])?,
             spatial_shape: [patch_height, patch_width],
         })
     }

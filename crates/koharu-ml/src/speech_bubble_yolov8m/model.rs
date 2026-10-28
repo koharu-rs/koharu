@@ -5,11 +5,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::{Result, bail};
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 use super::config::YoloV8mSpeechBubbleConfig;
 
@@ -38,7 +36,7 @@ impl Model {
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Result<Output> {
-        self.model.forward(&pixel_values.to_kind(self.vs.kind())?)
+        self.model.forward(&pixel_values.f_to_kind(self.vs.kind())?)
     }
 }
 
@@ -119,9 +117,9 @@ impl Upsample {
         Self { scale_factor }
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         let size = xs.size();
-        xs.upsample_nearest2d(
+        xs.f_upsample_nearest2d(
             [self.scale_factor * size[2], self.scale_factor * size[3]],
             None::<f64>,
             None::<f64>,
@@ -143,7 +141,7 @@ impl ConvBlock {
         kernel_size: i64,
         stride: i64,
         padding: Option<i64>,
-    ) -> koharu_torch::Result<Self> {
+    ) -> tch::Result<Self> {
         let conv = nn::conv2d(
             path / "conv",
             c1,
@@ -167,8 +165,8 @@ impl ConvBlock {
         Ok(Self { conv, bn })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.bn.forward_t(&self.conv.forward(xs)?, false)?.silu()
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+        self.bn.forward_t(&self.conv.forward(xs)?, false)?.f_silu()
     }
 }
 
@@ -180,7 +178,7 @@ struct Bottleneck {
 }
 
 impl Bottleneck {
-    fn load(path: &nn::Path<'_>, c1: i64, c2: i64, shortcut: bool) -> koharu_torch::Result<Self> {
+    fn load(path: &nn::Path<'_>, c1: i64, c2: i64, shortcut: bool) -> tch::Result<Self> {
         let channel_factor = 1.0;
         let hidden = (c2 as f64 * channel_factor) as i64;
         Ok(Self {
@@ -190,9 +188,9 @@ impl Bottleneck {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         let ys = self.cv2.forward(&self.cv1.forward(xs)?)?;
-        if self.residual { xs + ys } else { Ok(ys) }
+        if self.residual { xs.f_add(&ys) } else { Ok(ys) }
     }
 }
 
@@ -204,17 +202,11 @@ struct C2f {
 }
 
 impl C2f {
-    fn load(
-        path: &nn::Path<'_>,
-        c1: i64,
-        c2: i64,
-        n: usize,
-        shortcut: bool,
-    ) -> koharu_torch::Result<Self> {
+    fn load(path: &nn::Path<'_>, c1: i64, c2: i64, n: usize, shortcut: bool) -> tch::Result<Self> {
         let hidden = (c2 as f64 * 0.5) as i64;
         let bottleneck = (0..n)
             .map(|idx| Bottleneck::load(&(path / "m" / idx), hidden, hidden, shortcut))
-            .collect::<koharu_torch::Result<_>>()?;
+            .collect::<tch::Result<_>>()?;
         Ok(Self {
             cv1: ConvBlock::load(&(path / "cv1"), c1, 2 * hidden, 1, 1, None)?,
             cv2: ConvBlock::load(&(path / "cv2"), (2 + n as i64) * hidden, c2, 1, 1, None)?,
@@ -222,12 +214,12 @@ impl C2f {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut ys = self.cv1.forward(xs)?.chunk(2, 1)?;
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+        let mut ys = self.cv1.forward(xs)?.f_chunk(2, 1)?;
         for module in &self.bottleneck {
             ys.push(module.forward(ys.last().expect("c2f chunk"))?);
         }
-        self.cv2.forward(&Tensor::cat(&ys, 1)?)
+        self.cv2.forward(&Tensor::f_cat(&ys, 1)?)
     }
 }
 
@@ -239,7 +231,7 @@ struct Sppf {
 }
 
 impl Sppf {
-    fn load(path: &nn::Path<'_>, c1: i64, c2: i64, kernel_size: i64) -> koharu_torch::Result<Self> {
+    fn load(path: &nn::Path<'_>, c1: i64, c2: i64, kernel_size: i64) -> tch::Result<Self> {
         let hidden = c1 / 2;
         Ok(Self {
             cv1: ConvBlock::load(&(path / "cv1"), c1, hidden, 1, 1, None)?,
@@ -248,14 +240,14 @@ impl Sppf {
         })
     }
 
-    fn pool(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
-        xs.constant_pad_nd([
+    fn pool(&self, xs: &Tensor) -> tch::Result<Tensor> {
+        xs.f_constant_pad_nd([
             self.kernel_size / 2,
             self.kernel_size / 2,
             self.kernel_size / 2,
             self.kernel_size / 2,
         ])?
-        .max_pool2d(
+        .f_max_pool2d(
             [self.kernel_size, self.kernel_size],
             [1, 1],
             [0, 0],
@@ -264,12 +256,12 @@ impl Sppf {
         )
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         let xs = self.cv1.forward(xs)?;
         let xs2 = self.pool(&xs)?;
         let xs3 = self.pool(&xs2)?;
         let xs4 = self.pool(&xs3)?;
-        self.cv2.forward(&Tensor::cat(&[xs, xs2, xs3, xs4], 1)?)
+        self.cv2.forward(&Tensor::f_cat(&[xs, xs2, xs3, xs4], 1)?)
     }
 }
 
@@ -296,13 +288,13 @@ impl Dfl {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         let size = xs.size();
         let xs = xs
-            .view([size[0], 4, self.num_classes, size[2]])?
-            .transpose(2, 1)?
-            .softmax(1, None::<Kind>)?;
-        self.conv.forward(&xs)?.view([size[0], 4, size[2]])
+            .f_view([size[0], 4, self.num_classes, size[2]])?
+            .f_transpose(2, 1)?
+            .f_softmax(1, None::<Kind>)?;
+        self.conv.forward(&xs)?.f_view([size[0], 4, size[2]])
     }
 }
 
@@ -321,7 +313,7 @@ struct DarkNet {
 }
 
 impl DarkNet {
-    fn load(path: &nn::Path<'_>, multiples: Multiples) -> koharu_torch::Result<Self> {
+    fn load(path: &nn::Path<'_>, multiples: Multiples) -> tch::Result<Self> {
         let (w, r, d) = (multiples.width, multiples.ratio, multiples.depth);
         Ok(Self {
             b1_0: ConvBlock::load(&(path / 0), 3, (64.0 * w) as i64, 3, 2, Some(1))?,
@@ -418,7 +410,7 @@ struct YoloV8Neck {
 }
 
 impl YoloV8Neck {
-    fn load(path: &nn::Path<'_>, multiples: Multiples) -> koharu_torch::Result<Self> {
+    fn load(path: &nn::Path<'_>, multiples: Multiples) -> tch::Result<Self> {
         let (w, r, d) = (multiples.width, multiples.ratio, multiples.depth);
         let n = (3.0 * d).round() as usize;
         Ok(Self {
@@ -473,16 +465,17 @@ impl YoloV8Neck {
     fn forward(&self, p3: &Tensor, p4: &Tensor, p5: &Tensor) -> Result<(Tensor, Tensor, Tensor)> {
         let x = self
             .n1
-            .forward(&Tensor::cat(&[self.up.forward(p5)?, p4.alias()?], 1)?)?;
+            .forward(&Tensor::f_cat(&[self.up.forward(p5)?, p4.f_alias()?], 1)?)?;
         let head_1 = self
             .n2
-            .forward(&Tensor::cat(&[self.up.forward(&x)?, p3.alias()?], 1)?)?;
+            .forward(&Tensor::f_cat(&[self.up.forward(&x)?, p3.f_alias()?], 1)?)?;
         let head_2 = self
             .n4
-            .forward(&Tensor::cat(&[self.n3.forward(&head_1)?, x], 1)?)?;
-        let head_3 = self
-            .n6
-            .forward(&Tensor::cat(&[self.n5.forward(&head_2)?, p5.alias()?], 1)?)?;
+            .forward(&Tensor::f_cat(&[self.n3.forward(&head_1)?, x], 1)?)?;
+        let head_3 = self.n6.forward(&Tensor::f_cat(
+            &[self.n5.forward(&head_2)?, p5.f_alias()?],
+            1,
+        )?)?;
         Ok((head_1, head_2, head_3))
     }
 }
@@ -502,30 +495,32 @@ fn make_anchors(
         let size = xs.size();
         let height = size[2];
         let width = size[3];
-        let sx = (Tensor::arange(width, (kind, device))? + grid_cell_offset)?
-            .view([1, width])?
-            .repeat([height, 1])?
-            .view([-1])?;
-        let sy = (Tensor::arange(height, (kind, device))? + grid_cell_offset)?
-            .view([height, 1])?
-            .repeat([1, width])?
-            .view([-1])?;
-        anchor_points.push(Tensor::stack(&[sx, sy], -1)?);
-        stride_tensors.push(Tensor::full([height * width], stride, (kind, device))?);
+        let sx = (Tensor::f_arange(width, (kind, device))?)
+            .f_add_scalar(grid_cell_offset)?
+            .f_view([1, width])?
+            .f_repeat([height, 1])?
+            .f_view([-1])?;
+        let sy = (Tensor::f_arange(height, (kind, device))?)
+            .f_add_scalar(grid_cell_offset)?
+            .f_view([height, 1])?
+            .f_repeat([1, width])?
+            .f_view([-1])?;
+        anchor_points.push(Tensor::f_stack(&[sx, sy], -1)?);
+        stride_tensors.push(Tensor::f_full([height * width], stride, (kind, device))?);
     }
     Ok((
-        Tensor::cat(&anchor_points, 0)?,
-        Tensor::cat(&stride_tensors, 0)?.unsqueeze(1)?,
+        Tensor::f_cat(&anchor_points, 0)?,
+        Tensor::f_cat(&stride_tensors, 0)?.f_unsqueeze(1)?,
     ))
 }
 
 fn dist2bbox(distance: &Tensor, anchor_points: &Tensor) -> Result<Tensor> {
-    let chunks = distance.chunk(2, 1)?;
-    let x1y1 = (anchor_points - &chunks[0])?;
-    let x2y2 = (anchor_points + &chunks[1])?;
-    let center = ((&x1y1 + &x2y2)? * 0.5)?;
-    let dimensions = (x2y2 - x1y1)?;
-    Ok(Tensor::cat(&[center, dimensions], 1)?)
+    let chunks = distance.f_chunk(2, 1)?;
+    let x1y1 = anchor_points.f_sub(&chunks[0])?;
+    let x2y2 = anchor_points.f_add(&chunks[1])?;
+    let center = (x1y1.f_add(&x2y2)?).f_mul_scalar(0.5)?;
+    let dimensions = x2y2.f_sub(&x1y1)?;
+    Ok(Tensor::f_cat(&[center, dimensions], 1)?)
 }
 
 #[derive(Debug)]
@@ -555,7 +550,7 @@ impl HeadBranch {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         self.conv
             .forward(&self.block1.forward(&self.block0.forward(xs)?)?)
     }
@@ -588,7 +583,7 @@ impl Proto {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
         let xs = self.cv1.forward(xs)?;
         let xs = self.upsample.forward(&xs)?;
         let xs = self.cv2.forward(&xs)?;
@@ -648,7 +643,7 @@ impl SegmentHead {
     }
 
     fn forward_cv2_cv3(&self, xs: &Tensor, index: usize) -> Result<Tensor> {
-        Ok(Tensor::cat(
+        Ok(Tensor::f_cat(
             &[self.cv2[index].forward(xs)?, self.cv3[index].forward(xs)?],
             1,
         )?)
@@ -659,31 +654,31 @@ impl SegmentHead {
         let xs1 = self.forward_cv2_cv3(xs1, 1)?;
         let xs2 = self.forward_cv2_cv3(xs2, 2)?;
         let (anchors, strides) = make_anchors(&xs0, &xs1, &xs2, (8, 16, 32), 0.5)?;
-        let anchors = anchors.transpose(0, 1)?.unsqueeze(0)?;
-        let strides = strides.transpose(0, 1)?;
+        let anchors = anchors.f_transpose(0, 1)?.f_unsqueeze(0)?;
+        let strides = strides.f_transpose(0, 1)?;
 
         let reshape = |xs: &Tensor| {
             let size = xs.size();
-            xs.view([size[0], self.no, size[2] * size[3]])
+            xs.f_view([size[0], self.no, size[2] * size[3]])
         };
-        let xs = Tensor::cat(&[reshape(&xs0)?, reshape(&xs1)?, reshape(&xs2)?], 2)?;
-        let boxes = xs.slice(1, 0, self.reg_max * 4, 1)?;
-        let classes = xs.slice(1, self.reg_max * 4, self.no, 1)?;
-        let boxes = (dist2bbox(&self.dfl.forward(&boxes)?, &anchors)? * strides)?;
-        Ok(Tensor::cat(&[boxes, classes.sigmoid()?], 1)?)
+        let xs = Tensor::f_cat(&[reshape(&xs0)?, reshape(&xs1)?, reshape(&xs2)?], 2)?;
+        let boxes = xs.f_slice(1, 0, self.reg_max * 4, 1)?;
+        let classes = xs.f_slice(1, self.reg_max * 4, self.no, 1)?;
+        let boxes = (dist2bbox(&self.dfl.forward(&boxes)?, &anchors)?).f_mul(&strides)?;
+        Ok(Tensor::f_cat(&[boxes, classes.f_sigmoid()?], 1)?)
     }
 
     fn forward_cv4(&self, xs: &Tensor, index: usize) -> Result<Tensor> {
         let size = xs.size();
         Ok(self.cv4[index]
             .forward(xs)?
-            .view([size[0], self.num_masks, size[2] * size[3]])?)
+            .f_view([size[0], self.num_masks, size[2] * size[3]])?)
     }
 
     fn forward(&self, xs0: &Tensor, xs1: &Tensor, xs2: &Tensor) -> Result<Output> {
         let pred = self.forward_detection(xs0, xs1, xs2)?;
         let proto = self.proto.forward(xs0)?;
-        let mask_coefficients = Tensor::cat(
+        let mask_coefficients = Tensor::f_cat(
             &[
                 self.forward_cv4(xs0, 0)?,
                 self.forward_cv4(xs1, 1)?,
@@ -692,7 +687,7 @@ impl SegmentHead {
             2,
         )?;
         Ok(Output {
-            pred: Tensor::cat(&[pred, mask_coefficients], 1)?,
+            pred: Tensor::f_cat(&[pred, mask_coefficients], 1)?,
             proto,
         })
     }

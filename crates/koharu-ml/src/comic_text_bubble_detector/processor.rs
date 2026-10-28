@@ -10,8 +10,8 @@
 use anyhow::{Context, Result, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::DynamicImage;
-use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::{Deserialize, Serialize};
+use tch::{Device, IndexOp, Kind, Tensor};
 
 use super::model::RTDetrV2ObjectDetectionOutput;
 
@@ -94,10 +94,10 @@ impl RTDetrImageProcessor {
         // For a single image, Transformers pads to the image's own dimensions.
         // Therefore `do_pad` does not change this tensor's shape or values.
         let _ = self.do_pad;
-        Ok(Tensor::from_slice(&pixels)?
-            .view([1, height as i64, width as i64, 3])?
-            .permute([0, 3, 1, 2])?
-            .to_device(device)?)
+        Ok(Tensor::f_from_slice(&pixels)?
+            .f_view([1, height as i64, width as i64, 3])?
+            .f_permute([0, 3, 1, 2])?
+            .f_to_device(device)?)
     }
 
     pub(super) fn post_process_object_detection(
@@ -127,39 +127,41 @@ impl RTDetrImageProcessor {
                 height as f32,
             ]);
         }
-        boxes = (&boxes
-            * Tensor::from_slice(&scale_values)?
-                .view([batch_size as i64, 1, 4])?
-                .to_device(boxes.device())?)?;
+        boxes = boxes.f_mul(
+            &Tensor::f_from_slice(&scale_values)?
+                .f_view([batch_size as i64, 1, 4])?
+                .f_to_device(boxes.device())?,
+        )?;
 
         let num_top_queries = logits.size()[1];
         let num_classes = logits.size()[2];
         let (scores, labels, boxes) = if use_focal_loss {
             let (scores, index) =
                 logits
-                    .sigmoid()?
-                    .flatten(1, -1)?
-                    .topk(num_top_queries, -1, true, true)?;
-            let labels = index.remainder(num_classes)?;
-            let index = index.floor_divide_scalar(num_classes)?;
-            let boxes = boxes.gather(
+                    .f_sigmoid()?
+                    .f_flatten(1, -1)?
+                    .f_topk(num_top_queries, -1, true, true)?;
+            let labels = index.f_remainder(num_classes)?;
+            let index = index.f_floor_divide_scalar(num_classes)?;
+            let boxes = boxes.f_gather(
                 1,
-                &index.unsqueeze(-1)?.repeat([1, 1, boxes.size()[2]])?,
+                &index.f_unsqueeze(-1)?.f_repeat([1, 1, boxes.size()[2]])?,
                 false,
             )?;
             (scores, labels, boxes)
         } else {
-            let probabilities = logits.softmax(-1, None::<Kind>)?;
-            let probabilities = probabilities.slice(-1, 0, num_classes - 1, 1)?;
-            let (scores, labels) = probabilities.max_dim(-1, false)?;
+            let probabilities = logits.f_softmax(-1, None::<Kind>)?;
+            let probabilities = probabilities.f_slice(-1, 0, num_classes - 1, 1)?;
+            let (scores, labels) = probabilities.f_max_dim(-1, false)?;
             (scores, labels, boxes)
         };
 
         let mut results = Vec::with_capacity(batch_size);
         for batch in 0..batch_size {
-            let scores = Vec::<f32>::try_from(scores.i(batch as i64)?)?;
-            let labels = Vec::<i64>::try_from(labels.i(batch as i64)?)?;
-            let boxes = Vec::<f32>::try_from(boxes.i(batch as i64)?.contiguous()?.view([-1])?)?;
+            let scores = Vec::<f32>::try_from(scores.f_i(batch as i64)?)?;
+            let labels = Vec::<i64>::try_from(labels.f_i(batch as i64)?)?;
+            let boxes =
+                Vec::<f32>::try_from(boxes.f_i(batch as i64)?.f_contiguous()?.f_view([-1])?)?;
             let mut result = ObjectDetectionOutput::default();
             for query in 0..scores.len() {
                 if scores[query] <= threshold {
@@ -436,13 +438,13 @@ pub(super) fn create_text_blocks(
         .collect()
 }
 
-fn center_to_corners_format(boxes: &Tensor) -> koharu_torch::Result<Tensor> {
-    let centers = boxes.slice(-1, 0, 2, 1)?;
-    let dimensions = boxes.slice(-1, 2, 4, 1)?;
-    Tensor::cat(
+fn center_to_corners_format(boxes: &Tensor) -> tch::Result<Tensor> {
+    let centers = boxes.f_slice(-1, 0, 2, 1)?;
+    let dimensions = boxes.f_slice(-1, 2, 4, 1)?;
+    Tensor::f_cat(
         &[
-            (&centers - (&dimensions * 0.5)?)?,
-            (centers + (dimensions * 0.5)?)?,
+            centers.f_sub(&dimensions.f_mul_scalar(0.5)?)?,
+            centers.f_add(&dimensions.f_mul_scalar(0.5)?)?,
         ],
         -1,
     )

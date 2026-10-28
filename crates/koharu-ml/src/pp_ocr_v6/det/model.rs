@@ -5,11 +5,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 use super::super::pp_lcnet_v4::{PPLCNetV4Backbone, Spatial};
 use super::config::{IntraclassBlockConfig, PPOCRV6MediumDetConfig};
@@ -44,17 +42,17 @@ impl Model {
         Ok(())
     }
 
-    pub(crate) fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
+    pub(crate) fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
         let feature_maps = self
             .backbone
-            .forward(&pixel_values.to_kind(self.vs.kind())?)?;
+            .forward(&pixel_values.f_to_kind(self.vs.kind())?)?;
         self.head.forward(&self.neck.forward(&feature_maps)?)
     }
 }
 
-fn upsample_nearest(hidden_states: &Tensor, scale_factor: i64) -> koharu_torch::Result<Tensor> {
+fn upsample_nearest(hidden_states: &Tensor, scale_factor: i64) -> tch::Result<Tensor> {
     let size = hidden_states.size();
-    hidden_states.upsample_nearest2d(
+    hidden_states.f_upsample_nearest2d(
         [size[2] * scale_factor, size[3] * scale_factor],
         None::<f64>,
         None::<f64>,
@@ -69,7 +67,7 @@ fn conv2d(
     stride: [i64; 2],
     padding: [i64; 2],
     bias: bool,
-) -> koharu_torch::Result<nn::Conv2D> {
+) -> tch::Result<nn::Conv2D> {
     nn::conv(
         path,
         in_channels,
@@ -121,10 +119,10 @@ impl ConvBatchnormLayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         self.norm
             .forward_t(&self.convolution.forward(hidden_states)?, false)?
-            .relu()
+            .f_relu()
     }
 }
 
@@ -226,33 +224,43 @@ impl IntraclassBlock {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let residual = hidden_states;
         let hidden_states = self.conv_reduce_channel.forward(hidden_states)?;
-        let hidden_states = ((self.symmetric_conv_long_longratio.forward(&hidden_states)?
-            + self
+        let hidden_states = ((self.symmetric_conv_long_longratio.forward(&hidden_states)?).f_add(
+            &self
                 .vertical_long_to_small_conv_longratio
-                .forward(&hidden_states)?)?
-            + self
+                .forward(&hidden_states)?,
+        )?)
+        .f_add(
+            &self
                 .horizontal_small_to_long_conv_longratio
-                .forward(&hidden_states)?)?;
-        let hidden_states = ((self.symmetric_conv_long_midratio.forward(&hidden_states)?
-            + self
+                .forward(&hidden_states)?,
+        )?;
+        let hidden_states = ((self.symmetric_conv_long_midratio.forward(&hidden_states)?).f_add(
+            &self
                 .vertical_long_to_small_conv_midratio
-                .forward(&hidden_states)?)?
-            + self
+                .forward(&hidden_states)?,
+        )?)
+        .f_add(
+            &self
                 .horizontal_small_to_long_conv_midratio
-                .forward(&hidden_states)?)?;
+                .forward(&hidden_states)?,
+        )?;
         let hidden_states = ((self
             .symmetric_conv_long_shortratio
-            .forward(&hidden_states)?
-            + self
+            .forward(&hidden_states)?)
+        .f_add(
+            &self
                 .vertical_long_to_small_conv_shortratio
-                .forward(&hidden_states)?)?
-            + self
+                .forward(&hidden_states)?,
+        )?)
+        .f_add(
+            &self
                 .horizontal_small_to_long_conv_shortratio
-                .forward(&hidden_states)?)?;
-        residual + self.conv_final.forward(&hidden_states)?
+                .forward(&hidden_states)?,
+        )?;
+        residual.f_add(&self.conv_final.forward(&hidden_states)?)
     }
 }
 
@@ -340,20 +348,20 @@ impl Neck {
         })
     }
 
-    fn forward(&self, feature_maps: &[Tensor]) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, feature_maps: &[Tensor]) -> tch::Result<Tensor> {
         let channel_adjusted = feature_maps
             .iter()
             .zip(&self.input_channel_adjustment_convolution)
             .map(|(feature, convolution)| convolution.forward(feature))
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
 
         let mut top_down = channel_adjusted
             .iter()
-            .map(Tensor::alias)
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .map(Tensor::f_alias)
+            .collect::<tch::Result<Vec<_>>>()?;
         for index in (0..top_down.len() - 1).rev() {
             top_down[index] =
-                (&channel_adjusted[index] + upsample_nearest(&top_down[index + 1], 2)?)?;
+                channel_adjusted[index].f_add(&upsample_nearest(&top_down[index + 1], 2)?)?;
         }
 
         let projected = top_down
@@ -367,16 +375,17 @@ impl Neck {
                 };
                 self.input_feature_projection_convolution[index].forward(feature)
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
 
         let mut bottom_up = projected
             .iter()
-            .map(Tensor::alias)
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .map(Tensor::f_alias)
+            .collect::<tch::Result<Vec<_>>>()?;
         for index in 1..bottom_up.len() {
-            bottom_up[index] = (&projected[index]
-                + self.path_aggregation_head_convolution[index - 1]
-                    .forward(&bottom_up[index - 1])?)?;
+            bottom_up[index] = projected[index].f_add(
+                &self.path_aggregation_head_convolution[index - 1]
+                    .forward(&bottom_up[index - 1])?,
+            )?;
         }
 
         let lateral_refined = (0..projected.len())
@@ -388,12 +397,12 @@ impl Neck {
                 };
                 self.path_aggregation_lateral_convolution[index].forward(feature)
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         let intraclass_refined = lateral_refined
             .iter()
             .zip(&self.intraclass_blocks)
             .map(|(feature, block)| block.forward(feature))
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         let mut upsampled = intraclass_refined
             .iter()
             .zip(&self.scale_factor_list)
@@ -401,12 +410,12 @@ impl Neck {
                 if scale > 1 {
                     upsample_nearest(feature, scale)
                 } else {
-                    feature.alias()
+                    feature.f_alias()
                 }
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         upsampled.reverse();
-        Tensor::cat(&upsampled, 1)
+        Tensor::f_cat(&upsampled, 1)
     }
 }
 
@@ -459,10 +468,13 @@ impl Head {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = self.conv_down.forward(hidden_states)?;
         let hidden_states = self.conv_up.forward(&hidden_states)?;
-        let hidden_states = self.conv_up_norm.forward_t(&hidden_states, false)?.relu()?;
-        self.conv_final.forward(&hidden_states)?.sigmoid()
+        let hidden_states = self
+            .conv_up_norm
+            .forward_t(&hidden_states, false)?
+            .f_relu()?;
+        self.conv_final.forward(&hidden_states)?.f_sigmoid()
     }
 }

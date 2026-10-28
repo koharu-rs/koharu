@@ -4,7 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::{
     config::PPOCRV6MediumRecConfig,
@@ -66,7 +66,7 @@ impl PPOCRV6MediumRec {
     }
 
     pub fn inference(&self, image: &DynamicImage) -> Result<TextRecognition> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
             let probabilities = self.model.forward(&pixel_values)?;
             self.processor.postprocess(&probabilities)

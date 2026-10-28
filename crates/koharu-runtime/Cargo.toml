@@ -21,7 +21,6 @@ flate2 = { workspace = true }
 futures = { workspace = true }
 koharu-config = { workspace = true }
 koharu-diffusion-sys = { workspace = true }
-koharu-torch-sys = { workspace = true }
 libloading = { workspace = true }
 llama-cpp-sys-2 = { workspace = true }
 reqwest = { workspace = true }
@@ -33,6 +32,7 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+torch-sys = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }

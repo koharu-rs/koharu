@@ -1,4 +1,5 @@
 mod backend;
+mod nn;
 
 pub mod aot_inpainting;
 pub mod baberu_ocr;
@@ -23,7 +24,7 @@ pub mod speech_bubble_yolov8m;
 
 pub use koharu_runtime::Device;
 
-use koharu_torch::Tensor;
+use tch::Tensor;
 
 /// Transformers' `RepetitionPenaltyLogitsProcessor`: each score of a token in
 /// its row of `ids`, `[batch, n]` on `scores`' device, is multiplied by
@@ -33,24 +34,23 @@ pub(crate) fn repetition_penalty(
     scores: &Tensor,
     ids: &Tensor,
     penalty: f64,
-) -> koharu_torch::Result<Tensor> {
-    let score = scores.gather(1, ids, false)?;
-    let score = (&score * penalty)?.where_self(&score.lt(0.0)?, &(&score / penalty)?)?;
-    scores.scatter(1, ids, &score)
+) -> tch::Result<Tensor> {
+    let score = scores.f_gather(1, ids, false)?;
+    let score = score
+        .f_mul_scalar(penalty)?
+        .f_where_self(&score.f_lt(0.0)?, &score.f_div_scalar(penalty)?)?;
+    scores.f_scatter(1, ids, &score)
 }
 
 /// The rows' ids as one `[rows, n]` tensor on `device` for
 /// [`repetition_penalty`], each row padded with its first id, which the
 /// penalty then reads twice to the same effect.
-pub(crate) fn penalty_ids(
-    rows: &[Vec<i64>],
-    device: koharu_torch::Device,
-) -> koharu_torch::Result<Tensor> {
+pub(crate) fn penalty_ids(rows: &[Vec<i64>], device: tch::Device) -> tch::Result<Tensor> {
     let width = rows.iter().map(Vec::len).max().unwrap_or(0);
     let mut padded = Vec::with_capacity(rows.len() * width);
     for row in rows {
         let first = *row.first().ok_or_else(|| {
-            koharu_torch::TchError::Shape("a repetition penalty row has no ids".to_owned())
+            tch::TchError::Shape("a repetition penalty row has no ids".to_owned())
         })?;
         padded.extend(
             row.iter()
@@ -58,9 +58,9 @@ pub(crate) fn penalty_ids(
                 .chain(std::iter::repeat_n(first, width - row.len())),
         );
     }
-    Tensor::from_slice(&padded)?
-        .view([rows.len() as i64, width as i64])?
-        .to_device(device)
+    Tensor::f_from_slice(&padded)?
+        .f_view([rows.len() as i64, width as i64])?
+        .f_to_device(device)
 }
 
 macro_rules! model_repository {

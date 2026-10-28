@@ -8,8 +8,8 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use image::{DynamicImage, GenericImageView, GrayImage, Luma};
 use imageproc::contours::find_contours_with_threshold;
-use koharu_torch::{Device, Kind, Tensor};
 use serde::{Deserialize, Serialize};
+use tch::{Device, Kind, Tensor};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -69,21 +69,21 @@ impl PPOCRV6MediumDetImageProcessor {
         }
         let rgb = image.to_rgb8();
         let (width, height) = rgb.dimensions();
-        let mut pixel_values = Tensor::from_slice(rgb.as_raw())?
-            .view([1, height as i64, width as i64, 3])?
-            .permute([0, 3, 1, 2])?
-            .to_kind(Kind::Float)?
-            .to_device(device)?;
+        let mut pixel_values = Tensor::f_from_slice(rgb.as_raw())?
+            .f_view([1, height as i64, width as i64, 3])?
+            .f_permute([0, 3, 1, 2])?
+            .f_to_kind(Kind::Float)?
+            .f_to_device(device)?;
 
         if self.do_resize {
             let [target_height, target_width] = self.image_size(height as i64, width as i64)?;
             pixel_values = match self.resample {
-                0 => pixel_values.upsample_nearest2d(
+                0 => pixel_values.f_upsample_nearest2d(
                     [target_height, target_width],
                     None::<f64>,
                     None::<f64>,
                 )?,
-                2 => pixel_values.internal_upsample_bilinear2d_aa(
+                2 => pixel_values.f_internal_upsample_bilinear2d_aa(
                     [target_height, target_width],
                     false,
                     None::<f64>,
@@ -93,22 +93,22 @@ impl PPOCRV6MediumDetImageProcessor {
             };
         }
         if self.do_rescale {
-            pixel_values = (pixel_values * self.rescale_factor)?;
+            pixel_values = pixel_values.f_mul_scalar(self.rescale_factor)?;
         }
         if self.do_normalize {
             if self.image_mean.len() != 3 || self.image_std.len() != 3 {
                 bail!("PP-OCRv6 detection image_mean and image_std must contain three values");
             }
-            let mean = Tensor::from_slice(&self.image_mean)?
-                .view([1, 3, 1, 1])?
-                .to_device(device)?;
-            let std = Tensor::from_slice(&self.image_std)?
-                .view([1, 3, 1, 1])?
-                .to_device(device)?;
-            pixel_values = ((pixel_values - mean)? / std)?;
+            let mean = Tensor::f_from_slice(&self.image_mean)?
+                .f_view([1, 3, 1, 1])?
+                .f_to_device(device)?;
+            let std = Tensor::f_from_slice(&self.image_std)?
+                .f_view([1, 3, 1, 1])?
+                .f_to_device(device)?;
+            pixel_values = pixel_values.f_sub(&mean)?.f_div(&std)?;
         }
         // This channel reversal is performed after normalization in the Transformers processor.
-        pixel_values = pixel_values.flip([1])?;
+        pixel_values = pixel_values.f_flip([1])?;
         Ok(pixel_values)
     }
 
@@ -139,10 +139,10 @@ impl PPOCRV6MediumDetImageProcessor {
         let map_height = size[2] as u32;
         let values = Vec::<f32>::try_from(
             &output
-                .to_device(Device::Cpu)?
-                .to_kind(Kind::Float)?
-                .contiguous()?
-                .view([-1])?,
+                .f_to_device(Device::Cpu)?
+                .f_to_kind(Kind::Float)?
+                .f_contiguous()?
+                .f_view([-1])?,
         )?;
         let (dest_width, dest_height) = image.dimensions();
         Ok(TextDetections {

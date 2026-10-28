@@ -4,7 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::{Device, Tensor};
+use tch::{Device, Tensor};
 
 pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
 
@@ -77,12 +77,12 @@ impl MangaOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image, self.device))
                 .collect::<Result<Vec<_>>>()?;
-            let token_ids = self.model.forward(&Tensor::cat(&pixel_values, 0)?)?;
+            let token_ids = self.model.forward(&Tensor::f_cat(&pixel_values, 0)?)?;
             token_ids
                 .iter()
                 .map(|token_ids| self.tokenizer.decode(token_ids))

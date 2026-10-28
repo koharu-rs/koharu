@@ -4,13 +4,12 @@
 //! - https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py
 //! - https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr/modeling_rt_detr_resnet.py
 
+use crate::nn::Apply;
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, IndexOp, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, IndexOp, Kind, Tensor};
 
 use super::config::{RTDetrResNetConfig, RTDetrV2Config};
 
@@ -38,11 +37,8 @@ impl Model {
         Ok(())
     }
 
-    pub fn forward(
-        &self,
-        pixel_values: &Tensor,
-    ) -> koharu_torch::Result<RTDetrV2ObjectDetectionOutput> {
-        self.model.forward(&pixel_values.to_kind(self.vs.kind())?)
+    pub fn forward(&self, pixel_values: &Tensor) -> tch::Result<RTDetrV2ObjectDetectionOutput> {
+        self.model.forward(&pixel_values.f_to_kind(self.vs.kind())?)
     }
 }
 
@@ -68,7 +64,7 @@ impl RTDetrV2ForObjectDetection {
                         Default::default(),
                     )
                 })
-                .collect::<koharu_torch::Result<Vec<_>>>()?,
+                .collect::<tch::Result<Vec<_>>>()?,
             bbox_embed: (0..config.decoder_layers)
                 .map(|index| {
                     RTDetrV2MLPPredictionHead::new(
@@ -83,10 +79,7 @@ impl RTDetrV2ForObjectDetection {
         })
     }
 
-    fn forward(
-        &self,
-        pixel_values: &Tensor,
-    ) -> koharu_torch::Result<RTDetrV2ObjectDetectionOutput> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<RTDetrV2ObjectDetectionOutput> {
         self.model
             .forward(pixel_values, &self.bbox_embed, &self.class_embed)
     }
@@ -148,7 +141,7 @@ impl RTDetrV2Model {
                         Default::default(),
                     )?))
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
 
         let encoder = RTDetrV2HybridEncoder::new(&(path / "encoder"), config)?;
         let denoising_class_embed = (config.num_denoising > 0)
@@ -280,13 +273,13 @@ impl RTDetrV2Model {
         pixel_values: &Tensor,
         bbox_embed: &[RTDetrV2MLPPredictionHead],
         class_embed: &[nn::Linear],
-    ) -> koharu_torch::Result<RTDetrV2ObjectDetectionOutput> {
+    ) -> tch::Result<RTDetrV2ObjectDetectionOutput> {
         let features = self.backbone.forward(pixel_values)?;
         let proj_feats = features
             .iter()
             .enumerate()
             .map(|(level, source)| self.encoder_input_proj[level].forward_t(source, false))
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         let encoder_outputs = self.encoder.forward(proj_feats)?;
 
         let mut sources = Vec::with_capacity(self.config.num_feature_levels);
@@ -308,53 +301,59 @@ impl RTDetrV2Model {
             let height = size[2];
             let width = size[3];
             spatial_shapes.push((height, width));
-            source_flatten.push(source.flatten(2, -1)?.transpose(1, 2)?);
+            source_flatten.push(source.f_flatten(2, -1)?.f_transpose(1, 2)?);
         }
-        let source_flatten = Tensor::cat(&source_flatten, 1)?;
+        let source_flatten = Tensor::f_cat(&source_flatten, 1)?;
 
         // Transformers caches these tensors when `anchor_image_size` is fixed.
         // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L1392-L1420
         let (anchors, valid_mask) = match (&self.anchors, &self.valid_mask) {
-            (Some(anchors), Some(valid_mask)) => (anchors.alias()?, valid_mask.alias()?),
+            (Some(anchors), Some(valid_mask)) => (anchors.f_alias()?, valid_mask.f_alias()?),
             _ => generate_anchors(
                 &spatial_shapes,
                 source_flatten.device(),
                 source_flatten.kind(),
             )?,
         };
-        let memory = (valid_mask.to_kind(source_flatten.kind())? * &source_flatten)?;
+        let memory = valid_mask
+            .f_to_kind(source_flatten.kind())?
+            .f_mul(&source_flatten)?;
         let output_memory = self.enc_output.forward(&memory)?;
         let enc_outputs_class = self.enc_score_head.forward(&output_memory)?;
-        let enc_outputs_coord_logits = (self.enc_bbox_head.forward(&output_memory)? + anchors)?;
+        let enc_outputs_coord_logits =
+            (self.enc_bbox_head.forward(&output_memory)?).f_add(&anchors)?;
 
-        let (_, topk_ind) =
-            enc_outputs_class
-                .max_dim(-1, false)?
-                .0
-                .topk(self.config.num_queries, 1, true, true)?;
+        let (_, topk_ind) = enc_outputs_class.f_max_dim(-1, false)?.0.f_topk(
+            self.config.num_queries,
+            1,
+            true,
+            true,
+        )?;
 
-        let reference_points_unact = enc_outputs_coord_logits.gather(
+        let reference_points_unact = enc_outputs_coord_logits.f_gather(
             1,
             &topk_ind
-                .unsqueeze(-1)?
-                .repeat([1, 1, enc_outputs_coord_logits.size()[2]])?,
+                .f_unsqueeze(-1)?
+                .f_repeat([1, 1, enc_outputs_coord_logits.size()[2]])?,
             false,
         )?;
 
         let target = if let Some(weight_embedding) = &self.weight_embedding {
-            weight_embedding.ws.tile([source_flatten.size()[0], 1, 1])?
+            weight_embedding
+                .ws
+                .f_tile([source_flatten.size()[0], 1, 1])?
         } else {
             output_memory
-                .gather(
+                .f_gather(
                     1,
                     &topk_ind
-                        .unsqueeze(-1)?
-                        .repeat([1, 1, output_memory.size()[2]])?,
+                        .f_unsqueeze(-1)?
+                        .f_repeat([1, 1, output_memory.size()[2]])?,
                     false,
                 )?
-                .detach()?
+                .f_detach()?
         };
-        let init_reference_points = reference_points_unact.detach()?;
+        let init_reference_points = reference_points_unact.f_detach()?;
 
         let decoder_outputs = self.decoder.forward(
             &target,
@@ -366,10 +365,10 @@ impl RTDetrV2Model {
         )?;
 
         Ok(RTDetrV2ObjectDetectionOutput {
-            logits: decoder_outputs.intermediate_logits.select(1, -1)?,
+            logits: decoder_outputs.intermediate_logits.f_select(1, -1)?,
             pred_boxes: decoder_outputs
                 .intermediate_reference_points
-                .select(1, -1)?,
+                .f_select(1, -1)?,
         })
     }
 }
@@ -390,7 +389,7 @@ impl RTDetrV2ConvEncoder {
         self.model.channels()
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Vec<Tensor>> {
         self.model.forward(pixel_values)
     }
 }
@@ -413,13 +412,13 @@ impl RTDetrV2FrozenBatchNorm2d {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let weight = self.weight.reshape([1, -1, 1, 1])?;
-        let bias = self.bias.reshape([1, -1, 1, 1])?;
-        let running_mean = self.running_mean.reshape([1, -1, 1, 1])?;
-        let running_var = self.running_var.reshape([1, -1, 1, 1])?;
-        let scale = (weight * (running_var + 1e-5)?.rsqrt()?)?;
-        ((input * &scale)? + bias)? - (running_mean * scale)?
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let weight = self.weight.f_reshape([1, -1, 1, 1])?;
+        let bias = self.bias.f_reshape([1, -1, 1, 1])?;
+        let running_mean = self.running_mean.f_reshape([1, -1, 1, 1])?;
+        let running_var = self.running_var.f_reshape([1, -1, 1, 1])?;
+        let scale = weight.f_mul(&running_var.f_add_scalar(1e-5)?.f_rsqrt()?)?;
+        ((input.f_mul(&scale)?).f_add(&bias)?).f_sub(&running_mean.f_mul(&scale)?)
     }
 }
 
@@ -443,7 +442,7 @@ impl RTDetrResNetBackbone {
         self.config.channels()
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Vec<Tensor>> {
         let embedding = self.embedder.forward(pixel_values)?;
         let hidden_states = self.encoder.forward(&embedding)?;
         let stage_names = ["stem", "stage1", "stage2", "stage3", "stage4"];
@@ -456,7 +455,7 @@ impl RTDetrResNetBackbone {
                     .iter()
                     .any(|feature| feature == *stage)
             })
-            .map(|(idx, _)| hidden_states[idx].alias())
+            .map(|(idx, _)| hidden_states[idx].f_alias())
             .collect()
     }
 }
@@ -498,12 +497,12 @@ impl RTDetrResNetEmbeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut hidden_state = pixel_values.alias()?;
+    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+        let mut hidden_state = pixel_values.f_alias()?;
         for layer in &self.embedder {
             hidden_state = layer.forward(&hidden_state)?;
         }
-        hidden_state.max_pool2d([3, 3], [2, 2], [1, 1], [1, 1], false)
+        hidden_state.f_max_pool2d([3, 3], [2, 2], [1, 1], [1, 1], false)
     }
 }
 
@@ -540,11 +539,11 @@ impl RTDetrResNetEncoder {
         Ok(Self { stages })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Vec<Tensor>> {
-        let mut hidden_state = input.alias()?;
+    fn forward(&self, input: &Tensor) -> tch::Result<Vec<Tensor>> {
+        let mut hidden_state = input.f_alias()?;
         let mut hidden_states = Vec::with_capacity(self.stages.len() + 1);
         for stage in &self.stages {
-            hidden_states.push(hidden_state.alias()?);
+            hidden_states.push(hidden_state.f_alias()?);
             hidden_state = stage.forward(&hidden_state)?;
         }
         hidden_states.push(hidden_state);
@@ -586,8 +585,8 @@ impl RTDetrResNetStage {
         Ok(Self { layers })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut hidden_state = input.alias()?;
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let mut hidden_state = input.f_alias()?;
         for layer in &self.layers {
             hidden_state = layer.forward(&hidden_state)?;
         }
@@ -666,11 +665,11 @@ impl RTDetrResNetBottleNeckLayer {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
         let residual = if self.shortcut_avg_pool {
-            hidden_state.avg_pool2d([2, 2], [2, 2], [0, 0], true, true, None)?
+            hidden_state.f_avg_pool2d([2, 2], [2, 2], [0, 0], true, true, None)?
         } else {
-            hidden_state.alias()?
+            hidden_state.f_alias()?
         };
         let residual = self
             .shortcut
@@ -678,11 +677,11 @@ impl RTDetrResNetBottleNeckLayer {
             .map(|shortcut| shortcut.forward(&residual))
             .unwrap_or(Ok(residual))?;
 
-        let mut hidden_state = hidden_state.alias()?;
+        let mut hidden_state = hidden_state.f_alias()?;
         for layer in &self.layer {
             hidden_state = layer.forward(&hidden_state)?;
         }
-        self.activation.apply((hidden_state + residual)?)
+        self.activation.apply(hidden_state.f_add(&residual)?)
     }
 }
 
@@ -709,8 +708,9 @@ impl RTDetrResNetShortCut {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.normalization.forward(&input.apply(&self.convolution)?)
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        self.normalization
+            .forward(&input.f_apply(&self.convolution)?)
     }
 }
 
@@ -748,10 +748,10 @@ impl RTDetrResNetConvLayer {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         self.activation.apply(
             self.normalization
-                .forward(&input.apply(&self.convolution)?)?,
+                .forward(&input.f_apply(&self.convolution)?)?,
         )
     }
 }
@@ -814,7 +814,7 @@ impl RTDetrV2HybridEncoder {
         })
     }
 
-    fn forward(&self, mut feature_maps: Vec<Tensor>) -> koharu_torch::Result<Vec<Tensor>> {
+    fn forward(&self, mut feature_maps: Vec<Tensor>) -> tch::Result<Vec<Tensor>> {
         if self.config.encoder_layers > 0 {
             for (idx, &enc_ind) in self.config.encode_proj_layers.iter().enumerate() {
                 feature_maps[enc_ind] = self.encoder[idx].forward(&feature_maps[enc_ind])?;
@@ -824,24 +824,25 @@ impl RTDetrV2HybridEncoder {
         // Preserve Transformers' AIFI -> top-down FPN -> bottom-up PAN ordering;
         // changing the traversal changes which resolution is fused at each stage.
         // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L1112-L1145
-        let mut fpn_feature_maps = vec![feature_maps.last().expect("feature map").alias()?];
+        let mut fpn_feature_maps = vec![feature_maps.last().expect("feature map").f_alias()?];
         for idx in 0..self.lateral_convs.len() {
-            let backbone_feature_map = feature_maps[self.lateral_convs.len() - idx - 1].alias()?;
+            let backbone_feature_map =
+                feature_maps[self.lateral_convs.len() - idx - 1].f_alias()?;
             let top = self.lateral_convs[idx].forward(fpn_feature_maps.last().expect("fpn"))?;
-            *fpn_feature_maps.last_mut().expect("fpn") = top.alias()?;
+            *fpn_feature_maps.last_mut().expect("fpn") = top.f_alias()?;
             let size = top.size();
             let upsampled =
-                top.upsample_nearest2d([size[2] * 2, size[3] * 2], None::<f64>, None::<f64>)?;
-            let fused = Tensor::cat(&[upsampled, backbone_feature_map], 1)?;
+                top.f_upsample_nearest2d([size[2] * 2, size[3] * 2], None::<f64>, None::<f64>)?;
+            let fused = Tensor::f_cat(&[upsampled, backbone_feature_map], 1)?;
             fpn_feature_maps.push(self.fpn_blocks[idx].forward(&fused)?);
         }
         fpn_feature_maps.reverse();
 
-        let mut pan_feature_maps = vec![fpn_feature_maps[0].alias()?];
+        let mut pan_feature_maps = vec![fpn_feature_maps[0].f_alias()?];
         for idx in 0..self.downsample_convs.len() {
             let downsampled =
                 self.downsample_convs[idx].forward(pan_feature_maps.last().expect("pan"))?;
-            let fused = Tensor::cat(&[downsampled, fpn_feature_maps[idx + 1].alias()?], 1)?;
+            let fused = Tensor::f_cat(&[downsampled, fpn_feature_maps[idx + 1].f_alias()?], 1)?;
             pan_feature_maps.push(self.pan_blocks[idx].forward(&fused)?);
         }
 
@@ -870,12 +871,12 @@ impl RTDetrV2AIFILayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let height = size[2];
         let width = size[3];
-        let mut hidden_states = hidden_states.flatten(2, -1)?.permute([0, 2, 1])?;
+        let mut hidden_states = hidden_states.f_flatten(2, -1)?.f_permute([0, 2, 1])?;
         let pos_embed = self.position_embedding.forward(
             width,
             height,
@@ -886,9 +887,9 @@ impl RTDetrV2AIFILayer {
             hidden_states = layer.forward(&hidden_states, Some(&pos_embed))?;
         }
         hidden_states
-            .permute([0, 2, 1])?
-            .reshape([batch_size, self.encoder_hidden_dim, height, width])?
-            .contiguous()
+            .f_permute([0, 2, 1])?
+            .f_reshape([batch_size, self.encoder_hidden_dim, height, width])?
+            .f_contiguous()
     }
 }
 
@@ -933,17 +934,17 @@ impl RTDetrV2EncoderLayer {
         &self,
         hidden_states: &Tensor,
         position_embeddings: Option<&Tensor>,
-    ) -> koharu_torch::Result<Tensor> {
-        let residual = hidden_states.alias()?;
+    ) -> tch::Result<Tensor> {
+        let residual = hidden_states.f_alias()?;
         let hidden_states = if self.normalize_before {
             self.self_attn_layer_norm.forward(hidden_states)?
         } else {
-            hidden_states.alias()?
+            hidden_states.f_alias()?
         };
         let hidden_states = self
             .self_attn
             .forward(&hidden_states, position_embeddings)?;
-        let hidden_states = (residual + hidden_states)?;
+        let hidden_states = residual.f_add(&hidden_states)?;
         let hidden_states = if self.normalize_before {
             hidden_states
         } else {
@@ -953,9 +954,9 @@ impl RTDetrV2EncoderLayer {
         let residual = if self.normalize_before {
             self.final_layer_norm.forward(&hidden_states)?
         } else {
-            hidden_states.alias()?
+            hidden_states.f_alias()?
         };
-        let hidden_states = (residual.alias()? + self.mlp.forward(&residual)?)?;
+        let hidden_states = residual.f_alias()?.f_add(&self.mlp.forward(&residual)?)?;
         if self.normalize_before {
             Ok(hidden_states)
         } else {
@@ -1000,14 +1001,14 @@ impl RTDetrV2Decoder {
         spatial_shapes_list: &[(i64, i64)],
         bbox_embed: &[RTDetrV2MLPPredictionHead],
         class_embed: &[nn::Linear],
-    ) -> koharu_torch::Result<RTDetrV2DecoderOutput> {
-        let mut hidden_states = inputs_embeds.alias()?;
-        let mut reference_points = reference_points.sigmoid()?;
+    ) -> tch::Result<RTDetrV2DecoderOutput> {
+        let mut hidden_states = inputs_embeds.f_alias()?;
+        let mut reference_points = reference_points.f_sigmoid()?;
         let mut intermediate_logits = Vec::with_capacity(self.layers.len());
         let mut intermediate_reference_points = Vec::with_capacity(self.layers.len());
 
         for (idx, decoder_layer) in self.layers.iter().enumerate() {
-            let reference_points_input = reference_points.unsqueeze(2)?;
+            let reference_points_input = reference_points.f_unsqueeze(2)?;
             let object_queries_position_embeddings =
                 self.query_pos_head.forward(&reference_points)?;
             hidden_states = decoder_layer.forward(
@@ -1022,16 +1023,17 @@ impl RTDetrV2Decoder {
             // used by the next decoder layer, matching Transformers inference.
             // https://github.com/huggingface/transformers/blob/394b1a0eaa8e6199e372334da0aff3753a117fdb/src/transformers/models/rt_detr_v2/modeling_rt_detr_v2.py#L626-L636
             let predicted_corners = bbox_embed[idx].forward(&hidden_states)?;
-            let new_reference_points =
-                (predicted_corners + inverse_sigmoid(&reference_points)?)?.sigmoid()?;
-            reference_points = new_reference_points.detach()?;
+            let new_reference_points = predicted_corners
+                .f_add(&inverse_sigmoid(&reference_points)?)?
+                .f_sigmoid()?;
+            reference_points = new_reference_points.f_detach()?;
             intermediate_reference_points.push(new_reference_points);
             intermediate_logits.push(class_embed[idx].forward(&hidden_states)?);
         }
 
         Ok(RTDetrV2DecoderOutput {
-            intermediate_logits: Tensor::stack(&intermediate_logits, 1)?,
-            intermediate_reference_points: Tensor::stack(&intermediate_reference_points, 1)?,
+            intermediate_logits: Tensor::f_stack(&intermediate_logits, 1)?,
+            intermediate_reference_points: Tensor::f_stack(&intermediate_reference_points, 1)?,
         })
     }
 }
@@ -1089,16 +1091,16 @@ impl RTDetrV2DecoderLayer {
         reference_points: &Tensor,
         spatial_shapes_list: &[(i64, i64)],
         encoder_hidden_states: &Tensor,
-    ) -> koharu_torch::Result<Tensor> {
-        let residual = hidden_states.alias()?;
+    ) -> tch::Result<Tensor> {
+        let residual = hidden_states.f_alias()?;
         let hidden_states = self
             .self_attn
             .forward(hidden_states, Some(object_queries_position_embeddings))?;
         let hidden_states = self
             .self_attn_layer_norm
-            .forward(&(residual + hidden_states)?)?;
+            .forward(&residual.f_add(&hidden_states)?)?;
 
-        let residual = hidden_states.alias()?;
+        let residual = hidden_states.f_alias()?;
         let hidden_states = self.encoder_attn.forward(
             &hidden_states,
             encoder_hidden_states,
@@ -1108,10 +1110,10 @@ impl RTDetrV2DecoderLayer {
         )?;
         let hidden_states = self
             .encoder_attn_layer_norm
-            .forward(&(residual + hidden_states)?)?;
-        let residual = hidden_states.alias()?;
+            .forward(&residual.f_add(&hidden_states)?)?;
+        let residual = hidden_states.f_alias()?;
         self.final_layer_norm
-            .forward(&(residual.alias()? + self.mlp.forward(&residual)?)?)
+            .forward(&residual.f_alias()?.f_add(&self.mlp.forward(&residual)?)?)
     }
 }
 
@@ -1166,35 +1168,36 @@ impl RTDetrV2SelfAttention {
         &self,
         hidden_states: &Tensor,
         position_embeddings: Option<&Tensor>,
-    ) -> koharu_torch::Result<Tensor> {
+    ) -> tch::Result<Tensor> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let sequence_length = size[1];
         let query_key_input = position_embeddings
-            .map(|position_embeddings| hidden_states + position_embeddings)
-            .unwrap_or_else(|| hidden_states.alias())?;
+            .map(|position_embeddings| hidden_states.f_add(position_embeddings))
+            .unwrap_or_else(|| hidden_states.f_alias())?;
         let query_states = self
             .q_proj
             .forward(&query_key_input)?
-            .view([batch_size, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
+            .f_view([batch_size, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
         let key_states = self
             .k_proj
             .forward(&query_key_input)?
-            .view([batch_size, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
+            .f_view([batch_size, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
         let value_states = self
             .v_proj
             .forward(hidden_states)?
-            .view([batch_size, sequence_length, self.num_heads, self.head_dim])?
-            .transpose(1, 2)?;
-        let attn_weights = (query_states.matmul(&key_states.transpose(2, 3)?)? * self.scaling)?;
-        let attn_weights = attn_weights.softmax(-1, None::<Kind>)?;
+            .f_view([batch_size, sequence_length, self.num_heads, self.head_dim])?
+            .f_transpose(1, 2)?;
+        let attn_weights =
+            (query_states.f_matmul(&key_states.f_transpose(2, 3)?)?).f_mul_scalar(self.scaling)?;
+        let attn_weights = attn_weights.f_softmax(-1, None::<Kind>)?;
         let attn_output = attn_weights
-            .matmul(&value_states)?
-            .transpose(1, 2)?
-            .contiguous()?;
-        self.o_proj.forward(&attn_output.reshape([
+            .f_matmul(&value_states)?
+            .f_transpose(1, 2)?
+            .f_contiguous()?;
+        self.o_proj.forward(&attn_output.f_reshape([
             batch_size,
             sequence_length,
             self.num_heads * self.head_dim,
@@ -1225,7 +1228,7 @@ impl RTDetrV2MultiscaleDeformableAttention {
             .flat_map(|_| (0..n_points).map(move |_| 1.0f32 / n_points as f32))
             .collect::<Vec<_>>();
         let mut n_points_scale = path.var("n_points_scale", &[n_levels * n_points])?;
-        n_points_scale.copy_(&Tensor::from_slice(&n_points_scale_values)?)?;
+        n_points_scale.f_copy_(&Tensor::f_from_slice(&n_points_scale_values)?)?;
         Ok(Self {
             d_model: config.d_model,
             n_levels,
@@ -1268,20 +1271,20 @@ impl RTDetrV2MultiscaleDeformableAttention {
         position_embeddings: &Tensor,
         reference_points: &Tensor,
         spatial_shapes_list: &[(i64, i64)],
-    ) -> koharu_torch::Result<Tensor> {
-        let hidden_states = (hidden_states + position_embeddings)?;
+    ) -> tch::Result<Tensor> {
+        let hidden_states = hidden_states.f_add(position_embeddings)?;
         let batch_size = hidden_states.size()[0];
         let num_queries = hidden_states.size()[1];
         let sequence_length = encoder_hidden_states.size()[1];
         let dim_per_head = self.d_model / self.n_heads;
 
-        let value = self.value_proj.forward(encoder_hidden_states)?.view([
+        let value = self.value_proj.forward(encoder_hidden_states)?.f_view([
             batch_size,
             sequence_length,
             self.n_heads,
             dim_per_head,
         ])?;
-        let sampling_offsets = self.sampling_offsets.forward(&hidden_states)?.view([
+        let sampling_offsets = self.sampling_offsets.forward(&hidden_states)?.f_view([
             batch_size,
             num_queries,
             self.n_heads,
@@ -1291,39 +1294,43 @@ impl RTDetrV2MultiscaleDeformableAttention {
         let attention_weights = self
             .attention_weights
             .forward(&hidden_states)?
-            .view([
+            .f_view([
                 batch_size,
                 num_queries,
                 self.n_heads,
                 self.n_levels * self.n_points,
             ])?
-            .softmax(-1, None::<Kind>)?;
+            .f_softmax(-1, None::<Kind>)?;
 
         let sampling_locations = if reference_points.size().last().copied() == Some(4) {
-            let scale = self.n_points_scale.to_kind(hidden_states.kind())?.view([
-                1,
-                1,
-                1,
-                self.n_levels * self.n_points,
-                1,
-            ])?;
-            let ref_xy = reference_points.slice(-1, 0, 2, 1)?.unsqueeze(2)?;
-            let ref_wh = reference_points.slice(-1, 2, 4, 1)?.unsqueeze(2)?;
-            (ref_xy + (((sampling_offsets * scale)? * ref_wh)? * self.offset_scale)?)?
+            let scale = self
+                .n_points_scale
+                .f_to_kind(hidden_states.kind())?
+                .f_view([1, 1, 1, self.n_levels * self.n_points, 1])?;
+            let ref_xy = reference_points.f_slice(-1, 0, 2, 1)?.f_unsqueeze(2)?;
+            let ref_wh = reference_points.f_slice(-1, 2, 4, 1)?.f_unsqueeze(2)?;
+            ref_xy.f_add(
+                &sampling_offsets
+                    .f_mul(&scale)?
+                    .f_mul(&ref_wh)?
+                    .f_mul_scalar(self.offset_scale)?,
+            )?
         } else {
             let spatial_shapes = spatial_shapes_tensor(spatial_shapes_list, value.device())?
-                .to_kind(hidden_states.kind())?;
-            let normalizer = Tensor::stack(
-                &[spatial_shapes.i((.., 1))?, spatial_shapes.i((.., 0))?],
+                .f_to_kind(hidden_states.kind())?;
+            let normalizer = Tensor::f_stack(
+                &[spatial_shapes.f_i((.., 1))?, spatial_shapes.f_i((.., 0))?],
                 -1,
             )?;
-            (reference_points.unsqueeze(2)?.unsqueeze(4)?
-                + (sampling_offsets
-                    / normalizer
-                        .unsqueeze(0)?
-                        .unsqueeze(0)?
-                        .unsqueeze(0)?
-                        .unsqueeze(4)?)?)?
+            reference_points.f_unsqueeze(2)?.f_unsqueeze(4)?.f_add(
+                &sampling_offsets.f_div(
+                    &normalizer
+                        .f_unsqueeze(0)?
+                        .f_unsqueeze(0)?
+                        .f_unsqueeze(0)?
+                        .f_unsqueeze(4)?,
+                )?,
+            )?
         };
 
         let output = multiscale_deformable_attention_v2(
@@ -1369,7 +1376,7 @@ impl RTDetrV2MLP {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
         let hidden_states = self.activation.apply(self.fc1.forward(hidden_states)?)?;
         self.fc2.forward(&hidden_states)
     }
@@ -1403,16 +1410,16 @@ impl RTDetrV2MLPPredictionHead {
                     Default::default(),
                 )
             })
-            .collect::<koharu_torch::Result<Vec<_>>>()?;
+            .collect::<tch::Result<Vec<_>>>()?;
         Ok(Self { layers })
     }
 
-    fn forward(&self, x: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut x = x.alias()?;
+    fn forward(&self, x: &Tensor) -> tch::Result<Tensor> {
+        let mut x = x.f_alias()?;
         for (idx, layer) in self.layers.iter().enumerate() {
             x = layer.forward(&x)?;
             if idx + 1 != self.layers.len() {
-                x = x.relu()?;
+                x = x.f_relu()?;
             }
         }
         Ok(x)
@@ -1458,12 +1465,12 @@ impl RTDetrV2CSPRepLayer {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
         let mut hidden_state_1 = self.conv1.forward(hidden_state)?;
         for bottleneck in &self.bottlenecks {
             hidden_state_1 = bottleneck.forward(&hidden_state_1)?;
         }
-        hidden_state_1 + self.conv2.forward(hidden_state)?
+        hidden_state_1.f_add(&self.conv2.forward(hidden_state)?)
     }
 }
 
@@ -1502,9 +1509,9 @@ impl RTDetrV2RepVggBlock {
         })
     }
 
-    fn forward(&self, x: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> tch::Result<Tensor> {
         self.activation
-            .apply((self.conv1.forward(x)? + self.conv2.forward(x)?)?)
+            .apply(self.conv1.forward(x)?.f_add(&self.conv2.forward(x)?)?)
     }
 }
 
@@ -1552,9 +1559,12 @@ impl RTDetrV2ConvNormLayer {
         })
     }
 
-    fn forward(&self, hidden_state: &Tensor) -> koharu_torch::Result<Tensor> {
-        self.activation
-            .apply(hidden_state.apply(&self.conv)?.apply_t(&self.norm, false)?)
+    fn forward(&self, hidden_state: &Tensor) -> tch::Result<Tensor> {
+        self.activation.apply(
+            hidden_state
+                .f_apply(&self.conv)?
+                .f_apply_t(&self.norm, false)?,
+        )
     }
 }
 
@@ -1565,24 +1575,30 @@ struct RTDetrV2SinePositionEmbedding {
 }
 
 impl RTDetrV2SinePositionEmbedding {
-    fn forward(
-        &self,
-        width: i64,
-        height: i64,
-        device: Device,
-        kind: Kind,
-    ) -> koharu_torch::Result<Tensor> {
-        let grid_w = Tensor::arange(width, (kind, device))?;
-        let grid_h = Tensor::arange(height, (kind, device))?;
-        let mesh = Tensor::meshgrid_indexing(&[grid_w, grid_h], "xy")?;
-        let grid_w = mesh[0].flatten(0, -1)?.unsqueeze(-1)?;
-        let grid_h = mesh[1].flatten(0, -1)?.unsqueeze(-1)?;
+    fn forward(&self, width: i64, height: i64, device: Device, kind: Kind) -> tch::Result<Tensor> {
+        let grid_w = Tensor::f_arange(width, (kind, device))?;
+        let grid_h = Tensor::f_arange(height, (kind, device))?;
+        let mesh = Tensor::f_meshgrid_indexing(&[grid_w, grid_h], "xy")?;
+        let grid_w = mesh[0].f_flatten(0, -1)?.f_unsqueeze(-1)?;
+        let grid_h = mesh[1].f_flatten(0, -1)?.f_unsqueeze(-1)?;
         let pos_dim = self.embed_dim / 4;
-        let omega = (Tensor::arange(pos_dim, (kind, device))? / pos_dim as f64)?;
-        let omega = (self.temperature.ln() * &omega)?.exp()?.reciprocal()?;
-        let out_w = grid_w.matmul(&omega.unsqueeze(0)?)?;
-        let out_h = grid_h.matmul(&omega.unsqueeze(0)?)?;
-        Tensor::cat(&[out_h.sin()?, out_h.cos()?, out_w.sin()?, out_w.cos()?], 1)?.unsqueeze(0)
+        let omega = (Tensor::f_arange(pos_dim, (kind, device))?).f_div_scalar(pos_dim as f64)?;
+        let omega = omega
+            .f_mul_scalar(self.temperature.ln())?
+            .f_exp()?
+            .f_reciprocal()?;
+        let out_w = grid_w.f_matmul(&omega.f_unsqueeze(0)?)?;
+        let out_h = grid_h.f_matmul(&omega.f_unsqueeze(0)?)?;
+        Tensor::f_cat(
+            &[
+                out_h.f_sin()?,
+                out_h.f_cos()?,
+                out_w.f_sin()?,
+                out_w.f_cos()?,
+            ],
+            1,
+        )?
+        .f_unsqueeze(0)
     }
 }
 
@@ -1604,12 +1620,12 @@ impl Activation {
         }
     }
 
-    fn apply(self, x: Tensor) -> koharu_torch::Result<Tensor> {
+    fn apply(self, x: Tensor) -> tch::Result<Tensor> {
         match self {
             Self::None => Ok(x),
-            Self::Relu => x.relu(),
-            Self::Silu => x.silu(),
-            Self::Gelu => x.gelu("none"),
+            Self::Relu => x.f_relu(),
+            Self::Silu => x.f_silu(),
+            Self::Gelu => x.f_gelu("none"),
         }
     }
 }
@@ -1632,7 +1648,7 @@ fn multiscale_deformable_attention_v2(
     attention_weights: &Tensor,
     n_points: usize,
     method: &str,
-) -> koharu_torch::Result<Tensor> {
+) -> tch::Result<Tensor> {
     let size = value.size();
     let batch_size = size[0];
     let num_heads = size[2];
@@ -1642,37 +1658,46 @@ fn multiscale_deformable_attention_v2(
         .iter()
         .map(|(height, width)| height * width)
         .collect::<Vec<_>>();
-    let value_list = value.split_with_sizes(split_sizes, 1)?;
+    let value_list = value.f_split_with_sizes(split_sizes, 1)?;
     let sampling_grids = match method {
-        "default" => ((sampling_locations * 2.0)? - 1.0)?,
-        "discrete" => sampling_locations.alias()?,
+        "default" => sampling_locations.f_mul_scalar(2.0)?.f_sub_scalar(1.0)?,
+        "discrete" => sampling_locations.f_alias()?,
         _ => panic!("unsupported RT-DETR-v2 decoder method: {method}"),
     };
-    let sampling_grids = sampling_grids.permute([0, 2, 1, 3, 4])?.flatten(0, 1)?;
+    let sampling_grids = sampling_grids.f_permute([0, 2, 1, 3, 4])?.f_flatten(0, 1)?;
     let point_splits = vec![n_points as i64; spatial_shapes_list.len()];
-    let sampling_grid_list = sampling_grids.split_with_sizes(point_splits, -2)?;
+    let sampling_grid_list = sampling_grids.f_split_with_sizes(point_splits, -2)?;
 
     let mut sampling_values = Vec::with_capacity(spatial_shapes_list.len());
     for (level, (height, width)) in spatial_shapes_list.iter().copied().enumerate() {
         let value_l = value_list[level]
-            .flatten(2, -1)?
-            .transpose(1, 2)?
-            .reshape([batch_size * num_heads, hidden_dim, height, width])?;
+            .f_flatten(2, -1)?
+            .f_transpose(1, 2)?
+            .f_reshape([batch_size * num_heads, hidden_dim, height, width])?;
         let sampling_grid = &sampling_grid_list[level];
         let sampling_value = if method == "default" {
-            value_l.grid_sampler_2d(sampling_grid, 0, 0, false)?
+            value_l.f_grid_sampler_2d(sampling_grid, 0, 0, false)?
         } else {
-            let scale = Tensor::from_slice(&[width, height])?
-                .to_device(value.device())?
-                .view([1, 1, 1, 2])?;
-            let sampling_coord = ((sampling_grid * scale)? + 0.5)?.to_kind(Kind::Int64)?;
-            let x = sampling_coord.i((.., .., .., 0))?.clamp(0, width - 1)?;
-            let y = sampling_coord.i((.., .., .., 1))?.clamp(0, height - 1)?;
-            let index = ((y * width)? + x)?.flatten(1, -1)?;
+            let scale = Tensor::f_from_slice(&[width, height])?
+                .f_to_device(value.device())?
+                .f_view([1, 1, 1, 2])?;
+            let sampling_coord = sampling_grid
+                .f_mul(&scale)?
+                .f_add_scalar(0.5)?
+                .f_to_kind(Kind::Int64)?;
+            let x = sampling_coord.f_i((.., .., .., 0))?.f_clamp(0, width - 1)?;
+            let y = sampling_coord
+                .f_i((.., .., .., 1))?
+                .f_clamp(0, height - 1)?;
+            let index = y.f_mul_scalar(width)?.f_add(&x)?.f_flatten(1, -1)?;
             value_l
-                .flatten(2, -1)?
-                .gather(2, &index.unsqueeze(1)?.repeat([1, hidden_dim, 1])?, false)?
-                .view([
+                .f_flatten(2, -1)?
+                .f_gather(
+                    2,
+                    &index.f_unsqueeze(1)?.f_repeat([1, hidden_dim, 1])?,
+                    false,
+                )?
+                .f_view([
                     batch_size * num_heads,
                     hidden_dim,
                     num_queries,
@@ -1682,24 +1707,25 @@ fn multiscale_deformable_attention_v2(
         sampling_values.push(sampling_value);
     }
 
-    let attention_weights = attention_weights.permute([0, 2, 1, 3])?.reshape([
+    let attention_weights = attention_weights.f_permute([0, 2, 1, 3])?.f_reshape([
         batch_size * num_heads,
         1,
         num_queries,
         -1,
     ])?;
-    (Tensor::cat(&sampling_values, -1)? * attention_weights)?
-        .sum_dim_intlist(&[-1i64][..], false, None::<Kind>)?
-        .view([batch_size, num_heads * hidden_dim, num_queries])?
-        .transpose(1, 2)?
-        .contiguous()
+    (Tensor::f_cat(&sampling_values, -1)?)
+        .f_mul(&attention_weights)?
+        .f_sum_dim_intlist(&[-1i64][..], false, None::<Kind>)?
+        .f_view([batch_size, num_heads * hidden_dim, num_queries])?
+        .f_transpose(1, 2)?
+        .f_contiguous()
 }
 
 fn generate_anchors(
     spatial_shapes: &[(i64, i64)],
     device: Device,
     kind: Kind,
-) -> koharu_torch::Result<(Tensor, Tensor)> {
+) -> tch::Result<(Tensor, Tensor)> {
     let mut anchors = Vec::new();
     let mut valid = Vec::new();
     let eps = 1e-2f32;
@@ -1716,15 +1742,15 @@ fn generate_anchors(
         }
     }
     let total = valid.len() as i64;
-    let anchors = Tensor::from_slice(&anchors)?
-        .view([1, total, 4])?
-        .to_device(device)?
-        .to_kind(kind)?;
-    let valid_mask = Tensor::from_slice(&valid)?
-        .view([1, total, 1])?
-        .to_device(device)?;
-    let one_minus_anchors = (anchors.ones_like()? - &anchors)?;
-    let logit = (&anchors / one_minus_anchors)?.log()?;
+    let anchors = Tensor::f_from_slice(&anchors)?
+        .f_view([1, total, 4])?
+        .f_to_device(device)?
+        .f_to_kind(kind)?;
+    let valid_mask = Tensor::f_from_slice(&valid)?
+        .f_view([1, total, 1])?
+        .f_to_device(device)?;
+    let one_minus_anchors = anchors.f_ones_like()?.f_sub(&anchors)?;
+    let logit = anchors.f_div(&one_minus_anchors)?.f_log()?;
     let finfo_max = match kind {
         Kind::Half => 65_504.0,
         Kind::Double => f64::MAX,
@@ -1732,8 +1758,8 @@ fn generate_anchors(
         Kind::BFloat16 => 3.389_531_389_251_535_5e38,
         _ => f32::MAX as f64,
     };
-    let max = Tensor::full([1, total, 4], finfo_max, (kind, device))?;
-    let anchors = logit.where_self(&valid_mask.expand([1, total, 4], true)?, &max)?;
+    let max = Tensor::f_full([1, total, 4], finfo_max, (kind, device))?;
+    let anchors = logit.f_where_self(&valid_mask.f_expand([1, total, 4], true)?, &max)?;
     Ok((anchors, valid_mask))
 }
 
@@ -1758,22 +1784,19 @@ fn fixed_spatial_shapes(
     Some(spatial_shapes)
 }
 
-fn inverse_sigmoid(x: &Tensor) -> koharu_torch::Result<Tensor> {
-    let x = x.clamp(0.0, 1.0)?;
-    let x1 = x.clamp_min(1e-5)?;
-    let x2 = (x.ones_like()? - &x)?.clamp_min(1e-5)?;
-    (x1 / x2)?.log()
+fn inverse_sigmoid(x: &Tensor) -> tch::Result<Tensor> {
+    let x = x.f_clamp(0.0, 1.0)?;
+    let x1 = x.f_clamp_min(1e-5)?;
+    let x2 = x.f_ones_like()?.f_sub(&x)?.f_clamp_min(1e-5)?;
+    x1.f_div(&x2)?.f_log()
 }
 
-fn spatial_shapes_tensor(
-    spatial_shapes: &[(i64, i64)],
-    device: Device,
-) -> koharu_torch::Result<Tensor> {
+fn spatial_shapes_tensor(spatial_shapes: &[(i64, i64)], device: Device) -> tch::Result<Tensor> {
     let values = spatial_shapes
         .iter()
         .flat_map(|(h, w)| [*h, *w])
         .collect::<Vec<_>>();
-    Tensor::from_slice(&values)?
-        .view([spatial_shapes.len() as i64, 2])?
-        .to_device(device)
+    Tensor::f_from_slice(&values)?
+        .f_view([spatial_shapes.len() as i64, 2])?
+        .f_to_device(device)
 }

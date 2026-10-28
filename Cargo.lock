@@ -1199,11 +1199,31 @@ dependencies = [
 
 [[package]]
 name = "bzip2"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdb116a6ef3f6c3698828873ad02c3014b3c85cadb88496095628e3ef1e347f8"
+dependencies = [
+ "bzip2-sys",
+ "libc",
+]
+
+[[package]]
+name = "bzip2"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
 dependencies = [
  "libbz2-rs-sys",
+]
+
+[[package]]
+name = "bzip2-sys"
+version = "0.1.13+1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225bff33b2141874fe80d71e07d6eec4f85c5c216453dd96388240f96e1acc14"
+dependencies = [
+ "cc",
+ "pkg-config",
 ]
 
 [[package]]
@@ -1685,6 +1705,12 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "constant_time_eq"
@@ -2491,7 +2517,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05ee509499d14dc47da5f824e4bb1bd558ceb259adc5475956265d48787a80da"
 dependencies = [
- "bzip2",
+ "bzip2 0.6.1",
  "clap",
  "fs-err",
  "indicatif",
@@ -5248,11 +5274,13 @@ dependencies = [
  "koharu-diffusion",
  "koharu-llm",
  "koharu-runtime",
- "koharu-torch",
+ "memmap2",
  "nalgebra",
  "rayon",
+ "safetensors 0.8.0",
  "serde",
  "serde_json",
+ "tch",
  "tempfile",
  "tokenizers",
  "tokio",
@@ -5346,18 +5374,18 @@ dependencies = [
  "futures",
  "koharu-config",
  "koharu-diffusion-sys",
- "koharu-torch-sys",
  "libloading 0.9.0",
  "llama-cpp-sys-2",
  "reqwest",
  "serde",
- "sha1",
+ "sha1 0.11.0",
  "sha2 0.11.1",
  "strum",
  "tar",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "torch-sys",
  "tracing",
  "walkdir",
  "zip 9.0.5",
@@ -5399,27 +5427,6 @@ dependencies = [
  "memmap2",
  "thiserror 2.0.21",
  "tracing",
-]
-
-[[package]]
-name = "koharu-torch"
-version = "0.83.5"
-dependencies = [
- "half",
- "koharu-torch-sys",
- "libc",
- "memmap2",
- "safetensors",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "koharu-torch-sys"
-version = "0.83.5"
-dependencies = [
- "anyhow",
- "koharu-bindgen",
- "libloading 0.9.0",
 ]
 
 [[package]]
@@ -6198,6 +6205,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ndarray"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
+dependencies = [
+ "matrixmultiply",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "portable-atomic",
+ "portable-atomic-util",
+ "rawpointer",
+]
+
+[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6970,6 +6992,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73072a9470554c8e794778acece2312661218aaabb635600957d952cf01c716e"
 
 [[package]]
+name = "password-hash"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6986,6 +7019,18 @@ name = "pastey"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
+
+[[package]]
+name = "pbkdf2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
+dependencies = [
+ "digest 0.10.7",
+ "hmac 0.12.1",
+ "password-hash",
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "pbkdf2"
@@ -7953,7 +7998,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hmac 0.13.0",
  "rayon",
- "sha1",
+ "sha1 0.11.0",
  "sha2 0.11.1",
  "zeroize",
 ]
@@ -8650,6 +8695,16 @@ dependencies = [
 
 [[package]]
 name = "safetensors"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d93279b86b3de76f820a8854dd06cbc33cfa57a417b19c47f6a25280112fb1df"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "safetensors"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79b079b829cb27a1c3c374341345ed2e8b2c0c839034522cee576c140bd7f846"
@@ -9249,6 +9304,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "170fb83ab34de17dc69aa7c67482b22218ddb85da56546f9bd6b929e32a05930"
 dependencies = [
  "stable_deref_trait",
+]
+
+[[package]]
+name = "sha1"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -10278,6 +10344,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tch"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "975b1fb3b612ba925f03dd08b56e5c9452bb7102891d5d9f58c19b49a0b2ec1e"
+dependencies = [
+ "half",
+ "lazy_static",
+ "libc",
+ "ndarray",
+ "rand 0.8.8",
+ "safetensors 0.3.3",
+ "thiserror 1.0.69",
+ "torch-sys",
+ "zip 0.6.6",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10621,6 +10704,16 @@ name = "toml_writer"
 version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
+
+[[package]]
+name = "torch-sys"
+version = "0.26.0"
+dependencies = [
+ "anyhow",
+ "koharu-bindgen",
+ "libc",
+ "libloading 0.9.0",
+]
 
 [[package]]
 name = "tower"
@@ -12419,6 +12512,26 @@ dependencies = [
 
 [[package]]
 name = "zip"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
+dependencies = [
+ "aes 0.8.4",
+ "byteorder",
+ "bzip2 0.4.4",
+ "constant_time_eq 0.1.5",
+ "crc32fast",
+ "crossbeam-utils",
+ "flate2",
+ "hmac 0.12.1",
+ "pbkdf2 0.11.0",
+ "sha1 0.10.7",
+ "time",
+ "zstd 0.11.2+zstd.1.5.2",
+]
+
+[[package]]
+name = "zip"
 version = "4.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
@@ -12436,7 +12549,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
 dependencies = [
  "aes 0.9.3",
- "bzip2",
+ "bzip2 0.6.1",
  "constant_time_eq 0.6.1",
  "crc32fast",
  "deflate64",
@@ -12449,7 +12562,7 @@ dependencies = [
  "nix",
  "pbkdf2 0.13.0",
  "ppmd-rust",
- "sha1",
+ "sha1 0.11.0",
  "time",
  "typed-path",
  "zeroize",
@@ -12483,6 +12596,15 @@ dependencies = [
 
 [[package]]
 name = "zstd"
+version = "0.11.2+zstd.1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20cc960326ece64f010d2d2107537f26dc589a6573a316bd5b1dba685fa5fde4"
+dependencies = [
+ "zstd-safe 5.0.2+zstd.1.5.2",
+]
+
+[[package]]
+name = "zstd"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
@@ -12497,6 +12619,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "057cfd910cfac363a0ada849592624b4c9ff2e10bef504c3433810d78ed96f93"
 dependencies = [
  "zstd-safe 8.1.0",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "5.0.2+zstd.1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d2a5585e04f9eea4b2a3d1eca508c4dee9592a89ef6f450c11719da0726f4db"
+dependencies = [
+ "libc",
+ "zstd-sys",
 ]
 
 [[package]]

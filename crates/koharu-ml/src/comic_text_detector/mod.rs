@@ -3,7 +3,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::processor::{Quad, TextBlock};
 
@@ -49,7 +49,7 @@ impl ComicTextDetector {
     }
 
     pub fn inference(&self, image: &DynamicImage) -> Result<(image::GrayImage, Vec<TextBlock>)> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             if let Some(detection) =
                 rearranged_inference(image, self.device, |input| self.model.forward(input))?
             {
