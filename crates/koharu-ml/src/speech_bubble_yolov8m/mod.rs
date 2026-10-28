@@ -4,7 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_torch::Device;
+use tch::Device;
 
 pub use self::{
     config::YoloV8mSpeechBubbleConfig,
@@ -69,7 +69,7 @@ impl YoloV8mSpeechBubbleSegmenter {
         confidence_threshold: f32,
         nms_threshold: f32,
     ) -> Result<YoloV8mSpeechBubbleInstances> {
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let (pixel_values, letterbox) = self.processor.preprocess(image, self.device)?;
             let outputs = self.model.forward(&pixel_values)?;
             self.processor

@@ -54,7 +54,7 @@ flowchart TB
 
 ## ネイティブランタイム
 
-安全な `koharu-torch`、`llama-cpp-2`、`koharu-diffusion` は、Koharu 独自の `llama-cpp-sys-2` を含む unsafe な `-sys` 動的ロード crate から分離します。`koharu-runtime` がパッケージの検出、取得、検証、ロードを担当します。
+安全な `tch`、`llama-cpp-2`、`koharu-diffusion` は、Koharu 独自の `torch-sys` と `llama-cpp-sys-2` を含む unsafe な `-sys` 動的ロード crate から分離します。`koharu-runtime` がパッケージの検出、取得、検証、ロードを担当します。
 
 図には載せていない共通の crate が 1 つあります。`koharu-config` は `config.toml` の型付きセクションと暗号化されたシークレットを所有し、その鍵は OS の資格情報ストアに保管されます。
 

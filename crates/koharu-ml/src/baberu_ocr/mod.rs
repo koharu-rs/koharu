@@ -4,7 +4,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::Tensor;
+use tch::Tensor;
 
 pub use self::config::BaberuOcrConfig;
 
@@ -126,13 +126,13 @@ impl BaberuOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::no_grad(|| {
+        tch::no_grad(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))
                 .collect::<Result<Vec<_>>>()?;
             let token_ids = self.model.forward(
-                &Tensor::cat(&pixel_values, 0)?,
+                &Tensor::f_cat(&pixel_values, 0)?,
                 &self.tokenizer,
                 self.generation.max_new_tokens,
                 self.generation.repetition_penalty,

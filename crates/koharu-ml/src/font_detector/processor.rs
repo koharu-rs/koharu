@@ -8,9 +8,9 @@ use std::{fs, path::Path};
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_torch::{Device, Kind, Tensor};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use tch::{Device, Kind, Tensor};
 
 pub(super) const FONT_COUNT: i64 = 6_150;
 pub(super) const REGRESSION_DIM: i64 = 10;
@@ -112,27 +112,27 @@ impl Processor {
         // the same interpolation and quantization order. CUDA does not support
         // that operator for bytes, so resize on CPU, batch the packed results,
         // and perform one transfer before the on-device float conversion.
-        let pixel_values = (Tensor::cat(
+        let pixel_values = (Tensor::f_cat(
             &images
                 .iter()
                 .map(|&(width, height, ref pixels)| {
-                    Tensor::from_slice(pixels)?
-                        .view([height as i64, width as i64, 3])?
-                        .permute([2, 0, 1])?
-                        .unsqueeze(0)?
-                        .internal_upsample_bilinear2d_aa(
+                    Tensor::f_from_slice(pixels)?
+                        .f_view([height as i64, width as i64, 3])?
+                        .f_permute([2, 0, 1])?
+                        .f_unsqueeze(0)?
+                        .f_internal_upsample_bilinear2d_aa(
                             [512, 512],
                             false,
                             None::<f64>,
                             None::<f64>,
                         )
                 })
-                .collect::<koharu_torch::Result<Vec<_>>>()?,
+                .collect::<tch::Result<Vec<_>>>()?,
             0,
         )?
-        .to_device(device)?
-        .to_kind(Kind::Float)?
-            / 255.0)?;
+        .f_to_device(device)?
+        .f_to_kind(Kind::Float)?)
+        .f_div_scalar(255.0)?;
         let image_widths = images.iter().map(|&(width, _, _)| width).collect();
         Ok((pixel_values, image_widths))
     }
@@ -157,20 +157,20 @@ impl Processor {
 
         let top_k = top_k.min(FONT_COUNT as usize) as i64;
         let probabilities = output
-            .narrow(-1, 0, FONT_COUNT)?
-            .softmax(-1, None::<Kind>)?;
-        let (scores, indices) = probabilities.topk(top_k, -1, true, true)?;
+            .f_narrow(-1, 0, FONT_COUNT)?
+            .f_softmax(-1, None::<Kind>)?;
+        let (scores, indices) = probabilities.f_topk(top_k, -1, true, true)?;
         let directions = output
-            .narrow(-1, FONT_COUNT, 2)?
-            .argmax(-1, false)?
-            .unsqueeze(-1)?;
-        let regression = output.narrow(-1, FONT_COUNT + 2, REGRESSION_DIM)?;
+            .f_narrow(-1, FONT_COUNT, 2)?
+            .f_argmax(-1, false)?
+            .f_unsqueeze(-1)?;
+        let regression = output.f_narrow(-1, FONT_COUNT + 2, REGRESSION_DIM)?;
 
         // Copy only top-k scores and the compact style output. Grouping the
         // floating-point and integer results keeps GPU synchronization to two
         // host transfers, independent of the batch size.
-        let floats = Tensor::cat(&[scores, regression], -1)?.to_device(Device::Cpu)?;
-        let integers = Tensor::cat(&[indices, directions], -1)?.to_device(Device::Cpu)?;
+        let floats = Tensor::f_cat(&[scores, regression], -1)?.f_to_device(Device::Cpu)?;
+        let integers = Tensor::f_cat(&[indices, directions], -1)?.f_to_device(Device::Cpu)?;
         let floats = Vec::<Vec<f32>>::try_from(&floats)?;
         let integers = Vec::<Vec<i64>>::try_from(&integers)?;
 
@@ -271,7 +271,7 @@ mod tests {
         values[FONT_COUNT as usize + 1] = 1.0;
         values[FONT_COUNT as usize + 2..]
             .copy_from_slice(&[0.25, 0.5, 0.75, 0.2, 0.1, 0.1, 0.2, 0.3, 0.4, 0.75]);
-        let output = Tensor::from_slice(&values)?.view([1, OUTPUT_DIM])?;
+        let output = Tensor::f_from_slice(&values)?.f_view([1, OUTPUT_DIM])?;
 
         let predictions = processor().postprocess(&output, &[200], 2).unwrap();
         let prediction = &predictions[0];
@@ -307,11 +307,11 @@ mod tests {
         assert_eq!(pixels.kind(), Kind::Float);
         assert_eq!(widths, [2, 4]);
         assert_eq!(
-            f32::try_from(pixels.get(0)?.get(0)?.get(0)?.get(0)?).unwrap(),
+            f32::try_from(pixels.f_get(0)?.f_get(0)?.f_get(0)?.f_get(0)?).unwrap(),
             1.0
         );
         assert_eq!(
-            f32::try_from(pixels.get(1)?.get(1)?.get(0)?.get(0)?).unwrap(),
+            f32::try_from(pixels.f_get(1)?.f_get(1)?.f_get(0)?.f_get(0)?).unwrap(),
             1.0
         );
         Ok(())

@@ -27,8 +27,6 @@ koharu-scene = { path = "crates/koharu-scene" }
 koharu-diffusion = { path = "crates/koharu-diffusion" }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys" }
 koharu-runtime = { path = "crates/koharu-runtime" }
-koharu-torch = { path = "crates/koharu-torch" }
-koharu-torch-sys = { path = "crates/koharu-torch-sys" }
 koharu-llm = { path = "crates/koharu-llm" }
 koharu-ml = { path = "crates/koharu-ml" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
@@ -165,6 +163,10 @@ syn = { version = "3.0.6", features = ["full"] }
 libc = "0.2.189"
 llama-cpp-2 = { version = "0.1.160", default-features = false, features = ["mtmd", "llguidance"] }
 llama-cpp-sys-2 = "0.1.160"
+# The shim the runtime installs is built from the same tch-rs commit; see
+# torch-sys's README.
+tch = { version = "=0.26.0", default-features = false }
+torch-sys = "=0.26.0"
 # rig breaks its API in every release; see koharu-llm's README.
 rig-agent = { version = "=0.45.0", default-features = false }
 rig-core = { version = "=0.45.0", default-features = false }
@@ -174,6 +176,8 @@ memmap2 = "0.9.11"
 [patch.crates-io]
 # Koharu's llama.cpp bindings, loaded from the runtime's build; see its README.
 llama-cpp-sys-2 = { path = "crates/llama-cpp-sys-2" }
+# tch's libtorch bindings, loaded from the runtime's shim; see its README.
+torch-sys = { path = "crates/torch-sys" }
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }

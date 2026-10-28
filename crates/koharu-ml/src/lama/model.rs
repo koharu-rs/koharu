@@ -5,11 +5,9 @@
 
 use std::path::Path;
 
+use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{
-    Device, Kind, Tensor,
-    nn::{self, Module, ModuleT},
-};
+use tch::{Device, Kind, Tensor};
 
 use super::config::FFCResNetGeneratorConfig;
 
@@ -31,14 +29,14 @@ impl Model {
         Ok(())
     }
 
-    pub fn forward(&self, image: &Tensor, mask: &Tensor) -> koharu_torch::Result<Tensor> {
-        let image = image.to_kind(self.vs.kind())?;
-        let mask = mask.to_kind(self.vs.kind())?;
-        let inverse_mask = (mask.ones_like()? - &mask)?;
-        let masked_image = (&image * &inverse_mask)?;
-        let input = Tensor::cat(&[masked_image, mask.alias()?], 1)?;
+    pub fn forward(&self, image: &Tensor, mask: &Tensor) -> tch::Result<Tensor> {
+        let image = image.f_to_kind(self.vs.kind())?;
+        let mask = mask.f_to_kind(self.vs.kind())?;
+        let inverse_mask = mask.f_ones_like()?.f_sub(&mask)?;
+        let masked_image = image.f_mul(&inverse_mask)?;
+        let input = Tensor::f_cat(&[masked_image, mask.f_alias()?], 1)?;
         let predicted = self.generator.forward(&input)?;
-        (predicted * mask)? + (inverse_mask * image)?
+        (predicted.f_mul(&mask)?).f_add(&inverse_mask.f_mul(&image)?)
     }
 }
 
@@ -149,8 +147,8 @@ impl FFCResNetGenerator {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
-        let input = input.reflection_pad2d([3, 3, 3, 3])?;
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+        let input = input.f_reflection_pad2d([3, 3, 3, 3])?;
         let mut pair = self.initial.forward((input, None))?;
         for layer in &self.downsample {
             pair = layer.forward(pair)?;
@@ -161,11 +159,11 @@ impl FFCResNetGenerator {
 
         let mut x = self.concat_tuple.forward(pair)?;
         for (conv, bn) in &self.upsample {
-            x = bn.forward_t(&conv.forward(&x)?, false)?.relu()?;
+            x = bn.forward_t(&conv.forward(&x)?, false)?.f_relu()?;
         }
         self.final_conv
-            .forward(&x.reflection_pad2d([3, 3, 3, 3])?)?
-            .sigmoid()
+            .forward(&x.f_reflection_pad2d([3, 3, 3, 3])?)?
+            .f_sigmoid()
     }
 }
 
@@ -201,17 +199,14 @@ impl FFCResnetBlock {
         })
     }
 
-    fn forward(
-        &self,
-        input: (Tensor, Option<Tensor>),
-    ) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
-        let id_l = input.0.alias()?;
-        let id_g = input.1.as_ref().map(Tensor::alias).transpose()?;
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<(Tensor, Option<Tensor>)> {
+        let id_l = input.0.f_alias()?;
+        let id_g = input.1.as_ref().map(Tensor::f_alias).transpose()?;
         let output = self.conv2.forward(self.conv1.forward(input)?)?;
         Ok((
-            (output.0 + id_l)?,
+            output.0.f_add(&id_l)?,
             match (output.1, id_g) {
-                (Some(output), Some(id)) => Some((output + id)?),
+                (Some(output), Some(id)) => Some(output.f_add(&id)?),
                 (Some(output), None) => Some(output),
                 (None, Some(id)) => Some(id),
                 (None, None) => None,
@@ -269,10 +264,7 @@ impl FFC_BN_ACT {
         })
     }
 
-    fn forward(
-        &self,
-        input: (Tensor, Option<Tensor>),
-    ) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<(Tensor, Option<Tensor>)> {
         let output = self.ffc.forward(input)?;
         let local = self
             .bn_l
@@ -280,12 +272,12 @@ impl FFC_BN_ACT {
             .map(|bn| bn.forward_t(&output.0, false))
             .transpose()?
             .unwrap_or(output.0);
-        let local = if self.act_l { local.relu()? } else { local };
+        let local = if self.act_l { local.f_relu()? } else { local };
 
         let global = match (output.1, self.bn_g.as_ref()) {
             (Some(global), Some(bn)) => {
                 let global = bn.forward_t(&global, false)?;
-                Some(if self.act_g { global.relu()? } else { global })
+                Some(if self.act_g { global.f_relu()? } else { global })
             }
             (Some(global), None) => Some(global),
             (None, _) => None,
@@ -373,10 +365,7 @@ impl FFC {
         })
     }
 
-    fn forward(
-        &self,
-        input: (Tensor, Option<Tensor>),
-    ) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<(Tensor, Option<Tensor>)> {
         let local_from_local = self
             .convl2l
             .as_ref()
@@ -397,12 +386,12 @@ impl FFC {
         };
 
         let local = match (local_from_local, local_from_global) {
-            (Some(left), Some(right)) => (left + right)?,
+            (Some(left), Some(right)) => left.f_add(&right)?,
             (Some(output), None) | (None, Some(output)) => output,
             (None, None) => panic!("FFC local output is empty"),
         };
         let global = match (global_from_local, global_from_global) {
-            (Some(left), Some(right)) => Some((left + right)?),
+            (Some(left), Some(right)) => Some(left.f_add(&right)?),
             (Some(output), None) | (None, Some(output)) => Some(output),
             (None, None) => None,
         };
@@ -449,18 +438,18 @@ impl SpectralTransform {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let input = if self.stride == 2 {
-            input.avg_pool2d([2, 2], [2, 2], [0, 0], false, true, None)?
+            input.f_avg_pool2d([2, 2], [2, 2], [0, 0], false, true, None)?
         } else {
-            input.alias()?
+            input.f_alias()?
         };
         let x = self
             .bn1
             .forward_t(&self.conv1.forward(&input)?, false)?
-            .relu()?;
+            .f_relu()?;
         let output = self.fu.forward(&x)?;
-        self.conv2.forward(&(x + output)?)
+        self.conv2.forward(&x.f_add(&output)?)
     }
 }
 
@@ -487,7 +476,7 @@ impl FourierUnit {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
         let size = input.size();
         let batch = size[0];
         let height = size[2];
@@ -502,30 +491,30 @@ impl FourierUnit {
         // the learned convolution and batch normalization remain in the model dtype.
         let ffted =
             input
-                .to_kind(Kind::Float)?
-                .fft_rfftn(None::<&[i64]>, &fft_dims[..], "ortho")?;
-        let ffted = Tensor::stack(&[ffted.real()?, ffted.imag()?], -1)?
-            .permute([0, 1, 4, 2, 3])?
-            .contiguous()?
-            .to_kind(model_kind)?;
+                .f_to_kind(Kind::Float)?
+                .f_fft_rfftn(None::<&[i64]>, &fft_dims[..], "ortho")?;
+        let ffted = Tensor::f_stack(&[ffted.f_real()?, ffted.f_imag()?], -1)?
+            .f_permute([0, 1, 4, 2, 3])?
+            .f_contiguous()?
+            .f_to_kind(model_kind)?;
         let ffted_size = ffted.size();
-        let ffted = ffted.view([batch, -1, ffted_size[3], ffted_size[4]])?;
+        let ffted = ffted.f_view([batch, -1, ffted_size[3], ffted_size[4]])?;
 
         let ffted = self
             .bn
             .forward_t(&self.conv_layer.forward(&ffted)?, false)?
-            .relu()?;
+            .f_relu()?;
         let ffted_size = ffted.size();
         let ffted = ffted
-            .view([batch, -1, 2, ffted_size[2], ffted_size[3]])?
-            .permute([0, 1, 3, 4, 2])?
-            .contiguous()?;
-        let ffted = ffted.to_kind(Kind::Float)?;
-        let ffted = Tensor::complex(&ffted.select(-1, 0)?, &ffted.select(-1, 1)?)?;
+            .f_view([batch, -1, 2, ffted_size[2], ffted_size[3]])?
+            .f_permute([0, 1, 3, 4, 2])?
+            .f_contiguous()?;
+        let ffted = ffted.f_to_kind(Kind::Float)?;
+        let ffted = Tensor::f_complex(&ffted.f_select(-1, 0)?, &ffted.f_select(-1, 1)?)?;
         let output_size = [height, width];
         ffted
-            .fft_irfftn(&output_size[..], &fft_dims[..], "ortho")?
-            .to_kind(model_kind)
+            .f_fft_irfftn(&output_size[..], &fft_dims[..], "ortho")?
+            .f_to_kind(model_kind)
     }
 }
 
@@ -533,9 +522,9 @@ impl FourierUnit {
 struct ConcatTupleLayer;
 
 impl ConcatTupleLayer {
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<Tensor> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<Tensor> {
         match input.1 {
-            Some(global) => Tensor::cat(&[input.0, global], 1),
+            Some(global) => Tensor::f_cat(&[input.0, global], 1),
             None => Ok(input.0),
         }
     }
