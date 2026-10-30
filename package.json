@@ -23,7 +23,7 @@
     "fflate": "0.8.3",
     "git-cliff": "^2.14.2",
     "kill-port": "^2.0.1",
-    "oxfmt": "^0.74.0",
+    "oxfmt": "^0.75.0",
     "playwright": "1.64.1",
     "release-please": "17.11.2",
     "sponsorkit": "^19.0.0",
