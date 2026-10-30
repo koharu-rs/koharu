@@ -4,10 +4,15 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use koharu_rasterizer::{
-    PreparedGlyph, PreparedGlyphRun, PreparedResource, PreparedScene, PreparedSceneCommand,
-    ResourceId,
+    FillRule, PathElement, PreparedGlyph, PreparedGlyphRun, PreparedPath, PreparedResource,
+    PreparedScene, PreparedSceneCommand, ResourceId,
 };
-use vello::kurbo::Affine;
+use skrifa::{
+    GlyphId, MetadataProvider,
+    instance::Size,
+    outline::{DrawSettings, OutlinePen},
+};
+use vello::kurbo::{Affine, BezPath, Diagonal2, Join, PathEl, expand_path};
 
 use crate::{
     Error, FontStyle, HyphenationPolicy, LayoutRun, RenderBounds, RenderDiagnostic,
@@ -15,6 +20,7 @@ use crate::{
     bubble::LayoutBox,
     fonts::{Fonts, font_key},
     script::is_chinese_or_japanese_text,
+    shape::PositionedGlyph,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -110,10 +116,10 @@ impl TextRenderer {
         options: &TextRenderOptions,
         transform: Affine,
     ) {
-        // The border is drawn first as an outward-only dilation of the glyph outline (see
-        // `draw_layout`), then the ordinary fill is drawn on top in the foreground color. Unlike a
-        // centered stroke, a dilation never grows inward, so it can't punch a hole through small
-        // features (e.g. dots) once the border width exceeds their radius.
+        // The border is an outward dilation of each glyph in y-down pen space, recorded
+        // before the fill. A centered stroke would erase small marks, and font embolden
+        // shifts the halo toward one side as the width grows. Hinting and synthetic bold
+        // stay on the fill run.
         if let Some(stroke) = options
             .stroke
             .filter(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0)
@@ -364,6 +370,99 @@ struct GlyphPaint {
     dilation_px: f32,
 }
 
+fn glyph_pen_outline(
+    glyph: &PositionedGlyph<'_>,
+    font_size: f32,
+    x: f32,
+    y: f32,
+) -> Option<BezPath> {
+    let font = glyph.font.skrifa_ref().ok()?;
+    let outline = font.outline_glyphs().get(GlyphId::new(glyph.glyph_id))?;
+    let mut path = BezPath::new();
+    outline
+        .draw(
+            DrawSettings::unhinted(Size::new(font_size), glyph.font.location()),
+            &mut PenOutline(&mut path),
+        )
+        .ok()?;
+    if !path_has_segments(&path) {
+        return None;
+    }
+    let mut placed =
+        Affine::translate((f64::from(x), f64::from(y))) * Affine::scale_non_uniform(1.0, -1.0);
+    if let Some(angle) = glyph.font.synthetic_skew() {
+        placed *= Affine::skew(-(angle.to_radians().tan() as f64), 0.0);
+    }
+    path.apply_affine(placed);
+    path.is_finite().then_some(path)
+}
+
+fn finite_path_elements(path: &BezPath) -> Option<Vec<PathElement>> {
+    if !path.is_finite() || !path_has_segments(path) {
+        return None;
+    }
+    Some(
+        path.elements()
+            .iter()
+            .copied()
+            .map(|element| match element {
+                PathEl::MoveTo(point) => PathElement::MoveTo([point.x, point.y]),
+                PathEl::LineTo(point) => PathElement::LineTo([point.x, point.y]),
+                PathEl::QuadTo(control, point) => {
+                    PathElement::QuadTo([control.x, control.y, point.x, point.y])
+                }
+                PathEl::CurveTo(control_a, control_b, point) => PathElement::CurveTo([
+                    control_a.x,
+                    control_a.y,
+                    control_b.x,
+                    control_b.y,
+                    point.x,
+                    point.y,
+                ]),
+                PathEl::ClosePath => PathElement::Close,
+            })
+            .collect(),
+    )
+}
+
+fn path_has_segments(path: &BezPath) -> bool {
+    path.elements().iter().any(|element| {
+        matches!(
+            element,
+            PathEl::LineTo(_) | PathEl::QuadTo(_, _) | PathEl::CurveTo(_, _, _)
+        )
+    })
+}
+
+struct PenOutline<'a>(&'a mut BezPath);
+
+impl OutlinePen for PenOutline<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.0.move_to((f64::from(x), f64::from(y)));
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.0.line_to((f64::from(x), f64::from(y)));
+    }
+
+    fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+        self.0
+            .quad_to((f64::from(cx), f64::from(cy)), (f64::from(x), f64::from(y)));
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.0.curve_to(
+            (f64::from(cx0), f64::from(cy0)),
+            (f64::from(cx1), f64::from(cy1)),
+            (f64::from(x), f64::from(y)),
+        );
+    }
+
+    fn close(&mut self) {
+        self.0.close_path();
+    }
+}
+
 fn draw_layout(
     scene: &mut PreparedScene,
     resources: &mut Vec<PreparedResource>,
@@ -389,44 +488,72 @@ fn draw_layout(
                 end += 1;
             }
 
-            let mut glyphs = Vec::with_capacity(end - start);
-            for glyph in &line.glyphs[start..end] {
-                glyphs.push(PreparedGlyph {
-                    id: glyph.glyph_id,
-                    x: options.padding + baseline_x + pen_x + glyph.x_offset,
-                    y: options.padding + baseline_y + pen_y
-                        - glyph.y_offset
-                        - options.baseline_shift,
-                });
-                pen_x += glyph.x_advance;
-                pen_y -= glyph.y_advance;
-            }
-
-            let font_id = ResourceId::for_font(font.bytes());
-            if !resources.iter().any(|candidate| candidate.id() == font_id) {
-                resources.push(PreparedResource::font_shared(font.shared_bytes()));
-            }
-            let glyph_transform = font
-                .synthetic_skew()
-                .map(|angle| Affine::skew(-(angle.to_radians().tan() as f64), 0.0).as_coeffs());
             let synthetic_bold = if font.synthetic_bold() { 1.0 } else { 0.0 };
-            scene
-                .commands
-                .push(PreparedSceneCommand::GlyphRun(PreparedGlyphRun {
-                    font: font_id,
-                    font_index: font.index(),
-                    font_size: layout.font_size,
-                    normalized_coords: font.normalized_coords().to_vec(),
-                    transform: transform.as_coeffs(),
-                    glyph_transform,
-                    // Hinting folds a uniform zoom into `font_size` for crisp fill text, but a
-                    // border needs the real transform so its dilation amount stays proportional
-                    // to that same zoom instead of being rendered at a fixed pixel size.
-                    hint: options.hint_glyphs && paint.dilation_px == 0.0,
-                    embolden: [synthetic_bold + paint.dilation_px; 2],
-                    color: paint.color,
-                    glyphs,
-                }));
+            if paint.dilation_px > 0.0 {
+                let radius = f64::from(synthetic_bold + paint.dilation_px);
+                for glyph in &line.glyphs[start..end] {
+                    let x = options.padding + baseline_x + pen_x + glyph.x_offset;
+                    let y = options.padding + baseline_y + pen_y
+                        - glyph.y_offset
+                        - options.baseline_shift;
+                    if let Some(outline) = glyph_pen_outline(glyph, layout.font_size, x, y) {
+                        let dilated = expand_path(
+                            &outline,
+                            Diagonal2::new(radius, radius),
+                            Join::Round,
+                            4.0,
+                            0.1,
+                        );
+                        if let Some(elements) = finite_path_elements(&dilated) {
+                            scene
+                                .commands
+                                .push(PreparedSceneCommand::FillPath(PreparedPath {
+                                    fill: FillRule::NonZero,
+                                    transform: transform.as_coeffs(),
+                                    color: paint.color,
+                                    elements,
+                                }));
+                        }
+                    }
+                    pen_x += glyph.x_advance;
+                    pen_y -= glyph.y_advance;
+                }
+            } else {
+                let mut glyphs = Vec::with_capacity(end - start);
+                for glyph in &line.glyphs[start..end] {
+                    glyphs.push(PreparedGlyph {
+                        id: glyph.glyph_id,
+                        x: options.padding + baseline_x + pen_x + glyph.x_offset,
+                        y: options.padding + baseline_y + pen_y
+                            - glyph.y_offset
+                            - options.baseline_shift,
+                    });
+                    pen_x += glyph.x_advance;
+                    pen_y -= glyph.y_advance;
+                }
+
+                let font_id = ResourceId::for_font(font.bytes());
+                if !resources.iter().any(|candidate| candidate.id() == font_id) {
+                    resources.push(PreparedResource::font_shared(font.shared_bytes()));
+                }
+                let glyph_transform = font
+                    .synthetic_skew()
+                    .map(|angle| Affine::skew(-(angle.to_radians().tan() as f64), 0.0).as_coeffs());
+                scene
+                    .commands
+                    .push(PreparedSceneCommand::GlyphRun(PreparedGlyphRun {
+                        font: font_id,
+                        font_index: font.index(),
+                        font_size: layout.font_size,
+                        normalized_coords: font.normalized_coords().to_vec(),
+                        transform: transform.as_coeffs(),
+                        glyph_transform,
+                        hint: options.hint_glyphs,
+                        embolden: [synthetic_bold; 2],
+                        color: paint.color,
+                        glyphs,
+                    }));
+            }
             start = end;
         }
     }
@@ -435,14 +562,21 @@ fn draw_layout(
 #[cfg(test)]
 mod tests {
     use koharu_rasterizer::{
-        Bounds, CompositionCommand, LayerId, LayerKind as PreparedLayerKind, Point,
+        Bounds, CompositionCommand, LayerId, LayerKind as PreparedLayerKind, PathElement, Point,
         PreparedContent, PreparedFrame, PreparedFrameBundle, PreparedFrameManifest, PreparedLayer,
-        PreparedResourcePacket, PreparedResourceStore, Presentation, Revision,
+        PreparedPath, PreparedResourcePacket, PreparedResourceStore, Presentation, Revision,
     };
     use koharu_scene::EntityId;
+    use skrifa::{
+        GlyphId, MetadataProvider,
+        instance::Size,
+        outline::{DrawSettings, OutlinePen},
+    };
+    use vello::kurbo::{BezPath, PathEl, Rect, Shape};
 
     use super::*;
     use crate::fonts::FontSystem;
+    use crate::shape::PositionedGlyph;
 
     #[test]
     fn automatic_size_preserves_free_text_default_and_balloon_extent() {
@@ -564,5 +698,614 @@ mod tests {
             compiled.composition_commands(1).as_slice(),
             [CompositionCommand::Vector(_)]
         ));
+    }
+
+    #[test]
+    fn text_border_dilates_evenly_on_every_side() {
+        let font = FontSystem::new().first_font().unwrap();
+        assert!(font.synthetic_skew().is_none());
+        let layout = TextLayout::new(&font)
+            .with_font_size(64.0)
+            .run("H.")
+            .unwrap();
+        let padding = 4.0;
+        let baseline_shift = 3.0;
+        let transform = Affine::translate((12.0, -5.0));
+        let placed = |width: f32| {
+            stroke_paths(
+                &layout,
+                WritingMode::Horizontal,
+                padding,
+                baseline_shift,
+                [20, 40, 220, 255],
+                width,
+                transform,
+            )
+        };
+
+        let narrow = placed(8.0);
+        let wide = placed(16.0);
+        let glyphs = outlined_glyphs(&layout, padding, baseline_shift);
+        assert_eq!(narrow.len(), glyphs.len());
+        assert_eq!(wide.len(), glyphs.len());
+        assert!(glyphs.len() >= 2, "expected a path per outlined glyph");
+        for ((origin, glyph), (narrow_path, wide_path)) in
+            glyphs.iter().copied().zip(narrow.iter().zip(&wide))
+        {
+            let outline = unhinted_outline_bounds(glyph, origin, layout.font_size, transform);
+            let narrow_sides = side_deltas(&outline, path_bounds(narrow_path));
+            let wide_sides = side_deltas(&outline, path_bounds(wide_path));
+            assert_even(narrow_sides, 8.0);
+            assert_even(wide_sides, 16.0);
+            for (before, after) in narrow_sides.values().into_iter().zip(wide_sides.values()) {
+                let growth = after - before;
+                assert!(
+                    (growth - 8.0).abs() <= 1.25,
+                    "doubling the width should grow every side, grew by {growth}"
+                );
+            }
+        }
+
+        let (origin, period) = glyphs.last().copied().unwrap();
+        let outline = unhinted_outline(period, origin, layout.font_size, transform);
+        let center = Shape::bounding_box(&outline).center();
+        let period_stroke = path_bez(narrow.last().unwrap());
+        assert_ne!(
+            Shape::winding(&period_stroke, center),
+            0,
+            "a small mark stays a solid dilated blob"
+        );
+        let outline_bounds = Shape::bounding_box(&outline);
+        let stroke_bounds = Shape::bounding_box(&period_stroke);
+        assert!(stroke_bounds.union(outline_bounds) == stroke_bounds);
+    }
+
+    #[test]
+    fn invisible_stroke_emits_no_border() {
+        let font = FontSystem::new().first_font().unwrap();
+        let layout = TextLayout::new(&font)
+            .with_font_size(32.0)
+            .run("H")
+            .unwrap();
+        for stroke in [
+            Some(StrokeOptions {
+                color: [0, 0, 0, 255],
+                width_px: 0.0,
+            }),
+            Some(StrokeOptions {
+                color: [0, 0, 0, 255],
+                width_px: -4.0,
+            }),
+            Some(StrokeOptions {
+                color: [0, 0, 0, 0],
+                width_px: 8.0,
+            }),
+            None,
+        ] {
+            let mut scene = PreparedScene::default();
+            TextRenderer::new().render(
+                &mut scene,
+                &mut Vec::new(),
+                &layout,
+                WritingMode::Horizontal,
+                &TextRenderOptions {
+                    stroke,
+                    ..TextRenderOptions::default()
+                },
+                Affine::IDENTITY,
+            );
+            assert!(
+                scene
+                    .commands
+                    .iter()
+                    .all(|command| matches!(command, PreparedSceneCommand::GlyphRun(run) if run.embolden == [0.0, 0.0])),
+                "width {stroke:?} should not record a border"
+            );
+        }
+    }
+
+    #[test]
+    fn bold_and_vertical_borders_keep_the_fill_inside() {
+        let font = faux_bold_font();
+        assert!(font.synthetic_bold());
+        assert!(font.synthetic_skew().is_none());
+        let horizontal = TextLayout::new(&font)
+            .with_font_size(48.0)
+            .run("H.")
+            .unwrap();
+        let vertical = TextLayout::new(&font)
+            .with_font_size(48.0)
+            .with_writing_mode(WritingMode::VerticalRl)
+            .run("H.")
+            .unwrap();
+        for (layout, mode) in [
+            (&horizontal, WritingMode::Horizontal),
+            (&vertical, WritingMode::VerticalRl),
+        ] {
+            let mut scene = PreparedScene::default();
+            TextRenderer::new().render(
+                &mut scene,
+                &mut Vec::new(),
+                layout,
+                mode,
+                &TextRenderOptions {
+                    padding: 2.0,
+                    baseline_shift: 1.0,
+                    stroke: Some(StrokeOptions {
+                        color: [255, 0, 0, 255],
+                        width_px: 8.0,
+                    }),
+                    ..TextRenderOptions::default()
+                },
+                Affine::IDENTITY,
+            );
+            let (paths, runs): (Vec<_>, Vec<_>) = scene
+                .commands
+                .iter()
+                .partition(|command| matches!(command, PreparedSceneCommand::FillPath(_)));
+            assert!(!paths.is_empty());
+            assert!(runs.iter().all(|command| matches!(
+                command,
+                PreparedSceneCommand::GlyphRun(run)
+                    if run.embolden == [1.0, 1.0] && run.color == [0, 0, 0, 255]
+            )));
+            let glyphs = outlined_glyphs(layout, 2.0, 1.0);
+            assert_eq!(paths.len(), glyphs.len());
+            for ((origin, glyph), command) in glyphs.iter().copied().zip(&paths) {
+                let PreparedSceneCommand::FillPath(path) = command else {
+                    unreachable!();
+                };
+                let outline =
+                    unhinted_outline_bounds(glyph, origin, layout.font_size, Affine::IDENTITY);
+                assert_even(side_deltas(&outline, path_bounds(path)), 9.0);
+            }
+        }
+
+        let spaced = TextLayout::new(&font)
+            .with_font_size(48.0)
+            .run("A A")
+            .unwrap();
+        let mut scene = PreparedScene::default();
+        TextRenderer::new().render(
+            &mut scene,
+            &mut Vec::new(),
+            &spaced,
+            WritingMode::Horizontal,
+            &TextRenderOptions {
+                stroke: Some(StrokeOptions {
+                    color: [0, 0, 255, 255],
+                    width_px: 6.0,
+                }),
+                ..TextRenderOptions::default()
+            },
+            Affine::IDENTITY,
+        );
+        let path_count = scene
+            .commands
+            .iter()
+            .filter(|command| matches!(command, PreparedSceneCommand::FillPath(_)))
+            .count();
+        let fill = scene.commands.iter().find_map(|command| match command {
+            PreparedSceneCommand::GlyphRun(run) => Some(run),
+            PreparedSceneCommand::FillPath(_) => None,
+        });
+        let fill = fill.unwrap();
+        assert_eq!(fill.embolden, [1.0, 1.0]);
+        let outlined = outlined_glyphs(&spaced, 0.0, 0.0).len();
+        assert_eq!(path_count, outlined);
+        assert!(path_count < fill.glyphs.len());
+    }
+
+    #[test]
+    fn italic_border_covers_the_rendered_fill_under_a_scaled_transform() {
+        let font = faux_italic_font();
+        assert!(font.synthetic_skew().is_some());
+        let layout = TextLayout::new(&font)
+            .with_font_size(48.0)
+            .run("Hl.")
+            .unwrap();
+        let transform = Affine::translate((24.0, 16.0)) * Affine::scale(1.5);
+        let mut scene = PreparedScene::default();
+        let mut resources = Vec::new();
+        TextRenderer::new().render(
+            &mut scene,
+            &mut resources,
+            &layout,
+            WritingMode::Horizontal,
+            &TextRenderOptions {
+                padding: 2.0,
+                stroke: Some(StrokeOptions {
+                    color: [255, 0, 0, 255],
+                    width_px: 4.0,
+                }),
+                ..TextRenderOptions::default()
+            },
+            transform,
+        );
+        let (border, fill): (Vec<_>, Vec<_>) = scene
+            .commands
+            .into_iter()
+            .partition(|command| matches!(command, PreparedSceneCommand::FillPath(_)));
+        assert!(!border.is_empty());
+        assert!(fill.iter().all(|command| matches!(
+            command,
+            PreparedSceneCommand::GlyphRun(run) if run.glyph_transform.is_some()
+        )));
+
+        let width = (f64::from(layout.width) * 1.5 + 64.0).ceil() as u32;
+        let height = (f64::from(layout.height) * 1.5 + 48.0).ceil() as u32;
+        let border = rasterize_commands(border, &[], width, height);
+        let fill = rasterize_commands(fill, &resources, width, height);
+        let mut fill_pixels = 0;
+        let mut uncovered = 0;
+        for (fill, border) in fill.pixels().zip(border.pixels()) {
+            if fill.0[3] > 0 {
+                fill_pixels += 1;
+                if border.0[3] < 255 {
+                    uncovered += 1;
+                }
+            }
+        }
+        assert!(fill_pixels > 0, "the fill should rasterize");
+        assert_eq!(
+            uncovered, 0,
+            "{uncovered} of {fill_pixels} fill pixels fall outside the solid border"
+        );
+    }
+
+    fn rasterize_commands(
+        commands: Vec<PreparedSceneCommand>,
+        resources: &[PreparedResource],
+        width: u32,
+        height: u32,
+    ) -> image::RgbaImage {
+        let size = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+        };
+        let (w, h) = (f64::from(width), f64::from(height));
+        let bundle = PreparedFrameBundle {
+            frame: PreparedFrame {
+                revision: Revision::new(1),
+                page: LayerId::from_bytes([1; 16]),
+                width,
+                height,
+                origin: (0, 0),
+                normalization: Affine::IDENTITY.as_coeffs(),
+                layers: vec![PreparedLayer {
+                    id: LayerId::from_bytes([2; 16]),
+                    geometry: vec![
+                        Point { x: 0.0, y: 0.0 },
+                        Point { x: w, y: 0.0 },
+                        Point { x: w, y: h },
+                        Point { x: 0.0, y: h },
+                    ],
+                    bounds: size,
+                    local_bounds: size,
+                    presentation: Presentation {
+                        visible: true,
+                        opacity: 1.0,
+                    },
+                    kind: PreparedLayerKind::Text,
+                    placement: Affine::IDENTITY.as_coeffs(),
+                    content: PreparedContent::Vector(PreparedScene { commands }),
+                    element_frame: None,
+                }],
+            },
+            resources: resources.to_vec(),
+        };
+        let manifest = bundle.manifest().unwrap();
+        let mut store = PreparedResourceStore::default();
+        for reference in manifest.required_resources() {
+            store.insert(bundle.resource_packet(reference.id).unwrap());
+        }
+        let frame = manifest.compile(&store).unwrap();
+        koharu_rasterizer::Rasterizer::new()
+            .unwrap()
+            .rasterize(&frame, koharu_rasterizer::RasterOptions::default())
+            .unwrap()
+            .image
+    }
+
+    fn faux_italic_font() -> crate::fonts::Font {
+        let mut system = FontSystem::new();
+        for family in [
+            "Noto Sans CJK JP",
+            "Noto Sans CJK SC",
+            "Hiragino Sans",
+            "PingFang SC",
+            "Apple SD Gothic Neo",
+            "Comic Sans MS",
+            "Impact",
+            "Arial Black",
+            "Microsoft YaHei",
+            "Yu Gothic",
+            "MS Gothic",
+        ] {
+            if let Some(font) = synthetic_italic_face(&mut system, &[family.to_owned()]) {
+                return font;
+            }
+        }
+        synthetic_italic_face(&mut system, &[]).expect("no faux-italic system font")
+    }
+
+    fn synthetic_italic_face(
+        system: &mut FontSystem,
+        families: &[String],
+    ) -> Option<crate::fonts::Font> {
+        system
+            .resolve(
+                families,
+                fontique::Attributes {
+                    style: fontique::FontStyle::Italic,
+                    ..fontique::Attributes::default()
+                },
+                &[fontique::Script::from_bytes(*b"Latn")],
+                None,
+            )
+            .ok()?
+            .into_iter()
+            .find(|font| font.synthetic_skew().is_some() && font.has_glyph('H'))
+    }
+
+    fn faux_bold_font() -> crate::fonts::Font {
+        let mut system = FontSystem::new();
+        for family in [
+            "Times New Roman",
+            "Times",
+            "Georgia",
+            "Courier New",
+            "Courier",
+            "Verdana",
+            "Trebuchet MS",
+            "Comic Sans MS",
+            "Arial",
+            "Helvetica",
+            "DejaVu Sans",
+            "Liberation Sans",
+            "Noto Sans",
+        ] {
+            if let Some(font) = synthetic_bold_face(&mut system, &[family.to_owned()]) {
+                return font;
+            }
+        }
+        synthetic_bold_face(&mut system, &[]).expect("no faux-bold system font")
+    }
+
+    fn synthetic_bold_face(
+        system: &mut FontSystem,
+        families: &[String],
+    ) -> Option<crate::fonts::Font> {
+        system
+            .resolve(
+                families,
+                fontique::Attributes {
+                    weight: fontique::FontWeight::new(1000.0),
+                    ..fontique::Attributes::default()
+                },
+                &[fontique::Script::from_bytes(*b"Latn")],
+                None,
+            )
+            .ok()?
+            .into_iter()
+            .find(|font| font.synthetic_bold())
+    }
+
+    fn stroke_paths(
+        layout: &LayoutRun<'_>,
+        writing_mode: WritingMode,
+        padding: f32,
+        baseline_shift: f32,
+        color: [u8; 4],
+        width_px: f32,
+        transform: Affine,
+    ) -> Vec<PreparedPath> {
+        let mut scene = PreparedScene::default();
+        TextRenderer::new().render(
+            &mut scene,
+            &mut Vec::new(),
+            layout,
+            writing_mode,
+            &TextRenderOptions {
+                padding,
+                baseline_shift,
+                stroke: Some(StrokeOptions { color, width_px }),
+                ..TextRenderOptions::default()
+            },
+            transform,
+        );
+        let mut paths = Vec::new();
+        let mut seen_fill = false;
+        for command in scene.commands {
+            match command {
+                PreparedSceneCommand::FillPath(path) => {
+                    assert!(!seen_fill, "stroke paths are recorded before the fill");
+                    assert_eq!(path.color, color);
+                    paths.push(path);
+                }
+                PreparedSceneCommand::GlyphRun(run) => {
+                    seen_fill = true;
+                    assert_eq!(run.color, [0, 0, 0, 255]);
+                    assert_eq!(run.embolden, [0.0, 0.0]);
+                }
+            }
+        }
+        assert!(seen_fill);
+        paths
+    }
+
+    fn outlined_glyphs<'a>(
+        layout: &'a LayoutRun<'a>,
+        padding: f32,
+        baseline_shift: f32,
+    ) -> Vec<((f32, f32), &'a PositionedGlyph<'a>)> {
+        let mut glyphs = Vec::new();
+        for line in &layout.lines {
+            let (baseline_x, baseline_y) = line.baseline;
+            let mut pen_x = 0.0;
+            let mut pen_y = 0.0;
+            for glyph in &line.glyphs {
+                let origin = (
+                    padding + baseline_x + pen_x + glyph.x_offset,
+                    padding + baseline_y + pen_y - glyph.y_offset - baseline_shift,
+                );
+                if has_outline(glyph, layout.font_size) {
+                    glyphs.push((origin, glyph));
+                }
+                pen_x += glyph.x_advance;
+                pen_y -= glyph.y_advance;
+            }
+        }
+        glyphs
+    }
+
+    fn has_outline(glyph: &PositionedGlyph<'_>, font_size: f32) -> bool {
+        let Ok(font) = glyph.font.skrifa_ref() else {
+            return false;
+        };
+        let Some(outline) = font.outline_glyphs().get(GlyphId::new(glyph.glyph_id)) else {
+            return false;
+        };
+        let mut path = BezPath::new();
+        outline
+            .draw(
+                DrawSettings::unhinted(Size::new(font_size), glyph.font.location()),
+                &mut TestOutline(&mut path),
+            )
+            .is_ok_and(|_| {
+                path.elements().iter().any(|element| {
+                    matches!(
+                        element,
+                        PathEl::LineTo(_) | PathEl::QuadTo(_, _) | PathEl::CurveTo(_, _, _)
+                    )
+                })
+            })
+    }
+
+    fn unhinted_outline_bounds(
+        glyph: &PositionedGlyph<'_>,
+        origin: (f32, f32),
+        font_size: f32,
+        transform: Affine,
+    ) -> Rect {
+        Shape::bounding_box(&unhinted_outline(glyph, origin, font_size, transform))
+    }
+
+    fn unhinted_outline(
+        glyph: &PositionedGlyph<'_>,
+        (x, y): (f32, f32),
+        font_size: f32,
+        transform: Affine,
+    ) -> BezPath {
+        let font = glyph.font.skrifa_ref().unwrap();
+        let outline = font
+            .outline_glyphs()
+            .get(GlyphId::new(glyph.glyph_id))
+            .unwrap();
+        let mut path = BezPath::new();
+        outline
+            .draw(
+                DrawSettings::unhinted(Size::new(font_size), glyph.font.location()),
+                &mut TestOutline(&mut path),
+            )
+            .unwrap();
+        let mut placed =
+            Affine::translate((f64::from(x), f64::from(y))) * Affine::scale_non_uniform(1.0, -1.0);
+        if let Some(angle) = glyph.font.synthetic_skew() {
+            placed *= Affine::skew(-(angle.to_radians().tan() as f64), 0.0);
+        }
+        path.apply_affine(transform * placed);
+        path
+    }
+
+    struct TestOutline<'a>(&'a mut BezPath);
+
+    impl OutlinePen for TestOutline<'_> {
+        fn move_to(&mut self, x: f32, y: f32) {
+            self.0.move_to((f64::from(x), f64::from(y)));
+        }
+
+        fn line_to(&mut self, x: f32, y: f32) {
+            self.0.line_to((f64::from(x), f64::from(y)));
+        }
+
+        fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+            self.0
+                .quad_to((f64::from(cx), f64::from(cy)), (f64::from(x), f64::from(y)));
+        }
+
+        fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+            self.0.curve_to(
+                (f64::from(cx0), f64::from(cy0)),
+                (f64::from(cx1), f64::from(cy1)),
+                (f64::from(x), f64::from(y)),
+            );
+        }
+
+        fn close(&mut self) {
+            self.0.close_path();
+        }
+    }
+
+    fn path_bounds(path: &PreparedPath) -> Rect {
+        Shape::bounding_box(&path_bez(path))
+    }
+
+    fn path_bez(path: &PreparedPath) -> BezPath {
+        let mut bez = BezPath::new();
+        for element in &path.elements {
+            match *element {
+                PathElement::MoveTo([x, y]) => bez.move_to((x, y)),
+                PathElement::LineTo([x, y]) => bez.line_to((x, y)),
+                PathElement::QuadTo([x1, y1, x2, y2]) => bez.quad_to((x1, y1), (x2, y2)),
+                PathElement::CurveTo([x1, y1, x2, y2, x3, y3]) => {
+                    bez.curve_to((x1, y1), (x2, y2), (x3, y3));
+                }
+                PathElement::Close => bez.close_path(),
+            }
+        }
+        bez.apply_affine(Affine::new(path.transform));
+        bez
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct Sides {
+        left: f64,
+        right: f64,
+        top: f64,
+        bottom: f64,
+    }
+
+    impl Sides {
+        fn values(self) -> [f64; 4] {
+            [self.left, self.right, self.top, self.bottom]
+        }
+    }
+
+    fn side_deltas(outline: &Rect, stroke: Rect) -> Sides {
+        Sides {
+            left: outline.min_x() - stroke.min_x(),
+            right: stroke.max_x() - outline.max_x(),
+            top: outline.min_y() - stroke.min_y(),
+            bottom: stroke.max_y() - outline.max_y(),
+        }
+    }
+
+    fn assert_even(sides: Sides, radius: f64) {
+        let values = sides.values();
+        for value in values {
+            assert!(
+                (value - radius).abs() <= 1.0,
+                "expected about {radius}px on every side, got {sides:?}"
+            );
+        }
+        let min = values.into_iter().fold(f64::INFINITY, f64::min);
+        let max = values.into_iter().fold(f64::NEG_INFINITY, f64::max);
+        assert!(
+            max - min <= 1.0,
+            "the four sides should match, got {sides:?}"
+        );
     }
 }
