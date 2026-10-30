@@ -5,7 +5,7 @@
     "dev": "mint dev --port 3001 --no-open"
   },
   "devDependencies": {
-    "mint": "4.2.1128"
+    "mint": "4.2.1150"
   },
   "engines": {
     "node": "^24.0.0"
