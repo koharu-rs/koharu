@@ -896,6 +896,160 @@ mod tests {
         assert!(path_count < fill.glyphs.len());
     }
 
+    #[test]
+    fn italic_border_covers_the_rendered_fill_under_a_scaled_transform() {
+        let font = faux_italic_font();
+        assert!(font.synthetic_skew().is_some());
+        let layout = TextLayout::new(&font)
+            .with_font_size(48.0)
+            .run("Hl.")
+            .unwrap();
+        let transform = Affine::translate((24.0, 16.0)) * Affine::scale(1.5);
+        let mut scene = PreparedScene::default();
+        let mut resources = Vec::new();
+        TextRenderer::new().render(
+            &mut scene,
+            &mut resources,
+            &layout,
+            WritingMode::Horizontal,
+            &TextRenderOptions {
+                padding: 2.0,
+                stroke: Some(StrokeOptions {
+                    color: [255, 0, 0, 255],
+                    width_px: 4.0,
+                }),
+                ..TextRenderOptions::default()
+            },
+            transform,
+        );
+        let (border, fill): (Vec<_>, Vec<_>) = scene
+            .commands
+            .into_iter()
+            .partition(|command| matches!(command, PreparedSceneCommand::FillPath(_)));
+        assert!(!border.is_empty());
+        assert!(fill.iter().all(|command| matches!(
+            command,
+            PreparedSceneCommand::GlyphRun(run) if run.glyph_transform.is_some()
+        )));
+
+        let width = (f64::from(layout.width) * 1.5 + 64.0).ceil() as u32;
+        let height = (f64::from(layout.height) * 1.5 + 48.0).ceil() as u32;
+        let border = rasterize_commands(border, &[], width, height);
+        let fill = rasterize_commands(fill, &resources, width, height);
+        let mut fill_pixels = 0;
+        let mut uncovered = 0;
+        for (fill, border) in fill.pixels().zip(border.pixels()) {
+            if fill.0[3] > 0 {
+                fill_pixels += 1;
+                if border.0[3] < 255 {
+                    uncovered += 1;
+                }
+            }
+        }
+        assert!(fill_pixels > 0, "the fill should rasterize");
+        assert_eq!(
+            uncovered, 0,
+            "{uncovered} of {fill_pixels} fill pixels fall outside the solid border"
+        );
+    }
+
+    fn rasterize_commands(
+        commands: Vec<PreparedSceneCommand>,
+        resources: &[PreparedResource],
+        width: u32,
+        height: u32,
+    ) -> image::RgbaImage {
+        let size = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+        };
+        let (w, h) = (f64::from(width), f64::from(height));
+        let bundle = PreparedFrameBundle {
+            frame: PreparedFrame {
+                revision: Revision::new(1),
+                page: LayerId::from_bytes([1; 16]),
+                width,
+                height,
+                origin: (0, 0),
+                normalization: Affine::IDENTITY.as_coeffs(),
+                layers: vec![PreparedLayer {
+                    id: LayerId::from_bytes([2; 16]),
+                    geometry: vec![
+                        Point { x: 0.0, y: 0.0 },
+                        Point { x: w, y: 0.0 },
+                        Point { x: w, y: h },
+                        Point { x: 0.0, y: h },
+                    ],
+                    bounds: size,
+                    local_bounds: size,
+                    presentation: Presentation {
+                        visible: true,
+                        opacity: 1.0,
+                    },
+                    kind: PreparedLayerKind::Text,
+                    placement: Affine::IDENTITY.as_coeffs(),
+                    content: PreparedContent::Vector(PreparedScene { commands }),
+                    element_frame: None,
+                }],
+            },
+            resources: resources.to_vec(),
+        };
+        let manifest = bundle.manifest().unwrap();
+        let mut store = PreparedResourceStore::default();
+        for reference in manifest.required_resources() {
+            store.insert(bundle.resource_packet(reference.id).unwrap());
+        }
+        let frame = manifest.compile(&store).unwrap();
+        koharu_rasterizer::Rasterizer::new()
+            .unwrap()
+            .rasterize(&frame, koharu_rasterizer::RasterOptions::default())
+            .unwrap()
+            .image
+    }
+
+    fn faux_italic_font() -> crate::fonts::Font {
+        let mut system = FontSystem::new();
+        for family in [
+            "Noto Sans CJK JP",
+            "Noto Sans CJK SC",
+            "Hiragino Sans",
+            "PingFang SC",
+            "Apple SD Gothic Neo",
+            "Comic Sans MS",
+            "Impact",
+            "Arial Black",
+            "Microsoft YaHei",
+            "Yu Gothic",
+            "MS Gothic",
+        ] {
+            if let Some(font) = synthetic_italic_face(&mut system, &[family.to_owned()]) {
+                return font;
+            }
+        }
+        synthetic_italic_face(&mut system, &[]).expect("no faux-italic system font")
+    }
+
+    fn synthetic_italic_face(
+        system: &mut FontSystem,
+        families: &[String],
+    ) -> Option<crate::fonts::Font> {
+        system
+            .resolve(
+                families,
+                fontique::Attributes {
+                    style: fontique::FontStyle::Italic,
+                    ..fontique::Attributes::default()
+                },
+                &[fontique::Script::from_bytes(*b"Latn")],
+                None,
+            )
+            .ok()?
+            .into_iter()
+            .find(|font| font.synthetic_skew().is_some() && font.has_glyph('H'))
+    }
+
     fn faux_bold_font() -> crate::fonts::Font {
         let mut system = FontSystem::new();
         for family in [
