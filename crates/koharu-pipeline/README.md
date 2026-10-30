@@ -50,8 +50,6 @@ steps the run didn't ask for.
 
 ## What a run writes
 
-![The layers a run adds to a page, bottom to top](page.svg)
-
 | Step | Model | Reads (ingredients) | Writes | Action |
 |---|---|---|---|---|
 | detection | layout segmentation (RF-DETR) | the scan's `/file`, `parentOf` | per balloon, a `shape` with its outline as `path` and no fill or stroke; per text block, a hidden `text` with no content, the block's box as `frame`, its rotation in `transform`, and its measured direction and character style; a `raster` "Cleanup" over the scan with a pixel `mask` "Text mask" painted where the blocks' text is | `c2pa.created` |
@@ -171,8 +169,6 @@ Typesetting follows the scene's text model without a model of its own.
 
 ## Running
 
-![Eight spreads before, measured, and as planned](timeline.svg)
-
 The baseline is today's pipeline on `main`, in a release build, over eight
 Manga109 spreads of 1654×1170 with 16–34 text blocks each, on an RTX 5090 with
 the default models: RF-DETR, PaddleOCR-VL 1.6, Gemma 4 12B with vision, and
@@ -264,7 +260,7 @@ needs is in local LLM inference, wherever it lives.
   back to the device only when one of its own allocations would otherwise
   fail, on CUDA and HIP [libtorch CUDA memory] [libtorch HIP memory] [libtorch
   CUDA retry] as on Metal [libtorch Metal retry]. The shim release Koharu
-  binds has no `empty_cache` (`torch-sys`'s README), so libtorch's share of
+  binds has no `empty_cache` (`koharu-torch-sys`'s headers), so libtorch's share of
   the device grows to the most its models have needed, and llama.cpp and
   stable-diffusion.cpp don't get it back while Koharu runs.
 - **Footprint.** A model's footprint is how much free memory drops from an
@@ -292,7 +288,7 @@ needs is in local LLM inference, wherever it lives.
   ggml's CUDA pool aborts the process when it runs out [ggml pool], which
   covers llama.cpp and stable-diffusion.cpp; stable-diffusion.cpp reports
   other failures only in its log, and libtorch's errors reach Koharu only as
-  messages (`torch-sys`'s README). So nothing tells the lane that a failure was
+  messages (`koharu-torch-sys`'s headers). So nothing tells the lane that a failure was
   memory, and a retry would repeat any other failure: stable-diffusion.cpp
   retries with smaller tiles only on its typed allocation failure, as
   "Execution failures can leave the device unusable" [sd.cpp retry]. The lane
@@ -304,7 +300,7 @@ needs is in local LLM inference, wherever it lives.
 
 | Change | Where | Why |
 |---|---|---|
-| One context per loaded model, a sequence per page with its own sampler, images read one at a time, shared instructions copied | `koharu-llm`'s engine on `llama-cpp-2` | translation and PaddleOCR-VL OCR are 81% of the baseline |
+| One context per loaded model, a sequence per page with its own sampler, images read one at a time, shared instructions copied | `koharu-llm`'s engine on `koharu-llama` | translation and PaddleOCR-VL OCR are 81% of the baseline |
 | Live free memory for the device | `koharu-runtime` | the reserve and footprints need it; today it's always 0 |
 | `max_vram` from the lane's budget | `koharu-diffusion` | it otherwise takes all free memory |
 
@@ -333,27 +329,6 @@ language, instructions, and generation settings. A run reads the section
 from `koharu-config` when it starts, so nobody watches for changes, and models
 stay loaded while their settings stay the same. Provider connections belong to
 `koharu-llm`.
-
-## Changes from today
-
-- The `Committer`, snapshots, and entity scope go: the pipeline reads and
-  edits the scene through `Host`, and `Target` names pages, text layers, or a
-  rectangle.
-- `StopToken` becomes a cancellation token, and the config watcher goes.
-- `koharu-translator` merges into translation, and its machine-translation
-  services go.
-- The device lane no longer covers loading weights, CPU work, hosted
-  translation, or applying edits; it runs step by step over windows of pages,
-  batching each model's jobs.
-- OCR reads a block in its detected direction instead of guessing from its
-  shape, and reads every page's blocks in one batch.
-- Detection writes layers, a text mask, and blocks instead of entities and
-  PNG assets; inpainting writes raster tiles instead of a PNG.
-- Typesetting is a new step: the scene's dialogue style and balloon regions.
-- Residency keeps a reserve, measures footprints after a warm-up, and evicts
-  llama.cpp and stable-diffusion.cpp models by the queue; out of memory is
-  prevented, and today's retry of a step whose error message says it ran out
-  goes.
 
 ## Sources
 

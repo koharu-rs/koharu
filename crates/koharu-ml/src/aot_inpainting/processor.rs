@@ -6,7 +6,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GrayImage, RgbImage};
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::model::Model;
 

@@ -91,7 +91,16 @@ fn open(path: &Path) -> Result<Option<(Identity, Secrets)>> {
 }
 
 fn entry() -> Result<keyring::Entry> {
-    Ok(keyring::Entry::new(SERVICE, ACCOUNT)?)
+    keyring::Entry::new(SERVICE, ACCOUNT).map_err(|error| {
+        match (error, keyring::Entry::store_status()) {
+            // keyring sets its store up once, answering every later call
+            // with `NoDefaultStore` and keeping why in `store_status`.
+            (keyring::Error::NoDefaultStore, Err(cause)) => {
+                Error::NoCredentialStore(cause.to_string())
+            }
+            (error, _) => error.into(),
+        }
+    })
 }
 
 fn secrets_error(path: &Path, reason: impl ToString) -> Error {

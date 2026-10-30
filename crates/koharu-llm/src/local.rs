@@ -129,13 +129,7 @@ pub(crate) async fn load(
         size.sequences > 0 && size.context > 0,
         "a local model needs at least one sequence and one token of context"
     );
-    let runtime = koharu_runtime::Runtime::start().await?;
-    let name = &runtime.device().name;
-    let device = llama_cpp_2::list_llama_ggml_backend_devices()
-        .into_iter()
-        .find(|device| &device.name == name)
-        .with_context(|| format!("llama.cpp doesn't list {name}"))?
-        .index;
+    let device = koharu_runtime::device().await?.index;
     tokio::task::spawn_blocking(move || {
         let (jobs, queue) = mpsc::channel();
         let (ready, loaded) = mpsc::sync_channel(1);
@@ -212,7 +206,7 @@ impl Wire for Local {
         let sampling: Sampling = body.deserialize().map_err(EncodeError::request)?;
         sampling.check().map_err(EncodeError::request)?;
 
-        let marker = llama_cpp_2::mtmd::mtmd_default_marker();
+        let marker = koharu_llama::mtmd::mtmd_default_marker();
         let mut images = Vec::new();
         let mut messages = Vec::new();
         for message in &request.chat_history {

@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 
-use tch::{Kind, Result, TchError, Tensor};
+use koharu_torch::{Kind, Result, TchError, Tensor};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BatchNormConfig {
@@ -89,7 +89,7 @@ impl super::ModuleT for BatchNorm {
         }
         // The process-wide switch the runtime sets once, which keeps MIOpen
         // off where it isn't reliable.
-        let cudnn = tch::Cuda::user_enabled_cudnn();
+        let cudnn = koharu_torch::Cuda::user_enabled_cudnn();
         Tensor::f_batch_norm(
             xs,
             self.ws.as_ref(),

@@ -4,7 +4,8 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use tch::Tensor;
+use koharu_runtime::Repository;
+use koharu_torch::Tensor;
 
 pub use self::config::BaberuOcrConfig;
 
@@ -14,16 +15,14 @@ use self::{
     processor::{BaberuImageProcessor, Tokenizer},
 };
 
-crate::model_repository!("genshiai-daichi/baberu-ocr" @ "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" {
-    CONFIG = "config.json",
-    GENERATION_CONFIG = "generation_config.json",
-    WEIGHTS = "model.safetensors",
-    VOCABULARY = "tokenizer/vocab.json",
-});
-crate::model_repository!("facebook/dinov2-base" @ "f9e44c814b77203eaa57a6bdbbd535f21ede1415" {
-    VISION_CONFIG = "config.json",
-    VISION_PROCESSOR = "preprocessor_config.json",
-});
+const BABERU: Repository = Repository::model(
+    "genshiai-daichi/baberu-ocr",
+    "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae",
+);
+const DINOV2: Repository = Repository::model(
+    "facebook/dinov2-base",
+    "f9e44c814b77203eaa57a6bdbbd535f21ede1415",
+);
 
 #[derive(Debug)]
 pub struct BaberuOcr {
@@ -36,51 +35,19 @@ pub struct BaberuOcr {
 impl BaberuOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let (
-            config_path,
-            generation_path,
-            weights_path,
-            vocabulary_path,
-            vision_config_path,
-            vision_processor_path,
-        ) = tokio::try_join!(
-            async {
-                CONFIG
-                    .resolve()
-                    .await
-                    .context("failed to resolve Baberu OCR config")
-            },
-            async {
-                GENERATION_CONFIG
-                    .resolve()
-                    .await
-                    .context("failed to resolve Baberu OCR generation config")
-            },
-            async {
-                WEIGHTS
-                    .resolve()
-                    .await
-                    .context("failed to resolve Baberu OCR weights")
-            },
-            async {
-                VOCABULARY
-                    .resolve()
-                    .await
-                    .context("failed to resolve Baberu OCR vocabulary")
-            },
-            async {
-                VISION_CONFIG
-                    .resolve()
-                    .await
-                    .context("failed to resolve DINOv2 config")
-            },
-            async {
-                VISION_PROCESSOR
-                    .resolve()
-                    .await
-                    .context("failed to resolve DINOv2 image processor")
-            },
-        )?;
+        let [config_path, generation_path, weights_path, vocabulary_path] = BABERU
+            .resolve([
+                "config.json",
+                "generation_config.json",
+                "model.safetensors",
+                "tokenizer/vocab.json",
+            ])
+            .await
+            .context("failed to resolve Baberu OCR files")?;
+        let [vision_config_path, vision_processor_path] = DINOV2
+            .resolve(["config.json", "preprocessor_config.json"])
+            .await
+            .context("failed to resolve DINOv2 files")?;
 
         let config = BaberuOcrConfig::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
@@ -126,7 +93,7 @@ impl BaberuOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        tch::no_grad(|| {
+        koharu_torch::no_grad(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))
@@ -155,8 +122,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        let runtime = koharu_runtime::Runtime::start().await?;
-        let model = BaberuOcr::load(runtime.device()).await?;
+        let device = koharu_runtime::device().await?;
+        let model = BaberuOcr::load(device).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");
         let text = model.inference(&[image::open(input)?])?;

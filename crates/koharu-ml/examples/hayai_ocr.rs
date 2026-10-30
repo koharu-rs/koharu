@@ -17,8 +17,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(cli.input)?;
 
-    let runtime = koharu_runtime::Runtime::start().await?;
-    let model = HayaiOcr::load(runtime.device()).await?;
+    let device = koharu_runtime::device().await?;
+    let model = HayaiOcr::load(device).await?;
     for text in model.inference(&[image])? {
         println!("{text}");
     }

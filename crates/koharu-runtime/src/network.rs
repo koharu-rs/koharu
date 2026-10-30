@@ -2,13 +2,13 @@ use std::{sync::OnceLock, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use backon::ExponentialBuilder;
-use reqwest::{Client, redirect};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 const USER_AGENT: &str = concat!("koharu/", env!("CARGO_PKG_VERSION"));
 
 /// `[http]`: the shared client's timeouts, in seconds, and how many times a
-/// download retries a failed request.
+/// transfer retries a failed request.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 struct Config {
@@ -31,43 +31,29 @@ impl koharu_config::Section for Config {
     const NAME: &'static str = "http";
 }
 
-/// The app's one HTTP client: its user agent, the proxies the OS and the
-/// environment set, and its timeouts, read when it's first built.
-pub(crate) fn http() -> Result<Client> {
+/// The app's one HTTP client, which `koharu-llm`'s hosted providers send
+/// through: Koharu's user agent, the proxies the OS and the environment set,
+/// and `[http]`'s timeouts, read when it's first built. A response that stops
+/// arriving fails after the read timeout; the client retries nothing, as a
+/// generation request mustn't be replayed.
+pub fn http_client() -> Result<Client> {
     static CLIENT: OnceLock<Client> = OnceLock::new();
     if let Some(client) = CLIENT.get() {
         return Ok(client.clone());
     }
-    let client = build(redirect::Policy::default())?;
-    Ok(CLIENT.get_or_init(|| client).clone())
-}
-
-/// A client that doesn't follow redirects, for reading where the Hugging Face
-/// Hub sends a file and what it says the file's hash is.
-pub(crate) fn http_without_redirects() -> Result<Client> {
-    static CLIENT: OnceLock<Client> = OnceLock::new();
-    if let Some(client) = CLIENT.get() {
-        return Ok(client.clone());
-    }
-    let client = build(redirect::Policy::none())?;
-    Ok(CLIENT.get_or_init(|| client).clone())
-}
-
-fn build(redirects: redirect::Policy) -> Result<Client> {
     let config = config()?;
-    Client::builder()
+    let client = Client::builder()
         .user_agent(USER_AGENT)
-        .redirect(redirects)
         .connect_timeout(Duration::from_secs(config.connect_timeout))
-        // A response that stops arriving fails instead of hanging.
         .read_timeout(Duration::from_secs(config.read_timeout))
         .http2_adaptive_window(true)
         .tcp_keepalive(Duration::from_secs(60))
         .build()
-        .context("couldn't build the HTTP client")
+        .context("couldn't build the HTTP client")?;
+    Ok(CLIENT.get_or_init(|| client).clone())
 }
 
-/// The one retry policy for downloads.
+/// The one retry policy for transfers.
 pub(crate) fn backoff() -> Result<ExponentialBuilder> {
     Ok(ExponentialBuilder::default()
         .with_min_delay(Duration::from_millis(250))

@@ -2,18 +2,19 @@
 //! design.
 
 mod device;
-pub mod download;
 mod hardware;
-mod hugging_face;
+mod huggingface;
 mod network;
 mod packages;
 mod store;
+mod transfer;
 
 use tokio::sync::OnceCell;
 
 pub use device::{Backend, Device, Memory};
-pub use hugging_face::HuggingFaceFile;
-pub use store::Store;
+pub use huggingface::Repository;
+pub use network::http_client;
+pub use transfer::{State, Transfer, Transfers, transfers};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -33,52 +34,31 @@ fn tried(failures: &[String]) -> String {
     }
 }
 
-/// The native libraries, installed and loaded for the one device the runtime
-/// started on.
-#[derive(Debug)]
-pub struct Runtime {
-    device: Device,
-}
-
-impl Runtime {
-    /// Installs and loads what the best GPU needs, falling back to the next
-    /// when one fails before any of its bound libraries loaded. Every caller
-    /// shares one start; a failed one can be tried again.
-    pub async fn start() -> Result<&'static Self, Error> {
-        static RUNTIME: OnceCell<Runtime> = OnceCell::const_new();
-        RUNTIME
-            .get_or_try_init(|| async {
-                let mut failures = Vec::new();
-                for candidate in hardware::candidates() {
-                    match packages::start(&candidate).await {
-                        Ok(device) => {
-                            tracing::info!("running on {} ({})", device.description, device.name);
-                            return Ok(Self { device });
-                        }
-                        Err(packages::Failure { error, last }) => {
-                            tracing::warn!("{} can't be used: {error:#}", candidate.description);
-                            failures.push(format!("{}: {error:#}", candidate.description));
-                            if last {
-                                break;
-                            }
+/// The device every model runs on. The first call installs and loads what
+/// the best GPU needs, falling back to the next when one fails before any of
+/// its bound libraries loaded; every caller shares that start, and a failed
+/// one is tried again on the next call.
+pub async fn device() -> Result<&'static Device, Error> {
+    static DEVICE: OnceCell<Device> = OnceCell::const_new();
+    DEVICE
+        .get_or_try_init(|| async {
+            let mut failures = Vec::new();
+            for candidate in hardware::candidates() {
+                match packages::start(&candidate).await {
+                    Ok(device) => {
+                        tracing::info!("running on {} ({})", device.description, device.name);
+                        return Ok(device);
+                    }
+                    Err(packages::Failure { error, last }) => {
+                        tracing::warn!("{} can't be used: {error:#}", candidate.description);
+                        failures.push(format!("{}: {error:#}", candidate.description));
+                        if last {
+                            break;
                         }
                     }
                 }
-                Err(Error::NoGpu(failures))
-            })
-            .await
-    }
-
-    /// The device every model runs on.
-    #[must_use]
-    pub fn device(&self) -> &Device {
-        &self.device
-    }
-}
-
-/// The app's one HTTP client, which `koharu-llm` sends hosted requests
-/// through. A response that stops arriving fails after `[http]`'s read
-/// timeout; nothing is retried, as a generation request mustn't be replayed.
-pub fn http_client() -> anyhow::Result<reqwest::Client> {
-    network::http()
+            }
+            Err(Error::NoGpu(failures))
+        })
+        .await
 }

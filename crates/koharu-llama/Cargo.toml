@@ -1,0 +1,55 @@
+[package]
+name = "koharu-llama"
+version.workspace = true
+# Upstream's sources compile unchanged under upstream's edition.
+edition = "2021"
+description = "utilityai/llama-cpp-rs's llama-cpp-2 at e7af607, on the llama.cpp build Koharu's runtime loads."
+license = "MIT OR Apache-2.0"
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["llama", "llm", "inference", "machine-learning", "bindings"]
+categories = ["api-bindings", "science"]
+publish = true
+
+# Upstream's tests and doctests call llama.cpp, which it links and Koharu loads
+# only in the runtime; upstream's CI runs them.
+[lib]
+test = false
+doctest = false
+
+[dependencies]
+enumflags2 = { workspace = true }
+koharu-llama-sys = { workspace = true }
+llguidance = { workspace = true, optional = true }
+thiserror = { workspace = true }
+toktrie = { workspace = true, optional = true }
+tracing = { workspace = true }
+tracing-core = { workspace = true }
+
+[features]
+default = []
+llguidance = ["dep:llguidance", "dep:toktrie"]
+mtmd = []
+sampler = []
+
+[dev-dependencies]
+encoding_rs = { workspace = true }
+static_assertions = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Upstream's sources stay as upstream wrote them. Its `common` and
+# `dynamic-backends` features need llama-cpp-sys-2's C++ helper library and
+# backend directory, which the runtime's build doesn't have, so their code is
+# compiled out and leaves imports and helpers unused; and these bindings already
+# give some constants the type upstream casts them to.
+[lints.rust]
+dead_code = "allow"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("common", "dynamic-backends"))'] }
+unused_imports = "allow"
+
+[lints.clippy]
+double_must_use = "allow"
+unnecessary_cast = "allow"
+upper_case_acronyms = "allow"

@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module};
 use anyhow::Result;
-use tch::{Device, IndexOp, Kind, Tensor};
+use koharu_torch::{Device, IndexOp, Kind, Tensor};
 
 const RESOLUTION: i64 = 1152;
 const PATCH_SIZE: i64 = 12;
@@ -91,7 +91,7 @@ impl Model {
         let position_embeddings = features
             .iter()
             .map(sine_position_embedding)
-            .collect::<tch::Result<Vec<_>>>()?;
+            .collect::<koharu_torch::Result<Vec<_>>>()?;
         let transformer_output = self.transformer.forward(
             &features,
             &position_embeddings,
@@ -180,7 +180,7 @@ impl DinoBackbone {
         Ok(outputs)
     }
 
-    fn feature_map(&self, pixel_values: &Tensor, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn feature_map(&self, pixel_values: &Tensor, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let hidden_states = self.layernorm.forward(hidden_states)?.f_i((.., 1..))?;
         let input_size = pixel_values.size();
         let batch_size = input_size[0];
@@ -243,7 +243,7 @@ impl DinoEmbeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = pixel_values.size();
         assert_eq!(size[2], RESOLUTION);
         assert_eq!(size[3], RESOLUTION);
@@ -311,7 +311,7 @@ impl DinoLayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor, run_full_attention: bool) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor, run_full_attention: bool) -> koharu_torch::Result<Tensor> {
         let shortcut = hidden_states;
         let attention_input = if run_full_attention {
             let size = hidden_states.size();
@@ -378,7 +378,7 @@ impl DinoAttention {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let sequence_length = size[1];
@@ -416,7 +416,7 @@ impl DinoMlp {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.fc2
             .forward(&self.fc1.forward(hidden_states)?.f_gelu("none")?)
     }
@@ -465,7 +465,7 @@ impl C2f {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         let split = self
             .cv1
             .forward(xs)?
@@ -492,7 +492,7 @@ impl Bottleneck {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         self.cv2.forward(&self.cv1.forward(xs)?)
     }
 }
@@ -526,7 +526,7 @@ impl ConvX {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         self.bn
             .forward(&self.conv.forward(&xs.f_contiguous()?)?)?
             .f_silu()
@@ -541,7 +541,7 @@ impl ChannelLayerNorm {
         Ok(Self(layer_norm(path, channels, eps)?))
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         self.0
             .forward(&xs.f_permute([0, 2, 3, 1])?)?
             .f_permute([0, 3, 1, 2])
@@ -975,7 +975,7 @@ fn generate_encoder_output_proposals(
     ))
 }
 
-fn gen_sineembed_for_position(position: &Tensor) -> tch::Result<Tensor> {
+fn gen_sineembed_for_position(position: &Tensor) -> koharu_torch::Result<Tensor> {
     let dim = HIDDEN_DIM / 2;
     let dim_t = Tensor::f_arange(dim, (position.kind(), position.device()))?;
     let exponent = dim_t
@@ -999,7 +999,7 @@ fn gen_sineembed_for_position(position: &Tensor) -> tch::Result<Tensor> {
     Tensor::f_cat(&[encode(1)?, encode(0)?, encode(2)?, encode(3)?], 2)
 }
 
-fn sine_position_embedding(feature: &Tensor) -> tch::Result<Tensor> {
+fn sine_position_embedding(feature: &Tensor) -> koharu_torch::Result<Tensor> {
     let size = feature.size();
     let batch_size = size[0];
     let height = size[2];
@@ -1076,7 +1076,7 @@ impl SegmentationHead {
         spatial_features: &Tensor,
         query_features: &Tensor,
         image_size: (i64, i64),
-    ) -> tch::Result<Tensor> {
+    ) -> koharu_torch::Result<Tensor> {
         let mut spatial_features = spatial_features.f_upsample_bilinear2d(
             [image_size.0 / 4, image_size.1 / 4],
             false,
@@ -1131,7 +1131,7 @@ impl DepthwiseConvBlock {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         let residual = xs;
         let xs = self
             .norm
@@ -1172,7 +1172,7 @@ impl QueryMlpBlock {
         })
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         xs.f_add(
             &self.second.forward(
                 &self
@@ -1215,7 +1215,7 @@ impl Mlp {
         Ok(Self { layers })
     }
 
-    fn forward(&self, xs: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         let mut xs = xs.f_alias()?;
         for (index, layer) in self.layers.iter().enumerate() {
             xs = layer.forward(&xs)?;

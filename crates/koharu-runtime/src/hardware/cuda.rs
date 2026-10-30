@@ -122,12 +122,10 @@ impl Cuda {
         }
         let device = Device {
             name,
-            description,
-            backend: Backend::Cuda,
             index: usize::try_from(index).ok()?,
+            description,
+            backend: Backend::Cuda { compute_capability },
             integrated: self.attribute(handle, ATTRIBUTE_INTEGRATED).unwrap_or(0) != 0,
-            compute_capability,
-            target: None,
         };
         Some((device, memory as u64))
     }
