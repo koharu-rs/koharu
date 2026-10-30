@@ -12,7 +12,7 @@ use fontique::{
     GenericFamily, Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
 use harfrust::{Buffer, ShapeOptions, ShapePlan, ShapePlanKey, ShaperFont, font::Variation};
-use koharu_runtime::HuggingFaceFile;
+use koharu_runtime::Repository;
 use parking_lot::Mutex;
 use serde::Deserialize;
 use skrifa::{
@@ -30,9 +30,11 @@ use crate::{
     },
 };
 
-const FONT_REPOSITORY: &str = "mayocream/fonts";
 // The catalog and every referenced face or preview must come from one immutable snapshot.
-const FONT_REVISION: &str = "304901a868bebd5f31f95664a462e5839873d939";
+const FONTS: Repository = Repository::dataset(
+    "mayocream/fonts",
+    "304901a868bebd5f31f95664a462e5839873d939",
+);
 const FONT_INDEX: &str = "index.json";
 const FONT_INDEX_SCHEMA: u32 = 3;
 const DEFAULT_FONT_CACHE_BYTES: usize = 64 * 1024 * 1024;
@@ -755,10 +757,7 @@ impl Fonts {
         let system = self.system().clone();
         let catalog = self.catalog().await?;
         if let Some(face) = catalog.select(family_name, Attributes::default()) {
-            let path =
-                HuggingFaceFile::pinned_dataset(FONT_REPOSITORY, FONT_REVISION, &face.preview_file)
-                    .resolve()
-                    .await?;
+            let [path] = FONTS.resolve([face.preview_file.as_str()]).await?;
             return tokio::fs::read(&path)
                 .await
                 .with_context(|| format!("failed to read {}", path.display()))
@@ -800,10 +799,7 @@ impl Fonts {
     async fn catalog(&self) -> Result<&Arc<FontCatalog>> {
         self.catalog
             .get_or_try_init(|| async {
-                let path =
-                    HuggingFaceFile::pinned_dataset(FONT_REPOSITORY, FONT_REVISION, FONT_INDEX)
-                        .resolve()
-                        .await?;
+                let [path] = FONTS.resolve([FONT_INDEX]).await?;
                 let bytes = tokio::fs::read(&path)
                     .await
                     .with_context(|| format!("failed to read {}", path.display()))?;
@@ -831,9 +827,7 @@ impl Fonts {
         if let Some(font) = self.cache.lock().get(&face.post_script_name) {
             return Ok(font);
         }
-        let path = HuggingFaceFile::pinned_dataset(FONT_REPOSITORY, FONT_REVISION, &face.file_name)
-            .resolve()
-            .await?;
+        let [path] = FONTS.resolve([face.file_name.as_str()]).await?;
         let data = tokio::fs::read(&path)
             .await
             .with_context(|| format!("failed to read {}", path.display()))?;

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module};
 use anyhow::Result;
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 const RELU_NF_SCALE: f64 = 1.713_958_859_443_664_6;
 const WEIGHT_STANDARDIZATION_EPS: f64 = 1e-4;
@@ -96,7 +96,7 @@ impl ScaledWSConv2d {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         input.f_conv2d(
             &standardized_weight(&self.conv.ws, &self.gain)?,
             self.conv.bs.as_ref(),
@@ -145,7 +145,7 @@ impl ScaledWSTransposeConv2d {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         input.f_conv_transpose2d(
             &standardized_weight(&self.conv.ws, &self.gain)?,
             self.conv.bs.as_ref(),
@@ -195,7 +195,7 @@ impl GatedWSConvPadded {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let input =
             input.f_reflection_pad2d([self.padding, self.padding, self.padding, self.padding])?;
         ((self.conv.forward(&input)?).f_mul(&self.conv_gate.forward(&input)?.f_sigmoid()?)?)
@@ -235,7 +235,7 @@ impl GatedWSTransposeConvPadded {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         (self
             .conv
             .forward(input)?
@@ -267,7 +267,7 @@ impl PaddedConvRelu {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         self.conv
             .forward(&input.f_reflection_pad2d([
                 self.padding,
@@ -291,7 +291,7 @@ impl PaddedConv {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         self.conv.forward(&input.f_reflection_pad2d([1, 1, 1, 1])?)
     }
 }
@@ -320,12 +320,12 @@ impl AOTBlock {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let branches = self
             .blocks
             .iter()
             .map(|block| block.forward(input))
-            .collect::<tch::Result<Vec<_>>>()?;
+            .collect::<koharu_torch::Result<Vec<_>>>()?;
         let fused = self.fuse.forward(&Tensor::f_cat(&branches, 1)?)?;
         let mask = my_layer_norm(&self.gate.forward(input)?)?.f_sigmoid()?;
         (input.f_mul(&mask.f_ones_like()?.f_sub(&mask)?)?).f_add(&fused.f_mul(&mask)?)
@@ -352,7 +352,7 @@ impl Tail {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let x = relu_nf(self.conv0.forward(input)?)?;
         let x = relu_nf(self.conv1.forward(&x)?)?;
         let x = relu_nf(self.up0.forward(&x)?)?;
@@ -361,7 +361,7 @@ impl Tail {
     }
 }
 
-fn standardized_weight(weight: &Tensor, gain: &Tensor) -> tch::Result<Tensor> {
+fn standardized_weight(weight: &Tensor, gain: &Tensor) -> koharu_torch::Result<Tensor> {
     let (variance, mean) = weight.f_var_mean_dim([1_i64, 2, 3].as_slice(), true, true)?;
     let fan_in = weight.size()[1..].iter().product::<i64>() as f64;
     let scale = (variance
@@ -372,11 +372,11 @@ fn standardized_weight(weight: &Tensor, gain: &Tensor) -> tch::Result<Tensor> {
     (weight.f_mul(&scale)?).f_sub(&mean.f_mul(&scale)?)
 }
 
-fn relu_nf(input: Tensor) -> tch::Result<Tensor> {
+fn relu_nf(input: Tensor) -> koharu_torch::Result<Tensor> {
     input.f_relu()?.f_mul_scalar(RELU_NF_SCALE)
 }
 
-fn my_layer_norm(input: &Tensor) -> tch::Result<Tensor> {
+fn my_layer_norm(input: &Tensor) -> koharu_torch::Result<Tensor> {
     let dimensions = [2_i64, 3];
     let mean = input.f_mean_dim(dimensions.as_slice(), true, None)?;
     let std = input

@@ -19,8 +19,8 @@ clap = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
-koharu-ml = { workspace = true }
 koharu-config = { workspace = true }
+koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
 rayon = { workspace = true }

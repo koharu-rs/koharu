@@ -102,15 +102,6 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
-            #[cfg(all(target_os = "windows", not(debug_assertions)))]
-            koharu_runtime::Store::configure(
-                application
-                    .path()
-                    .resource_dir()
-                    .context("failed to locate Koharu's installation directory")?
-                    .join("store"),
-            )?;
-
             application.manage(CurrentProject {
                 project: Mutex::new(None),
             });
@@ -149,65 +140,31 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
                 initialization_handle.state::<Initialization>().ready();
             }));
 
-            let mut downloads = koharu_runtime::download::subscribe();
+            let mut transfers = koharu_runtime::transfers();
             let download_handle = handle.clone();
             drop(tauri::async_runtime::spawn(async move {
-                loop {
-                    match downloads.recv().await {
-                        Ok(event) => {
-                            let download = match event {
-                                koharu_runtime::download::Event::Started { id, name } => Download {
-                                    id,
-                                    state: DownloadState::Running,
-                                    name: Some(name),
-                                    completed: 0,
-                                    total: 0,
-                                    error: None,
-                                },
-                                koharu_runtime::download::Event::Progress {
-                                    id,
-                                    name,
-                                    completed,
-                                    total,
-                                } => Download {
-                                    id,
-                                    state: DownloadState::Running,
-                                    name: Some(name),
-                                    completed,
-                                    total,
-                                    error: None,
-                                },
-                                koharu_runtime::download::Event::Finished { id } => Download {
-                                    id,
-                                    state: DownloadState::Finished,
-                                    name: None,
-                                    completed: 0,
-                                    total: 0,
-                                    error: None,
-                                },
-                                koharu_runtime::download::Event::Failed { id, name, error } => {
-                                    Download {
-                                        id,
-                                        state: DownloadState::Failed,
-                                        name: Some(name),
-                                        completed: 0,
-                                        total: 0,
-                                        error: Some(error),
-                                    }
-                                }
-                            };
-                            let downloads = download_handle.state::<DownloadChannel>();
-                            let mut channel = downloads.channel.lock();
-                            if let Some(current) = channel.as_ref()
-                                && current.send(download).is_err()
-                            {
-                                channel.take();
-                            }
+                while let Some(transfer) = transfers.next().await {
+                    let (state, error) = match transfer.state {
+                        koharu_runtime::State::Running => (DownloadState::Running, None),
+                        koharu_runtime::State::Finished => (DownloadState::Finished, None),
+                        koharu_runtime::State::Failed(error) => {
+                            (DownloadState::Failed, Some(error))
                         }
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                            tracing::warn!(skipped, "download channel fell behind");
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    };
+                    let download = Download {
+                        id: transfer.id,
+                        state,
+                        name: Some(transfer.name),
+                        completed: transfer.completed,
+                        total: transfer.total,
+                        error,
+                    };
+                    let downloads = download_handle.state::<DownloadChannel>();
+                    let mut channel = downloads.channel.lock();
+                    if let Some(current) = channel.as_ref()
+                        && current.send(download).is_err()
+                    {
+                        channel.take();
                     }
                 }
             }));

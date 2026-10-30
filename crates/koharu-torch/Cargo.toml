@@ -1,0 +1,28 @@
+[package]
+name = "koharu-torch"
+version.workspace = true
+edition = "2021"
+description = "Rust bindings for LibTorch with a dynamically loaded C++ shim."
+license = "MIT OR Apache-2.0"
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["pytorch", "libtorch", "tensor", "deep-learning", "machine-learning"]
+categories = ["api-bindings", "science"]
+publish = true
+
+[dependencies]
+half = { workspace = true }
+image = { workspace = true, optional = true }
+koharu-torch-sys = { workspace = true }
+lazy_static = { workspace = true }
+libc = { workspace = true }
+ndarray = { workspace = true }
+rand = { workspace = true }
+safetensors = { workspace = true }
+thiserror = { workspace = true }
+zip = { workspace = true }
+
+[features]
+cuda-tests = []

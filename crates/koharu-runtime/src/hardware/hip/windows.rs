@@ -80,13 +80,13 @@ pub(super) fn probe() -> Vec<Device> {
             };
             let index = result.len();
             result.push(Device {
-                index,
                 name: format!("ROCm{index}"),
-                description: name.clone(),
-                backend: Backend::Rocm,
+                index,
+                description: name,
+                backend: Backend::Rocm {
+                    target: target.into(),
+                },
                 integrated: target.integrated(),
-                compute_capability: 0,
-                target: Some(name),
             });
         }
     }

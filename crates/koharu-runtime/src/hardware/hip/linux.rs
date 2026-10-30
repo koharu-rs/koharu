@@ -66,16 +66,15 @@ pub(super) fn probe() -> Result<Vec<Device>> {
         else {
             continue;
         };
-        let name = target.to_string();
         let index = devices.len();
         devices.push(Device {
-            index,
             name: format!("ROCm{index}"),
-            description: name.clone(),
-            backend: Backend::Rocm,
+            index,
+            description: target.to_string(),
+            backend: Backend::Rocm {
+                target: target.into(),
+            },
             integrated: target.integrated(),
-            compute_capability: 0,
-            target: Some(name),
         });
     }
     Ok(devices)

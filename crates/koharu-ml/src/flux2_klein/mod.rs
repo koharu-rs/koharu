@@ -10,6 +10,7 @@ use anyhow::{Context, Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, RgbImage};
 use koharu_diffusion::{ImageParams, SampleMethod, Scheduler};
+use koharu_runtime::Repository;
 
 use self::{
     model::{Model, ModelPaths},
@@ -18,15 +19,18 @@ use self::{
 
 pub use self::processor::{Flux2KleinInpaintOptions, Flux2KleinOptions};
 
-crate::model_repository!("unsloth/FLUX.2-klein-4B-GGUF" @ "0084d1df98e2e2137fe776d55170bc4792ec1d66" {
-    TRANSFORMER_WEIGHTS = "flux-2-klein-4b-Q4_K_M.gguf"
-});
-crate::model_repository!("black-forest-labs/FLUX.2-small-decoder" @ "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a" {
-    VAE_WEIGHTS = "full_encoder_small_decoder.safetensors"
-});
-crate::model_repository!("unsloth/Qwen3-4B-GGUF" @ "22c9fc8a8c7700b76a1789366280a6a5a1ad1120" {
-    TEXT_ENCODER_WEIGHTS = "Qwen3-4B-Q4_K_M.gguf"
-});
+const TRANSFORMER: Repository = Repository::model(
+    "unsloth/FLUX.2-klein-4B-GGUF",
+    "0084d1df98e2e2137fe776d55170bc4792ec1d66",
+);
+const DECODER: Repository = Repository::model(
+    "black-forest-labs/FLUX.2-small-decoder",
+    "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a",
+);
+const TEXT_ENCODER: Repository = Repository::model(
+    "unsloth/Qwen3-4B-GGUF",
+    "22c9fc8a8c7700b76a1789366280a6a5a1ad1120",
+);
 
 #[derive(Debug)]
 pub struct Flux2Klein {
@@ -37,21 +41,22 @@ impl Flux2Klein {
     /// Loads the model once for generation and inpainting, its weights
     /// placed to fit `max_vram` bytes of the device.
     pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
-        let (transformer, text_encoder, vae) = tokio::try_join!(
-            TRANSFORMER_WEIGHTS.resolve(),
-            TEXT_ENCODER_WEIGHTS.resolve(),
-            VAE_WEIGHTS.resolve(),
-        )
-        .context("failed to resolve FLUX.2 Klein model assets")?;
-        let model = Model::new(
-            device,
-            max_vram,
-            &ModelPaths {
+        let paths = async {
+            let [transformer] = TRANSFORMER.resolve(["flux-2-klein-4b-Q4_K_M.gguf"]).await?;
+            let [text_encoder] = TEXT_ENCODER.resolve(["Qwen3-4B-Q4_K_M.gguf"]).await?;
+            let [vae] = DECODER
+                .resolve(["full_encoder_small_decoder.safetensors"])
+                .await?;
+            anyhow::Ok(ModelPaths {
                 transformer,
                 text_encoder,
                 vae,
-            },
-        )?;
+            })
+        };
+        let paths = paths
+            .await
+            .context("failed to resolve FLUX.2 Klein model assets")?;
+        let model = Model::new(device, max_vram, &paths)?;
         Ok(Self { model })
     }
 

@@ -22,161 +22,162 @@ publish = false
 koharu-app = { path = "crates/koharu-app" }
 koharu-bindgen = { path = "crates/koharu-bindgen" }
 koharu-config = { path = "crates/koharu-config" }
-koharu-storage = { path = "crates/koharu-storage" }
-koharu-scene = { path = "crates/koharu-scene" }
+koharu-desktop = { path = "crates/koharu-desktop" }
 koharu-diffusion = { path = "crates/koharu-diffusion" }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys" }
-koharu-runtime = { path = "crates/koharu-runtime" }
+koharu-llama = { path = "crates/koharu-llama" }
+koharu-llama-sys = { path = "crates/koharu-llama-sys" }
 koharu-llm = { path = "crates/koharu-llm" }
 koharu-ml = { path = "crates/koharu-ml" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
-koharu-desktop = { path = "crates/koharu-desktop" }
+koharu-runtime = { path = "crates/koharu-runtime" }
+koharu-scene = { path = "crates/koharu-scene" }
+koharu-storage = { path = "crates/koharu-storage" }
+koharu-torch = { path = "crates/koharu-torch" }
+koharu-torch-sys = { path = "crates/koharu-torch-sys" }
 
 # external dependencies
-alphanumeric-sort = "1.5.8"
-arc-swap = "1.9.2"
-hayro = "0.8.0"
-image = "0.25.10"
-webp = { version = "0.3.1" }
-fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
-anyhow = "1.0.104"
-async-trait = "0.1.92"
-backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
-imageproc = "0.27.0"
 ab_glyph = "0.2.32"
-clap = { version = "4.6.7", features = ["derive"] }
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-specta = { version = "=2.0.0-rc.26", features = ["derive", "serde_json", "url", "uuid"] }
-specta-typescript = "=0.0.13"
-tokio = { version = "1.53.1", features = ["full"] }
-tokio-rayon = "2.1.0"
-log = "0.4.34"
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "registry"] }
-console = "0.16.6"
-open = "5.4.4"
-rfd = "0.17.2"
-thiserror = "2.0.21"
+age = "0.12.1"
+alphanumeric-sort = "1.5.8"
+anyhow = "1.0.104"
+arc-swap = "1.9.2"
+async-trait = "0.1.92"
+atomicwrites = "0.4.4"
+backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
+base64 = "0.23.1"
+bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 blake3 = "1.8.7"
-rayon = "1.12.0"
-# disables `esaxx_fast` feature which is conflicting with `ort`
-tokenizers = { version = "0.23.2", features = ["onig"] }
-strum = { version = "0.28.0", features = ["derive"] }
-sysinfo = { version = "0.39.6", features = ["system"] }
-rars = "0.11.0"
-zip = { version = "9.0.2", features = ["deflate"] }
+bytes = "1.12.1"
+clap = { version = "4.6.7", features = ["derive"] }
+color = "0.3.3"
+console = "0.16.6"
+criterion = { version = "0.8.2", features = ["html_reports"] }
 dirs = "7.0.0"
+encoding_rs = "0.8.42"
+enumflags2 = "0.7.12"
+fast-glob = "1.1.2"
+fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
+flate2 = "1.1.10"
+fontique = "0.12.0"
 futures = "0.3.34"
 futures-channel = "0.3.34"
-reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
-secrecy = "0.10.3"
-toml = "1.1.6"
-toml_edit = "0.25.17"
-serde_ignored = "0.1.14"
-url = { version = "2.5.8", features = ["serde"] }
-imbl = "7.0.2"
-hashbrown = "0.17.1"
-slotmap = "1.1.1"
-smallvec = "1.16.2"
-revision = { version = "0.30.0", features = ["uuid"] }
-flate2 = "1.1.10"
-tempfile = "3.27.0"
-libloading = "0.9.0"
-loro = "1.17.1"
-json-patch = { version = "4.2.0", default-features = false }
-jsonptr = "0.7.1"
-kurbo = "0.13.1"
-color = "0.3.3"
-icu_locale_core = { version = "2.3.0", features = ["alloc", "serde"] }
-semver = "1.0.28"
-serde_json_canonicalizer = "0.3.2"
-nvml-wrapper = "0.13.0"
-minijinja = "3.0.0"
-minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
-windows = { version = "0.62.2", features = [
-    "Win32",
-    "Win32_System",
-    "Win32_System_Console",
-    "Win32_UI_WindowsAndMessaging",
-] }
-skrifa = "0.48.0"
+half = "2.7.1"
 harfrust = "0.14.0"
+hashbrown = "0.17.1"
+hayro = "0.8.0"
+http = "1.5.0"
 hypher = "0.1.8"
+icu_locale_core = { version = "2.3.0", features = ["alloc", "serde"] }
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.3.0", features = ["compiled_data"] }
 icu_segmenter = { version = "2.3.0", features = ["compiled_data"] }
+image = "0.25.10"
+imageproc = "0.27.0"
+imbl = "7.0.2"
+indoc = "2.0.8"
 jieba-rs = "0.11.0"
-fontique = "0.12.0"
+js-sys = "0.3.106"
+json-patch = { version = "4.2.0", default-features = false }
+jsonptr = "0.7.1"
+keyring = "4.2.0"
+kurbo = "0.13.1"
+lazy_static = "1.5.1"
+libc = "0.2.189"
+libloading = "0.9.0"
+llguidance = "1.9.1"
+log = "0.4.34"
+loro = "1.17.1"
+memmap2 = "0.9.11"
+minijinja = "3.0.0"
+minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
+ndarray = "0.17.2"
+nvml-wrapper = "0.13.0"
+open = "5.4.4"
+parking_lot = "0.12.5"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "59cb4c49bd236df04d8e37d4764253f29ca6600a" }
 pollster = "1.0.1"
+postcard = { version = "1.1.3", features = ["use-std"] }
+prettyplease = "0.3.0"
+proc-macro2 = "1.0.107"
 quick_cache = "0.6.24"
-vello = "0.11.0"
+quote = "1.0.47"
+rand = "0.10.3"
+rars = "0.11.0"
+rayon = "1.12.0"
+reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
+revision = { version = "0.30.0", features = ["uuid"] }
+rfd = "0.17.2"
+# rig breaks its API in every release.
+rig-agent = { version = "=0.45.0", default-features = false }
+rig-core = { version = "=0.45.0", default-features = false }
+rig-reqwest = { version = "=0.45.0", default-features = false }
+safetensors = "0.8.0"
+schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
+secrecy = "0.10.3"
+semver = "1.0.28"
+sentry = { version = "0.49.3", features = ["tracing"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde-wasm-bindgen = "0.6.5"
+serde_ignored = "0.1.14"
+serde_json = "1.0.151"
+serde_json_canonicalizer = "0.3.2"
+skrifa = "0.48.0"
+slotmap = "1.1.1"
+smallvec = "1.16.2"
+specta = { version = "=2.0.0-rc.26", features = ["derive", "serde_json", "url", "uuid"] }
+specta-typescript = "=0.0.13"
+static_assertions = "1.1.0"
+strum = { version = "0.28.0", features = ["derive"] }
+syn = { version = "3.0.6", features = ["full"] }
+sysinfo = { version = "0.39.6", features = ["system"] }
+tar = "0.4.46"
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74", default-features = false, features = [
     "compression",
     "dynamic-acl",
     "specta",
 ] }
 tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
-tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
+tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-specta = { git = "https://github.com/tauri-apps/tauri-specta", rev = "6bcec0cdec0c92decf404c85ff01b4d8c3868599", features = ["derive", "typescript"] }
-schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
-uuid = { version = "1.26.1", features = ["v4", "v7", "serde"] }
-atomicwrites = "0.4.4"
-sha1 = "0.11.0"
-sha2 = "0.11.1"
-parking_lot = "0.12.5"
-postcard = { version = "1.1.3", features = ["use-std"] }
-walkdir = "2.5.0"
-base64 = "0.23.1"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+# disables `esaxx_fast` feature which is conflicting with `ort`
+tokenizers = { version = "0.23.2", features = ["onig"] }
+tokio = { version = "1.53.1", features = ["full"] }
+tokio-rayon = "2.1.0"
+toktrie = "1.9.1"
+toml = "1.1.6"
+toml_edit = "0.25.17"
+tracing = "0.1.44"
+tracing-core = "0.1.36"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "registry"] }
 unicode-bidi = "0.3.18"
-criterion = { version = "0.8.2", features = ["html_reports"] }
-keyring = "4.2.0"
-age = "0.12.1"
-llguidance = "1.9.1"
-sentry = { version = "0.49.3", features = ["tracing"] }
-fast-glob = "1.1.2"
-tar = "0.4.46"
-bytes = "1.12.1"
-http = "1.5.0"
-half = "2.7.1"
-js-sys = "0.3.106"
-safetensors = "0.8.0"
-serde-wasm-bindgen = "0.6.5"
+url = { version = "2.5.8", features = ["serde"] }
+uuid = { version = "1.26.1", features = ["v4", "v7", "serde"] }
+vello = "0.11.0"
+walkdir = "2.5.0"
 wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4.79"
 web-sys = "0.3.106"
-bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
-prettyplease = "0.3.0"
-proc-macro2 = "1.0.107"
-quote = "1.0.47"
-syn = { version = "3.0.6", features = ["full"] }
-libc = "0.2.189"
-llama-cpp-2 = { version = "0.1.160", default-features = false, features = ["mtmd", "llguidance"] }
-llama-cpp-sys-2 = "0.1.160"
-# The shim the runtime installs is built from the same tch-rs commit; see
-# torch-sys's README.
-tch = { version = "=0.26.0", default-features = false }
-torch-sys = "=0.26.0"
-# rig breaks its API in every release; see koharu-llm's README.
-rig-agent = { version = "=0.45.0", default-features = false }
-rig-core = { version = "=0.45.0", default-features = false }
-rig-reqwest = { version = "=0.45.0", default-features = false }
-memmap2 = "0.9.11"
+webp = { version = "0.3.1" }
+windows = { version = "0.62.2", features = [
+    "Win32",
+    "Win32_System",
+    "Win32_System_Console",
+    "Win32_UI_WindowsAndMessaging",
+] }
+zip = { version = "9.0.2", features = ["deflate"] }
 
 [patch.crates-io]
-# Koharu's llama.cpp bindings, loaded from the runtime's build; see its README.
-llama-cpp-sys-2 = { path = "crates/llama-cpp-sys-2" }
-# tch's libtorch bindings, loaded from the runtime's shim; see its README.
-torch-sys = { path = "crates/torch-sys" }
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
@@ -184,27 +185,3 @@ tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993f
 [profile.release]
 # Keep debug information for Sentry's native stack traces and source context.
 debug = true
-
-[profile.dev]
-debug = 1
-
-[profile.dev.package.blake3]
-opt-level = 3
-
-[profile.dev.package.koharu-canvas]
-opt-level = 3
-
-[profile.dev.package.postcard]
-opt-level = 3
-
-[profile.dev.package.image]
-opt-level = 3
-
-[profile.dev.package.image-webp]
-opt-level = 3
-
-[profile.dev.package.webp]
-opt-level = 3
-
-[profile.dev.package.libwebp-sys]
-opt-level = 3

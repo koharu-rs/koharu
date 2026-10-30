@@ -13,7 +13,7 @@ pub mod rorem_mixed;
 
 pub use koharu_runtime::Device;
 
-use tch::Tensor;
+use koharu_torch::Tensor;
 
 /// Transformers' `RepetitionPenaltyLogitsProcessor`: each score of a token in
 /// its row of `ids`, `[batch, n]` on `scores`' device, is multiplied by
@@ -23,7 +23,7 @@ pub(crate) fn repetition_penalty(
     scores: &Tensor,
     ids: &Tensor,
     penalty: f64,
-) -> tch::Result<Tensor> {
+) -> koharu_torch::Result<Tensor> {
     let score = scores.f_gather(1, ids, false)?;
     let score = score
         .f_mul_scalar(penalty)?
@@ -34,12 +34,12 @@ pub(crate) fn repetition_penalty(
 /// The rows' ids as one `[rows, n]` tensor on `device` for
 /// [`repetition_penalty`], each row padded with its first id, which the
 /// penalty then reads twice to the same effect.
-pub(crate) fn penalty_ids(rows: &[Vec<i64>], device: tch::Device) -> tch::Result<Tensor> {
+pub(crate) fn penalty_ids(rows: &[Vec<i64>], device: koharu_torch::Device) -> koharu_torch::Result<Tensor> {
     let width = rows.iter().map(Vec::len).max().unwrap_or(0);
     let mut padded = Vec::with_capacity(rows.len() * width);
     for row in rows {
         let first = *row.first().ok_or_else(|| {
-            tch::TchError::Shape("a repetition penalty row has no ids".to_owned())
+            koharu_torch::TchError::Shape("a repetition penalty row has no ids".to_owned())
         })?;
         padded.extend(
             row.iter()
@@ -51,18 +51,3 @@ pub(crate) fn penalty_ids(rows: &[Vec<i64>], device: tch::Device) -> tch::Result
         .f_view([rows.len() as i64, width as i64])?
         .f_to_device(device)
 }
-
-macro_rules! model_repository {
-    ($repository:literal @ $revision:literal { $($name:ident = $filename:literal),+ $(,)? }) => {
-        $(
-            const $name: koharu_runtime::HuggingFaceFile<'static> =
-                koharu_runtime::HuggingFaceFile::pinned(
-                    $repository,
-                    $revision,
-                    $filename,
-                );
-        )+
-    };
-}
-
-pub(crate) use model_repository;

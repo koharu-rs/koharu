@@ -1,11 +1,12 @@
 //! Hosted models through rig's providers, on Koharu's HTTP client, and the
-//! models each provider lists, with what each can do.
+//! models each provider lists, with what rig's catalog says each can do.
 
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
 use bytes::Bytes;
 use rig_core::{
+    catalog::Catalog,
     driver::DynModel,
     error::ProviderError,
     http_client::{self, HttpClientExt, LazyBody, MultipartForm, StreamingResponse},
@@ -17,6 +18,7 @@ use rig_core::{
             OpenAIConfig,
             wire::{DEEPSEEK, MINIMAX, OPENROUTER},
         },
+        registry::ProviderId,
         xai,
     },
 };
@@ -77,10 +79,6 @@ pub(crate) async fn model(provider: Provider, id: &str) -> Result<DynModel<Compl
     let providers: Providers = koharu_config::get()?;
     Ok(match provider {
         Provider::Local => bail!("a local model isn't hosted"),
-        Provider::OpenAi => OpenAIConfig::new(key(provider)?)
-            .connect(http)
-            .responses(id)
-            .erase(),
         Provider::ChatGpt => crate::chatgpt::model(id, http).await?,
         Provider::Claude => AnthropicConfig::new(key(provider)?)
             .connect(http)
@@ -90,33 +88,40 @@ pub(crate) async fn model(provider: Provider, id: &str) -> Result<DynModel<Compl
             .connect(http)
             .completion(id)
             .erase(),
-        Provider::Xai => OpenAIConfig::with_key(&xai::DIALECT, key(provider)?)
+        Provider::OpenAi => openai(provider, &providers)?
+            .connect(http)
+            .responses(id)
+            .erase(),
+        Provider::Xai => openai(provider, &providers)?
             .connect(http)
             .completion(id)
             .erase(),
-        Provider::DeepSeek => OpenAIConfig::with_key(&DEEPSEEK, key(provider)?)
-            .connect(http)
-            .chat(id)
-            .erase(),
-        Provider::MiniMax => OpenAIConfig::with_key(&MINIMAX, key(provider)?)
-            .connect(http)
-            .chat(id)
-            .erase(),
-        Provider::OpenRouter => OpenAIConfig::with_key(&OPENROUTER, key(provider)?)
-            .connect(http)
-            .chat(id)
-            .erase(),
+        Provider::DeepSeek
+        | Provider::MiniMax
+        | Provider::OpenRouter
+        | Provider::LmStudio
+        | Provider::OpenAiCompatible => {
+            openai(provider, &providers)?.connect(http).chat(id).erase()
+        }
+    })
+}
+
+/// How rig reaches a provider that speaks OpenAI's dialect.
+fn openai(provider: Provider, providers: &Providers) -> Result<OpenAIConfig> {
+    Ok(match provider {
+        Provider::OpenAi => OpenAIConfig::new(key(provider)?),
+        Provider::Xai => OpenAIConfig::with_key(&xai::DIALECT, key(provider)?),
+        Provider::DeepSeek => OpenAIConfig::with_key(&DEEPSEEK, key(provider)?),
+        Provider::MiniMax => OpenAIConfig::with_key(&MINIMAX, key(provider)?),
+        Provider::OpenRouter => OpenAIConfig::with_key(&OPENROUTER, key(provider)?),
         Provider::LmStudio => OpenAIConfig::new(optional_key(provider)?.unwrap_or_default())
-            .with_base_url(format!("{}/v1", providers.lm_studio.base_url(LM_STUDIO)))
-            .connect(http)
-            .chat(id)
-            .erase(),
+            .with_base_url(format!("{}/v1", providers.lm_studio.base_url(LM_STUDIO))),
         Provider::OpenAiCompatible => {
             OpenAIConfig::new(optional_key(provider)?.unwrap_or_default())
                 .with_base_url(providers.openai_compatible.base_url(OPENAI_COMPATIBLE))
-                .connect(http)
-                .chat(id)
-                .erase()
+        }
+        Provider::Local | Provider::ChatGpt | Provider::Claude | Provider::Gemini => {
+            bail!("{provider} doesn't speak OpenAI's dialect")
         }
     })
 }
@@ -227,154 +232,106 @@ impl HttpClientExt for Http {
     }
 }
 
-/// The models `provider` lists, or none when it has no key.
+/// The models `provider` lists, or none when it needs a key and has none,
+/// with what rig's catalog says each can do.
 pub(crate) async fn models(provider: Provider) -> Result<Vec<ModelInfo>> {
-    let client = koharu_runtime::http_client()?;
     let providers: Providers = koharu_config::get()?;
-    let get = |url: &str| client.get(url);
-    let info =
-        |id: String, name: Option<String>, images: bool, tools: bool, reasoning: bool| ModelInfo {
-            provider,
-            name: name.unwrap_or_else(|| id.clone()),
-            id,
-            quantizations: Vec::new(),
-            images,
-            tools,
-            reasoning,
-            json: provider.json(),
-            languages: None,
-        };
-    let key = match provider {
+    match provider {
         Provider::Local => return Ok(Vec::new()),
-        Provider::ChatGpt => return crate::chatgpt::models(&client).await,
-        Provider::LmStudio | Provider::OpenAiCompatible => optional_key(provider)?,
-        _ => match optional_key(provider)? {
-            Some(key) => Some(key),
-            None => return Ok(Vec::new()),
-        },
+        Provider::ChatGpt => return crate::chatgpt::models(&koharu_runtime::http_client()?).await,
+        Provider::LmStudio => return lm_studio(&providers).await,
+        Provider::OpenAiCompatible => {}
+        _ if optional_key(provider)?.is_none() => return Ok(Vec::new()),
+        _ => {}
+    }
+    let http = Http::new()?;
+    let listed = match provider {
+        Provider::Claude => {
+            AnthropicConfig::new(key(provider)?)
+                .connect(http)
+                .list_models()
+                .await?
+        }
+        Provider::Gemini => {
+            GeminiConfig::new(key(provider)?)
+                .connect(http)
+                .list_models()
+                .await?
+        }
+        _ => {
+            openai(provider, &providers)?
+                .connect(http)
+                .list_models()
+                .await?
+        }
     };
-    let bearer = |request: reqwest::RequestBuilder| match &key {
-        Some(key) => request.bearer_auth(key),
-        None => request,
-    };
-    Ok(match provider {
-        // https://developers.openai.com/api/reference/resources/models/methods/list
-        // The list says nothing of capabilities, so they come from the
-        // model's family.
-        Provider::OpenAi => list(bearer(get("https://api.openai.com/v1/models")), "data")
-            .await?
-            .into_iter()
-            .filter_map(|model| {
-                let id = string(&model, "id")?;
-                openai_family(&id).then(|| info(id, None, true, true, true))
-            })
-            .collect(),
-        // https://platform.claude.com/docs/en/api/models/list
-        Provider::Claude => list(
-            get("https://api.anthropic.com/v1/models?limit=1000")
-                .header("x-api-key", key.as_deref().unwrap_or_default())
-                .header("anthropic-version", "2023-06-01"),
-            "data",
-        )
-        .await?
+    // The catalog's vendor for the provider's models; an OpenAI-compatible
+    // server's models have none.
+    let vendor = match provider {
+        Provider::OpenAi => Some("openai"),
+        Provider::Claude => Some("anthropic"),
+        Provider::Gemini => Some("gcp.gemini"),
+        Provider::Xai => Some("xai"),
+        Provider::DeepSeek => Some("deepseek"),
+        Provider::MiniMax => Some("minimax"),
+        Provider::OpenRouter => Some("openrouter"),
+        _ => None,
+    }
+    .map(|vendor| {
+        ProviderId::catalog(vendor).with_context(|| format!("rig's catalog has no {vendor}"))
+    })
+    .transpose()?;
+    let catalog = Catalog::builtin();
+    Ok(listed
         .into_iter()
         .filter_map(|model| {
-            let supported = |pointer: &str| {
-                model
-                    .pointer(pointer)
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-            };
-            let images = supported("/capabilities/image_input/supported");
-            let reasoning = supported("/capabilities/thinking/types/adaptive/supported");
-            Some(info(
-                string(&model, "id")?,
-                string(&model, "display_name"),
-                images,
-                true,
-                reasoning,
-            ))
+            let spec = vendor
+                .and_then(|vendor| catalog.get(vendor, &model.id))
+                .map(|resolved| resolved.spec);
+            // A model the catalog knows as neither calling tools nor keeping
+            // to a schema, such as an embedding or image model, writes no
+            // text Koharu reads.
+            if spec.is_some_and(|spec| !spec.tools && !spec.structured_output) {
+                return None;
+            }
+            Some(ModelInfo {
+                provider,
+                name: model.name.unwrap_or_else(|| model.id.clone()),
+                id: model.id,
+                quantizations: Vec::new(),
+                images: spec.is_some_and(|spec| spec.input.image),
+                tools: spec.is_some_and(|spec| spec.tools),
+                reasoning: spec.is_some_and(|spec| spec.reasoning.supported()),
+                json: provider.json(),
+                languages: None,
+            })
         })
-        .collect(),
-        // https://ai.google.dev/api/models
-        Provider::Gemini => list(
-            get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")
-                .header("x-goog-api-key", key.as_deref().unwrap_or_default()),
-            "models",
-        )
-        .await?
-        .into_iter()
-        .filter_map(|model| {
-            let generates = strings(&model, "supportedGenerationMethods")
-                .iter()
-                .any(|method| method == "generateContent");
-            let id = string(&model, "name")?.strip_prefix("models/")?.to_owned();
-            let thinking = model
-                .get("thinking")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            (generates && gemini_family(&id))
-                .then(|| info(id, string(&model, "displayName"), true, true, thinking))
-        })
-        .collect(),
-        // https://docs.x.ai/developers/rest-api-reference/inference/models
-        Provider::Xai => list(bearer(get("https://api.x.ai/v1/language-models")), "models")
-            .await?
-            .into_iter()
-            .filter_map(|model| {
-                let images = strings(&model, "input_modalities")
-                    .iter()
-                    .any(|m| m == "image");
-                Some(info(string(&model, "id")?, None, images, true, true))
-            })
-            .collect(),
-        // https://api-docs.deepseek.com/api/list-models
-        Provider::DeepSeek => list(bearer(get("https://api.deepseek.com/models")), "data")
-            .await?
-            .into_iter()
-            .filter_map(|model| {
-                let images = strings(&model, "input_modalities")
-                    .iter()
-                    .any(|m| m == "image");
-                Some(info(string(&model, "id")?, None, images, true, true))
-            })
-            .collect(),
-        // https://platform.minimax.io/docs/api-reference/models/openai/list-models
-        Provider::MiniMax => list(bearer(get("https://api.minimax.io/v1/models")), "data")
-            .await?
-            .into_iter()
-            .filter_map(|model| Some(info(string(&model, "id")?, None, false, true, true)))
-            .collect(),
-        // https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties
-        Provider::OpenRouter => list(bearer(get("https://openrouter.ai/api/v1/models")), "data")
-            .await?
-            .into_iter()
-            .filter_map(|model| {
-                let parameters = strings(&model, "supported_parameters");
-                let images = model
-                    .pointer("/architecture/input_modalities")
-                    .and_then(Value::as_array)
-                    .is_some_and(|modalities| modalities.iter().any(|m| m == "image"));
-                let takes = |parameter: &str| parameters.iter().any(|p| p == parameter);
-                Some(info(
-                    string(&model, "id")?,
-                    string(&model, "name"),
-                    images,
-                    takes("tools"),
-                    takes("reasoning"),
-                ))
-            })
-            .collect(),
-        // https://lmstudio.ai/docs/developer/rest/list
-        Provider::LmStudio => list(
-            bearer(get(&format!(
-                "{}/api/v1/models",
-                providers.lm_studio.base_url(LM_STUDIO)
-            ))),
-            "models",
-        )
-        .await?
-        .into_iter()
+        .collect())
+}
+
+/// LM Studio's language models, from its own list, which says what each can
+/// do: rig neither lists nor catalogs them.
+async fn lm_studio(providers: &Providers) -> Result<Vec<ModelInfo>> {
+    // https://lmstudio.ai/docs/developer/rest/list
+    let mut request = koharu_runtime::http_client()?.get(format!(
+        "{}/api/v1/models",
+        providers.lm_studio.base_url(LM_STUDIO)
+    ));
+    if let Some(key) = optional_key(Provider::LmStudio)? {
+        request = request.bearer_auth(key);
+    }
+    let response = request.send().await?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("the model list answered {status}: {body}");
+    }
+    let body: Value = response.json().await?;
+    let Some(models) = body.get("models").and_then(Value::as_array) else {
+        bail!("the model list has no `models` array");
+    };
+    Ok(models
+        .iter()
         .filter(|model| {
             matches!(
                 model.get("type").and_then(Value::as_str),
@@ -382,114 +339,27 @@ pub(crate) async fn models(provider: Provider) -> Result<Vec<ModelInfo>> {
             )
         })
         .filter_map(|model| {
-            let images = model
-                .pointer("/capabilities/vision")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let tools = model
-                .pointer("/capabilities/trained_for_tool_use")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let reasoning = model.pointer("/capabilities/reasoning").is_some();
-            Some(info(
-                string(&model, "key")?,
-                string(&model, "display_name"),
-                images,
-                tools,
-                reasoning,
-            ))
+            let id = model.get("key")?.as_str()?.to_owned();
+            Some(ModelInfo {
+                provider: Provider::LmStudio,
+                name: model
+                    .get("display_name")
+                    .and_then(Value::as_str)
+                    .map_or_else(|| id.clone(), str::to_owned),
+                id,
+                quantizations: Vec::new(),
+                images: model
+                    .pointer("/capabilities/vision")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                tools: model
+                    .pointer("/capabilities/trained_for_tool_use")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                reasoning: model.pointer("/capabilities/reasoning").is_some(),
+                json: Provider::LmStudio.json(),
+                languages: None,
+            })
         })
-        .collect(),
-        Provider::OpenAiCompatible => list(
-            bearer(get(&format!(
-                "{}/models",
-                providers.openai_compatible.base_url(OPENAI_COMPATIBLE)
-            ))),
-            "data",
-        )
-        .await?
-        .into_iter()
-        .filter_map(|model| Some(info(string(&model, "id")?, None, true, true, true)))
-        .collect(),
-        Provider::Local | Provider::ChatGpt => unreachable!("answered above"),
-    })
-}
-
-/// The array at `field` of the JSON `request` answers.
-async fn list(request: reqwest::RequestBuilder, field: &str) -> Result<Vec<Value>> {
-    let response = request.send().await?;
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        bail!("the model list answered {status}: {body}");
-    }
-    let mut body: Value = response.json().await?;
-    match body.get_mut(field).map(Value::take) {
-        Some(Value::Array(models)) => Ok(models),
-        _ => bail!("the model list has no `{field}` array"),
-    }
-}
-
-fn string(value: &Value, field: &str) -> Option<String> {
-    value.get(field)?.as_str().map(str::to_owned)
-}
-
-fn strings(value: &Value, field: &str) -> Vec<String> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|value| value.as_str().map(str::to_owned))
-        .collect()
-}
-
-/// OpenAI's text models that take images and a schema, fine-tuned ones
-/// included: GPT-5, GPT-4.1, GPT-4o, and o3, less their audio, image, search,
-/// and other variants.
-fn openai_family(id: &str) -> bool {
-    let id = id
-        .strip_prefix("ft:")
-        .and_then(|id| id.split(':').next())
-        .unwrap_or(id)
-        .to_ascii_lowercase();
-    let family = ["gpt-5", "gpt-4.1", "gpt-4o", "o3-"]
-        .iter()
-        .any(|family| id.starts_with(family))
-        || id == "o3";
-    let variant = [
-        "-audio",
-        "-codex",
-        "-deep-research",
-        "-image",
-        "-pro",
-        "-realtime",
-        "-search",
-        "-transcribe",
-        "-tts",
-    ]
-    .iter()
-    .any(|variant| id.contains(variant));
-    family && !variant
-}
-
-/// Gemini's text models, less its image, audio, video, and agent ones.
-fn gemini_family(id: &str) -> bool {
-    ![
-        "antigravity",
-        "computer-use",
-        "deep-research",
-        "embedding",
-        "image",
-        "imagen",
-        "live",
-        "lyria",
-        "native-audio",
-        "omni",
-        "robotics",
-        "tts",
-        "veo",
-    ]
-    .iter()
-    .any(|variant| id.contains(variant))
+        .collect())
 }

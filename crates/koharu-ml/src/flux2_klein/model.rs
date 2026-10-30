@@ -29,7 +29,7 @@ pub(super) struct Model {
 impl Model {
     /// The model on `device`, its weights placed to fit `max_vram` bytes.
     pub fn new(device: &crate::Device, max_vram: u64, paths: &ModelPaths) -> Result<Self> {
-        let cuda = device.backend == Backend::Cuda;
+        let cuda = matches!(device.backend, Backend::Cuda { .. });
         let context = Context::new(&ContextParams {
             diffusion_model: Some(&paths.transformer),
             llm: Some(&paths.text_encoder),

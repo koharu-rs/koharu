@@ -1,5 +1,4 @@
-//! The native packages a device needs, each pinned with a SHA-256 for every
-//! file it downloads.
+//! The native packages a device needs, each pinned to a version.
 
 mod cuda;
 mod native;
@@ -7,7 +6,7 @@ mod rocm;
 mod torch;
 
 use std::{
-    ffi::CString,
+    ffi::CStr,
     fs::{File, create_dir_all},
     io::copy,
     mem::forget,
@@ -18,10 +17,7 @@ use anyhow::{Context, Result, ensure};
 use fast_glob::glob_match;
 use flate2::read::GzDecoder;
 
-use crate::{
-    Backend, Device,
-    download::{self, Digest},
-};
+use crate::{Backend, Device, store, transfer};
 
 /// Why a candidate couldn't start, and whether another still can: once one
 /// of a bound library's builds has loaded, the process keeps it, so no other
@@ -33,34 +29,36 @@ pub(crate) struct Failure {
 
 /// Installs what `device` needs, then loads it in dependency order: CUDA or
 /// ROCm, libtorch, llama.cpp, then stable-diffusion.cpp. Everything installs
-/// before anything loads, so a download that fails leaves nothing loaded.
+/// before anything loads, so a transfer that fails leaves nothing loaded.
 pub(crate) async fn start(device: &Device) -> Result<Device, Failure> {
     let retry = |error| Failure { error, last: false };
     let host = Host::current().map_err(retry)?;
     let mut device = device.clone();
     let cuda = match device.backend {
-        Backend::Cuda => Some(cuda::install(host).await.map_err(retry)?),
+        Backend::Cuda { .. } => Some(cuda::install(host).await.map_err(retry)?),
         _ => None,
     };
     let rocm = match device.backend {
-        Backend::Rocm => Some(rocm::install(host, &device).await.map_err(retry)?),
+        Backend::Rocm { target } => {
+            Some((rocm::install(host, target).await.map_err(retry)?, target))
+        }
         _ => None,
     };
     let torch = torch::install(host, device.backend).await.map_err(retry)?;
     let llama = native::LLAMA
-        .install(host, device.backend)
+        .install(host, device.backend, |_| true)
         .await
         .map_err(retry)?;
     let diffusion = native::DIFFUSION
-        .install(host, device.backend)
+        .install(host, device.backend, |_| true)
         .await
         .map_err(retry)?;
 
     if let Some(cuda) = &cuda {
         cuda::load(cuda).map_err(retry)?;
     }
-    if let Some(rocm) = &rocm {
-        device.index = rocm::load(rocm, &device).map_err(retry)?;
+    if let Some((rocm, target)) = &rocm {
+        device.index = rocm::load(rocm, target).map_err(retry)?;
         device.name = format!("ROCm{}", device.index);
     }
     let mut bound = false;
@@ -71,29 +69,36 @@ pub(crate) async fn start(device: &Device) -> Result<Device, Failure> {
         }
         native::load_llama(&llama)?;
         bound = true;
-        // A device is one llama.cpp found: a Vulkan loader on disk without a
-        // Vulkan device doesn't count.
-        let name = CString::new(device.name.as_str())?;
+        // A device is one llama.cpp found, at the index libtorch addresses it
+        // by: a Vulkan loader on disk without a Vulkan device doesn't count.
+        let listed = unsafe {
+            (device.index < koharu_llama_sys::ggml_backend_dev_count()).then(|| {
+                CStr::from_ptr(koharu_llama_sys::ggml_backend_dev_name(
+                    koharu_llama_sys::ggml_backend_dev_get(device.index),
+                ))
+            })
+        };
         ensure!(
-            !unsafe { llama_cpp_sys_2::ggml_backend_dev_by_name(name.as_ptr()) }.is_null(),
-            "llama.cpp doesn't list {}",
-            device.name
+            listed.is_some_and(|name| name.to_bytes() == device.name.as_bytes()),
+            "llama.cpp doesn't list {} at {}",
+            device.name,
+            device.index
         );
         native::load_diffusion(&diffusion)
     };
     load().map_err(|error| Failure { error, last: bound })?;
 
-    if cuda.is_some() {
-        cuda::remove_older().await;
-    }
-    if rocm.is_some() {
-        rocm::remove_older().await;
-    }
-    if torch.is_some() {
-        torch::RELEASE.remove_older().await;
-    }
-    native::LLAMA.remove_older().await;
-    native::DIFFUSION.remove_older().await;
+    // CUDA's wheels install at their version folders, and the other packages
+    // one level below theirs.
+    let mut versions = cuda.unwrap_or_default();
+    versions.extend(
+        rocm.iter()
+            .map(|(folder, _)| folder)
+            .chain(&torch)
+            .chain([&llama, &diffusion])
+            .filter_map(|folder| folder.parent().map(Path::to_owned)),
+    );
+    store::remove_others(versions).await;
     Ok(device)
 }
 
@@ -132,20 +137,15 @@ impl Host {
     }
 }
 
-/// Downloads an archive into `stage`, on the store's own volume, checks it,
-/// and extracts the files matching `patterns` off the async threads.
-async fn install_archive(
-    url: &str,
-    sha256: &str,
-    stage: &Path,
-    patterns: &'static [&'static str],
-) -> Result<()> {
+/// Fetches an archive into `stage`, on the store's own volume, and extracts
+/// the files matching `patterns` off the async threads.
+async fn install_archive(url: &str, stage: &Path, patterns: &'static [&'static str]) -> Result<()> {
     let name = url
         .rsplit('/')
         .next()
         .context("an archive URL has no name")?;
     let archive = stage.join(name);
-    download::fetch(url, &archive, &Digest::Sha256(sha256.to_owned())).await?;
+    transfer::fetch(url, &archive).await?;
     let stage = stage.to_owned();
     tokio::task::spawn_blocking(move || {
         extract(&archive, &stage, patterns)?;

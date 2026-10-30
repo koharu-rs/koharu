@@ -42,9 +42,8 @@ async fn main() -> Result<()> {
     let mask = cli.mask.as_ref().map(image::open).transpose()?;
     let reference = cli.reference.as_ref().map(image::open).transpose()?;
 
-    let runtime = koharu_runtime::Runtime::start().await?;
-    let device = runtime.device();
-    let pipeline = Flux2Klein::load(device, device.memory()?.free).await?;
+    let device = koharu_runtime::device().await?;
+    let pipeline = Flux2Klein::load(device, device.memory().free).await?;
 
     let output = if let Some(mask) = mask.as_ref() {
         let input = input

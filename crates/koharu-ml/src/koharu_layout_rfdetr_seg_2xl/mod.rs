@@ -11,7 +11,8 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use tch::Device;
+use koharu_runtime::Repository;
+use koharu_torch::Device;
 
 pub use self::{
     config::{KoharuLayoutRFDetrSeg2XLConfig, KoharuLayoutThresholds},
@@ -23,10 +24,10 @@ pub use self::{
 
 use self::model::Model;
 
-crate::model_repository!("mayocream/koharu-layout-rfdetr-seg-2xl-1152" @ "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2" {
-    CONFIG = "inference_config.json",
-    WEIGHTS = "model.safetensors",
-});
+const REPOSITORY: Repository = Repository::model(
+    "mayocream/koharu-layout-rfdetr-seg-2xl-1152",
+    "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2",
+);
 
 #[derive(Debug)]
 pub struct KoharuLayoutRFDetrSeg2XL {
@@ -38,14 +39,10 @@ pub struct KoharuLayoutRFDetrSeg2XL {
 impl KoharuLayoutRFDetrSeg2XL {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let config_path = CONFIG
-            .resolve()
+        let [config_path, weights_path] = REPOSITORY
+            .resolve(["inference_config.json", "model.safetensors"])
             .await
-            .context("failed to resolve KoharuLayout RF-DETR inference config")?;
-        let weights_path = WEIGHTS
-            .resolve()
-            .await
-            .context("failed to resolve KoharuLayout RF-DETR weights")?;
+            .context("failed to resolve KoharuLayout RF-DETR files")?;
         let config = KoharuLayoutRFDetrSeg2XLConfig::from_file(&config_path)?;
         let processor = KoharuLayoutRFDetrImageProcessor::new(&config)?;
         let mut model = Model::new(device, kind)?;
@@ -68,7 +65,7 @@ impl KoharuLayoutRFDetrSeg2XL {
         image: &DynamicImage,
         thresholds: KoharuLayoutThresholds,
     ) -> Result<KoharuLayoutDetections> {
-        tch::no_grad(|| {
+        koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
             let output = self.model.forward(&pixel_values)?;
             self.processor
@@ -92,12 +89,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires CUDA"]
     async fn checkpoint_matches_rfdetr_upstream_structured_output() -> Result<()> {
-        let runtime = koharu_runtime::Runtime::start().await?;
+        let device = koharu_runtime::device().await?;
         let image = image::open(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("benches/fixtures/object_detection/1.jpg"),
         )?;
-        let model = KoharuLayoutRFDetrSeg2XL::load(runtime.device()).await?;
+        let model = KoharuLayoutRFDetrSeg2XL::load(device).await?;
         let result = model.inference(&image)?;
 
         // RF-DETR 4ab7c18, CUDA BF16, shape=(1152, 1152), antialias disabled.

@@ -11,7 +11,7 @@ use anyhow::{Result, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, RgbImage};
 use serde::Deserialize;
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ViTImageProcessor {

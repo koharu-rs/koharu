@@ -7,14 +7,12 @@ and Koharu's local llama.cpp engine is one more rig model, so page
 translation, PaddleOCR-VL OCR, and the agent send rig's requests and read rig's
 streams whichever model answers.
 
-![Who calls koharu-llm, and what it calls](overview.svg)
-
 ## What it owns
 
 | From | Here | Gone |
 |---|---|---|
 | `koharu-translator`'s hosted providers, model listing, and GGUF catalog | rig's providers, Koharu's model listing, and the local catalog | DeepL, Google Cloud Translation, and Caiyun; five copies of one hand-written client; the `translate` binary that read keys from environment variables |
-| `koharu-ml`'s `llm` module | the local engine, on `llama-cpp-2`, as a rig model | a llama.cpp context per call, and `koharu-llama` |
+| `koharu-ml`'s `llm` module | the local engine, on `koharu-llama`, as a rig model | a llama.cpp context per call |
 | `koharu-agent` | the agent, on rig's agent loop, with rig's ChatGPT sign-in | its own loop, and its own Codex sign-in and token storage |
 
 Translation's prompt, schema, and answer check belong to the pipeline's
@@ -39,23 +37,26 @@ let models = koharu_llm::models().await;                 // what the user can pi
 | Cancelling is dropping the stream: a local sequence is freed at the next step, and a hosted request's connection closes. | rig's streams stop when dropped [rig agent readme] |
 
 `models()` lists every model the user can pick, with what it can do: images,
-tools, reasoning, and how it keeps to a JSON schema. rig's model lists carry no
-capabilities [rig listing], so Koharu reads them from each provider's own list,
-and the pipeline and the agent offer models by them.
+tools, reasoning, and how it keeps to a JSON schema. rig lists each provider's
+models, and as its lists carry no capabilities [rig listing], they come from
+rig's catalog, built from models.dev [rig catalog]. A listed model the catalog
+doesn't know can do none of the three, and one it knows as neither calling
+tools nor keeping to a schema, such as an embedding model, isn't listed. The
+pipeline and the agent offer models by them.
 
 | Provider | rig client | How Koharu asks for JSON | Listing |
 |---|---|---|---|
 | local | Koharu's engine | a JSON schema, enforced by an llguidance grammar | the catalog |
-| OpenAI | Responses | the schema, strict [OpenAI structured outputs] | `/v1/models`, capabilities by model family |
+| OpenAI | Responses | the schema, strict [OpenAI structured outputs] | rig's list |
 | ChatGPT | ChatGPT, Codex's route | the schema in the instructions; the route takes no structured output [rig codex limits] | Codex's model list |
-| Claude | Anthropic | the schema, as `output_config` [Claude structured outputs] | `/v1/models` with each model's capabilities [Claude models] |
-| Gemini | Gemini | the schema, as `responseJsonSchema` [Gemini structured output] | `models.list` [Gemini models] |
-| xAI | xAI Responses | the schema [xAI structured outputs] | `/v1/language-models` |
-| DeepSeek | DeepSeek | JSON mode, with the schema in the instructions [DeepSeek JSON mode] | `/models` with input modalities |
-| MiniMax | MiniMax | the schema in the instructions; MiniMax documents no JSON setting | its model list |
-| OpenRouter | OpenRouter | the schema, with `provider.require_parameters` [OpenRouter structured outputs] | `/models` with input modalities and supported parameters [OpenRouter models] |
-| LM Studio | OpenAI dialect | the schema, enforced by a grammar [LM Studio structured output] | `/api/v1/models` with capabilities [LM Studio models] |
-| OpenAI-compatible | OpenAI dialect | the schema | `/models` |
+| Claude | Anthropic | the schema, as `output_config` [Claude structured outputs] | rig's list |
+| Gemini | Gemini | the schema, as `responseJsonSchema` [Gemini structured output] | rig's list |
+| xAI | xAI Responses | the schema [xAI structured outputs] | rig's list |
+| DeepSeek | DeepSeek | JSON mode, with the schema in the instructions [DeepSeek JSON mode] | rig's list |
+| MiniMax | MiniMax | the schema in the instructions; MiniMax documents no JSON setting | rig's list |
+| OpenRouter | OpenRouter | the schema, with `provider.require_parameters` [OpenRouter structured outputs] | rig's list |
+| LM Studio | OpenAI dialect | the schema, enforced by a grammar [LM Studio structured output] | `/api/v1/models` with capabilities [LM Studio models], as rig neither lists nor catalogs it |
+| OpenAI-compatible | OpenAI dialect | the schema | rig's list, with no capabilities |
 
 ## JSON output
 
@@ -84,8 +85,6 @@ languages it translates, as now; Gemma 4 12B at Q4_K_XL is the default. A
 model is downloaded through `koharu-runtime` when it's first picked and loaded
 on the runtime's device.
 
-![A loaded model's sequences over time](engine.svg)
-
 - **One engine per loaded model.** A thread owns the model, one llama.cpp
   context, and its samplers, which can't move between threads, and takes
   requests from a queue.
@@ -111,9 +110,9 @@ on the runtime's device.
   abort callback isn't used, as it works "only with CPU execution" [llama.h
   abort].
 
-The engine runs on `llama-cpp-2` [llama-cpp-2], with Koharu's build of
-`llama-cpp-sys-2` loading the runtime's llama.cpp, as that crate's README
-describes.
+The engine runs on `koharu-llama`, upstream's `llama-cpp-2` [llama-cpp-2]
+unchanged but for its bindings: `koharu-llama-sys`, which loads the runtime's
+llama.cpp.
 
 ## ChatGPT sign-in
 
@@ -157,7 +156,7 @@ pub trait Host: Send + Sync + 'static {
 | A run stops after 20 model calls, set with `max_turns(20)` as rig's default is 1, and reports the limit as a failure. | rig ends the run with `MaxTurns` [rig max turns]; Vercel's `ToolLoopAgent` defaults to 20 steps [Vercel loop control] |
 | A tool that fails returns its error to the model, marked as an error; the run goes on. | rig's tool errors [rig tool result]; Claude's `is_error` [Claude tool calls]; MCP's `isError` [MCP tools] |
 | Edits run without asking, as each is one undo step. | the Claude Agent SDK's `acceptEdits` mode [Claude permissions]; MCP asks for a human able to deny [MCP tools], which undo gives |
-| A model's reasoning state goes back unchanged on the next call: rig replays a model's own turns as they came. A run keeps its instructions and tools fixed, as Claude's replay drops thinking signatures when either changes; the project's context goes in the user's message. | rig's history replay [rig history] and its Claude rule [rig claude replay] |
+| A model's reasoning state goes back unchanged on the next call: rig replays a model's own turns as they came. A run keeps its instructions and tools fixed, as Claude's replay drops thinking signatures when either changes; the project's state goes with each request as a context document, ahead of the history and never in it. | rig's history replay [rig history], its Claude rule [rig claude replay], and its run documents [rig run document] [rig documents] |
 | Cancelling drops rig's stream, which drops a running tool with it, so each edit runs detached and finishes: an edit is whole or not at all. | rig's cancellation is dropping the stream [rig agent readme] |
 
 The agent panel's events come from rig's stream (text and reasoning deltas,
@@ -186,32 +185,20 @@ Both come from `koharu-config`, read when they're needed.
   `chatgpt` the record rig's ChatGPT sign-in keeps: its tokens, their expiry,
   and the account id [rig chatgpt auth].
 
-## Changes from today
-
-- Hosted providers come from `rig` instead of five copies of one hand-written
-  client, and models are listed with their capabilities.
-- The local engine is a rig model that keeps one context per loaded model and
-  decodes requests together, instead of a context and a sequence per call.
-- The agent runs on rig's loop, bounded at 20 calls, and signs in to ChatGPT
-  through rig instead of its own Codex sign-in. The tokens move from the
-  `agent_codex` keys to rig's one `chatgpt` record, so a signed-in user signs
-  in once more.
-- Machine-translation services and keys from environment variables go.
-
 ## Sources
 
 - rig: [rig], [rig wire], [rig replay target], [rig connect], [rig reqwest],
-  [rig retry], [rig listing], [rig OpenAI dialect], [rig dialects], [rig chat
-  schema], [rig schema], [rig refusal], [rig chatgpt], [rig chatgpt auth],
-  [rig sign-in], [rig token store], [rig codex limits], [rig dynamic tools],
-  [rig tool validation], [rig runner], [rig max turns], [rig tool result], [rig
-  history], [rig claude replay], [rig agent streaming], [rig agent readme],
-  [rig changelog]
+  [rig retry], [rig listing], [rig catalog], [rig OpenAI dialect], [rig
+  dialects], [rig chat schema], [rig schema], [rig refusal], [rig chatgpt], [rig
+  chatgpt auth], [rig sign-in], [rig token store], [rig codex limits], [rig
+  dynamic tools], [rig tool validation], [rig runner], [rig max turns], [rig
+  tool result], [rig history], [rig claude replay], [rig run document], [rig
+  documents], [rig agent streaming], [rig agent readme], [rig changelog]
 - Providers: [OpenAI structured outputs], [OpenAI rate limits], [Claude
-  structured outputs], [Claude refusals], [Claude models], [Claude rate
-  limits], [Gemini structured output], [Gemini models], [xAI structured
-  outputs], [DeepSeek JSON mode], [OpenRouter structured outputs], [OpenRouter
-  models], [LM Studio structured output], [LM Studio models]
+  structured outputs], [Claude refusals], [Claude rate limits], [Gemini
+  structured output], [xAI structured outputs], [DeepSeek JSON mode],
+  [OpenRouter structured outputs], [LM Studio structured output], [LM Studio
+  models]
 - ChatGPT: [SIWC inference]
 - Local inference: [Orca], [llama.cpp parallel], [llama.h kv_unified], [mtmd
   decode], [llama.h abort], [llama-cpp-2]
@@ -225,6 +212,7 @@ Both come from `koharu-config`, read when they're needed.
 [rig reqwest]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-reqwest/src/lib.rs#L135-L139
 [rig retry]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/error/retry.rs#L9-L42
 [rig listing]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/model/listing.rs#L14-L49
+[rig catalog]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/catalog/mod.rs#L1-L10
 [rig OpenAI dialect]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/providers/openai/wire.rs#L576-L613
 [rig dialects]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/providers/openai/wire/dialects.rs#L77-L94
 [rig chat schema]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/providers/openai/wire/chat.rs#L298-L312
@@ -242,6 +230,8 @@ Both come from `koharu-config`, read when they're needed.
 [rig tool result]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/tool/result.rs#L154-L170
 [rig history]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/completion/history.rs#L1-L4
 [rig claude replay]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/providers/anthropic/wire.rs#L679
+[rig run document]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-agent/src/agent/runner.rs#L247-L251
+[rig documents]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/src/completion/request.rs#L1397-L1421
 [rig agent streaming]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-agent/src/agent/streaming.rs#L181
 [rig agent readme]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-agent/README.md#L59-L64
 [rig changelog]: https://github.com/0xPlaygrounds/rig/blob/98ed06d7f1c911e6e4c7fdb5d690093bc964c514/crates/rig-core/CHANGELOG.md
@@ -249,14 +239,11 @@ Both come from `koharu-config`, read when they're needed.
 [OpenAI rate limits]: https://developers.openai.com/api/docs/guides/rate-limits
 [Claude structured outputs]: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
 [Claude refusals]: https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons
-[Claude models]: https://platform.claude.com/docs/en/api/models/list
 [Claude rate limits]: https://platform.claude.com/docs/en/api/rate-limits
 [Gemini structured output]: https://ai.google.dev/gemini-api/docs/structured-output
-[Gemini models]: https://ai.google.dev/api/models
 [xAI structured outputs]: https://docs.x.ai/developers/model-capabilities/text/structured-outputs
 [DeepSeek JSON mode]: https://api-docs.deepseek.com/guides/json_mode
 [OpenRouter structured outputs]: https://openrouter.ai/docs/guides/features/structured-outputs
-[OpenRouter models]: https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties
 [LM Studio structured output]: https://lmstudio.ai/docs/developer/openai-compat/structured-output
 [LM Studio models]: https://lmstudio.ai/docs/developer/rest/list
 [SIWC inference]: https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference
@@ -265,7 +252,7 @@ Both come from `koharu-config`, read when they're needed.
 [llama.h kv_unified]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/include/llama.h#L412-L417
 [mtmd decode]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/tools/mtmd/mtmd.cpp#L2426-L2447
 [llama.h abort]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/include/llama.h#L400-L404
-[llama-cpp-2]: https://docs.rs/llama-cpp-2/0.1.160/llama_cpp_2/
+[llama-cpp-2]: https://github.com/utilityai/llama-cpp-rs/tree/e7af607ebd5ec2932709ef918c17cca2f9b0fce4/llama-cpp-2
 [OpenAI agents loop]: https://github.com/openai/openai-agents-python/blob/a88d2919631dbd93801a79eb0f97011ef9b451b7/docs/running_agents.md
 [Claude tool calls]: https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls
 [Claude permissions]: https://code.claude.com/docs/en/agent-sdk/permissions

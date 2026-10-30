@@ -4,18 +4,17 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use tch::{Device, Tensor};
+use koharu_runtime::Repository;
+use koharu_torch::{Device, Tensor};
 
 pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
 
 use self::{model::Model, processor::Tokenizer};
 
-crate::model_repository!("mayocream/manga-ocr" @ "4380edba990b959c508752350955350c1c80c31c" {
-    CONFIG = "config.json",
-    WEIGHTS = "model.safetensors",
-    PROCESSOR = "preprocessor_config.json",
-    VOCABULARY = "vocab.txt",
-});
+const REPOSITORY: Repository = Repository::model(
+    "mayocream/manga-ocr",
+    "4380edba990b959c508752350955350c1c80c31c",
+);
 
 #[derive(Debug)]
 pub struct MangaOcr {
@@ -28,22 +27,15 @@ pub struct MangaOcr {
 impl MangaOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let config_path = CONFIG
-            .resolve()
+        let [config_path, weights_path, processor_path, vocabulary_path] = REPOSITORY
+            .resolve([
+                "config.json",
+                "model.safetensors",
+                "preprocessor_config.json",
+                "vocab.txt",
+            ])
             .await
-            .context("failed to resolve Manga OCR config")?;
-        let weights_path = WEIGHTS
-            .resolve()
-            .await
-            .context("failed to resolve Manga OCR weights")?;
-        let processor_path = PROCESSOR
-            .resolve()
-            .await
-            .context("failed to resolve Manga OCR image processor")?;
-        let vocabulary_path = VOCABULARY
-            .resolve()
-            .await
-            .context("failed to resolve Manga OCR vocabulary")?;
+            .context("failed to resolve Manga OCR files")?;
 
         let config = MangaOcrConfig::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
@@ -77,7 +69,7 @@ impl MangaOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        tch::no_grad(|| {
+        koharu_torch::no_grad(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image, self.device))

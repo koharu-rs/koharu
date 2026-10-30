@@ -15,7 +15,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use llama_cpp_2::{
+use koharu_llama::{
     context::{LlamaContext, params::LlamaContextParams},
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
@@ -107,7 +107,7 @@ fn backend() -> Result<&'static LlamaBackend> {
     if let Some(backend) = BACKEND.get() {
         return Ok(backend);
     }
-    llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default());
+    koharu_llama::send_logs_to_tracing(koharu_llama::LogOptions::default());
     let backend = LlamaBackend::init().context("couldn't start llama.cpp")?;
     Ok(BACKEND.get_or_init(|| backend))
 }

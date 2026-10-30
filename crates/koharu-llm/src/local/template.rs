@@ -2,7 +2,7 @@
 //! with its own Jinja engine.
 
 use anyhow::{Context, Result};
-use llama_cpp_2::model::LlamaModel;
+use koharu_llama::model::LlamaModel;
 use minijinja::{Environment, Error, ErrorKind, context};
 
 const NAME: &str = "chat";

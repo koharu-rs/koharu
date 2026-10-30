@@ -12,9 +12,9 @@ async fn main() -> Result<()> {
         .join("ocr")
         .join("title.png");
 
-    let runtime = koharu_runtime::Runtime::start().await?;
+    let device = koharu_runtime::device().await?;
     let image = image::open(&input)?;
-    let model = MangaOcr::load(runtime.device()).await?;
+    let model = MangaOcr::load(device).await?;
 
     let warmup = model.inference(std::slice::from_ref(&image))?;
     assert_eq!(warmup, ["対策委員会です！"]);

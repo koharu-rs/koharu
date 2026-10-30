@@ -17,6 +17,8 @@ build = "build.rs"
 libloading = { workspace = true }
 
 [build-dependencies]
-anyhow = { workspace = true }
 koharu-bindgen = { workspace = true }
 
+# Only the generated bindings use it.
+[package.metadata.cargo-machete]
+ignored = ["libloading"]

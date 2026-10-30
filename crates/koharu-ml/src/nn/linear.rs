@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 
-use tch::{Result, Tensor};
+use koharu_torch::{Result, Tensor};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LinearConfig {
