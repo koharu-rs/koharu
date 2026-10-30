@@ -1,6 +1,6 @@
 //! The forward pass.
 
-use tch::{Result, Tensor};
+use koharu_torch::{Result, Tensor};
 
 pub trait Module: std::fmt::Debug + Send {
     fn forward(&self, xs: &Tensor) -> Result<Tensor>;

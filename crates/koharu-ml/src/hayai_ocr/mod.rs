@@ -4,7 +4,8 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use tch::Device;
+use koharu_runtime::Repository;
+use koharu_torch::Device;
 
 use self::{
     config::HayaiConfig,
@@ -12,11 +13,10 @@ use self::{
     processor::{ImageProcessor, Tokenizer},
 };
 
-crate::model_repository!("JustANormalTinkerer/hayai-ocr-v2" @ "4a4ce477c9a8841f208b94e1d9ed5c0938965e05" {
-    CONFIG = "config.json",
-    WEIGHTS = "model.safetensors",
-    TOKENIZER = "tokenizer.json",
-});
+const REPOSITORY: Repository = Repository::model(
+    "JustANormalTinkerer/hayai-ocr-v2",
+    "4a4ce477c9a8841f208b94e1d9ed5c0938965e05",
+);
 
 /// Fast crop-level OCR for Japanese, Chinese, Korean, and English text.
 ///
@@ -34,26 +34,10 @@ pub struct HayaiOcr {
 impl HayaiOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let (config_path, weights_path, tokenizer_path) = tokio::try_join!(
-            async {
-                CONFIG
-                    .resolve()
-                    .await
-                    .context("failed to resolve Hayai OCR config")
-            },
-            async {
-                WEIGHTS
-                    .resolve()
-                    .await
-                    .context("failed to resolve Hayai OCR weights")
-            },
-            async {
-                TOKENIZER
-                    .resolve()
-                    .await
-                    .context("failed to resolve Hayai OCR tokenizer")
-            },
-        )?;
+        let [config_path, weights_path, tokenizer_path] = REPOSITORY
+            .resolve(["config.json", "model.safetensors", "tokenizer.json"])
+            .await
+            .context("failed to resolve Hayai OCR files")?;
 
         let config = HayaiConfig::from_file(&config_path)
             .with_context(|| format!("failed to read {}", config_path.display()))?;
@@ -84,7 +68,7 @@ impl HayaiOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        tch::no_grad(|| {
+        koharu_torch::no_grad(|| {
             let inputs = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))
@@ -107,8 +91,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        let runtime = koharu_runtime::Runtime::start().await?;
-        let model = HayaiOcr::load(runtime.device()).await?;
+        let device = koharu_runtime::device().await?;
+        let model = HayaiOcr::load(device).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");
         let text = model.inference(&[image::open(input)?])?;

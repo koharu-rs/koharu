@@ -17,9 +17,10 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
+indoc = { workspace = true }
 koharu-config = { workspace = true }
+koharu-llama = { workspace = true, features = ["llguidance", "mtmd"] }
 koharu-runtime = { workspace = true }
-llama-cpp-2 = { workspace = true }
 llguidance = { workspace = true }
 minijinja = { workspace = true }
 minijinja-contrib = { workspace = true }

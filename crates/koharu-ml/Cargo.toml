@@ -12,22 +12,22 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
+fast_image_resize = { workspace = true }
+futures = { workspace = true }
+icu_properties = { workspace = true }
+image = { workspace = true }
+imageproc = { workspace = true }
 koharu-diffusion = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
-tch = { workspace = true }
-anyhow = { workspace = true }
-futures = { workspace = true }
-image = { workspace = true }
-imageproc = { workspace = true }
+koharu-torch = { workspace = true }
 memmap2 = { workspace = true }
-icu_properties = { workspace = true }
-fast_image_resize = { workspace = true }
 safetensors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
 tokenizers = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 ab_glyph = { workspace = true }

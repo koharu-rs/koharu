@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module};
 use anyhow::{Result, ensure};
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::{
     config::{HayaiConfig, decoder, siglip2},
@@ -97,7 +97,7 @@ impl Model {
             &inputs
                 .iter()
                 .map(|input| input.pixel_values.f_alias())
-                .collect::<tch::Result<Vec<_>>>()?,
+                .collect::<koharu_torch::Result<Vec<_>>>()?,
             0,
         )?
         .f_to_kind(kind)?;
@@ -105,7 +105,7 @@ impl Model {
             &inputs
                 .iter()
                 .map(|input| input.attention_mask.f_alias())
-                .collect::<tch::Result<Vec<_>>>()?,
+                .collect::<koharu_torch::Result<Vec<_>>>()?,
             0,
         )?;
         let spatial_shapes = inputs
@@ -264,7 +264,7 @@ impl Model {
     /// Interleaved 2D rotary angles over this image's patch grid
     /// (upstream `_get_2d_visual_freqs`), returning `(cos, sin)` of shape
     /// `(height * width, head_dim / 2)`.
-    fn visual_rope(&self, height: i64, width: i64) -> tch::Result<(Tensor, Tensor)> {
+    fn visual_rope(&self, height: i64, width: i64) -> koharu_torch::Result<(Tensor, Tensor)> {
         let device = self.text_rope_cos.device();
         let inv_freq = inverse_frequencies(decoder::HEAD_DIM / 2, decoder::ROPE_THETA, device)?;
         let grid_y = Tensor::f_arange(height, (Kind::Float, device))?
@@ -284,7 +284,7 @@ impl Model {
     }
 }
 
-fn inverse_frequencies(d_axis: i64, theta: f64, device: Device) -> tch::Result<Tensor> {
+fn inverse_frequencies(d_axis: i64, theta: f64, device: Device) -> koharu_torch::Result<Tensor> {
     let dimensions = Tensor::f_arange_start_step(0, d_axis, 2, (Kind::Float, device))?;
     (dimensions.f_div_scalar(d_axis as f64)?)
         .f_mul_scalar(theta.ln())?
@@ -295,7 +295,7 @@ fn inverse_frequencies(d_axis: i64, theta: f64, device: Device) -> tch::Result<T
 /// Applies an interleaved (even/odd pairs) rotary embedding over the last
 /// dimension (upstream `apply_rotary_emb_2d`). Angles have shape
 /// `(batch, sequence, head_dim / 2)` and broadcast across heads.
-fn apply_rotary_emb(x: &Tensor, angles_cos: &Tensor, angles_sin: &Tensor) -> tch::Result<Tensor> {
+fn apply_rotary_emb(x: &Tensor, angles_cos: &Tensor, angles_sin: &Tensor) -> koharu_torch::Result<Tensor> {
     let original_kind = x.kind();
     let original_size = x.size();
     let mut pairs_shape = original_size.clone();
@@ -319,7 +319,7 @@ fn apply_rotary_emb(x: &Tensor, angles_cos: &Tensor, angles_sin: &Tensor) -> tch
 
 /// Converts a `[batch, keys]` padding mask into an additive SDPA bias,
 /// `[batch, 1, 1, keys]`, where `0` entries become forbidden keys.
-fn additive_mask(mask: &Tensor, kind: Kind) -> tch::Result<Tensor> {
+fn additive_mask(mask: &Tensor, kind: Kind) -> koharu_torch::Result<Tensor> {
     mask.f_lt(0.5)?
         .f_to_kind(Kind::Float)?
         .f_mul_scalar(f32::MIN as f64)?
@@ -360,7 +360,7 @@ impl Siglip2VisionModel {
         pixel_values: &Tensor,
         spatial_shapes: &[[i64; 2]],
         attention_mask: Option<&Tensor>,
-    ) -> tch::Result<Tensor> {
+    ) -> koharu_torch::Result<Tensor> {
         let mut hidden_states = self.embeddings.forward(pixel_values, spatial_shapes)?;
         for layer in &self.layers {
             hidden_states = layer.forward(&hidden_states, attention_mask)?;
@@ -436,16 +436,16 @@ impl VisionEmbeddings {
     /// Patch embeddings plus each image's position embeddings, resized to its
     /// patch grid (upstream `resize_positional_embeddings`, which loops over
     /// the batch).
-    fn forward(&self, pixel_values: &Tensor, spatial_shapes: &[[i64; 2]]) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor, spatial_shapes: &[[i64; 2]]) -> koharu_torch::Result<Tensor> {
         let patch_embeds = self.patch_embedding.forward(pixel_values)?;
         let position_embeddings = spatial_shapes
             .iter()
             .map(|&[height, width]| self.position_embeddings(height, width))
-            .collect::<tch::Result<Vec<_>>>()?;
+            .collect::<koharu_torch::Result<Vec<_>>>()?;
         patch_embeds.f_add(&Tensor::f_stack(&position_embeddings, 0)?)
     }
 
-    fn position_embeddings(&self, height: i64, width: i64) -> tch::Result<Tensor> {
+    fn position_embeddings(&self, height: i64, width: i64) -> koharu_torch::Result<Tensor> {
         // Bilinear interpolation of the square base grid to this image's patch
         // shape. Upstream enables antialiasing, which the LibTorch binding
         // does not expose; with a 16x16 source grid the difference is
@@ -517,7 +517,7 @@ impl VisionEncoderLayer {
         &self,
         hidden_states: &Tensor,
         attention_mask: Option<&Tensor>,
-    ) -> tch::Result<Tensor> {
+    ) -> koharu_torch::Result<Tensor> {
         let attended = self
             .attention
             .forward(&self.layer_norm1.forward(hidden_states)?, attention_mask)?;
@@ -576,7 +576,7 @@ impl VisionAttention {
         &self,
         hidden_states: &Tensor,
         attention_mask: Option<&Tensor>,
-    ) -> tch::Result<Tensor> {
+    ) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         let [batch_size, sequence_length] = [size[0], size[1]];
         let shape = [batch_size, sequence_length, self.num_heads, self.head_dim];
@@ -636,7 +636,7 @@ impl VisionMlp {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         // Upstream activation is `gelu_pytorch_tanh`.
         self.fc2
             .forward(&self.fc1.forward(hidden_states)?.f_gelu("tanh")?)
@@ -678,7 +678,7 @@ impl Decoder {
     }
 
     /// Logits of the final sequence position; generation consumes nothing else.
-    fn logits(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn logits(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let last_hidden_state = hidden_states.f_select(1, hidden_states.size()[1] - 1)?;
         self.output_head
             .forward(&self.final_norm.forward(&last_hidden_state)?)
@@ -699,7 +699,7 @@ impl Projector {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.linear2
             .forward(&self.linear1.forward(hidden_states)?.f_gelu("none")?)
     }
@@ -733,7 +733,7 @@ impl DecoderLayer {
         attention_mask: Option<&Tensor>,
         rope: (&Tensor, &Tensor),
         past_key_value: Option<&LayerCache>,
-    ) -> tch::Result<(Tensor, LayerCache)> {
+    ) -> koharu_torch::Result<(Tensor, LayerCache)> {
         let normalized = self.attn_norm.forward(hidden_states)?;
         let (attention, present) =
             self.attn
@@ -802,7 +802,7 @@ impl GroupedQueryAttention {
         attention_mask: Option<&Tensor>,
         (cos, sin): (&Tensor, &Tensor),
         past_key_value: Option<&LayerCache>,
-    ) -> tch::Result<(Tensor, LayerCache)> {
+    ) -> koharu_torch::Result<(Tensor, LayerCache)> {
         let size = hidden_states.size();
         let [batch_size, sequence_length] = [size[0], size[1]];
         let query_shape = [batch_size, sequence_length, self.query_heads, self.head_dim];
@@ -892,7 +892,7 @@ impl SwiGlu {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.w_down.forward(
             &self
                 .w_gate
@@ -915,7 +915,7 @@ impl RmsNorm {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let input_kind = hidden_states.kind();
         let hidden_states = hidden_states.f_to_kind(Kind::Float)?;
         let variance = hidden_states.f_pow_tensor_scalar(2.0)?.f_mean_dim(

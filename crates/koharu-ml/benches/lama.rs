@@ -16,8 +16,8 @@ async fn main() -> Result<()> {
     let image = image::open(&image_path)?;
     let mask = image::open(&mask_path)?.to_luma8();
 
-    let runtime = koharu_runtime::Runtime::start().await?;
-    let model = LaMa::load(runtime.device()).await?;
+    let device = koharu_runtime::device().await?;
+    let model = LaMa::load(device).await?;
     let config = InpaintRequest::default();
 
     let mut criterion = Criterion::default()

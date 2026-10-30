@@ -2,12 +2,12 @@
 
 `koharu-ml` holds the vision models Koharu runs on the user's machine for
 the pipeline's detection, OCR, and inpainting steps. Each is a port that stays
-traceable to a pinned upstream, with one lifecycle for all. They run on libtorch (`tch`),
+traceable to a pinned upstream, with one lifecycle for all. They run on libtorch (`koharu-torch`),
 stable-diffusion.cpp (`koharu-diffusion`), or, for PaddleOCR-VL, llama.cpp
 through `koharu-llm`'s engine.
 
 ```rust,ignore
-let device = runtime.device();
+let device = koharu_runtime::device().await?;
 let ocr = MangaOcr::load(&device).await?;
 let texts = ocr.inference(&crops)?;        // one call for a batch of crops
 ```
@@ -32,7 +32,7 @@ let texts = ocr.inference(&crops)?;        // one call for a batch of crops
 |---|---|
 | `load(&Device)` resolves the model's pinned files, converts the device once into a libtorch device and a precision chosen from that device, builds the network, and loads its weights, which never track gradients; network and weights are apart from pre- and post-processing. | `AGENTS.md` "Models" |
 | Loading fails on a missing weight and on an unexpected one, except where upstream itself allows it: a BatchNorm's `num_batches_tracked`, which PyTorch fills in when a checkpoint leaves it out. | `AGENTS.md`: missing or unexpected weights mean a name mismatch; PyTorch's BatchNorm loading [PyTorch batch norm] |
-| `inference(&self, …)` runs under `no_grad` and returns a `Result`: a port calls `tch`'s `f_` ops and this crate's layers, never `tch`'s panicking forms. | `AGENTS.md`; `tch`'s fallible ops [tch fallible] |
+| `inference(&self, …)` runs under `no_grad` and returns a `Result`: a port calls `koharu-torch`'s `f_` ops and this crate's layers, never its panicking forms. | `AGENTS.md`; `tch`'s fallible ops [tch fallible] |
 | Layers and the weight store are this crate's own (`nn`): a constructor declares each weight under the checkpoint's name, in the store's device and precision, holding nothing until the store fills it from the checkpoint once. | `tch`'s `nn` starts each weight random and tracking gradients [tch var], and its loading ignores weights the model doesn't declare [tch load] |
 | Token ids and index tensors are made on the model's device. | `AGENTS.md`: "a CPU tensor used against accelerator embeddings is a defect" |
 | Each model has one loader, and detectors default their thresholds the same way. | `AGENTS.md`: the same public lifecycle for every model |
@@ -65,32 +65,6 @@ clock stops, on representative pages (`AGENTS.md` "Performance"). The
 command-line programs become examples, so their dependencies (`clap`,
 `tracing-subscriber`, `ab_glyph`) are development dependencies only [Cargo
 examples].
-
-## Changes from today
-
-- Hayai's repetition penalty builds its token ids on the model's device; today
-  they're built on the CPU, every token, against GPU logits.
-- Precision comes from the given device, the cuDNN switch is set once, and
-  Vulkan fails instead of falling back to the CPU silently.
-- `init` and `device` go: the runtime starts and hands out the device.
-- RF-DETR's weights are frozen, and loading fails on unexpected weights.
-- The OCR models take batches.
-- FLUX.2 Klein loads once for generation and inpainting; today two types load
-  it twice.
-- `llm` moves to `koharu-llm`, with `llguidance`, `minijinja`, and the other
-  dependencies only it used.
-- Ports run on upstream `tch` 0.26 (`torch-sys`'s README), and the layers and
-  weight store `koharu-torch` held move here.
-- One repetition penalty, `Vec::try_from` for tensors, and `round_ties_even`
-  replace the copies across ports.
-- Hayai's SigLIP2 references are pinned to commits; the benchmarks run on the
-  GPU.
-- The models no pipeline step runs go: the comic layout, speech bubble, comic
-  text, text mask, and document layout detectors, the onomatopoeia, PP-OCRv6,
-  and font models, and PaddleOCR-VL's libtorch port, whose task prompts the
-  quantized model keeps.
-
-## Sources
 
 [Cargo examples]: https://doc.rust-lang.org/cargo/reference/cargo-targets.html#examples
 [PyTorch batch norm]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/nn/modules/batchnorm.py#L117-L141

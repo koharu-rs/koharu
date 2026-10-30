@@ -12,13 +12,14 @@ use koharu_llm::{
         message::{DocumentSourceKind, Image, ImageMediaType, UserContent},
     },
 };
+use koharu_runtime::Repository;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-crate::model_repository!("PaddlePaddle/PaddleOCR-VL-1.6-GGUF" @ "511b09642bb324401f15f97cc23bc67e8f0a291d" {
-    MODEL = "PaddleOCR-VL-1.6-GGUF.gguf",
-    PROJECTOR = "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
-});
+const REPOSITORY: Repository = Repository::model(
+    "PaddlePaddle/PaddleOCR-VL-1.6-GGUF",
+    "511b09642bb324401f15f97cc23bc67e8f0a291d",
+);
 
 const MAX_NEW_TOKENS: usize = 512;
 const REPETITION_PENALTY: f32 = 1.2;
@@ -66,7 +67,12 @@ pub struct PaddleOCRVLQuantized {
 impl PaddleOCRVLQuantized {
     /// Loads the model to decode `sequences` crops together.
     pub async fn load(sequences: u32) -> Result<Self> {
-        let (model, projector) = tokio::try_join!(MODEL.resolve(), PROJECTOR.resolve())
+        let [model, projector] = REPOSITORY
+            .resolve([
+                "PaddleOCR-VL-1.6-GGUF.gguf",
+                "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
+            ])
+            .await
             .context("failed to resolve quantized PaddleOCR-VL-1.6 files")?;
         let model = koharu_llm::load(
             &model,

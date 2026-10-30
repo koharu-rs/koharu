@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::config::FFCResNetGeneratorConfig;
 
@@ -29,7 +29,7 @@ impl Model {
         Ok(())
     }
 
-    pub fn forward(&self, image: &Tensor, mask: &Tensor) -> tch::Result<Tensor> {
+    pub fn forward(&self, image: &Tensor, mask: &Tensor) -> koharu_torch::Result<Tensor> {
         let image = image.f_to_kind(self.vs.kind())?;
         let mask = mask.f_to_kind(self.vs.kind())?;
         let inverse_mask = mask.f_ones_like()?.f_sub(&mask)?;
@@ -147,7 +147,7 @@ impl FFCResNetGenerator {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let input = input.f_reflection_pad2d([3, 3, 3, 3])?;
         let mut pair = self.initial.forward((input, None))?;
         for layer in &self.downsample {
@@ -199,7 +199,7 @@ impl FFCResnetBlock {
         })
     }
 
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
         let id_l = input.0.f_alias()?;
         let id_g = input.1.as_ref().map(Tensor::f_alias).transpose()?;
         let output = self.conv2.forward(self.conv1.forward(input)?)?;
@@ -264,7 +264,7 @@ impl FFC_BN_ACT {
         })
     }
 
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
         let output = self.ffc.forward(input)?;
         let local = self
             .bn_l
@@ -365,7 +365,7 @@ impl FFC {
         })
     }
 
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
         let local_from_local = self
             .convl2l
             .as_ref()
@@ -438,7 +438,7 @@ impl SpectralTransform {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let input = if self.stride == 2 {
             input.f_avg_pool2d([2, 2], [2, 2], [0, 0], false, true, None)?
         } else {
@@ -476,7 +476,7 @@ impl FourierUnit {
         })
     }
 
-    fn forward(&self, input: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, input: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = input.size();
         let batch = size[0];
         let height = size[2];
@@ -522,7 +522,7 @@ impl FourierUnit {
 struct ConcatTupleLayer;
 
 impl ConcatTupleLayer {
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> tch::Result<Tensor> {
+    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<Tensor> {
         match input.1 {
             Some(global) => Tensor::f_cat(&[input.0, global], 1),
             None => Ok(input.0),

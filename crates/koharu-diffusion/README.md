@@ -2,7 +2,7 @@
 
 `koharu-diffusion` runs stable-diffusion.cpp [sd.cpp] for Koharu's diffusion
 models, FLUX.2 Klein and RORem, loaded when the runtime starts.
-`koharu-diffusion-sys` holds the header, copied verbatim from sd.cpp `1d0a58a`,
+`koharu-diffusion-sys` holds the header, copied verbatim from sd.cpp `be48649`,
 and the bindings generated from it. No crate on crates.io loads sd.cpp at run
 time, so these stay.
 
@@ -36,33 +36,9 @@ an image and a mask, the parameters Koharu sets, and logging, sent to
 callback never crosses into C, as now. One sd.cpp commit is cited everywhere,
 and the runtime checks the library's `sd_commit()` matches it when it loads.
 
-## Changes from today
-
-- Parameters come from sd.cpp's initialisers; today the defaults are copied by
-  hand and turn `auto_fit` off, and FLUX keeps its weights in system memory by
-  a rule that never passes.
-- `max_vram` is bytes from the pipeline's budget instead of an untyped string
-  nothing sets.
-- Loading fails with an error when the library or a function is missing,
-  instead of panicking, and building default parameters no longer calls
-  native code.
-- The global lock around every native call goes, with the callbacks it served:
-  progress, preview, and graph. The logging callback is installed once.
-- Unused surface goes, about 1,800 lines: video and audio, the upscaler,
-  conversion, Canny, LoRA, PhotoMaker, PuLID, the step caches (EasyCache and
-  the others, which skip work between denoising steps and so change the
-  image), and the cancel handle, which kept a model's memory alive after
-  unloading; the pipeline cancels between crops.
-- The conditioning cache is kept and named as the reason a crop's prompt costs
-  nothing after the first; today it's on only because the wrapper copies
-  sd.cpp's default by hand.
-- Parameters borrow their images instead of owning copies.
-
-## Sources
-
-[sd.cpp]: https://github.com/leejet/stable-diffusion.cpp/tree/1d0a58a35050d285b1d6fb1bc68a92924d35825e
-[sd init]: https://github.com/leejet/stable-diffusion.cpp/blob/1d0a58a35050d285b1d6fb1bc68a92924d35825e/include/stable-diffusion.h#L515-L531
-[sd memory]: https://github.com/leejet/stable-diffusion.cpp/blob/1d0a58a35050d285b1d6fb1bc68a92924d35825e/include/stable-diffusion.h#L238-L244
-[sd backend]: https://github.com/leejet/stable-diffusion.cpp/blob/1d0a58a35050d285b1d6fb1bc68a92924d35825e/docs/backend.md#L45-L49
-[sd conditioning cache]: https://github.com/leejet/stable-diffusion.cpp/blob/1d0a58a35050d285b1d6fb1bc68a92924d35825e/include/stable-diffusion.h#L253
+[sd.cpp]: https://github.com/leejet/stable-diffusion.cpp/tree/be486498eadc29dc3cd234d944c2180ed42b1415
+[sd init]: https://github.com/leejet/stable-diffusion.cpp/blob/be486498eadc29dc3cd234d944c2180ed42b1415/include/stable-diffusion.h#L538-L554
+[sd memory]: https://github.com/leejet/stable-diffusion.cpp/blob/be486498eadc29dc3cd234d944c2180ed42b1415/include/stable-diffusion.h#L241-L247
+[sd backend]: https://github.com/leejet/stable-diffusion.cpp/blob/be486498eadc29dc3cd234d944c2180ed42b1415/docs/backend.md#L45-L49
+[sd conditioning cache]: https://github.com/leejet/stable-diffusion.cpp/blob/be486498eadc29dc3cd234d944c2180ed42b1415/include/stable-diffusion.h#L256
 [sd prompt cache issue]: https://github.com/leejet/stable-diffusion.cpp/issues/1774

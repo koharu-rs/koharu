@@ -2,140 +2,108 @@ use std::{
     fs::{File, OpenOptions},
     future::Future,
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::LazyLock,
 };
 
 use anyhow::{Context, Result, ensure};
 
-static ROOT: OnceLock<PathBuf> = OnceLock::new();
-
-/// Koharu's process-wide immutable package store.
-pub struct Store;
-
-impl Store {
-    /// Selects the store before the first artifact or runtime is resolved.
-    pub fn configure(root: impl Into<PathBuf>) -> Result<()> {
-        let requested = root.into();
-        ensure!(
-            requested.is_absolute(),
-            "runtime store must be absolute: {}",
-            requested.display()
-        );
-
-        if let Some(active) = ROOT.get() {
-            ensure!(
-                active == &requested,
-                "runtime store is already {}",
-                active.display()
-            );
-            return Ok(());
-        }
-
-        if let Err(requested) = ROOT.set(requested) {
-            let active = ROOT
-                .get()
-                .context("runtime store was configured concurrently without a value")?;
-            ensure!(
-                active == &requested,
-                "runtime store is already {}",
-                active.display()
-            );
-        }
-        Ok(())
-    }
-
-    /// Returns the configured root, or the operating system cache by default.
-    #[must_use]
-    pub fn root() -> &'static Path {
-        ROOT.get_or_init(|| {
+/// The one store everything installs into: the `store` folder beside the
+/// executable in Windows release builds, where the installer puts Koharu,
+/// and the OS cache folder's `koharu/store` otherwise.
+pub(crate) fn root() -> &'static Path {
+    static ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
+        if cfg!(all(windows, not(debug_assertions))) {
+            std::env::current_exe()
+                .expect("Koharu knows where its executable is")
+                .with_file_name("store")
+        } else {
             dirs::cache_dir()
                 .unwrap_or_else(std::env::temp_dir)
                 .join("koharu")
-                .join("packages")
-        })
+                .join("store")
+        }
+    });
+    &ROOT
+}
+
+pub(crate) async fn directory<Valid, Install, Pending>(
+    target: PathBuf,
+    valid: Valid,
+    install: Install,
+) -> Result<PathBuf>
+where
+    Valid: Fn(&Path) -> bool + Send + Sync,
+    Install: FnOnce(PathBuf) -> Pending + Send,
+    Pending: Future<Output = Result<()>> + Send,
+{
+    if valid(&target) {
+        return Ok(target);
     }
 
-    pub(crate) async fn directory<Valid, Install, Pending>(
-        target: PathBuf,
-        valid: Valid,
-        install: Install,
-    ) -> Result<PathBuf>
-    where
-        Valid: Fn(&Path) -> bool + Send + Sync,
-        Install: FnOnce(PathBuf) -> Pending + Send,
-        Pending: Future<Output = Result<()>> + Send,
+    let _guard = Lock::acquire(&target).await?;
+    if valid(&target) {
+        return Ok(target);
+    }
+
+    let parent = target
+        .parent()
+        .with_context(|| format!("{} has no parent directory", target.display()))?;
+    if target
+        .try_exists()
+        .with_context(|| format!("failed to inspect {}", target.display()))?
     {
-        if valid(&target) {
-            return Ok(target);
-        }
+        std::fs::remove_dir_all(&target)
+            .with_context(|| format!("failed to replace incomplete {}", target.display()))?;
+    }
+    let stage = tempfile::Builder::new()
+        .prefix(".install-")
+        .tempdir_in(parent)
+        .with_context(|| format!("failed to stage {}", target.display()))?;
+    install(stage.path().to_owned()).await?;
+    ensure!(
+        valid(stage.path()),
+        "installer produced an incomplete package"
+    );
 
-        let _guard = Lock::acquire(&target).await?;
-        if valid(&target) {
-            return Ok(target);
-        }
+    match std::fs::rename(stage.path(), &target) {
+        Ok(()) => Ok(target),
+        Err(_) if valid(&target) => Ok(target),
+        Err(error) => Err(error).with_context(|| format!("failed to publish {}", target.display())),
+    }
+}
 
-        let parent = target
-            .parent()
-            .with_context(|| format!("{} has no parent directory", target.display()))?;
-        if target
-            .try_exists()
-            .with_context(|| format!("failed to inspect {}", target.display()))?
-        {
-            std::fs::remove_dir_all(&target)
-                .with_context(|| format!("failed to replace incomplete {}", target.display()))?;
-        }
-        let stage = tempfile::Builder::new()
-            .prefix(".install-")
-            .tempdir_in(parent)
-            .with_context(|| format!("failed to stage {}", target.display()))?;
-        install(stage.path().to_owned()).await?;
-        ensure!(
-            valid(stage.path()),
-            "installer produced an incomplete package"
-        );
-
-        match std::fs::rename(stage.path(), &target) {
-            Ok(()) => Ok(target),
-            Err(_) if valid(&target) => Ok(target),
-            Err(error) => {
-                Err(error).with_context(|| format!("failed to publish {}", target.display()))
-            }
-        }
+pub(crate) async fn file<Install, Pending>(target: PathBuf, install: Install) -> Result<PathBuf>
+where
+    Install: FnOnce(PathBuf) -> Pending + Send,
+    Pending: Future<Output = Result<()>> + Send,
+{
+    if target.is_file() {
+        return Ok(target);
     }
 
-    pub(crate) async fn file<Install, Pending>(target: PathBuf, install: Install) -> Result<PathBuf>
-    where
-        Install: FnOnce(PathBuf) -> Pending + Send,
-        Pending: Future<Output = Result<()>> + Send,
-    {
-        if target.is_file() {
-            return Ok(target);
-        }
-
-        let _guard = Lock::acquire(&target).await?;
-        if target.is_file() {
-            return Ok(target);
-        }
-
-        let parent = target
-            .parent()
-            .with_context(|| format!("{} has no parent directory", target.display()))?;
-        let stage = tempfile::NamedTempFile::new_in(parent)
-            .with_context(|| format!("failed to stage {}", target.display()))?
-            .into_temp_path();
-        install(stage.to_path_buf()).await?;
-        ensure!(stage.is_file(), "installer did not create an artifact");
-
-        if target.exists() {
-            std::fs::remove_file(&target)
-                .with_context(|| format!("failed to replace incomplete {}", target.display()))?;
-        }
-        stage
-            .persist(&target)
-            .map_err(|error| error.error)
-            .with_context(|| format!("failed to publish {}", target.display()))?;
-        Ok(target)
+    let _guard = Lock::acquire(&target).await?;
+    if target.is_file() {
+        return Ok(target);
     }
+
+    let parent = target
+        .parent()
+        .with_context(|| format!("{} has no parent directory", target.display()))?;
+    let stage = tempfile::NamedTempFile::new_in(parent)
+        .with_context(|| format!("failed to stage {}", target.display()))?
+        .into_temp_path();
+    install(stage.to_path_buf()).await?;
+    ensure!(stage.is_file(), "installer did not create an artifact");
+
+    if target.exists() {
+        std::fs::remove_file(&target)
+            .with_context(|| format!("failed to replace incomplete {}", target.display()))?;
+    }
+    stage
+        .persist(&target)
+        .map_err(|error| error.error)
+        .with_context(|| format!("failed to publish {}", target.display()))?;
+    Ok(target)
 }
 
 /// Holds a target against every other install of it, in this process or
@@ -173,34 +141,39 @@ impl Lock {
     }
 }
 
-/// Removes the entries of `directory` named with `prefix`, other than
-/// `keep`: the builds a newer one replaced. A build another running Koharu
-/// still holds open stays, and a later start removes it.
-pub(crate) async fn remove_others(directory: PathBuf, prefix: String, keep: String) {
+/// Removes every other version beside each of `versions`, the version
+/// folders a start installed. A version another running Koharu still holds
+/// open stays, and a later start removes it.
+pub(crate) async fn remove_others(versions: Vec<PathBuf>) {
     let removed = tokio::task::spawn_blocking(move || {
-        let Ok(entries) = std::fs::read_dir(&directory) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name == keep || !name.starts_with(&prefix) || name.starts_with('.') {
+        for version in versions {
+            let (Some(package), Some(keep)) = (version.parent(), version.file_name()) else {
                 continue;
-            }
-            let path = entry.path();
-            let result = if path.is_dir() {
-                std::fs::remove_dir_all(&path)
-            } else {
-                std::fs::remove_file(&path)
             };
-            match result {
-                Ok(()) => tracing::info!("removed {}", path.display()),
-                Err(error) => tracing::warn!("couldn't remove {}: {error}", path.display()),
+            let Ok(entries) = std::fs::read_dir(package) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                if name == keep || name.to_string_lossy().starts_with('.') {
+                    continue;
+                }
+                let path = entry.path();
+                let result = if path.is_dir() {
+                    std::fs::remove_dir_all(&path)
+                } else {
+                    std::fs::remove_file(&path)
+                };
+                match result {
+                    Ok(()) => tracing::info!("removed {}", path.display()),
+                    Err(error) => tracing::warn!("couldn't remove {}: {error}", path.display()),
+                }
             }
         }
     })
     .await;
     if let Err(error) = removed {
-        tracing::warn!("removing older builds failed: {error}");
+        tracing::warn!("removing older versions failed: {error}");
     }
 }
 
@@ -222,7 +195,7 @@ mod tests {
             let target = target.clone();
             let attempts = attempts.clone();
             async move {
-                Store::directory(
+                directory(
                     target,
                     |path| path.join("ready").is_file(),
                     move |stage| async move {
@@ -248,7 +221,7 @@ mod tests {
         let target = root.path().join("runtime");
         let winner = target.clone();
 
-        let installed = Store::directory(
+        let installed = directory(
             target.clone(),
             |path| path.join("ready").is_file(),
             move |stage| async move {
@@ -282,7 +255,7 @@ mod tests {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(Store::directory(
+                .block_on(directory(
                     target.clone(),
                     |path| path.join("ready").is_file(),
                     move |stage| async move {

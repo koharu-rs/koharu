@@ -1,7 +1,7 @@
 //! The GGUF models Koharu offers, each pinned to a Hugging Face revision.
 //! Ported from `koharu-translator`'s catalog.
 
-use koharu_runtime::HuggingFaceFile;
+use koharu_runtime::Repository;
 
 use super::Sampling;
 
@@ -11,8 +11,7 @@ pub(crate) const DEFAULT_QUANTIZATION: &str = "Q4_K_XL";
 pub(crate) struct Entry {
     pub(crate) id: &'static str,
     pub(crate) name: &'static str,
-    pub(crate) repository: &'static str,
-    pub(crate) revision: &'static str,
+    pub(crate) repository: Repository,
     /// The first is the default.
     pub(crate) quantizations: &'static [Quantization],
     pub(crate) projector: Option<&'static str>,
@@ -54,10 +53,6 @@ const fn sampling(temperature: f64, top_k: u32, top_p: f64) -> Sampling {
 }
 
 impl Entry {
-    pub(crate) fn file(&self, file: &'static str) -> HuggingFaceFile<'static> {
-        HuggingFaceFile::pinned(self.repository, self.revision, file)
-    }
-
     pub(crate) fn quantization(&self, id: Option<&str>) -> anyhow::Result<&'static Quantization> {
         let Some(id) = id else {
             return Ok(&self.quantizations[0]);
@@ -80,8 +75,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "lfm2.5-1.2b-instruct",
         name: "LFM2.5 1.2B Instruct",
-        repository: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
-        revision: "afbd8eaeab5dd94ba0b079ebfb02517d19641e38",
+        repository: Repository::model(
+            "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+            "afbd8eaeab5dd94ba0b079ebfb02517d19641e38",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_M", "Q4_K_M", "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"),
             Quantization::new("BF16", "BF16", "LFM2.5-1.2B-Instruct-BF16.gguf"),
@@ -101,8 +98,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "ministral-3-8b-instruct",
         name: "Ministral 3 8B Instruct",
-        repository: "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
-        revision: "0102285ad796bd99af90f58de616092e5630e970",
+        repository: Repository::model(
+            "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+            "0102285ad796bd99af90f58de616092e5630e970",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_M",
@@ -128,8 +127,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-e2b-it",
         name: "Gemma 4 E2B Instruct",
-        repository: "unsloth/gemma-4-E2B-it-qat-GGUF",
-        revision: "66a399f68ddd113b06dff02fca9523e55465d11d",
+        repository: Repository::model(
+            "unsloth/gemma-4-E2B-it-qat-GGUF",
+            "66a399f68ddd113b06dff02fca9523e55465d11d",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"),
             Quantization::new("Q2_K_XL", "Q2_K XL", "gemma-4-E2B-it-qat-UD-Q2_K_XL.gguf"),
@@ -142,8 +143,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-e4b-it",
         name: "Gemma 4 E4B Instruct",
-        repository: "unsloth/gemma-4-E4B-it-qat-GGUF",
-        revision: "8c5a9e4fd5482e2be20fe0bf013b4c262a8f4265",
+        repository: Repository::model(
+            "unsloth/gemma-4-E4B-it-qat-GGUF",
+            "8c5a9e4fd5482e2be20fe0bf013b4c262a8f4265",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"),
             Quantization::new("Q2_K_XL", "Q2_K XL", "gemma-4-E4B-it-qat-UD-Q2_K_XL.gguf"),
@@ -156,8 +159,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-12b-it",
         name: "Gemma 4 12B Instruct",
-        repository: "unsloth/gemma-4-12B-it-qat-GGUF",
-        revision: "980b060c40a8539ac159e0501a3e0f66a6365af3",
+        repository: Repository::model(
+            "unsloth/gemma-4-12B-it-qat-GGUF",
+            "980b060c40a8539ac159e0501a3e0f66a6365af3",
+        ),
         quantizations: &[Quantization::new(
             "Q4_K_XL",
             "Q4_K XL",
@@ -171,8 +176,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-26b-a4b-it",
         name: "Gemma 4 26B A4B Instruct",
-        repository: "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
-        revision: "7b92b5b28818151e8669af2e45e88d6086f490dd",
+        repository: Repository::model(
+            "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+            "7b92b5b28818151e8669af2e45e88d6086f490dd",
+        ),
         quantizations: &[Quantization::new(
             "Q4_K_XL",
             "Q4_K XL",
@@ -186,8 +193,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-31b-it",
         name: "Gemma 4 31B Instruct",
-        repository: "unsloth/gemma-4-31B-it-qat-GGUF",
-        revision: "43cc1aeb31adf47ec06a854507ce552cd9862e6f",
+        repository: Repository::model(
+            "unsloth/gemma-4-31B-it-qat-GGUF",
+            "43cc1aeb31adf47ec06a854507ce552cd9862e6f",
+        ),
         quantizations: &[Quantization::new(
             "Q4_K_XL",
             "Q4_K XL",
@@ -201,8 +210,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-e2b-uncensored",
         name: "Gemma 4 E2B Uncensored",
-        repository: "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
-        revision: "da8593c3e407afcd3e7da94ff2d69d77e2a28a48",
+        repository: Repository::model(
+            "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+            "da8593c3e407afcd3e7da94ff2d69d77e2a28a48",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_P",
@@ -248,8 +259,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-e4b-uncensored",
         name: "Gemma 4 E4B Uncensored",
-        repository: "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
-        revision: "45b6a334b4bcd1d7f37179df58b3b1d66a184e5d",
+        repository: Repository::model(
+            "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+            "45b6a334b4bcd1d7f37179df58b3b1d66a184e5d",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_P",
@@ -300,8 +313,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-12b-uncensored",
         name: "Gemma 4 12B Uncensored",
-        repository: "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
-        revision: "ae8045ac2bd216293ca49a3065da2c942dde4b68",
+        repository: Repository::model(
+            "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+            "ae8045ac2bd216293ca49a3065da2c942dde4b68",
+        ),
         quantizations: &[Quantization::new(
             "Q4_K_M",
             "Q4_K M",
@@ -315,8 +330,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-26b-a4b-uncensored",
         name: "Gemma 4 26B A4B Uncensored",
-        repository: "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
-        revision: "f9093662a2e7ae0503f637088bc96f77a1a70c83",
+        repository: Repository::model(
+            "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+            "f9093662a2e7ae0503f637088bc96f77a1a70c83",
+        ),
         quantizations: &[Quantization::new(
             "Q4_K_M",
             "Q4_K M",
@@ -330,8 +347,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "gemma4-31b-uncensored",
         name: "Gemma 4 31B Uncensored",
-        repository: "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
-        revision: "9654466e82d83f5ebfe1518a369bc5900873abb1",
+        repository: Repository::model(
+            "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+            "9654466e82d83f5ebfe1518a369bc5900873abb1",
+        ),
         quantizations: &[Quantization::new(
             "Q4_K_M",
             "Q4_K M",
@@ -345,8 +364,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-0.8b",
         name: "Qwen 3.5 0.8B",
-        repository: "unsloth/Qwen3.5-0.8B-GGUF",
-        revision: "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+        repository: Repository::model(
+            "unsloth/Qwen3.5-0.8B-GGUF",
+            "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.5-0.8B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.5-0.8B-UD-IQ2_M.gguf"),
@@ -366,8 +387,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-2b",
         name: "Qwen 3.5 2B",
-        repository: "unsloth/Qwen3.5-2B-GGUF",
-        revision: "f6d5376be1edb4d416d56da11e5397a961aca8ae",
+        repository: Repository::model(
+            "unsloth/Qwen3.5-2B-GGUF",
+            "f6d5376be1edb4d416d56da11e5397a961aca8ae",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.5-2B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.5-2B-UD-IQ2_M.gguf"),
@@ -387,8 +410,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-4b",
         name: "Qwen 3.5 4B",
-        repository: "unsloth/Qwen3.5-4B-GGUF",
-        revision: "e87f176479d0855a907a41277aca2f8ee7a09523",
+        repository: Repository::model(
+            "unsloth/Qwen3.5-4B-GGUF",
+            "e87f176479d0855a907a41277aca2f8ee7a09523",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.5-4B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.5-4B-UD-IQ2_M.gguf"),
@@ -408,8 +433,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-9b",
         name: "Qwen 3.5 9B",
-        repository: "unsloth/Qwen3.5-9B-GGUF",
-        revision: "3885219b6810b007914f3a7950a8d1b469d598a5",
+        repository: Repository::model(
+            "unsloth/Qwen3.5-9B-GGUF",
+            "3885219b6810b007914f3a7950a8d1b469d598a5",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.5-9B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.5-9B-UD-IQ2_M.gguf"),
@@ -429,8 +456,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-27b",
         name: "Qwen 3.5 27B",
-        repository: "unsloth/Qwen3.5-27B-GGUF",
-        revision: "3221f178a6b842d04f1fb42f1c413534adcc0a6a",
+        repository: Repository::model(
+            "unsloth/Qwen3.5-27B-GGUF",
+            "3221f178a6b842d04f1fb42f1c413534adcc0a6a",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.5-27B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.5-27B-UD-IQ2_M.gguf"),
@@ -450,8 +479,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-35b-a3b",
         name: "Qwen 3.5 35B A3B",
-        repository: "unsloth/Qwen3.5-35B-A3B-GGUF",
-        revision: "bc014a17be43adabd7066b7a86075ff935c6a4e2",
+        repository: Repository::model(
+            "unsloth/Qwen3.5-35B-A3B-GGUF",
+            "bc014a17be43adabd7066b7a86075ff935c6a4e2",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.5-35B-A3B-UD-IQ2_M.gguf"),
@@ -471,8 +502,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.6-27b",
         name: "Qwen 3.6 27B",
-        repository: "unsloth/Qwen3.6-27B-GGUF",
-        revision: "82d411acf4a06cfb8d9b073a5211bf410bfc29bf",
+        repository: Repository::model(
+            "unsloth/Qwen3.6-27B-GGUF",
+            "82d411acf4a06cfb8d9b073a5211bf410bfc29bf",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.6-27B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.6-27B-UD-IQ2_M.gguf"),
@@ -492,8 +525,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.6-35b-a3b",
         name: "Qwen 3.6 35B A3B",
-        repository: "unsloth/Qwen3.6-35B-A3B-GGUF",
-        revision: "a483e9e6cbd595906af30beda3187c2663a1118c",
+        repository: Repository::model(
+            "unsloth/Qwen3.6-35B-A3B-GGUF",
+            "a483e9e6cbd595906af30beda3187c2663a1118c",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ1_M", "IQ1 M", "Qwen3.6-35B-A3B-UD-IQ1_M.gguf"),
@@ -524,8 +559,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.8-27b",
         name: "Qwen 3.8 27B",
-        repository: "unsloth/Qwen3.8-27B-GGUF",
-        revision: "f975863083b62f54a5e6fac11671c750c2bbc59c",
+        repository: Repository::model(
+            "unsloth/Qwen3.8-27B-GGUF",
+            "f975863083b62f54a5e6fac11671c750c2bbc59c",
+        ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.8-27B-UD-Q4_K_XL.gguf"),
             Quantization::new("IQ2_M", "IQ2 M", "Qwen3.8-27B-UD-IQ2_M.gguf"),
@@ -545,8 +582,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-2b-uncensored",
         name: "Qwen 3.5 2B Uncensored",
-        repository: "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
-        revision: "2bcf35c1ebf62c837c12c1aa90b578ff4717e831",
+        repository: Repository::model(
+            "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+            "2bcf35c1ebf62c837c12c1aa90b578ff4717e831",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_M",
@@ -577,8 +616,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-4b-uncensored",
         name: "Qwen 3.5 4B Uncensored",
-        repository: "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
-        revision: "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
+        repository: Repository::model(
+            "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+            "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_M",
@@ -609,8 +650,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.5-9b-uncensored",
         name: "Qwen 3.5 9B Uncensored",
-        repository: "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
-        revision: "0a41c68809d375475f954be12ba7c40efa56c2a9",
+        repository: Repository::model(
+            "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+            "0a41c68809d375475f954be12ba7c40efa56c2a9",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_M",
@@ -641,8 +684,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.6-27b-uncensored",
         name: "Qwen 3.6 27B Uncensored",
-        repository: "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced",
-        revision: "9a28c2fbd15f21fb8ed204074c6f58d5bc889941",
+        repository: Repository::model(
+            "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced",
+            "9a28c2fbd15f21fb8ed204074c6f58d5bc889941",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_P",
@@ -703,8 +748,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.6-35b-a3b-uncensored",
         name: "Qwen 3.6 35B A3B Uncensored",
-        repository: "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
-        revision: "f12a584fecbeb5f20001130d8ecd66c9327ae685",
+        repository: Repository::model(
+            "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+            "f12a584fecbeb5f20001130d8ecd66c9327ae685",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_P",
@@ -760,8 +807,10 @@ pub(crate) static MODELS: &[Entry] = &[
     Entry {
         id: "qwen3.8-27b-uncensored",
         name: "Qwen 3.8 27B Uncensored",
-        repository: "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
-        revision: "993a5971fda8f30dd1b7eb2654792ba4415c7460",
+        repository: Repository::model(
+            "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
+            "993a5971fda8f30dd1b7eb2654792ba4415c7460",
+        ),
         quantizations: &[
             Quantization::new(
                 "Q4_K_P",
@@ -829,7 +878,6 @@ mod tests {
     fn entries_are_unique_and_complete() {
         for (index, entry) in MODELS.iter().enumerate() {
             assert!(!MODELS[..index].iter().any(|other| other.id == entry.id));
-            assert_eq!(entry.revision.len(), 40);
             assert!(!entry.quantizations.is_empty());
             for (index, quantization) in entry.quantizations.iter().enumerate() {
                 assert!(!quantization.file.is_empty());
