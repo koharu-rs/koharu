@@ -18,8 +18,6 @@ pub(crate) fn candidates() -> Vec<Device> {
             backend: Backend::Metal,
             index: 0,
             integrated: true,
-            compute_capability: 0,
-            target: None,
         };
         devices.push((metal, 0));
     } else if cfg!(any(target_os = "linux", target_os = "windows")) {
@@ -32,24 +30,23 @@ pub(crate) fn candidates() -> Vec<Device> {
                 backend: Backend::Vulkan,
                 index: 0,
                 integrated: false,
-                compute_capability: 0,
-                target: None,
             };
             devices.push((vulkan, 0));
         }
     }
     devices.sort_by_key(|(device, memory)| {
-        let rank = match (device.backend, device.integrated) {
-            (Backend::Metal, _) | (Backend::Cuda, false) => 0,
-            (Backend::Rocm, false) => 1,
-            (Backend::Cuda, true) => 2,
-            (Backend::Rocm, true) => 3,
-            (Backend::Vulkan, _) => 4,
+        let (rank, compute_capability) = match (device.backend, device.integrated) {
+            (Backend::Metal, _) => (0, 0),
+            (Backend::Cuda { compute_capability }, false) => (0, compute_capability),
+            (Backend::Rocm { .. }, false) => (1, 0),
+            (Backend::Cuda { compute_capability }, true) => (2, compute_capability),
+            (Backend::Rocm { .. }, true) => (3, 0),
+            (Backend::Vulkan, _) => (4, 0),
         };
         (
             rank,
             Reverse(*memory),
-            Reverse(device.compute_capability),
+            Reverse(compute_capability),
             device.index,
         )
     });

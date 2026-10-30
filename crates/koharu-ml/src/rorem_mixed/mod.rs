@@ -11,6 +11,7 @@ mod processor;
 use anyhow::{Context, Result, ensure};
 use image::{DynamicImage, GrayImage, RgbImage};
 use koharu_diffusion::{ImageParams, SampleMethod, Scheduler};
+use koharu_runtime::Repository;
 
 use self::{
     model::{Model, ModelPaths},
@@ -22,15 +23,14 @@ pub use self::processor::RoremMixedOptions;
 pub const DEFAULT_PROMPT: &str = "clean manga illustration, crisp black line art, flat colors, seamless original background, clean white speech bubble, no text";
 pub const DEFAULT_NEGATIVE_PROMPT: &str = "text, letters, words, symbols, watermark, signature, blurry, smudged, dirty, gray artifacts, extra objects, photorealistic";
 
-crate::model_repository!("mayocream/RORem-mixed-GGUF" @ "62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56" {
-    DIFFUSION_MODEL = "rorem-mixed-unet-q4_K.gguf",
-    SDXL_VERSION_MARKER = "sdxl-version-marker.safetensors",
-});
-crate::model_repository!("diffusers/stable-diffusion-xl-1.0-inpainting-0.1" @ "115134f363124c53c7d878647567d04daf26e41e" {
-    VAE_MODEL = "vae/diffusion_pytorch_model.fp16.safetensors",
-    CLIP_L_MODEL = "text_encoder/model.fp16.safetensors",
-    CLIP_G_MODEL = "text_encoder_2/model.fp16.safetensors",
-});
+const ROREM: Repository = Repository::model(
+    "mayocream/RORem-mixed-GGUF",
+    "62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56",
+);
+const SDXL_INPAINTING: Repository = Repository::model(
+    "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
+    "115134f363124c53c7d878647567d04daf26e41e",
+);
 
 #[derive(Debug)]
 pub struct RoremMixed {
@@ -41,25 +41,32 @@ impl RoremMixed {
     /// Loads the model, its weights placed to fit `max_vram` bytes of the
     /// device.
     pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
-        let (diffusion_model, version_marker, vae, clip_l, clip_g) = tokio::try_join!(
-            DIFFUSION_MODEL.resolve(),
-            SDXL_VERSION_MARKER.resolve(),
-            VAE_MODEL.resolve(),
-            CLIP_L_MODEL.resolve(),
-            CLIP_G_MODEL.resolve(),
-        )
-        .context("failed to resolve RORem mixed model assets")?;
-        let model = Model::new(
-            device,
-            max_vram,
-            &ModelPaths {
+        let paths = async {
+            let [diffusion_model, version_marker] = ROREM
+                .resolve([
+                    "rorem-mixed-unet-q4_K.gguf",
+                    "sdxl-version-marker.safetensors",
+                ])
+                .await?;
+            let [vae, clip_l, clip_g] = SDXL_INPAINTING
+                .resolve([
+                    "vae/diffusion_pytorch_model.fp16.safetensors",
+                    "text_encoder/model.fp16.safetensors",
+                    "text_encoder_2/model.fp16.safetensors",
+                ])
+                .await?;
+            anyhow::Ok(ModelPaths {
                 diffusion_model,
                 version_marker,
                 vae,
                 clip_l,
                 clip_g,
-            },
-        )?;
+            })
+        };
+        let paths = paths
+            .await
+            .context("failed to resolve RORem mixed model assets")?;
+        let model = Model::new(device, max_vram, &paths)?;
         Ok(Self { model })
     }
 

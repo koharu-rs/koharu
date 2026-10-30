@@ -1,5 +1,6 @@
 //! Koharu's settings and secrets. The README is the design.
 
+mod error;
 mod secrets;
 
 use std::{
@@ -19,6 +20,7 @@ use serde::{
 use toml::de::DeTable;
 use toml_edit::{DocumentMut, Item, TableLike};
 
+pub use error::{Error, Result};
 pub use secrecy::{ExposeSecret, SecretString};
 pub use secrets::{delete_secret, secret, set_secret};
 
@@ -27,37 +29,6 @@ pub use secrets::{delete_secret, secret, set_secret};
 pub trait Section: Default + Serialize + DeserializeOwned {
     /// The table's name, such as `pipeline`.
     const NAME: &'static str;
-}
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("there's no home folder to keep Koharu's settings in")]
-    NoHome,
-    #[error("couldn't read {}", path.display())]
-    Read { path: PathBuf, source: io::Error },
-    #[error("couldn't save {}", path.display())]
-    Write { path: PathBuf, source: io::Error },
-    #[error("{} isn't valid TOML: {message}", path.display())]
-    Toml { path: PathBuf, message: String },
-    #[error("[{section}] in {}: {message}", path.display())]
-    Section {
-        path: PathBuf,
-        section: &'static str,
-        message: String,
-    },
-    #[error("[{section}] can't be written as a TOML table: {message}")]
-    Serialize {
-        section: &'static str,
-        message: String,
-    },
-    #[error("the OS credential store refused: {0}")]
-    Credentials(#[from] keyring::Error),
-    #[error("{} can't be opened: {reason}", path.display())]
-    Secrets { path: PathBuf, reason: String },
-    #[error("the secret `{0}` can't be empty")]
-    EmptySecret(String),
 }
 
 /// The section as `config.toml` holds it now.
@@ -284,6 +255,7 @@ fn save(path: &Path, contents: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
     use serde::{Deserialize, Serialize};
 
     use super::*;
@@ -314,7 +286,19 @@ mod tests {
         let path = directory.path().join("config.toml");
         fs::write(
             &path,
-            "# hand-written\n[pipeline]\nocr = \"manga\" # chosen\nmodel = \"gemma\"\nlater = 1\n\n[pipeline.translation]\nlanguage = \"en\"\n\n[other]\nkept = true\n",
+            indoc! {r#"
+                # hand-written
+                [pipeline]
+                ocr = "manga" # chosen
+                model = "gemma"
+                later = 1
+
+                [pipeline.translation]
+                language = "en"
+
+                [other]
+                kept = true
+            "#},
         )
         .unwrap();
 
@@ -327,7 +311,19 @@ mod tests {
 
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
-            "# hand-written\n[pipeline]\nocr = \"paddle\" # chosen\nlater = 1\n\n[pipeline.translation]\nlanguage = \"en\"\nbatch = 4\n\n[other]\nkept = true\n",
+            indoc! {r#"
+                # hand-written
+                [pipeline]
+                ocr = "paddle" # chosen
+                later = 1
+
+                [pipeline.translation]
+                language = "en"
+                batch = 4
+
+                [other]
+                kept = true
+            "#},
         );
         let pipeline: Pipeline = read(&path).unwrap();
         assert_eq!(pipeline.retries, 0);
@@ -338,7 +334,14 @@ mod tests {
     fn a_value_of_the_wrong_type_fails_naming_its_key() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.toml");
-        fs::write(&path, "[pipeline]\nretries = \"three\"\n").unwrap();
+        fs::write(
+            &path,
+            indoc! {r#"
+                [pipeline]
+                retries = "three"
+            "#},
+        )
+        .unwrap();
 
         let error = read::<Pipeline>(&path).unwrap_err().to_string();
 
@@ -350,7 +353,10 @@ mod tests {
         ));
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
-            "[pipeline]\nretries = \"three\"\n"
+            indoc! {r#"
+                [pipeline]
+                retries = "three"
+            "#}
         );
     }
 }

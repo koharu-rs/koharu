@@ -6,7 +6,7 @@
 use anyhow::{Result, ensure};
 use image::DynamicImage;
 use serde::Serialize;
-use tch::{Device, IndexOp, Kind, Tensor};
+use koharu_torch::{Device, IndexOp, Kind, Tensor};
 
 use super::{
     config::{KoharuLayoutRFDetrSeg2XLConfig, KoharuLayoutThresholds},

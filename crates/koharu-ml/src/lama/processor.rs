@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GrayImage, RgbImage};
 use imageproc::contours::{BorderType, find_contours_with_threshold};
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::{
     config::{HDStrategy, InpaintRequest},

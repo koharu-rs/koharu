@@ -5,9 +5,10 @@ use std::{future::Future, sync::Arc};
 
 use anyhow::{Context, Result, bail};
 use futures::StreamExt;
+use indoc::indoc;
 use rig_agent::agent::{AgentBuilder, MultiTurnStreamItem};
 use rig_core::{
-    completion::{Effort, GenerationOptions, Message},
+    completion::{Document, Effort, GenerationOptions, Message},
     message::ToolName,
     streaming::{Item, StreamEvent},
     tool::{DynamicTool, ToolErrorKind, ToolExecutionError, ToolOutput},
@@ -17,11 +18,12 @@ use serde_json::Value;
 
 use crate::{Selection, hosted};
 
-const INSTRUCTIONS: &str = "You are Koharu Agent, operating a manga translation project inside Koharu.
-The current project state is supplied in a koharu_project_context block on every user turn.
-Use the provided tools whenever the user asks to inspect or change the project. Never claim a change succeeded unless its tool result says it succeeded.
-All project changes are revisioned and reversible. Do not ask for permission. Continue using tools until the request is complete or cannot be completed.
-Do not invent identifiers. Preserve artwork and existing authored content unless the user asks to change them.";
+const INSTRUCTIONS: &str = indoc! {"
+    You are Koharu Agent, operating a manga translation project inside Koharu.
+    The project's state when the request began is the JSON file with id project; tool results report changes since.
+    Use the provided tools whenever the user asks to inspect or change the project. Never claim a change succeeded unless its tool result says it succeeded.
+    All project changes are revisioned and reversible. Do not ask for permission. Continue using tools until the request is complete or cannot be completed.
+    Do not invent identifiers. Preserve artwork and existing authored content unless the user asks to change them."};
 
 /// A run stops after this many model calls; rig's default is one.
 const MAX_TURNS: usize = 20;
@@ -152,14 +154,18 @@ impl<H: Host> Agent<H> {
         if let Some(effort) = config.reasoning {
             agent = agent.options(GenerationOptions::default().reasoning(effort));
         }
-        let message = Message::user(format!(
-            "<koharu_project_context>\n{}\n</koharu_project_context>\n\n{prompt}",
-            self.host.context()
-        ));
         let mut stream = agent
             .build()
-            .prompt(message)
+            .prompt(Message::user(prompt))
             .history(self.history.clone())
+            // rig sends the document ahead of the history with each of the
+            // run's requests and keeps it out of the history, so the model
+            // sees only the project's latest state.
+            .document(Document {
+                id: "project".to_owned(),
+                text: self.host.context().to_string(),
+                additional_props: Default::default(),
+            })
             .max_turns(MAX_TURNS)
             .stream();
         while let Some(item) = stream.next().await {

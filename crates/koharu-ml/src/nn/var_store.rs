@@ -5,7 +5,7 @@ use std::ops::Div;
 use std::sync::{Mutex, PoisonError};
 
 use safetensors::{Dtype, SafeTensors};
-use tch::{Device, Kind, Result, TchError, Tensor};
+use koharu_torch::{Device, Kind, Result, TchError, Tensor};
 
 /// The separator between a weight name's parts.
 const SEP: char = '.';
@@ -68,7 +68,7 @@ impl VarStore {
         let tensors = SafeTensors::deserialize(&mapping)
             .map_err(|err| TchError::FileFormat(format!("{file}: {err}")))?;
         let mut unused = tensors.names().into_iter().collect::<BTreeSet<_>>();
-        let _guard = tch::no_grad_guard();
+        let _guard = koharu_torch::no_grad_guard();
         for (name, variable) in variables.iter_mut() {
             let Ok(view) = tensors.tensor(name) else {
                 if optional.contains(name) {

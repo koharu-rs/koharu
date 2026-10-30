@@ -28,8 +28,8 @@ koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 open = { workspace = true }
 parking_lot = { workspace = true }
-rayon = { workspace = true }
 rars = { workspace = true }
+rayon = { workspace = true }
 rfd = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
@@ -38,13 +38,13 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 strum = { workspace = true }
 tauri = { workspace = true }
-tauri-runtime-cef = { workspace = true }
 tauri-plugin-log = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-process = { workspace = true }
 tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
+tauri-runtime-cef = { workspace = true }
 tauri-specta = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

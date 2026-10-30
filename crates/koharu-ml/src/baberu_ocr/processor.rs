@@ -13,7 +13,7 @@ use icu_properties::{
 };
 use image::{DynamicImage, RgbImage};
 use serde::Deserialize;
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 #[derive(Debug, Deserialize)]
 struct BitImageProcessorConfig {

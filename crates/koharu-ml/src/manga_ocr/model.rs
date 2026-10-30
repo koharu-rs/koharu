@@ -10,7 +10,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module};
 use anyhow::{Result, ensure};
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::config::{BertConfig, MangaOcrConfig, ViTConfig};
 
@@ -305,7 +305,7 @@ fn no_repeat_ngram_mask(
     ngram_size: usize,
     vocab_size: usize,
     device: Device,
-) -> tch::Result<Tensor> {
+) -> koharu_torch::Result<Tensor> {
     let mut mask = vec![0u8; sequences.len() * vocab_size];
     if ngram_size == 0 {
         return Tensor::f_from_slice(&mask)?
@@ -337,7 +337,7 @@ fn banned_ngram_tokens(sequence: &[i64], ngram_size: usize) -> Vec<i64> {
         .collect()
 }
 
-fn reorder_cache(cache: Vec<LayerCache>, beam_indices: &Tensor) -> tch::Result<Vec<LayerCache>> {
+fn reorder_cache(cache: Vec<LayerCache>, beam_indices: &Tensor) -> koharu_torch::Result<Vec<LayerCache>> {
     cache
         .into_iter()
         .map(|layer| {
@@ -373,7 +373,7 @@ impl ViTModel {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let hidden_states = self.embeddings.forward(pixel_values)?;
         let hidden_states = self.encoder.forward(&hidden_states)?;
         let hidden_states = self.layernorm.forward(&hidden_states)?;
@@ -400,7 +400,7 @@ impl ViTEmbeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let batch_size = pixel_values.size()[0];
         let embeddings = self.patch_embeddings.forward(pixel_values)?;
         let cls_tokens = self.cls_token.f_expand([batch_size, -1, -1], true)?;
@@ -431,7 +431,7 @@ impl PatchEmbeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         assert_eq!(
             &pixel_values.size()[2..],
             &[self.image_size, self.image_size]
@@ -457,7 +457,7 @@ impl ViTEncoder {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.layer
             .iter()
             .try_fold(hidden_states.f_alias()?, |hidden, layer| {
@@ -504,7 +504,7 @@ impl ViTLayer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let hidden_states = hidden_states.f_add(
             &self
                 .attention
@@ -562,7 +562,7 @@ impl ViTAttention {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let query = self.transpose_for_scores(&self.query.forward(hidden_states)?)?;
         let key = self.transpose_for_scores(&self.key.forward(hidden_states)?)?;
         let value = self.transpose_for_scores(&self.value.forward(hidden_states)?)?;
@@ -579,7 +579,7 @@ impl ViTAttention {
         self.output.forward(&context)
     }
 
-    fn transpose_for_scores(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn transpose_for_scores(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         hidden_states
             .f_view([size[0], size[1], self.num_heads, self.head_dim])?
@@ -604,7 +604,7 @@ impl ViTPooler {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.dense.forward(&hidden_states.f_select(1, 0)?)?.f_tanh()
     }
 }
@@ -628,7 +628,7 @@ impl BertLMHeadModel {
         input_ids: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&[LayerCache]>,
-    ) -> tch::Result<(Tensor, Vec<LayerCache>)> {
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
         let (sequence_output, cache) =
             self.bert.forward(input_ids, encoder_hidden_states, cache)?;
         Ok((self.cls.forward(&sequence_output)?, cache))
@@ -654,7 +654,7 @@ impl BertModel {
         input_ids: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&[LayerCache]>,
-    ) -> tch::Result<(Tensor, Vec<LayerCache>)> {
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
         let past_length = cache.map_or(0, |cache| cache[0].self_key.size()[2]);
         let embeddings = self.embeddings.forward(input_ids, past_length)?;
         self.encoder
@@ -709,7 +709,7 @@ impl BertEmbeddings {
         })
     }
 
-    fn forward(&self, input_ids: &Tensor, past_length: i64) -> tch::Result<Tensor> {
+    fn forward(&self, input_ids: &Tensor, past_length: i64) -> koharu_torch::Result<Tensor> {
         let sequence_length = input_ids.size()[1];
         let position_ids = self
             .position_ids
@@ -744,7 +744,7 @@ impl BertEncoder {
         hidden_states: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&[LayerCache]>,
-    ) -> tch::Result<(Tensor, Vec<LayerCache>)> {
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
         let mut hidden_states = hidden_states.f_alias()?;
         let mut next_cache = Vec::with_capacity(self.layer.len());
         for (index, layer) in self.layer.iter().enumerate() {
@@ -807,7 +807,7 @@ impl BertLayer {
         hidden_states: &Tensor,
         encoder_hidden_states: &Tensor,
         cache: Option<&LayerCache>,
-    ) -> tch::Result<(Tensor, LayerCache)> {
+    ) -> koharu_torch::Result<(Tensor, LayerCache)> {
         let (attention_output, self_key, self_value) = self.attention.forward(
             hidden_states,
             None,
@@ -867,7 +867,7 @@ impl BertAttention {
         hidden_states: &Tensor,
         key_value_states: Option<&Tensor>,
         past: Option<(&Tensor, &Tensor)>,
-    ) -> tch::Result<(Tensor, Tensor, Tensor)> {
+    ) -> koharu_torch::Result<(Tensor, Tensor, Tensor)> {
         let (context, key, value) =
             self.self_attention
                 .forward(hidden_states, key_value_states, past)?;
@@ -919,7 +919,7 @@ impl BertSelfAttention {
         hidden_states: &Tensor,
         key_value_states: Option<&Tensor>,
         past: Option<(&Tensor, &Tensor)>,
-    ) -> tch::Result<(Tensor, Tensor, Tensor)> {
+    ) -> koharu_torch::Result<(Tensor, Tensor, Tensor)> {
         let query = self.transpose_for_scores(&self.query.forward(hidden_states)?)?;
         let (key, value) = match (key_value_states, past) {
             (Some(_), Some((key, value))) => (key.f_alias()?, value.f_alias()?),
@@ -952,7 +952,7 @@ impl BertSelfAttention {
         Ok((context, key, value))
     }
 
-    fn transpose_for_scores(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn transpose_for_scores(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         hidden_states
             .f_view([size[0], size[1], self.num_heads, self.head_dim])?
@@ -986,7 +986,7 @@ impl BertOnlyMLMHead {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.decoder
             .forward(&self.transform.forward(hidden_states)?)
     }
@@ -1015,7 +1015,7 @@ impl BertPredictionHeadTransform {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.layer_norm
             .forward(&self.dense.forward(hidden_states)?.f_gelu("none")?)
     }

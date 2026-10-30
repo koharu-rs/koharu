@@ -1,40 +1,47 @@
 # koharu-bindgen
 
-`koharu-bindgen` is the build step behind Koharu's `-sys` crates. It runs
-`bindgen` over a crate's vendored C headers at build time, or reads the Rust
-declarations an upstream `-sys` crate ships, and turns each C function into a
-Rust function that calls through a library loaded when the
-runtime starts, so one Koharu binary runs whichever libtorch, llama.cpp, and
-stable-diffusion.cpp build fits the machine's GPU.
+The build step behind Koharu's `-sys` crates. It runs bindgen over a crate's
+headers and turns each C function into a free function with the same name and
+signature that calls through a library loaded at run time, so one Koharu
+binary runs whichever libtorch, llama.cpp, and stable-diffusion.cpp build fits
+the GPU.
 
 ```rust,ignore
-// in a -sys crate's build.rs
-koharu_bindgen::Bindings::new("wrapper.h")
-    .configure(|builder| builder.allowlist_function("llama_.*"))
-    .write(out_dir.join("bindings.rs"))?;
+// build.rs: what the crate binds, and nothing else
+fn main() {
+    koharu_bindgen::generate(|bindings| {
+        bindings
+            .allowlist_function("^(ggml|gguf|llama|mtmd)_.*")
+            .allowlist_type("^(ggml|gguf|llama|mtmd)_.*")
+            .derive_partialeq(true)
+    });
+}
 
-// at runtime, by koharu-runtime
-llama_cpp_sys_2::load(&[&llama_dll, &mtmd_dll])?;
+// at run time, by koharu-runtime
+koharu_llama_sys::load(&[&llama, &mtmd])?;
 ```
 
-| Rule | Evidence |
-|---|---|
-| Bindings are generated from headers copied verbatim from the library's pinned commit; nothing generated is checked in or edited. | `AGENTS.md` |
-| `load` opens each library by absolute path and resolves every function it binds before returning, and a missing library or function is an error naming it. Nothing is resolved lazily, and no library is looked up on the search path, where a different build could be found. Calling a bound function before `load` panics, as there's nothing to call. | bindgen's runtime loading can require every symbol at load (`dynamic_link_require_all`) [bindgen dynamic] |
-| Each function stays a free function with the C name and signature, so a `-sys` crate built this way can stand in for one that links normally, as Koharu's llama.cpp bindings stand in for `llama-cpp-sys-2`. | `llama-cpp-sys-2`'s README in this repository |
-| A crate whose upstream declares its functions in Rust rather than a header, as `torch-sys` does, passes those sources to `rewrite`, which reads the module files they declare and rewrites every `extern` block in place; a module's `#[cfg]` also decides whether `load` resolves its functions. | `torch-sys`'s README |
-| Library file names come from `libloading`. | `library_filename` builds the platform's name for a library [libloading filename] |
+## Every `-sys` crate
 
-## Changes from today
+```text
+koharu-<library>-sys/
+├── Cargo.toml   libloading, and koharu-bindgen as the only build dependency
+├── build.rs     one koharu_bindgen::generate call
+├── wrapper.h    #includes the headers it binds
+├── include/     the library's headers, copied verbatim from its pinned commit
+└── src/lib.rs   the pinned commit, include!(bindings.rs), then what's written by hand
+```
 
-- `load` resolves everything up front and returns an error; today the first
-  call to a missing function panics, and a library that fails to load is
-  looked up on the search path.
-- `rewrite` takes an upstream crate's Rust declarations, for `torch-sys`.
-- The unused command-line tool, with its `clap` dependency, and the unused
-  rewrite entry points go.
-
-## Sources
-
-[bindgen dynamic]: https://docs.rs/bindgen/latest/bindgen/struct.Builder.html#method.dynamic_link_require_all
-[libloading filename]: https://docs.rs/libloading/0.9.0/libloading/fn.library_filename.html
+- **One shape for every crate.** `generate` does what each build script used
+  to repeat: it reads `wrapper.h`, puts `include/` on the include path, reruns
+  when any header it read changes, and writes `bindings.rs`. Two `-sys` crates
+  then differ only in what they bind, which is what a reviewer needs to see.
+- **Headers stay verbatim,** so updating a library is copying its headers at
+  the new commit, and nothing generated is checked in. A function is bound
+  as its header declares it; no call is written by hand.
+- **Everything resolves at `load`.** It opens each library by absolute path
+  and resolves every function before returning, so a missing library or
+  function is one error naming it, not a crash partway through a page, and no
+  other build on the search path can be picked up.
+- **A build script just fails.** A header that doesn't parse stops the build
+  with bindgen's message; there's nothing for a build script to recover.

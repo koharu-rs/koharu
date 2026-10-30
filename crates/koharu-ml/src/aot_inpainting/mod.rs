@@ -5,12 +5,14 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbImage};
+use koharu_runtime::Repository;
 
 use self::{model::Model, processor::Processor};
 
-crate::model_repository!("mayocream/aot-inpainting" @ "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" {
-    WEIGHTS = "model.safetensors"
-});
+const REPOSITORY: Repository = Repository::model(
+    "mayocream/aot-inpainting",
+    "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f",
+);
 
 #[derive(Debug)]
 pub struct AotInpainting {
@@ -21,8 +23,8 @@ pub struct AotInpainting {
 impl AotInpainting {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let weights_path = WEIGHTS
-            .resolve()
+        let [weights_path] = REPOSITORY
+            .resolve(["model.safetensors"])
             .await
             .context("failed to resolve AOT inpainting weights")?;
         let mut model = Model::new(device, kind)?;
@@ -45,6 +47,6 @@ impl AotInpainting {
         mask: &GrayImage,
         max_side: u32,
     ) -> Result<RgbImage> {
-        tch::no_grad(|| self.processor.call(&self.model, image, mask, max_side))
+        koharu_torch::no_grad(|| self.processor.call(&self.model, image, mask, max_side))
     }
 }

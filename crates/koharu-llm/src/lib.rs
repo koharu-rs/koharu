@@ -174,14 +174,19 @@ pub async fn model(selection: &Selection, size: Size) -> Result<Model> {
         Provider::Local => {
             let entry = local::catalog::entry(&selection.model)?;
             let quantization = entry.quantization(selection.quantization.as_deref())?;
-            let projector = async {
-                match entry.projector {
-                    Some(file) => entry.file(file).resolve().await.map(Some),
-                    None => Ok(None),
+            let (model, projector) = match entry.projector {
+                Some(projector) => {
+                    let [model, projector] = entry
+                        .repository
+                        .resolve([quantization.file, projector])
+                        .await?;
+                    (model, Some(projector))
+                }
+                None => {
+                    let [model] = entry.repository.resolve([quantization.file]).await?;
+                    (model, None)
                 }
             };
-            let (model, projector) =
-                tokio::try_join!(entry.file(quantization.file).resolve(), projector)?;
             local::load(
                 entry.id.to_owned(),
                 model,
@@ -264,7 +269,7 @@ pub async fn models() -> Vec<ModelInfo> {
                     name: quantization.name,
                     downloaded: std::iter::once(quantization.file)
                         .chain(entry.projector)
-                        .all(|file| entry.file(file).exists()),
+                        .all(|file| entry.repository.exists(file)),
                 })
                 .collect(),
             images: entry.projector.is_some(),

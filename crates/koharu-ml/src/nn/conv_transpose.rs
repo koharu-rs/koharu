@@ -3,7 +3,7 @@
 use std::borrow::Borrow;
 
 use super::Path;
-use tch::{Result, Tensor};
+use koharu_torch::{Result, Tensor};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ConvTransposeConfigND<ND> {

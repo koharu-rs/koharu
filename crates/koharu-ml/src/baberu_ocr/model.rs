@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module};
 use anyhow::{Result, ensure};
-use tch::{Device, Kind, Tensor};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::{
     config::{BaberuOcrConfig, Dinov2Config},
@@ -176,7 +176,7 @@ impl Model {
         Ok(tokens)
     }
 
-    fn logits(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn logits(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         // Generation only consumes the final position. Applying the tied head to
         // that row avoids materializing 256 unused vision-prefix logit rows.
         let last_hidden_state = hidden_states.f_select(1, hidden_states.size()[1] - 1)?;
@@ -213,7 +213,7 @@ impl Dinov2Model {
         self.embeddings.cache_position_embeddings(height, width)
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let hidden_states = self.embeddings.forward(pixel_values)?;
         self.layernorm
             .forward(&self.encoder.forward(hidden_states)?)
@@ -276,7 +276,7 @@ impl Dinov2Embeddings {
         Ok(())
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         let batch_size = pixel_values.size()[0];
         let patch_tokens = self
             .patch_embeddings
@@ -312,7 +312,7 @@ impl Dinov2PatchEmbeddings {
         })
     }
 
-    fn forward(&self, pixel_values: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         self.projection
             .forward(pixel_values)?
             .f_flatten(2, -1)?
@@ -334,7 +334,7 @@ impl Dinov2Encoder {
         })
     }
 
-    fn forward(&self, mut hidden_states: Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, mut hidden_states: Tensor) -> koharu_torch::Result<Tensor> {
         for layer in &self.layer {
             hidden_states = layer.forward(&hidden_states)?;
         }
@@ -364,7 +364,7 @@ impl Dinov2Layer {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let hidden_states = hidden_states.f_add(
             &self.layer_scale1.forward(
                 &self
@@ -394,7 +394,7 @@ impl Dinov2Attention {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.output.forward(&self.attention.forward(hidden_states)?)
     }
 }
@@ -437,7 +437,7 @@ impl Dinov2SelfAttention {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let sequence_length = size[1];
@@ -490,7 +490,7 @@ impl Dinov2SelfOutput {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.dense.forward(hidden_states)
     }
 }
@@ -507,7 +507,7 @@ impl Dinov2LayerScale {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         hidden_states.f_mul(&self.lambda1)
     }
 }
@@ -536,7 +536,7 @@ impl Dinov2Mlp {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.fc2
             .forward(&self.fc1.forward(hidden_states)?.f_gelu("none")?)
     }
@@ -566,7 +566,7 @@ impl BaberuVisionProjector {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.linear2
             .forward(&self.linear1.forward(hidden_states)?.f_gelu("none")?)
     }
@@ -617,7 +617,7 @@ impl BaberuModel {
         &self,
         mut hidden_states: Tensor,
         past_key_values: Option<&[LayerCache]>,
-    ) -> tch::Result<(Tensor, Vec<LayerCache>)> {
+    ) -> koharu_torch::Result<(Tensor, Vec<LayerCache>)> {
         let q_len = hidden_states.size()[1];
         let past_len = past_key_values
             .and_then(|cache| cache.first())
@@ -698,7 +698,7 @@ impl BaberuDecoderLayer {
         attention_mask: Option<&Tensor>,
         past_key_value: Option<&LayerCache>,
         past_len: i64,
-    ) -> tch::Result<(Tensor, LayerCache)> {
+    ) -> koharu_torch::Result<(Tensor, LayerCache)> {
         let (attention, present) = self.attn.forward(
             &self.input_norm.forward(hidden_states)?,
             cos,
@@ -780,7 +780,7 @@ impl BaberuAttention {
         attention_mask: Option<&Tensor>,
         past_key_value: Option<&LayerCache>,
         past_len: i64,
-    ) -> tch::Result<(Tensor, LayerCache)> {
+    ) -> koharu_torch::Result<(Tensor, LayerCache)> {
         let size = hidden_states.size();
         let batch_size = size[0];
         let q_len = size[1];
@@ -884,7 +884,7 @@ impl BaberuMlp {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.down_proj.forward(
             &self
                 .gate_proj
@@ -909,7 +909,7 @@ impl BaberuRmsNorm {
         })
     }
 
-    fn forward(&self, hidden_states: &Tensor) -> tch::Result<Tensor> {
+    fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let input_kind = hidden_states.kind();
         let hidden_states = hidden_states.f_to_kind(Kind::Float)?;
         let variance = hidden_states.f_pow_tensor_scalar(2.0)?.f_mean_dim(
@@ -946,7 +946,7 @@ impl BaberuRotaryEmbedding {
         })
     }
 
-    fn forward(&self, past_len: i64, sequence_length: i64) -> tch::Result<(Tensor, Tensor)> {
+    fn forward(&self, past_len: i64, sequence_length: i64) -> koharu_torch::Result<(Tensor, Tensor)> {
         Ok((
             self.cos
                 .f_narrow(0, past_len, sequence_length)?
@@ -963,7 +963,7 @@ fn apply_rotary_pos_emb(
     key: &Tensor,
     cos: &Tensor,
     sin: &Tensor,
-) -> tch::Result<(Tensor, Tensor)> {
+) -> koharu_torch::Result<(Tensor, Tensor)> {
     let cos = cos.f_unsqueeze(1)?;
     let sin = sin.f_unsqueeze(1)?;
     Ok((
@@ -972,7 +972,7 @@ fn apply_rotary_pos_emb(
     ))
 }
 
-fn rotate_half(hidden_states: &Tensor) -> tch::Result<Tensor> {
+fn rotate_half(hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
     let half = hidden_states.size()[hidden_states.dim() - 1] / 2;
     Tensor::f_cat(
         &[
@@ -983,7 +983,7 @@ fn rotate_half(hidden_states: &Tensor) -> tch::Result<Tensor> {
     )
 }
 
-fn causal_mask(q_len: i64, kv_len: i64, kind: Kind, device: Device) -> tch::Result<Tensor> {
+fn causal_mask(q_len: i64, kv_len: i64, kind: Kind, device: Device) -> koharu_torch::Result<Tensor> {
     Tensor::f_full([q_len, kv_len], f64::NEG_INFINITY, (kind, device))?
         .f_triu(kv_len - q_len + 1)?
         .f_unsqueeze(0)?

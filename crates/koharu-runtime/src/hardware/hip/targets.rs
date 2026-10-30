@@ -13,6 +13,7 @@
     PartialEq,
     strum::Display,
     strum::EnumString,
+    strum::IntoStaticStr,
     strum::EnumIter,
     strum::EnumProperty,
 )]
