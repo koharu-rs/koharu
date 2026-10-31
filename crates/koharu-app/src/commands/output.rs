@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use futures::future::try_join_all;
+use futures::{StreamExt as _, TryStreamExt as _, stream};
 use image::{
     ExtendedColorType, ImageEncoder as _,
     codecs::png::{CompressionType, FilterType, PngEncoder},
@@ -8,7 +8,6 @@ use koharu_psd::{PsdExportOptions, export_page};
 use koharu_rasterizer::{Raster, RasterOptions, Rasterizer};
 use koharu_renderer::{Frame, Renderer};
 use koharu_scene::{AssetRole, EntityId, Snapshot};
-use rayon::prelude::*;
 use serde::Deserialize;
 use specta::Type;
 use std::{io::Write as _, sync::Arc};
@@ -37,6 +36,11 @@ pub enum ExportFormat {
     Psd,
     Cbz,
 }
+
+/// Pages prepared at once during an export. Each one holds a full-resolution
+/// frame and its encoded file, so preparing a whole long project together
+/// exhausts memory.
+const EXPORT_CONCURRENCY: usize = 4;
 
 #[tauri::command]
 #[specta::specta]
@@ -71,89 +75,95 @@ pub(crate) async fn export(
     };
     let renderer = desktop.renderer();
     let rasterizer = desktop.rasterizer().await?;
-    let frames = try_join_all(pages.iter().map(|&page| renderer.render(&snapshot, page))).await?;
-    let (extension, images) = match format {
-        ExportFormat::Png | ExportFormat::Cbz => {
-            let images = tokio_rayon::spawn(move || {
-                frames
-                    .par_iter()
-                    .map(|frame| -> Result<_> {
-                        let image = rasterizer
-                            .rasterize(&frame.raster_frame()?, RasterOptions::default())?
-                            .image;
-                        let mut bytes = Vec::new();
-                        PngEncoder::new_with_quality(
-                            &mut bytes,
-                            CompressionType::Best,
-                            FilterType::Adaptive,
-                        )
-                        .write_image(
-                            image.as_raw(),
-                            image.width(),
-                            image.height(),
-                            ExtendedColorType::Rgba8,
-                        )?;
-                        Ok(bytes)
-                    })
-                    .collect::<Result<Vec<_>>>()
-            })
-            .await?;
-            ("png", images)
-        }
-        ExportFormat::Psd => {
-            let options = PsdExportOptions::default();
-            let images = try_join_all(
-                frames
-                    .iter()
-                    .map(|frame| export_page(Arc::clone(&rasterizer), &snapshot, frame, &options)),
-            )
-            .await?;
-            ("psd", images)
-        }
+    let options = PsdExportOptions::default();
+    let extension = match format {
+        ExportFormat::Png | ExportFormat::Cbz => "png",
+        ExportFormat::Psd => "psd",
     };
-    tokio_rayon::spawn(move || -> Result<()> {
-        let mut archive = if matches!(format, ExportFormat::Cbz) {
-            let directory = destination.parent().context("archive path has no parent")?;
-            Some(zip::ZipWriter::new(tempfile::NamedTempFile::new_in(
-                directory,
-            )?))
-        } else {
-            None
-        };
-        let width = pages.len().to_string().len().max(4);
-        // Async preparation and indexed encoding both preserve project order.
-        for (index, (page_id, bytes)) in pages.into_iter().zip(images).enumerate() {
-            let page = snapshot.page(page_id)?.page()?;
-            let name = page
-                .label
-                .trim()
-                .trim_end_matches(|character: char| character == '.' || character.is_whitespace());
-            let name = name
-                .rsplit_once('.')
-                .map_or(name, |(stem, _)| stem)
-                .replace(['<', '>', ':', '"', '/', '\\', '|', '?', '*'], "_");
-            let name = format!(
-                "{:0width$}_{}.{extension}",
-                index + 1,
-                if name.is_empty() { "page" } else { &name }
-            );
-            if let Some(archive) = &mut archive {
-                // PNG data is already compressed.
-                let options = zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Stored);
-                archive.start_file(name, options)?;
-                archive.write_all(&bytes)?;
-            } else {
-                std::fs::write(destination.join(name), bytes)?;
+    let mut archive = if matches!(format, ExportFormat::Cbz) {
+        let directory = destination.parent().context("archive path has no parent")?;
+        Some(zip::ZipWriter::new(tempfile::NamedTempFile::new_in(
+            directory,
+        )?))
+    } else {
+        None
+    };
+    let width = pages.len().to_string().len().max(4);
+    // `buffered` yields in project order while bounding the pages in flight.
+    let mut encoded = stream::iter(pages.iter().copied())
+        .map(|page| {
+            let (renderer, snapshot, options) = (&renderer, &snapshot, &options);
+            let rasterizer = Arc::clone(&rasterizer);
+            async move {
+                let frame = renderer.render(snapshot, page).await?;
+                match format {
+                    ExportFormat::Png | ExportFormat::Cbz => {
+                        tokio_rayon::spawn(move || encode_png(&rasterizer, &frame)).await
+                    }
+                    ExportFormat::Psd => {
+                        Ok(export_page(rasterizer, snapshot, &frame, options).await?)
+                    }
+                }
             }
+        })
+        .buffered(EXPORT_CONCURRENCY);
+    let mut index = 0;
+    while let Some(bytes) = encoded.try_next().await? {
+        let page = snapshot.page(pages[index])?.page()?;
+        let name = page
+            .label
+            .trim()
+            .trim_end_matches(|character: char| character == '.' || character.is_whitespace());
+        let name = name
+            .rsplit_once('.')
+            .map_or(name, |(stem, _)| stem)
+            .replace(['<', '>', ':', '"', '/', '\\', '|', '?', '*'], "_");
+        let name = format!(
+            "{:0width$}_{}.{extension}",
+            index + 1,
+            if name.is_empty() { "page" } else { &name }
+        );
+        if let Some(mut writer) = archive.take() {
+            // Archive I/O is synchronous, so it runs off the async workers.
+            archive = Some(
+                tokio::task::spawn_blocking(move || -> Result<_> {
+                    // PNG data is already compressed.
+                    let options = zip::write::SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Stored);
+                    writer.start_file(name, options)?;
+                    writer.write_all(&bytes)?;
+                    Ok(writer)
+                })
+                .await??,
+            );
+        } else {
+            tokio::fs::write(destination.join(name), bytes).await?;
         }
-        if let Some(archive) = archive {
-            archive.finish()?.persist(destination)?;
-        }
-        Ok(())
-    })
-    .await?;
+        index += 1;
+    }
+    if let Some(writer) = archive {
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            writer.finish()?.persist(destination)?;
+            Ok(())
+        })
+        .await??;
+    }
     Ok(())
+}
+
+fn encode_png(rasterizer: &Rasterizer, frame: &Frame) -> Result<Vec<u8>> {
+    let image = rasterizer
+        .rasterize(&frame.raster_frame()?, RasterOptions::default())?
+        .image;
+    let mut bytes = Vec::new();
+    PngEncoder::new_with_quality(&mut bytes, CompressionType::Best, FilterType::Adaptive)
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            ExtendedColorType::Rgba8,
+        )?;
+    Ok(bytes)
 }
 
 #[tauri::command]
