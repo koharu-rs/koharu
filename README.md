@@ -26,13 +26,13 @@ Fork của [koharu-rs/koharu](https://github.com/koharu-rs/koharu), bổ sung du
 4. Giữ **Check source updates** bật nếu muốn kiểm tra ảnh mới từ máy chủ. Bật **Translate a new copy** nếu muốn dịch lại và giữ project trước đó.
 5. Bấm **Translate this chapter**. App hiển thị tiến độ tải ảnh, chuyển sang editor và chạy xử lý cho toàn project. Dùng cơ chế Stop, sửa nội dung, lưu và export có sẵn của Koharu.
 
-App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/page.jpg`, vì slug, số chương thập phân, định dạng và số lượng ảnh có thể khác nhau. Hiện giới hạn tối đa 500 ảnh/chương và 32 MiB/ảnh; hỗ trợ JPEG, PNG và WebP theo nội dung ảnh thực tế.
+App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/page.jpg`, vì slug, số chương thập phân, định dạng và số lượng ảnh có thể khác nhau. Bộ trích ảnh nhận đường dẫn bất kỳ trên đúng host `cdn.rawkuma.com`, ví dụ `/s/...`, `/images/...` hoặc `/w/.../38.5/1.webp`; chỉ chọn ảnh trong vùng đọc truyện hoặc ảnh có nhãn trang, rồi kiểm tra nội dung JPEG/PNG/WebP khi tải về. Hiện giới hạn tối đa 500 ảnh/chương và 32 MiB/ảnh; hỗ trợ JPEG, PNG và WebP theo nội dung ảnh thực tế.
 
 ### Phạm vi và trạng thái kiểm chứng
 
 - Đã build và chạy bản macOS Apple Silicon độc lập; nhập thực tế 32 trang của một chương Rawkuma và hiển thị trong editor.
 - Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
-- 4 kiểm tra backend và 4 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
+- 6 kiểm tra backend và 4 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
 - Chưa xác nhận chất lượng/tốc độ Qwen hoặc kết quả hoàn chỉnh của toàn chương; tại thời điểm kiểm tra luồng nhập, app đang tải model cho lần chạy đầu. Chưa kiểm chứng tính năng Rawkuma trên Windows/Linux.
 - Đây là app desktop, chưa có bản iPad/iOS hoặc máy chủ đọc truyện qua trình duyệt. Có thể chuyển kết quả export sang iPad để đọc bằng ứng dụng phù hợp.
 - Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.

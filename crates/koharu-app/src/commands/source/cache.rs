@@ -59,7 +59,7 @@ pub(super) fn is_image_url(url: &Url) -> bool {
         && url.port().is_none()
         && url.username().is_empty()
         && url.password().is_none()
-        && url.path().starts_with("/s/")
+        && url.path() != "/"
 }
 
 pub(super) fn digest(bytes: &[u8]) -> String {
@@ -222,13 +222,21 @@ mod tests {
             "https://user:pass@cdn.rawkuma.com/s/book/1/1.jpg",
             "https://127.0.0.1/s/book/1/1.jpg",
             "https://cdn.rawkuma.com:8443/s/book/1/1.jpg",
-            "https://cdn.rawkuma.com/cover.jpg",
+            "https://cdn.rawkuma.com/",
         ] {
             assert!(!is_image_url(&Url::parse(url).unwrap()), "{url}");
         }
         assert!(is_image_url(
             &Url::parse("https://cdn.rawkuma.com/s/book/16.2/1.jpg").unwrap()
         ));
+        assert!(is_image_url(
+            &Url::parse("https://cdn.rawkuma.com/images/e/book/26/1.jpg").unwrap()
+        ));
+        for path in ["w/book/38.5/1.webp", "another-directory/book/1/2.png?v=2"] {
+            assert!(is_image_url(
+                &Url::parse(&format!("https://cdn.rawkuma.com/{path}")).unwrap()
+            ));
+        }
     }
 
     #[tokio::test]

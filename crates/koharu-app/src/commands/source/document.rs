@@ -51,8 +51,14 @@ pub(super) async fn read(view: &Webview<CefRuntime>) -> Result<String> {
 pub(super) fn parse(url: Url, html: &str) -> Result<SourcePage> {
     let document = dom_query::Document::from(html);
     let title = document.select("title").text().to_string();
-    let selection =
-        document.select("section[data-image-data] img, img[src*=\"//cdn.rawkuma.com/s/\"]");
+    // CDN directories vary by series. Select reader pages, then validate their host;
+    // a CDN cover elsewhere in the document must not become a translated page.
+    let reader = document.select("section[data-image-data] img");
+    let selection = if reader.is_empty() {
+        document.select("img[alt*=\" - Page \"]")
+    } else {
+        reader
+    };
     let mut seen = HashSet::new();
     let mut images = Vec::new();
     for node in selection.nodes() {
@@ -83,6 +89,58 @@ pub(super) fn parse(url: Url, html: &str) -> Result<SourcePage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_any_cdn_directory_and_fractional_chapters_without_importing_covers() {
+        let page = parse(
+            Url::parse("https://rawkuma.net/manga/book/chapter-38.5/").unwrap(),
+            r#"<img src="https://cdn.rawkuma.com/covers/book.jpg">
+              <section data-image-data="1">
+                <img src="https://cdn.rawkuma.com/w/book/38.5/1.webp">
+                <img src="https://cdn.rawkuma.com/another-directory/book/38.5/2.png">
+              </section>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            page.images,
+            [
+                "https://cdn.rawkuma.com/w/book/38.5/1.webp",
+                "https://cdn.rawkuma.com/another-directory/book/38.5/2.png",
+            ]
+        );
+        let fallback = parse(
+            Url::parse("https://rawkuma.net/manga/book/chapter-38.5/").unwrap(),
+            r#"<img src="https://cdn.rawkuma.com/covers/book.jpg" alt="Book cover">
+              <img src="https://cdn.rawkuma.com/w/book/38.5/1.webp" alt="Book - Chapter 38.5 - Page 1">"#,
+        )
+        .unwrap();
+        assert_eq!(
+            fallback.images,
+            ["https://cdn.rawkuma.com/w/book/38.5/1.webp"]
+        );
+    }
+
+    #[test]
+    fn extracts_chapters_served_from_the_images_directory() {
+        // Older chapters, including the observed Eiyuu Ou chapter 26, use /images/.
+        let page = parse(
+            Url::parse("https://rawkuma.net/manga/book/chapter-26.296992/").unwrap(),
+            r#"<title>Chapter 26</title>
+              <img src="https://cdn.rawkuma.com/cover.jpg">
+              <section data-image-data="1">
+                <img src="https://cdn.rawkuma.com/images/e/book/26/1.jpg">
+                <img src="https://cdn.rawkuma.com/images/e/book/26/2.jpg">
+              </section>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            page.images,
+            [
+                "https://cdn.rawkuma.com/images/e/book/26/1.jpg",
+                "https://cdn.rawkuma.com/images/e/book/26/2.jpg",
+            ]
+        );
+    }
 
     #[test]
     fn extracts_ordered_lazy_pages_without_covers_duplicates_or_foreign_images() {
