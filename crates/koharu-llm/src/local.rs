@@ -129,7 +129,7 @@ pub(crate) async fn load(
         size.sequences > 0 && size.context > 0,
         "a local model needs at least one sequence and one token of context"
     );
-    let device = koharu_runtime::device().await?.index;
+    let device = koharu_runtime::devices().await?.ggml.index;
     tokio::task::spawn_blocking(move || {
         let (jobs, queue) = mpsc::channel();
         let (ready, loaded) = mpsc::sync_channel(1);

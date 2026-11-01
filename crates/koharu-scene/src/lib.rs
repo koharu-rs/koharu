@@ -1,5 +1,4 @@
-//! Koharu's scene graph on Loro. The schema and its evidence are in the
-//! crate README.
+//! Koharu's scene graph on Loro.
 //!
 //! A [`Session`] alone owns an open project's document. Reads return owned
 //! values; every change is an [`Edit`], checked in full before anything is

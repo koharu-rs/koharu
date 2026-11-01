@@ -384,7 +384,7 @@ pub(crate) async fn import(
     if files.is_empty() {
         return Err(anyhow::anyhow!("no supported images were found in the selection").into());
     }
-    let pages = tokio_rayon::spawn(move || import::import(files)).await?;
+    let pages = tokio::task::spawn_blocking(move || import::import(files)).await??;
 
     let (commit, page) = {
         let mut project = project.project.lock().await;

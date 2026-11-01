@@ -1,22 +1,25 @@
 //! Baberu OCR image and character processing.
 //!
 //! Canonical image and decoding behavior:
-//! https://huggingface.co/genshiai-daichi/baberu-ocr/blob/d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae/inference.py
+//! https://huggingface.co/genshiai-daichi/baberu-ocr/blob/a0e3d4b1f98a8c5d0aba66ded831fe7b52bbf2fa/inference.py
 
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, path::Path};
 
-use anyhow::{Context, Result, bail, ensure};
-use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
+use anyhow::{Result, bail, ensure};
+use fast_image_resize::{FilterType, ResizeAlg};
 use icu_properties::{
     CodePointMapData,
     props::{GeneralCategory, GeneralCategoryGroup},
 };
-use image::{DynamicImage, RgbImage};
-use serde::Deserialize;
+use image::DynamicImage;
 use koharu_torch::{Device, Kind, Tensor};
+use serde::Deserialize;
+
+/// Pillow's bicubic filter, the same Catmull-Rom convolution.
+const RESIZE: ResizeAlg = ResizeAlg::Convolution(FilterType::CatmullRom);
 
 #[derive(Debug, Deserialize)]
-struct BitImageProcessorConfig {
+pub(super) struct BitImageProcessorConfig {
     do_convert_rgb: bool,
     do_normalize: bool,
     do_rescale: bool,
@@ -27,7 +30,7 @@ struct BitImageProcessorConfig {
 }
 
 #[derive(Debug)]
-pub(crate) struct BaberuImageProcessor {
+pub(super) struct BaberuImageProcessor {
     size: u32,
     do_normalize: bool,
     do_rescale: bool,
@@ -39,8 +42,7 @@ pub(crate) struct BaberuImageProcessor {
 }
 
 impl BaberuImageProcessor {
-    pub(crate) fn from_file(path: impl AsRef<Path>, size: i64, device: Device) -> Result<Self> {
-        let config: BitImageProcessorConfig = serde_json::from_str(&fs::read_to_string(path)?)?;
+    pub(super) fn new(config: &BitImageProcessorConfig, size: i64, device: Device) -> Result<Self> {
         ensure!(config.do_convert_rgb, "Baberu OCR requires RGB conversion");
         ensure!(
             size > 0 && size <= u32::MAX.into(),
@@ -68,7 +70,7 @@ impl BaberuImageProcessor {
         })
     }
 
-    pub(crate) fn preprocess(&self, image: &DynamicImage) -> Result<Tensor> {
+    pub(super) fn preprocess(&self, image: &DynamicImage) -> Result<Tensor> {
         if image.width() == 0 || image.height() == 0 {
             bail!("cannot recognize an empty image");
         }
@@ -85,7 +87,7 @@ impl BaberuImageProcessor {
         let image = if image.width() == self.size && image.height() == self.size {
             image
         } else {
-            resize_bicubic(&image, self.size, self.size)?
+            crate::image::resize(&image, self.size, self.size, RESIZE)?
         };
         let mut pixel_values = Tensor::f_from_slice(image.as_raw())?
             .f_view([1, i64::from(self.size), i64::from(self.size), 3])?
@@ -102,29 +104,15 @@ impl BaberuImageProcessor {
     }
 }
 
-fn resize_bicubic(image: &RgbImage, width: u32, height: u32) -> Result<RgbImage> {
-    let mut resized = RgbImage::new(width, height);
-    Resizer::new()
-        .resize(
-            image,
-            &mut resized,
-            &ResizeOptions::new()
-                .resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom))
-                .use_alpha(false),
-        )
-        .context("failed to resize Baberu OCR input")?;
-    Ok(resized)
-}
-
 #[derive(Debug)]
-pub(crate) struct Tokenizer {
+pub(super) struct Tokenizer {
     vocabulary: Vec<String>,
     content_ids: HashSet<i64>,
 }
 
 impl Tokenizer {
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let charset: Vec<String> = serde_json::from_str(&fs::read_to_string(path)?)?;
+    pub(super) fn from_file(path: &Path) -> Result<Self> {
+        let charset: Vec<String> = serde_json::from_slice(&fs_err::read(path)?)?;
         let mut vocabulary = vec![
             "<pad>".to_owned(),
             "<bos>".to_owned(),
@@ -161,15 +149,15 @@ impl Tokenizer {
         })
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.vocabulary.len()
     }
 
-    pub(crate) fn is_content(&self, token_id: i64) -> bool {
+    pub(super) fn is_content(&self, token_id: i64) -> bool {
         self.content_ids.contains(&token_id)
     }
 
-    pub(crate) fn decode(&self, token_ids: &[i64]) -> Result<String> {
+    pub(super) fn decode(&self, token_ids: &[i64]) -> Result<String> {
         let mut text = String::new();
         for &token_id in token_ids {
             let token = self
@@ -188,14 +176,14 @@ impl Tokenizer {
 mod tests {
     use std::{io::Write, path::PathBuf};
 
-    use super::{Tokenizer, resize_bicubic};
+    use super::{RESIZE, Tokenizer};
 
     #[test]
     fn bicubic_resize_stays_aligned_with_pillow() {
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");
         let input = image::open(input).unwrap().to_rgb8();
-        let resized = resize_bicubic(&input, 224, 224).unwrap();
+        let resized = crate::image::resize(&input, 224, 224, RESIZE).unwrap();
         let pixels = resized.as_raw();
 
         assert_eq!(resized.dimensions(), (224, 224));

@@ -171,7 +171,7 @@ struct Prepared<'a> {
     outline: Option<Outline>,
 }
 
-pub(crate) fn lay_out(input: &Input) -> Result<Laid> {
+pub(crate) fn layout(input: &Input) -> Result<Laid> {
     let BidiInfo {
         levels, paragraphs, ..
     } = BidiInfo::new(&input.text, None);

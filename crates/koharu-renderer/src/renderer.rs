@@ -247,8 +247,8 @@ impl Renderer {
                 .0
         };
         let renderer = self.clone();
-        tokio_rayon::spawn(move || {
-            let laid = text::lay_out(&Input {
+        tokio::task::spawn_blocking(move || {
+            let laid = text::layout(&Input {
                 spans: vec![Span {
                     range: 0..label.len(),
                     fonts,
@@ -283,6 +283,7 @@ impl Renderer {
             )
         })
         .await
+        .map_err(|error| Error::Backend(error.into()))?
     }
 
     /// A layer's content, retained by what it depends on.
@@ -434,7 +435,7 @@ impl Renderer {
                 missing,
             });
         }
-        let laid = text::lay_out(&Input {
+        let laid = text::layout(&Input {
             text,
             spans,
             vertical: layer.direction == Direction::Vertical,

@@ -38,10 +38,11 @@ impl Release {
         complete: impl Fn(&Path) -> bool + Send + Sync,
     ) -> Result<PathBuf> {
         let variant = match backend {
+            Backend::Cpu => "cpu",
             Backend::Cuda { .. } => "cuda",
             Backend::Rocm { .. } => "hip",
-            Backend::Vulkan => "vulkan",
             Backend::Metal => "metal",
+            Backend::Vulkan => "vulkan",
         };
         let archive = format!("{}-{variant}", host.triple());
         let url = format!(

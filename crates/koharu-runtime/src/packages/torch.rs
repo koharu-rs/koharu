@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use super::{Host, native::Release, preload};
 use crate::Backend;
@@ -13,11 +13,12 @@ static RELEASE: Release = Release {
     tag: koharu_torch_sys::RELEASE,
 };
 
-/// libtorch's own libraries, in load order, before the shim. On macOS the
-/// root goes first, so dyld resolves libtorch's weak C++ symbols inside one
-/// local image group instead of publishing them globally.
-fn libraries(backend: Backend) -> &'static [&'static str] {
-    match backend {
+/// libtorch's own libraries for `backend`, in load order, before the shim,
+/// or `None` where libtorch has no build for it: Vulkan. On macOS the root
+/// goes first, so dyld resolves libtorch's weak C++ symbols inside one local
+/// image group instead of publishing them globally.
+fn libraries(backend: Backend) -> Option<&'static [&'static str]> {
+    Some(match backend {
         Backend::Cuda { .. } if cfg!(windows) => &[
             "c10.dll",
             "c10_cuda.dll",
@@ -60,27 +61,48 @@ fn libraries(backend: Backend) -> &'static [&'static str] {
             "libtorch_cpu.dylib",
             "libc10.dylib",
         ],
-        Backend::Vulkan => &[],
+        // Its OpenMP runtime first.
+        Backend::Cpu if cfg!(windows) => &[
+            "libiomp5md.dll",
+            "c10.dll",
+            "torch_global_deps.dll",
+            "torch_cpu.dll",
+            "torch.dll",
+        ],
+        Backend::Cpu => &[
+            "libgomp.so.1",
+            "libc10.so",
+            "libtorch_global_deps.so",
+            "libtorch_cpu.so",
+            "libtorch.so",
+        ],
+        Backend::Vulkan => return None,
+    })
+}
+
+/// The backend libtorch runs a GPU's models on: the GPU's own where libtorch
+/// has a build for it, and the CPU otherwise.
+pub(super) fn backend(gpu: Backend) -> Backend {
+    if libraries(gpu).is_some() {
+        gpu
+    } else {
+        Backend::Cpu
     }
 }
 
-/// Installs libtorch for `backend`, or nothing on Vulkan, which libtorch
-/// doesn't run on.
-pub(super) async fn install(host: Host, backend: Backend) -> Result<Option<PathBuf>> {
-    if backend == Backend::Vulkan {
-        return Ok(None);
-    }
+pub(super) async fn install(host: Host, backend: Backend) -> Result<PathBuf> {
+    let libraries = libraries(backend).context("libtorch has no build for this backend")?;
     let complete = move |folder: &Path| {
-        libraries(backend)
+        libraries
             .iter()
             .all(|library| folder.join(library).is_file())
             && folder.join(shim()).is_file()
     };
-    Ok(Some(RELEASE.install(host, backend, complete).await?))
+    RELEASE.install(host, backend, complete).await
 }
 
 pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
-    for library in libraries(backend) {
+    for library in libraries(backend).context("libtorch has no build for this backend")? {
         preload(&folder.join(library), false)?;
     }
     koharu_torch_sys::load(&[&folder.join(shim())])?;

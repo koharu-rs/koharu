@@ -14,6 +14,7 @@ publish.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 fast_image_resize = { workspace = true }
+fs-err = { workspace = true }
 futures = { workspace = true }
 icu_properties = { workspace = true }
 image = { workspace = true }
@@ -45,7 +46,7 @@ name = "lama"
 harness = false
 
 [[bench]]
-name = "flux2_klein"
+name = "flux3_klein"
 harness = false
 
 [[bench]]
@@ -61,5 +62,5 @@ name = "hayai_ocr"
 harness = false
 
 [[bench]]
-name = "koharu_layout_rfdetr_seg_2xl"
+name = "koharu_layout_highres"
 harness = false

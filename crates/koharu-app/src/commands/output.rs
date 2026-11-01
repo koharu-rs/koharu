@@ -4,7 +4,7 @@ use image::{
     ExtendedColorType, ImageEncoder as _,
     codecs::png::{CompressionType, FilterType, PngEncoder},
 };
-use koharu_psd::{PsdExportOptions, export_page};
+use koharu_psd::PsdExportOptions;
 use koharu_rasterizer::{Raster, RasterOptions, Rasterizer};
 use koharu_renderer::{Frame, Renderer};
 use koharu_scene::{AssetRole, EntityId, Snapshot};
@@ -74,7 +74,7 @@ pub(crate) async fn export(
     let frames = try_join_all(pages.iter().map(|&page| renderer.render(&snapshot, page))).await?;
     let (extension, images) = match format {
         ExportFormat::Png | ExportFormat::Cbz => {
-            let images = tokio_rayon::spawn(move || {
+            let images = tokio::task::spawn_blocking(move || {
                 frames
                     .par_iter()
                     .map(|frame| -> Result<_> {
@@ -97,21 +97,19 @@ pub(crate) async fn export(
                     })
                     .collect::<Result<Vec<_>>>()
             })
-            .await?;
+            .await??;
             ("png", images)
         }
         ExportFormat::Psd => {
             let options = PsdExportOptions::default();
-            let images = try_join_all(
-                frames
-                    .iter()
-                    .map(|frame| export_page(Arc::clone(&rasterizer), &snapshot, frame, &options)),
-            )
+            let images = try_join_all(frames.iter().map(|frame| {
+                koharu_psd::export(Arc::clone(&rasterizer), &snapshot, frame, &options)
+            }))
             .await?;
             ("psd", images)
         }
     };
-    tokio_rayon::spawn(move || -> Result<()> {
+    tokio::task::spawn_blocking(move || -> Result<()> {
         let mut archive = if matches!(format, ExportFormat::Cbz) {
             let directory = destination.parent().context("archive path has no parent")?;
             Some(zip::ZipWriter::new(tempfile::NamedTempFile::new_in(
@@ -152,7 +150,7 @@ pub(crate) async fn export(
         }
         Ok(())
     })
-    .await?;
+    .await??;
     Ok(())
 }
 
@@ -175,7 +173,7 @@ pub(crate) async fn get_thumbnail(
         .with_context(|| format!("page {page} has no source image"))?
         .blob;
     let bytes = snapshot.read_blob(blob).await?;
-    let bytes = tokio_rayon::spawn(move || -> Result<Vec<u8>> {
+    let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
         let image = image::load_from_memory(&bytes).context("failed to decode source image")?;
         if image.width() == 0 || image.height() == 0 {
             return Err(anyhow::anyhow!("source image is empty"));
@@ -184,7 +182,7 @@ pub(crate) async fn get_thumbnail(
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
         Ok(encoder.encode(80.0).to_vec())
     })
-    .await?;
+    .await??;
     Ok(ThumbnailBytes(bytes))
 }
 
@@ -199,14 +197,14 @@ pub(crate) async fn rendered_preview(
     let image = rasterize(rasterizer, &frame, RasterOptions::default())
         .await?
         .image;
-    tokio_rayon::spawn(move || {
+    tokio::task::spawn_blocking(move || {
         let image = image::DynamicImage::ImageRgba8(image)
             .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
             .to_rgba8();
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
         Ok::<_, anyhow::Error>(encoder.encode(85.0).to_vec())
     })
-    .await
+    .await?
 }
 
 async fn rasterize(
@@ -215,7 +213,7 @@ async fn rasterize(
     options: RasterOptions,
 ) -> Result<Raster> {
     let frame = frame.raster_frame()?;
-    tokio_rayon::spawn(move || rasterizer.rasterize(&frame, options))
-        .await
+    tokio::task::spawn_blocking(move || rasterizer.rasterize(&frame, options))
+        .await?
         .map_err(Into::into)
 }

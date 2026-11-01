@@ -9,19 +9,11 @@ mod model;
 mod processor;
 
 use anyhow::{Context, Result, ensure};
-use image::{DynamicImage, GrayImage, RgbImage};
+use image::{DynamicImage, GenericImageView, GrayImage, RgbImage};
 use koharu_diffusion::{ImageParams, SampleMethod, Scheduler};
 use koharu_runtime::Repository;
 
-use self::{
-    model::{Model, ModelPaths},
-    processor::Processor,
-};
-
-pub use self::processor::RoremMixedOptions;
-
-pub const DEFAULT_PROMPT: &str = "clean manga illustration, crisp black line art, flat colors, seamless original background, clean white speech bubble, no text";
-pub const DEFAULT_NEGATIVE_PROMPT: &str = "text, letters, words, symbols, watermark, signature, blurry, smudged, dirty, gray artifacts, extra objects, photorealistic";
+use self::model::{Model, ModelPaths};
 
 const ROREM: Repository = Repository::model(
     "mayocream/RORem-mixed-GGUF",
@@ -31,6 +23,37 @@ const SDXL_INPAINTING: Repository = Repository::model(
     "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
     "115134f363124c53c7d878647567d04daf26e41e",
 );
+
+/// The converted model card's settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Options {
+    pub prompt: String,
+    pub negative_prompt: String,
+    /// Square inference resolution. RORem mixed was trained at 512 and 1024.
+    pub resolution: u32,
+    /// Mask growth in model-space pixels.
+    pub mask_dilation: u8,
+    pub num_inference_steps: i32,
+    pub guidance_scale: f32,
+    pub strength: f32,
+    /// sd.cpp's seed; -1 picks one at random.
+    pub seed: i64,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            prompt: "clean manga illustration, crisp black line art, flat colors, seamless original background, clean white speech bubble, no text".to_owned(),
+            negative_prompt: "text, letters, words, symbols, watermark, signature, blurry, smudged, dirty, gray artifacts, extra objects, photorealistic".to_owned(),
+            resolution: 512,
+            mask_dilation: 0,
+            num_inference_steps: 30,
+            guidance_scale: 8.0,
+            strength: 0.999,
+            seed: -1,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct RoremMixed {
@@ -65,24 +88,56 @@ impl RoremMixed {
         };
         let paths = paths
             .await
-            .context("failed to resolve RORem mixed model assets")?;
+            .context("failed to resolve RORem mixed's files")?;
         let model = Model::new(device, max_vram, &paths)?;
         Ok(Self { model })
     }
 
+    /// `image` repainted where `mask` is white.
     pub fn inference(
         &self,
         image: &DynamicImage,
         mask: &GrayImage,
-        prompt: &str,
-        negative_prompt: &str,
-        options: &RoremMixedOptions,
+        options: &Options,
     ) -> Result<RgbImage> {
-        Processor::validate(image, mask, prompt, negative_prompt, options)?;
+        ensure!(
+            image.width() > 0 && image.height() > 0,
+            "image dimensions must be non-zero"
+        );
+        ensure!(
+            image.dimensions() == mask.dimensions(),
+            "image and mask dimensions differ: image={:?}, mask={:?}",
+            image.dimensions(),
+            mask.dimensions()
+        );
+        ensure!(
+            matches!(options.resolution, 512 | 1024),
+            "RORem mixed resolution must be 512 or 1024"
+        );
+        ensure!(
+            options.num_inference_steps > 0,
+            "num_inference_steps must be greater than zero"
+        );
+        ensure!(
+            options.guidance_scale.is_finite() && options.guidance_scale > 0.0,
+            "guidance_scale must be finite and greater than zero"
+        );
+        ensure!(
+            options.strength.is_finite() && options.strength > 0.0 && options.strength < 1.0,
+            "RORem mixed strength must be finite, greater than zero, and less than one"
+        );
+        ensure!(
+            !options.prompt.contains('\0'),
+            "prompt contains an interior NUL byte"
+        );
+        ensure!(
+            !options.negative_prompt.contains('\0'),
+            "negative prompt contains an interior NUL byte"
+        );
 
         let original = image.to_rgb8();
-        let init_image = Processor::resize_image(&original, options.resolution)?;
-        let native_mask = Processor::resize_mask(mask, options.resolution, options.mask_dilation)?;
+        let init_image = processor::resize_image(&original, options.resolution)?;
+        let native_mask = processor::resize_mask(mask, options.resolution, options.mask_dilation)?;
         if native_mask.as_raw().iter().all(|&value| value == 0) {
             return Ok(original);
         }
@@ -90,8 +145,8 @@ impl RoremMixed {
         let generated = self
             .model
             .forward(&ImageParams {
-                prompt,
-                negative_prompt,
+                prompt: &options.prompt,
+                negative_prompt: &options.negative_prompt,
                 init: Some(&init_image),
                 mask: Some(&native_mask),
                 width: Some(options.resolution),
@@ -114,6 +169,6 @@ impl RoremMixed {
             generated.dimensions()
         );
 
-        Processor::composite(&original, &native_mask, &generated)
+        processor::composite(&original, &native_mask, &generated)
     }
 }

@@ -1,5 +1,4 @@
-//! Writes a Koharu page as a layered PSD with photocraft-psd. The README maps
-//! each scene element to what the PSD holds, with sources.
+//! Writes a Koharu page as a layered PSD with photocraft-psd.
 
 mod blocks;
 mod engine_data;
@@ -43,7 +42,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// layer with its own pixels, properties, and masks; shapes and text also
 /// keep what lets Photoshop edit them. The page is rendered once, so call it
 /// off the UI thread.
-pub fn export_page(session: &Session, renderer: &Renderer, page: PageId) -> Result<Vec<u8>> {
+pub fn export(session: &Session, renderer: &Renderer, page: PageId) -> Result<Vec<u8>> {
     let view = session.page(page)?;
     let (width, height) = (view.size.width, view.size.height);
     if width > MAX_SIDE || height > MAX_SIDE {
