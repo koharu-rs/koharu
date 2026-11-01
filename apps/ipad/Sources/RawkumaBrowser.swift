@@ -92,35 +92,91 @@ struct BrowserSurface: UIViewRepresentable {
 
 struct BrowserScreen: View {
     @Environment(MangaLibrary.self) private var library
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Bindable var browser: RawkumaBrowser
     @State private var revalidate = true
     @State private var newCopy = false
     var showLibrary: (UUID) -> Void
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button { browser.webView.goBack() } label: { Image(systemName: "chevron.backward") }.accessibilityLabel(L("Back"))
-                Button { browser.webView.goForward() } label: { Image(systemName: "chevron.forward") }.accessibilityLabel(L("Forward"))
-                Button { browser.webView.reload() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel(L("Reload"))
-                TextField(L("Rawkuma URL"), text: $browser.address).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).onSubmit { browser.go(browser.address) }.textFieldStyle(.roundedBorder).environment(\.layoutDirection, .leftToRight)
-                Button(L("Go")) { browser.go(browser.address) }
-            }.padding(10)
-            HStack {
-                Button {
-                    guard let chapter = browser.chapter else { return }
-                    library.importChapter(chapter, revalidate: revalidate, newCopy: newCopy, onReady: showLibrary)
-                } label: { Label(L("Translate this chapter"), systemImage: "translate") }
-                .buttonStyle(.borderedProminent).disabled(library.busy || browser.chapter == nil || browser.loading)
-                Toggle(L("Check source updates"), isOn: $revalidate).toggleStyle(.button)
-                Toggle(L("New copy"), isOn: $newCopy).toggleStyle(.button)
-                Spacer()
-                if let chapter = browser.chapter { Text("\(chapter.images.count) \(L("pages"))").font(.caption).foregroundStyle(.secondary) }
-                if browser.loading { ProgressView() }
-            }.padding(.horizontal, 10).padding(.bottom, 8)
+            if horizontalSizeClass == .compact {
+                VStack(spacing: 2) {
+                    HStack(spacing: 8) {
+                        Group {
+                            if browser.loading { ProgressView().controlSize(.small) }
+                            else { Image(systemName: "globe").foregroundStyle(.secondary) }
+                        }.frame(width: 18)
+                        TextField(L("Rawkuma URL"), text: $browser.address)
+                            .font(.subheadline).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .keyboardType(.URL).submitLabel(.go).onSubmit { browser.go(browser.address) }
+                            .environment(\.layoutDirection, .leftToRight)
+                        Button {
+                            if browser.address == browser.webView.url?.absoluteString { browser.webView.reload() }
+                            else { browser.go(browser.address) }
+                        } label: {
+                            Image(systemName: browser.address == browser.webView.url?.absoluteString ? "arrow.clockwise" : "arrow.right")
+                                .frame(width: 32, height: 40).contentShape(Rectangle())
+                        }.accessibilityLabel(L(browser.address == browser.webView.url?.absoluteString ? "Reload" : "Go"))
+                    }
+                    .padding(.leading, 12).padding(.trailing, 4)
+                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    HStack(spacing: 4) {
+                        Button { browser.webView.goBack() } label: {
+                            Image(systemName: "chevron.backward").frame(width: 44, height: 44).contentShape(Rectangle())
+                        }.accessibilityLabel(L("Back")).disabled(!browser.webView.canGoBack)
+                        Button { browser.webView.goForward() } label: {
+                            Image(systemName: "chevron.forward").frame(width: 44, height: 44).contentShape(Rectangle())
+                        }.accessibilityLabel(L("Forward")).disabled(!browser.webView.canGoForward)
+                        Button(action: translateChapter) {
+                            HStack(spacing: 6) {
+                                Label(L("Translate this chapter"), systemImage: "translate")
+                                    .lineLimit(1).minimumScaleFactor(0.75)
+                                if let chapter = browser.chapter {
+                                    Text(chapter.images.count, format: .number).font(.caption.monospacedDigit())
+                                        .padding(.horizontal, 5).padding(.vertical, 2)
+                                        .background(.white.opacity(0.18), in: Capsule())
+                                }
+                            }.font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 30)
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                        .disabled(library.busy || browser.chapter == nil || browser.loading)
+                        Menu {
+                            if let chapter = browser.chapter { Text("\(chapter.images.count) \(L("pages"))") }
+                            Toggle(L("Check source updates"), isOn: $revalidate)
+                            Toggle(L("New copy"), isOn: $newCopy)
+                        } label: {
+                            Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle())
+                        }.accessibilityLabel(L("Translation"))
+                    }.font(.subheadline)
+                }.padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 2).background(.bar)
+                Divider()
+            } else {
+                HStack {
+                    Button { browser.webView.goBack() } label: { Image(systemName: "chevron.backward") }.accessibilityLabel(L("Back"))
+                    Button { browser.webView.goForward() } label: { Image(systemName: "chevron.forward") }.accessibilityLabel(L("Forward"))
+                    Button { browser.webView.reload() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel(L("Reload"))
+                    TextField(L("Rawkuma URL"), text: $browser.address).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).onSubmit { browser.go(browser.address) }.textFieldStyle(.roundedBorder).environment(\.layoutDirection, .leftToRight)
+                    Button(L("Go")) { browser.go(browser.address) }
+                }.padding(10)
+                HStack {
+                    Button(action: translateChapter) { Label(L("Translate this chapter"), systemImage: "translate") }
+                    .buttonStyle(.borderedProminent).disabled(library.busy || browser.chapter == nil || browser.loading)
+                    Toggle(L("Check source updates"), isOn: $revalidate).toggleStyle(.button)
+                    Toggle(L("New copy"), isOn: $newCopy).toggleStyle(.button)
+                    Spacer()
+                    if let chapter = browser.chapter { Text("\(chapter.images.count) \(L("pages"))").font(.caption).foregroundStyle(.secondary) }
+                    if browser.loading { ProgressView() }
+                }.padding(.horizontal, 10).padding(.bottom, 8)
+            }
             if let error = browser.error { Text(error).font(.caption).foregroundStyle(.red).padding(6) }
             BrowserSurface(browser: browser)
         }
         .navigationTitle("Rawkuma")
+        .navigationBarTitleDisplayMode(horizontalSizeClass == .compact ? .inline : .large)
         .task { if browser.webView.url == nil { browser.go(browser.address) } }
+    }
+    private func translateChapter() {
+        guard let chapter = browser.chapter else { return }
+        library.importChapter(chapter, revalidate: revalidate, newCopy: newCopy, onReady: showLibrary)
     }
 }
