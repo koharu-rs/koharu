@@ -32,6 +32,7 @@ import Observation
             chapters = try disk.chapters()
             let config = disk.root.appendingPathComponent("preferences.json")
             if FileManager.default.fileExists(atPath: config.path) { preferences = try disk.load(Preferences.self, config) }
+            else { try disk.save(preferences, to: config) }
             let inventory = disk.root.appendingPathComponent("models.json")
             if FileManager.default.fileExists(atPath: inventory.path) { models = try disk.load([LocalModel].self, inventory) }
         } catch { self.error = error.localizedDescription }

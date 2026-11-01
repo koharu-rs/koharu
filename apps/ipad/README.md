@@ -2,6 +2,10 @@
 
 Native SwiftUI/WKWebView app, separate from the desktop CEF executable. Requires iOS/iPadOS 26 or newer. The interface supports English (US/UK), French, Arabic, Spanish, Portuguese, German, Korean, Japanese, Traditional Chinese, Simplified Chinese and Vietnamese. **Settings → Interface → App language** changes the interface immediately and saves it separately from the chapter's translation target. **System default** follows the device's supported language preference. Arabic uses right-to-left controls/layout; URL and token fields stay left-to-right. Native system permission/share dialogs follow iPadOS's app-language settings. The translation target catalog is generated from Koharu's Rust language catalog (43 targets, including separate US and UK English). The base translation prompt and Rawkuma navigation script are shared source files with the desktop app.
 
+Version **0.3.9** starts with **System default** for the interface, matching the device's supported preferred languages; if none match, it uses **English (US)** (`en-US`). A new library's initial translation target follows that resolved interface language, including US/UK English and Simplified/Traditional Chinese. The initial preferences are saved immediately. Existing saved translation targets are preserved; later interface changes and target selection remain independent.
+
+Two focused Debug checks passed on the physical iPad M5 (0.004 seconds): regional/system preference matching, unsupported/empty preference fallback, all interface-to-target/catalog mappings, initial preference persistence and preservation of a manually selected target. An isolated iPad simulator app verified first launch with `fr-CA` → French interface + `fr-FR`, and unsupported `th-TH` → English interface + `en-US`. The production library was not reset for these checks.
+
 ## Reading and translation
 
 1. In **Settings**, choose a translation provider and a target language: **LM Studio**, **On-device GGUF**, or one of the hosted APIs below.

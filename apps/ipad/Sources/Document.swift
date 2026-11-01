@@ -54,7 +54,7 @@ struct Preferences: Codable, Equatable {
     var remoteModel = ""
     var hosted: [String: HostedConfiguration]?
     var localModel: UUID?
-    var target = "vi-VN"
+    var target = AppLocalization.shared.resolvedLanguage.translationTarget
     var instructions = ""
     var contextSize = 4096
     var inpaint = false
