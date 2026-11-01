@@ -108,6 +108,7 @@ function installProject() {
     active_page: 'page',
     can_undo: false,
     can_redo: false,
+    source_url: null,
   })
   queryClient.setQueryData(pagesKey, [])
   queryClient.setQueryData(pageKey, page)

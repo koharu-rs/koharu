@@ -7,7 +7,7 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	discoverLmStudio: (port: number) => __TAURI_INVOKE<LmStudioDiscovery>("discover_lm_studio", { port }),
-	openSourceBrowser: (bounds: SourceBounds) => __TAURI_INVOKE<null>("open_source_browser", { bounds }),
+	openSourceBrowser: (bounds: SourceBounds, url: string | null) => __TAURI_INVOKE<null>("open_source_browser", { bounds, url }),
 	resizeSourceBrowser: (bounds: SourceBounds) => __TAURI_INVOKE<null>("resize_source_browser", { bounds }),
 	closeSourceBrowser: () => __TAURI_INVOKE<null>("close_source_browser"),
 	navigateSourceBrowser: (url: string) => __TAURI_INVOKE<null>("navigate_source_browser", { url }),
@@ -411,6 +411,7 @@ export type ProcessorConfig = {
 
 export type ProjectInfo = {
 	name: string,
+	source_url: string | null,
 	revision: Revision,
 	active_page: EntityId | null,
 	can_undo: boolean,

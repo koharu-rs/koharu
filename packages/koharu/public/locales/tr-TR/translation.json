@@ -571,6 +571,7 @@
     "pages_one": "{{count}} sayfa",
     "pages_other": "{{count}} sayfa",
     "chooseChapter": "Çevirmek için bir bölüm açın",
-    "browser": "Rawkuma tarayıcısı"
+    "browser": "Rawkuma tarayıcısı",
+    "original": "Orijinal bölüm"
   }
 }

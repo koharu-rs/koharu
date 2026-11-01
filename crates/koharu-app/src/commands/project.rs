@@ -29,6 +29,7 @@ pub(crate) enum RasterStrokeMode {
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct ProjectInfo {
     pub name: String,
+    pub source_url: Option<String>,
     pub revision: Revision,
     pub active_page: Option<EntityId>,
     pub can_undo: bool,
@@ -313,14 +314,15 @@ impl Project {
         }
     }
 
-    pub(crate) fn info(&self) -> ProjectInfo {
-        ProjectInfo {
+    pub(crate) fn info(&self) -> Result<ProjectInfo> {
+        Ok(ProjectInfo {
             name: self.name.clone(),
+            source_url: super::source::project_url(&self.snapshot())?,
             revision: self.revision(),
             active_page: self.active_page,
             can_undo: !self.undo.is_empty(),
             can_redo: !self.redo.is_empty(),
-        }
+        })
     }
 
     pub(crate) fn pages(snapshot: &Snapshot) -> Result<Vec<PageSummary>> {

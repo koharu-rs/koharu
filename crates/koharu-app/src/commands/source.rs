@@ -24,11 +24,51 @@ use url::Url;
 use super::{
     Error, import, lifecycle,
     processing::{JobId, Processing},
-    project::{CurrentProject, ProjectLibrary},
+    project::{CurrentProject, Project, ProjectLibrary},
 };
 
 const BROWSER: &str = "rawkuma-source";
 const HOME: &str = "https://rawkuma.net/";
+
+#[revision::revisioned(revision = 1)]
+#[derive(Clone)]
+struct ChapterSource {
+    url: String,
+}
+
+impl koharu_scene::Component for ChapterSource {
+    const KIND: &'static str = "dev.koharu.rawkuma.chapter";
+
+    fn validate(&self, _: &koharu_scene::ValidationContext<'_>) -> koharu_scene::Result<()> {
+        if self.url.len() <= 8192 && Url::parse(&self.url).is_ok_and(|url| source_url(&url)) {
+            Ok(())
+        } else {
+            Err(koharu_scene::Error::Invalid(
+                "invalid Rawkuma chapter URL".into(),
+            ))
+        }
+    }
+}
+
+pub(super) fn project_url(snapshot: &koharu_scene::Snapshot) -> Result<Option<String>> {
+    Ok(snapshot
+        .project_component::<ChapterSource>()?
+        .map(|source| source.url))
+}
+
+async fn remember_source(project: &mut Project, url: &str) -> Result<()> {
+    let snapshot = project.snapshot();
+    if let Some(existing) = project_url(&snapshot)? {
+        if existing != url {
+            bail!("the cached project belongs to a different Rawkuma chapter");
+        }
+        return Ok(());
+    }
+    // The chapter link belongs to the document, not the disposable HTTP cache.
+    let patch = snapshot.patch(|edit| edit.set_project(&ChapterSource { url: url.into() }))?;
+    project.session.commit(patch).await?;
+    Ok(())
+}
 
 #[derive(Default)]
 pub(crate) struct SourceState {
@@ -202,28 +242,41 @@ pub(crate) async fn open_source_browser(
     handle: AppHandle<CefRuntime>,
     state: State<'_, SourceState>,
     bounds: SourceBounds,
+    url: Option<String>,
 ) -> Result<(), Error> {
     trusted(&webview)?;
+    let url = url.map(|url| Url::parse(&url)).transpose()?;
+    if url.as_ref().is_some_and(|url| !source_url(url)) {
+        return Err(anyhow::anyhow!("enter an HTTPS Rawkuma URL").into());
+    }
     let _browser = state.browser.lock().await;
     let rect = bounds.rect()?;
     if let Some(view) = handle.get_webview(BROWSER) {
         view.set_bounds(rect)?;
+        if let Some(url) = url
+            && view.url()? != url
+        {
+            view.navigate(url)?;
+        }
         view.show()?;
     } else {
         let window = handle
             .get_window("main")
             .context("the editor window is unavailable")?;
         window.add_child(
-            tauri::webview::WebviewBuilder::new(BROWSER, WebviewUrl::External(Url::parse(HOME)?))
-                .bounds(rect)
-                .data_directory(
-                    dirs::cache_dir()
-                        .context("the cache directory is unavailable")?
-                        .join("koharu")
-                        .join("rawkuma-browser"),
-                )
-                .on_navigation(source_url)
-                .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny),
+            tauri::webview::WebviewBuilder::new(
+                BROWSER,
+                WebviewUrl::External(url.unwrap_or(Url::parse(HOME)?)),
+            )
+            .bounds(rect)
+            .data_directory(
+                dirs::cache_dir()
+                    .context("the cache directory is unavailable")?
+                    .join("koharu")
+                    .join("rawkuma-browser"),
+            )
+            .on_navigation(source_url)
+            .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny),
         )?;
     }
     Ok(())
@@ -382,7 +435,7 @@ pub(crate) async fn prepare_source_translation(
     let entry_path = root.join("projects").join(format!("{fingerprint}.json"));
     let existing = cache::read_json::<cache::CachedProject>(&entry_path).await?;
     let library = handle.state::<ProjectLibrary>().inner().clone();
-    if !replace && let Some(entry) = existing {
+    if !replace && let Some(mut entry) = existing {
         let active = handle
             .state::<CurrentProject>()
             .project
@@ -397,10 +450,22 @@ pub(crate) async fn prepare_source_translation(
         if let Some((revision, page_count)) = active
             && page_count == images.len()
         {
+            let current = handle.state::<CurrentProject>();
+            let mut current = current.project.lock().await;
+            let project = current
+                .as_mut()
+                .filter(|project| project.name == entry.name)
+                .context("the cached project was closed")?;
+            remember_source(project, &page.url).await?;
+            let cached = entry.complete && entry.revision == Some(revision);
+            if cached && project.revision() != revision {
+                entry.revision = Some(project.revision());
+                cache::write_json(&entry_path, &entry).await?;
+            }
             state.prepared(entry.name.clone(), entry_path, settings);
             return Ok(SourceTranslation {
                 project: entry.name,
-                cached: entry.complete && entry.revision == Some(revision),
+                cached,
                 pages: count,
             });
         }
@@ -410,10 +475,15 @@ pub(crate) async fn prepare_source_translation(
                 .iter()
                 .any(|project| project.name == entry.name)
         {
-            let opened = library.open(&entry.name).await?;
+            let mut opened = library.open(&entry.name).await?;
             let snapshot = opened.snapshot();
             if snapshot.pages().count() == images.len() {
                 let cached = entry.complete && entry.revision == Some(snapshot.revision());
+                remember_source(&mut opened, &page.url).await?;
+                if cached && opened.revision() != snapshot.revision() {
+                    entry.revision = Some(opened.revision());
+                    cache::write_json(&entry_path, &entry).await?;
+                }
                 lifecycle::replace_project(&handle, opened).await?;
                 state.prepared(entry.name.clone(), entry_path, settings);
                 return Ok(SourceTranslation {
@@ -457,6 +527,7 @@ pub(crate) async fn prepare_source_translation(
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     );
     let mut opened = library.create(&name).await?;
+    remember_source(&mut opened, &page.url).await?;
     lifecycle::append_imported_pages(&mut opened, pages).await?;
     lifecycle::replace_project(&handle, opened).await?;
     cache::write_json(
@@ -512,6 +583,47 @@ pub(crate) async fn clear_source_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn chapter_url_survives_reopening_and_cannot_be_reassigned_by_a_cache_hit() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("chapter.khrproj");
+        let url = "https://rawkuma.net/manga/example/chapter-38-5/";
+        let mut project = Project::create("chapter".into(), path.clone())
+            .await
+            .unwrap();
+        assert_eq!(project.info().unwrap().source_url, None);
+        remember_source(&mut project, url).await.unwrap();
+        let revision = project.revision();
+        remember_source(&mut project, url).await.unwrap();
+        assert_eq!(project.revision(), revision);
+        assert!(
+            remember_source(&mut project, "https://rawkuma.net/manga/other/")
+                .await
+                .is_err()
+        );
+        drop(project);
+        let reopened = Project::open("chapter".into(), path).await.unwrap();
+        assert_eq!(reopened.info().unwrap().source_url.as_deref(), Some(url));
+    }
+
+    #[tokio::test]
+    async fn chapter_metadata_rejects_urls_outside_the_source_browser_boundary() {
+        let root = tempfile::tempdir().unwrap();
+        let mut project = Project::create("test".into(), root.path().join("test.khrproj"))
+            .await
+            .unwrap();
+        for url in [
+            "http://rawkuma.net/",
+            "https://evil.test/",
+            "https://rawkuma.net.evil.test/",
+            "https://user@rawkuma.net/",
+            "javascript:alert(1)",
+        ] {
+            assert!(remember_source(&mut project, url).await.is_err());
+        }
+        assert_eq!(project.info().unwrap().source_url, None);
+    }
 
     #[tokio::test]
     async fn only_the_matching_successful_pipeline_job_publishes_a_complete_cache() {

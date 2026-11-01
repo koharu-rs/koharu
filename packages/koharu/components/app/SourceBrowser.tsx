@@ -33,9 +33,10 @@ const home = 'https://rawkuma.net/'
 
 export function SourceBrowser() {
   const { t } = useTranslation()
+  const targetUrl = useKoharuStore((state) => state.sourceTargetUrl)
   const container = useRef<HTMLDivElement>(null)
   const [page, setPage] = useState<SourcePage | null>(null)
-  const [address, setAddress] = useState(home)
+  const [address, setAddress] = useState(targetUrl ?? home)
   const [progress, setProgress] = useState<SourceProgress | null>(null)
   const [revalidate, setRevalidate] = useState(true)
   const [replace, setReplace] = useState(false)
@@ -54,7 +55,8 @@ export function SourceBrowser() {
     let ready = false
     let polling = false
     let frame = 0
-    let lastUrl = home
+    let lastUrl = targetUrl ?? home
+    let awaitingTarget = targetUrl
     const bounds = () => {
       const rect = container.current!.getBoundingClientRect()
       return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
@@ -65,6 +67,9 @@ export function SourceBrowser() {
       try {
         const next = await commands.inspectSourcePage()
         if (!disposed) {
+          // A retained child webview may still expose its previous chapter while navigating.
+          if (awaitingTarget && next.url !== awaitingTarget) return
+          awaitingTarget = null
           setPage(next)
           setPageError(null)
           const previousUrl = lastUrl
@@ -77,7 +82,7 @@ export function SourceBrowser() {
         polling = false
       }
     }
-    void call(commands.openSourceBrowser, bounds())
+    void call(commands.openSourceBrowser, bounds(), targetUrl)
       .then(async () => {
         if (disposed) return
         ready = true
@@ -100,7 +105,7 @@ export function SourceBrowser() {
       void commands.closeSourceBrowser().catch(() => undefined)
     }
     // The browser has its own navigation history and is retained when this view closes.
-  }, [])
+  }, [targetUrl])
 
   const navigate = async (url: string) => {
     setMessage(null)
@@ -132,7 +137,7 @@ export function SourceBrowser() {
       if (container.current) {
         const rect = container.current.getBoundingClientRect()
         void commands
-          .openSourceBrowser({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
+          .openSourceBrowser({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }, null)
           .catch(() => undefined)
       }
     } finally {
@@ -178,7 +183,7 @@ export function SourceBrowser() {
     else if (container.current) {
       const rect = container.current.getBoundingClientRect()
       void commands
-        .openSourceBrowser({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })
+        .openSourceBrowser({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }, null)
         .catch(() => undefined)
     }
   }

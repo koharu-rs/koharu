@@ -1,7 +1,7 @@
 'use client'
 
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { FilePlus2, FolderOpen, Globe, LoaderCircle, Settings } from 'lucide-react'
+import { BookOpen, FilePlus2, FolderOpen, Globe, LoaderCircle, Settings } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -55,6 +55,7 @@ export function TitleBar() {
   const sourceOpen = useKoharuStore((state) => state.sourceOpen)
   const sourceBusy = useKoharuStore((state) => state.sourceBusy)
   const setSourceOpen = useKoharuStore((state) => state.setSourceOpen)
+  const openProjectSource = useKoharuStore((state) => state.openProjectSource)
   const { importPages, importing } = useImportPages()
   const { run: exportProject, busy: exporting } = useCommand(
     ['export-project'],
@@ -267,6 +268,19 @@ export function TitleBar() {
         </Menubar>
 
         <div className='min-w-0 flex-1' />
+        {project?.source_url && !sourceOpen && (
+          <Button
+            size='sm'
+            variant='ghost'
+            className='relative z-10 mr-1 h-7 text-xs'
+            disabled={sourceBusy}
+            title={project.source_url}
+            onClick={() => openProjectSource(project.source_url!)}
+          >
+            <BookOpen className='size-3.5' />
+            {t('source.original')}
+          </Button>
+        )}
         <Button
           size='sm'
           variant={sourceOpen ? 'secondary' : 'ghost'}

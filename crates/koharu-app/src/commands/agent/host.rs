@@ -43,7 +43,7 @@ impl KoharuHost {
                 .into_iter()
                 .map(|page| Project::page(&snapshot, page.id))
                 .collect::<Result<Vec<_>>>()?;
-            (project.info(), pages)
+            (project.info()?, pages)
         };
         let preferences = Preferences::load()?;
         let fonts = self
@@ -97,7 +97,7 @@ impl KoharuHost {
             let (commit, value) = mutation(project).await?;
             project.record_commit(&commit);
             project.reconcile_page();
-            (commit, value, project.active_page(), project.info())
+            (commit, value, project.active_page(), project.info()?)
         };
         let revision = commit.revision;
         self.synchronize(commit, page).await?;

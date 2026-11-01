@@ -571,6 +571,7 @@
     "pages_one": "{{count}} page",
     "pages_other": "{{count}} pages",
     "chooseChapter": "Open a chapter to translate",
-    "browser": "Rawkuma source browser"
+    "browser": "Rawkuma source browser",
+    "original": "Original chapter"
   }
 }

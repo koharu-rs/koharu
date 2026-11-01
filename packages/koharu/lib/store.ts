@@ -62,8 +62,10 @@ interface KoharuStore {
   processingStages: Stage[]
   settingsOpen: boolean
   sourceOpen: boolean
+  sourceTargetUrl: string | null
   sourceBusy: boolean
   setSourceOpen: (open: boolean) => void
+  openProjectSource: (url: string) => void
   setSourceBusy: (busy: boolean) => void
   shortcuts: Shortcuts
   selectPages: (pages: EntityId[]) => void
@@ -114,9 +116,12 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   processingStages: [...pipelineStages],
   settingsOpen: false,
   sourceOpen: false,
+  sourceTargetUrl: null,
   sourceBusy: false,
   setSourceOpen: (sourceOpen) =>
-    set({ sourceOpen, ...(sourceOpen ? { settingsOpen: false } : {}) }),
+    set({ sourceOpen, sourceTargetUrl: null, ...(sourceOpen ? { settingsOpen: false } : {}) }),
+  openProjectSource: (sourceTargetUrl) =>
+    set({ sourceTargetUrl, sourceOpen: true, settingsOpen: false }),
   setSourceBusy: (sourceBusy) => set({ sourceBusy }),
   shortcuts: defaultShortcuts,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),

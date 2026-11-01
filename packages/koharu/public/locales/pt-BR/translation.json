@@ -571,6 +571,7 @@
     "pages_one": "{{count}} página",
     "pages_other": "{{count}} páginas",
     "chooseChapter": "Abra um capítulo para traduzir",
-    "browser": "Navegador Rawkuma"
+    "browser": "Navegador Rawkuma",
+    "original": "Capítulo original"
   }
 }

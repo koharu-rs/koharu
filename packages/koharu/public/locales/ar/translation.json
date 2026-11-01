@@ -571,6 +571,7 @@
     "pages_one": "{{count}} صفحة",
     "pages_other": "{{count}} صفحة",
     "chooseChapter": "افتح فصلاً لترجمته",
-    "browser": "متصفح Rawkuma"
+    "browser": "متصفح Rawkuma",
+    "original": "الفصل الأصلي"
   }
 }

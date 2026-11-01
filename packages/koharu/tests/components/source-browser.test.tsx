@@ -31,6 +31,19 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('source chapter translation', () => {
+  it('opens the saved chapter and does not offer the previous retained chapter for translation', async () => {
+    const target = 'https://rawkuma.net/manga/example/chapter-38-5/'
+    useKoharuStore.getState().openProjectSource(target)
+    vi.spyOn(commands, 'inspectSourcePage').mockResolvedValue(source)
+    render(<SourceBrowser />)
+    await waitFor(() =>
+      expect(commands.openSourceBrowser).toHaveBeenCalledWith(expect.any(Object), target),
+    )
+    expect(screen.getByRole('textbox', { name: 'Rawkuma address' })).toHaveValue(target)
+    expect(screen.getByRole('button', { name: 'Translate this chapter' })).toBeDisabled()
+    expect(commands.process).not.toHaveBeenCalled()
+  })
+
   it('does not hide the second browser surface after StrictMode replays the first mount', async () => {
     render(
       <StrictMode>

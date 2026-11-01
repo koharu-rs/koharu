@@ -32,7 +32,7 @@ App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/p
 
 - Đã build và chạy bản macOS Apple Silicon độc lập; nhập thực tế 32 trang của một chương Rawkuma và hiển thị trong editor.
 - Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
-- 8 kiểm tra backend và 10 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
+- 10 kiểm tra backend và 13 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
 - Đã hoàn tất lượt dịch lại 28 trang có OCR sẵn trên Mac qua LM Studio trên Windows, với Qwen 3.8 27B Q4 và đích tiếng Việt; bản dịch trả về và hiển thị trực tiếp trong editor. Chưa đánh giá thủ công độ chính xác của toàn chương hoặc benchmark tốc độ. Chưa kiểm chứng app Rawkuma chạy trực tiếp trên Windows/Linux.
 - Đây là app desktop, chưa có bản iPad/iOS hoặc máy chủ đọc truyện qua trình duyệt. Có thể chuyển kết quả export sang iPad để đọc bằng ứng dụng phù hợp.
 - Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.
@@ -57,6 +57,8 @@ cargo tauri build --debug --bundles app \
 ```
 
 Bundle macOS nằm tại `target/debug/bundle/macos/koharu.app`. Nếu libclang chưa được phát hiện, đặt `LIBCLANG_PATH` tới thư mục lib của LLVM/Xcode trên máy.
+
+Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`. Nút **Original chapter** ở thanh trên mở đúng URL đó trong trình duyệt Rawkuma của app; từ đây bấm chương tiếp theo trên website rồi **Translate this chapter**. URL vẫn còn sau khi mở lại project hoặc Clear cache. Project cũ chưa lưu URL cần mở lại đúng chương trên Rawkuma và nhập/dịch chương đó để gắn URL; app không đoán link từ tên project.
 
 ## Dùng LM Studio trên máy khác trong LAN
 

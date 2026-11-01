@@ -571,6 +571,7 @@
     "pages_one": "{{count}} стр.",
     "pages_other": "{{count}} стр.",
     "chooseChapter": "Откройте главу для перевода",
-    "browser": "Браузер Rawkuma"
+    "browser": "Браузер Rawkuma",
+    "original": "Оригинальная глава"
   }
 }

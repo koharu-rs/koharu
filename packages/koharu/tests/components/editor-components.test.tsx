@@ -202,6 +202,7 @@ function installProject() {
     active_page: 'page',
     can_undo: true,
     can_redo: false,
+    source_url: null,
   })
   queryClient.setQueryData(pagesKey, [
     {
@@ -249,6 +250,25 @@ function SettingsNavigationHarness() {
 }
 
 describe('greenfield editor', () => {
+  it('opens the original chapter saved in the active project', () => {
+    installProject()
+    const source_url = 'https://rawkuma.net/manga/example/chapter-38-5/'
+    queryClient.setQueryData<ProjectInfo>(projectKey, (project) => ({ ...project!, source_url }))
+    render(<TitleBar />)
+    fireEvent.click(screen.getByRole('button', { name: 'Original chapter' }))
+    expect(useKoharuStore.getState()).toMatchObject({
+      sourceOpen: true,
+      sourceTargetUrl: source_url,
+    })
+    expect(screen.queryByRole('button', { name: 'Original chapter' })).not.toBeInTheDocument()
+  })
+
+  it('hides the original chapter button on projects without a saved source', () => {
+    installProject()
+    render(<TitleBar />)
+    expect(screen.queryByRole('button', { name: 'Original chapter' })).not.toBeInTheDocument()
+  })
+
   it('registers one native resize listener in React strict mode', async () => {
     const unlisten = vi.fn()
     nativeWindow.onResized.mockClear()
@@ -535,6 +555,7 @@ describe('greenfield editor', () => {
           active_page: 'page-3',
           can_undo: true,
           can_redo: false,
+          source_url: null,
         },
         page: pages[2]!,
       })
@@ -548,6 +569,7 @@ describe('greenfield editor', () => {
           active_page: 'page-2',
           can_undo: true,
           can_redo: false,
+          source_url: null,
         },
         page: pages[1]!,
       })

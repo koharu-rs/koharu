@@ -571,6 +571,7 @@
     "pages_one": "{{count}}페이지",
     "pages_other": "{{count}}페이지",
     "chooseChapter": "번역할 장을 여세요",
-    "browser": "Rawkuma 브라우저"
+    "browser": "Rawkuma 브라우저",
+    "original": "원본 챕터"
   }
 }

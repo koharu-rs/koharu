@@ -571,6 +571,7 @@
     "pages_one": "{{count}} 頁",
     "pages_other": "{{count}} 頁",
     "chooseChapter": "請開啟需要翻譯的章節",
-    "browser": "Rawkuma 瀏覽器"
+    "browser": "Rawkuma 瀏覽器",
+    "original": "原始章節"
   }
 }

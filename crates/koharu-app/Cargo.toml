@@ -40,6 +40,7 @@ rayon = { workspace = true }
 rars = { workspace = true }
 rfd = { workspace = true }
 reqwest = { workspace = true }
+revision = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

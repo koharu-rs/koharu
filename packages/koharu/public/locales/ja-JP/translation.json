@@ -571,6 +571,7 @@
     "pages_one": "{{count}}ページ",
     "pages_other": "{{count}}ページ",
     "chooseChapter": "翻訳する話を開いてください",
-    "browser": "Rawkumaブラウザー"
+    "browser": "Rawkumaブラウザー",
+    "original": "元のチャプター"
   }
 }

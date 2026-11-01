@@ -183,7 +183,7 @@ pub(crate) async fn subscribe(
 pub(super) async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Result<()> {
     let snapshot = opened.snapshot();
     let page = opened.active_page();
-    let info = opened.info();
+    let info = opened.info()?;
 
     handle.state::<AgentState>().reset().await;
     let processing = handle.state::<Processing>();
@@ -213,7 +213,13 @@ pub(super) async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Proj
 pub(crate) async fn get_project(
     project: State<'_, CurrentProject>,
 ) -> std::result::Result<Option<ProjectInfo>, Error> {
-    Ok(project.project.lock().await.as_ref().map(Project::info))
+    Ok(project
+        .project
+        .lock()
+        .await
+        .as_ref()
+        .map(Project::info)
+        .transpose()?)
 }
 
 #[tauri::command]
@@ -449,7 +455,7 @@ pub(crate) async fn select_page(
         let project = project.as_mut().context("no project is open")?;
         project.select_page(page)?;
         let snapshot = project.snapshot();
-        let project_info = project.info();
+        let project_info = project.info()?;
         let selected_page = Project::page(&snapshot, page)?;
         (snapshot, project_info, selected_page)
     };

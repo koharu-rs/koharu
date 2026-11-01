@@ -571,6 +571,7 @@
     "pages_one": "{{count}} 页",
     "pages_other": "{{count}} 页",
     "chooseChapter": "请打开需要翻译的章节",
-    "browser": "Rawkuma 浏览器"
+    "browser": "Rawkuma 浏览器",
+    "original": "原始章节"
   }
 }
