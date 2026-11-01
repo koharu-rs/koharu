@@ -77,6 +77,7 @@ struct LibraryScreen: View {
     var openSource: (String) -> Void
     var browse: () -> Void
     @State private var deleting: Chapter?
+    @State private var deletingAll = false
     var body: some View {
         List {
             if library.chapters.isEmpty {
@@ -92,17 +93,36 @@ struct LibraryScreen: View {
                         ProgressView(value: Double(chapter.pages.filter { $0.rendered != nil }.count), total: Double(max(1, chapter.pages.count))).tint(.pink)
                     }.padding(.vertical, 8)
                 }
-                .swipeActions { Button(L("Delete"), role: .destructive) { deleting = chapter }.disabled(library.busy) }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(L("Delete"), systemImage: "trash", role: .destructive) { deleting = chapter }.disabled(library.busy)
+                }
                 .contextMenu {
                     Button(L("Original chapter"), systemImage: "globe") { openSource(chapter.sourceURL) }
                     Button(L("Retranslate"), systemImage: "arrow.clockwise") { library.run(chapter.id, force: true) }.disabled(library.busy)
+                    Divider()
+                    Button(L("Delete"), systemImage: "trash", role: .destructive) { deleting = chapter }.disabled(library.busy)
                 }
             }
         }
         .navigationTitle(L("Library"))
-        .toolbar { Button(L("Browse Rawkuma"), systemImage: "globe", action: browse) }
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button(L("Delete all chapters"), systemImage: "trash") { deletingAll = true }
+                    .disabled(library.busy || library.chapters.isEmpty)
+                Button(L("Browse Rawkuma"), systemImage: "globe", action: browse)
+            }
+        }
         .confirmationDialog(L("Delete this saved chapter?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button(L("Delete"), role: .destructive) { if let deleting { library.delete(deleting.id) }; deleting = nil }
+            Button(L("Delete"), role: .destructive) { if let deleting { library.delete([deleting.id]) }; deleting = nil }
+            Button(L("Cancel"), role: .cancel) { deleting = nil }
+        } message: {
+            Text(L("Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept."))
+        }
+        .confirmationDialog(L("Delete all saved chapters?"), isPresented: $deletingAll, titleVisibility: .visible) {
+            Button(L("Delete all chapters"), role: .destructive) { library.delete(library.chapters.map(\.id)) }
+            Button(L("Cancel"), role: .cancel) {}
+        } message: {
+            Text(L("Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept."))
         }
     }
 }

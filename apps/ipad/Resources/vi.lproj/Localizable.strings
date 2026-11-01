@@ -191,3 +191,6 @@
 "Failed" = "Lỗi";
 "Segments per request" = "Số đoạn mỗi lượt dịch";
 "Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "Mặc định: 100. OCR đọc xong từng trang rồi mới dịch. Chọn 1–100 đoạn mỗi lượt; giảm số này nếu context hoặc giới hạn đầu ra của model không đủ.";
+"Delete all chapters" = "Xóa tất cả chương";
+"Delete all saved chapters?" = "Xóa tất cả chương đã lưu?";
+"Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "Ảnh gốc, bản dịch và lịch sử chương sẽ bị xóa vĩnh viễn. Model đã tải và cài đặt được giữ lại.";

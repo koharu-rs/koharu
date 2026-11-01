@@ -199,8 +199,14 @@ import Observation
             if let index = chapters.firstIndex(where: { $0.id == id }) { chapters[index] = chapter }
         } catch { self.error = error.localizedDescription }
     }
-    func delete(_ id: UUID) {
+    func delete(_ ids: [UUID]) {
         guard !busy else { return }
-        do { try FileManager.default.removeItem(at: disk.chapterURL(id)); chapters.removeAll { $0.id == id } } catch { self.error = error.localizedDescription }
+        let requested = Set(ids)
+        do {
+            for id in chapters.map(\.id) where requested.contains(id) {
+                try FileManager.default.removeItem(at: disk.chapterURL(id))
+                chapters.removeAll { $0.id == id }
+            }
+        } catch { self.error = error.localizedDescription }
     }
 }

@@ -191,3 +191,6 @@
 "Failed" = "Falha";
 "Segments per request" = "Segmentos por pedido";
 "Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "Predefinição: 100. O OCR termina cada página antes da tradução. Escolha de 1 a 100 segmentos por pedido; reduza este valor se o contexto ou o limite de saída do modelo for insuficiente.";
+"Delete all chapters" = "Apagar todos os capítulos";
+"Delete all saved chapters?" = "Apagar todos os capítulos guardados?";
+"Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "As imagens originais, as traduções e o histórico dos capítulos serão apagados permanentemente. Os modelos descarregados e as definições serão mantidos.";

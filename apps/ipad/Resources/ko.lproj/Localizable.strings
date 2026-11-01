@@ -191,3 +191,6 @@
 "Failed" = "실패";
 "Segments per request" = "요청당 텍스트 구간 수";
 "Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "기본값: 100. 각 페이지의 OCR이 완료된 후 번역합니다. 요청당 1~100개 구간을 설정하세요. 모델의 컨텍스트나 출력 한도가 부족하면 이 값을 줄이세요.";
+"Delete all chapters" = "모든 챕터 삭제";
+"Delete all saved chapters?" = "저장된 모든 챕터를 삭제할까요?";
+"Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "원본 이미지, 번역 및 챕터 기록이 영구적으로 삭제됩니다. 다운로드한 모델과 설정은 유지됩니다.";

@@ -3,6 +3,39 @@ import UIKit
 @testable import KoharuPad
 
 final class ChapterNavigationChecks: XCTestCase {
+    @MainActor func testChapterDeletionKeepsModelsSettingsAndUnselectedChapters() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let disk = try LibraryDisk(root: root), library = MangaLibrary(disk: disk)
+        let settings = root.appendingPathComponent("preferences.json")
+        try disk.save(library.preferences, to: settings)
+        let settingsData = try Data(contentsOf: settings)
+        let model = disk.modelsURL.appendingPathComponent("keep-model.gguf")
+        try Data([1, 2, 3]).write(to: model)
+        var ids: [UUID] = []
+        for index in 1...3 {
+            let chapter = Chapter(title: "Disposable chapter \(index)", sourceURL: "https://rawkuma.net/manga/check/\(index)/", target: "vi-VN", pages: [])
+            try library.update(chapter)
+            for name in ["original.image", "render.png", "undo.json"] {
+                try Data([4, 5, 6]).write(to: disk.chapterURL(chapter.id).appendingPathComponent(name))
+            }
+            ids.append(chapter.id)
+        }
+        library.busy = true
+        library.delete(ids)
+        XCTAssertEqual(library.chapters.count, 3)
+        library.busy = false
+        library.delete([ids[0]])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: disk.chapterURL(ids[0]).path))
+        XCTAssertEqual(Set(try disk.chapters().map(\.id)), Set(ids.dropFirst()))
+        library.delete(library.chapters.map(\.id))
+        XCTAssertTrue(library.chapters.isEmpty)
+        XCTAssertTrue(try disk.chapters().isEmpty)
+        for id in ids { XCTAssertFalse(FileManager.default.fileExists(atPath: disk.chapterURL(id).path)) }
+        XCTAssertEqual(try Data(contentsOf: settings), settingsData)
+        XCTAssertEqual(try Data(contentsOf: model), Data([1, 2, 3]))
+        XCTAssertNil(library.error)
+    }
     @MainActor func testBatchSizePersistsWithoutChangingProcessingPreferences() throws {
         let previous = UserDefaults.standard.object(forKey: "translationBatchSize")
         defer {

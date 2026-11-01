@@ -191,3 +191,6 @@
 "Failed" = "失败";
 "Segments per request" = "每次请求的文本段数";
 "Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "默认：100。每页 OCR 完成后再翻译。每次请求可设置 1–100 段；如果模型的上下文窗口或输出上限不足，请减小此值。";
+"Delete all chapters" = "删除所有章节";
+"Delete all saved chapters?" = "删除所有已保存的章节？";
+"Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "原始图片、译文和章节历史将被永久删除。已下载的模型和设置将保留。";
