@@ -85,6 +85,7 @@ struct MangaPage: Codable, Identifiable {
     var ocrSignature: String?
     var rendered: String?
     var fingerprint: String?
+    var textLayoutVersion: Int?
 }
 struct Chapter: Codable, Identifiable {
     var id: UUID = UUID()

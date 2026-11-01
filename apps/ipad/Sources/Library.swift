@@ -97,12 +97,14 @@ import Observation
             if let only, chapter.pages[index].id != only { continue }
             try Task.checkCancellation()
             if !force && chapter.pages[index].fingerprint == fingerprint,
+               chapter.pages[index].textLayoutVersion == PageTypography.version,
                let file = chapter.pages[index].rendered, FileManager.default.fileExists(atPath: disk.pageURL(id, file).path) { continue }
             status = "\(L("Translating")) \(index + 1)/\(chapter.pages.count)"
             progress = Double(index) / Double(chapter.pages.count)
             let source = disk.pageURL(id, chapter.pages[index].original)
             var page = chapter.pages[index]
-            if page.ocrSignature != ocrSignature {
+            let rescanned = page.ocrSignature != ocrSignature
+            if rescanned {
                 guard !page.segments.contains(where: \.edited) else {
                     throw AppError.message(L("This page has edits from a different OCR configuration. Make a new copy to rescan without losing them."))
                 }
@@ -112,7 +114,7 @@ import Observation
                 page.ocrSignature = ocrSignature
             }
             let targets = page.segments.filter { !$0.edited }
-            if !targets.isEmpty {
+            if !targets.isEmpty && (force || rescanned || page.fingerprint != fingerprint || targets.contains(where: { $0.text == nil })) {
                 status = "\(L("Translating")) \(index + 1)/\(chapter.pages.count)"
                 let texts = try await translator.translate(targets.map(\.source), config: config, model: model.map { disk.modelsURL.appendingPathComponent($0.filename) })
                 for (segment, text) in zip(targets, texts) {
@@ -149,7 +151,7 @@ import Observation
             status = "\(L("Saving page")) \(index + 1)/\(chapter.pages.count)"
             let file = UUID().uuidString + ".png"
             try output.write(to: disk.pageURL(id, file), options: .atomic)
-            page.rendered = file; page.fingerprint = fingerprint
+            page.rendered = file; page.fingerprint = fingerprint; page.textLayoutVersion = PageTypography.version
             chapter.pages[index] = page
             chapter.readPage = chapters.first { $0.id == id }?.readPage ?? chapter.readPage
             try update(chapter)
@@ -172,6 +174,7 @@ import Observation
             try Task.checkCancellation()
             let file = UUID().uuidString + ".png"; try output.write(to: disk.pageURL(chapterID, file), options: .atomic)
             chapter.pages[index].rendered = file
+            chapter.pages[index].textLayoutVersion = PageTypography.version
             chapter.readPage = chapters.first { $0.id == chapterID }?.readPage ?? chapter.readPage
             try update(chapter)
             return true

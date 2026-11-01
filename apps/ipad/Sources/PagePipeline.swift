@@ -96,16 +96,9 @@ actor PagePipeline {
                 guard rect.width > 1 && rect.height > 1 else { continue }
                 if background == nil { UIColor.white.setFill(); UIBezierPath(roundedRect: rect, cornerRadius: 2).fill() }
                 guard !text.isEmpty else { continue }
-                let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center; paragraph.lineBreakMode = .byWordWrapping
-                var lo: CGFloat = 3, hi = min(42, max(10, rect.height * 0.7))
-                for _ in 0..<12 {
-                    let font = UIFont.systemFont(ofSize: (lo + hi) / 2, weight: .medium)
-                    let measured = (text as NSString).boundingRect(with: CGSize(width: max(1, rect.width - 4), height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font, .paragraphStyle: paragraph], context: nil)
-                    if measured.height <= rect.height - 2 { lo = (lo + hi) / 2 } else { hi = (lo + hi) / 2 }
-                }
-                let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: lo, weight: .medium), .foregroundColor: UIColor.black, .strokeColor: UIColor.white, .strokeWidth: -3, .paragraphStyle: paragraph]
-                let measured = (text as NSString).boundingRect(with: CGSize(width: max(1, rect.width - 4), height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes, context: nil)
-                (text as NSString).draw(in: CGRect(x: rect.minX + 2, y: rect.midY - measured.height / 2, width: max(1, rect.width - 4), height: measured.height), withAttributes: attributes)
+                let width = max(0.1, rect.width - 4)
+                let layout = PageTypography(text, size: CGSize(width: width, height: max(0.1, rect.height - 2)))
+                layout.text.draw(in: CGRect(x: rect.minX + 2, y: rect.midY - layout.bounds.height / 2, width: width, height: layout.bounds.height))
             }
         }
         guard let data = rendered.pngData() else { throw AppError.message(L("Could not render translated page")) }
