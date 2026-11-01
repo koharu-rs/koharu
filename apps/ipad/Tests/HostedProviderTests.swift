@@ -155,6 +155,53 @@ final class HostedProviderTests: XCTestCase {
         do { _ = try await service.models(endpoint: HostedEndpoint(provider: .miniMax, configuration: .init()), key: "test-key"); XCTFail() }
         catch { XCTAssertFalse(error.localizedDescription.contains("test-key")) }
     }
+    func testEngineUsesConfiguredBatchesAndPreservesAllPageSegments() async throws {
+        var settings = HostedConfiguration()
+        settings.workspace = "batch-check-" + UUID().uuidString.lowercased()
+        settings.model = "qwen3.8-flash"
+        let endpoint = try HostedEndpoint(provider: .qwen, configuration: settings)
+        try Credentials.save("batch-check-key", endpoint.credentialAccount)
+        defer { try? Credentials.save("", endpoint.credentialAccount) }
+        var config = Preferences(); config.provider = .qwen; config.hosted = ["qwen": settings]
+        let input = (0..<103).map { "原文 \($0)" }
+        for limit in [100, 7] {
+            var sizes: [Int] = []
+            let service = ProviderHTTP.setup { request in
+                if request.httpMethod == "GET" {
+                    return .init(status: 200, body: ["output": ["total": 1, "models": [["model": settings.model, "features": ["structured-outputs"]]]]])
+                }
+                let body = try Self.jsonBody(request)
+                let messages = try XCTUnwrap(body["messages"] as? [[String: String]])
+                let payload = try JSONDecoder().decode(TranslationPayload.self, from: Data(try XCTUnwrap(messages.last?["content"]).utf8))
+                sizes.append(payload.segments.count)
+                XCTAssertEqual(payload.segments.map(\.id), Array(0..<payload.segments.count))
+                let output = try JSONSerialization.data(withJSONObject: ["translations": payload.segments.reversed().map { ["id": $0.id, "text": "Dịch " + $0.text] as [String: Any] }])
+                return .init(status: 200, body: ["choices": [["finish_reason": "stop", "message": ["content": String(decoding: output, as: UTF8.self)]]]])
+            }
+            let engine = TranslationEngine(hosted: service)
+            let output = try await engine.translate(input, config: config, model: nil, batchSize: limit)
+            XCTAssertEqual(output, input.map { "Dịch " + $0 })
+            XCTAssertEqual(sizes, limit == 100 ? [100, 3] : Array(repeating: 7, count: 14) + [5])
+            for invalid in [0, 101] {
+                do { _ = try await engine.translate(input, config: config, model: nil, batchSize: invalid); XCTFail("Invalid batch size accepted") }
+                catch {}
+            }
+        }
+    }
+    func testHundredSegmentOutputBudgetAndStrictDecoding() async throws {
+        let values = (0..<100).map { ["id": $0, "text": "Translation \($0)"] as [String: Any] }
+        let answer = String(decoding: try JSONSerialization.data(withJSONObject: ["translations": values]), as: UTF8.self)
+        let service = ProviderHTTP.setup { request in
+            if request.httpMethod == "GET" { return .init(status: 200, body: ["data": [["id": "MiniMax-Text-01"]]]) }
+            let body = try Self.jsonBody(request)
+            XCTAssertEqual(body["max_completion_tokens"] as? Int, 8192)
+            return .init(status: 200, body: ["choices": [["finish_reason": "stop", "message": ["content": answer]]]])
+        }
+        let data = try await service.translate(endpoint: HostedEndpoint(provider: .miniMax, configuration: .init()), key: "test-key", model: "MiniMax-Text-01", system: "shared", user: "{}", count: 100)
+        XCTAssertEqual(try TranslationContract.decode(data, count: 100).count, 100)
+        let missing = try JSONSerialization.data(withJSONObject: ["translations": Array(values.dropLast())])
+        XCTAssertThrowsError(try TranslationContract.decode(missing, count: 100))
+    }
     private static func jsonBody(_ request: URLRequest) throws -> [String: Any] {
         var data = request.httpBody ?? Data()
         if let stream = request.httpBodyStream {

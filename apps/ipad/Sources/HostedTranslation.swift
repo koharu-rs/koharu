@@ -58,8 +58,8 @@ actor HostedTranslation {
         if let session { self.session = session }
         else {
             let config = URLSessionConfiguration.ephemeral
-            config.timeoutIntervalForRequest = 180
-            config.timeoutIntervalForResource = 240
+            config.timeoutIntervalForRequest = 600
+            config.timeoutIntervalForResource = 660
             config.httpCookieStorage = nil
             config.urlCache = nil
             self.session = URLSession(configuration: config, delegate: RedirectBoundary { _ in false }, delegateQueue: nil)
@@ -205,7 +205,7 @@ actor HostedTranslation {
 
     func translate(endpoint: HostedEndpoint, key: String, model: String, system: String, user: String, count: Int, instructions: String = "") async throws -> Data {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (1...12).contains(count) else { throw invalidResponse }
+        guard (1...100).contains(count) else { throw invalidResponse }
         let available = try await models(endpoint: endpoint, key: key)
         guard available.contains(where: { $0.id == model }) else { throw AppError.message(L("Validate the API key and select a supported model in Settings")) }
         if endpoint.provider == .deepL { return try await deepL(endpoint, key: key, model: model, user: user, instructions: instructions, count: count) }
@@ -213,7 +213,8 @@ actor HostedTranslation {
         let format: [String: Any] = ["type": "json_schema", "json_schema": ["name": "translation", "strict": true, "schema": schema]]
         let messages = [["role": "system", "content": system], ["role": "user", "content": user]]
         var path = "chat/completions"
-        var body: [String: Any] = ["model": model, "messages": messages, "response_format": format, "max_tokens": 4096]
+        let outputLimit = max(4096, TranslationContract.outputTokenLimit(count: count))
+        var body: [String: Any] = ["model": model, "messages": messages, "response_format": format, "max_tokens": outputLimit]
         switch endpoint.provider {
         case .openAI, .grok:
             path = "responses"
@@ -221,11 +222,11 @@ actor HostedTranslation {
                     "text": ["format": ["type": "json_schema", "name": "translation", "strict": true, "schema": schema]]]
         case .anthropic:
             path = "messages"
-            body = ["model": model, "system": system, "messages": [["role": "user", "content": user]], "max_tokens": 4096,
+            body = ["model": model, "system": system, "messages": [["role": "user", "content": user]], "max_tokens": outputLimit,
                     "output_config": ["format": ["type": "json_schema", "schema": schema]]]
         case .deepSeek:
             path = "beta/chat/completions"
-            body = ["model": model, "messages": messages, "max_tokens": 4096, "thinking": ["type": "disabled"],
+            body = ["model": model, "messages": messages, "max_tokens": outputLimit, "thinking": ["type": "disabled"],
                     "tools": [["type": "function", "function": ["name": "translation", "description": "Return the translated segments.", "strict": true, "parameters": schema]]],
                     "tool_choice": ["type": "function", "function": ["name": "translation"]]]
         case .qwen:
@@ -234,7 +235,7 @@ actor HostedTranslation {
             body["max_tokens"] = nil; body["max_completion_tokens"] = 8192
         case .miniMax:
             path = "text/chatcompletion_v2"
-            body["max_tokens"] = nil; body["max_completion_tokens"] = 4096
+            body["max_tokens"] = nil; body["max_completion_tokens"] = outputLimit
         case .gemini:
             path = "models/\(model):generateContent"
             body = ["systemInstruction": ["parts": [["text": system]]], "contents": [["role": "user", "parts": [["text": user]]]],

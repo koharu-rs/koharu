@@ -189,3 +189,5 @@
 "Rendering page" = "페이지 렌더링 중";
 "Saving page" = "페이지 저장 중";
 "Failed" = "실패";
+"Segments per request" = "요청당 텍스트 구간 수";
+"Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "기본값: 100. 각 페이지의 OCR이 완료된 후 번역합니다. 요청당 1~100개 구간을 설정하세요. 모델의 컨텍스트나 출력 한도가 부족하면 이 값을 줄이세요.";

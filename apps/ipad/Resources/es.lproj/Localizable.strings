@@ -189,3 +189,5 @@
 "Rendering page" = "Renderizando página";
 "Saving page" = "Guardando página";
 "Failed" = "Error";
+"Segments per request" = "Segmentos por solicitud";
+"Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "Predeterminado: 100. El OCR termina cada página antes de traducir. Elige entre 1 y 100 segmentos por solicitud; reduce este valor si el contexto o el límite de salida del modelo no es suficiente.";

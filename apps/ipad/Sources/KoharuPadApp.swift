@@ -25,14 +25,25 @@ struct RootScreen: View {
     @Environment(MangaLibrary.self) private var library
     @State private var browser = RawkumaBrowser()
     @State private var selection = MainTab.library
+    @State private var readerPath: [UUID] = []
     var body: some View {
         @Bindable var library = library
         TabView(selection: $selection) {
             Tab(L("Library"), systemImage: "books.vertical", value: .library) {
-                NavigationStack { LibraryScreen { url in browser.go(url); selection = .browser } browse: { selection = .browser } }
+                NavigationStack(path: $readerPath) {
+                    LibraryScreen { url in browser.go(url); selection = .browser } browse: { selection = .browser }
+                        .navigationDestination(for: UUID.self) { id in
+                            ReaderScreen(chapterID: id, openSource: { url in browser.go(url); selection = .browser }).id(id)
+                        }
+                }
             }
             Tab("Rawkuma", systemImage: "globe", value: .browser) {
-                NavigationStack { BrowserScreen(browser: browser) { selection = .library } }
+                NavigationStack {
+                    BrowserScreen(browser: browser) { id in
+                        readerPath = [id]
+                        selection = .library
+                    }
+                }
             }
             Tab(L("Settings"), systemImage: "gear", value: .settings) { NavigationStack { SettingsScreen() } }
         }
@@ -74,9 +85,7 @@ struct LibraryScreen: View {
                 } description: { Text(L("Browse Rawkuma and translate a chapter. Saved chapters stay on this device.")) } actions: { Button(L("Browse Rawkuma"), action: browse).buttonStyle(.borderedProminent) }
             }
             ForEach(library.chapters) { chapter in
-                NavigationLink {
-                    ReaderScreen(chapterID: chapter.id, openSource: openSource)
-                } label: {
+                NavigationLink(value: chapter.id) {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(chapter.title).font(.headline).lineLimit(2)
                         Text("\(chapter.pages.count) \(L("pages")) · \(AppLocalization.shared.locale.localizedString(forIdentifier: chapter.target) ?? chapter.target)").font(.caption).foregroundStyle(.secondary)

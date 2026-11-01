@@ -189,3 +189,5 @@
 "Rendering page" = "جارٍ رسم الصفحة";
 "Saving page" = "جارٍ حفظ الصفحة";
 "Failed" = "فشل";
+"Segments per request" = "المقاطع في كل طلب";
+"Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "القيمة الافتراضية: 100. يكتمل التعرف على النص في كل صفحة قبل الترجمة. اختر من 1 إلى 100 مقطع لكل طلب؛ قلّل العدد إذا كانت نافذة السياق أو حد الإخراج للنموذج غير كافٍ.";

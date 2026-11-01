@@ -95,7 +95,7 @@ struct BrowserScreen: View {
     @Bindable var browser: RawkumaBrowser
     @State private var revalidate = true
     @State private var newCopy = false
-    var showLibrary: () -> Void
+    var showLibrary: (UUID) -> Void
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -108,8 +108,7 @@ struct BrowserScreen: View {
             HStack {
                 Button {
                     guard let chapter = browser.chapter else { return }
-                    library.importChapter(chapter, revalidate: revalidate, newCopy: newCopy)
-                    showLibrary()
+                    library.importChapter(chapter, revalidate: revalidate, newCopy: newCopy, onReady: showLibrary)
                 } label: { Label(L("Translate this chapter"), systemImage: "translate") }
                 .buttonStyle(.borderedProminent).disabled(library.busy || browser.chapter == nil || browser.loading)
                 Toggle(L("Check source updates"), isOn: $revalidate).toggleStyle(.button)

@@ -35,6 +35,11 @@ struct SettingsScreen: View {
                     ForEach(TargetLanguage.all) { Text($0.displayName).tag($0.tag) }
                 }
                 TextField(L("Additional instructions"), text: $library.preferences.instructions, axis: .vertical).lineLimit(3...6)
+                LabeledContent(L("Segments per request")) {
+                    TextField(L("Segments per request"), value: Binding(get: { library.translationBatchSize }, set: { library.translationBatchSize = min(100, max(1, $0)) }), format: .number)
+                        .keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 80)
+                }
+                Text(L("Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small.")).font(.caption).foregroundStyle(.secondary)
             }
             if library.preferences.provider == .lmStudio {
                 Section("LM Studio") {
@@ -116,11 +121,13 @@ struct SettingsScreen: View {
             }
             Section(L("Image cleanup")) {
                 Toggle(L("AI inpainting"), isOn: $library.preferences.inpaint)
-                Picker(L("Model"), selection: Binding(get: { library.preferences.cleanupModel ?? "lama" }, set: { library.preferences.cleanupModel = $0 })) {
-                    ForEach(VisionModel.all.filter { $0.kind == "inpaint" }) { Text($0.name).tag($0.id) }
+                if library.preferences.inpaint {
+                    Picker(L("Model"), selection: Binding(get: { library.preferences.cleanupModel ?? "lama" }, set: { library.preferences.cleanupModel = $0 })) {
+                        ForEach(VisionModel.all.filter { $0.kind == "inpaint" }) { Text($0.name).tag($0.id) }
+                    }
+                    VisionModelDownload(modelID: library.preferences.cleanupModel ?? "lama")
                 }
                 Text(L("Inpainting runs on this device on native-resolution crops. FLUX and RORem need more RAM and time. Without cleanup, translated text uses white speech cards.")).font(.caption).foregroundStyle(.secondary)
-                VisionModelDownload(modelID: library.preferences.cleanupModel ?? "lama")
             }
             if library.downloadingModel {
                 Section {
@@ -129,7 +136,7 @@ struct SettingsScreen: View {
                 }
             }
             Section(L("About")) {
-                Text("Koharu iPad 0.3.2")
+                Text("Koharu iPad \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                 Text(L("Projects and source URLs stay on this device. Remote providers receive OCR text and translation instructions. Local mode translates on this device. API keys are stored in Keychain.")).font(.caption).foregroundStyle(.secondary)
             }
         }

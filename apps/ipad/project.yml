@@ -73,7 +73,9 @@ targets:
   KoharuPadDeviceChecks:
     type: bundle.unit-test
     platform: iOS
-    sources: [DeviceChecks]
+    sources:
+      - DeviceChecks
+      - Tests/HostedProviderTests.swift
     dependencies:
       - target: KoharuPad
     settings:

@@ -189,3 +189,5 @@
 "Rendering page" = "正在绘制页面";
 "Saving page" = "正在保存页面";
 "Failed" = "失败";
+"Segments per request" = "每次请求的文本段数";
+"Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "默认：100。每页 OCR 完成后再翻译。每次请求可设置 1–100 段；如果模型的上下文窗口或输出上限不足，请减小此值。";

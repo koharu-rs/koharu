@@ -5,6 +5,12 @@ import Observation
     let disk: LibraryDisk
     var chapters: [Chapter] = []
     var preferences = Preferences()
+    // Request sizing is an execution preference, separate from page content/cache.
+    var translationBatchSize = min(100, max(1, UserDefaults.standard.object(forKey: "translationBatchSize") as? Int ?? 100)) {
+        didSet {
+            UserDefaults.standard.set(translationBatchSize, forKey: "translationBatchSize")
+        }
+    }
     var models: [LocalModel] = []
     var busy = false
     var status = ""
@@ -33,7 +39,7 @@ import Observation
         if let index = chapters.firstIndex(where: { $0.id == chapter.id }) { chapters[index] = chapter }
         else { chapters.insert(chapter, at: 0) }
     }
-    func importChapter(_ source: SourceChapter, revalidate: Bool, newCopy: Bool = false) {
+    func importChapter(_ source: SourceChapter, revalidate: Bool, newCopy: Bool = false, onReady: @escaping @MainActor (UUID) -> Void) {
         guard !busy else { return }
         busy = true
         activeTask = Task {
@@ -52,6 +58,7 @@ import Observation
                 }
                 chapter.pages = pages
                 try update(chapter)
+                onReady(chapter.id)
                 try await translate(chapter.id, force: false)
             } catch is CancellationError { status = L("Stopped") }
             catch { processingFailed(error) }
@@ -88,6 +95,7 @@ import Observation
     private func translate(_ id: UUID, force: Bool, only: UUID? = nil) async throws {
         guard var chapter = chapters.first(where: { $0.id == id }) else { throw AppError.message(L("Chapter not found")) }
         let config = preferences
+        let batchSize = translationBatchSize
         let model = models.first { $0.id == config.localModel }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let prompt = try TranslationContract.prompts([], preferences: config).0
@@ -116,7 +124,7 @@ import Observation
             let targets = page.segments.filter { !$0.edited }
             if !targets.isEmpty && (force || rescanned || page.fingerprint != fingerprint || targets.contains(where: { $0.text == nil })) {
                 status = "\(L("Translating")) \(index + 1)/\(chapter.pages.count)"
-                let texts = try await translator.translate(targets.map(\.source), config: config, model: model.map { disk.modelsURL.appendingPathComponent($0.filename) })
+                let texts = try await translator.translate(targets.map(\.source), config: config, model: model.map { disk.modelsURL.appendingPathComponent($0.filename) }, batchSize: batchSize)
                 for (segment, text) in zip(targets, texts) {
                     if let i = page.segments.firstIndex(where: { $0.id == segment.id }) { page.segments[i].text = text }
                 }

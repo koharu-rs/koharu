@@ -12,6 +12,7 @@ struct TranslationPayload: Codable {
     var segments: [Segment]
 }
 enum TranslationContract {
+    static func outputTokenLimit(count: Int) -> Int { max(2048, min(8192, count * 96)) }
     static func prompts(_ texts: [String], preferences: Preferences) throws -> (String, String) {
         guard let resource = Bundle.main.url(forResource: "translation-system", withExtension: "txt") else { throw AppError.message(L("Translation prompt resource is missing")) }
         let target = TargetLanguage.all.first { $0.tag == preferences.target }?.name ?? preferences.target
@@ -56,14 +57,15 @@ enum TranslationContract {
 
 actor TranslationEngine {
     let local = LocalInference()
-    let hosted = HostedTranslation()
-    func translate(_ texts: [String], config: Preferences, model: URL?) async throws -> [String] {
+    let hosted: HostedTranslation
+    init(hosted: HostedTranslation = HostedTranslation()) { self.hosted = hosted }
+    func translate(_ texts: [String], config: Preferences, model: URL?, batchSize: Int) async throws -> [String] {
+        guard (1...100).contains(batchSize) else { throw AppError.message(L("Invalid translation request")) }
         var result: [String] = []
-        // Bound both the prompt and result on small device contexts. A failed batch
-        // never publishes a partial translated page.
-        for start in stride(from: 0, to: texts.count, by: 12) {
+        // Finish OCR for a page first; a failed batch never publishes a partial page.
+        for start in stride(from: 0, to: texts.count, by: batchSize) {
             try Task.checkCancellation()
-            let batch = Array(texts[start..<min(start + 12, texts.count)])
+            let batch = Array(texts[start..<min(start + batchSize, texts.count)])
             let (system, user) = try TranslationContract.prompts(batch, preferences: config)
             let data: Data
             switch config.provider {
@@ -81,10 +83,10 @@ actor TranslationEngine {
                 if !token.isEmpty { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
                 request.httpBody = try JSONSerialization.data(withJSONObject: [
                     "model": config.remoteModel, "messages": [["role": "system", "content": system], ["role": "user", "content": user]],
-                    "temperature": 0.2, "max_tokens": 2048, "reasoning_effort": "none",
+                    "temperature": 0.2, "max_tokens": TranslationContract.outputTokenLimit(count: batch.count), "reasoning_effort": "none",
                     "response_format": ["type": "json_schema", "json_schema": ["name": "translation", "strict": true, "schema": TranslationContract.schema(count: batch.count)]]
                 ])
-                let session = LMStudio.session(timeout: 180); defer { session.invalidateAndCancel() }
+                let session = LMStudio.session(timeout: Double(max(180, batch.count * 6))); defer { session.invalidateAndCancel() }
                 let (responseData, response) = try await session.data(for: request)
                 guard let response = response as? HTTPURLResponse, response.statusCode == 200 else { throw AppError.message("LM Studio HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)") }
                 guard responseData.count <= 4_194_304, let root = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
@@ -145,7 +147,7 @@ actor LocalInference {
     }
     func generate(model url: URL, context size: Int, system: String, user: String) throws -> Data {
         let countRequested = try JSONDecoder().decode(TranslationPayload.self, from: Data(user.utf8)).segments.count
-        guard (1...12).contains(countRequested) else { throw AppError.message(L("Invalid translation request")) }
+        guard (1...100).contains(countRequested) else { throw AppError.message(L("Invalid translation request")) }
         try load(url, size: size)
         guard let model, let context, let vocab = llama_model_get_vocab(model), let template = llama_model_chat_template(model, nil) else { throw AppError.message(L("The model has no supported chat template")) }
         llama_memory_clear(llama_get_memory(context), true)
@@ -172,7 +174,7 @@ actor LocalInference {
         llama_sampler_chain_add(chain, grammar)
         llama_sampler_chain_add(chain, llama_sampler_init_greedy())
         var output = Data()
-        for _ in 0..<min(2048, size - Int(count) - 1) {
+        for _ in 0..<min(TranslationContract.outputTokenLimit(count: countRequested), size - Int(count) - 1) {
             try Task.checkCancellation()
             let token = llama_sampler_sample(chain, context, -1)
             if llama_vocab_is_eog(vocab, token) { return output }

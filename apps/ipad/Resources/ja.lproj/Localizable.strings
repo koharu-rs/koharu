@@ -189,3 +189,5 @@
 "Rendering page" = "ページを描画中";
 "Saving page" = "ページを保存中";
 "Failed" = "失敗";
+"Segments per request" = "リクエストごとのテキスト数";
+"Default: 100. OCR finishes each page before translation. Set 1–100 segments per request; reduce this value if the model context or output limit is too small." = "初期値：100。各ページのOCRが完了してから翻訳します。1回のリクエストにつき1〜100個を設定できます。モデルのコンテキストや出力上限が不足する場合は値を下げてください。";
