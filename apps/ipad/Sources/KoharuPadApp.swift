@@ -135,6 +135,7 @@ struct ReaderScreen: View {
                 }
             } else { ContentUnavailableView(L("Chapter not found"), systemImage: "book.closed") }
         }
+        .background(ReaderNavigationGuard().allowsHitTesting(false))
         .navigationTitle(chapter?.title ?? L("Reader"))
         .navigationBarTitleDisplayMode(.inline)
         .task { if let chapter { index = min(chapter.readPage, max(0, chapter.pages.count - 1)) } }
@@ -178,6 +179,44 @@ struct ReaderScreen: View {
                 }.value
             } catch { library.error = error.localizedDescription }
         }
+    }
+}
+
+struct ReaderNavigationGuard: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> ReaderNavigationController { ReaderNavigationController() }
+    func updateUIViewController(_ controller: ReaderNavigationController, context: Context) {}
+    static func dismantleUIViewController(_ controller: ReaderNavigationController, coordinator: ()) { controller.restoreNavigationGestures() }
+}
+
+final class ReaderNavigationController: UIViewController {
+    private var savedGestures: [(UIGestureRecognizer, Bool)] = []
+    override func loadView() { view = UIView(); view.backgroundColor = .clear }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        reserveReaderGestures()
+    }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        reserveReaderGestures()
+    }
+    override func viewWillDisappear(_ animated: Bool) {
+        restoreNavigationGestures()
+        super.viewWillDisappear(animated)
+    }
+    private func reserveReaderGestures() {
+        guard let navigationController else { return }
+        if savedGestures.isEmpty {
+            // iPadOS 26+ also recognizes back swipes across the content area.
+            // The reader owns horizontal gestures until it leaves the screen.
+            savedGestures = [navigationController.interactivePopGestureRecognizer,
+                             navigationController.interactiveContentPopGestureRecognizer]
+                .compactMap { $0 }.map { ($0, $0.isEnabled) }
+        }
+        for (gesture, _) in savedGestures { gesture.isEnabled = false }
+    }
+    func restoreNavigationGestures() {
+        for (gesture, enabled) in savedGestures { gesture.isEnabled = enabled }
+        savedGestures.removeAll()
     }
 }
 
