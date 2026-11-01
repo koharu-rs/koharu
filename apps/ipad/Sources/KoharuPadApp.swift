@@ -54,6 +54,7 @@ struct RootScreen: View {
             Button(L("OK")) { library.error = nil }
         } message: { Text(library.error ?? "") }
         .onChange(of: library.preferences) { _, _ in library.savePreferences() }
+        .onChange(of: library.busy) { _, busy in UIApplication.shared.isIdleTimerDisabled = busy }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
             if !library.busy { Task { await library.translator.unload() } }
         }

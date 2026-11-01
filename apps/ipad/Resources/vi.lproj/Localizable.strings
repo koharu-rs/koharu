@@ -183,3 +183,9 @@
 "Validate the API key first" = "Hãy xác thực API key trước";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "Việc xác thực sẽ lưu key của nhà cung cấp này vào Keychain trên thiết bị. Các key riêng biệt cho từng nhà cung cấp/vùng và không bao gồm khi xuất chương.";
 "Workspace ID" = "Workspace ID";
+"Recognizing text" = "Đang nhận dạng chữ";
+"Loading cleanup model" = "Đang nạp model xóa nền";
+"Cleaning background" = "Đang xóa chữ nền";
+"Rendering page" = "Đang dựng trang";
+"Saving page" = "Đang lưu trang";
+"Failed" = "Lỗi";

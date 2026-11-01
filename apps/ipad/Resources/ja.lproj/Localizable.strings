@@ -183,3 +183,9 @@
 "Validate the API key first" = "まずAPIキーを検証してください";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "検証時にこのプロバイダーのキーがデバイスのKeychainに保存されます。キーはプロバイダーとリージョンごとに個別に管理され、チャプターのエクスポートには含まれません。";
 "Workspace ID" = "Workspace ID";
+"Recognizing text" = "文字を認識中";
+"Loading cleanup model" = "背景修復モデルを読み込み中";
+"Cleaning background" = "背景を修復中";
+"Rendering page" = "ページを描画中";
+"Saving page" = "ページを保存中";
+"Failed" = "失敗";

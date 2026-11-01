@@ -183,3 +183,9 @@
 "Validate the API key first" = "تحقق من مفتاح الـ API أولاً";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "التحقق يحفظ مفتاح هذا المزود في Keychain على هذا الجهاز. المفاتيح منفصلة لكل مزود ومنطقة ولا تُدرج عند تصدير الفصول.";
 "Workspace ID" = "معرف مساحة العمل (Workspace ID)";
+"Recognizing text" = "جارٍ التعرّف على النص";
+"Loading cleanup model" = "جارٍ تحميل نموذج التنظيف";
+"Cleaning background" = "جارٍ تنظيف الخلفية";
+"Rendering page" = "جارٍ رسم الصفحة";
+"Saving page" = "جارٍ حفظ الصفحة";
+"Failed" = "فشل";

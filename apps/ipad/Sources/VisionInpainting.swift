@@ -26,9 +26,10 @@ struct InpaintTile: Equatable {
 }
 
 extension PagePipeline {
-    func inpaintImage(_ image: UIImage, boxes: [CGRect], modelID: String, modelRoot: URL) throws -> UIImage {
+    func inpaintImage(_ image: UIImage, boxes: [CGRect], modelID: String, modelRoot: URL, onProgress: @Sendable (CleanupProgress) -> Void = { _ in }) throws -> UIImage {
         let model = try VisionModel.named(modelID)
         guard model.kind == "inpaint", model.ready(modelRoot) else { throw AppError.message(L("Download the selected model in Settings first")) }
+        onProgress(.loading)
         try model.checkMemory()
         let directory = model.directory(modelRoot)
         let onnx = try VisionONNX()
@@ -40,7 +41,9 @@ extension PagePipeline {
         let source = try VisionRaster(image)
         var result = source
         let edge = InpaintTile.edge, count = edge * edge
-        for tile in InpaintTile.covering(boxes, size: image.size) {
+        let tiles = InpaintTile.covering(boxes, size: image.size)
+        onProgress(.tiles(completed: 0, total: tiles.count))
+        for (index, tile) in tiles.enumerated() {
             try Task.checkCancellation()
             var pixels = [UInt8](repeating: 255, count: count * 3), mask = [UInt8](repeating: 0, count: count)
             for y in 0..<edge where tile.y + y < source.height { for x in 0..<edge where tile.x + x < source.width {
@@ -54,27 +57,31 @@ extension PagePipeline {
                     for x in max(0, Int(intersection.minX) - tile.x)..<min(edge, Int(intersection.maxX) - tile.x) { mask[y * edge + x] = 255 }
                 }
             }
-            let output: [UInt8]
-            if let session {
-                var values = VisionRaster(width: edge, height: edge, rgb: pixels).normalized(mean: modelID == "aot" ? [0.5,0.5,0.5] : [0,0,0], std: modelID == "aot" ? [0.5,0.5,0.5] : [1,1,1])
-                let maskValues = mask.map { Float($0) / 255 }
-                if modelID == "aot" { for i in 0..<count where mask[i] != 0 { for c in 0..<3 { values[c * count + i] = 0 } } }
-                let prediction = try VisionONNX.output("output", from: VisionONNX.run(session, [modelID == "aot" ? "img" : "image": VisionONNX.floats(values, [1,3,edge,edge]), "mask": VisionONNX.floats(maskValues, [1,1,edge,edge])]))
-                let data = try prediction.tensorData()
-                guard data.length == count * 3 * 4 else { throw AppError.message(L("Unexpected cleanup model output")) }
-                let floats = data.bytes.assumingMemoryBound(to: Float.self)
-                var rgb = [UInt8](repeating: 0, count: count * 3)
-                for i in 0..<count { for c in 0..<3 {
-                    let value = floats[c * count + i]
-                    guard value.isFinite else { throw AppError.message(L("Unexpected cleanup model output")) }
-                    let normalized = modelID == "aot" ? (value + 1) / 2 : value
-                    rgb[i * 3 + c] = UInt8(clamping: Int((normalized * 255).rounded()))
-                } }
-                output = rgb
-            } else {
-                var rgb = [UInt8](repeating: 0, count: count * 3)
-                guard koharu_diffusion_run(diffusion!, pixels, mask, Int32(edge), &rgb, &error, error.count) != 0 else { throw AppError.message(L(String(cString: error))) }
-                output = rgb
+            // Metal/Core ML create autoreleased buffers during each inference.
+            // Drain those per tile instead of retaining every tile's temporaries
+            // until the entire page finishes.
+            let output: [UInt8] = try autoreleasepool {
+                if let session {
+                    var values = VisionRaster(width: edge, height: edge, rgb: pixels).normalized(mean: modelID == "aot" ? [0.5,0.5,0.5] : [0,0,0], std: modelID == "aot" ? [0.5,0.5,0.5] : [1,1,1])
+                    let maskValues = mask.map { Float($0) / 255 }
+                    if modelID == "aot" { for i in 0..<count where mask[i] != 0 { for c in 0..<3 { values[c * count + i] = 0 } } }
+                    let prediction = try VisionONNX.output("output", from: VisionONNX.run(session, [modelID == "aot" ? "img" : "image": VisionONNX.floats(values, [1,3,edge,edge]), "mask": VisionONNX.floats(maskValues, [1,1,edge,edge])]))
+                    let data = try prediction.tensorData()
+                    guard data.length == count * 3 * 4 else { throw AppError.message(L("Unexpected cleanup model output")) }
+                    let floats = data.bytes.assumingMemoryBound(to: Float.self)
+                    var rgb = [UInt8](repeating: 0, count: count * 3)
+                    for i in 0..<count { for c in 0..<3 {
+                        let value = floats[c * count + i]
+                        guard value.isFinite else { throw AppError.message(L("Unexpected cleanup model output")) }
+                        let normalized = modelID == "aot" ? (value + 1) / 2 : value
+                        rgb[i * 3 + c] = UInt8(clamping: Int((normalized * 255).rounded()))
+                    } }
+                    return rgb
+                } else {
+                    var rgb = [UInt8](repeating: 0, count: count * 3)
+                    guard koharu_diffusion_run(diffusion!, pixels, mask, Int32(edge), &rgb, &error, error.count) != 0 else { throw AppError.message(L(String(cString: error))) }
+                    return rgb
+                }
             }
             try Task.checkCancellation()
             // Composite only replaced pixels at native resolution. No whole-page
@@ -83,6 +90,7 @@ extension PagePipeline {
                 let src = (y * edge + x) * 3, dst = ((tile.y + y) * source.width + tile.x + x) * 3
                 for c in 0..<3 { result.rgb[dst + c] = output[src + c] }
             } }
+            onProgress(.tiles(completed: index + 1, total: tiles.count))
         }
         return try result.image()
     }

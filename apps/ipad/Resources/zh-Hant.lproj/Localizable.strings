@@ -183,3 +183,9 @@
 "Validate the API key first" = "請先進行驗證";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "驗證會將此供應商的 Key 儲存於裝置的 Keychain 中。每個供應商與地區的 Key 是分開儲存的，且不會包含在章節匯出檔中。";
 "Workspace ID" = "Workspace ID";
+"Recognizing text" = "正在辨識文字";
+"Loading cleanup model" = "正在載入背景清理模型";
+"Cleaning background" = "正在清理背景";
+"Rendering page" = "正在繪製頁面";
+"Saving page" = "正在儲存頁面";
+"Failed" = "失敗";

@@ -54,7 +54,7 @@ import Observation
                 try update(chapter)
                 try await translate(chapter.id, force: false)
             } catch is CancellationError { status = L("Stopped") }
-            catch { self.error = error.localizedDescription }
+            catch { processingFailed(error) }
         }
     }
     func run(_ id: UUID, force: Bool, page: UUID? = nil) {
@@ -78,8 +78,12 @@ import Observation
                 try await translate(target, force: force, only: page)
             }
             catch is CancellationError { status = L("Stopped") }
-            catch { self.error = error.localizedDescription }
+            catch { processingFailed(error) }
         }
+    }
+    private func processingFailed(_ error: Error) {
+        self.error = status + "\n" + error.localizedDescription
+        status = L("Failed")
     }
     private func translate(_ id: UUID, force: Bool, only: UUID? = nil) async throws {
         guard var chapter = chapters.first(where: { $0.id == id }) else { throw AppError.message(L("Chapter not found")) }
@@ -102,12 +106,14 @@ import Observation
                 guard !page.segments.contains(where: \.edited) else {
                     throw AppError.message(L("This page has edits from a different OCR configuration. Make a new copy to rescan without losing them."))
                 }
+                status = "\(L("Recognizing text")) \(index + 1)/\(chapter.pages.count)"
                 await translator.unload()
                 page.segments = try await pipeline.recognize(source, modelID: config.ocrModel, modelRoot: disk.modelsURL)
                 page.ocrSignature = ocrSignature
             }
             let targets = page.segments.filter { !$0.edited }
             if !targets.isEmpty {
+                status = "\(L("Translating")) \(index + 1)/\(chapter.pages.count)"
                 let texts = try await translator.translate(targets.map(\.source), config: config, model: model.map { disk.modelsURL.appendingPathComponent($0.filename) })
                 for (segment, text) in zip(targets, texts) {
                     if let i = page.segments.firstIndex(where: { $0.id == segment.id }) { page.segments[i].text = text }
@@ -115,8 +121,32 @@ import Observation
             }
             // Release the large GGUF allocation before inpainting takes the device lane.
             if config.inpaint { await translator.unload() }
-            let output = try await pipeline.render(source, segments: page.segments, inpaint: config.inpaint, modelID: config.cleanupModel ?? "lama", modelRoot: disk.modelsURL)
+            status = "\(L("Rendering page")) \(index + 1)/\(chapter.pages.count)"
+            let cleanupModel = config.cleanupModel ?? "lama"
+            let cleanupName = VisionModel.all.first { $0.id == cleanupModel }?.name ?? cleanupModel
+            let output: Data
+            // Native inference reports into a bounded per-page stream. Cancel
+            // its UI consumer before saving so an obsolete tile cannot replace
+            // the next page's status or revive a stopped job.
+            let (events, continuation) = AsyncStream<CleanupProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))
+            let reporting = Task { @MainActor in
+                for await event in events {
+                    guard !Task.isCancelled else { break }
+                    switch event {
+                    case .loading:
+                        status = "\(L("Loading cleanup model")) \(index + 1)/\(chapter.pages.count) · \(cleanupName)"
+                    case .tiles(let completed, let total):
+                        status = "\(L("Cleaning background")) \(index + 1)/\(chapter.pages.count) · \(cleanupName) · \(completed)/\(total)"
+                        progress = (Double(index) + 0.4 + 0.5 * Double(completed) / Double(max(1, total))) / Double(chapter.pages.count)
+                    }
+                }
+            }
+            do {
+                defer { continuation.finish(); reporting.cancel() }
+                output = try await pipeline.render(source, segments: page.segments, inpaint: config.inpaint, modelID: cleanupModel, modelRoot: disk.modelsURL) { continuation.yield($0) }
+            }
             try Task.checkCancellation()
+            status = "\(L("Saving page")) \(index + 1)/\(chapter.pages.count)"
             let file = UUID().uuidString + ".png"
             try output.write(to: disk.pageURL(id, file), options: .atomic)
             page.rendered = file; page.fingerprint = fingerprint

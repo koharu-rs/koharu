@@ -183,3 +183,9 @@
 "Validate the API key first" = "Valida primero la API key";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "La validación guarda la clave de este proveedor en el Keychain de este dispositivo. Las claves son independientes para cada proveedor y región, y no se incluyen en las exportaciones de capítulos.";
 "Workspace ID" = "ID de espacio de trabajo";
+"Recognizing text" = "Reconociendo texto";
+"Loading cleanup model" = "Cargando modelo de limpieza";
+"Cleaning background" = "Limpiando el fondo";
+"Rendering page" = "Renderizando página";
+"Saving page" = "Guardando página";
+"Failed" = "Error";

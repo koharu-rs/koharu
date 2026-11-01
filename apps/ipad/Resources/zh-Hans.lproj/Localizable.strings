@@ -183,3 +183,9 @@
 "Validate the API key first" = "请先验证 API key";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "验证过程会将此服务商的密钥保存在设备的 Keychain 中。每个服务商和区域的密钥是独立的，且不会包含在章节导出文件中。";
 "Workspace ID" = "Workspace ID";
+"Recognizing text" = "正在识别文字";
+"Loading cleanup model" = "正在加载背景清理模型";
+"Cleaning background" = "正在清理背景";
+"Rendering page" = "正在绘制页面";
+"Saving page" = "正在保存页面";
+"Failed" = "失败";

@@ -183,3 +183,9 @@
 "Validate the API key first" = "먼저 API key를 확인하세요";
 "Validation saves this provider's key in Keychain on this device. Keys are separate for each provider and region and are excluded from chapter exports." = "확인 시 이 제공자의 키가 기기의 Keychain에 저장됩니다. 키는 제공자 및 지역별로 구분되며 챕터 내보내기에는 포함되지 않습니다.";
 "Workspace ID" = "workspace ID";
+"Recognizing text" = "텍스트 인식 중";
+"Loading cleanup model" = "배경 정리 모델 불러오는 중";
+"Cleaning background" = "배경 정리 중";
+"Rendering page" = "페이지 렌더링 중";
+"Saving page" = "페이지 저장 중";
+"Failed" = "실패";

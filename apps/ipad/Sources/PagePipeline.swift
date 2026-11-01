@@ -3,6 +3,11 @@ import UIKit
 import Vision
 import ImageIO
 
+enum CleanupProgress: Sendable {
+    case loading
+    case tiles(completed: Int, total: Int)
+}
+
 actor PagePipeline {
     func recognize(_ url: URL, modelID: String? = nil, modelRoot: URL? = nil) async throws -> [TextSegment] {
         try Task.checkCancellation()
@@ -63,7 +68,7 @@ actor PagePipeline {
         }
         return segments
     }
-    func render(_ source: URL, segments: [TextSegment], inpaint: Bool, modelID: String = "lama", modelRoot: URL) async throws -> Data {
+    func render(_ source: URL, segments: [TextSegment], inpaint: Bool, modelID: String = "lama", modelRoot: URL, onCleanupProgress: @escaping @Sendable (CleanupProgress) -> Void = { _ in }) async throws -> Data {
         try Task.checkCancellation()
         guard let image = UIImage(contentsOfFile: source.path) else { throw AppError.message(L("Could not decode source image")) }
         let size = image.size
@@ -72,7 +77,7 @@ actor PagePipeline {
         }
         let background: UIImage?
         if inpaint && !boxes.isEmpty {
-            background = try performVisionInference { try inpaintImage(image, boxes: boxes, modelID: modelID, modelRoot: modelRoot) }
+            background = try performVisionInference { try inpaintImage(image, boxes: boxes, modelID: modelID, modelRoot: modelRoot, onProgress: onCleanupProgress) }
         } else { background = nil }
         try Task.checkCancellation()
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true

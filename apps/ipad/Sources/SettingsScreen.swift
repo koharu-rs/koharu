@@ -129,7 +129,7 @@ struct SettingsScreen: View {
                 }
             }
             Section(L("About")) {
-                Text("Koharu iPad 0.3.0")
+                Text("Koharu iPad 0.3.1")
                 Text(L("Projects and source URLs stay on this device. Remote providers receive OCR text and translation instructions. Local mode translates on this device. API keys are stored in Keychain.")).font(.caption).foregroundStyle(.secondary)
             }
         }
