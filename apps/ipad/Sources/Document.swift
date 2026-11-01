@@ -6,7 +6,15 @@ struct TargetLanguage: Codable, Identifiable {
     var tag: String
     var name: String
     var id: String { tag }
-    var displayName: String { Locale.current.localizedString(forIdentifier: tag) ?? name }
+    var displayName: String {
+        let language = String(tag.split(separator: "-")[0])
+        let identifier: String
+        if tag == "zh-CN" { identifier = "zh-Hans" }
+        else if tag == "zh-TW" { identifier = "zh-Hant" }
+        else if Self.all.filter({ $0.tag.split(separator: "-").first == Substring(language) }).count > 1 { identifier = tag }
+        else { identifier = language }
+        return Locale.current.localizedString(forIdentifier: identifier) ?? name
+    }
     static let all: [TargetLanguage] = {
         guard let url = Bundle.main.url(forResource: "languages", withExtension: "json"),
               let data = try? Data(contentsOf: url), let result = try? JSONDecoder().decode([Self].self, from: data) else { return [] }
@@ -46,6 +54,7 @@ struct MangaPage: Codable, Identifiable {
     var etag: String?
     var modified: String?
     var segments: [TextSegment] = []
+    var ocrRevision: Int?
     var rendered: String?
     var fingerprint: String?
 }

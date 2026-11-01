@@ -11,7 +11,7 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup()
 })
 
-function install() {
+function install(missingList = false) {
   document.body.innerHTML = `
     <a aria-label="Prev" href="/manga/example/chapter-38/">Prev</a>
     <a aria-label="Next" href="/manga/example/chapter-39/">Next</a>
@@ -22,9 +22,29 @@ function install() {
       <a href="${chapter}">Chapter 38.5</a>
       <a href="https://unrelated.test/tracker">Unrelated</a>
     </div>`
+  if (missingList) {
+    document.getElementById('chapter-lists-head')!.remove()
+    const button = document.querySelector('[pop-content]')!
+    const placeholder = document.createElement('div')
+    placeholder.setAttribute('hx-get', '/wp-admin/admin-ajax.php?action=chapter_selects&manga_id=1')
+    button.replaceWith(placeholder)
+    placeholder.append(button)
+  }
   const assign = vi.fn()
+  const fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    text: async () => `<a href="${chapter}">Chapter 38.5</a>
+      <a href="/manga/example/chapter-39/">Chapter 39</a>
+      <a href="/manga/other/chapter-1/">Other series</a>
+      <a href="https://unrelated.test/tracker">Unrelated</a>`,
+  })
   const target = {
-    location: { href: chapter, assign },
+    location: {
+      href: chapter,
+      origin: 'https://rawkuma.net',
+      pathname: new URL(chapter).pathname,
+      assign,
+    },
     addEventListener: (type: string, listener: EventListener, options: boolean) => {
       window.addEventListener(type, listener, options)
       cleanups.push(() => window.removeEventListener(type, listener, options))
@@ -36,7 +56,16 @@ function install() {
       cleanups.push(() => this.disconnect())
     }
   }
-  runInNewContext(script, { window: target, document, URL, Element, MutationObserver: Observer })
+  runInNewContext(script, {
+    window: target,
+    document,
+    URL,
+    Element,
+    MutationObserver: Observer,
+    fetch,
+    DOMParser,
+    console,
+  })
   return assign
 }
 
@@ -67,5 +96,16 @@ describe('Rawkuma chapter navigation', () => {
     select.value = 'https://rawkuma.net/manga/example/chapter-39/'
     select.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }))
     expect(assign).toHaveBeenLastCalledWith(select.value)
+  })
+  it('loads a missing HTMX chapter list without importing scripts or other series', async () => {
+    install(true)
+    await vi.waitFor(() =>
+      expect(document.querySelector('select[data-koharu-chapters]')).not.toBeNull(),
+    )
+    const select = document.querySelector<HTMLSelectElement>('select[data-koharu-chapters]')!
+    expect([...select.options].map((option) => option.value)).toEqual([
+      chapter,
+      'https://rawkuma.net/manga/example/chapter-39/',
+    ])
   })
 })

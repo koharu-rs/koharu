@@ -64,9 +64,9 @@ Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`.
 
 App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 trở lên. Chọn **LM Studio** để dùng server trong LAN hoặc **On-device GGUF** để tải/import model và dịch trên thiết bị. Có giao diện Việt/Anh và 42 ngôn ngữ dịch đích; OCR, render và cache nằm trên iPad. Model local được kiểm tra bộ nhớ trước khi nạp; chọn kích thước phù hợp RAM thực tế. Model 0.8B chỉ phù hợp kiểm tra runtime, chất lượng dịch có thể kém.
 
-Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev mở URL thực, Home mở trang bộ truyện, dropdown dùng selector native từ danh sách chương mà website đã tải. Không suy đoán số chương kế tiếp hay giới hạn đường dẫn CDN vào một tiền tố.
+Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev mở URL thực, Home mở trang bộ truyện, dropdown dùng selector native từ danh sách chương của website, tự tải endpoint chương cùng origin nếu phần HTMX còn trống. Không suy đoán số chương kế tiếp hay giới hạn đường dẫn CDN vào một tiền tố.
 
-Kiểm chứng điều hướng mới: hai test DOM cho Next/Prev/Home và dropdown đã qua. Trên simulator iPad, Next/Prev đã chuyển đúng URL chương và dropdown native đã mở được. Home và kết quả chọn chương từ dropdown chưa được kiểm tra xong. Bản Mac mới gặp màn hình `Tauri CEF Initial Load` trong lượt kiểm tra này, nên cần xác minh tiếp trước khi thay bản desktop đang dùng.
+Kiểm chứng: ba test DOM điều hướng đã qua. Trên bản Mac đã cài, Next/Prev chuyển đúng URL, Home về trang bộ truyện và dropdown chọn chương 33.2 nhận đúng 22 trang. Trên simulator iPad đã thử Next/Prev/Home và chọn chương thập phân từ dropdown, kiểm tra URL đích. Bản 0.1.1 đã ký Kuruby và cài trên iPad Pro M5 thật; làm mới model và dò server LM Studio trong LAN hoạt động. Runtime GGUF Metal và OCR chữ Nhật dọc đã qua kiểm tra tập trung trên iPad thật; chất lượng dịch vẫn phụ thuộc model. Xem số đo và giới hạn trong tài liệu iPad.
 
 ## Dùng LM Studio trên máy khác trong LAN
 

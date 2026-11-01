@@ -59,11 +59,26 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.flowerfx.koharu.ipad.tests
         TEST_HOST: '$(BUILT_PRODUCTS_DIR)/KoharuPad.app/KoharuPad'
         BUNDLE_LOADER: '$(TEST_HOST)'
+  KoharuPadDeviceChecks:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [DeviceChecks]
+    dependencies:
+      - target: KoharuPad
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.flowerfx.koharu.ipad.devicechecks
+        FRAMEWORK_SEARCH_PATHS: '$(inherited) $(PROJECT_DIR)/Vendor/build-apple/llama.xcframework/ios-arm64'
+        TEST_HOST: '$(BUILT_PRODUCTS_DIR)/KoharuPad.app/KoharuPad'
+        BUNDLE_LOADER: '$(TEST_HOST)'
 schemes:
   KoharuPad:
     build:
       targets:
         KoharuPad: all
+    test:
+      targets: [KoharuPadDeviceChecks]
   KoharuPadSimulator:
     build:
       targets:

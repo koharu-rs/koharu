@@ -5,29 +5,31 @@ import CoreML
 import ImageIO
 
 actor PagePipeline {
+    static let ocrRevision = 2
     private var cleanup: MLModel?
-    func recognize(_ url: URL) throws -> [TextSegment] {
+    func recognize(_ url: URL) async throws -> [TextSegment] {
         try Task.checkCancellation()
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        let supported = try request.supportedRecognitionLanguages()
-        request.recognitionLanguages = ["ja-JP", "en-US"].filter { supported.contains($0) }
-        request.automaticallyDetectsLanguage = true
-        request.usesLanguageCorrection = false
-        request.minimumTextHeight = 0.004
-        let handler = VNImageRequestHandler(url: url, options: [:])
-        try handler.perform([request])
+        // Document recognition exposes vertical CJK lines and their direction;
+        // the legacy text request missed most speech on the same manga page.
+        var request = RecognizeDocumentsRequest()
+        request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: "ja-JP"), Locale.Language(identifier: "en-US")]
+        request.textRecognitionOptions.automaticallyDetectLanguage = false
+        request.textRecognitionOptions.useLanguageCorrection = false
+        request.textRecognitionOptions.minimumTextHeightFraction = 0.004
+        request.barcodeDetectionOptions.enabled = false
+        let documents = try await request.perform(on: url)
         try Task.checkCancellation()
-        var regions = (request.results ?? []).compactMap { item -> (CGRect, String)? in
-            guard let text = item.topCandidates(1).first?.string, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-            let r = item.boundingBox
-            return (CGRect(x: r.minX, y: 1 - r.maxY, width: r.width, height: r.height), text)
+        var regions = documents.flatMap { $0.document.text.lines }.compactMap { item -> (CGRect, String, Bool)? in
+            let text = item.transcript
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            let r = item.boundingBox.cgRect
+            return (CGRect(x: r.minX, y: 1 - r.maxY, width: r.width, height: r.height), text, item.textDirection == .topToBottom)
         }.sorted { a, b in
             if abs(a.0.minY - b.0.minY) > 0.04 { return a.0.minY < b.0.minY }
             return a.0.maxX > b.0.maxX
         }
         // Join nearby lines/columns only when they share orientation and overlap.
-        var merged: [(CGRect, String)] = []
+        var merged: [(CGRect, String, Bool)] = []
         while !regions.isEmpty {
             var region = regions.removeFirst()
             var changed = true
@@ -35,8 +37,8 @@ actor PagePipeline {
                 changed = false
                 for index in regions.indices {
                     let next = regions[index]
-                    let vertical = region.0.height > region.0.width * 1.5
-                    guard vertical == (next.0.height > next.0.width * 1.5) else { continue }
+                    let vertical = region.2
+                    guard vertical == next.2 else { continue }
                     let overlap = region.0.intersection(next.0)
                     let along = vertical ? min(region.0.maxY, next.0.maxY) - max(region.0.minY, next.0.minY) : min(region.0.maxX, next.0.maxX) - max(region.0.minX, next.0.minX)
                     let length = vertical ? min(region.0.height, next.0.height) : min(region.0.width, next.0.width)

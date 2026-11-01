@@ -272,6 +272,18 @@ pub(crate) async fn open_source_browser(
             .initialization_script(include_str!(
                 "../../../../packages/bridge/src/rawkuma-navigation.js"
             ))
+            .on_page_load(|view, payload| {
+                // Reapply after external loads; the shared installer is idempotent
+                // and also watches for chapter controls loaded later by the site.
+                if payload.event() == tauri::webview::PageLoadEvent::Finished
+                    && source_url(payload.url())
+                    && let Err(error) = view.eval(include_str!(
+                        "../../../../packages/bridge/src/rawkuma-navigation.js"
+                    ))
+                {
+                    tracing::warn!(%error, "failed to install Rawkuma chapter navigation");
+                }
+            })
             .data_directory(
                 dirs::cache_dir()
                     .context("the cache directory is unavailable")?

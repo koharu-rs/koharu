@@ -87,7 +87,7 @@ import Observation
         let model = models.first { $0.id == config.localModel }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let prompt = try TranslationContract.prompts([], preferences: config).0
-        let fingerprint = digest(Data(("ipad-pipeline-1\n" + prompt).utf8) + (try encoder.encode(config)))
+        let fingerprint = digest(Data(("ipad-pipeline-2\n" + prompt).utf8) + (try encoder.encode(config)))
         for index in chapter.pages.indices {
             if let only, chapter.pages[index].id != only { continue }
             try Task.checkCancellation()
@@ -97,7 +97,13 @@ import Observation
             progress = Double(index) / Double(chapter.pages.count)
             let source = disk.pageURL(id, chapter.pages[index].original)
             var page = chapter.pages[index]
-            if page.segments.isEmpty { page.segments = try await pipeline.recognize(source) }
+            if page.ocrRevision != PagePipeline.ocrRevision {
+                guard !page.segments.contains(where: \.edited) else {
+                    throw AppError.message(L("This page has edits from an older OCR version. Make a new copy to rescan without losing them."))
+                }
+                page.segments = try await pipeline.recognize(source)
+                page.ocrRevision = PagePipeline.ocrRevision
+            }
             let targets = page.segments.filter { !$0.edited }
             if !targets.isEmpty {
                 let texts = try await translator.translate(targets.map(\.source), config: config, model: model.map { disk.modelsURL.appendingPathComponent($0.filename) })

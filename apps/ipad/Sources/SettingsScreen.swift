@@ -109,7 +109,7 @@ struct SettingsScreen: View {
                 }
             }
             Section(L("About")) {
-                Text("Koharu iPad 0.1.0")
+                Text("Koharu iPad 0.1.1")
                 Text(L("Projects and source URLs are saved on this device. LM Studio receives OCR text only. Local mode keeps translation on this device.")).font(.caption).foregroundStyle(.secondary)
             }
         }

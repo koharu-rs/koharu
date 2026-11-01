@@ -66,17 +66,58 @@
     },
     true,
   )
+  const chapterLists = new Map()
+  const pendingLists = new Set()
   const enhance = () => {
     for (const button of document.querySelectorAll('button[pop-content^="#chapter-lists-"]')) {
       if (button.dataset.koharuEnhanced) continue
       const panel = document.getElementById(button.getAttribute('pop-content').slice(1))
-      const links = [...(panel?.querySelectorAll('a[href]') ?? [])]
+      const container = button.closest('[hx-get]')
+      const endpoint = container && allowed(container.getAttribute('hx-get'))
+      const cached = endpoint && chapterLists.get(endpoint)
+      const links = [...(panel?.querySelectorAll('a[href]') ?? cached ?? [])]
         .map((link) => ({
           label: link.textContent.trim(),
           url: allowed(link.getAttribute('href')),
         }))
         .filter((item) => item.url && item.label)
-      if (!links.length) continue
+      if (!links.length) {
+        // Some chapter pages leave an empty HTMX placeholder. Retrieve only its
+        // same-origin chapter endpoint, then use inert links, never response scripts.
+        if (
+          endpoint &&
+          new URL(endpoint).origin === window.location.origin &&
+          new URL(endpoint).searchParams.get('action') === 'chapter_selects' &&
+          !pendingLists.has(endpoint)
+        ) {
+          pendingLists.add(endpoint)
+          const request = new URL(endpoint)
+          request.searchParams.set('loc', 'head')
+          fetch(request.href, { credentials: 'same-origin', redirect: 'error' })
+            .then((response) => {
+              if (!response.ok) throw new Error(`Chapter list HTTP ${response.status}`)
+              return response.text()
+            })
+            .then((html) => {
+              const parsed = new DOMParser().parseFromString(html, 'text/html')
+              chapterLists.set(
+                endpoint,
+                [...parsed.querySelectorAll('a[href]')].filter((link) => {
+                  const url = allowed(link.getAttribute('href'))
+                  return (
+                    url &&
+                    new URL(url).pathname.startsWith(
+                      window.location.pathname.replace(/chapter-[^/]+\/?$/, 'chapter-'),
+                    )
+                  )
+                }),
+              )
+              enhance()
+            })
+            .catch((error) => console.warn('Koharu chapter list:', error.message))
+        }
+        continue
+      }
       const select = document.createElement('select')
       select.dataset.koharuChapters = 'true'
       select.setAttribute('aria-label', button.textContent.trim() || document.title)
