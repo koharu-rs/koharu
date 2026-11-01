@@ -19,7 +19,14 @@ struct SettingsScreen: View {
     @State private var deleting: LocalModel?
     var body: some View {
         @Bindable var library = library
+        @Bindable var localization = AppLocalization.shared
         Form {
+            Section(L("Interface")) {
+                Picker(L("App language"), selection: $localization.language) {
+                    ForEach(InterfaceLanguage.allCases) { Text($0.name).tag($0) }
+                }
+                Text(L("Interface language changes menus and controls. The translation target is selected separately.")).font(.caption).foregroundStyle(.secondary)
+            }
             Section(L("Translation")) {
                 Picker(L("Provider"), selection: $library.preferences.provider) {
                     Text("LM Studio").tag(TranslationProvider.lmStudio)
@@ -32,9 +39,9 @@ struct SettingsScreen: View {
             }
             if library.preferences.provider == .lmStudio {
                 Section("LM Studio") {
-                    TextField(L("Server URL"), text: $library.preferences.server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField(L("Server URL"), text: $library.preferences.server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().environment(\.layoutDirection, .leftToRight)
                     Text(L("Use the server root URL, without /v1. Enable LAN serving in LM Studio.")).font(.caption).foregroundStyle(.secondary)
-                    SecureField(L("API token (optional)"), text: $token).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    SecureField(L("API token (optional)"), text: $token).textInputAutocapitalization(.never).autocorrectionDisabled().environment(\.layoutDirection, .leftToRight)
                     Button(L("Save credential")) {
                         do { try Credentials.save(token, library.preferences.server) } catch { library.error = error.localizedDescription }
                     }
@@ -80,7 +87,7 @@ struct SettingsScreen: View {
                     #if targetEnvironment(simulator)
                     Text(L("Local GGUF inference requires a physical iPad/iPhone. Use LM Studio in Simulator.")).font(.caption).foregroundStyle(.orange)
                     #endif
-                    TextField(L("HTTPS GGUF download URL"), text: $downloadURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField(L("HTTPS GGUF download URL"), text: $downloadURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().environment(\.layoutDirection, .leftToRight)
                     Menu(L("Choose a GGUF download")) {
                         ForEach(CatalogModel.all) { model in Button(model.name) { downloadURL = model.url } }
                     }
@@ -120,7 +127,7 @@ struct SettingsScreen: View {
                 }
             }
             Section(L("About")) {
-                Text("Koharu iPad 0.2.0")
+                Text("Koharu iPad 0.2.1")
                 Text(L("Projects and source URLs are saved on this device. LM Studio receives OCR text only. Local mode keeps translation on this device.")).font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -150,7 +157,7 @@ struct VisionModelDownload: View {
     @State private var removing = false
     var body: some View {
         if let model = VisionModel.all.first(where: { $0.id == modelID }) {
-            Text("\(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)) · \(L("estimated available RAM")): \(model.minimumFreeMB) MB").font(.caption).foregroundStyle(.secondary)
+            Text("\(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)) · \(L("Estimated free RAM required")): \(model.minimumFreeMB) MB").font(.caption).foregroundStyle(.secondary)
             if VisionModel.availableMemory < model.minimumFreeMB * 1024 * 1024 {
                 Label(L("Not enough available RAM"), systemImage: "memorychip").font(.caption).foregroundStyle(.orange)
             }

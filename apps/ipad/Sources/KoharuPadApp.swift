@@ -10,8 +10,12 @@ import UIKit
     }
     var body: some Scene {
         WindowGroup {
-            if let library { RootScreen().environment(library).tint(.pink) }
-            else { ContentUnavailableView(L("Could not open library"), systemImage: "exclamationmark.triangle", description: Text(startupError ?? "")) }
+            Group {
+                if let library { RootScreen().environment(library).tint(.pink) }
+                else { ContentUnavailableView(L("Could not open library"), systemImage: "exclamationmark.triangle", description: Text(startupError ?? "")) }
+            }
+            .environment(\.locale, AppLocalization.shared.locale)
+            .environment(\.layoutDirection, AppLocalization.shared.isRightToLeft ? .rightToLeft : .leftToRight)
         }
     }
 }
@@ -32,6 +36,10 @@ struct RootScreen: View {
             }
             Tab(L("Settings"), systemImage: "gear", value: .settings) { NavigationStack { SettingsScreen() } }
         }
+        // UIKit's collection/tab controllers retain mirrored transforms when a
+        // live language switch crosses RTL/LTR. Recreate presentation only;
+        // selected tab, browser and durable reading state remain above it.
+        .id(AppLocalization.shared.isRightToLeft)
         .tabViewStyle(.sidebarAdaptable)
         .safeAreaInset(edge: .bottom) {
             if library.busy {
@@ -70,7 +78,7 @@ struct LibraryScreen: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 7) {
                         Text(chapter.title).font(.headline).lineLimit(2)
-                        Text("\(chapter.pages.count) \(L("pages")) · \(Locale.current.localizedString(forIdentifier: chapter.target) ?? chapter.target)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(chapter.pages.count) \(L("pages")) · \(AppLocalization.shared.locale.localizedString(forIdentifier: chapter.target) ?? chapter.target)").font(.caption).foregroundStyle(.secondary)
                         ProgressView(value: Double(chapter.pages.filter { $0.rendered != nil }.count), total: Double(max(1, chapter.pages.count))).tint(.pink)
                     }.padding(.vertical, 8)
                 }
@@ -106,9 +114,9 @@ struct ReaderScreen: View {
                 let page = chapter.pages[min(index, chapter.pages.count - 1)]
                 VStack(spacing: 0) {
                     HStack {
-                        Button { index = max(0, index - 1) } label: { Image(systemName: "chevron.left") }.disabled(index == 0).accessibilityLabel(L("Previous page"))
+                        Button { index = max(0, index - 1) } label: { Image(systemName: "chevron.backward") }.disabled(index == 0).accessibilityLabel(L("Previous page"))
                         Text("\(index + 1) / \(chapter.pages.count)").monospacedDigit()
-                        Button { index = min(chapter.pages.count - 1, index + 1) } label: { Image(systemName: "chevron.right") }.disabled(index == chapter.pages.count - 1).accessibilityLabel(L("Next page"))
+                        Button { index = min(chapter.pages.count - 1, index + 1) } label: { Image(systemName: "chevron.forward") }.disabled(index == chapter.pages.count - 1).accessibilityLabel(L("Next page"))
                         Slider(value: Binding(get: { Double(index) }, set: { index = Int($0.rounded()) }), in: 0...Double(max(1, chapter.pages.count - 1)), step: 1).disabled(chapter.pages.count == 1)
                         Toggle(L("Original"), isOn: $original).toggleStyle(.button)
                         Button(L("Edit text"), systemImage: "text.cursor") { editing = true }.disabled(library.busy || page.segments.isEmpty)

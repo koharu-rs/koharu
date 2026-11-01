@@ -35,7 +35,7 @@ extension PagePipeline {
         let session = ["lama", "aot"].contains(modelID) ? try onnx.session(directory.appendingPathComponent("model.onnx"), coreMLCache: modelID == "aot" ? directory.appendingPathComponent("coreml-" + model.files[0].sha256) : nil) : nil
         var error = [CChar](repeating: 0, count: 4096)
         let diffusion = session == nil ? koharu_diffusion_open(directory.path, modelID == "flux" ? 1 : 0, &error, error.count) : nil
-        if session == nil && diffusion == nil { throw AppError.message(String(cString: error)) }
+        if session == nil && diffusion == nil { throw AppError.message(L(String(cString: error))) }
         defer { if let diffusion { koharu_diffusion_close(diffusion) } }
         let source = try VisionRaster(image)
         var result = source
@@ -73,7 +73,7 @@ extension PagePipeline {
                 output = rgb
             } else {
                 var rgb = [UInt8](repeating: 0, count: count * 3)
-                guard koharu_diffusion_run(diffusion!, pixels, mask, Int32(edge), &rgb, &error, error.count) != 0 else { throw AppError.message(String(cString: error)) }
+                guard koharu_diffusion_run(diffusion!, pixels, mask, Int32(edge), &rgb, &error, error.count) != 0 else { throw AppError.message(L(String(cString: error))) }
                 output = rgb
             }
             try Task.checkCancellation()

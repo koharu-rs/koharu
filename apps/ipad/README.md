@@ -1,6 +1,6 @@
 # Koharu for iPad and iPhone
 
-Native SwiftUI/WKWebView app, separate from the desktop CEF executable. Requires iOS/iPadOS 26 or newer. English and Vietnamese UI; the translation target catalog is generated from Koharu's Rust language catalog (currently 42 languages). The base translation prompt and Rawkuma navigation script are shared source files with the desktop app.
+Native SwiftUI/WKWebView app, separate from the desktop CEF executable. Requires iOS/iPadOS 26 or newer. The interface supports English (US/UK), French, Arabic, Spanish, Portuguese, German, Korean, Japanese, Traditional Chinese, Simplified Chinese and Vietnamese. **Settings → Interface → App language** changes the interface immediately and saves it separately from the chapter's translation target. **System default** follows the device's supported language preference. Arabic uses right-to-left controls/layout; URL and token fields stay left-to-right. Native system permission/share dialogs follow iPadOS's app-language settings. The translation target catalog is generated from Koharu's Rust language catalog (43 targets, including separate US and UK English). The base translation prompt and Rawkuma navigation script are shared source files with the desktop app.
 
 ## Reading and translation
 
@@ -46,7 +46,8 @@ Install Xcode with an iOS SDK and `brew install xcodegen`, then from this direct
 ```sh
 python3 scripts/bootstrap.py
 
-# Simulator: same UI, OCR, renderer and LM Studio; no local llama slice.
+# Simulator: UI, Apple Vision, white-card rendering and LM Studio.
+# Vision-model execution and memory admission are validated on physical hardware.
 xcodebuild -project KoharuPad.xcodeproj -scheme KoharuPadSimulator \
   -configuration Debug -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath DerivedData -clonedSourcePackagesDirPath Vendor/Packages \
@@ -65,6 +66,8 @@ Open the generated project in Xcode, select **KoharuPad**, a connected trusted i
 The bootstrap pins the upstream prebuilt llama.cpp b12024 and stable-diffusion-native v0.3.0 archives and verifies their SHA-256. ONNX Runtime 1.24.2 is resolved through the official Microsoft Swift package (its binary has a package checksum). The llama archive contains iOS arm64 and macOS slices, with no simulator slice; diffusion and ONNX include simulator slices. Vendor weights/frameworks, generated Xcode projects, language JSON, icon PNG, DerivedData, archives and IPAs are ignored. Run bootstrap after updating the authoritative Rust language catalog. Localizations remain source-controlled.
 
 ## Verification limits
+
+Version **0.2.1 (build 6)** adds the 12 interface choices and British English as a separate translation target. All 148 UI/native-error keys and the two privacy descriptions have matching catalogs in 13 bundles (12 requested choices plus generic English fallback). Two focused Rust language tests passed. On the iPad 26.4 simulator, the complete language menu, both four-model menus, live Arabic RTL → German LTR switching, German long labels and unchanged Vietnamese translation target were checked. Recreating the presentation controllers when crossing RTL/LTR fixes UIKit's stale mirrored text while preserving the selected tab and browser owner. AOT GAN was downloaded through the app, checksum-verified and published as ready. The signed Debug build was installed on the physical M5. Model memory/inference results below come from hardware; the simulator is used for UI checks and can report unavailable memory to the admission check. Translations were drafted with the user's local LM Studio model and reviewed for UI terminology; this is not a native-speaker review of every language.
 
 Version **0.2.0 (build 5)** was built in Debug and checked on the physical iPad Pro 11-inch M5, iPadOS 27.0. All eight downloaded models ran, with no RAM skips. Focused native comparisons used identical inputs against the pinned Python ONNX implementations (and the same pinned GGUF/runtime on Mac for Paddle):
 

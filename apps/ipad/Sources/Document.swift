@@ -13,7 +13,7 @@ struct TargetLanguage: Codable, Identifiable {
         else if tag == "zh-TW" { identifier = "zh-Hant" }
         else if Self.all.filter({ $0.tag.split(separator: "-").first == Substring(language) }).count > 1 { identifier = tag }
         else { identifier = language }
-        return Locale.current.localizedString(forIdentifier: identifier) ?? name
+        return AppLocalization.shared.locale.localizedString(forIdentifier: identifier) ?? name
     }
     static let all: [TargetLanguage] = {
         guard let url = Bundle.main.url(forResource: "languages", withExtension: "json"),
@@ -93,7 +93,7 @@ enum AppError: LocalizedError {
     case message(String)
     var errorDescription: String? { switch self { case .message(let value): return value } }
 }
-func L(_ key: String) -> String { NSLocalizedString(key, comment: "") }
+func L(_ key: String) -> String { AppLocalization.shared.text(key) }
 func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 
 struct LibraryDisk {

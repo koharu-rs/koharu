@@ -106,6 +106,7 @@ fn target(language: Language) -> Option<&'static str> {
         ChineseSimplified => "ZH-HANS",
         ChineseTraditional => "ZH-HANT",
         English => "EN-US",
+        BritishEnglish => "EN-GB",
         French => "FR",
         Portuguese => "PT-PT",
         BrazilianPortuguese => "PT-BR",
@@ -147,7 +148,7 @@ fn source(language: Language) -> Option<&'static str> {
     use Language::*;
     Some(match language {
         ChineseSimplified | ChineseTraditional => "ZH",
-        English => "EN",
+        English | BritishEnglish => "EN",
         Portuguese | BrazilianPortuguese => "PT",
         language => target(language)?.split('-').next()?,
     })

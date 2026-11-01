@@ -99,10 +99,10 @@ struct BrowserScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button { browser.webView.goBack() } label: { Image(systemName: "chevron.left") }.accessibilityLabel(L("Back"))
-                Button { browser.webView.goForward() } label: { Image(systemName: "chevron.right") }.accessibilityLabel(L("Forward"))
+                Button { browser.webView.goBack() } label: { Image(systemName: "chevron.backward") }.accessibilityLabel(L("Back"))
+                Button { browser.webView.goForward() } label: { Image(systemName: "chevron.forward") }.accessibilityLabel(L("Forward"))
                 Button { browser.webView.reload() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel(L("Reload"))
-                TextField(L("Rawkuma URL"), text: $browser.address).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).onSubmit { browser.go(browser.address) }.textFieldStyle(.roundedBorder)
+                TextField(L("Rawkuma URL"), text: $browser.address).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL).onSubmit { browser.go(browser.address) }.textFieldStyle(.roundedBorder).environment(\.layoutDirection, .leftToRight)
                 Button(L("Go")) { browser.go(browser.address) }
             }.padding(10)
             HStack {

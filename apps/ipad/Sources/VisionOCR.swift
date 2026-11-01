@@ -53,12 +53,12 @@ final class VisionONNX {
         let directory = model.directory(root)
         if model.id == "paddle" {
             var error = [CChar](repeating: 0, count: 8192)
-            guard let handle = koharu_paddle_open(directory.path, &error, error.count) else { throw AppError.message(String(cString: error)) }
+            guard let handle = koharu_paddle_open(directory.path, &error, error.count) else { throw AppError.message(L(String(cString: error))) }
             defer { koharu_paddle_close(handle) }
             return try crops.map { image in
                 try Task.checkCancellation()
                 let pixels = try VisionRaster(image)
-                guard koharu_paddle_read(handle, pixels.rgb, Int32(pixels.width), Int32(pixels.height), &error, error.count) != 0 else { throw AppError.message(String(cString: error)) }
+                guard koharu_paddle_read(handle, pixels.rgb, Int32(pixels.width), Int32(pixels.height), &error, error.count) != 0 else { throw AppError.message(L(String(cString: error))) }
                 return String(cString: error)
             }
         }

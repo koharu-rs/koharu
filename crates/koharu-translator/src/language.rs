@@ -34,6 +34,12 @@ pub enum Language {
     )]
     English,
     #[strum(
+        to_string = "British English",
+        serialize = "en-GB",
+        props(tag = "en-GB")
+    )]
+    BritishEnglish,
+    #[strum(
         to_string = "French",
         serialize = "fr-FR",
         serialize = "fr",
