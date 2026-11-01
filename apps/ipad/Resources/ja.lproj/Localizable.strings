@@ -198,3 +198,7 @@
 "Reading mode" = "読み方";
 "Horizontal swipes (default)" = "左右スワイプ（初期設定）";
 "Vertical scrolling" = "縦スクロール";
+"Search chapters" = "チャプターを検索";
+"Chapters" = "チャプター";
+"No matching chapters" = "一致するチャプターがありません";
+"Try another chapter title." = "別のチャプター名を入力してください。";

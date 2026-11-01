@@ -78,33 +78,47 @@ struct LibraryScreen: View {
     var browse: () -> Void
     @State private var deleting: Chapter?
     @State private var deletingAll = false
+    @State private var searchText = ""
+    private var query: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var visibleChapters: [Chapter] {
+        query.isEmpty ? library.chapters : library.chapters.filter { $0.title.localizedStandardContains(query) }
+    }
     var body: some View {
         List {
-            if library.chapters.isEmpty {
-                ContentUnavailableView {
-                    Label(L("Your manga library"), systemImage: "books.vertical")
-                } description: { Text(L("Browse Rawkuma and translate a chapter. Saved chapters stay on this device.")) } actions: { Button(L("Browse Rawkuma"), action: browse).buttonStyle(.borderedProminent) }
-            }
-            ForEach(library.chapters) { chapter in
-                NavigationLink(value: chapter.id) {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(chapter.title).font(.headline).lineLimit(2)
-                        Text("\(chapter.pages.count) \(L("pages")) · \(AppLocalization.shared.locale.localizedString(forIdentifier: chapter.target) ?? chapter.target)").font(.caption).foregroundStyle(.secondary)
-                        ProgressView(value: Double(chapter.pages.filter { $0.rendered != nil }.count), total: Double(max(1, chapter.pages.count))).tint(.pink)
-                    }.padding(.vertical, 8)
+            Section {
+                if library.chapters.isEmpty {
+                    ContentUnavailableView {
+                        Label(L("Your manga library"), systemImage: "books.vertical")
+                    } description: { Text(L("Browse Rawkuma and translate a chapter. Saved chapters stay on this device.")) } actions: { Button(L("Browse Rawkuma"), action: browse).buttonStyle(.borderedProminent) }
                 }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(L("Delete"), systemImage: "trash", role: .destructive) { deleting = chapter }.disabled(library.busy)
+                if !library.chapters.isEmpty && visibleChapters.isEmpty {
+                    ContentUnavailableView(L("No matching chapters"), systemImage: "magnifyingglass", description: Text(L("Try another chapter title.")))
                 }
-                .contextMenu {
-                    Button(L("Original chapter"), systemImage: "globe") { openSource(chapter.sourceURL) }
-                    Button(L("Retranslate"), systemImage: "arrow.clockwise") { library.run(chapter.id, force: true) }.disabled(library.busy)
-                    Divider()
-                    Button(L("Delete"), systemImage: "trash", role: .destructive) { deleting = chapter }.disabled(library.busy)
+                ForEach(visibleChapters) { chapter in
+                    NavigationLink(value: chapter.id) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(chapter.title).font(.headline).lineLimit(2)
+                            Text("\(chapter.pages.count) \(L("pages")) · \(AppLocalization.shared.locale.localizedString(forIdentifier: chapter.target) ?? chapter.target)").font(.caption).foregroundStyle(.secondary)
+                            ProgressView(value: Double(chapter.pages.filter { $0.rendered != nil }.count), total: Double(max(1, chapter.pages.count))).tint(.pink)
+                        }.padding(.vertical, 8)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(L("Delete"), systemImage: "trash", role: .destructive) { deleting = chapter }.disabled(library.busy)
+                    }
+                    .contextMenu {
+                        Button(L("Original chapter"), systemImage: "globe") { openSource(chapter.sourceURL) }
+                        Button(L("Retranslate"), systemImage: "arrow.clockwise") { library.run(chapter.id, force: true) }.disabled(library.busy)
+                        Divider()
+                        Button(L("Delete"), systemImage: "trash", role: .destructive) { deleting = chapter }.disabled(library.busy)
+                    }
                 }
+            } header: {
+                Text("\(L("Chapters")): \(query.isEmpty ? "\(library.chapters.count)" : "\(visibleChapters.count) / \(library.chapters.count)")")
+                    .monospacedDigit().textCase(nil)
             }
         }
         .navigationTitle(L("Library"))
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: L("Search chapters"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button(L("Delete all chapters"), systemImage: "trash") { deletingAll = true }

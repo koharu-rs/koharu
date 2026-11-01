@@ -49,6 +49,12 @@ Translated text wraps at word boundaries. The font fits both the bubble height a
 
 After updating to **0.3.2**, use **Run** to refresh existing page layouts. With unchanged processing settings and complete cached translations, the app redraws the stored text without calling an AI model again. Enabled cleanup may run again when rebuilding the page image. **Retranslate** explicitly requests new AI translations.
 
+## Library search
+
+Version **0.3.8** adds an always-visible **Search chapters** field in Library. Enter part of a saved chapter title to filter immediately, ignoring case and diacritics. The list shows the total chapter count when the query is empty and **matching / total** while searching; no matches shows **0 / total** with an empty-results message. Clear the field to restore the full list. Counts update from the current library after imports or deletion. Swipe/context actions still act on their chapter; **Delete all chapters** continues to mean the entire library and requires its existing confirmation.
+
+The Debug iPad simulator UI verified total **2**, uppercase query `CHAPTER 2.1` → **1 / 2**, an unmatched query → **0 / 2**, and clearing → **2**. The signed 0.3.8 (build 15) is installed and launched on the physical iPad M5; its mirrored screen showed the user-entered query `Ga` matching four chapter rows with **4 / 5**. Search is local and requires no AI request.
+
 ## Cache and storage
 
 Chapters and preferences live in the app's Application Support directory. Source bytes are immutable SHA-256 named files. **Check source updates** revalidates ETag/Last-Modified and reuses HTTP 304 responses. Derived pages are reused only when configuration and source match. **New copy** preserves a separate chapter. **Clear cache** removes translated PNGs for the selected chapter and preserves original images, OCR, edited text and source URL. **Run** regenerates missing pages.

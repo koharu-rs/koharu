@@ -198,3 +198,7 @@
 "Reading mode" = "읽기 방식";
 "Horizontal swipes (default)" = "좌우로 넘기기 (기본값)";
 "Vertical scrolling" = "세로 스크롤";
+"Search chapters" = "챕터 검색";
+"Chapters" = "챕터";
+"No matching chapters" = "일치하는 챕터 없음";
+"Try another chapter title." = "다른 챕터 제목을 입력해 보세요.";

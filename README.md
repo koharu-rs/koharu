@@ -70,6 +70,8 @@ Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev 
 
 Kiểm chứng: ba test DOM điều hướng đã qua. Trên bản Mac đã cài, Next/Prev chuyển đúng URL, Home về trang bộ truyện và dropdown chọn chương 33.2 nhận đúng 22 trang. Trên simulator iPad đã thử Next/Prev/Home và chọn chương thập phân từ dropdown, kiểm tra URL đích. Bản 0.1.1 đã ký Kuruby và cài trên iPad Pro M5 thật; làm mới model và dò server LM Studio trong LAN hoạt động. Runtime GGUF Metal và OCR chữ Nhật dọc đã qua kiểm tra tập trung trên iPad thật. Một chương 30 trang đã hoàn tất OCR mới, dịch qua LM Studio, xóa chữ nền LaMa và lưu đủ ảnh kết quả; chất lượng dịch vẫn phụ thuộc model. Xem số đo và giới hạn trong tài liệu iPad.
 
+Bản **0.3.8** thêm ô **Tìm chương truyện** trong Thư viện: lọc ngay theo tên, không phân biệt hoa/thường và dấu. Khi chưa tìm hiển thị tổng số chương; khi tìm hiển thị **số khớp / tổng số**, kể cả **0 / tổng số** khi không có kết quả. Xóa từ khóa để hiện lại tất cả. Tìm kiếm chạy trên thiết bị, không gọi AI.
+
 Bản **0.3.7** thêm **Cài đặt → Đọc truyện → Cách đọc → Cuộn dọc**: vuốt lên/xuống để đọc các trang nối tiếp, đồng bộ bộ đếm, thanh kéo và vị trí đọc đã lưu. Vuốt trái/phải vẫn là mặc định. App chỉ giữ ảnh gần vùng đang đọc trong bộ nhớ; thay đổi cách đọc không làm mất cache bản dịch. Hai kiểm tra Debug đã đạt trên iPad M5 thật; người dùng đã xác nhận cuộn và số trang hoạt động đúng trên máy này.
 
 Bản **0.3.6** thêm xóa chương bằng **vuốt trái → Xóa** hoặc **nhấn giữ → Xóa**, cùng nút **Xóa tất cả chương** ở góc trên Thư viện. Mỗi thao tác cần xác nhận; xóa chương gồm ảnh gốc, bản dịch và lịch sử của chương, giữ lại model đã tải và cài đặt. Không cho xóa trong lúc đang xử lý.
