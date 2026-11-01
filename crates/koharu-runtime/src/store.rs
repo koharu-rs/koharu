@@ -72,10 +72,13 @@ where
     }
 }
 
+/// Installs the file `target` once: `install` writes it into a staging
+/// folder on the store's own volume and returns where, and it moves into
+/// place from there.
 pub(crate) async fn file<Install, Pending>(target: PathBuf, install: Install) -> Result<PathBuf>
 where
     Install: FnOnce(PathBuf) -> Pending + Send,
-    Pending: Future<Output = Result<()>> + Send,
+    Pending: Future<Output = Result<PathBuf>> + Send,
 {
     if target.is_file() {
         return Ok(target);
@@ -89,19 +92,13 @@ where
     let parent = target
         .parent()
         .with_context(|| format!("{} has no parent directory", target.display()))?;
-    let stage = tempfile::NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to stage {}", target.display()))?
-        .into_temp_path();
-    install(stage.to_path_buf()).await?;
-    ensure!(stage.is_file(), "installer did not create an artifact");
-
-    if target.exists() {
-        std::fs::remove_file(&target)
-            .with_context(|| format!("failed to replace incomplete {}", target.display()))?;
-    }
-    stage
-        .persist(&target)
-        .map_err(|error| error.error)
+    let stage = tempfile::Builder::new()
+        .prefix(".install-")
+        .tempdir_in(parent)
+        .with_context(|| format!("failed to stage {}", target.display()))?;
+    let staged = install(stage.path().to_owned()).await?;
+    ensure!(staged.is_file(), "installer did not create a file");
+    std::fs::rename(&staged, &target)
         .with_context(|| format!("failed to publish {}", target.display()))?;
     Ok(target)
 }

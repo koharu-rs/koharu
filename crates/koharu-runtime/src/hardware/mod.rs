@@ -41,7 +41,7 @@ pub(crate) fn candidates() -> Vec<Device> {
             (Backend::Rocm { .. }, false) => (1, 0),
             (Backend::Cuda { compute_capability }, true) => (2, compute_capability),
             (Backend::Rocm { .. }, true) => (3, 0),
-            (Backend::Vulkan, _) => (4, 0),
+            (Backend::Vulkan | Backend::Cpu, _) => (4, 0),
         };
         (
             rank,

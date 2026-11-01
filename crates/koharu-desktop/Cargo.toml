@@ -18,5 +18,4 @@ parking_lot = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }
 tokio = { workspace = true }
-tokio-rayon = { workspace = true }
 tracing = { workspace = true }

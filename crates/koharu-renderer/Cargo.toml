@@ -34,7 +34,6 @@ skrifa = { workspace = true }
 specta = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-rayon = { workspace = true }
 unicode-bidi = { workspace = true }
 vello = { workspace = true }
 webp = { workspace = true }

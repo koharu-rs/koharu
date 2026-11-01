@@ -16,8 +16,9 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use fast_glob::glob_match;
 use flate2::read::GzDecoder;
+use koharu_llama_sys::ggml_backend_dev_t;
 
-use crate::{Backend, Device, store, transfer};
+use crate::{Backend, Device, Devices, store, transfer};
 
 /// Why a candidate couldn't start, and whether another still can: once one
 /// of a bound library's builds has loaded, the process keeps it, so no other
@@ -27,30 +28,31 @@ pub(crate) struct Failure {
     pub(crate) last: bool,
 }
 
-/// Installs what `device` needs, then loads it in dependency order: CUDA or
+/// Installs what `gpu` needs, then loads it in dependency order: CUDA or
 /// ROCm, libtorch, llama.cpp, then stable-diffusion.cpp. Everything installs
 /// before anything loads, so a transfer that fails leaves nothing loaded.
-pub(crate) async fn start(device: &Device) -> Result<Device, Failure> {
+pub(crate) async fn start(gpu: &Device) -> Result<Devices, Failure> {
     let retry = |error| Failure { error, last: false };
     let host = Host::current().map_err(retry)?;
-    let mut device = device.clone();
-    let cuda = match device.backend {
+    let mut gpu = gpu.clone();
+    let torch_backend = torch::backend(gpu.backend);
+    let cuda = match gpu.backend {
         Backend::Cuda { .. } => Some(cuda::install(host).await.map_err(retry)?),
         _ => None,
     };
-    let rocm = match device.backend {
+    let rocm = match gpu.backend {
         Backend::Rocm { target } => {
             Some((rocm::install(host, target).await.map_err(retry)?, target))
         }
         _ => None,
     };
-    let torch = torch::install(host, device.backend).await.map_err(retry)?;
+    let torch = torch::install(host, torch_backend).await.map_err(retry)?;
     let llama = native::LLAMA
-        .install(host, device.backend, |_| true)
+        .install(host, gpu.backend, |_| true)
         .await
         .map_err(retry)?;
     let diffusion = native::DIFFUSION
-        .install(host, device.backend, |_| true)
+        .install(host, gpu.backend, |_| true)
         .await
         .map_err(retry)?;
 
@@ -58,35 +60,24 @@ pub(crate) async fn start(device: &Device) -> Result<Device, Failure> {
         cuda::load(cuda).map_err(retry)?;
     }
     if let Some((rocm, target)) = &rocm {
-        device.index = rocm::load(rocm, target).map_err(retry)?;
-        device.name = format!("ROCm{}", device.index);
+        gpu.index = rocm::load(rocm, target).map_err(retry)?;
+        gpu.name = format!("ROCm{}", gpu.index);
     }
     let mut bound = false;
-    let mut load = || -> Result<()> {
-        if let Some(torch) = &torch {
-            torch::load(device.backend, torch)?;
-            bound = true;
-        }
-        native::load_llama(&llama)?;
+    let mut load = || -> Result<Devices> {
+        torch::load(torch_backend, &torch)?;
         bound = true;
-        // A device is one llama.cpp found, at the index libtorch addresses it
-        // by: a Vulkan loader on disk without a Vulkan device doesn't count.
-        let listed = unsafe {
-            (device.index < koharu_llama_sys::ggml_backend_dev_count()).then(|| {
-                CStr::from_ptr(koharu_llama_sys::ggml_backend_dev_name(
-                    koharu_llama_sys::ggml_backend_dev_get(device.index),
-                ))
-            })
+        native::load_llama(&llama)?;
+        let ggml = listed(&gpu)?;
+        let torch = if torch_backend == gpu.backend {
+            ggml.clone()
+        } else {
+            cpu()?
         };
-        ensure!(
-            listed.is_some_and(|name| name.to_bytes() == device.name.as_bytes()),
-            "llama.cpp doesn't list {} at {}",
-            device.name,
-            device.index
-        );
-        native::load_diffusion(&diffusion)
+        native::load_diffusion(&diffusion)?;
+        Ok(Devices { torch, ggml })
     };
-    load().map_err(|error| Failure { error, last: bound })?;
+    let devices = load().map_err(|error| Failure { error, last: bound })?;
 
     // CUDA's wheels install at their version folders, and the other packages
     // one level below theirs.
@@ -94,12 +85,60 @@ pub(crate) async fn start(device: &Device) -> Result<Device, Failure> {
     versions.extend(
         rocm.iter()
             .map(|(folder, _)| folder)
-            .chain(&torch)
-            .chain([&llama, &diffusion])
+            .chain([&torch, &llama, &diffusion])
             .filter_map(|folder| folder.parent().map(Path::to_owned)),
     );
     store::remove_others(versions).await;
-    Ok(device)
+    Ok(devices)
+}
+
+/// `gpu` with llama.cpp's description, once llama.cpp lists it at its index
+/// under its name: a GPU is one llama.cpp found, at the index libtorch
+/// addresses it by, so a Vulkan loader on disk without a Vulkan device
+/// doesn't count.
+fn listed(gpu: &Device) -> Result<Device> {
+    let listed = unsafe {
+        (gpu.index < koharu_llama_sys::ggml_backend_dev_count())
+            .then(|| describe(koharu_llama_sys::ggml_backend_dev_get(gpu.index)))
+    };
+    match listed {
+        Some((name, description)) if name == gpu.name => Ok(Device {
+            description,
+            ..gpu.clone()
+        }),
+        _ => anyhow::bail!("llama.cpp doesn't list {} at {}", gpu.name, gpu.index),
+    }
+}
+
+/// The CPU, as llama.cpp lists it.
+fn cpu() -> Result<Device> {
+    let device = unsafe {
+        koharu_llama_sys::ggml_backend_dev_by_type(koharu_llama_sys::GGML_BACKEND_DEVICE_TYPE_CPU)
+    };
+    ensure!(!device.is_null(), "llama.cpp lists no CPU");
+    let (name, description) = unsafe { describe(device) };
+    Ok(Device {
+        name,
+        index: 0,
+        description,
+        backend: Backend::Cpu,
+        integrated: true,
+    })
+}
+
+/// A listed device's name and description.
+unsafe fn describe(device: ggml_backend_dev_t) -> (String, String) {
+    let text = |text| {
+        unsafe { CStr::from_ptr(text) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    unsafe {
+        (
+            text(koharu_llama_sys::ggml_backend_dev_name(device)),
+            text(koharu_llama_sys::ggml_backend_dev_description(device)),
+        )
+    }
 }
 
 /// The platforms Koharu ships native packages for.

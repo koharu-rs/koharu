@@ -1,11 +1,6 @@
 # koharu-app
 
-`koharu-app` owns Koharu's Tauri-managed application state, command API,
-project lifecycle, processing jobs, typed channels, and agent host. It uses
-`koharu-desktop` to prepare and publish page frames for the browser canvas.
-
-Rust command signatures are the authoritative frontend contract:
-
-```powershell
-cargo run -p koharu-app --bin generate
-```
+Koharu's application inside Tauri: its state, the commands and typed channels
+the frontend calls, the project lifecycle, processing jobs, and the agent's
+host. Its Rust command signatures are the frontend's contract, and the
+TypeScript bindings are generated from them.

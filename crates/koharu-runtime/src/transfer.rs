@@ -4,14 +4,14 @@
 use std::{
     path::Path,
     sync::{
-        Arc, LazyLock,
+        Arc, LazyLock, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, ensure};
-use backon::Retryable;
+use backon::{ExponentialBuilder, Retryable};
 use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::{Client, StatusCode, header};
 use serde::Serialize;
@@ -20,11 +20,14 @@ use tokio::{
     sync::broadcast::{self, error::RecvError},
 };
 
-use crate::network;
+/// The user agent every transfer sends.
+pub(crate) const USER_AGENT: &str = concat!("koharu/", env!("CARGO_PKG_VERSION"));
 
 const RANGE_SIZE: u64 = 64 * 1024 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 const WRITE_BUFFER_SIZE: usize = 256 * 1024;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+const RETRIES: usize = 3;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 static TRANSFERS: LazyLock<broadcast::Sender<Transfer>> =
@@ -84,36 +87,88 @@ pub(crate) async fn fetch(url: &str, destination: &Path) -> Result<()> {
                 .map(str::to_owned)
         })
         .unwrap_or_else(|| "download".to_owned());
-    let activity = Activity {
-        id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-        name,
-        completed: AtomicU64::new(0),
-        total: AtomicU64::new(0),
-    };
-    activity.send(State::Running);
-    let result = async { download(&activity, &network::http_client()?, url, destination).await };
-    match result.await {
-        Ok(()) => {
-            activity.send(State::Finished);
-            Ok(())
-        }
-        Err(error) => {
-            let _ = tokio::fs::remove_file(destination).await;
-            activity.send(State::Failed(format!("{error:#}")));
-            Err(error)
-        }
+    let activity = Activity::start(name);
+    let result = async { download(&activity, client()?, url, destination).await }.await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(destination).await;
     }
+    activity.finish(result)
+}
+
+/// The client packages transfer through. A transfer takes as long as the
+/// file does, so a response is never cut off for arriving slowly.
+fn client() -> Result<&'static Client> {
+    static CLIENT: OnceLock<Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client);
+    }
+    let client = Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .http2_adaptive_window(true)
+        .tcp_keepalive(Duration::from_secs(60))
+        .build()
+        .context("couldn't build the HTTP client")?;
+    Ok(CLIENT.get_or_init(|| client))
+}
+
+/// The one retry policy for transfers.
+fn backoff() -> ExponentialBuilder {
+    ExponentialBuilder::default()
+        .with_min_delay(Duration::from_millis(250))
+        .with_max_delay(Duration::from_secs(5))
+        .with_max_times(RETRIES)
+        .with_jitter()
 }
 
 /// A transfer in progress, and the last progress it reported.
-struct Activity {
+pub(crate) struct Activity {
     id: u64,
     name: String,
     completed: AtomicU64,
     total: AtomicU64,
+    reported: Mutex<Instant>,
 }
 
 impl Activity {
+    /// Starts reporting a transfer of the file `name`.
+    pub(crate) fn start(name: impl Into<String>) -> Self {
+        let activity = Self {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            name: name.into(),
+            completed: AtomicU64::new(0),
+            total: AtomicU64::new(0),
+            reported: Mutex::new(Instant::now()),
+        };
+        activity.send(State::Running);
+        activity
+    }
+
+    /// Records progress, and reports it at most once per
+    /// `PROGRESS_INTERVAL`.
+    pub(crate) fn progress(&self, completed: u64, total: u64) {
+        self.completed.store(completed, Ordering::Relaxed);
+        self.total.store(total, Ordering::Relaxed);
+        let mut reported = self
+            .reported
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if reported.elapsed() >= PROGRESS_INTERVAL {
+            *reported = Instant::now();
+            drop(reported);
+            self.send(State::Running);
+        }
+    }
+
+    /// Reports how the transfer ended, and passes `result` on.
+    pub(crate) fn finish<T>(&self, result: Result<T>) -> Result<T> {
+        match &result {
+            Ok(_) => self.send(State::Finished),
+            Err(error) => self.send(State::Failed(format!("{error:#}"))),
+        }
+        result
+    }
+
     fn send(&self, state: State) {
         let _ = TRANSFERS.send(Transfer {
             id: self.id,
@@ -122,12 +177,6 @@ impl Activity {
             total: self.total.load(Ordering::Relaxed),
             state,
         });
-    }
-
-    fn progress(&self, completed: u64, total: u64) {
-        self.completed.store(completed, Ordering::Relaxed);
-        self.total.store(total, Ordering::Relaxed);
-        self.send(State::Running);
     }
 }
 
@@ -147,7 +196,7 @@ async fn download(
             .send()
             .await?)
     })
-    .retry(network::backoff()?)
+    .retry(backoff())
     .when(retryable)
     .await?;
     let total = match probe.status() {
@@ -183,7 +232,7 @@ async fn download(
         Some(total) => fetch_ranges(activity, client, url, destination, total).await,
         None => {
             (|| fetch_stream(activity, client, url, destination))
-                .retry(network::backoff()?)
+                .retry(backoff())
                 .when(retryable)
                 .notify(|error, delay| tracing::warn!(?delay, "retrying {url}: {error:#}"))
                 .await
@@ -210,18 +259,13 @@ async fn fetch_stream(
     );
     let mut body = response.bytes_stream();
     let mut completed = 0;
-    let mut reported = Instant::now();
     while let Some(bytes) = body.next().await {
         let bytes = bytes?;
         output.write_all(&bytes).await?;
         completed += bytes.len() as u64;
-        if reported.elapsed() >= PROGRESS_INTERVAL {
-            activity.progress(completed, total);
-            reported = Instant::now();
-        }
+        activity.progress(completed, total);
     }
     output.flush().await?;
-    activity.progress(completed, total);
     Ok(())
 }
 
@@ -237,7 +281,7 @@ async fn fetch_ranges(
         .set_len(total)
         .await?;
     let completed = Arc::new(AtomicU64::new(0));
-    let backoff = network::backoff()?;
+    let backoff = backoff();
     let ranges = (0..total)
         .step_by(RANGE_SIZE as usize)
         .map(|start| (start, (start + RANGE_SIZE).min(total) - 1));

@@ -59,7 +59,7 @@ pub async fn sign_in(
     device_code: impl Fn(DeviceCodePrompt) + Send + Sync + 'static,
 ) -> Result<()> {
     authenticator(DeviceCodeHandler::new(device_code))
-        .sign_in(&Http::new()?, SignInMethod::Browser, prompt)
+        .sign_in(&Http::default(), SignInMethod::Browser, prompt)
         .await?;
     Ok(())
 }
@@ -67,7 +67,7 @@ pub async fn sign_in(
 /// Signs out: ChatGPT revokes the tokens, and the record is deleted.
 pub async fn sign_out() -> Result<()> {
     authenticator(DeviceCodeHandler::default())
-        .sign_out(&Http::new()?)
+        .sign_out(&Http::default())
         .await?;
     Ok(())
 }
@@ -90,7 +90,7 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
         return Ok(Vec::new());
     }
     let context = authenticator(DeviceCodeHandler::default())
-        .auth_context(&Http::new()?)
+        .auth_context(&Http::default())
         .await?;
     let mut request = client
         .get("https://chatgpt.com/backend-api/codex/models?client_version=0.146.0")

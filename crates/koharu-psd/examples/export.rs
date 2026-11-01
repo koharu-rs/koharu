@@ -4,7 +4,7 @@
 //!
 //! `cargo run -p koharu-psd --example export -- [page.psd]`
 
-use koharu_psd::export_page;
+use koharu_psd::export;
 use koharu_renderer::{Renderer, TypesettingConfig};
 use koharu_scene::{Author, Edit, Session};
 use photocraft_psd::PsdFile;
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     })?;
 
     let renderer = Renderer::new(TypesettingConfig::default());
-    let bytes = export_page(&session, &renderer, change.pages.added[0])?;
+    let bytes = export(&session, &renderer, change.pages.added[0])?;
     let file = PsdFile::from_bytes(&bytes)?;
     println!(
         "{}×{}, {} bytes",

@@ -151,11 +151,10 @@ pub struct LanguageChoice {
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn save_preferences(
-    mut pipeline: PipelineConfig,
+    pipeline: PipelineConfig,
     providers: ProviderPreferences,
     typesetting: TypesettingConfig,
 ) -> std::result::Result<Preferences, Error> {
-    remember_pipeline_profiles(&mut pipeline);
     let providers = providers.into_config()?;
     let pipeline_config = PipelineConfig::load()?;
     let providers_config = ProvidersConfig::load()?;
@@ -176,17 +175,6 @@ pub(crate) async fn save_preferences(
         current.save()?;
     }
     Ok(Preferences::load()?)
-}
-
-fn remember_pipeline_profiles(config: &mut PipelineConfig) {
-    let koharu_pipeline::DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) = &config.detection;
-    config.processor.koharu_layout_rfdetr_seg_2xl = Some(settings.clone());
-    if let koharu_pipeline::InpaintingModel::Flux2Klein(settings) = &config.inpainting {
-        config.processor.flux2_klein = Some(settings.clone());
-    }
-    if let koharu_pipeline::InpaintingModel::RoremMixed(settings) = &config.inpainting {
-        config.processor.rorem_mixed = Some(settings.clone());
-    }
 }
 
 #[tauri::command]
