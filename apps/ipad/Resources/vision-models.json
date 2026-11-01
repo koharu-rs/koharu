@@ -1,0 +1,224 @@
+[
+  {
+    "id": "lama",
+    "name": "LaMa Manga",
+    "kind": "inpaint",
+    "minimumFreeMB": 900,
+    "files": [
+      {
+        "path": "model.onnx",
+        "url": "https://huggingface.co/mayocream/lama-manga-onnx/resolve/b55497aadbfcb9740e1ed16f008268d71b4f3f79/lama-manga.onnx",
+        "bytes": 207482644,
+        "sha256": "4512adab295ee5a5e02ccd1bdf8d45dccbac88309d9cff1532ffd5de876f02a4"
+      }
+    ],
+    "source": "https://huggingface.co/mayocream/lama-manga-onnx"
+  },
+  {
+    "id": "aot",
+    "name": "AOT GAN",
+    "kind": "inpaint",
+    "minimumFreeMB": 650,
+    "files": [
+      {
+        "path": "model.onnx",
+        "url": "https://huggingface.co/Liiesl/aot-inpainting-onnx/resolve/fde3692f488ff2ae9ffc411077666c20ccfcb969/inpainting_aot.onnx",
+        "bytes": 23066382,
+        "sha256": "ced9b2171953b0f7486336a4663bf5086e9c1f2eb130330776466f34806c3bb2"
+      }
+    ],
+    "source": "https://huggingface.co/Liiesl/aot-inpainting-onnx"
+  },
+  {
+    "id": "manga",
+    "name": "Manga OCR",
+    "kind": "ocr",
+    "minimumFreeMB": 1100,
+    "files": [
+      {
+        "path": "encoder.onnx",
+        "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/encoder_model.onnx",
+        "bytes": 343454249,
+        "sha256": "15fa8155fe9bc1a7d25d9bb353debaa4def033d0174e907dbd2dd6d995def85f"
+      },
+      {
+        "path": "decoder.onnx",
+        "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/decoder_model.onnx",
+        "bytes": 117480262,
+        "sha256": "ef7765261e9d1cdc34d89356986c2bbc2a082897f753a89605ae80fdfa61f5e8"
+      },
+      {
+        "path": "vocab.txt",
+        "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/vocab.txt",
+        "bytes": 30216,
+        "sha256": "5cb5c5586d98a2f331d9f8828e4586479b0611bfba5d8c3b6dadffc84d6a36a3"
+      },
+      {
+        "path": "config.json",
+        "url": "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/24b12778d85800835e2ca409236de281b8ab7b9f/config.json",
+        "bytes": 77161,
+        "sha256": "fda165bab7a9cd1b4a0ce57ed9a78e516f101fcd23afd9f58c9e779c9b5ed11b"
+      }
+    ],
+    "source": "https://huggingface.co/mayocream/manga-ocr-onnx"
+  },
+  {
+    "id": "baberu",
+    "name": "Baberu OCR",
+    "kind": "ocr",
+    "minimumFreeMB": 800,
+    "files": [
+      {
+        "path": "encoder.onnx",
+        "url": "https://huggingface.co/genshiai-daichi/baberu-ocr/resolve/b9868433dbda3ed9ba1357d008599ff4ada873d5/onnx/vision_fp16.onnx",
+        "bytes": 172917304,
+        "sha256": "12dd22685ea75c0da3166be9dc3c2622a21d99a9919320d9192702f388e55e5c"
+      },
+      {
+        "path": "prefill.onnx",
+        "url": "https://huggingface.co/genshiai-daichi/baberu-ocr/resolve/b9868433dbda3ed9ba1357d008599ff4ada873d5/onnx/decoder_prefill_int8.onnx",
+        "bytes": 35133596,
+        "sha256": "187a59cb61d3870f1f97c9eb027eb34ff19d023fba801cda113a13870be0b724"
+      },
+      {
+        "path": "step.onnx",
+        "url": "https://huggingface.co/genshiai-daichi/baberu-ocr/resolve/b9868433dbda3ed9ba1357d008599ff4ada873d5/onnx/decoder_step_int8.onnx",
+        "bytes": 34715466,
+        "sha256": "46640b0b3db77f0f0eef660bbe5dc9126a5e0fb49eb2786b2edba7b0371d9769"
+      },
+      {
+        "path": "vocab.json",
+        "url": "https://huggingface.co/genshiai-daichi/baberu-ocr/resolve/b9868433dbda3ed9ba1357d008599ff4ada873d5/tokenizer/vocab.json",
+        "bytes": 130761,
+        "sha256": "681de4eb83154a397af49e2ddae4705041b12a22e16fe00860b829e889e5f47c"
+      },
+      {
+        "path": "generation_config.json",
+        "url": "https://huggingface.co/genshiai-daichi/baberu-ocr/resolve/b9868433dbda3ed9ba1357d008599ff4ada873d5/generation_config.json",
+        "bytes": 269,
+        "sha256": "1941f05f35c3528c002f1577d5ab32454313d09a556f22c687384d1893fd968f"
+      }
+    ],
+    "source": "https://huggingface.co/genshiai-daichi/baberu-ocr"
+  },
+  {
+    "id": "hayai",
+    "name": "Hayai OCR",
+    "kind": "ocr",
+    "minimumFreeMB": 800,
+    "files": [
+      {
+        "path": "encoder.onnx",
+        "url": "https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2-onnx/resolve/685ae08ce48db204268854863722bcb292021e0d/onnx/hayai_encoder_dynamic_quant.onnx",
+        "bytes": 86861590,
+        "sha256": "77a65893752297e7a3bcca241792519a491635d4e828a978757cd2625d2f50e1"
+      },
+      {
+        "path": "decoder.onnx",
+        "url": "https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2-onnx/resolve/685ae08ce48db204268854863722bcb292021e0d/onnx/hayai_decoder_dynamic_quant.onnx",
+        "bytes": 55946650,
+        "sha256": "efcd4435c8d3b7ff5b447df36fc52d964dc070be057a9d4acd02512b8490a77d"
+      },
+      {
+        "path": "position_base.npy",
+        "url": "https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2-onnx/resolve/685ae08ce48db204268854863722bcb292021e0d/onnx/position_base.npy",
+        "bytes": 786560,
+        "sha256": "86b9f944334a3c6227c2898daecb90a521753aa1bdbac620b66027e54b0fcf4b"
+      },
+      {
+        "path": "tokenizer.json",
+        "url": "https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2-onnx/resolve/685ae08ce48db204268854863722bcb292021e0d/onnx/tokenizer.json",
+        "bytes": 1247253,
+        "sha256": "f8a0a909c628a684fe463094614e236a8b1d3609e7770f77e7beafaf1056bf13"
+      }
+    ],
+    "source": "https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2-onnx"
+  },
+  {
+    "id": "paddle",
+    "name": "PaddleOCR VL 1.6",
+    "kind": "ocr",
+    "minimumFreeMB": 2800,
+    "files": [
+      {
+        "path": "model.gguf",
+        "url": "https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF/resolve/511b09642bb324401f15f97cc23bc67e8f0a291d/PaddleOCR-VL-1.6-GGUF.gguf",
+        "bytes": 935769056,
+        "sha256": "f3ae46ec885050acf4b3d31944431e1fd90d50664fb09126af4a3c050ba14ee8"
+      },
+      {
+        "path": "mmproj.gguf",
+        "url": "https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF/resolve/511b09642bb324401f15f97cc23bc67e8f0a291d/PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
+        "bytes": 881770560,
+        "sha256": "204d757d7610d9b3faab10d506d69e5b244e32bf765e2bab2d0167e65e0a058a"
+      }
+    ],
+    "source": "https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF"
+  },
+  {
+    "id": "flux",
+    "name": "FLUX.2 Klein",
+    "kind": "inpaint",
+    "minimumFreeMB": 6500,
+    "files": [
+      {
+        "path": "diffusion.gguf",
+        "url": "https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF/resolve/0084d1df98e2e2137fe776d55170bc4792ec1d66/flux-2-klein-4b-Q4_K_M.gguf",
+        "bytes": 2604311104,
+        "sha256": "0b25d143c8469b342bc5af3bce92b783bf6b0636d285f7b2f75e38af63af9a15"
+      },
+      {
+        "path": "vae.safetensors",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/a3efc24f613ef42d9428af62fdbd6f5fd8856c4a/full_encoder_small_decoder.safetensors",
+        "bytes": 249519092,
+        "sha256": "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62"
+      },
+      {
+        "path": "text.gguf",
+        "url": "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/22c9fc8a8c7700b76a1789366280a6a5a1ad1120/Qwen3-4B-Q4_K_M.gguf",
+        "bytes": 2497281312,
+        "sha256": "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a"
+      }
+    ],
+    "source": "https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF"
+  },
+  {
+    "id": "rorem",
+    "name": "RORem mixed",
+    "kind": "inpaint",
+    "minimumFreeMB": 6200,
+    "files": [
+      {
+        "path": "diffusion.gguf",
+        "url": "https://huggingface.co/mayocream/RORem-mixed-GGUF/resolve/62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56/rorem-mixed-unet-q4_K.gguf",
+        "bytes": 2024141794,
+        "sha256": "f62820f13a14485c50fe03daf5ce29ad5bf14b82d0d508764eee9b50fb5a5f2c"
+      },
+      {
+        "path": "marker.safetensors",
+        "url": "https://huggingface.co/mayocream/RORem-mixed-GGUF/resolve/62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56/sdxl-version-marker.safetensors",
+        "bytes": 106,
+        "sha256": "a15a362374a741646d33589fb3269cbbe7639d2f71d3c866f4ee78b7f36af196"
+      },
+      {
+        "path": "vae.safetensors",
+        "url": "https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1/resolve/115134f363124c53c7d878647567d04daf26e41e/vae/diffusion_pytorch_model.fp16.safetensors",
+        "bytes": 167335338,
+        "sha256": "4ad62825e5c8b31eefb77355ba6693785619bf7d669d9b1a6fd9f19dec6d65b3"
+      },
+      {
+        "path": "clip_l.safetensors",
+        "url": "https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1/resolve/115134f363124c53c7d878647567d04daf26e41e/text_encoder/model.fp16.safetensors",
+        "bytes": 246144867,
+        "sha256": "fc83cf401d930147807e7c44021c164bcc5508c9d4cc0ff35f4e354685ca9cd0"
+      },
+      {
+        "path": "clip_g.safetensors",
+        "url": "https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1/resolve/115134f363124c53c7d878647567d04daf26e41e/text_encoder_2/model.fp16.safetensors",
+        "bytes": 1389382884,
+        "sha256": "a8622bd41f8d359df484fdf9de091edb9337a2fd747f0a5c9c320a62e24d1fd3"
+      }
+    ],
+    "source": "https://huggingface.co/mayocream/RORem-mixed-GGUF"
+  }
+]

@@ -1,4 +1,8 @@
 name: KoharuPad
+packages:
+  ONNXRuntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager
+    exactVersion: 1.24.2
 options:
   bundleIdPrefix: dev.flowerfx
   deploymentTarget:
@@ -14,6 +18,11 @@ targetTemplates:
   App:
     type: application
     platform: iOS
+    dependencies:
+      - package: ONNXRuntime
+        product: onnxruntime
+      - framework: Vendor/sd-native/stable_diffusion.xcframework
+        embed: true
     sources:
       - Sources
       - Resources
@@ -25,6 +34,8 @@ targetTemplates:
       base:
         PRODUCT_NAME: KoharuPad
         INFOPLIST_FILE: Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/VisionNative.h
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
 targets:
   KoharuPad:
     templates: [App]

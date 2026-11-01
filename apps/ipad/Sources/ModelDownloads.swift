@@ -1,5 +1,4 @@
 import Foundation
-import CoreML
 
 extension MangaLibrary {
     func importModel(_ source: URL) {
@@ -62,43 +61,5 @@ extension MangaLibrary {
             if preferences.localModel == model.id { preferences.localModel = nil }
             try disk.save(models, to: disk.root.appendingPathComponent("models.json")); savePreferences()
         } catch { self.error = error.localizedDescription }
-    }
-    func downloadCleanup() {
-        guard !downloadingModel else { return }
-        downloadingModel = true
-        modelTask = Task {
-            defer { downloadingModel = false; modelTask = nil }
-            do {
-                struct Manifest: Decodable {
-                    struct File: Decodable { var path: String; var url: URL }
-                    var files: [File]
-                }
-                guard let resource = Bundle.main.url(forResource: "cleanup-model", withExtension: "json") else { throw AppError.message(L("Cleanup model manifest missing")) }
-                let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: resource))
-                let staging = disk.root.appendingPathComponent("downloads/" + UUID().uuidString, isDirectory: true)
-                try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-                defer { try? FileManager.default.removeItem(at: staging) }
-                for file in manifest.files {
-                    try Task.checkCancellation()
-                    status = L("Downloading cleanup model")
-                    guard file.url.scheme == "https", file.url.host == "huggingface.co", !file.path.contains(".."), !file.path.hasPrefix("/") else { throw AppError.message(L("Invalid cleanup model manifest")) }
-                    let (temporary, response) = try await URLSession.shared.download(from: file.url)
-                    defer { try? FileManager.default.removeItem(at: temporary) }
-                    guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw AppError.message(L("Cleanup model download failed")) }
-                    let destination = staging.appendingPathComponent(file.path)
-                    try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try FileManager.default.moveItem(at: temporary, to: destination)
-                }
-                status = L("Preparing cleanup model")
-                let compiled = try await MLModel.compileModel(at: staging.appendingPathComponent("LaMa.mlpackage"))
-                defer { try? FileManager.default.removeItem(at: compiled) }
-                try Task.checkCancellation()
-                let destination = disk.modelsURL.appendingPathComponent("LaMa.mlmodelc")
-                if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
-                try FileManager.default.moveItem(at: compiled, to: destination)
-                preferences.inpaint = true; savePreferences(); status = L("Model ready")
-            } catch is CancellationError { status = L("Stopped") }
-            catch { self.error = error.localizedDescription }
-        }
     }
 }

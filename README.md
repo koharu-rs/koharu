@@ -34,7 +34,7 @@ App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/p
 - Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
 - 10 kiểm tra backend và 13 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
 - Đã hoàn tất lượt dịch lại 28 trang có OCR sẵn trên Mac qua LM Studio trên Windows, với Qwen 3.8 27B Q4 và đích tiếng Việt; bản dịch trả về và hiển thị trực tiếp trong editor. Chưa đánh giá thủ công độ chính xác của toàn chương hoặc benchmark tốc độ. Chưa kiểm chứng app Rawkuma chạy trực tiếp trên Windows/Linux.
-- Có thêm app SwiftUI riêng cho iPad/iPhone trong [`apps/ipad`](apps/ipad/README.md): duyệt Rawkuma, thư viện chương, OCR Vision, dịch qua LM Studio hoặc GGUF cục bộ bằng llama.cpp Metal, sửa văn bản và xuất PNG/PDF. App iPad không bao gồm toàn bộ editor/PSD của desktop. Xem phạm vi kiểm chứng và hướng dẫn ký/cài trong tài liệu iPad.
+- Có thêm app SwiftUI riêng cho iPad/iPhone trong [`apps/ipad`](apps/ipad/README.md): duyệt Rawkuma, thư viện chương, chọn bốn model OCR và bốn model inpaint chạy ngay trên iPad, dịch qua LM Studio hoặc GGUF cục bộ bằng llama.cpp Metal, sửa văn bản và xuất PNG/PDF. App iPad không bao gồm toàn bộ editor/PSD của desktop. Xem phạm vi kiểm chứng và hướng dẫn ký/cài trong tài liệu iPad.
 - Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.
 
 ### Build bản macOS debug của fork
@@ -62,7 +62,9 @@ Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`.
 
 ## Bản iPad/iPhone
 
-App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 trở lên. Chọn **LM Studio** để dùng server trong LAN hoặc **On-device GGUF** để tải/import model và dịch trên thiết bị. Có giao diện Việt/Anh và 42 ngôn ngữ dịch đích; OCR, render và cache nằm trên iPad. Ở màn hình đọc, vuốt trái để sang trang tiếp, vuốt phải để về trang trước; khi phóng to, kéo để di chuyển ảnh. Màn hình đọc chặn vuốt quay lại của navigation để tránh kéo cả view; dùng nút Back để về thư viện. Model local được kiểm tra bộ nhớ trước khi nạp; chọn kích thước phù hợp RAM thực tế. Model 0.8B chỉ phù hợp kiểm tra runtime, chất lượng dịch có thể kém.
+App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 trở lên. Chọn **LM Studio** để dùng server trong LAN hoặc **On-device GGUF** để tải/import model và dịch trên thiết bị. Có giao diện Việt/Anh và 42 ngôn ngữ dịch đích; OCR, render và cache nằm trên iPad. Trong **Cài đặt**, OCR có **Manga OCR, Baberu OCR, Hayai OCR v2.1, PaddleOCR VL 1.6** (vẫn giữ Apple Vision tích hợp). Xóa chữ nền có **LaMa Manga, AOT GAN, FLUX.2 Klein, RORem mixed**. Mỗi model tải riêng và xác minh SHA-256, có nút xóa để giải phóng bộ nhớ. Inpaint xử lý từng vùng ở độ phân giải gốc, giữ nguyên pixel ngoài mask; FLUX/RORem chạy Metal trực tiếp, cần nhiều RAM và thời gian hơn. App báo rõ khi RAM khả dụng không đủ; không tự đổi sang model khác. Xem dung lượng, runtime và giới hạn kiểm chứng trong [tài liệu iPad](apps/ipad/README.md).
+
+Ở màn hình đọc, vuốt trái để sang trang tiếp, vuốt phải để về trang trước; khi phóng to, kéo để di chuyển ảnh. Màn hình đọc chặn vuốt quay lại của navigation để tránh kéo cả view; dùng nút Back để về thư viện. Model local được kiểm tra bộ nhớ trước khi nạp; chọn kích thước phù hợp RAM thực tế. Model 0.8B chỉ phù hợp kiểm tra runtime, chất lượng dịch có thể kém.
 
 Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev mở URL thực, Home mở trang bộ truyện, dropdown dùng selector native từ danh sách chương của website, tự tải endpoint chương cùng origin nếu phần HTMX còn trống. Không suy đoán số chương kế tiếp hay giới hạn đường dẫn CDN vào một tiền tố.
 

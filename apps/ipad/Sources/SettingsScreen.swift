@@ -96,11 +96,22 @@ struct SettingsScreen: View {
                     }
                 }
             }
+            if VisionModel.all.isEmpty { Text(L("Invalid vision model manifest")).foregroundStyle(.red) }
+            Section(L("OCR model")) {
+                Picker(L("Model"), selection: $library.preferences.ocrModel) {
+                    Text(L("Apple Vision (built in)")).tag(String?.none)
+                    ForEach(VisionModel.all.filter { $0.kind == "ocr" }) { Text($0.name).tag(Optional($0.id)) }
+                }
+                Text(L("Apple Vision detects text regions. The selected OCR model reads each crop locally; models are downloaded separately.")).font(.caption).foregroundStyle(.secondary)
+                if let id = library.preferences.ocrModel { VisionModelDownload(modelID: id) }
+            }
             Section(L("Image cleanup")) {
-                Toggle(L("AI inpainting with LaMa"), isOn: $library.preferences.inpaint).disabled(library.busy)
-                Text(L("OCR runs on this device using Apple Vision. LaMa cleanup is optional and downloads separately. Without cleanup, translated text uses white speech cards.")).font(.caption).foregroundStyle(.secondary)
-                Button(L("Download cleanup model (40 MB)"), systemImage: "arrow.down.circle") { library.downloadCleanup() }.disabled(library.downloadingModel || library.busy)
-                if FileManager.default.fileExists(atPath: library.disk.modelsURL.appendingPathComponent("LaMa.mlmodelc").path) { Label(L("Cleanup model ready"), systemImage: "checkmark.circle").foregroundStyle(.green) }
+                Toggle(L("AI inpainting"), isOn: $library.preferences.inpaint)
+                Picker(L("Model"), selection: Binding(get: { library.preferences.cleanupModel ?? "lama" }, set: { library.preferences.cleanupModel = $0 })) {
+                    ForEach(VisionModel.all.filter { $0.kind == "inpaint" }) { Text($0.name).tag($0.id) }
+                }
+                Text(L("Inpainting runs on this device on native-resolution crops. FLUX and RORem need more RAM and time. Without cleanup, translated text uses white speech cards.")).font(.caption).foregroundStyle(.secondary)
+                VisionModelDownload(modelID: library.preferences.cleanupModel ?? "lama")
             }
             if library.downloadingModel {
                 Section {
@@ -109,7 +120,7 @@ struct SettingsScreen: View {
                 }
             }
             Section(L("About")) {
-                Text("Koharu iPad 0.1.3")
+                Text("Koharu iPad 0.2.0")
                 Text(L("Projects and source URLs are saved on this device. LM Studio receives OCR text only. Local mode keeps translation on this device.")).font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -130,5 +141,36 @@ struct SettingsScreen: View {
             remoteModels = try await LMStudio.models(library.preferences.server, token: Credentials.read(library.preferences.server))
             if !remoteModels.contains(library.preferences.remoteModel) { library.preferences.remoteModel = remoteModels.first ?? "" }
         } catch { library.error = error.localizedDescription }
+    }
+}
+
+struct VisionModelDownload: View {
+    @Environment(MangaLibrary.self) private var library
+    let modelID: String
+    @State private var removing = false
+    var body: some View {
+        if let model = VisionModel.all.first(where: { $0.id == modelID }) {
+            Text("\(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)) · \(L("estimated available RAM")): \(model.minimumFreeMB) MB").font(.caption).foregroundStyle(.secondary)
+            if VisionModel.availableMemory < model.minimumFreeMB * 1024 * 1024 {
+                Label(L("Not enough available RAM"), systemImage: "memorychip").font(.caption).foregroundStyle(.orange)
+            }
+            if model.ready(library.disk.modelsURL) {
+                HStack {
+                    Label(L("Model ready"), systemImage: "checkmark.circle").foregroundStyle(.green)
+                    Spacer()
+                    Button(role: .destructive) { removing = true } label: { Image(systemName: "trash") }
+                        .accessibilityLabel(L("Delete this downloaded model?"))
+                        .disabled(library.busy || library.downloadingModel)
+                }
+                .confirmationDialog(L("Delete this downloaded model?"), isPresented: $removing, titleVisibility: .visible) {
+                    Button(L("Delete"), role: .destructive) {
+                        library.removeVisionModel(model)
+                    }
+                }
+            } else {
+                Button(L("Download selected model"), systemImage: "arrow.down.circle") { library.downloadVisionModel(model) }.disabled(library.downloadingModel || library.busy)
+            }
+            Link(L("Model source"), destination: model.source)
+        }
     }
 }

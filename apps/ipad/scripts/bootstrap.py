@@ -32,6 +32,25 @@ if checksum.hexdigest() != SHA256:
 # ditto preserves framework symlinks; zipfile.extractall does not.
 subprocess.run(["ditto", "-x", "-k", str(ARCHIVE), str(ARCHIVE.parent)], check=True)
 
+# Official prebuilt stable-diffusion.cpp wrapper: includes Metal and iOS slices.
+SD_VERSION = "v0.3.0"
+SD_SHA256 = "3b83a0c21a00f6418890b679ea45b00c20d012da0a57fe989635b793e09f096a"
+sd_archive = APP / "Vendor" / f"stable-diffusion-native-apple-xcframework-{SD_VERSION}.zip"
+if not sd_archive.exists():
+    temporary = sd_archive.with_suffix(".download")
+    try:
+        urllib.request.urlretrieve(f"https://github.com/leehack/stable-diffusion-native/releases/download/{SD_VERSION}/{sd_archive.name}", temporary)
+        temporary.replace(sd_archive)
+    finally:
+        temporary.unlink(missing_ok=True)
+checksum = hashlib.sha256()
+with sd_archive.open("rb") as archive:
+    for chunk in iter(lambda: archive.read(1024 * 1024), b""):
+        checksum.update(chunk)
+if checksum.hexdigest() != SD_SHA256:
+    raise SystemExit(f"Diffusion runtime checksum mismatch: {sd_archive}")
+subprocess.run(["ditto", "-x", "-k", str(sd_archive), str(APP / "Vendor/sd-native")], check=True)
+
 language_source = (REPO / "crates/koharu-translator/src/language.rs").read_text()
 languages = re.findall(r'to_string\s*=\s*"([^"]+)"(?:(?!to_string).)*?props\(tag\s*=\s*"([^"]+)"\)', language_source, re.S)
 if not languages:
@@ -44,4 +63,4 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["iconutil", "--convert", "iconset", str(REPO / "crates/koharu/icons/icon.icns"), "--output", str(icons)], check=True)
     shutil.copyfile(icons / "icon_512x512@2x.png", APP / "Resources/Assets.xcassets/AppIcon.appiconset/Icon.png")
 subprocess.run(["xcodegen", "generate", "--spec", "project.yml"], cwd=APP, check=True)
-print(f"Generated project; {len(languages)} target languages; llama.cpp {VERSION} verified.")
+print(f"Generated project; {len(languages)} target languages; llama.cpp {VERSION} and diffusion {SD_VERSION} verified.")

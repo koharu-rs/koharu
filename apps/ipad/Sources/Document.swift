@@ -32,6 +32,8 @@ struct Preferences: Codable, Equatable {
     var instructions = ""
     var contextSize = 4096
     var inpaint = false
+    var ocrModel: String?
+    var cleanupModel: String?
 }
 struct LocalModel: Codable, Identifiable {
     var id: UUID
@@ -54,7 +56,7 @@ struct MangaPage: Codable, Identifiable {
     var etag: String?
     var modified: String?
     var segments: [TextSegment] = []
-    var ocrRevision: Int?
+    var ocrSignature: String?
     var rendered: String?
     var fingerprint: String?
 }

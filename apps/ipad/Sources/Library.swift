@@ -87,7 +87,8 @@ import Observation
         let model = models.first { $0.id == config.localModel }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let prompt = try TranslationContract.prompts([], preferences: config).0
-        let fingerprint = digest(Data(("ipad-pipeline-2\n" + prompt).utf8) + (try encoder.encode(config)))
+        let fingerprint = digest(Data(("ipad-pipeline-3\n" + prompt).utf8) + (try encoder.encode(config)))
+        let ocrSignature = "vision-3:" + (config.ocrModel ?? "apple") + ":" + (config.ocrModel.flatMap { id in VisionModel.all.first { $0.id == id } }?.files.map(\.sha256).joined() ?? "document-2")
         for index in chapter.pages.indices {
             if let only, chapter.pages[index].id != only { continue }
             try Task.checkCancellation()
@@ -97,12 +98,13 @@ import Observation
             progress = Double(index) / Double(chapter.pages.count)
             let source = disk.pageURL(id, chapter.pages[index].original)
             var page = chapter.pages[index]
-            if page.ocrRevision != PagePipeline.ocrRevision {
+            if page.ocrSignature != ocrSignature {
                 guard !page.segments.contains(where: \.edited) else {
-                    throw AppError.message(L("This page has edits from an older OCR version. Make a new copy to rescan without losing them."))
+                    throw AppError.message(L("This page has edits from a different OCR configuration. Make a new copy to rescan without losing them."))
                 }
-                page.segments = try await pipeline.recognize(source)
-                page.ocrRevision = PagePipeline.ocrRevision
+                await translator.unload()
+                page.segments = try await pipeline.recognize(source, modelID: config.ocrModel, modelRoot: disk.modelsURL)
+                page.ocrSignature = ocrSignature
             }
             let targets = page.segments.filter { !$0.edited }
             if !targets.isEmpty {
@@ -111,9 +113,9 @@ import Observation
                     if let i = page.segments.firstIndex(where: { $0.id == segment.id }) { page.segments[i].text = text }
                 }
             }
-            // Release the large GGUF allocation before CoreML takes the device lane.
+            // Release the large GGUF allocation before inpainting takes the device lane.
             if config.inpaint { await translator.unload() }
-            let output = try await pipeline.render(source, segments: page.segments, inpaint: config.inpaint, modelRoot: disk.modelsURL)
+            let output = try await pipeline.render(source, segments: page.segments, inpaint: config.inpaint, modelID: config.cleanupModel ?? "lama", modelRoot: disk.modelsURL)
             try Task.checkCancellation()
             let file = UUID().uuidString + ".png"
             try output.write(to: disk.pageURL(id, file), options: .atomic)
@@ -135,7 +137,8 @@ import Observation
                     chapter.pages[index].segments[s].edited = true
                 }
             }
-            let output = try await pipeline.render(disk.pageURL(chapterID, chapter.pages[index].original), segments: chapter.pages[index].segments, inpaint: preferences.inpaint, modelRoot: disk.modelsURL)
+            if preferences.inpaint { await translator.unload() }
+            let output = try await pipeline.render(disk.pageURL(chapterID, chapter.pages[index].original), segments: chapter.pages[index].segments, inpaint: preferences.inpaint, modelID: preferences.cleanupModel ?? "lama", modelRoot: disk.modelsURL)
             try Task.checkCancellation()
             let file = UUID().uuidString + ".png"; try output.write(to: disk.pageURL(chapterID, file), options: .atomic)
             chapter.pages[index].rendered = file

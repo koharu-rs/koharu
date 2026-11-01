@@ -1,13 +1,10 @@
 import Foundation
 import UIKit
 import Vision
-import CoreML
 import ImageIO
 
 actor PagePipeline {
-    static let ocrRevision = 2
-    private var cleanup: MLModel?
-    func recognize(_ url: URL) async throws -> [TextSegment] {
+    func recognize(_ url: URL, modelID: String? = nil, modelRoot: URL? = nil) async throws -> [TextSegment] {
         try Task.checkCancellation()
         // Document recognition exposes vertical CJK lines and their direction;
         // the legacy text request missed most speech on the same manga page.
@@ -53,9 +50,20 @@ actor PagePipeline {
             }
             merged.append(region)
         }
-        return merged.enumerated().map { TextSegment(id: $0.offset, source: $0.element.1, rect: $0.element.0) }
+        var segments = merged.enumerated().map { TextSegment(id: $0.offset, source: $0.element.1, rect: $0.element.0) }
+        if let modelID, !segments.isEmpty {
+            guard let modelRoot, let image = UIImage(contentsOfFile: url.path)?.cgImage else { throw AppError.message(L("Could not decode source image")) }
+            let crops = try segments.map { segment -> UIImage in
+                let rect = CGRect(x: segment.rect.minX * CGFloat(image.width), y: segment.rect.minY * CGFloat(image.height), width: segment.rect.width * CGFloat(image.width), height: segment.rect.height * CGFloat(image.height)).insetBy(dx: -2, dy: -2).integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+                guard let crop = image.cropping(to: rect) else { throw AppError.message(L("Could not prepare OCR crop")) }
+                return UIImage(cgImage: crop)
+            }
+            let texts = try performVisionInference { try VisionONNX().read(crops, model: VisionModel.named(modelID), root: modelRoot) }
+            for index in segments.indices { segments[index].source = texts[index] }
+        }
+        return segments
     }
-    func render(_ source: URL, segments: [TextSegment], inpaint: Bool, modelRoot: URL) async throws -> Data {
+    func render(_ source: URL, segments: [TextSegment], inpaint: Bool, modelID: String = "lama", modelRoot: URL) async throws -> Data {
         try Task.checkCancellation()
         guard let image = UIImage(contentsOfFile: source.path) else { throw AppError.message(L("Could not decode source image")) }
         let size = image.size
@@ -64,8 +72,7 @@ actor PagePipeline {
         }
         let background: UIImage?
         if inpaint && !boxes.isEmpty {
-            do { background = try await inpaintImage(image, boxes: boxes, modelRoot: modelRoot) }
-            catch { cleanup = nil; throw error }
+            background = try performVisionInference { try inpaintImage(image, boxes: boxes, modelID: modelID, modelRoot: modelRoot) }
         } else { background = nil }
         try Task.checkCancellation()
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
@@ -99,40 +106,20 @@ actor PagePipeline {
         guard let data = rendered.pngData() else { throw AppError.message(L("Could not render translated page")) }
         return data
     }
-    private func inpaintImage(_ image: UIImage, boxes: [CGRect], modelRoot: URL) async throws -> UIImage {
-        if cleanup == nil {
-            let file = modelRoot.appendingPathComponent("LaMa.mlmodelc")
-            guard FileManager.default.fileExists(atPath: file.path) else { throw AppError.message(L("Download the cleanup model in Settings or disable AI cleanup")) }
-            let config = MLModelConfiguration(); config.computeUnits = .all
-            cleanup = try await MLModel.load(contentsOf: file, configuration: config)
+    private func performVisionInference<T>(_ operation: () throws -> T) throws -> T {
+        do { return try autoreleasepool(invoking: operation) }
+        catch {
+            let message = error.localizedDescription.lowercased()
+            let allocationFailed = message.contains("bad_alloc") || message.contains("out of memory") || message.contains("failed to allocate memory") ||
+                ((error as NSError).domain == NSPOSIXErrorDomain && (error as NSError).code == Int(ENOMEM))
+            guard allocationFailed else { throw error }
+            // Every stage owns its sessions locally. Unwinding + the autorelease
+            // pool unloads them before a fresh memory check in the one retry.
+            try Task.checkCancellation()
+            Thread.sleep(forTimeInterval: 0.15)
+            try Task.checkCancellation()
+            return try autoreleasepool(invoking: operation)
         }
-        guard let cleanup else { throw AppError.message(L("Cleanup model unavailable")) }
-        let edge = 512
-        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
-        let small = UIGraphicsImageRenderer(size: CGSize(width: edge, height: edge), format: format).image { _ in image.draw(in: CGRect(x: 0, y: 0, width: edge, height: edge)) }
-        guard let cg = small.cgImage else { throw AppError.message(L("Could not prepare cleanup image")) }
-        var pixels = [UInt8](repeating: 0, count: edge * edge * 4)
-        try pixels.withUnsafeMutableBytes { buffer in
-            guard let canvas = CGContext(data: buffer.baseAddress, width: edge, height: edge, bitsPerComponent: 8, bytesPerRow: edge * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw AppError.message(L("Could not allocate cleanup pixels")) }
-            canvas.draw(cg, in: CGRect(x: 0, y: 0, width: edge, height: edge))
-        }
-        let rgb = try MLMultiArray(shape: [1, 3, 512, 512], dataType: .float32)
-        let mask = try MLMultiArray(shape: [1, 1, 512, 512], dataType: .float32)
-        let rgbData = rgb.dataPointer.assumingMemoryBound(to: Float.self)
-        let maskData = mask.dataPointer.assumingMemoryBound(to: Float.self)
-        let count = edge * edge
-        for i in 0..<count { for c in 0..<3 { rgbData[c * count + i] = Float(pixels[4 * i + c]) / 255 }; maskData[i] = 0 }
-        for box in boxes {
-            let r = CGRect(x: box.minX / image.size.width * 512, y: box.minY / image.size.height * 512, width: box.width / image.size.width * 512, height: box.height / image.size.height * 512).integral.intersection(CGRect(x: 0, y: 0, width: 512, height: 512))
-            for y in max(0, Int(r.minY))..<min(512, Int(r.maxY)) { for x in max(0, Int(r.minX))..<min(512, Int(r.maxX)) { maskData[y * 512 + x] = 1 } }
-        }
-        let input = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(multiArray: rgb), "mask": MLFeatureValue(multiArray: mask)])
-        let prediction = try await cleanup.prediction(from: input)
-        try Task.checkCancellation()
-        guard let output = prediction.featureValue(for: "inpainted_image")?.multiArrayValue, output.count == count * 3, output.dataType == .float32 else { throw AppError.message(L("Unexpected cleanup model output")) }
-        let values = output.dataPointer.assumingMemoryBound(to: Float.self)
-        for i in 0..<count { for c in 0..<3 { pixels[4 * i + c] = UInt8(max(0, min(255, values[c * count + i] * 255))) }; pixels[4 * i + 3] = 255 }
-        guard let provider = CGDataProvider(data: Data(pixels) as CFData), let result = CGImage(width: edge, height: edge, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: edge * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { throw AppError.message(L("Could not render cleanup result")) }
-        return UIImage(cgImage: result)
     }
+
 }
