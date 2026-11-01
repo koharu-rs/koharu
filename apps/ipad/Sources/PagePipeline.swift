@@ -89,12 +89,21 @@ actor PagePipeline {
                 context.cgContext.clip()
                 background.draw(in: CGRect(origin: .zero, size: size))
                 context.cgContext.restoreGState()
+            } else {
+                // Cover the same padded OCR mask before drawing any translation;
+                // overlapping cards must never erase text drawn for another region.
+                UIColor.white.setFill()
+                for box in boxes { context.cgContext.fill(box) }
+                UIColor(white: 0.5, alpha: 1).setStroke()
+                context.cgContext.setLineWidth(1)
+                for box in boxes where box.width > 1 && box.height > 1 {
+                    context.cgContext.stroke(box.insetBy(dx: 0.5, dy: 0.5))
+                }
             }
             for segment in segments {
                 guard let text = segment.text else { continue }
                 let rect = CGRect(x: segment.rect.minX * size.width, y: segment.rect.minY * size.height, width: segment.rect.width * size.width, height: segment.rect.height * size.height).insetBy(dx: -2, dy: -2).intersection(CGRect(origin: .zero, size: size))
                 guard rect.width > 1 && rect.height > 1 else { continue }
-                if background == nil { UIColor.white.setFill(); UIBezierPath(roundedRect: rect, cornerRadius: 2).fill() }
                 guard !text.isEmpty else { continue }
                 let width = max(0.1, rect.width - 4)
                 let layout = PageTypography(text, size: CGSize(width: width, height: max(0.1, rect.height - 2)))

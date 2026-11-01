@@ -76,4 +76,39 @@ final class TypographyChecks: XCTestCase {
         try data.write(to: root.appendingPathComponent("preview.png"))
         XCTAssertNotNil(UIImage(data: data))
     }
+    func testWhiteCardsCoverSourceBeforeDrawingOverlappingTranslations() async throws {
+        let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("WhiteCardChecks")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let size = CGSize(width: 400, height: 400)
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
+        let source = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor(white: 0.25, alpha: 1).setFill(); context.fill(CGRect(origin: .zero, size: size))
+            for y in stride(from: 60, to: 280, by: 24) {
+                ("原文 ORIGINAL" as NSString).draw(at: CGPoint(x: 45, y: y), withAttributes: [.font: UIFont.systemFont(ofSize: 20), .foregroundColor: UIColor.black])
+            }
+        }
+        let input = root.appendingPathComponent("input.png"); try XCTUnwrap(source.pngData()).write(to: input)
+        let segments = [
+            TextSegment(id: 0, source: "原文", text: "Không ngờ mình lại có tài năng!", rect: CGRect(x: 0.1, y: 0.15, width: 0.6, height: 0.5)),
+            TextSegment(id: 1, source: "原文", text: "", rect: CGRect(x: 0.4, y: 0.2, width: 0.5, height: 0.5)),
+            TextSegment(id: 2, source: "Untouched", rect: CGRect(x: 0.1, y: 0.8, width: 0.8, height: 0.1))
+        ]
+        let pipeline = PagePipeline()
+        let data = try await pipeline.render(input, segments: segments, inpaint: false, modelRoot: root)
+        let reversed = try await pipeline.render(input, segments: Array(segments.reversed()), inpaint: false, modelRoot: root)
+        XCTAssertEqual(data, reversed, "Card order must not erase translated text")
+        let image = try XCTUnwrap(UIImage(data: data)?.cgImage)
+        var pixels = [UInt8](repeating: 0, count: 400 * 400 * 4)
+        try pixels.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: 400, height: 400, bitsPerComponent: 8, bytesPerRow: 1600, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(origin: .zero, size: size))
+        }
+        func red(_ x: Int, _ y: Int) -> UInt8 { pixels[(y * 400 + x) * 4] }
+        XCTAssertEqual(red(38, 58), 255, "Padded corners must be completely opaque white")
+        XCTAssertEqual(red(39, 70), 255)
+        XCTAssertEqual(red(37, 70), 128, accuracy: 1, "One-pixel gray border stays inside the mask")
+        XCTAssertEqual(red(36, 70), 64, accuracy: 1, "Artwork outside the mask remains unchanged")
+        XCTAssertEqual(red(50, 330), 64, accuracy: 1, "Untranslated OCR regions stay untouched")
+        try data.write(to: root.appendingPathComponent("preview.png"))
+    }
 }
