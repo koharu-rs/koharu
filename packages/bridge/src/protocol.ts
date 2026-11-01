@@ -6,6 +6,14 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
+	openSourceBrowser: (bounds: SourceBounds) => __TAURI_INVOKE<null>("open_source_browser", { bounds }),
+	resizeSourceBrowser: (bounds: SourceBounds) => __TAURI_INVOKE<null>("resize_source_browser", { bounds }),
+	closeSourceBrowser: () => __TAURI_INVOKE<null>("close_source_browser"),
+	navigateSourceBrowser: (url: string) => __TAURI_INVOKE<null>("navigate_source_browser", { url }),
+	sourceBrowserAction: (action: SourceBrowserAction) => __TAURI_INVOKE<null>("source_browser_action", { action }),
+	inspectSourcePage: () => __TAURI_INVOKE<SourcePage>("inspect_source_page"),
+	prepareSourceTranslation: (revalidate: boolean, replace: boolean, onProgress: Channel<SourceProgress>) => __TAURI_INVOKE<SourceTranslation>("prepare_source_translation", { revalidate, replace, onProgress }),
+	clearSourceCache: () => __TAURI_INVOKE<null>("clear_source_cache"),
 	getAgentStatus: () => __TAURI_INVOKE<AgentStatus>("get_agent_status"),
 	loginAgent: (onEvent: Channel<LoginEvent>) => __TAURI_INVOKE<AgentStatus>("login_agent", { onEvent }),
 	logoutAgent: () => __TAURI_INVOKE<AgentStatus>("logout_agent"),
@@ -440,9 +448,35 @@ export type Scope = { scope: "project" } | { scope: "pages"; value: EntityId[] }
 	bounds: Bounds,
 } } | { scope: "entities"; value: EntityId[] };
 
+export type SourceBounds = {
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+};
+
+export type SourceBrowserAction = "back" | "forward" | "reload";
+
+export type SourcePage = {
+	url: string,
+	title: string,
+	images: string[],
+};
+
+export type SourceProgress = {
+	completed: number,
+	total: number,
+};
+
 export type SourceText = {
 	text: string,
 	language: string | null,
+};
+
+export type SourceTranslation = {
+	project: string,
+	cached: boolean,
+	pages: number,
 };
 
 export type Stage = "detection" | "ocr" | "translation" | "inpainting";

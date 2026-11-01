@@ -180,7 +180,7 @@ pub(crate) async fn subscribe(
     })
 }
 
-async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Result<()> {
+pub(super) async fn replace_project(handle: &AppHandle<CefRuntime>, opened: Project) -> Result<()> {
     let snapshot = opened.snapshot();
     let page = opened.active_page();
     let info = opened.info();
@@ -389,36 +389,7 @@ pub(crate) async fn import(
     let (commit, page) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let source = AssetRole::new("source")?;
-        let patch = project.snapshot().patch(|edit| {
-            for imported in pages {
-                let page = edit.add_page(
-                    PageDraft::new(
-                        imported.name,
-                        f64::from(imported.width),
-                        f64::from(imported.height),
-                    ),
-                    At::End,
-                )?;
-                edit.set_asset(
-                    page,
-                    &source,
-                    AssetInput::new(
-                        imported.bytes,
-                        imported.format.to_mime_type(),
-                        AssetMetadata {
-                            width: Some(imported.width),
-                            height: Some(imported.height),
-                            attributes: Default::default(),
-                        },
-                    ),
-                )?;
-            }
-            Ok(())
-        })?;
-        let commit = project.session.commit(patch).await?;
-        project.record(vec![commit.revision]);
-        project.reconcile_page();
+        let commit = append_imported_pages(project, pages).await?;
         let page = project.active_page();
         (commit, page)
     };
@@ -426,6 +397,43 @@ pub(crate) async fn import(
     let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
     Ok(())
+}
+
+pub(super) async fn append_imported_pages(
+    project: &mut Project,
+    pages: Vec<import::Page>,
+) -> Result<koharu_scene::Commit> {
+    let source = AssetRole::new("source")?;
+    let patch = project.snapshot().patch(|edit| {
+        for imported in pages {
+            let page = edit.add_page(
+                PageDraft::new(
+                    imported.name,
+                    f64::from(imported.width),
+                    f64::from(imported.height),
+                ),
+                At::End,
+            )?;
+            edit.set_asset(
+                page,
+                &source,
+                AssetInput::new(
+                    imported.bytes,
+                    imported.format.to_mime_type(),
+                    AssetMetadata {
+                        width: Some(imported.width),
+                        height: Some(imported.height),
+                        attributes: Default::default(),
+                    },
+                ),
+            )?;
+        }
+        Ok(())
+    })?;
+    let commit = project.session.commit(patch).await?;
+    project.record(vec![commit.revision]);
+    project.reconcile_page();
+    Ok(commit)
 }
 
 #[tauri::command]

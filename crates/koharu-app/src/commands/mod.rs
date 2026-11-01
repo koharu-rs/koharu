@@ -8,6 +8,7 @@ pub(crate) mod output;
 pub(crate) mod preferences;
 pub(crate) mod processing;
 pub(crate) mod project;
+pub(crate) mod source;
 
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -57,6 +58,14 @@ pub fn bindings() -> tauri_specta::Builder<tauri_runtime_cef::CefRuntime> {
 
     Builder::new()
         .commands(collect_commands![
+            source::open_source_browser,
+            source::resize_source_browser,
+            source::close_source_browser,
+            source::navigate_source_browser,
+            source::source_browser_action,
+            source::inspect_source_page,
+            source::prepare_source_translation,
+            source::clear_source_cache,
             agent::get_agent_status,
             agent::login_agent,
             agent::logout_agent,

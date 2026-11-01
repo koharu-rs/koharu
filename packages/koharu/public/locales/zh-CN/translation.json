@@ -535,5 +535,28 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "restore": "还原"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "编辑器",
+    "back": "后退",
+    "forward": "前进",
+    "reload": "刷新",
+    "home": "首页",
+    "address": "Rawkuma 地址",
+    "go": "前往",
+    "translate": "翻译本章",
+    "clear": "清除缓存",
+    "cacheHelp": "删除已下载图片及 HTTP 元数据，保留已保存的项目。",
+    "revalidate": "检查原图更新",
+    "replace": "翻译新副本",
+    "replaceHelp": "保留原项目作为备份。",
+    "failed": "未能完成，请查看错误信息后重试。",
+    "cleared": "下载缓存已清除，已保存的项目仍保留。",
+    "progress": "正在下载 {{completed}} / {{total}}",
+    "pages_one": "{{count}} 页",
+    "pages_other": "{{count}} 页",
+    "chooseChapter": "请打开需要翻译的章节",
+    "browser": "Rawkuma 浏览器"
   }
 }

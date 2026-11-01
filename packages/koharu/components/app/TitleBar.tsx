@@ -1,7 +1,7 @@
 'use client'
 
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { FilePlus2, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
+import { FilePlus2, FolderOpen, Globe, LoaderCircle, Settings } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -23,6 +23,7 @@ import {
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type Operation, type Scope, type Stage } from '@koharu/bridge/protocol'
+import { Button } from '@koharu/ui/components/button'
 import {
   Menubar,
   MenubarContent as UiMenubarContent,
@@ -51,6 +52,9 @@ export function TitleBar() {
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const requestCanvasFit = useKoharuStore((state) => state.requestCanvasFit)
+  const sourceOpen = useKoharuStore((state) => state.sourceOpen)
+  const sourceBusy = useKoharuStore((state) => state.sourceBusy)
+  const setSourceOpen = useKoharuStore((state) => state.setSourceOpen)
   const { importPages, importing } = useImportPages()
   const { run: exportProject, busy: exporting } = useCommand(
     ['export-project'],
@@ -86,7 +90,7 @@ export function TitleBar() {
         )}
         <Menubar className='relative z-10 h-full shrink-0 gap-0 border-0 bg-transparent p-0 shadow-none'>
           <MenubarMenu>
-            <MenubarTrigger>{t('menu.file')}</MenubarTrigger>
+            <MenubarTrigger disabled={sourceOpen}>{t('menu.file')}</MenubarTrigger>
             <MenubarContent>
               <MenubarSub>
                 <MenubarSubTrigger
@@ -142,7 +146,7 @@ export function TitleBar() {
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('menu.edit')}</MenubarTrigger>
+            <MenubarTrigger disabled={sourceOpen}>{t('menu.edit')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
                 disabled={!project?.can_undo}
@@ -192,7 +196,7 @@ export function TitleBar() {
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('menu.process')}</MenubarTrigger>
+            <MenubarTrigger disabled={sourceOpen}>{t('menu.process')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
                 disabled={!project || pages.length === 0}
@@ -233,7 +237,7 @@ export function TitleBar() {
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('menu.view')}</MenubarTrigger>
+            <MenubarTrigger disabled={sourceOpen}>{t('menu.view')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem disabled={!page} onClick={requestCanvasFit}>
                 {t('menu.fit')}
@@ -242,7 +246,7 @@ export function TitleBar() {
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('menu.help')}</MenubarTrigger>
+            <MenubarTrigger disabled={sourceOpen}>{t('menu.help')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
                 onClick={() => void openUrl('https://discord.gg/mHvHkxGnUY').catch(() => undefined)}
@@ -263,6 +267,16 @@ export function TitleBar() {
         </Menubar>
 
         <div className='min-w-0 flex-1' />
+        <Button
+          size='sm'
+          variant={sourceOpen ? 'secondary' : 'ghost'}
+          className='relative z-10 mr-2 h-7 text-xs'
+          disabled={sourceBusy}
+          onClick={() => setSourceOpen(!sourceOpen)}
+        >
+          <Globe className='size-3.5' />
+          {sourceOpen ? t('source.editor') : t('source.open')}
+        </Button>
         <div className='pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[40vw] min-w-16 -translate-x-1/2 items-center justify-center px-3 text-[11px] text-muted-foreground select-none'>
           {project ? (
             <span className='truncate'>
@@ -290,7 +304,7 @@ function MenubarTrigger({ className, ...props }: ComponentProps<typeof UiMenubar
   return (
     <UiMenubarTrigger
       className={cn(
-        'h-6 px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-muted-foreground aria-expanded:bg-primary/10 aria-expanded:text-muted-foreground',
+        'h-6 px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-muted-foreground disabled:opacity-40 aria-expanded:bg-primary/10 aria-expanded:text-muted-foreground',
         className,
       )}
       {...props}

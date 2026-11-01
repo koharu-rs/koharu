@@ -535,5 +535,28 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "restore": "還原"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "編輯器",
+    "back": "上一頁",
+    "forward": "下一頁",
+    "reload": "重新整理",
+    "home": "首頁",
+    "address": "Rawkuma 網址",
+    "go": "前往",
+    "translate": "翻譯本章",
+    "clear": "清除快取",
+    "cacheHelp": "刪除已下載圖片與 HTTP 中繼資料，保留已儲存的專案。",
+    "revalidate": "檢查原圖更新",
+    "replace": "翻譯新副本",
+    "replaceHelp": "保留原專案作為備份。",
+    "failed": "未能完成，請查看錯誤訊息後重試。",
+    "cleared": "下載快取已清除，已儲存的專案仍保留。",
+    "progress": "正在下載 {{completed}} / {{total}}",
+    "pages_one": "{{count}} 頁",
+    "pages_other": "{{count}} 頁",
+    "chooseChapter": "請開啟需要翻譯的章節",
+    "browser": "Rawkuma 瀏覽器"
   }
 }

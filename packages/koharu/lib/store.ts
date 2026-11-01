@@ -61,6 +61,10 @@ interface KoharuStore {
   processingScope: PipelineScope
   processingStages: Stage[]
   settingsOpen: boolean
+  sourceOpen: boolean
+  sourceBusy: boolean
+  setSourceOpen: (open: boolean) => void
+  setSourceBusy: (busy: boolean) => void
   shortcuts: Shortcuts
   selectPages: (pages: EntityId[]) => void
   showInspector: (section: InspectorSection) => void
@@ -109,12 +113,18 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   processingScope: 'selected-pages',
   processingStages: [...pipelineStages],
   settingsOpen: false,
+  sourceOpen: false,
+  sourceBusy: false,
+  setSourceOpen: (sourceOpen) =>
+    set({ sourceOpen, ...(sourceOpen ? { settingsOpen: false } : {}) }),
+  setSourceBusy: (sourceBusy) => set({ sourceBusy }),
   shortcuts: defaultShortcuts,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
   showInspector: (inspector) => set({ inspector }),
   setProcessingScope: (processingScope) => set({ processingScope }),
   setProcessingStages: (processingStages) => set({ processingStages }),
-  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  setSettingsOpen: (settingsOpen) =>
+    set({ settingsOpen, ...(settingsOpen ? { sourceOpen: false } : {}) }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),
   setBrush: (brush) => set({ brush }),

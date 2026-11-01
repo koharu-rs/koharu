@@ -15,11 +15,15 @@ alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+blake3 = { workspace = true }
+cef = { version = "=154.5.0", default-features = false }
+dom_query = { version = "0.28", default-features = false }
 dirs = { workspace = true }
 futures = { workspace = true }
 hayro = { workspace = true }
 image = { workspace = true }
 koharu-agent = { workspace = true }
+koharu-config = { workspace = true }
 koharu-desktop = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-pipeline = { workspace = true }
@@ -35,6 +39,7 @@ parking_lot = { workspace = true }
 rayon = { workspace = true }
 rars = { workspace = true }
 rfd = { workspace = true }
+reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -55,6 +60,7 @@ tokio = { workspace = true }
 tokio-rayon = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
+url = { workspace = true }
 walkdir = { workspace = true }
 webp = { workspace = true }
 zip = { workspace = true }

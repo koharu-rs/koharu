@@ -535,5 +535,28 @@
     "maximize": "Maximizar",
     "minimize": "Minimizar",
     "restore": "Restaurar"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "Editor",
+    "back": "Voltar",
+    "forward": "Avançar",
+    "reload": "Recarregar",
+    "home": "Início",
+    "address": "Endereço Rawkuma",
+    "go": "Ir",
+    "translate": "Traduzir este capítulo",
+    "clear": "Limpar cache",
+    "cacheHelp": "Remove imagens baixadas e metadados HTTP. Os projetos salvos são mantidos.",
+    "revalidate": "Verificar atualizações",
+    "replace": "Traduzir nova cópia",
+    "replaceHelp": "Manter o projeto anterior como backup.",
+    "failed": "Não foi possível concluir. Confira o erro e tente novamente.",
+    "cleared": "Cache limpo. Os projetos salvos foram mantidos.",
+    "progress": "Baixando {{completed}} / {{total}}",
+    "pages_one": "{{count}} página",
+    "pages_other": "{{count}} páginas",
+    "chooseChapter": "Abra um capítulo para traduzir",
+    "browser": "Navegador Rawkuma"
   }
 }

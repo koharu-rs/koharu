@@ -123,6 +123,7 @@ tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b
     "compression",
     "dynamic-acl",
     "specta",
+    "unstable",
 ] }
 tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
 tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }

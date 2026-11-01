@@ -535,5 +535,28 @@
     "maximize": "Maximize",
     "minimize": "Minimize",
     "restore": "Restore"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "Editor",
+    "back": "Back",
+    "forward": "Forward",
+    "reload": "Reload",
+    "home": "Home",
+    "address": "Rawkuma address",
+    "go": "Go",
+    "translate": "Translate this chapter",
+    "clear": "Clear cache",
+    "cacheHelp": "Remove downloaded images and HTTP metadata. Saved projects are kept.",
+    "revalidate": "Check source updates",
+    "replace": "Translate a new copy",
+    "replaceHelp": "Keep the previous project as a backup.",
+    "failed": "Could not finish. Check the error message and try again.",
+    "cleared": "Download cache cleared. Saved projects are kept.",
+    "progress": "Downloading {{completed}} / {{total}}",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "chooseChapter": "Open a chapter to translate",
+    "browser": "Rawkuma source browser"
   }
 }

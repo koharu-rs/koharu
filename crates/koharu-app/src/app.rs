@@ -54,6 +54,7 @@ pub(crate) async fn initialize(handle: AppHandle<CefRuntime>) -> Result<()> {
 }
 
 pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
+    let commands = crate::commands::bindings().invoke_handler();
     let cef = Cef::default();
     #[cfg(debug_assertions)]
     let cef = cef.remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
@@ -100,7 +101,16 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(crate::commands::bindings().invoke_handler())
+        .invoke_handler(move |invoke| {
+            // External source pages can be inspected, but cannot invoke any editor command.
+            if invoke.message.webview_ref().label() != "main" {
+                invoke
+                    .resolver
+                    .reject("editor commands require the trusted main webview");
+                return true;
+            }
+            commands(invoke)
+        })
         .setup(move |application| {
             #[cfg(all(target_os = "windows", not(debug_assertions)))]
             koharu_runtime::Store::configure(
@@ -116,6 +126,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
             });
             application.manage(ProjectLibrary::new()?);
             application.manage(Processing::default());
+            application.manage(crate::commands::source::SourceState::default());
             application.manage(CanvasChannel::default());
             application.manage(JobChannel::default());
             application.manage(DownloadChannel::default());
@@ -215,10 +226,12 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if matches!(
-                event,
-                WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
-            ) {
+            if window.label() == "main"
+                && matches!(
+                    event,
+                    WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
+                )
+            {
                 let processing = window.state::<Processing>();
                 for stop in processing.stops.lock().values() {
                     stop.stop();

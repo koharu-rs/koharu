@@ -535,5 +535,28 @@
     "maximize": "최대화",
     "minimize": "최소화",
     "restore": "복원"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "편집기",
+    "back": "뒤로",
+    "forward": "앞으로",
+    "reload": "새로 고침",
+    "home": "홈",
+    "address": "Rawkuma 주소",
+    "go": "이동",
+    "translate": "이 장 번역",
+    "clear": "캐시 지우기",
+    "cacheHelp": "다운로드한 이미지와 HTTP 정보를 삭제합니다. 저장된 프로젝트는 유지됩니다.",
+    "revalidate": "원본 업데이트 확인",
+    "replace": "새 사본 번역",
+    "replaceHelp": "이전 프로젝트를 백업으로 유지합니다.",
+    "failed": "완료하지 못했습니다. 오류를 확인하고 다시 시도하세요.",
+    "cleared": "다운로드 캐시를 지웠습니다. 저장된 프로젝트는 유지됩니다.",
+    "progress": "다운로드 중 {{completed}} / {{total}}",
+    "pages_one": "{{count}}페이지",
+    "pages_other": "{{count}}페이지",
+    "chooseChapter": "번역할 장을 여세요",
+    "browser": "Rawkuma 브라우저"
   }
 }

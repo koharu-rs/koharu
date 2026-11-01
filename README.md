@@ -1,6 +1,66 @@
-<h1 align="center">Koharu</h1>
+<h1 align="center">Koharu + Rawkuma</h1>
 
 <p align="center">ML-powered manga translator, written in <b>Rust</b>.</p>
+
+Fork của [koharu-rs/koharu](https://github.com/koharu-rs/koharu), bổ sung duyệt và dịch chương truyện từ Rawkuma ngay trong ứng dụng desktop. Mã nguồn fork: [flowerfx/koharu](https://github.com/flowerfx/koharu).
+
+## Tính năng bổ sung của fork
+
+| Tính năng                     | Hỗ trợ                                                                                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Trình duyệt Rawkuma trong app | Nút **Rawkuma** mở website; dùng danh sách truyện, tìm kiếm, thể loại và danh sách chương của website. Có Back, Forward, Reload, Home và ô nhập URL.                                                                     |
+| Dịch chương hiện tại          | **Translate this chapter** lấy danh sách ảnh từ tài liệu đang mở, tải theo đúng thứ tự, tạo project và chạy pipeline detection → OCR → translation / inpainting có sẵn của Koharu.                                       |
+| Nhiều ngôn ngữ đích           | Chọn trực tiếp trong màn hình Rawkuma, dùng lại danh sách 53 ngôn ngữ của Koharu: Việt, Anh, Nhật, Hàn, Trung, Pháp, Đức, Tây Ban Nha, Ả Rập… Khả năng và chất lượng thực tế phụ thuộc model/provider đã chọn.           |
+| Model dịch hiện có            | Giữ cấu hình model/provider của người dùng, bao gồm Qwen 3.8 27B GGUF và các mức lượng tử hóa có trong danh mục. Fork không yêu cầu một dịch vụ dịch riêng.                                                              |
+| Cache ảnh                     | Lưu nội dung ảnh theo BLAKE3; kiểm tra lại tính toàn vẹn trước khi dùng cache. **Check source updates** dùng ETag hoặc Last-Modified để gửi yêu cầu có điều kiện và tận dụng phản hồi HTTP 304.                          |
+| Dùng lại kết quả dịch         | Chỉ bỏ qua suy luận khi project đã dịch thành công, revision còn khớp và ảnh/cấu hình dịch không đổi. Khóa cache bao gồm URL chương, thứ tự/nội dung ảnh, ngôn ngữ, model và các cấu hình pipeline/typesetting/provider. |
+| Giữ bản trước                 | **Translate a new copy** tạo project mới để giữ project cũ. Ảnh nguồn thay đổi hoặc cấu hình dịch khác cũng có khóa cache riêng.                                                                                         |
+| Xóa cache                     | **Clear cache** xóa ảnh tải xuống, HTTP metadata và chỉ mục cache. Project `.khrproj` đã lưu và phiên trình duyệt được giữ lại.                                                                                          |
+| Bảo vệ editor                 | Trang nguồn không được gọi các command của editor; URL tải ảnh và redirect bị giới hạn ở CDN Rawkuma.                                                                                                                    |
+
+### Cách dùng
+
+1. Mở **Settings** để chọn model dịch, OCR và inpainting phù hợp. Có thể dùng Qwen 3.8 27B Q4 nếu máy đủ bộ nhớ; lần đầu app cần tải các mô hình chưa có.
+2. Bấm **Rawkuma** ở thanh tiêu đề, tìm truyện và mở chương muốn đọc. Cũng có thể dán URL chương vào ô địa chỉ rồi bấm **Go**.
+3. Chọn **Target language**. Đây là ngôn ngữ của bản dịch, độc lập với ngôn ngữ giao diện app.
+4. Giữ **Check source updates** bật nếu muốn kiểm tra ảnh mới từ máy chủ. Bật **Translate a new copy** nếu muốn dịch lại và giữ project trước đó.
+5. Bấm **Translate this chapter**. App hiển thị tiến độ tải ảnh, chuyển sang editor và chạy xử lý cho toàn project. Dùng cơ chế Stop, sửa nội dung, lưu và export có sẵn của Koharu.
+
+App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/page.jpg`, vì slug, số chương thập phân, định dạng và số lượng ảnh có thể khác nhau. Hiện giới hạn tối đa 500 ảnh/chương và 32 MiB/ảnh; hỗ trợ JPEG, PNG và WebP theo nội dung ảnh thực tế.
+
+### Phạm vi và trạng thái kiểm chứng
+
+- Đã build và chạy bản macOS Apple Silicon độc lập; nhập thực tế 32 trang của một chương Rawkuma và hiển thị trong editor.
+- Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
+- 4 kiểm tra backend và 4 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
+- Chưa xác nhận chất lượng/tốc độ Qwen hoặc kết quả hoàn chỉnh của toàn chương; tại thời điểm kiểm tra luồng nhập, app đang tải model cho lần chạy đầu. Chưa kiểm chứng tính năng Rawkuma trên Windows/Linux.
+- Đây là app desktop, chưa có bản iPad/iOS hoặc máy chủ đọc truyện qua trình duyệt. Có thể chuyển kết quả export sang iPad để đọc bằng ứng dụng phù hợp.
+- Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.
+
+### Build bản macOS debug của fork
+
+Cài các phụ thuộc nền tảng trong phần **Development** bên dưới, cùng CMake/Ninja và target Rust `wasm32-unknown-unknown`. Chạy từ thư mục gốc repo:
+
+```bash
+bun install
+rustup target add wasm32-unknown-unknown
+
+# Tạo WASM cho canvas bằng profile dev.
+CARGO_TARGET_DIR="$PWD/target/wasm-build" bun x wasm-pack@0.15.0 build \
+  crates/koharu-canvas --dev --target web \
+  --out-dir "$PWD/packages/bridge/src/wasm" --out-name koharu_canvas --no-pack
+
+# Tạo frontend tĩnh rồi đóng gói app debug, không tạo gói auto-update.
+SENTRY_AUTH_TOKEN= bun run --filter @koharu/app build
+cargo tauri build --debug --bundles app \
+  --config '{"build":{"beforeBuildCommand":""},"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+Bundle macOS nằm tại `target/debug/bundle/macos/koharu.app`. Nếu libclang chưa được phát hiện, đặt `LIBCLANG_PATH` tới thư mục lib của LLVM/Xcode trên máy.
+
+## Dự án và tài liệu upstream
+
+Các badge, tài liệu, package manager và release liên kết bên dưới thuộc **Koharu upstream**. Chúng không bao gồm phần Rawkuma của fork; hãy build mã nguồn fork để dùng tính năng này. Giấy phép và ghi nhận tác giả gốc được giữ nguyên.
 
 <p align="center">
 <a href="https://github.com/koharu-rs/koharu/releases/latest" target="_blank"><img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/koharu-rs/koharu/total?style=for-the-badge&link=https%3A%2F%2Fgithub.com%2Fkoharu-rs%2Fkoharu%2Freleases%2Flatest"></a>

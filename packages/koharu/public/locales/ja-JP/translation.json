@@ -535,5 +535,28 @@
     "maximize": "最大化",
     "minimize": "最小化",
     "restore": "元のサイズに戻す"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "エディター",
+    "back": "戻る",
+    "forward": "進む",
+    "reload": "再読み込み",
+    "home": "ホーム",
+    "address": "Rawkumaのアドレス",
+    "go": "移動",
+    "translate": "この話を翻訳",
+    "clear": "キャッシュを削除",
+    "cacheHelp": "ダウンロード画像とHTTP情報を削除します。保存済みプロジェクトは残ります。",
+    "revalidate": "原稿の更新を確認",
+    "replace": "新しいコピーを翻訳",
+    "replaceHelp": "以前のプロジェクトをバックアップとして残します。",
+    "failed": "処理できませんでした。エラーを確認して再試行してください。",
+    "cleared": "キャッシュを削除しました。保存済みプロジェクトは残ります。",
+    "progress": "ダウンロード中 {{completed}} / {{total}}",
+    "pages_one": "{{count}}ページ",
+    "pages_other": "{{count}}ページ",
+    "chooseChapter": "翻訳する話を開いてください",
+    "browser": "Rawkumaブラウザー"
   }
 }

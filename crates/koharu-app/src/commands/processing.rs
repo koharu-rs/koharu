@@ -82,13 +82,11 @@ pub(crate) async fn process(
     processing: State<'_, Processing>,
     job_channel: State<'_, JobChannel>,
 ) -> std::result::Result<JobId, Error> {
-    let snapshot = project
-        .project
-        .lock()
-        .await
-        .as_ref()
-        .context("no project is open")?
-        .snapshot();
+    let (snapshot, project_name) = {
+        let project = project.project.lock().await;
+        let project = project.as_ref().context("no project is open")?;
+        (project.snapshot(), project.name.clone())
+    };
     let id = JobId::new();
     let stop = StopToken::default();
     {
@@ -110,6 +108,15 @@ pub(crate) async fn process(
     };
     processing.jobs.lock().insert(id, job.clone());
     job_channel.channel.publish(job);
+    if matches!(&scope, koharu_pipeline::Scope::Project)
+        && matches!(&operation, koharu_pipeline::Operation::Full)
+    {
+        if let Ok(settings) = super::source::settings_fingerprint() {
+            handle
+                .state::<super::source::SourceState>()
+                .begin_translation(&project_name, id, &settings);
+        }
+    }
 
     let pipeline = handle.state::<koharu_pipeline::Pipeline>().inner().clone();
     let task_handle = handle.clone();
@@ -206,6 +213,21 @@ pub(crate) async fn process(
                 (false, Some(format!("{error:#}")))
             }
         };
+        let revision = task_handle
+            .state::<CurrentProject>()
+            .project
+            .lock()
+            .await
+            .as_ref()
+            .filter(|project| project.name == project_name)
+            .map(|project| project.snapshot().revision());
+        if let Err(cache_error) = task_handle
+            .state::<super::source::SourceState>()
+            .finish_translation(id, !stopped && error.is_none(), revision)
+            .await
+        {
+            tracing::warn!(%cache_error, "could not cache the completed source translation");
+        }
         task_handle.state::<Processing>().stops.lock().remove(&id);
         let job = task_handle
             .state::<Processing>()

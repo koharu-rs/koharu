@@ -535,5 +535,28 @@
     "maximize": "Ekranı kapla",
     "minimize": "Simge durumuna küçült",
     "restore": "Geri yükle"
+  },
+  "source": {
+    "open": "Rawkuma",
+    "editor": "Düzenleyici",
+    "back": "Geri",
+    "forward": "İleri",
+    "reload": "Yenile",
+    "home": "Ana sayfa",
+    "address": "Rawkuma adresi",
+    "go": "Git",
+    "translate": "Bu bölümü çevir",
+    "clear": "Önbelleği temizle",
+    "cacheHelp": "İndirilen resimleri ve HTTP verilerini siler. Kaydedilen projeler korunur.",
+    "revalidate": "Kaynak güncellemelerini denetle",
+    "replace": "Yeni kopyayı çevir",
+    "replaceHelp": "Önceki projeyi yedek olarak sakla.",
+    "failed": "Tamamlanamadı. Hatayı kontrol edip yeniden deneyin.",
+    "cleared": "İndirme önbelleği temizlendi. Kaydedilen projeler korundu.",
+    "progress": "İndiriliyor {{completed}} / {{total}}",
+    "pages_one": "{{count}} sayfa",
+    "pages_other": "{{count}} sayfa",
+    "chooseChapter": "Çevirmek için bir bölüm açın",
+    "browser": "Rawkuma tarayıcısı"
   }
 }

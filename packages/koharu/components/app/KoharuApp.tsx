@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { SourceBrowser } from '@/components/app/SourceBrowser'
 import { TitleBar } from '@/components/app/TitleBar'
 import { Editor } from '@/components/editor/Editor'
 import { SettingsPage } from '@/components/preferences/SettingsPage'
@@ -19,8 +20,9 @@ export function KoharuApp() {
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const projectLoaded = project !== undefined
   const settingsOpen = useKoharuStore((state) => state.settingsOpen)
+  const sourceOpen = useKoharuStore((state) => state.sourceOpen)
   const activePage = project?.active_page
-  const editorOpen = project !== undefined && project !== null && !settingsOpen
+  const editorOpen = project !== undefined && project !== null && !settingsOpen && !sourceOpen
 
   useEffect(() => {
     if (!projectLoaded || selectedPages.length > 0) return
@@ -36,7 +38,9 @@ export function KoharuApp() {
       )}
     >
       <TitleBar />
-      {settingsOpen ? (
+      {sourceOpen ? (
+        <SourceBrowser />
+      ) : settingsOpen ? (
         <SettingsPage />
       ) : project === undefined ? (
         <main className='grid min-h-0 flex-1 place-items-center bg-[var(--surface-canvas)]'>
