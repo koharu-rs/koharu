@@ -1,0 +1,156 @@
+import Foundation
+import Observation
+
+@MainActor @Observable final class MangaLibrary {
+    let disk: LibraryDisk
+    var chapters: [Chapter] = []
+    var preferences = Preferences()
+    var models: [LocalModel] = []
+    var busy = false
+    var status = ""
+    var progress: Double = 0
+    var error: String?
+    var activeTask: Task<Void, Never>?
+    var modelTask: Task<Void, Never>?
+    var downloadingModel = false
+    let translator = TranslationEngine()
+    let pipeline = PagePipeline()
+    let images = SourceImages()
+
+    init(disk: LibraryDisk) {
+        self.disk = disk
+        do {
+            chapters = try disk.chapters()
+            let config = disk.root.appendingPathComponent("preferences.json")
+            if FileManager.default.fileExists(atPath: config.path) { preferences = try disk.load(Preferences.self, config) }
+            let inventory = disk.root.appendingPathComponent("models.json")
+            if FileManager.default.fileExists(atPath: inventory.path) { models = try disk.load([LocalModel].self, inventory) }
+        } catch { self.error = error.localizedDescription }
+    }
+    func savePreferences() { do { try disk.save(preferences, to: disk.root.appendingPathComponent("preferences.json")) } catch { self.error = error.localizedDescription } }
+    func update(_ chapter: Chapter, recordUndo: Bool = true) throws {
+        try disk.save(chapter, recordUndo: recordUndo)
+        if let index = chapters.firstIndex(where: { $0.id == chapter.id }) { chapters[index] = chapter }
+        else { chapters.insert(chapter, at: 0) }
+    }
+    func importChapter(_ source: SourceChapter, revalidate: Bool, newCopy: Bool = false) {
+        guard !busy else { return }
+        busy = true
+        activeTask = Task {
+            defer { busy = false; activeTask = nil }
+            do {
+                let source = try source.validated()
+                var chapter = (newCopy ? nil : chapters.first { $0.sourceURL == source.url && $0.target == preferences.target }) ?? Chapter(title: source.title, sourceURL: source.url, target: preferences.target, pages: [])
+                var pages: [MangaPage] = []
+                for (index, url) in source.images.enumerated() {
+                    try Task.checkCancellation()
+                    status = "\(L("Downloading")) \(index + 1)/\(source.images.count)"
+                    progress = Double(index) / Double(source.images.count)
+                    let old = chapter.pages.first { $0.source == url }
+                    let page = try await images.fetch(url: url, referer: source.url, chapter: chapter.id, previous: old, revalidate: revalidate, disk: disk)
+                    pages.append(page)
+                }
+                chapter.pages = pages
+                try update(chapter)
+                try await translate(chapter.id, force: false)
+            } catch is CancellationError { status = L("Stopped") }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+    func run(_ id: UUID, force: Bool, page: UUID? = nil) {
+        guard !busy else { return }
+        busy = true
+        activeTask = Task {
+            defer { busy = false; activeTask = nil }
+            do {
+                var target = id
+                if let source = chapters.first(where: { $0.id == id }), source.target != preferences.target {
+                    var copy = source; copy.id = UUID(); copy.target = preferences.target; copy.created = Date()
+                    try FileManager.default.createDirectory(at: disk.chapterURL(copy.id), withIntermediateDirectories: true)
+                    for i in copy.pages.indices {
+                        let input = disk.pageURL(source.id, copy.pages[i].original), output = disk.pageURL(copy.id, copy.pages[i].original)
+                        if !FileManager.default.fileExists(atPath: output.path) { try FileManager.default.copyItem(at: input, to: output) }
+                        copy.pages[i].rendered = nil; copy.pages[i].fingerprint = nil
+                        for s in copy.pages[i].segments.indices { copy.pages[i].segments[s].text = nil; copy.pages[i].segments[s].edited = false }
+                    }
+                    try update(copy); target = copy.id
+                }
+                try await translate(target, force: force, only: page)
+            }
+            catch is CancellationError { status = L("Stopped") }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+    private func translate(_ id: UUID, force: Bool, only: UUID? = nil) async throws {
+        guard var chapter = chapters.first(where: { $0.id == id }) else { throw AppError.message(L("Chapter not found")) }
+        let config = preferences
+        let model = models.first { $0.id == config.localModel }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let prompt = try TranslationContract.prompts([], preferences: config).0
+        let fingerprint = digest(Data(("ipad-pipeline-1\n" + prompt).utf8) + (try encoder.encode(config)))
+        for index in chapter.pages.indices {
+            if let only, chapter.pages[index].id != only { continue }
+            try Task.checkCancellation()
+            if !force && chapter.pages[index].fingerprint == fingerprint,
+               let file = chapter.pages[index].rendered, FileManager.default.fileExists(atPath: disk.pageURL(id, file).path) { continue }
+            status = "\(L("Translating")) \(index + 1)/\(chapter.pages.count)"
+            progress = Double(index) / Double(chapter.pages.count)
+            let source = disk.pageURL(id, chapter.pages[index].original)
+            var page = chapter.pages[index]
+            if page.segments.isEmpty { page.segments = try await pipeline.recognize(source) }
+            let targets = page.segments.filter { !$0.edited }
+            if !targets.isEmpty {
+                let texts = try await translator.translate(targets.map(\.source), config: config, model: model.map { disk.modelsURL.appendingPathComponent($0.filename) })
+                for (segment, text) in zip(targets, texts) {
+                    if let i = page.segments.firstIndex(where: { $0.id == segment.id }) { page.segments[i].text = text }
+                }
+            }
+            // Release the large GGUF allocation before CoreML takes the device lane.
+            if config.inpaint { await translator.unload() }
+            let output = try await pipeline.render(source, segments: page.segments, inpaint: config.inpaint, modelRoot: disk.modelsURL)
+            try Task.checkCancellation()
+            let file = UUID().uuidString + ".png"
+            try output.write(to: disk.pageURL(id, file), options: .atomic)
+            page.rendered = file; page.fingerprint = fingerprint
+            chapter.pages[index] = page
+            chapter.readPage = chapters.first { $0.id == id }?.readPage ?? chapter.readPage
+            try update(chapter)
+        }
+        status = L("Completed"); progress = 1
+    }
+    func edit(_ chapterID: UUID, page: UUID, texts: [Int: String]) async -> Bool {
+        guard !busy, var chapter = chapters.first(where: { $0.id == chapterID }), let index = chapter.pages.firstIndex(where: { $0.id == page }) else { return false }
+        busy = true
+        defer { busy = false }
+        do {
+            for s in chapter.pages[index].segments.indices {
+                if let text = texts[chapter.pages[index].segments[s].id] {
+                    chapter.pages[index].segments[s].text = text
+                    chapter.pages[index].segments[s].edited = true
+                }
+            }
+            let output = try await pipeline.render(disk.pageURL(chapterID, chapter.pages[index].original), segments: chapter.pages[index].segments, inpaint: preferences.inpaint, modelRoot: disk.modelsURL)
+            try Task.checkCancellation()
+            let file = UUID().uuidString + ".png"; try output.write(to: disk.pageURL(chapterID, file), options: .atomic)
+            chapter.pages[index].rendered = file
+            chapter.readPage = chapters.first { $0.id == chapterID }?.readPage ?? chapter.readPage
+            try update(chapter)
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
+    func clearCache(_ id: UUID) {
+        guard !busy else { return }
+        do { try disk.clearDerived(id); chapters = try disk.chapters() } catch { self.error = error.localizedDescription }
+    }
+    func restore(_ id: UUID, redo: Bool) {
+        guard !busy else { return }
+        do {
+            let chapter = try disk.restore(id, redo: redo)
+            if let index = chapters.firstIndex(where: { $0.id == id }) { chapters[index] = chapter }
+        } catch { self.error = error.localizedDescription }
+    }
+    func delete(_ id: UUID) {
+        guard !busy else { return }
+        do { try FileManager.default.removeItem(at: disk.chapterURL(id)); chapters.removeAll { $0.id == id } } catch { self.error = error.localizedDescription }
+    }
+}

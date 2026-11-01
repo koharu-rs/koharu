@@ -10,7 +10,7 @@ Fork của [koharu-rs/koharu](https://github.com/koharu-rs/koharu), bổ sung du
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Trình duyệt Rawkuma trong app | Nút **Rawkuma** mở website; dùng danh sách truyện, tìm kiếm, thể loại và danh sách chương của website. Có Back, Forward, Reload, Home và ô nhập URL.                                                                     |
 | Dịch chương hiện tại          | **Translate this chapter** lấy danh sách ảnh từ tài liệu đang mở, tải theo đúng thứ tự, tạo project và chạy pipeline detection → OCR → translation / inpainting có sẵn của Koharu.                                       |
-| Nhiều ngôn ngữ đích           | Chọn trực tiếp trong màn hình Rawkuma, dùng lại danh sách 53 ngôn ngữ của Koharu: Việt, Anh, Nhật, Hàn, Trung, Pháp, Đức, Tây Ban Nha, Ả Rập… Khả năng và chất lượng thực tế phụ thuộc model/provider đã chọn.           |
+| Nhiều ngôn ngữ đích           | Chọn trực tiếp trong màn hình Rawkuma, dùng lại danh sách 42 ngôn ngữ của Koharu: Việt, Anh, Nhật, Hàn, Trung, Pháp, Đức, Tây Ban Nha, Ả Rập… Khả năng và chất lượng thực tế phụ thuộc model/provider đã chọn.           |
 | Model dịch hiện có            | Giữ cấu hình model/provider của người dùng, bao gồm Qwen 3.8 27B GGUF và các mức lượng tử hóa có trong danh mục. Fork không yêu cầu một dịch vụ dịch riêng.                                                              |
 | Cache ảnh                     | Lưu nội dung ảnh theo BLAKE3; kiểm tra lại tính toàn vẹn trước khi dùng cache. **Check source updates** dùng ETag hoặc Last-Modified để gửi yêu cầu có điều kiện và tận dụng phản hồi HTTP 304.                          |
 | Dùng lại kết quả dịch         | Chỉ bỏ qua suy luận khi project đã dịch thành công, revision còn khớp và ảnh/cấu hình dịch không đổi. Khóa cache bao gồm URL chương, thứ tự/nội dung ảnh, ngôn ngữ, model và các cấu hình pipeline/typesetting/provider. |
@@ -34,7 +34,7 @@ App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/p
 - Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
 - 10 kiểm tra backend và 13 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
 - Đã hoàn tất lượt dịch lại 28 trang có OCR sẵn trên Mac qua LM Studio trên Windows, với Qwen 3.8 27B Q4 và đích tiếng Việt; bản dịch trả về và hiển thị trực tiếp trong editor. Chưa đánh giá thủ công độ chính xác của toàn chương hoặc benchmark tốc độ. Chưa kiểm chứng app Rawkuma chạy trực tiếp trên Windows/Linux.
-- Đây là app desktop, chưa có bản iPad/iOS hoặc máy chủ đọc truyện qua trình duyệt. Có thể chuyển kết quả export sang iPad để đọc bằng ứng dụng phù hợp.
+- Có thêm app SwiftUI riêng cho iPad/iPhone trong [`apps/ipad`](apps/ipad/README.md): duyệt Rawkuma, thư viện chương, OCR Vision, dịch qua LM Studio hoặc GGUF cục bộ bằng llama.cpp Metal, sửa văn bản và xuất PNG/PDF. App iPad không bao gồm toàn bộ editor/PSD của desktop. Xem phạm vi kiểm chứng và hướng dẫn ký/cài trong tài liệu iPad.
 - Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.
 
 ### Build bản macOS debug của fork
@@ -59,6 +59,14 @@ cargo tauri build --debug --bundles app \
 Bundle macOS nằm tại `target/debug/bundle/macos/koharu.app`. Nếu libclang chưa được phát hiện, đặt `LIBCLANG_PATH` tới thư mục lib của LLVM/Xcode trên máy.
 
 Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`. Nút **Original chapter** ở thanh trên mở đúng URL đó trong trình duyệt Rawkuma của app; từ đây bấm chương tiếp theo trên website rồi **Translate this chapter**. URL vẫn còn sau khi mở lại project hoặc Clear cache. Đã kiểm tra trên project 27.1 có 20 trang được mở lại từ cache và project 27.2 mới: nút nguồn điều hướng đúng URL đã lưu ngay cả khi browser đang ở trang chủ. Project cũ chưa lưu URL cần mở lại đúng chương trên Rawkuma và nhập/dịch chương đó để gắn URL; app không đoán link từ tên project.
+
+## Bản iPad/iPhone
+
+App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 trở lên. Chọn **LM Studio** để dùng server trong LAN hoặc **On-device GGUF** để tải/import model và dịch trên thiết bị. Có giao diện Việt/Anh và 42 ngôn ngữ dịch đích; OCR, render và cache nằm trên iPad. Model local được kiểm tra bộ nhớ trước khi nạp; chọn kích thước phù hợp RAM thực tế. Model 0.8B chỉ phù hợp kiểm tra runtime, chất lượng dịch có thể kém.
+
+Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev mở URL thực, Home mở trang bộ truyện, dropdown dùng selector native từ danh sách chương mà website đã tải. Không suy đoán số chương kế tiếp hay giới hạn đường dẫn CDN vào một tiền tố.
+
+Kiểm chứng điều hướng mới: hai test DOM cho Next/Prev/Home và dropdown đã qua. Trên simulator iPad, Next/Prev đã chuyển đúng URL chương và dropdown native đã mở được. Home và kết quả chọn chương từ dropdown chưa được kiểm tra xong. Bản Mac mới gặp màn hình `Tauri CEF Initial Load` trong lượt kiểm tra này, nên cần xác minh tiếp trước khi thay bản desktop đang dùng.
 
 ## Dùng LM Studio trên máy khác trong LAN
 

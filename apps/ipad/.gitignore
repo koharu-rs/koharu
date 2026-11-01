@@ -1,0 +1,9 @@
+Vendor/
+DerivedData/
+DerivedDataDevice/
+Resources/Assets.xcassets/AppIcon.appiconset/Icon.png
+Resources/languages.json
+*.xcodeproj/
+*.xcarchive/
+*.ipa
+build/

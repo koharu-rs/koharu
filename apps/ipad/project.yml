@@ -1,0 +1,72 @@
+name: KoharuPad
+options:
+  bundleIdPrefix: dev.flowerfx
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    PRODUCT_BUNDLE_IDENTIFIER: dev.flowerfx.koharu.ipad
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+targetTemplates:
+  App:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Resources
+      - path: ../../crates/koharu-translator/src/translation-system.txt
+        buildPhase: resources
+      - path: ../../packages/bridge/src/rawkuma-navigation.js
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: KoharuPad
+        INFOPLIST_FILE: Info.plist
+targets:
+  KoharuPad:
+    templates: [App]
+    settings:
+      base:
+        FRAMEWORK_SEARCH_PATHS: '$(inherited) $(PROJECT_DIR)/Vendor/build-apple/llama.xcframework/ios-arm64'
+        CODE_SIGN_ENTITLEMENTS: KoharuPad.entitlements
+        OTHER_LDFLAGS: '$(inherited) -framework llama -lc++'
+    postBuildScripts:
+      - name: Embed llama runtime
+        script: |
+          set -eu
+          mkdir -p "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+          ditto "$PROJECT_DIR/Vendor/build-apple/llama.xcframework/ios-arm64/llama.framework" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/llama.framework"
+          if [ "$CODE_SIGNING_ALLOWED" = YES ] && [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/llama.framework"
+          fi
+  KoharuPadSimulator:
+    templates: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.flowerfx.koharu.ipad.simulator
+  KoharuPadTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: KoharuPadSimulator
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.flowerfx.koharu.ipad.tests
+        TEST_HOST: '$(BUILT_PRODUCTS_DIR)/KoharuPad.app/KoharuPad'
+        BUNDLE_LOADER: '$(TEST_HOST)'
+schemes:
+  KoharuPad:
+    build:
+      targets:
+        KoharuPad: all
+  KoharuPadSimulator:
+    build:
+      targets:
+        KoharuPadSimulator: all
+    test:
+      targets: [KoharuPadTests]

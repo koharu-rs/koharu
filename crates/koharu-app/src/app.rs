@@ -57,10 +57,14 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     let commands = crate::commands::bindings().invoke_handler();
     let cef = Cef::default();
     #[cfg(debug_assertions)]
-    let cef = cef.remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
-        port: 4000,
-        allowed_origins: Vec::new(),
-    });
+    let cef = cef
+        .remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
+            port: 4000,
+            allowed_origins: Vec::new(),
+        })
+        // A prior non-debug run persists false. Configuring a port alone does not
+        // reset that local-state preference in the pinned CEF runtime.
+        .global_preference("devtools.remote_debugging.allowed", true);
     #[cfg(target_os = "linux")]
     let cef = cef
         .enable_features(["Vulkan", "VulkanFromANGLE"])

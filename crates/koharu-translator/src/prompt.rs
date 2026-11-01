@@ -117,29 +117,10 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         .source_language
         .map(|language| language.to_string())
         .unwrap_or_else(|| "the detected source language".to_owned());
-    let mut prompt = format!(
-        indoc! {"
-            You are a professional manga translator.
-
-            Translation requirements:
-            - Translate every input segment from {source} into natural {target}.
-            - Preserve meaning, character voice, emotional tone, relationship nuance, emphasis, and sound effects.
-            - Localize idioms and sound effects naturally while keeping wording concise enough for speech bubbles.
-            - Use surrounding segments only for disambiguation and continuity; never merge or split segments.
-            - Write every translated `text` value only in {target}; do not include source text, notes, explanations, or alternatives.
-            - Never preserve or repeat original-language text; translate names, terms, and sound effects using natural {target} conventions.
-
-            Output requirements:
-            - Each input segment has a numeric `id`.
-            - Return only a JSON object whose `translations` array contains one object with `id` and translated `text` for every input segment.
-            - Copy every input ID exactly once; order does not matter.
-            - Never merge, split, omit, duplicate, or add segments.
-        "},
-        source = source,
-        target = request.target_language,
-    )
-    .trim_end()
-    .to_owned();
+    let mut prompt = include_str!("translation-system.txt")
+        .trim_end()
+        .replace("{source}", &source)
+        .replace("{target}", &request.target_language.to_string());
 
     if !request.context.is_empty() {
         prompt.push_str("\n\n");

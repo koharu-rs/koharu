@@ -269,6 +269,9 @@ pub(crate) async fn open_source_browser(
                 WebviewUrl::External(url.unwrap_or(Url::parse(HOME)?)),
             )
             .bounds(rect)
+            .initialization_script(include_str!(
+                "../../../../packages/bridge/src/rawkuma-navigation.js"
+            ))
             .data_directory(
                 dirs::cache_dir()
                     .context("the cache directory is unavailable")?
