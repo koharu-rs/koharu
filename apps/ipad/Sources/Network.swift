@@ -12,8 +12,15 @@ enum Credentials {
     }
     static func save(_ value: String, _ account: String) throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "dev.flowerfx.koharu.ipad", kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
-        guard !value.isEmpty else { return }
+        if value.isEmpty {
+            let status = SecItemDelete(query as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else { throw AppError.message(L("Could not save credential in Keychain")) }
+            return
+        }
+        let attributes: [String: Any] = [kSecValueData as String: Data(value.utf8)]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecSuccess { return }
+        guard status == errSecItemNotFound else { throw AppError.message(L("Could not save credential in Keychain")) }
         var add = query
         add[kSecValueData as String] = Data(value.utf8)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly

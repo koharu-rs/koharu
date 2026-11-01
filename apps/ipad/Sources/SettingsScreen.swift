@@ -29,8 +29,7 @@ struct SettingsScreen: View {
             }
             Section(L("Translation")) {
                 Picker(L("Provider"), selection: $library.preferences.provider) {
-                    Text("LM Studio").tag(TranslationProvider.lmStudio)
-                    Text(L("Local GGUF on this device")).tag(TranslationProvider.local)
+                    ForEach(TranslationProvider.allCases) { Text($0.name).tag($0) }
                 }
                 Picker(L("Target language"), selection: $library.preferences.target) {
                     ForEach(TargetLanguage.all) { Text($0.displayName).tag($0.tag) }
@@ -73,7 +72,7 @@ struct SettingsScreen: View {
                         } label: { VStack(alignment: .leading) { Text(server.url); Text("\(server.models.count) \(L("models"))").font(.caption).foregroundStyle(.secondary) } }
                     }
                 }
-            } else {
+            } else if library.preferences.provider == .local {
                 Section(L("Local AI")) {
                     Picker(L("Model"), selection: $library.preferences.localModel) {
                         Text(L("Select a model")).tag(UUID?.none)
@@ -103,6 +102,9 @@ struct SettingsScreen: View {
                     }
                 }
             }
+            if library.preferences.provider.hosted {
+                HostedProviderSettings(provider: library.preferences.provider).id(library.preferences.provider)
+            }
             if VisionModel.all.isEmpty { Text(L("Invalid vision model manifest")).foregroundStyle(.red) }
             Section(L("OCR model")) {
                 Picker(L("Model"), selection: $library.preferences.ocrModel) {
@@ -127,8 +129,8 @@ struct SettingsScreen: View {
                 }
             }
             Section(L("About")) {
-                Text("Koharu iPad 0.2.1")
-                Text(L("Projects and source URLs are saved on this device. LM Studio receives OCR text only. Local mode keeps translation on this device.")).font(.caption).foregroundStyle(.secondary)
+                Text("Koharu iPad 0.3.0")
+                Text(L("Projects and source URLs stay on this device. Remote providers receive OCR text and translation instructions. Local mode translates on this device. API keys are stored in Keychain.")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .navigationTitle(L("Settings"))

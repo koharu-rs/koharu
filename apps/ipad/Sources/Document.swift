@@ -22,11 +22,37 @@ struct TargetLanguage: Codable, Identifiable {
     }()
 }
 
-enum TranslationProvider: String, Codable, CaseIterable { case lmStudio, local }
+enum TranslationProvider: String, Codable, CaseIterable, Identifiable {
+    case lmStudio, local, openAI, anthropic, deepSeek, qwen, miniMax, gemini, grok, openRouter, deepL
+    var id: String { rawValue }
+    var name: String {
+        switch self {
+        case .lmStudio: return "LM Studio"
+        case .local: return L("Local GGUF on this device")
+        case .openAI: return "OpenAI"
+        case .anthropic: return "Anthropic"
+        case .deepSeek: return "DeepSeek"
+        case .qwen: return "Qwen"
+        case .miniMax: return "MiniMax"
+        case .gemini: return "Gemini"
+        case .grok: return "Grok"
+        case .openRouter: return "OpenRouter"
+        case .deepL: return "DeepL"
+        }
+    }
+    var hosted: Bool { self != .lmStudio && self != .local }
+}
+struct HostedConfiguration: Codable, Equatable {
+    var model = ""
+    var region = "international"
+    var workspace = ""
+}
+
 struct Preferences: Codable, Equatable {
     var provider: TranslationProvider = .lmStudio
     var server = "http://localhost:1234"
     var remoteModel = ""
+    var hosted: [String: HostedConfiguration]?
     var localModel: UUID?
     var target = "vi-VN"
     var instructions = ""

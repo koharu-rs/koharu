@@ -4,7 +4,7 @@ Native SwiftUI/WKWebView app, separate from the desktop CEF executable. Requires
 
 ## Reading and translation
 
-1. In **Settings**, choose **LM Studio** or **On-device GGUF** and a target language.
+1. In **Settings**, choose a translation provider and a target language: **LM Studio**, **On-device GGUF**, or one of the hosted APIs below.
 2. For LM Studio, enter its LAN root URL, for example `http://192.168.1.20:1234`, refresh the model list and select a loaded model. The initial `localhost` address is a placeholder on iPad; use **Find server** or replace it. Already loaded models sort first. Optional authentication is stored in Keychain. **Find server** checks private IPv4 interfaces with mask `255.255.255.0`, using the selected port. It sends no saved credentials to discovered addresses and follows no redirects. Allow the local-network permission when iOS asks.
 3. For local inference, download a catalog model, enter a direct HTTPS GGUF URL, or import a GGUF from Files. Weights stay on the device. The official prebuilt llama.cpp Metal framework runs inference on physical iPads/iPhones. Start with a small model; available RAM limits model size and context. The 0.8B catalog entry is useful for a runtime check, but its translation quality can be poor.
 4. Open **Rawkuma**, navigate to a chapter, then **Translate this chapter**. Next/Prev/Home use the site's actual links. Chapter menus use a native selector populated from the site's chapter links. Empty HTMX placeholders are loaded through their same-origin chapter endpoint; fractional chapter URLs are preserved.
@@ -39,6 +39,28 @@ Chapters and preferences live in the app's Application Support directory. Source
 
 Completed pages are committed individually with atomic manifests and one-step Undo/Redo. Stop discards the uncommitted page. Model downloads use temporary files rather than holding the whole GGUF in memory; model weights are excluded from backup. Keep the app in the foreground during processing and model downloads; background transfer/resume is not implemented.
 
+## Hosted translation APIs (0.3.0)
+
+In **Settings → Translation → Provider**, choose **OpenAI, Anthropic, DeepSeek, Qwen, MiniMax, Gemini, Grok, OpenRouter or DeepL**. Enter the provider's own API key, press **Validate key and load models**, then choose a model. Validation uses authenticated discovery/usage requests and does not generate a paid sample. The model picker stays unavailable until validation succeeds. Changing a key, region or workspace cancels and invalidates the displayed validation. Each provider keeps its own selected model. Saved keys can be removed from the same section.
+
+Keys are stored in this device's Keychain (`AfterFirstUnlockThisDeviceOnly`), never in preferences, source, chapter exports or the IPA. Hosted requests use provider-owned HTTPS origins, reject redirects and send credentials in headers. The selected service receives OCR text and the shared translation instructions; images remain on the device. LM Studio and on-device processing remain available. The app does not transfer development-machine keys to iPad.
+
+| Provider | Discovery and translation contract |
+| --- | --- |
+| OpenAI | Authenticated Models API; Responses API with strict JSON Schema and `store: false`. Text model families are filtered to exclude image/audio/realtime and other specialized APIs. |
+| Anthropic | Paginated authenticated Models API; Messages API with `output_config.format`. |
+| DeepSeek | Authenticated model list; strict function output through the documented beta Chat Completions API. |
+| Qwen | Select API region and enter the **Model Studio workspace ID**. Authenticated paginated model catalog plus native JSON Schema; currently Qwen 3.7 Plus/Flash/Max and 3.8 Max/Flash families. JSON-only models are excluded. |
+| MiniMax | International or China API; authenticated model list. Currently only **MiniMax-Text-01** is selectable because the native API documents JSON Schema for that model. A key with no supported model reports this explicitly. |
+| Gemini | Paginated authenticated Models API; `generateContent` with `responseJsonSchema`. Specialized image/audio/live models are excluded. |
+| Grok | Authenticated language-model catalog; Responses API with strict JSON Schema. |
+| OpenRouter | Validates `/key` first because its model catalog is public. Lists text models advertising `structured_outputs`; requests require parameter-compatible routing. |
+| DeepL | Authenticated usage request; Free/Pro origin selected by the key's `:fx` suffix. Offers the documented **quality**, **speed**, and **prefer quality with fallback** modes instead of pretending it has an LLM catalog. Checks target-language availability before translating. Additional instructions use `custom_instructions` and are limited to 300 characters. |
+
+A provider accepting a key does not guarantee generation permission or remaining credit for every model. Authentication, rate/quota limits, unsupported requests and incomplete answers stop the page without committing partial translations. No provider fallback or JSON repair is performed. The shared prompt is unchanged; providers receive a portable native schema and the existing strict decoder checks exact segment count, unique IDs and text types. Runtime discovery is cached for at most five minutes per credential/origin; the actual translation request still enforces current authorization.
+
+The Swift adapters are traceable to the desktop provider ownership at [`c9717fc`](https://github.com/flowerfx/koharu/tree/c9717fc9cd11e2d0c540d9912f7f40a234bc1048/crates/koharu-translator/src/remote), updated against the official APIs: [OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs), [Anthropic](https://platform.claude.com/docs/en/build-with-claude/structured-outputs), [DeepSeek](https://api-docs.deepseek.com/guides/tool_calls/), [Qwen](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output), [MiniMax](https://platform.minimax.io/docs/api-reference/text-post), [Gemini](https://ai.google.dev/gemini-api/docs/structured-output), [Grok](https://docs.x.ai/developers/model-capabilities/text/structured-outputs), [OpenRouter](https://openrouter.ai/docs/guides/features/structured-outputs), [DeepL](https://developers.deepl.com/api-reference/translate/request-translation). Intentional differences are DeepSeek strict tools (instead of JSON-only mode), portable schema constraints for Claude/DeepSeek, header-only Gemini authentication, and authenticated OpenRouter key validation.
+
 ## Build
 
 Install Xcode with an iOS SDK and `brew install xcodegen`, then from this directory:
@@ -65,7 +87,12 @@ Open the generated project in Xcode, select **KoharuPad**, a connected trusted i
 
 The bootstrap pins the upstream prebuilt llama.cpp b12024 and stable-diffusion-native v0.3.0 archives and verifies their SHA-256. ONNX Runtime 1.24.2 is resolved through the official Microsoft Swift package (its binary has a package checksum). The llama archive contains iOS arm64 and macOS slices, with no simulator slice; diffusion and ONNX include simulator slices. Vendor weights/frameworks, generated Xcode projects, language JSON, icon PNG, DerivedData, archives and IPAs are ignored. Run bootstrap after updating the authoritative Rust language catalog. Localizations remain source-controlled.
 
-## Verification limits
+## Verification
+
+Version **0.3.0 (build 7)** was built and archived in Debug, exported as a development IPA, and installed/launched on the physical iPad Pro M5 using Kuruby signing. Five focused `HostedProviderTests` passed on Mac using the same unmodified Foundation/Keychain/network/translation sources and XCTest file through a temporary Swift package: nine provider request/response contracts, credential/region boundaries, DeepL Free routing, authenticated OpenRouter validation, pagination, revoked-key cache invalidation, truncated responses and corrupt segment IDs. Simulator XCTest injection stalled in dyld before app startup, so it is not reported as a successful iOS test run. The standalone simulator app runs normally: its provider menu, Vietnamese Qwen region/workspace form, German long labels and a live invalid-OpenAI-key rejection with the model selector locked were checked visually. All 13 localization catalogs contain the same 183 keys and pass plist validation.
+
+The production Swift OpenAI client ran on Mac using an existing environment credential: 52 filtered model entries were discovered and `gpt-4.1-mini` returned two valid Japanese-to-Vietnamese translations through the shared prompt/schema/decoder. No development-machine key was saved to iPad. The other eight services have protocol tests but have **not** been exercised with valid customer keys; model access, regional account configuration and translation quality still need confirmation with those accounts. No new whole-chapter test was run for this provider change.
+ limits
 
 Version **0.2.1 (build 6)** adds the 12 interface choices and British English as a separate translation target. All 148 UI/native-error keys and the two privacy descriptions have matching catalogs in 13 bundles (12 requested choices plus generic English fallback). Two focused Rust language tests passed. On the iPad 26.4 simulator, the complete language menu, both four-model menus, live Arabic RTL → German LTR switching, German long labels and unchanged Vietnamese translation target were checked. Recreating the presentation controllers when crossing RTL/LTR fixes UIKit's stale mirrored text while preserving the selected tab and browser owner. AOT GAN was downloaded through the app, checksum-verified and published as ready. The signed Debug build was installed on the physical M5. Model memory/inference results below come from hardware; the simulator is used for UI checks and can report unavailable memory to the admission check. Translations were drafted with the user's local LM Studio model and reviewed for UI terminology; this is not a native-speaker review of every language.
 

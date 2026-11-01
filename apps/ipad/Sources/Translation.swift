@@ -25,6 +25,11 @@ enum TranslationContract {
     static func schema(count: Int) -> [String: Any] {
         ["type": "object", "additionalProperties": false, "required": ["translations"], "properties": ["translations": ["type": "array", "minItems": count, "maxItems": count, "items": ["type": "object", "additionalProperties": false, "required": ["id", "text"], "properties": ["id": ["type": "integer", "minimum": 0, "maximum": max(0, count - 1)], "text": ["type": "string"]]]]]]
     }
+    // Claude and DeepSeek accept a smaller schema dialect. IDs and object shapes
+    // remain constrained natively; the decoder enforces count and uniqueness.
+    static func hostedSchema(count: Int) -> [String: Any] {
+        ["type": "object", "additionalProperties": false, "required": ["translations"], "properties": ["translations": ["type": "array", "description": "Exactly \(count) translations, one per input ID.", "items": ["type": "object", "additionalProperties": false, "required": ["id", "text"], "properties": ["id": ["type": "integer", "enum": Array(0..<count)], "text": ["type": "string"]]]]]]
+    }
     static func decode(_ data: Data, count: Int) throws -> [String] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any], Set(root.keys) == ["translations"], let values = root["translations"] as? [[String: Any]], values.count == count else { throw AppError.message(L("The model returned invalid translation JSON")) }
         var result = [String?](repeating: nil, count: count)
@@ -51,6 +56,7 @@ enum TranslationContract {
 
 actor TranslationEngine {
     let local = LocalInference()
+    let hosted = HostedTranslation()
     func translate(_ texts: [String], config: Preferences, model: URL?) async throws -> [String] {
         var result: [String] = []
         // Bound both the prompt and result on small device contexts. A failed batch
@@ -87,6 +93,11 @@ actor TranslationEngine {
                     throw AppError.message(L("LM Studio returned no final answer. Check its reasoning/content separation setting and output token limit."))
                 }
                 data = Data(content.utf8)
+            default:
+                let settings = config.hosted?[config.provider.rawValue] ?? HostedConfiguration()
+                let endpoint = try HostedEndpoint(provider: config.provider, configuration: settings)
+                let key = Credentials.read(endpoint.credentialAccount)
+                data = try await hosted.translate(endpoint: endpoint, key: key, model: settings.model, system: system, user: user, count: batch.count, instructions: config.instructions)
             }
             result += try TranslationContract.decode(data, count: batch.count)
         }
