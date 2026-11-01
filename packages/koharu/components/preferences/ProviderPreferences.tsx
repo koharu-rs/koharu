@@ -4,6 +4,7 @@ import { Eraser } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { LmStudioDiscovery } from '@/components/preferences/LmStudioDiscovery'
 import {
   PreferencePage,
   PreferenceRow,
@@ -67,6 +68,19 @@ export function ProviderPreferences({
                   type='url'
                   value={entry.config.settings.base_url ?? ''}
                   onChange={(base_url) =>
+                    onChange(
+                      replaceEntry(value, {
+                        ...entry,
+                        config: withBaseUrl(entry.config, base_url),
+                      }),
+                    )
+                  }
+                />
+              )}
+              {entry.config.provider === 'lm-studio' && (
+                <LmStudioDiscovery
+                  baseUrl={entry.config.settings.base_url ?? ''}
+                  onSelect={(base_url) =>
                     onChange(
                       replaceEntry(value, {
                         ...entry,

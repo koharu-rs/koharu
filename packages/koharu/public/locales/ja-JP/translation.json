@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}}工程",
     "stages": "工程",
     "stop": "停止",
-    "stopProcessing": "処理を停止"
+    "stopProcessing": "処理を停止",
+    "retranslate": "再翻訳",
+    "retranslateHelp": "選択範囲の既存OCRから再翻訳します。手動編集は保持されます。OCRがないページは先に実行してください。"
   },
   "inspector": {
     "alignBottom": "下揃え",
@@ -418,7 +420,19 @@
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",
       "notConfigured": "未設定",
-      "title": "プロバイダー"
+      "title": "プロバイダー",
+      "discovery": {
+        "refresh": "更新 / サーバーを検索",
+        "scanning": "検索中…",
+        "help": "プライベート /24 ネットワーク（255.255.255.0）のポート {{port}} で LM Studio を検索します。",
+        "found": "{{count}} 台のサーバーが見つかりました。使用するサーバーを選択してください。",
+        "none": "{{subnets}} にサーバーが見つかりません。LAN 公開とファイアウォールを確認してください。認証付きサーバーは URL の手動入力が必要な場合があります。",
+        "noNetwork": "マスク 255.255.255.0 のプライベート IPv4 ネットワークが見つかりません。",
+        "use": "{{url}} を使用",
+        "models": "{{count}} モデル",
+        "invalidUrl": "検索前に有効な HTTP サーバー URL を入力してください。",
+        "failed": "LM Studio サーバーを検索できませんでした。"
+      }
     },
     "shortcuts": {
       "description": "テキスト入力欄にフォーカスがないとき、単一キーのショートカットを使用できます。",

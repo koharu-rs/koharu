@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}} 个阶段",
     "stages": "阶段",
     "stop": "停止",
-    "stopProcessing": "停止处理"
+    "stopProcessing": "停止处理",
+    "retranslate": "重新翻译",
+    "retranslateHelp": "用选定范围里已有个OCR重新翻译，保留手动改过个译文。呒没OCR个页面先运行。"
   },
   "inspector": {
     "alignBottom": "底端对齐",
@@ -418,7 +420,19 @@
       "credentialLabel": "{{provider}} 个凭据",
       "description": "连接提供翻译服务搭语言模型个提供商。",
       "notConfigured": "还呒没配置",
-      "title": "提供商"
+      "title": "提供商",
+      "discovery": {
+        "refresh": "刷新 / 寻服务器",
+        "scanning": "扫描当中…",
+        "help": "勒私有 /24 网络（255.255.255.0）个 {{port}} 端口寻 LM Studio。",
+        "found": "寻着 {{count}} 个服务器，请选择使用。",
+        "none": "勒 {{subnets}} 勿曾寻着服务器。请检查局域网服务搭防火墙。要认证个服务器可能要手动输入 URL。",
+        "noNetwork": "勿曾寻着掩码是 255.255.255.0 个私有 IPv4 网络。",
+        "use": "使用 {{url}}",
+        "models": "{{count}} 个模型",
+        "invalidUrl": "扫描前请输进有效个 HTTP 服务器 URL。",
+        "failed": "勿能寻 LM Studio 服务器。"
+      }
     },
     "shortcuts": {
       "description": "文本框呒没焦点个辰光，就好用单键快捷键。",

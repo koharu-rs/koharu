@@ -1,5 +1,6 @@
 pub(crate) mod agent;
 pub(crate) mod canvas;
+pub(crate) mod discovery;
 pub(crate) mod editing;
 pub(crate) mod fonts;
 pub(crate) mod import;
@@ -58,6 +59,7 @@ pub fn bindings() -> tauri_specta::Builder<tauri_runtime_cef::CefRuntime> {
 
     Builder::new()
         .commands(collect_commands![
+            discovery::discover_lm_studio,
             source::open_source_browser,
             source::resize_source_browser,
             source::close_source_browser,

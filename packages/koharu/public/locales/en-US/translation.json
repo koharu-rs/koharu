@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}} stages",
     "stages": "Stages",
     "stop": "Stop",
-    "stopProcessing": "Stop processing"
+    "stopProcessing": "Stop processing",
+    "retranslate": "Retranslate",
+    "retranslateHelp": "Translate again using existing OCR in the selected scope. Keeps manually edited translations. Run first for pages without OCR."
   },
   "inspector": {
     "alignBottom": "Align bottom",
@@ -418,7 +420,19 @@
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",
       "notConfigured": "Not configured",
-      "title": "Providers"
+      "title": "Providers",
+      "discovery": {
+        "refresh": "Refresh / find server",
+        "scanning": "Scanning…",
+        "help": "Find LM Studio on private /24 networks (255.255.255.0), port {{port}}.",
+        "found": "Found {{count}} server(s). Select one to use.",
+        "none": "No server found on {{subnets}}. Check LAN serving and the firewall. Authenticated servers may need a manual URL.",
+        "noNetwork": "No private IPv4 network with mask 255.255.255.0 was found.",
+        "use": "Use {{url}}",
+        "models": "{{count}} models",
+        "invalidUrl": "Enter a valid HTTP server URL before scanning.",
+        "failed": "Could not search for LM Studio servers."
+      }
     },
     "shortcuts": {
       "description": "Single-key shortcuts are available whenever a text field is not focused.",

@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}} 個階段",
     "stages": "階段",
     "stop": "停止",
-    "stopProcessing": "停止處理"
+    "stopProcessing": "停止處理",
+    "retranslate": "重新翻譯",
+    "retranslateHelp": "使用所選範圍內已有的OCR重新翻譯，保留手動修改的譯文。沒有OCR的頁面請先執行。"
   },
   "inspector": {
     "alignBottom": "底端對齊",
@@ -418,7 +420,19 @@
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
       "notConfigured": "未設定",
-      "title": "提供者"
+      "title": "提供者",
+      "discovery": {
+        "refresh": "重新整理 / 尋找伺服器",
+        "scanning": "掃描中…",
+        "help": "在私人 /24 網路（255.255.255.0）的 {{port}} 連接埠尋找 LM Studio。",
+        "found": "找到 {{count}} 個伺服器，請選擇使用。",
+        "none": "在 {{subnets}} 找不到伺服器。請檢查區域網路服務和防火牆。需要驗證的伺服器可能需要手動輸入 URL。",
+        "noNetwork": "找不到遮罩為 255.255.255.0 的私人 IPv4 網路。",
+        "use": "使用 {{url}}",
+        "models": "{{count}} 個模型",
+        "invalidUrl": "掃描前請輸入有效的 HTTP 伺服器 URL。",
+        "failed": "無法尋找 LM Studio 伺服器。"
+      }
     },
     "shortcuts": {
       "description": "當文字欄位未取得焦點時，可以使用單鍵快捷鍵。",

@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  RotateCcw,
   Settings,
   Sparkles,
   Square,
@@ -64,6 +65,19 @@ export function InferenceControl({
         onScopeChange={setScope}
         onStagesChange={setStages}
       />
+
+      <Button
+        type='button'
+        size='sm'
+        variant='outline'
+        className='rounded-lg px-2.5 text-[11px]'
+        disabled={disabled || unavailable || Boolean(running)}
+        title={t('inference.retranslateHelp')}
+        onClick={() => onRun(scope, ['translation'])}
+      >
+        <RotateCcw className='size-3' />
+        <span>{t('inference.retranslate')}</span>
+      </Button>
 
       <Button
         type='button'

@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}}단계",
     "stages": "단계",
     "stop": "중지",
-    "stopProcessing": "처리 중지"
+    "stopProcessing": "처리 중지",
+    "retranslate": "다시 번역",
+    "retranslateHelp": "선택 범위의 기존 OCR로 다시 번역합니다. 직접 편집한 번역은 유지됩니다. OCR이 없는 페이지는 먼저 실행하세요."
   },
   "inspector": {
     "alignBottom": "아래 정렬",
@@ -418,7 +420,19 @@
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
       "notConfigured": "설정 안 됨",
-      "title": "제공자"
+      "title": "제공자",
+      "discovery": {
+        "refresh": "새로 고침 / 서버 찾기",
+        "scanning": "검색 중…",
+        "help": "사설 /24 네트워크(255.255.255.0)의 {{port}} 포트에서 LM Studio를 찾습니다.",
+        "found": "서버 {{count}}개를 찾았습니다. 사용할 서버를 선택하세요.",
+        "none": "{{subnets}}에서 서버를 찾지 못했습니다. LAN 제공과 방화벽을 확인하세요. 인증 서버는 URL을 직접 입력해야 할 수 있습니다.",
+        "noNetwork": "마스크가 255.255.255.0인 사설 IPv4 네트워크가 없습니다.",
+        "use": "{{url}} 사용",
+        "models": "모델 {{count}}개",
+        "invalidUrl": "검색 전에 유효한 HTTP 서버 URL을 입력하세요.",
+        "failed": "LM Studio 서버를 검색하지 못했습니다."
+      }
     },
     "shortcuts": {
       "description": "텍스트 필드에 포커스가 없을 때 단일 키 단축키를 사용할 수 있습니다.",

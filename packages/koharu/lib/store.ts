@@ -110,7 +110,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   tool: 'select',
   brush: { diameter: 48, color: '#FFFFFF' },
   inspector: 'copy',
-  processingScope: 'selected-pages',
+  processingScope: 'project',
   processingStages: [...pipelineStages],
   settingsOpen: false,
   sourceOpen: false,

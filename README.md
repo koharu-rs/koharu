@@ -32,7 +32,7 @@ App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/p
 
 - Đã build và chạy bản macOS Apple Silicon độc lập; nhập thực tế 32 trang của một chương Rawkuma và hiển thị trong editor.
 - Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
-- 6 kiểm tra backend và 4 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
+- 8 kiểm tra backend và 10 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
 - Chưa xác nhận chất lượng/tốc độ Qwen hoặc kết quả hoàn chỉnh của toàn chương; tại thời điểm kiểm tra luồng nhập, app đang tải model cho lần chạy đầu. Chưa kiểm chứng tính năng Rawkuma trên Windows/Linux.
 - Đây là app desktop, chưa có bản iPad/iOS hoặc máy chủ đọc truyện qua trình duyệt. Có thể chuyển kết quả export sang iPad để đọc bằng ứng dụng phù hợp.
 - Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.
@@ -57,6 +57,19 @@ cargo tauri build --debug --bundles app \
 ```
 
 Bundle macOS nằm tại `target/debug/bundle/macos/koharu.app`. Nếu libclang chưa được phát hiện, đặt `LIBCLANG_PATH` tới thư mục lib của LLVM/Xcode trên máy.
+
+## Dùng LM Studio trên máy khác trong LAN
+
+Phạm vi xử lý mặc định là **Entire project** (toàn bộ project). **Run** chạy các bước đang chọn trên toàn bộ trang trong phạm vi này, kể cả khi chỉ đang xem một trang. **Retranslate** chạy lại riêng bước dịch bằng model và ngôn ngữ hiện tại, tái sử dụng OCR sẵn có; bản dịch do AI tạo trước đó sẽ được cập nhật, còn phần đã chỉnh tay được giữ lại. Trang chưa có OCR cần chạy **Run** trước. Cả hai nút dùng chung lựa chọn phạm vi và cơ chế dừng/Undo hiện có.
+
+1. Trên máy chạy LM Studio, nạp model và bật server phục vụ qua LAN. Firewall phải cho phép thiết bị khách tới đúng cổng API (mặc định `1234`). Có thể giới hạn nguồn ở một IP hoặc subnet riêng như `192.168.31.0/24`; giữ nguyên các cổng khác.
+2. Trong Koharu, mở **Settings → Providers → LM Studio**. Điền Base URL gốc, ví dụ `http://192.168.1.20:1234`, **không thêm `/v1`** cho provider LM Studio này. Nếu server yêu cầu xác thực, nhập token vào ô Credential; app lưu credential trong kho bảo mật của hệ điều hành.
+3. Bấm **Refresh / find server** để dò IP trên các interface IPv4 riêng có mask `255.255.255.0`. App chỉ kiểm tra cổng trong Base URL, tối đa 32 địa chỉ đồng thời, với timeout ngắn; bỏ qua địa chỉ mạng/broadcast. Chọn địa chỉ trong kết quả để cập nhật Base URL. Nếu không tìm thấy, URL hiện tại được giữ nguyên; server yêu cầu xác thực có thể cần nhập URL thủ công.
+4. Trong **Settings → Translation**, chọn model có nhãn **LM Studio**, chọn ngôn ngữ đích rồi quay lại dịch chương.
+
+Mac tải truyện, chạy detection/OCR và inpainting; model trên server LM Studio nhận nội dung cần dịch, trả kết quả về để Koharu dựng trang. Khi bật **Vision**, ảnh trang truyện cũng được gửi tới server đã chọn. Nút dò server không gửi credential đã lưu tới các IP đang dò, không đi qua proxy và không theo redirect.
+
+Nếu suy luận chậm hoặc hết VRAM, kiểm tra context length và số yêu cầu song song trong LM Studio. Dịch từng trang thường không cần context cực lớn; có thể bắt đầu với 16.384 token và 1 yêu cầu mỗi lúc rồi đo trên model/phần cứng thực tế.
 
 ## Dự án và tài liệu upstream
 

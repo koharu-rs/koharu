@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}} etapas",
     "stages": "Etapas",
     "stop": "Detener",
-    "stopProcessing": "Detener procesamiento"
+    "stopProcessing": "Detener procesamiento",
+    "retranslate": "Retraducir",
+    "retranslateHelp": "Vuelve a traducir el OCR existente en el alcance elegido. Conserva las traducciones editadas a mano. Ejecuta primero las páginas sin OCR."
   },
   "inspector": {
     "alignBottom": "Alinear abajo",
@@ -418,7 +420,19 @@
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecta proveedores de traducción y modelos de lenguaje.",
       "notConfigured": "Sin configurar",
-      "title": "Proveedores"
+      "title": "Proveedores",
+      "discovery": {
+        "refresh": "Actualizar / buscar servidor",
+        "scanning": "Buscando…",
+        "help": "Buscar LM Studio en redes privadas /24 (255.255.255.0), puerto {{port}}.",
+        "found": "Se encontraron {{count}} servidores. Seleccione uno.",
+        "none": "No hay servidores en {{subnets}}. Revise el acceso LAN y el cortafuegos. Los servidores autenticados pueden requerir una URL manual.",
+        "noNetwork": "No se encontró una red IPv4 privada con máscara 255.255.255.0.",
+        "use": "Usar {{url}}",
+        "models": "{{count}} modelos",
+        "invalidUrl": "Introduzca una URL de servidor HTTP válida antes de buscar.",
+        "failed": "No se pudieron buscar servidores LM Studio."
+      }
     },
     "shortcuts": {
       "description": "Los atajos de una tecla están disponibles cuando ningún campo de texto tiene el foco.",

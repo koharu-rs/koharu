@@ -154,7 +154,9 @@
     "stageCount_other": "{{count}} aşama",
     "stages": "Aşamalar",
     "stop": "Durdur",
-    "stopProcessing": "İşlemeyi durdur"
+    "stopProcessing": "İşlemeyi durdur",
+    "retranslate": "Yeniden çevir",
+    "retranslateHelp": "Seçilen kapsamdaki mevcut OCR metnini yeniden çevirir. Elle düzenlenen çeviriler korunur. OCR olmayan sayfalarda önce çalıştırın."
   },
   "inspector": {
     "alignBottom": "Alta hizala",
@@ -418,7 +420,19 @@
       "credentialLabel": "{{provider}} kimlik bilgisi",
       "description": "Çeviri ve dil modeli sağlayıcılarını bağlayın.",
       "notConfigured": "Yapılandırılmadı",
-      "title": "Sağlayıcılar"
+      "title": "Sağlayıcılar",
+      "discovery": {
+        "refresh": "Yenile / sunucu bul",
+        "scanning": "Taranıyor…",
+        "help": "Özel /24 ağlarında (255.255.255.0), {{port}} bağlantı noktasında LM Studio ara.",
+        "found": "{{count}} sunucu bulundu. Kullanılacak sunucuyu seçin.",
+        "none": "{{subnets}} üzerinde sunucu bulunamadı. LAN paylaşımını ve güvenlik duvarını kontrol edin. Kimlik doğrulamalı sunucular için URL elle girilebilir.",
+        "noNetwork": "255.255.255.0 maskeli özel IPv4 ağı bulunamadı.",
+        "use": "{{url}} kullan",
+        "models": "{{count}} model",
+        "invalidUrl": "Taramadan önce geçerli bir HTTP sunucu URL’si girin.",
+        "failed": "LM Studio sunucuları aranamadı."
+      }
     },
     "shortcuts": {
       "description": "Tek tuşlu kısayollar, bir metin alanına odaklanılmadığında kullanılabilir.",

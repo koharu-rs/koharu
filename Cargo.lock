@@ -4692,6 +4692,7 @@ dependencies = [
  "specta",
  "specta-typescript",
  "strum",
+ "sysinfo 0.39.6",
  "tauri",
  "tauri-plugin-log",
  "tauri-plugin-opener",

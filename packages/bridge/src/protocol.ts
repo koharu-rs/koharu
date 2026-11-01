@@ -6,6 +6,7 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
+	discoverLmStudio: (port: number) => __TAURI_INVOKE<LmStudioDiscovery>("discover_lm_studio", { port }),
 	openSourceBrowser: (bounds: SourceBounds) => __TAURI_INVOKE<null>("open_source_browser", { bounds }),
 	resizeSourceBrowser: (bounds: SourceBounds) => __TAURI_INVOKE<null>("resize_source_browser", { bounds }),
 	closeSourceBrowser: () => __TAURI_INVOKE<null>("close_source_browser"),
@@ -291,6 +292,16 @@ export type LayerVisibility = {
 
 export type LmStudioConfig = {
 	base_url?: string | null,
+};
+
+export type LmStudioDiscovery = {
+	subnets: string[],
+	servers: LmStudioServer[],
+};
+
+export type LmStudioServer = {
+	base_url: string,
+	models: string[],
 };
 
 export type LocalConfig = Record<string, never>;
