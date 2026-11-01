@@ -1,5 +1,4 @@
-//! stable-diffusion.cpp for Koharu's diffusion models. The README is the
-//! design.
+//! stable-diffusion.cpp for Koharu's diffusion models.
 
 mod context;
 mod logging;

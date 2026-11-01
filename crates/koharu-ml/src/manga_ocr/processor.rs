@@ -5,16 +5,21 @@
 //! https://github.com/huggingface/transformers/blob/05fa1a7ac17bb7aa07b9e0c1e138ecb31a28bbfe/src/transformers/models/vit/feature_extraction_vit.py
 //! https://github.com/kha-white/manga-ocr/blob/847e0939fcb391ad63584dcf50ba6c6533ec9ee8/manga_ocr/ocr.py
 
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, path::Path};
 
 use anyhow::{Result, bail};
-use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
+use fast_image_resize::{FilterType, ResizeAlg};
 use image::{DynamicImage, RgbImage};
-use serde::Deserialize;
 use koharu_torch::{Device, Kind, Tensor};
+use serde::Deserialize;
+
+/// Pillow's bilinear filter: convolution widens the kernel like Pillow while
+/// downscaling, though fast_image_resize can still differ from Pillow at
+/// coefficient rounding.
+const RESIZE: ResizeAlg = ResizeAlg::Convolution(FilterType::Bilinear);
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ViTImageProcessor {
+pub(super) struct ViTImageProcessor {
     do_normalize: bool,
     do_resize: bool,
     image_mean: [f32; 3],
@@ -24,11 +29,7 @@ pub struct ViTImageProcessor {
 }
 
 impl ViTImageProcessor {
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
-    }
-
-    pub(crate) fn preprocess(&self, image: &DynamicImage, device: Device) -> Result<Tensor> {
+    pub(super) fn preprocess(&self, image: &DynamicImage, device: Device) -> Result<Tensor> {
         if image.width() == 0 || image.height() == 0 {
             bail!("cannot recognize an empty image");
         }
@@ -43,7 +44,7 @@ impl ViTImageProcessor {
         let image = pillow_grayscale(image);
         let image = if self.do_resize && (image.width() != self.size || image.height() != self.size)
         {
-            resize_bilinear(&image, self.size, self.size)?
+            crate::image::resize(&image, self.size, self.size, RESIZE)?
         } else {
             image
         };
@@ -81,29 +82,15 @@ fn pillow_grayscale(image: &DynamicImage) -> RgbImage {
     image
 }
 
-fn resize_bilinear(image: &RgbImage, width: u32, height: u32) -> Result<RgbImage> {
-    let mut resized = RgbImage::new(width, height);
-    Resizer::new().resize(
-        image,
-        &mut resized,
-        &ResizeOptions::new()
-            // Convolution widens the bilinear kernel like Pillow while downscaling.
-            // fast_image_resize can still differ from Pillow at coefficient rounding.
-            .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
-            .use_alpha(false),
-    )?;
-    Ok(resized)
-}
-
 #[derive(Debug)]
-pub(crate) struct Tokenizer {
+pub(super) struct Tokenizer {
     vocabulary: Vec<String>,
     special_tokens: HashSet<&'static str>,
 }
 
 impl Tokenizer {
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let vocabulary = fs::read_to_string(path)?
+    pub(super) fn from_file(path: &Path) -> Result<Self> {
+        let vocabulary = fs_err::read_to_string(path)?
             .lines()
             .map(str::to_owned)
             .collect::<Vec<_>>();
@@ -116,11 +103,11 @@ impl Tokenizer {
         })
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.vocabulary.len()
     }
 
-    pub(crate) fn decode(&self, token_ids: &[i64]) -> Result<String> {
+    pub(super) fn decode(&self, token_ids: &[i64]) -> Result<String> {
         let mut text = String::new();
         for &token_id in token_ids {
             let token = self
@@ -223,7 +210,7 @@ fn compose_katakana(base: char, mark: char) -> Option<char> {
 mod tests {
     use image::{DynamicImage, Rgb, RgbImage};
 
-    use super::{pillow_grayscale, post_process, resize_bilinear};
+    use super::{RESIZE, pillow_grayscale, post_process};
 
     #[test]
     fn pillow_image_processing_matches_reference() {
@@ -241,7 +228,7 @@ mod tests {
             [76, 150, 29, 255, 0, 79].map(|value| Rgb([value; 3]))
         );
         assert_eq!(
-            resize_bilinear(&grayscale, 2, 2)
+            crate::image::resize(&grayscale, 2, 2, RESIZE)
                 .unwrap()
                 .pixels()
                 .copied()

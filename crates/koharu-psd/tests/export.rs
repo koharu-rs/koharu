@@ -2,7 +2,7 @@
 //! tree, each layer's properties and masks, and the blocks that keep shapes
 //! and text editable.
 
-use koharu_psd::export_page;
+use koharu_psd::export;
 use koharu_renderer::{Renderer, TypesettingConfig};
 use koharu_scene::{Author, Edit, Op, Session, StyleId};
 use photocraft_psd::{
@@ -103,7 +103,7 @@ fn a_page_exports_as_layers_photoshop_can_edit() {
         eprintln!("skipped without a GPU: {error}");
         return;
     }
-    let bytes = export_page(&session, &renderer, page).unwrap();
+    let bytes = export(&session, &renderer, page).unwrap();
     let file = PsdFile::from_bytes(&bytes).unwrap();
     assert_eq!((file.header.width, file.header.height), (200, 200));
     assert_eq!(file.has_real_merged_data(), Some(true));

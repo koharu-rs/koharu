@@ -1,3 +1,9 @@
+//! Baberu OCR: a DINOv2 encoder, a projector, and a small decoder reading a
+//! speech bubble of Japanese manga text, character by character.
+//!
+//! Upstream, at its `v1.2` tag:
+//! https://huggingface.co/genshiai-daichi/baberu-ocr/tree/a0e3d4b1f98a8c5d0aba66ded831fe7b52bbf2fa
+
 mod config;
 mod model;
 mod processor;
@@ -7,17 +13,16 @@ use image::DynamicImage;
 use koharu_runtime::Repository;
 use koharu_torch::Tensor;
 
-pub use self::config::BaberuOcrConfig;
-
 use self::{
-    config::{BaberuGenerationConfig, Dinov2Config},
+    config::{BaberuGenerationConfig, BaberuOcrConfig, Dinov2Config},
     model::Model,
-    processor::{BaberuImageProcessor, Tokenizer},
+    processor::{BaberuImageProcessor, BitImageProcessorConfig, Tokenizer},
 };
 
+/// The `v1.2` tag.
 const BABERU: Repository = Repository::model(
     "genshiai-daichi/baberu-ocr",
-    "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae",
+    "a0e3d4b1f98a8c5d0aba66ded831fe7b52bbf2fa",
 );
 const DINOV2: Repository = Repository::model(
     "facebook/dinov2-base",
@@ -35,7 +40,7 @@ pub struct BaberuOcr {
 impl BaberuOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let [config_path, generation_path, weights_path, vocabulary_path] = BABERU
+        let [config, generation, weights, vocabulary] = BABERU
             .resolve([
                 "config.json",
                 "generation_config.json",
@@ -43,43 +48,33 @@ impl BaberuOcr {
                 "tokenizer/vocab.json",
             ])
             .await
-            .context("failed to resolve Baberu OCR files")?;
-        let [vision_config_path, vision_processor_path] = DINOV2
+            .context("failed to resolve Baberu OCR's files")?;
+        let [vision_config, vision_processor] = DINOV2
             .resolve(["config.json", "preprocessor_config.json"])
             .await
-            .context("failed to resolve DINOv2 files")?;
-
-        let config = BaberuOcrConfig::from_file(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        let generation = BaberuGenerationConfig::from_file(&generation_path)
-            .with_context(|| format!("failed to read {}", generation_path.display()))?;
-        let vision_config = Dinov2Config::from_file(&vision_config_path)
-            .with_context(|| format!("failed to read {}", vision_config_path.display()))?;
+            .context("failed to resolve DINOv2's files")?;
+        let config: BaberuOcrConfig = serde_json::from_slice(&fs_err::read(&config)?)?;
+        let generation: BaberuGenerationConfig =
+            serde_json::from_slice(&fs_err::read(&generation)?)?;
+        let vision_config: Dinov2Config = serde_json::from_slice(&fs_err::read(&vision_config)?)?;
+        let vision_processor: BitImageProcessorConfig =
+            serde_json::from_slice(&fs_err::read(&vision_processor)?)?;
         config.validate(&vision_config)?;
         generation.validate(&config)?;
-
-        let tokenizer = Tokenizer::from_file(&vocabulary_path)
-            .with_context(|| format!("failed to read {}", vocabulary_path.display()))?;
+        let tokenizer = Tokenizer::from_file(&vocabulary)?;
         ensure!(
             tokenizer.len() == config.vocab_size as usize,
             "Baberu OCR vocabulary has {} entries but the decoder has {} outputs",
             tokenizer.len(),
             config.vocab_size
         );
-        let processor = BaberuImageProcessor::from_file(
-            &vision_processor_path,
-            config.vision_image_size,
-            device,
-        )
-        .with_context(|| format!("failed to read {}", vision_processor_path.display()))?;
+        let processor =
+            BaberuImageProcessor::new(&vision_processor, config.vision_image_size, device)?;
 
         // The complete DINOv2/projector/decoder tree must exist before loading
         // checkpoint names, including the unused DINOv2 mask token.
         let mut model = Model::new(&config, &vision_config, device, kind)?;
-        model
-            .load(&weights_path, config.vision_image_size)
-            .with_context(|| format!("failed to load {}", weights_path.display()))?;
-
+        model.load(&weights, config.vision_image_size)?;
         Ok(Self {
             model,
             processor,
@@ -103,7 +98,9 @@ impl BaberuOcr {
                 &self.tokenizer,
                 self.generation.max_new_tokens,
                 self.generation.repetition_penalty,
+                // `BaberuOCR.__call__`'s `max_content_run` and `max_symbol_run`.
                 12,
+                16,
             )?;
             token_ids
                 .iter()
@@ -122,7 +119,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        let device = koharu_runtime::device().await?;
+        let device = &koharu_runtime::devices().await?.torch;
         let model = BaberuOcr::load(device).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");

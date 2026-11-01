@@ -1,55 +1,49 @@
 //! Baberu OCR and DINOv2 configuration.
 //!
 //! Upstream configuration:
-//! https://huggingface.co/genshiai-daichi/baberu-ocr/blob/d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae/configuration_baberu.py
+//! https://huggingface.co/genshiai-daichi/baberu-ocr/blob/a0e3d4b1f98a8c5d0aba66ded831fe7b52bbf2fa/configuration_baberu.py
 //! DINOv2 configuration used by `AutoModel.from_config`:
 //! https://github.com/huggingface/transformers/blob/c6c8503869367af938666810e01a71866ca4fe93/src/transformers/models/dinov2/configuration_dinov2.py
-
-use std::{fs, path::Path};
 
 use anyhow::{Result, ensure};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct BaberuOcrConfig {
-    pub(crate) vision_model_name: Option<String>,
-    pub(crate) vision_hidden_size: i64,
-    pub(crate) vision_image_size: i64,
-    pub(crate) vision_patch_size: i64,
-    pub(crate) vision_num_tokens: i64,
-    pub(crate) projector_act: String,
-    pub(crate) vocab_size: i64,
-    pub(crate) hidden_size: i64,
-    pub(crate) intermediate_size: i64,
-    pub(crate) num_hidden_layers: usize,
-    pub(crate) num_attention_heads: i64,
-    pub(crate) num_key_value_heads: i64,
-    pub(crate) head_dim: Option<i64>,
-    pub(crate) max_position_embeddings: i64,
-    pub(crate) hidden_act: String,
-    pub(crate) rms_norm_eps: f64,
-    pub(crate) sandwich_norm: bool,
-    pub(crate) rope_theta: f64,
-    pub(crate) final_logit_softcap: Option<f64>,
-    pub(crate) attn_logit_softcap: Option<f64>,
-    pub(crate) tie_word_embeddings: bool,
-    pub(crate) pad_token_id: i64,
-    pub(crate) bos_token_id: i64,
-    pub(crate) eos_token_id: i64,
-    pub(crate) unk_token_id: i64,
+pub(super) struct BaberuOcrConfig {
+    pub(super) vision_model_name: Option<String>,
+    pub(super) vision_hidden_size: i64,
+    pub(super) vision_image_size: i64,
+    pub(super) vision_patch_size: i64,
+    pub(super) vision_num_tokens: i64,
+    pub(super) projector_act: String,
+    pub(super) vocab_size: i64,
+    pub(super) hidden_size: i64,
+    pub(super) intermediate_size: i64,
+    pub(super) num_hidden_layers: usize,
+    pub(super) num_attention_heads: i64,
+    pub(super) num_key_value_heads: i64,
+    pub(super) head_dim: Option<i64>,
+    pub(super) max_position_embeddings: i64,
+    pub(super) hidden_act: String,
+    pub(super) rms_norm_eps: f64,
+    pub(super) sandwich_norm: bool,
+    pub(super) rope_theta: f64,
+    pub(super) final_logit_softcap: Option<f64>,
+    pub(super) attn_logit_softcap: Option<f64>,
+    pub(super) tie_word_embeddings: bool,
+    pub(super) pad_token_id: i64,
+    pub(super) bos_token_id: i64,
+    pub(super) eos_token_id: i64,
+    pub(super) unk_token_id: i64,
 }
 
 impl BaberuOcrConfig {
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
-    }
-
-    pub(crate) fn head_dim(&self) -> i64 {
+    pub(super) fn head_dim(&self) -> i64 {
         self.head_dim
             .unwrap_or(self.hidden_size / self.num_attention_heads)
     }
 
-    pub(crate) fn validate(&self, vision: &Dinov2Config) -> Result<()> {
+    pub(super) fn validate(&self, vision: &Dinov2Config) -> Result<()> {
         ensure!(
             self.vision_model_name.as_deref() == Some("facebook/dinov2-base"),
             "unsupported Baberu OCR vision model {:?}",
@@ -116,20 +110,16 @@ impl BaberuOcrConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct BaberuGenerationConfig {
-    pub(crate) bos_token_id: i64,
-    pub(crate) eos_token_id: i64,
-    pub(crate) pad_token_id: i64,
-    pub(crate) max_new_tokens: usize,
-    pub(crate) repetition_penalty: f64,
+pub(super) struct BaberuGenerationConfig {
+    pub(super) bos_token_id: i64,
+    pub(super) eos_token_id: i64,
+    pub(super) pad_token_id: i64,
+    pub(super) max_new_tokens: usize,
+    pub(super) repetition_penalty: f64,
 }
 
 impl BaberuGenerationConfig {
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
-    }
-
-    pub(crate) fn validate(&self, model: &BaberuOcrConfig) -> Result<()> {
+    pub(super) fn validate(&self, model: &BaberuOcrConfig) -> Result<()> {
         ensure!(
             self.bos_token_id == model.bos_token_id,
             "BOS token IDs differ"
@@ -157,25 +147,19 @@ impl BaberuGenerationConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub(crate) struct Dinov2Config {
-    pub(crate) hidden_size: i64,
-    pub(crate) num_hidden_layers: usize,
-    pub(crate) num_attention_heads: i64,
-    pub(crate) mlp_ratio: i64,
-    pub(crate) hidden_act: String,
-    pub(crate) layer_norm_eps: f64,
-    pub(crate) image_size: i64,
-    pub(crate) patch_size: i64,
-    pub(crate) num_channels: i64,
-    pub(crate) qkv_bias: bool,
-    pub(crate) use_swiglu_ffn: bool,
-    pub(crate) use_mask_token: bool,
-}
-
-impl Dinov2Config {
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
-    }
+pub(super) struct Dinov2Config {
+    pub(super) hidden_size: i64,
+    pub(super) num_hidden_layers: usize,
+    pub(super) num_attention_heads: i64,
+    pub(super) mlp_ratio: i64,
+    pub(super) hidden_act: String,
+    pub(super) layer_norm_eps: f64,
+    pub(super) image_size: i64,
+    pub(super) patch_size: i64,
+    pub(super) num_channels: i64,
+    pub(super) qkv_bias: bool,
+    pub(super) use_swiglu_ffn: bool,
+    pub(super) use_mask_token: bool,
 }
 
 impl Default for Dinov2Config {

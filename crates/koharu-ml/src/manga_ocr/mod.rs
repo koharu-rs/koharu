@@ -1,3 +1,9 @@
+//! Manga OCR: a ViT encoder and a BERT decoder reading one line or bubble of
+//! Japanese manga text.
+//!
+//! Upstream:
+//! https://github.com/kha-white/manga-ocr/blob/847e0939fcb391ad63584dcf50ba6c6533ec9ee8/manga_ocr/ocr.py
+
 mod config;
 mod model;
 mod processor;
@@ -7,9 +13,11 @@ use image::DynamicImage;
 use koharu_runtime::Repository;
 use koharu_torch::{Device, Tensor};
 
-pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
-
-use self::{model::Model, processor::Tokenizer};
+use self::{
+    config::MangaOcrConfig,
+    model::Model,
+    processor::{Tokenizer, ViTImageProcessor},
+};
 
 const REPOSITORY: Repository = Repository::model(
     "mayocream/manga-ocr",
@@ -27,7 +35,7 @@ pub struct MangaOcr {
 impl MangaOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let [config_path, weights_path, processor_path, vocabulary_path] = REPOSITORY
+        let [config, weights, processor, vocabulary] = REPOSITORY
             .resolve([
                 "config.json",
                 "model.safetensors",
@@ -35,14 +43,10 @@ impl MangaOcr {
                 "vocab.txt",
             ])
             .await
-            .context("failed to resolve Manga OCR files")?;
-
-        let config = MangaOcrConfig::from_file(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        let processor = ViTImageProcessor::from_file(&processor_path)
-            .with_context(|| format!("failed to read {}", processor_path.display()))?;
-        let tokenizer = Tokenizer::from_file(&vocabulary_path)
-            .with_context(|| format!("failed to read {}", vocabulary_path.display()))?;
+            .context("failed to resolve Manga OCR's files")?;
+        let config: MangaOcrConfig = serde_json::from_slice(&fs_err::read(&config)?)?;
+        let processor: ViTImageProcessor = serde_json::from_slice(&fs_err::read(&processor)?)?;
+        let tokenizer = Tokenizer::from_file(&vocabulary)?;
         ensure!(
             tokenizer.len() == config.decoder.vocab_size as usize,
             "Manga OCR vocabulary has {} entries but the decoder has {} outputs",
@@ -52,10 +56,7 @@ impl MangaOcr {
 
         // The full ViT/BERT module tree must exist before VarStore loads checkpoint names.
         let mut model = Model::new(&config, device, kind)?;
-        model
-            .load(&weights_path)
-            .with_context(|| format!("failed to load {}", weights_path.display()))?;
-
+        model.load(&weights)?;
         Ok(Self {
             device,
             model,

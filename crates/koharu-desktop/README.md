@@ -1,10 +1,7 @@
 # koharu-desktop
 
-`koharu-desktop` coordinates native page preparation for browser presentation
-and export. It retains the current `koharu-renderer` frame, publishes frame
-generations to the Tauri frontend, serves an exact-generation manifest and its
-independently addressed resources, validates durable transform commits, and
-lazily owns the shared native `koharu-rasterizer` used by export and previews.
-Queued page requests are latest-wins: obsolete requests do not enter rendering
-after the current preparation completes and cannot replace or republish the
-active frame.
+Prepares pages natively for the browser canvas and for export. It keeps the
+current frame from `koharu-renderer`, publishes new frames to the frontend,
+serves each frame's resources, validates transform commits, and owns the
+rasterizer that export and previews share. Page requests are latest-wins, so an
+outdated request never replaces the frame on screen.

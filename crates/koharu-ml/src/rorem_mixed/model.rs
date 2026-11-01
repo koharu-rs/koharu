@@ -14,11 +14,11 @@ use koharu_runtime::Backend;
 
 #[derive(Debug)]
 pub(super) struct ModelPaths {
-    pub diffusion_model: PathBuf,
-    pub version_marker: PathBuf,
-    pub vae: PathBuf,
-    pub clip_l: PathBuf,
-    pub clip_g: PathBuf,
+    pub(super) diffusion_model: PathBuf,
+    pub(super) version_marker: PathBuf,
+    pub(super) vae: PathBuf,
+    pub(super) clip_l: PathBuf,
+    pub(super) clip_g: PathBuf,
 }
 
 #[derive(Debug)]

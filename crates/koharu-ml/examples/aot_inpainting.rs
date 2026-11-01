@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::aot_inpainting::AotInpainting;
+use koharu_ml::aot_inpainting::{AotInpainting, Options};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -26,9 +26,15 @@ async fn main() -> Result<()> {
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?.to_luma8();
 
-    let device = koharu_runtime::device().await?;
+    let device = &koharu_runtime::devices().await?.torch;
     let model = AotInpainting::load(device).await?;
-    let inpainted = model.inference_with_max_side(&image, &mask, cli.max_side)?;
+    let inpainted = model.inference(
+        &image,
+        &mask,
+        &Options {
+            max_side: cli.max_side,
+        },
+    )?;
     inpainted.save(cli.output)?;
     Ok(())
 }

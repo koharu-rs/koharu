@@ -4,8 +4,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::ops::Div;
 use std::sync::{Mutex, PoisonError};
 
-use safetensors::{Dtype, SafeTensors};
 use koharu_torch::{Device, Kind, Result, TchError, Tensor};
+use safetensors::{Dtype, SafeTensors};
 
 /// The separator between a weight name's parts.
 const SEP: char = '.';
@@ -61,10 +61,11 @@ impl VarStore {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         let optional = self.optional.lock().unwrap_or_else(PoisonError::into_inner);
-        let handle = std::fs::File::open(path)?;
+        let unreadable = |err: std::io::Error| TchError::FileFormat(format!("{file}: {err}"));
+        let handle = std::fs::File::open(path).map_err(unreadable)?;
         // The file isn't changed while it's mapped: the runtime's store keeps
         // it read-only once it's pinned and checked.
-        let mapping = unsafe { memmap2::Mmap::map(&handle) }?;
+        let mapping = unsafe { memmap2::Mmap::map(&handle) }.map_err(unreadable)?;
         let tensors = SafeTensors::deserialize(&mapping)
             .map_err(|err| TchError::FileFormat(format!("{file}: {err}")))?;
         let mut unused = tensors.names().into_iter().collect::<BTreeSet<_>>();

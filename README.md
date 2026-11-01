@@ -84,7 +84,7 @@ Detection, OCR, and inpainting models are selected separately.
 
 The detection model finds text regions, speech bubbles, and segmentation masks.
 
-- [Koharu Layout RF-DETR Seg 2XL](https://huggingface.co/mayocream/koharu-layout-rfdetr-seg-2xl-1152)
+- [Koharu Layout HighRes](https://huggingface.co/mayocream/koharu-layout-highres)
 
 #### OCR
 
@@ -93,13 +93,13 @@ OCR reads source text from detected regions.
 - [PaddleOCR VL 1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6)
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr)
 - [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)
-- [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2)
+- [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova)
 
 #### Inpainting
 
 Inpainting reconstructs the image behind source text before the translation is rendered.
 
-- [FLUX.2 Klein](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
+- [FLUX.3 Image Klein](https://huggingface.co/unsloth/flux-3-image-klein-GGUF)
 - [RORem mixed](https://huggingface.co/mayocream/RORem-mixed-GGUF)
 - [LaMa](https://huggingface.co/mayocream/lama-manga)
 - [AOT GAN](https://huggingface.co/mayocream/aot-inpainting)

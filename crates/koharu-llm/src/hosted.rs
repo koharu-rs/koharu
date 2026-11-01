@@ -1,4 +1,4 @@
-//! Hosted models through rig's providers, on Koharu's HTTP client, and the
+//! Hosted models through rig's providers, on rig's own HTTP client, and the
 //! models each provider lists, with what rig's catalog says each can do.
 
 use std::time::{Duration, SystemTime};
@@ -75,7 +75,7 @@ fn optional_key(provider: Provider) -> Result<Option<String>> {
 }
 
 pub(crate) async fn model(provider: Provider, id: &str) -> Result<DynModel<Completion>> {
-    let http = Http::new()?;
+    let http = Http::default();
     let providers: Providers = koharu_config::get()?;
     Ok(match provider {
         Provider::Local => bail!("a local model isn't hosted"),
@@ -126,18 +126,20 @@ fn openai(provider: Provider, providers: &Providers) -> Result<OpenAIConfig> {
     })
 }
 
-/// Koharu's HTTP client for rig. A 429 or 5xx reply is sent again, up to
-/// three times, after the wait rig reads from it, or a second, then two,
-/// then four when it names none; rig itself retries nothing.
-#[derive(Clone)]
+/// rig's own client, shared by the process, sending a 429 or 5xx reply
+/// again, up to three times, after the wait rig reads from it, or a second,
+/// then two, then four when it names none; rig itself retries nothing.
+#[derive(Clone, Default)]
 pub(crate) struct Http(ReqwestClient);
 
 const RETRIES: u32 = 3;
 
-impl Http {
-    pub(crate) fn new() -> Result<Self> {
-        Ok(Self(ReqwestClient::from(koharu_runtime::http_client()?)))
-    }
+/// rig's own client, for the requests Koharu makes outside rig.
+fn reqwest() -> Result<reqwest::Client> {
+    ReqwestClient::default()
+        .inner()
+        .cloned()
+        .context("couldn't build the HTTP client")
 }
 
 /// How long to wait before sending again after `error`, or `None` when it
@@ -238,13 +240,13 @@ pub(crate) async fn models(provider: Provider) -> Result<Vec<ModelInfo>> {
     let providers: Providers = koharu_config::get()?;
     match provider {
         Provider::Local => return Ok(Vec::new()),
-        Provider::ChatGpt => return crate::chatgpt::models(&koharu_runtime::http_client()?).await,
+        Provider::ChatGpt => return crate::chatgpt::models(&reqwest()?).await,
         Provider::LmStudio => return lm_studio(&providers).await,
         Provider::OpenAiCompatible => {}
         _ if optional_key(provider)?.is_none() => return Ok(Vec::new()),
         _ => {}
     }
-    let http = Http::new()?;
+    let http = Http::default();
     let listed = match provider {
         Provider::Claude => {
             AnthropicConfig::new(key(provider)?)
@@ -313,7 +315,7 @@ pub(crate) async fn models(provider: Provider) -> Result<Vec<ModelInfo>> {
 /// do: rig neither lists nor catalogs them.
 async fn lm_studio(providers: &Providers) -> Result<Vec<ModelInfo>> {
     // https://lmstudio.ai/docs/developer/rest/list
-    let mut request = koharu_runtime::http_client()?.get(format!(
+    let mut request = reqwest()?.get(format!(
         "{}/api/v1/models",
         providers.lm_studio.base_url(LM_STUDIO)
     ));

@@ -1,3 +1,12 @@
+//! Hayai OCR v2.5 Nova: crop-level OCR for Japanese, Chinese, Korean, and
+//! English text. A SigLIP2 NaFlex encoder's 2x2 patch blocks are merged into
+//! one token each by a projector, then a small GQA transformer decoder reads
+//! them over a shared visual and textual prefix, with block-causal attention
+//! and 2D multimodal RoPE.
+//!
+//! Upstream:
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova/tree/2803d0dc005fa4396ab1e7c5a472d2c450a247f7
+
 mod config;
 mod model;
 mod processor;
@@ -14,52 +23,43 @@ use self::{
 };
 
 const REPOSITORY: Repository = Repository::model(
-    "JustANormalTinkerer/hayai-ocr-v2",
-    "4a4ce477c9a8841f208b94e1d9ed5c0938965e05",
+    "JustANormalTinkerer/hayai-ocr-v2.5-nova",
+    "2803d0dc005fa4396ab1e7c5a472d2c450a247f7",
 );
 
-/// Fast crop-level OCR for Japanese, Chinese, Korean, and English text.
-///
-/// Port of the Hayai OCR v2 vision-to-text model: a SigLIP2 NaFlex encoder
-/// paired with a small GQA transformer decoder over a shared visual/textual
-/// prefix with block-causal attention and 2D multimodal RoPE.
 #[derive(Debug)]
 pub struct HayaiOcr {
+    device: Device,
     model: Model,
     processor: ImageProcessor,
     tokenizer: Tokenizer,
-    device: Device,
 }
 
 impl HayaiOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device)?;
-        let [config_path, weights_path, tokenizer_path] = REPOSITORY
+        let [config, weights, tokenizer] = REPOSITORY
             .resolve(["config.json", "model.safetensors", "tokenizer.json"])
             .await
-            .context("failed to resolve Hayai OCR files")?;
-
-        let config = HayaiConfig::from_file(&config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?;
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)?;
+            .context("failed to resolve Hayai OCR's files")?;
+        let config: HayaiConfig = serde_json::from_slice(&fs_err::read(&config)?)?;
+        config.validate()?;
+        let tokenizer = Tokenizer::from_file(&tokenizer)?;
         ensure!(
             tokenizer.len() == config.vocab_size as usize,
             "Hayai OCR vocabulary has {} entries but the decoder has {} outputs",
             tokenizer.len(),
             config.vocab_size
         );
-
-        let mut model = Model::new(&config, &tokenizer, device, kind)?;
-        model
-            .load(&weights_path)
-            .with_context(|| format!("failed to load {}", weights_path.display()))?;
         let processor = ImageProcessor::new(device)?;
 
+        let mut model = Model::new(&config, &tokenizer, device, kind)?;
+        model.load(&weights)?;
         Ok(Self {
+            device,
             model,
             processor,
             tokenizer,
-            device,
         })
     }
 
@@ -91,7 +91,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        let device = koharu_runtime::device().await?;
+        let device = &koharu_runtime::devices().await?.torch;
         let model = HayaiOcr::load(device).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");

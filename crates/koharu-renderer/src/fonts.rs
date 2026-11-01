@@ -624,7 +624,7 @@ impl Fonts {
         let catalog = self.catalog().await?;
         let mut families = BTreeMap::<String, FontFamily>::new();
 
-        let faces = tokio_rayon::spawn(move || system.lock().system_faces()).await;
+        let faces = tokio::task::spawn_blocking(move || system.lock().system_faces()).await?;
         for face in faces {
             let key = normalize(&face.family_name);
             let family = families.entry(key).or_insert_with(|| FontFamily {
@@ -763,7 +763,7 @@ impl Fonts {
                 .with_context(|| format!("failed to read {}", path.display()))
                 .map(FontPreview::Webp);
         }
-        tokio_rayon::spawn({
+        tokio::task::spawn_blocking({
             let family_name = family_name.to_owned();
             move || {
                 system
@@ -773,7 +773,7 @@ impl Fonts {
                     .map(FontPreview::System)
             }
         })
-        .await
+        .await?
     }
 
     /// Downloads the bundled faces `requests` name. A family the catalog
@@ -803,7 +803,7 @@ impl Fonts {
                 let bytes = tokio::fs::read(&path)
                     .await
                     .with_context(|| format!("failed to read {}", path.display()))?;
-                tokio_rayon::spawn(move || {
+                tokio::task::spawn_blocking(move || {
                     let index: CatalogIndex =
                         serde_json::from_slice(&bytes).context("invalid bundled font index")?;
                     if index.schema_version != FONT_INDEX_SCHEMA {
@@ -814,7 +814,7 @@ impl Fonts {
                     }
                     Ok(Arc::new(FontCatalog::from_index(index)))
                 })
-                .await
+                .await?
             })
             .await
     }
@@ -832,7 +832,7 @@ impl Fonts {
             .await
             .with_context(|| format!("failed to read {}", path.display()))?;
         let face_for_worker = face.clone();
-        let font = tokio_rayon::spawn(move || {
+        let font = tokio::task::spawn_blocking(move || {
             font_from_blob(
                 Blob::from(data),
                 &face_for_worker,
@@ -843,7 +843,7 @@ impl Fonts {
                 },
             )
         })
-        .await?;
+        .await??;
         self.cache
             .lock()
             .insert(face.post_script_name.clone(), font.clone());

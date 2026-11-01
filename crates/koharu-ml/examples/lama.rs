@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::lama::{InpaintRequest, LaMa};
+use koharu_ml::lama::{Lama, Options};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -23,10 +23,10 @@ async fn main() -> Result<()> {
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?.to_luma8();
 
-    let device = koharu_runtime::device().await?;
+    let device = &koharu_runtime::devices().await?.torch;
 
-    let model = LaMa::load(device).await?;
-    let inpainted = model.inference(&image, &mask, &InpaintRequest::default())?;
+    let model = Lama::load(device).await?;
+    let inpainted = model.inference(&image, &mask, &Options::default())?;
     inpainted.save(cli.output)?;
 
     Ok(())

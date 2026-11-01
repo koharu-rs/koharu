@@ -337,7 +337,10 @@ fn banned_ngram_tokens(sequence: &[i64], ngram_size: usize) -> Vec<i64> {
         .collect()
 }
 
-fn reorder_cache(cache: Vec<LayerCache>, beam_indices: &Tensor) -> koharu_torch::Result<Vec<LayerCache>> {
+fn reorder_cache(
+    cache: Vec<LayerCache>,
+    beam_indices: &Tensor,
+) -> koharu_torch::Result<Vec<LayerCache>> {
     cache
         .into_iter()
         .map(|layer| {

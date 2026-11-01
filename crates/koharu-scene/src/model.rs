@@ -502,7 +502,7 @@ fn unmarked(style: &CharStyle) -> bool {
     *style == CharStyle::default()
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize, Type, JsonSchema)]
 #[serde(untagged)]
 enum RichTextInput {
     Plain(String),

@@ -1,7 +1,7 @@
 //! Inference-only Baberu OCR network.
 //!
 //! Baberu architecture and generation implementation:
-//! https://huggingface.co/genshiai-daichi/baberu-ocr/blob/d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae/modeling_baberu.py
+//! https://huggingface.co/genshiai-daichi/baberu-ocr/blob/a0e3d4b1f98a8c5d0aba66ded831fe7b52bbf2fa/modeling_baberu.py
 //! DINOv2 implementation instantiated by the upstream `AutoModel` call:
 //! https://github.com/huggingface/transformers/blob/c6c8503869367af938666810e01a71866ca4fe93/src/transformers/models/dinov2/modeling_dinov2.py
 
@@ -36,7 +36,6 @@ impl Model {
         device: Device,
         kind: Kind,
     ) -> Result<Self> {
-        config.validate(vision_config)?;
         let vs = nn::VarStore::new(device, kind);
         let root = vs.root();
         let vision_encoder = Dinov2Model::new(&(&root / "vision_encoder"), vision_config)?;
@@ -74,6 +73,7 @@ impl Model {
         max_new_tokens: usize,
         repetition_penalty: f64,
         max_content_run: usize,
+        max_symbol_run: usize,
     ) -> Result<Vec<Vec<i64>>> {
         let size = pixel_values.size();
         ensure!(
@@ -108,23 +108,31 @@ impl Model {
 
         for _ in 0..max_new_tokens {
             if repetition_penalty != 1.0 {
-                let ids = crate::penalty_ids(&seen_ids, device)?;
-                logits = crate::repetition_penalty(&logits, &ids, repetition_penalty)?;
+                let ids = penalty_ids(&seen_ids, device)?;
+                logits = apply_repetition_penalty(&logits, &ids, repetition_penalty)?;
             }
-            if max_content_run != 0 {
-                // A content token repeated max_content_run times can't come
-                // again.
+            if max_content_run != 0 || max_symbol_run != 0 {
+                // A content token repeated max_content_run times, or any other
+                // non-special token repeated max_symbol_run times, can't come
+                // again; a cap of 0 is off.
                 let banned = tokens
                     .iter()
                     .map(|tokens| {
                         tokens.last().is_some_and(|&token_id| {
-                            tokenizer.is_content(token_id)
+                            let cap = if tokenizer.is_content(token_id) {
+                                max_content_run
+                            } else if token_id > 3 {
+                                max_symbol_run
+                            } else {
+                                0
+                            };
+                            cap != 0
                                 && tokens
                                     .iter()
                                     .rev()
                                     .take_while(|candidate| **candidate == token_id)
                                     .count()
-                                    >= max_content_run
+                                    >= cap
                         })
                     })
                     .collect::<Vec<_>>();
@@ -946,7 +954,11 @@ impl BaberuRotaryEmbedding {
         })
     }
 
-    fn forward(&self, past_len: i64, sequence_length: i64) -> koharu_torch::Result<(Tensor, Tensor)> {
+    fn forward(
+        &self,
+        past_len: i64,
+        sequence_length: i64,
+    ) -> koharu_torch::Result<(Tensor, Tensor)> {
         Ok((
             self.cos
                 .f_narrow(0, past_len, sequence_length)?
@@ -983,7 +995,49 @@ fn rotate_half(hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
     )
 }
 
-fn causal_mask(q_len: i64, kv_len: i64, kind: Kind, device: Device) -> koharu_torch::Result<Tensor> {
+/// Transformers' `RepetitionPenaltyLogitsProcessor`: each score of a token in
+/// its row of `ids`, `[batch, n]` on `scores`' device, is multiplied by
+/// `penalty` when negative and divided by it otherwise.
+/// https://github.com/huggingface/transformers/blob/598d8ba8baaec7fec5a22da0e2844c7bf4ea20e1/src/transformers/generation/logits_process.py#L409-L412
+fn apply_repetition_penalty(
+    scores: &Tensor,
+    ids: &Tensor,
+    penalty: f64,
+) -> koharu_torch::Result<Tensor> {
+    let score = scores.f_gather(1, ids, false)?;
+    let score = score
+        .f_mul_scalar(penalty)?
+        .f_where_self(&score.f_lt(0.0)?, &score.f_div_scalar(penalty)?)?;
+    scores.f_scatter(1, ids, &score)
+}
+
+/// The rows' ids as one `[rows, n]` tensor on `device` for
+/// [`apply_repetition_penalty`], each row padded with its first id, which the
+/// penalty then reads twice to the same effect.
+fn penalty_ids(rows: &[Vec<i64>], device: koharu_torch::Device) -> koharu_torch::Result<Tensor> {
+    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let mut padded = Vec::with_capacity(rows.len() * width);
+    for row in rows {
+        let first = *row.first().ok_or_else(|| {
+            koharu_torch::TchError::Shape("a repetition penalty row has no ids".to_owned())
+        })?;
+        padded.extend(
+            row.iter()
+                .copied()
+                .chain(std::iter::repeat_n(first, width - row.len())),
+        );
+    }
+    Tensor::f_from_slice(&padded)?
+        .f_view([rows.len() as i64, width as i64])?
+        .f_to_device(device)
+}
+
+fn causal_mask(
+    q_len: i64,
+    kv_len: i64,
+    kind: Kind,
+    device: Device,
+) -> koharu_torch::Result<Tensor> {
     Tensor::f_full([q_len, kv_len], f64::NEG_INFINITY, (kind, device))?
         .f_triu(kv_len - q_len + 1)?
         .f_unsqueeze(0)?

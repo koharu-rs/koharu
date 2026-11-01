@@ -13,7 +13,6 @@ use koharu_llm::{
     },
 };
 use koharu_runtime::Repository;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const REPOSITORY: Repository = Repository::model(
@@ -26,8 +25,8 @@ const REPETITION_PENALTY: f32 = 1.2;
 
 /// The task prompts the model card lists:
 /// https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6/blob/66317acc4c9fc17bd154591ce650735cd2855f3e/README.md
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PaddleOCRVLTask {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Task {
     Ocr,
     Table,
     Formula,
@@ -36,7 +35,7 @@ pub enum PaddleOCRVLTask {
     Seal,
 }
 
-impl PaddleOCRVLTask {
+impl Task {
     fn prompt(self) -> &'static str {
         match self {
             Self::Ocr => "OCR:",
@@ -49,22 +48,17 @@ impl PaddleOCRVLTask {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PaddleOCRVLResult {
-    pub text: String,
-}
-
 /// The tokens one crop's request holds: the largest image PaddleOCR-VL
 /// reads, 1,280 tokens at its processor's `max_pixels`, the task prompt, and
 /// the answer.
 const CONTEXT: u32 = 2048;
 
 #[derive(Debug)]
-pub struct PaddleOCRVLQuantized {
+pub struct PaddleOcrVlQuantized {
     model: koharu_llm::Model,
 }
 
-impl PaddleOCRVLQuantized {
+impl PaddleOcrVlQuantized {
     /// Loads the model to decode `sequences` crops together.
     pub async fn load(sequences: u32) -> Result<Self> {
         let [model, projector] = REPOSITORY
@@ -73,7 +67,7 @@ impl PaddleOCRVLQuantized {
                 "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
             ])
             .await
-            .context("failed to resolve quantized PaddleOCR-VL-1.6 files")?;
+            .context("failed to resolve quantized PaddleOCR-VL-1.6's files")?;
         let model = koharu_llm::load(
             &model,
             Some(&projector),
@@ -87,12 +81,8 @@ impl PaddleOCRVLQuantized {
         Ok(Self { model })
     }
 
-    /// Reads each image, the requests decoding together.
-    pub async fn inference(
-        &self,
-        images: &[DynamicImage],
-        task: PaddleOCRVLTask,
-    ) -> Result<Vec<PaddleOCRVLResult>> {
+    /// The text of each crop for `task`, the crops decoded together.
+    pub async fn inference(&self, images: &[DynamicImage], task: Task) -> Result<Vec<String>> {
         let requests = images
             .iter()
             .map(|image| request(image, task))
@@ -103,16 +93,13 @@ impl PaddleOCRVLQuantized {
                 .map(|request| self.model.completion.call(request)),
         )
         .await?;
-        Ok(replies
-            .into_iter()
-            .map(|reply| PaddleOCRVLResult { text: reply.text() })
-            .collect())
+        Ok(replies.into_iter().map(|reply| reply.text()).collect())
     }
 }
 
 /// The image, then the task prompt, greedy, with the libtorch port's
 /// repetition penalty over the answer's length.
-fn request(image: &DynamicImage, task: PaddleOCRVLTask) -> Result<CompletionRequest> {
+fn request(image: &DynamicImage, task: Task) -> Result<CompletionRequest> {
     let mut png = Vec::new();
     image.write_to(&mut Cursor::new(&mut png), ImageFormat::Png)?;
     let content = vec![

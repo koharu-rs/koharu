@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::aot_inpainting::AotInpainting;
+use koharu_ml::aot_inpainting::{AotInpainting, Options};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -13,9 +13,9 @@ async fn main() -> Result<()> {
     let image = image::open(fixtures.join("image_4k.jpg"))?;
     let mask = image::open(fixtures.join("mask_4k.png"))?.to_luma8();
 
-    let device = koharu_runtime::device().await?;
+    let device = &koharu_runtime::devices().await?.torch;
     let model = AotInpainting::load(device).await?;
-    model.inference(&image, &mask)?;
+    model.inference(&image, &mask, &Options::default())?;
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -26,7 +26,11 @@ async fn main() -> Result<()> {
     criterion.bench_function("aot_inpainting/inference/3840x2074", |bencher| {
         bencher.iter(|| {
             let output = model
-                .inference(black_box(&image), black_box(&mask))
+                .inference(
+                    black_box(&image),
+                    black_box(&mask),
+                    black_box(&Options::default()),
+                )
                 .expect("AOT inpainting inference failed");
             black_box(output);
         });

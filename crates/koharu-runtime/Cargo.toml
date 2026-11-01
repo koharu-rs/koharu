@@ -19,7 +19,7 @@ dirs = { workspace = true }
 fast-glob = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
-koharu-config = { workspace = true }
+hf-hub = { workspace = true }
 koharu-diffusion-sys = { workspace = true }
 koharu-llama-sys = { workspace = true }
 koharu-torch-sys = { workspace = true }

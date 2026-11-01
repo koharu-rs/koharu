@@ -2,9 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::rorem_mixed::{
-    DEFAULT_NEGATIVE_PROMPT, DEFAULT_PROMPT, RoremMixed, RoremMixedOptions,
-};
+use koharu_ml::rorem_mixed::{Options, RoremMixed};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -17,11 +15,11 @@ struct Cli {
     #[arg(short, long, value_name = "FILE")]
     output: PathBuf,
 
-    #[arg(short, long, default_value = DEFAULT_PROMPT)]
-    prompt: String,
+    #[arg(short, long)]
+    prompt: Option<String>,
 
-    #[arg(long, default_value = DEFAULT_NEGATIVE_PROMPT)]
-    negative_prompt: String,
+    #[arg(long)]
+    negative_prompt: Option<String>,
 
     #[arg(long, default_value_t = 512)]
     resolution: u32,
@@ -49,14 +47,15 @@ async fn main() -> Result<()> {
     let image = image::open(cli.input)?;
     let mask = image::open(cli.mask)?.to_luma8();
 
-    let device = koharu_runtime::device().await?;
+    let device = &koharu_runtime::devices().await?.ggml;
     let model = RoremMixed::load(device, device.memory().free).await?;
+    let defaults = Options::default();
     let output = model.inference(
         &image,
         &mask,
-        &cli.prompt,
-        &cli.negative_prompt,
-        &RoremMixedOptions {
+        &Options {
+            prompt: cli.prompt.unwrap_or(defaults.prompt),
+            negative_prompt: cli.negative_prompt.unwrap_or(defaults.negative_prompt),
             resolution: cli.resolution,
             mask_dilation: cli.mask_dilation,
             num_inference_steps: cli.steps,

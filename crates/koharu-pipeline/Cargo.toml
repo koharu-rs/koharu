@@ -13,33 +13,26 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = { workspace = true }
-async-trait = { workspace = true }
 clap = { workspace = true }
+enumflags2 = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
+indoc = { workspace = true }
 koharu-config = { workspace = true }
+koharu-llm = { workspace = true }
 koharu-ml = { workspace = true }
-koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
+kurbo = { workspace = true }
 rayon = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
-specta = { workspace = true }
+serde_json = { workspace = true }
 strum = { workspace = true }
-sysinfo = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-rayon = { workspace = true }
-tracing = { workspace = true }
-
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-nvml-wrapper = { workspace = true }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = [
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-] }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 toml = { workspace = true }

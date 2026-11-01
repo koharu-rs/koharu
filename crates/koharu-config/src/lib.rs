@@ -1,4 +1,4 @@
-//! Koharu's settings and secrets. The README is the design.
+//! Koharu's settings and secrets.
 
 mod error;
 mod secrets;

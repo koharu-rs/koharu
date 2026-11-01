@@ -1,4 +1,4 @@
-//! Language models for Koharu, local and hosted. The README is the design.
+//! Language models for Koharu, local and hosted.
 
 mod agent;
 mod chatgpt;

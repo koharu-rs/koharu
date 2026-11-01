@@ -12,24 +12,28 @@ use koharu_torch::{Device, Kind, Tensor};
 use super::config::FFCResNetGeneratorConfig;
 
 #[derive(Debug)]
-pub struct Model {
+pub(super) struct Model {
     vs: nn::VarStore,
     generator: FFCResNetGenerator,
 }
 
 impl Model {
-    pub fn new(config: &FFCResNetGeneratorConfig, device: Device, kind: Kind) -> Result<Self> {
+    pub(super) fn new(
+        config: &FFCResNetGeneratorConfig,
+        device: Device,
+        kind: Kind,
+    ) -> Result<Self> {
         let vs = nn::VarStore::new(device, kind);
         let generator = FFCResNetGenerator::new(&vs.root(), config)?;
         Ok(Self { vs, generator })
     }
 
-    pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
+    pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
         Ok(())
     }
 
-    pub fn forward(&self, image: &Tensor, mask: &Tensor) -> koharu_torch::Result<Tensor> {
+    pub(super) fn forward(&self, image: &Tensor, mask: &Tensor) -> koharu_torch::Result<Tensor> {
         let image = image.f_to_kind(self.vs.kind())?;
         let mask = mask.f_to_kind(self.vs.kind())?;
         let inverse_mask = mask.f_ones_like()?.f_sub(&mask)?;
@@ -199,7 +203,10 @@ impl FFCResnetBlock {
         })
     }
 
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(
+        &self,
+        input: (Tensor, Option<Tensor>),
+    ) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
         let id_l = input.0.f_alias()?;
         let id_g = input.1.as_ref().map(Tensor::f_alias).transpose()?;
         let output = self.conv2.forward(self.conv1.forward(input)?)?;
@@ -264,7 +271,10 @@ impl FFC_BN_ACT {
         })
     }
 
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(
+        &self,
+        input: (Tensor, Option<Tensor>),
+    ) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
         let output = self.ffc.forward(input)?;
         let local = self
             .bn_l
@@ -365,7 +375,10 @@ impl FFC {
         })
     }
 
-    fn forward(&self, input: (Tensor, Option<Tensor>)) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
+    fn forward(
+        &self,
+        input: (Tensor, Option<Tensor>),
+    ) -> koharu_torch::Result<(Tensor, Option<Tensor>)> {
         let local_from_local = self
             .convl2l
             .as_ref()

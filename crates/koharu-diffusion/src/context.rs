@@ -133,8 +133,10 @@ impl Context {
         if let Some(scheduler) = params.scheduler {
             raw.sample_params.scheduler = match scheduler {
                 Scheduler::Discrete => sys::DISCRETE_SCHEDULER,
-                Scheduler::Flux2 => sys::FLUX2_SCHEDULER,
             };
+        }
+        if let Some(flow_shift) = params.flow_shift {
+            raw.sample_params.flow_shift = flow_shift;
         }
         if let Some(SampleMethod::Euler) = params.sample_method {
             raw.sample_params.sample_method = sys::EULER_SAMPLE_METHOD;

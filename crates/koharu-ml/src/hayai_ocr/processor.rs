@@ -9,13 +9,15 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
-use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
-use image::{DynamicImage, RgbImage};
+use fast_image_resize::{FilterType, ResizeAlg};
+use image::DynamicImage;
 use koharu_torch::{Device, Kind, Tensor};
 use tokenizers::Tokenizer as HuggingFaceTokenizer;
 
 use super::config::siglip2;
 
+/// Pillow's bilinear filter, as convolution.
+const RESIZE: ResizeAlg = ResizeAlg::Convolution(FilterType::Bilinear);
 const RESCALE_FACTOR: f64 = 1.0 / 255.0;
 const IMAGE_MEAN: [f32; 3] = [0.5, 0.5, 0.5];
 const IMAGE_STD: [f32; 3] = [0.5, 0.5, 0.5];
@@ -80,7 +82,7 @@ impl ImageProcessor {
         let image = if image.width() == width && image.height() == height {
             image
         } else {
-            resize_bilinear(&image, width, height)?
+            crate::image::resize(&image, width, height, RESIZE)?
         };
 
         let mut pixel_values = Tensor::f_from_slice(image.as_raw())?
@@ -163,22 +165,8 @@ fn get_image_size_for_max_num_patches(
     )
 }
 
-fn resize_bilinear(image: &RgbImage, width: u32, height: u32) -> Result<RgbImage> {
-    let mut resized = RgbImage::new(width, height);
-    Resizer::new()
-        .resize(
-            image,
-            &mut resized,
-            &ResizeOptions::new()
-                .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
-                .use_alpha(false),
-        )
-        .map_err(|error| anyhow::anyhow!("failed to resize Hayai OCR input: {error}"))?;
-    Ok(resized)
-}
-
 #[derive(Debug)]
-pub(crate) struct Tokenizer {
+pub(super) struct Tokenizer {
     inner: HuggingFaceTokenizer,
     bos_token_id: i64,
     eos_token_id: i64,
@@ -186,8 +174,7 @@ pub(crate) struct Tokenizer {
 }
 
 impl Tokenizer {
-    pub(crate) fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref();
+    pub(super) fn from_file(path: &Path) -> Result<Self> {
         let inner = HuggingFaceTokenizer::from_file(path)
             .map_err(|error| anyhow::anyhow!(error.to_string()))
             .with_context(|| format!("failed to parse {}", path.display()))?;
@@ -205,25 +192,25 @@ impl Tokenizer {
         })
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.inner.get_vocab_size(true)
     }
 
-    pub(crate) fn bos_token_id(&self) -> i64 {
+    pub(super) fn bos_token_id(&self) -> i64 {
         self.bos_token_id
     }
 
-    pub(crate) fn eos_token_id(&self) -> i64 {
+    pub(super) fn eos_token_id(&self) -> i64 {
         self.eos_token_id
     }
 
-    pub(crate) fn pad_token_id(&self) -> i64 {
+    pub(super) fn pad_token_id(&self) -> i64 {
         self.pad_token_id
     }
 
     /// Decodes generated ids, dropping special tokens like the upstream
     /// `generate` cleanup pass.
-    pub(crate) fn decode(&self, token_ids: &[i64]) -> Result<String> {
+    pub(super) fn decode(&self, token_ids: &[i64]) -> Result<String> {
         let token_ids = token_ids
             .iter()
             .copied()

@@ -11,7 +11,6 @@ pub enum VaeFormat {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Scheduler {
     Discrete,
-    Flux2,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,6 +60,8 @@ pub struct ImageParams<'a> {
     /// Classifier-free guidance on the text.
     pub cfg: Option<f32>,
     pub scheduler: Option<Scheduler>,
+    /// The flow-matching time shift; unset keeps the model's own.
+    pub flow_shift: Option<f32>,
     pub sample_method: Option<SampleMethod>,
     pub steps: Option<u32>,
     pub strength: Option<f32>,
