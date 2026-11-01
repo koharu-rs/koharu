@@ -58,7 +58,7 @@ cargo tauri build --debug --bundles app \
 
 Bundle macOS nằm tại `target/debug/bundle/macos/koharu.app`. Nếu libclang chưa được phát hiện, đặt `LIBCLANG_PATH` tới thư mục lib của LLVM/Xcode trên máy.
 
-Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`. Nút **Original chapter** ở thanh trên mở đúng URL đó trong trình duyệt Rawkuma của app; từ đây bấm chương tiếp theo trên website rồi **Translate this chapter**. URL vẫn còn sau khi mở lại project hoặc Clear cache. Project cũ chưa lưu URL cần mở lại đúng chương trên Rawkuma và nhập/dịch chương đó để gắn URL; app không đoán link từ tên project.
+Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`. Nút **Original chapter** ở thanh trên mở đúng URL đó trong trình duyệt Rawkuma của app; từ đây bấm chương tiếp theo trên website rồi **Translate this chapter**. URL vẫn còn sau khi mở lại project hoặc Clear cache. Đã kiểm tra trên project 27.1 có 20 trang được mở lại từ cache và project 27.2 mới: nút nguồn điều hướng đúng URL đã lưu ngay cả khi browser đang ở trang chủ. Project cũ chưa lưu URL cần mở lại đúng chương trên Rawkuma và nhập/dịch chương đó để gắn URL; app không đoán link từ tên project.
 
 ## Dùng LM Studio trên máy khác trong LAN
 
