@@ -113,7 +113,9 @@ struct ReaderScreen: View {
                         Toggle(L("Original"), isOn: $original).toggleStyle(.button)
                         Button(L("Edit text"), systemImage: "text.cursor") { editing = true }.disabled(library.busy || page.segments.isEmpty)
                     }.padding(10).background(.bar)
-                    ZoomPage(url: pageURL(page)).id(page.id.uuidString + (original ? "original" : page.rendered ?? "source"))
+                    ZoomPage(url: pageURL(page)) { offset in
+                        index = min(chapter.pages.count - 1, max(0, index + offset))
+                    }.id(page.id.uuidString + (original ? "original" : page.rendered ?? "source"))
                 }
                 .sheet(isPresented: $editing) { TextEditorScreen(chapterID: chapterID, page: page) }
                 .toolbar {
@@ -187,14 +189,24 @@ struct ActivityShare: UIViewControllerRepresentable {
 }
 struct ZoomPage: UIViewRepresentable {
     let url: URL
-    func makeUIView(context: Context) -> PageScrollView { let view = PageScrollView(); view.show(url); return view }
-    func updateUIView(_ view: PageScrollView, context: Context) { view.show(url) }
+    var turnPage: (Int) -> Void
+    func makeUIView(context: Context) -> PageScrollView { let view = PageScrollView(); view.turnPage = turnPage; view.show(url); return view }
+    func updateUIView(_ view: PageScrollView, context: Context) { view.turnPage = turnPage; view.show(url) }
 }
-final class PageScrollView: UIScrollView, UIScrollViewDelegate {
+final class PageScrollView: UIScrollView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+    var turnPage: ((Int) -> Void)?
     private let picture = UIImageView()
     private var url: URL?
     private var previousSize: CGSize = .zero
-    override init(frame: CGRect) { super.init(frame: frame); delegate = self; maximumZoomScale = 6; backgroundColor = .black; addSubview(picture) }
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        delegate = self; maximumZoomScale = 6; backgroundColor = .black; addSubview(picture)
+        for direction: UISwipeGestureRecognizer.Direction in [.left, .right] {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(turnPageWithSwipe(_:)))
+            swipe.direction = direction; swipe.delegate = self
+            addGestureRecognizer(swipe)
+        }
+    }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
     func show(_ url: URL) {
         guard self.url != url else { return }
@@ -213,6 +225,19 @@ final class PageScrollView: UIScrollView, UIScrollViewDelegate {
         contentSize = picture.frame.size
     }
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { picture }
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer is UISwipeGestureRecognizer else { return super.gestureRecognizerShouldBegin(gestureRecognizer) }
+        // A zoomed page owns horizontal drags for panning, including when a
+        // second finger is just beginning a pinch.
+        return zoomScale <= minimumZoomScale * 1.01 && !isZooming && (pinchGestureRecognizer?.numberOfTouches ?? 0) < 2
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        otherGestureRecognizer === panGestureRecognizer
+    }
+    @objc private func turnPageWithSwipe(_ swipe: UISwipeGestureRecognizer) {
+        guard swipe.state == .ended, gestureRecognizerShouldBegin(swipe) else { return }
+        turnPage?(swipe.direction == .left ? 1 : -1)
+    }
 }
 
 struct TextEditorScreen: View {

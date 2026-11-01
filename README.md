@@ -62,7 +62,7 @@ Project Rawkuma mới lưu URL chương gốc ngay trong tài liệu `.khrproj`.
 
 ## Bản iPad/iPhone
 
-App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 trở lên. Chọn **LM Studio** để dùng server trong LAN hoặc **On-device GGUF** để tải/import model và dịch trên thiết bị. Có giao diện Việt/Anh và 42 ngôn ngữ dịch đích; OCR, render và cache nằm trên iPad. Model local được kiểm tra bộ nhớ trước khi nạp; chọn kích thước phù hợp RAM thực tế. Model 0.8B chỉ phù hợp kiểm tra runtime, chất lượng dịch có thể kém.
+App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 trở lên. Chọn **LM Studio** để dùng server trong LAN hoặc **On-device GGUF** để tải/import model và dịch trên thiết bị. Có giao diện Việt/Anh và 42 ngôn ngữ dịch đích; OCR, render và cache nằm trên iPad. Ở màn hình đọc, vuốt trái để sang trang tiếp, vuốt phải để về trang trước; khi phóng to, kéo để di chuyển ảnh. Model local được kiểm tra bộ nhớ trước khi nạp; chọn kích thước phù hợp RAM thực tế. Model 0.8B chỉ phù hợp kiểm tra runtime, chất lượng dịch có thể kém.
 
 Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev mở URL thực, Home mở trang bộ truyện, dropdown dùng selector native từ danh sách chương của website, tự tải endpoint chương cùng origin nếu phần HTMX còn trống. Không suy đoán số chương kế tiếp hay giới hạn đường dẫn CDN vào một tiền tố.
 
