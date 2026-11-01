@@ -66,7 +66,7 @@ App native ở [`apps/ipad`](apps/ipad/README.md), hỗ trợ iOS/iPadOS 26 tr�
 
 Trình duyệt nguồn dùng chung script điều hướng với Mac: Next/Prev mở URL thực, Home mở trang bộ truyện, dropdown dùng selector native từ danh sách chương của website, tự tải endpoint chương cùng origin nếu phần HTMX còn trống. Không suy đoán số chương kế tiếp hay giới hạn đường dẫn CDN vào một tiền tố.
 
-Kiểm chứng: ba test DOM điều hướng đã qua. Trên bản Mac đã cài, Next/Prev chuyển đúng URL, Home về trang bộ truyện và dropdown chọn chương 33.2 nhận đúng 22 trang. Trên simulator iPad đã thử Next/Prev/Home và chọn chương thập phân từ dropdown, kiểm tra URL đích. Bản 0.1.1 đã ký Kuruby và cài trên iPad Pro M5 thật; làm mới model và dò server LM Studio trong LAN hoạt động. Runtime GGUF Metal và OCR chữ Nhật dọc đã qua kiểm tra tập trung trên iPad thật; chất lượng dịch vẫn phụ thuộc model. Xem số đo và giới hạn trong tài liệu iPad.
+Kiểm chứng: ba test DOM điều hướng đã qua. Trên bản Mac đã cài, Next/Prev chuyển đúng URL, Home về trang bộ truyện và dropdown chọn chương 33.2 nhận đúng 22 trang. Trên simulator iPad đã thử Next/Prev/Home và chọn chương thập phân từ dropdown, kiểm tra URL đích. Bản 0.1.1 đã ký Kuruby và cài trên iPad Pro M5 thật; làm mới model và dò server LM Studio trong LAN hoạt động. Runtime GGUF Metal và OCR chữ Nhật dọc đã qua kiểm tra tập trung trên iPad thật. Một chương 30 trang đã hoàn tất OCR mới, dịch qua LM Studio, xóa chữ nền LaMa và lưu đủ ảnh kết quả; chất lượng dịch vẫn phụ thuộc model. Xem số đo và giới hạn trong tài liệu iPad.
 
 ## Dùng LM Studio trên máy khác trong LAN
 
