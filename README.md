@@ -33,7 +33,7 @@ App lấy danh sách ảnh từ trang thực tế thay vì đoán URL `chapter/p
 - Đã build và chạy bản macOS Apple Silicon độc lập; nhập thực tế 32 trang của một chương Rawkuma và hiển thị trong editor.
 - Đã xác minh tải ảnh với User-Agent riêng `Koharu/<version>` và phản hồi HTTP 304 với ETag/Last-Modified. Trong lần kiểm tra này, User-Agent mặc định của Python bị CDN từ chối bằng HTTP 403; không cần sao chép cookie Chrome.
 - 8 kiểm tra backend và 10 kiểm tra component đã qua; frontend build, kiểm tra kiểu và định dạng đã qua.
-- Chưa xác nhận chất lượng/tốc độ Qwen hoặc kết quả hoàn chỉnh của toàn chương; tại thời điểm kiểm tra luồng nhập, app đang tải model cho lần chạy đầu. Chưa kiểm chứng tính năng Rawkuma trên Windows/Linux.
+- Đã hoàn tất lượt dịch lại 28 trang có OCR sẵn trên Mac qua LM Studio trên Windows, với Qwen 3.8 27B Q4 và đích tiếng Việt; bản dịch trả về và hiển thị trực tiếp trong editor. Chưa đánh giá thủ công độ chính xác của toàn chương hoặc benchmark tốc độ. Chưa kiểm chứng app Rawkuma chạy trực tiếp trên Windows/Linux.
 - Đây là app desktop, chưa có bản iPad/iOS hoặc máy chủ đọc truyện qua trình duyệt. Có thể chuyển kết quả export sang iPad để đọc bằng ứng dụng phù hợp.
 - Phần danh sách/tìm kiếm/thể loại dùng trực tiếp giao diện Rawkuma; chưa có thư viện truyện riêng, tải hàng loạt nhiều chương hay đồng bộ giữa thiết bị. Thay đổi cấu trúc website/CDN có thể cần cập nhật bộ trích ảnh.
 
