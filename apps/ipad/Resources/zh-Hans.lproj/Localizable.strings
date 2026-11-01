@@ -194,3 +194,7 @@
 "Delete all chapters" = "删除所有章节";
 "Delete all saved chapters?" = "删除所有已保存的章节？";
 "Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "原始图片、译文和章节历史将被永久删除。已下载的模型和设置将保留。";
+"Reading" = "阅读";
+"Reading mode" = "阅读模式";
+"Horizontal swipes (default)" = "左右滑动（默认）";
+"Vertical scrolling" = "纵向滚动";

@@ -5,6 +5,9 @@ import Observation
     let disk: LibraryDisk
     var chapters: [Chapter] = []
     var preferences = Preferences()
+    var readingMode = ReadingMode(rawValue: UserDefaults.standard.string(forKey: "readingMode") ?? "horizontal") ?? .horizontal {
+        didSet { UserDefaults.standard.set(readingMode.rawValue, forKey: "readingMode") }
+    }
     // Request sizing is an execution preference, separate from page content/cache.
     var translationBatchSize = min(100, max(1, UserDefaults.standard.object(forKey: "translationBatchSize") as? Int ?? 100)) {
         didSet {

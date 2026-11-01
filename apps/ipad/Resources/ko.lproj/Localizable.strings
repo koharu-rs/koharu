@@ -194,3 +194,7 @@
 "Delete all chapters" = "모든 챕터 삭제";
 "Delete all saved chapters?" = "저장된 모든 챕터를 삭제할까요?";
 "Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "원본 이미지, 번역 및 챕터 기록이 영구적으로 삭제됩니다. 다운로드한 모델과 설정은 유지됩니다.";
+"Reading" = "읽기";
+"Reading mode" = "읽기 방식";
+"Horizontal swipes (default)" = "좌우로 넘기기 (기본값)";
+"Vertical scrolling" = "세로 스크롤";

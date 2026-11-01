@@ -194,3 +194,7 @@
 "Delete all chapters" = "すべてのチャプターを削除";
 "Delete all saved chapters?" = "保存済みのチャプターをすべて削除しますか？";
 "Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "元の画像、翻訳、チャプターの履歴は完全に削除されます。ダウンロード済みのモデルと設定は保持されます。";
+"Reading" = "読書";
+"Reading mode" = "読み方";
+"Horizontal swipes (default)" = "左右スワイプ（初期設定）";
+"Vertical scrolling" = "縦スクロール";

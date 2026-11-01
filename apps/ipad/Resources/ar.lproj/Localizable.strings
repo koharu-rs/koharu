@@ -194,3 +194,7 @@
 "Delete all chapters" = "حذف جميع الفصول";
 "Delete all saved chapters?" = "هل تريد حذف جميع الفصول المحفوظة؟";
 "Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "سيتم حذف الصور الأصلية والترجمات وسجل الفصول نهائيًا. ستبقى النماذج التي تم تنزيلها والإعدادات محفوظة.";
+"Reading" = "القراءة";
+"Reading mode" = "وضع القراءة";
+"Horizontal swipes (default)" = "السحب أفقيًا (افتراضي)";
+"Vertical scrolling" = "التمرير العمودي";

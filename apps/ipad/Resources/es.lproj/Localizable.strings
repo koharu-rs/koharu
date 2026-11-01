@@ -194,3 +194,7 @@
 "Delete all chapters" = "Eliminar todos los capítulos";
 "Delete all saved chapters?" = "¿Eliminar todos los capítulos guardados?";
 "Original images, translations and chapter history will be permanently deleted. Downloaded models and settings are kept." = "Las imágenes originales, las traducciones y el historial de los capítulos se eliminarán permanentemente. Se conservarán los modelos descargados y la configuración.";
+"Reading" = "Lectura";
+"Reading mode" = "Modo de lectura";
+"Horizontal swipes (default)" = "Deslizar horizontalmente (predeterminado)";
+"Vertical scrolling" = "Desplazamiento vertical";

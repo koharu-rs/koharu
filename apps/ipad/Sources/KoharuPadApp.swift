@@ -151,9 +151,13 @@ struct ReaderScreen: View {
                         Toggle(L("Original"), isOn: $original).toggleStyle(.button)
                         Button(L("Edit text"), systemImage: "text.cursor") { editing = true }.disabled(library.busy || page.segments.isEmpty)
                     }.padding(10).background(.bar)
-                    ZoomPage(url: pageURL(page)) { offset in
-                        index = min(chapter.pages.count - 1, max(0, index + offset))
-                    }.id(page.id.uuidString + (original ? "original" : page.rendered ?? "source"))
+                    if library.readingMode == .vertical {
+                        ContinuousReader(urls: chapter.pages.map { pageURL($0) }, index: index) { index = $0 }
+                    } else {
+                        ZoomPage(url: pageURL(page)) { offset in
+                            index = min(chapter.pages.count - 1, max(0, index + offset))
+                        }.id(page.id.uuidString + (original ? "original" : page.rendered ?? "source"))
+                    }
                 }
                 .sheet(isPresented: $editing) { TextEditorScreen(chapterID: chapterID, page: page) }
                 .toolbar {

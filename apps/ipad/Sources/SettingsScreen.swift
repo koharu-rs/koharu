@@ -27,6 +27,11 @@ struct SettingsScreen: View {
                 }
                 Text(L("Interface language changes menus and controls. The translation target is selected separately.")).font(.caption).foregroundStyle(.secondary)
             }
+            Section(L("Reading")) {
+                Picker(L("Reading mode"), selection: $library.readingMode) {
+                    ForEach(ReadingMode.allCases) { Text($0.name).tag($0) }
+                }
+            }
             Section(L("Translation")) {
                 Picker(L("Provider"), selection: $library.preferences.provider) {
                     ForEach(TranslationProvider.allCases) { Text($0.name).tag($0) }
