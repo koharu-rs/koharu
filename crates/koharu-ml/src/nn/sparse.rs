@@ -43,7 +43,7 @@ pub fn embedding<'a, T: Borrow<super::Path<'a>>>(
 
 impl super::Module for Embedding {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        Tensor::f_embedding(
+        Tensor::embedding(
             &self.ws,
             xs,
             self.config.padding_idx,

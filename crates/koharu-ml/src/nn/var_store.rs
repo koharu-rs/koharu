@@ -101,7 +101,7 @@ impl VarStore {
                     )));
                 }
             };
-            variable.f_copy_(&Tensor::f_from_data_size(view.data(), &shape, kind)?)?;
+            variable.copy_(&Tensor::from_data_size(view.data(), &shape, kind)?, false)?;
             unused.remove(name.as_str());
         }
         if !unused.is_empty() {
@@ -166,14 +166,17 @@ impl<'a> Path<'a> {
 
     /// Declares a weight of its own kind, such as an integer buffer.
     pub fn var_with_kind(&self, name: &str, dims: &[i64], kind: Kind) -> Result<Tensor> {
-        self.declare(name, Tensor::f_empty(dims, (kind, self.device()))?)
+        self.declare(
+            name,
+            Tensor::empty_memory_format(dims, (kind, self.device()), None)?,
+        )
     }
 
     /// Declares a buffer a checkpoint may leave out, which then stays zero,
     /// as PyTorch fills in a BatchNorm's missing `num_batches_tracked`.
     pub fn optional_var_with_kind(&self, name: &str, dims: &[i64], kind: Kind) -> Result<()> {
         // The store keeps the buffer; nothing reads it during inference.
-        let _ = self.declare(name, Tensor::f_zeros(dims, (kind, self.device()))?)?;
+        let _ = self.declare(name, Tensor::zeros(dims, (kind, self.device()))?)?;
         self.var_store
             .optional
             .lock()
@@ -188,7 +191,7 @@ impl<'a> Path<'a> {
         if variables.contains_key(&path) {
             return Err(TchError::Convert(format!("`{path}` is declared twice")));
         }
-        let view = tensor.f_alias()?;
+        let view = tensor.alias()?;
         variables.insert(path, tensor);
         Ok(view)
     }

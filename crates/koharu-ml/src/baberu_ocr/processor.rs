@@ -52,12 +52,12 @@ impl BaberuImageProcessor {
             config.image_std.iter().all(|value| *value != 0.0),
             "Baberu OCR image standard deviation contains zero"
         );
-        let mean = Tensor::f_from_slice(&config.image_mean)?
-            .f_view([1, 3, 1, 1])?
-            .f_to_device(device)?;
-        let std = Tensor::f_from_slice(&config.image_std)?
-            .f_view([1, 3, 1, 1])?
-            .f_to_device(device)?;
+        let mean = Tensor::from_slice(&config.image_mean)?
+            .view([1, 3, 1, 1])?
+            .to(device)?;
+        let std = Tensor::from_slice(&config.image_std)?
+            .view([1, 3, 1, 1])?
+            .to(device)?;
         Ok(Self {
             size: size as u32,
             do_normalize: config.do_normalize,
@@ -89,16 +89,16 @@ impl BaberuImageProcessor {
         } else {
             crate::image::resize(&image, self.size, self.size, RESIZE)?
         };
-        let mut pixel_values = Tensor::f_from_slice(image.as_raw())?
-            .f_view([1, i64::from(self.size), i64::from(self.size), 3])?
-            .f_permute([0, 3, 1, 2])?
-            .f_to_device(self.device)?
-            .f_to_kind(Kind::Float)?;
+        let mut pixel_values = Tensor::from_slice(image.as_raw())?
+            .view([1, i64::from(self.size), i64::from(self.size), 3])?
+            .permute([0, 3, 1, 2])?
+            .to(self.device)?
+            .to_kind(Kind::Float)?;
         if self.do_rescale {
-            pixel_values = pixel_values.f_mul_scalar(self.rescale_factor)?;
+            pixel_values = pixel_values.mul_scalar(self.rescale_factor)?;
         }
         if self.do_normalize {
-            pixel_values = (pixel_values.f_sub(&self.mean)?).f_div(&self.std)?;
+            pixel_values = (pixel_values.sub_tensor(&self.mean, 1)?).div_tensor(&self.std)?;
         }
         Ok(pixel_values)
     }

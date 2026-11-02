@@ -1,2 +1,2 @@
-#include "torch_api.h"
-#include "torch_api_generated.h"
+#include "koharu_torch.h"
+#include "koharu_torch_aten.h"
