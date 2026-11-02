@@ -1,5 +1,20 @@
 //! Devices on which tensor computations are run.
 
+use koharu_torch_sys::{
+    koharu_torch_accelerator, koharu_torch_has, koharu_torch_set_setting, koharu_torch_setting,
+    koharu_torch_synchronize, KoharuTorchSetting, KOHARU_TORCH_CUDNN_BENCHMARK,
+    KOHARU_TORCH_CUDNN_ENABLED, KOHARU_TORCH_HAS_CUDNN,
+};
+
+use super::utils::check;
+use crate::{Result, TchError};
+
+/// c10::DeviceType's values for the devices Koharu runs on. A HIP build of
+/// libtorch reports its GPUs as CUDA ones.
+const CPU: i32 = 0;
+const CUDA: i32 = 1;
+const MPS: i32 = 13;
+
 /// A torch device.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Device {
@@ -9,68 +24,54 @@ pub enum Device {
     Cuda(usize),
     /// The main MPS device.
     Mps,
-    /// The main Vulkan device.
-    Vulkan,
 }
 
 /// Cuda related helper functions.
 pub enum Cuda {}
+
 impl Cuda {
     /// Returns the number of CUDA devices available.
     pub fn device_count() -> i64 {
-        let res = unsafe_torch!(koharu_torch_sys::cuda::atc_cuda_device_count());
-        i64::from(res)
+        let (mut device_type, mut count) = (0, 0);
+        check(unsafe { koharu_torch_accelerator(&mut device_type, &mut count) })
+            .expect("libtorch reports its accelerator");
+        if device_type == CUDA {
+            i64::from(count)
+        } else {
+            0
+        }
     }
 
     /// Returns true if at least one CUDA device is available.
     pub fn is_available() -> bool {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_cuda_is_available()) != 0
+        Cuda::device_count() > 0
     }
 
     /// Returns true if CUDA is available, and CuDNN is available.
     pub fn cudnn_is_available() -> bool {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_cudnn_is_available()) != 0
-    }
-
-    /// Sets the seed for the current GPU.
-    ///
-    /// # Arguments
-    ///
-    /// * `seed` - An unsigned 64bit int to be used as seed.
-    pub fn manual_seed(seed: u64) {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_manual_seed(seed));
-    }
-
-    /// Sets the seed for all available GPUs.
-    ///
-    /// # Arguments
-    ///
-    /// * `seed` - An unsigned 64bit int to be used as seed.
-    pub fn manual_seed_all(seed: u64) {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_manual_seed_all(seed));
+        let mut has = false;
+        check(unsafe { koharu_torch_has(KOHARU_TORCH_HAS_CUDNN, &mut has) })
+            .expect("libtorch reports its features");
+        Cuda::is_available() && has
     }
 
     /// Waits for all kernels in all streams on a CUDA device to complete.
-    ///
-    /// # Arguments
-    ///
-    /// * `device_index` - A signed 64bit int to indice which device to wait for.
-    pub fn synchronize(device_index: i64) {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_synchronize(device_index));
+    pub fn synchronize(device_index: i64) -> Result<()> {
+        let index = i32::try_from(device_index)
+            .map_err(|_| TchError::Convert(format!("no device {device_index}")))?;
+        check(unsafe { koharu_torch_synchronize(index) })
     }
 
     /// Returns true if cudnn is enabled by the user.
     ///
     /// This does not indicate whether cudnn is actually usable.
     pub fn user_enabled_cudnn() -> bool {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_user_enabled_cudnn()) != 0
+        setting(KOHARU_TORCH_CUDNN_ENABLED) != 0
     }
 
     /// Enable or disable cudnn.
     pub fn set_user_enabled_cudnn(b: bool) {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_set_user_enabled_cudnn(
-            i32::from(b)
-        ))
+        set_setting(KOHARU_TORCH_CUDNN_ENABLED, i64::from(b))
     }
 
     /// Sets cudnn benchmark mode.
@@ -80,29 +81,38 @@ impl Cuda {
     /// in the following runs. This can result in significant performance
     /// improvements.
     pub fn cudnn_set_benchmark(b: bool) {
-        unsafe_torch!(koharu_torch_sys::cuda::atc_set_benchmark_cudnn(i32::from(
-            b
-        )))
+        set_setting(KOHARU_TORCH_CUDNN_BENCHMARK, i64::from(b))
     }
 }
 
+fn setting(setting: KoharuTorchSetting) -> i64 {
+    let mut value = 0;
+    check(unsafe { koharu_torch_setting(setting, &mut value) }).expect("libtorch has the setting");
+    value
+}
+
+fn set_setting(setting: KoharuTorchSetting, value: i64) {
+    check(unsafe { koharu_torch_set_setting(setting, value) }).expect("libtorch has the setting")
+}
+
 impl Device {
-    pub(super) fn c_int(self) -> libc::c_int {
+    /// The c10::DeviceType and index libtorch's C functions take.
+    pub(crate) fn c_parts(self) -> (i32, i32) {
         match self {
-            Device::Cpu => -1,
-            Device::Cuda(device_index) => device_index as libc::c_int,
-            Device::Mps => -2,
-            Device::Vulkan => -3,
+            Device::Cpu => (CPU, -1),
+            Device::Cuda(index) => (CUDA, index as i32),
+            Device::Mps => (MPS, -1),
         }
     }
 
-    pub(super) fn from_c_int(v: libc::c_int) -> Self {
-        match v {
-            -1 => Device::Cpu,
-            -2 => Device::Mps,
-            -3 => Device::Vulkan,
-            index if index >= 0 => Device::Cuda(index as usize),
-            _ => panic!("unexpected device {v}"),
+    pub(crate) fn from_c_parts(device_type: i32, index: i32) -> Result<Device> {
+        match device_type {
+            CPU => Ok(Device::Cpu),
+            CUDA => Ok(Device::Cuda(usize::try_from(index).unwrap_or(0))),
+            MPS => Ok(Device::Mps),
+            _ => Err(TchError::Convert(format!(
+                "unsupported device type {device_type}"
+            ))),
         }
     }
 
@@ -118,7 +128,7 @@ impl Device {
     pub fn is_cuda(self) -> bool {
         match self {
             Device::Cuda(_) => true,
-            Device::Cpu | Device::Mps | Device::Vulkan => false,
+            Device::Cpu | Device::Mps => false,
         }
     }
 }

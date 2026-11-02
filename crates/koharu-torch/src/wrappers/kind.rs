@@ -29,7 +29,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub(super) fn c_int(self) -> libc::c_int {
+    pub(crate) fn c_int(self) -> i32 {
         // These values should be in sync with include/c10/core/ScalarType.h
         // https://github.com/pytorch/pytorch/blob/a8d6afb511a69687bbb2b7e88a3cf67917e1697e/c10/core/ScalarType.h#L57
         match self {
@@ -56,7 +56,7 @@ impl Kind {
         }
     }
 
-    pub(super) fn from_c_int(v: libc::c_int) -> Result<Kind, crate::TchError> {
+    pub(crate) fn from_c_int(v: i32) -> Result<Kind, crate::TchError> {
         match v {
             0 => Ok(Kind::Uint8),
             1 => Ok(Kind::Int8),

@@ -130,11 +130,11 @@ pub(super) fn crop_box(
 
 pub(super) fn post_process(tensor: &Tensor, width: u32, height: u32) -> Result<RgbImage> {
     let tensor = tensor
-        .f_squeeze_dim(0)?
-        .f_permute([1, 2, 0])?
-        .f_contiguous()?
-        .f_to_device(Device::Cpu)?
-        .f_view([-1])?;
+        .squeeze_dim(0)?
+        .permute([1, 2, 0])?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .to(Device::Cpu)?
+        .view([-1])?;
     let rgb = Vec::<u8>::try_from(&tensor)?;
     RgbImage::from_raw(width, height, rgb).context("failed to convert LaMa tensor to RGB image")
 }
@@ -147,8 +147,8 @@ pub(super) fn pad_img_to_modulo(tensor: Tensor, modulo: u32) -> Result<Tensor> {
     let height_indices = symmetric_indices(height, out_height, tensor.device())?;
     let width_indices = symmetric_indices(width, out_width, tensor.device())?;
     Ok(tensor
-        .f_index_select(2, &height_indices)?
-        .f_index_select(3, &width_indices)?)
+        .index_select(2, &height_indices)?
+        .index_select(3, &width_indices)?)
 }
 
 fn ceil_modulo(value: u32, modulo: u32) -> u32 {
@@ -164,18 +164,15 @@ fn symmetric_indices(length: u32, output_length: u32, device: Device) -> Result<
         let indices = (0..output_length)
             .map(|index| i64::from(crate::image::symmetric_index(index, length)))
             .collect::<Vec<_>>();
-        return Ok(Tensor::f_from_slice(&indices)?.f_to_device(device)?);
+        return Ok(Tensor::from_slice(&indices)?.to(device)?);
     }
     let length = i64::from(length);
     let period = length * 2;
-    let indices = Tensor::f_arange(i64::from(output_length), (Kind::Int64, device))?;
-    let indices = indices.f_sub(
-        &indices
-            .f_floor_divide_scalar(period)?
-            .f_mul_scalar(period)?,
-    )?;
-    Ok(indices.f_where_self(
-        &indices.f_lt(length)?,
-        &indices.f_sub_scalar(period)?.f_neg()?.f_sub_scalar(1)?,
+    let indices = Tensor::arange(i64::from(output_length), (Kind::Int64, device))?;
+    let indices =
+        indices.sub_tensor(&indices.floor_divide_scalar(period)?.mul_scalar(period)?, 1)?;
+    Ok(indices.where_self(
+        &indices.lt_scalar(length)?,
+        &indices.sub_scalar(period, 1)?.neg()?.sub_scalar(1, 1)?,
     )?)
 }

@@ -105,12 +105,21 @@ pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
     for library in libraries(backend).context("libtorch has no build for this backend")? {
         preload(&folder.join(library), false)?;
     }
-    koharu_torch_sys::load(&[&folder.join(shim())])?;
-    koharu_torch_sys::io::register_callbacks();
+    // libtorch's own C functions for the shim's tensors live in torch_cpu.
+    koharu_torch_sys::load(&[
+        &folder.join(shim()),
+        &folder.join(libloading::library_filename("torch_cpu")),
+    ])?;
     // libtorch's cuDNN switch also turns MIOpen on and off; MIOpen isn't
     // reliable on Windows. Set once, before any model runs.
     let cudnn = !(cfg!(windows) && matches!(backend, Backend::Rocm { .. }));
-    unsafe { koharu_torch_sys::cuda::atc_set_user_enabled_cudnn(i32::from(cudnn)) };
+    let error = unsafe {
+        koharu_torch_sys::koharu_torch_set_setting(
+            koharu_torch_sys::KOHARU_TORCH_CUDNN_ENABLED,
+            i64::from(cudnn),
+        )
+    };
+    anyhow::ensure!(error == 0, "libtorch has no cuDNN setting");
     Ok(())
 }
 

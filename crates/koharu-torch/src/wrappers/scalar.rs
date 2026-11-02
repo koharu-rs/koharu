@@ -1,112 +1,79 @@
 //! Scalar elements.
 
-use crate::TchError;
+use koharu_torch_sys::{
+    KoharuTorchScalar, KoharuTorchScalar__bindgen_ty_1,
+    KoharuTorchScalar__bindgen_ty_1__bindgen_ty_1, KOHARU_TORCH_SCALAR_BOOL,
+    KOHARU_TORCH_SCALAR_COMPLEX, KOHARU_TORCH_SCALAR_FLOAT, KOHARU_TORCH_SCALAR_INT,
+};
 
-/// A single scalar value.
-pub struct Scalar {
-    pub(super) c_scalar: *mut koharu_torch_sys::C_scalar,
+use crate::{Result, TchError};
+
+/// A single scalar value, of the type ATen's type promotion reads: an
+/// integer added to an integer tensor keeps it an integer tensor.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Scalar {
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Complex { real: f64, imag: f64 },
 }
 
 impl Scalar {
-    /// Creates an integer scalar.
-    pub fn int(v: i64) -> Scalar {
-        let c_scalar = unsafe_torch!(koharu_torch_sys::ats_int(v));
-        Scalar { c_scalar }
+    pub(crate) fn c_scalar(self) -> KoharuTorchScalar {
+        let (type_, value) = match self {
+            Scalar::Bool(b) => (
+                KOHARU_TORCH_SCALAR_BOOL,
+                KoharuTorchScalar__bindgen_ty_1 { b },
+            ),
+            Scalar::Int(i) => (
+                KOHARU_TORCH_SCALAR_INT,
+                KoharuTorchScalar__bindgen_ty_1 { i },
+            ),
+            Scalar::Float(f) => (
+                KOHARU_TORCH_SCALAR_FLOAT,
+                KoharuTorchScalar__bindgen_ty_1 { f },
+            ),
+            Scalar::Complex { real, imag } => (
+                KOHARU_TORCH_SCALAR_COMPLEX,
+                KoharuTorchScalar__bindgen_ty_1 {
+                    c: KoharuTorchScalar__bindgen_ty_1__bindgen_ty_1 { real, imag },
+                },
+            ),
+        };
+        KoharuTorchScalar { type_, value }
     }
 
-    /// Creates a float scalar scalar.
-    pub fn float(v: f64) -> Scalar {
-        let c_scalar = unsafe_torch!(koharu_torch_sys::ats_float(v));
-        Scalar { c_scalar }
-    }
-
-    /// Returns an integer value.
-    pub fn to_int(&self) -> Result<i64, TchError> {
-        let i = unsafe_torch_err!(koharu_torch_sys::ats_to_int(self.c_scalar));
-        Ok(i)
-    }
-
-    /// Returns a float value.
-    pub fn to_float(&self) -> Result<f64, TchError> {
-        let f = unsafe_torch_err!(koharu_torch_sys::ats_to_float(self.c_scalar));
-        Ok(f)
-    }
-
-    /// Returns a string representation of the scalar.
-    pub fn to_string(&self) -> Result<String, TchError> {
-        let s = unsafe_torch_err!({
-            super::utils::ptr_to_string(koharu_torch_sys::ats_to_string(self.c_scalar))
-        });
-        match s {
-            None => Err(TchError::Kind("nullptr representation".to_string())),
-            Some(s) => Ok(s),
+    pub(crate) fn from_c_scalar(scalar: KoharuTorchScalar) -> Result<Scalar> {
+        // The tag says which field the shim wrote.
+        unsafe {
+            Ok(match scalar.type_ {
+                KOHARU_TORCH_SCALAR_BOOL => Scalar::Bool(scalar.value.b),
+                KOHARU_TORCH_SCALAR_INT => Scalar::Int(scalar.value.i),
+                KOHARU_TORCH_SCALAR_FLOAT => Scalar::Float(scalar.value.f),
+                KOHARU_TORCH_SCALAR_COMPLEX => Scalar::Complex {
+                    real: scalar.value.c.real,
+                    imag: scalar.value.c.imag,
+                },
+                tag => return Err(TchError::Convert(format!("a scalar of unknown type {tag}"))),
+            })
         }
     }
 }
 
-impl std::fmt::Debug for Scalar {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self.to_string() {
-            Err(_) => write!(f, "err"),
-            Ok(s) => write!(f, "scalar<{s}>"),
-        }
-    }
-}
-
-impl Drop for Scalar {
-    fn drop(&mut self) {
-        unsafe_torch!(koharu_torch_sys::ats_free(self.c_scalar))
+impl From<bool> for Scalar {
+    fn from(v: bool) -> Scalar {
+        Scalar::Bool(v)
     }
 }
 
 impl From<i64> for Scalar {
     fn from(v: i64) -> Scalar {
-        Scalar::int(v)
+        Scalar::Int(v)
     }
 }
 
 impl From<f64> for Scalar {
     fn from(v: f64) -> Scalar {
-        Scalar::float(v)
-    }
-}
-
-impl From<Scalar> for i64 {
-    fn from(s: Scalar) -> i64 {
-        Self::from(&s)
-    }
-}
-
-impl From<Scalar> for f64 {
-    fn from(s: Scalar) -> f64 {
-        Self::from(&s)
-    }
-}
-
-impl From<&Scalar> for i64 {
-    fn from(s: &Scalar) -> i64 {
-        s.to_int().unwrap()
-    }
-}
-
-impl From<&Scalar> for f64 {
-    fn from(s: &Scalar) -> f64 {
-        s.to_float().unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Scalar;
-    #[test]
-    #[ignore = "requires the dynamically loaded LibTorch runtime"]
-    fn scalar() {
-        let pi = Scalar::float(std::f64::consts::PI);
-        assert_eq!(i64::from(&pi), 3);
-        assert_eq!(f64::from(&pi), std::f64::consts::PI);
-        let leet = Scalar::int(1337);
-        assert_eq!(i64::from(&leet), 1337);
-        assert_eq!(f64::from(&leet), 1337.);
-        assert_eq!(&format!("{pi:?}"), "scalar<3.14159>");
+        Scalar::Float(v)
     }
 }

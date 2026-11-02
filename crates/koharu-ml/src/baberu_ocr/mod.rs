@@ -94,7 +94,7 @@ impl BaberuOcr {
                 .map(|image| self.processor.preprocess(image))
                 .collect::<Result<Vec<_>>>()?;
             let token_ids = self.model.forward(
-                &Tensor::f_cat(&pixel_values, 0)?,
+                &Tensor::cat(&pixel_values, 0)?,
                 &self.tokenizer,
                 self.generation.max_new_tokens,
                 self.generation.repetition_penalty,

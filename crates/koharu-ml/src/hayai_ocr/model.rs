@@ -51,12 +51,12 @@ impl Model {
         // every decoding step. Visual tokens receive their own 2D frequencies
         // per spatial shape, computed during generation.
         let inv_freq = inverse_frequencies(decoder::HEAD_DIM / 2, decoder::ROPE_THETA, device)?;
-        let positions = Tensor::f_arange(MAX_NEW_TOKENS + 1, (Kind::Float, device))?
-            .f_unsqueeze(1)?
-            .f_matmul(&inv_freq.f_unsqueeze(0)?)?;
-        let angles = Tensor::f_cat(&[positions.f_alias()?, positions], -1)?;
-        let text_rope_cos = angles.f_cos()?;
-        let text_rope_sin = angles.f_sin()?;
+        let positions = Tensor::arange(MAX_NEW_TOKENS + 1, (Kind::Float, device))?
+            .unsqueeze(1)?
+            .matmul(&inv_freq.unsqueeze(0)?)?;
+        let angles = Tensor::cat(&[positions.alias()?, positions], -1)?;
+        let text_rope_cos = angles.cos()?;
+        let text_rope_sin = angles.sin()?;
 
         Ok(Self {
             vs,
@@ -93,18 +93,18 @@ impl Model {
                 siglip2::MAX_NUM_PATCHES
             );
         }
-        let pixel_values = Tensor::f_cat(
+        let pixel_values = Tensor::cat(
             &inputs
                 .iter()
-                .map(|input| input.pixel_values.f_alias())
+                .map(|input| input.pixel_values.alias())
                 .collect::<koharu_torch::Result<Vec<_>>>()?,
             0,
         )?
-        .f_to_kind(kind)?;
-        let attention_mask = Tensor::f_cat(
+        .to_kind(kind)?;
+        let attention_mask = Tensor::cat(
             &inputs
                 .iter()
-                .map(|input| input.attention_mask.f_alias())
+                .map(|input| input.attention_mask.alias())
                 .collect::<koharu_torch::Result<Vec<_>>>()?,
             0,
         )?;
@@ -124,8 +124,8 @@ impl Model {
             .projector
             .forward(&visual_features, &spatial_shapes)?;
 
-        let bos = Tensor::f_full([rows as i64, 1], self.bos_token_id, (Kind::Int64, device))?;
-        let mut hidden = Tensor::f_cat(
+        let bos = Tensor::full([rows as i64, 1], self.bos_token_id, (Kind::Int64, device))?;
+        let mut hidden = Tensor::cat(
             &[
                 vision_embeddings,
                 self.decoder.token_embeddings.forward(&bos)?,
@@ -137,22 +137,22 @@ impl Model {
         let total_length = m_vision + 1;
         // Block-causal prefill mask: bidirectional across visual tokens, causal
         // onto the text token (upstream `generate_block_causal_mask`).
-        let text_future = Tensor::f_cat(
+        let text_future = Tensor::cat(
             &[
-                Tensor::f_full([m_vision, 1], f64::NEG_INFINITY, (kind, device))?,
-                Tensor::f_zeros([1, 1], (kind, device))?,
+                Tensor::full([m_vision, 1], f64::NEG_INFINITY, (kind, device))?,
+                Tensor::zeros([1, 1], (kind, device))?,
             ],
             0,
         )?;
-        let prefill_mask = Tensor::f_cat(
+        let prefill_mask = Tensor::cat(
             &[
-                Tensor::f_zeros([total_length, m_vision], (kind, device))?,
+                Tensor::zeros([total_length, m_vision], (kind, device))?,
                 text_future,
             ],
             1,
         )?
-        .f_unsqueeze(0)?
-        .f_unsqueeze(0)?;
+        .unsqueeze(0)?
+        .unsqueeze(0)?;
 
         // Tokens past a crop's own merged grid only pad the batch; upstream
         // masks them as keys in prefill and in every decoding step.
@@ -164,9 +164,9 @@ impl Model {
             .collect::<Vec<_>>();
         let vision_key_mask = if vision_keys.contains(&0) {
             Some(additive_mask(
-                &Tensor::f_from_slice(&vision_keys)?
-                    .f_view([rows as i64, m_vision])?
-                    .f_to_device(device)?,
+                &Tensor::from_slice(&vision_keys)?
+                    .view([rows as i64, m_vision])?
+                    .to(device)?,
                 kind,
             )?)
         } else {
@@ -176,10 +176,10 @@ impl Model {
             vision_key_mask
                 .as_ref()
                 .map(|vision| {
-                    Tensor::f_cat(
+                    Tensor::cat(
                         &[
-                            vision.f_alias()?,
-                            Tensor::f_zeros([rows as i64, 1, 1, text_keys], (kind, device))?,
+                            vision.alias()?,
+                            Tensor::zeros([rows as i64, 1, 1, text_keys], (kind, device))?,
                         ],
                         3,
                     )
@@ -187,7 +187,7 @@ impl Model {
                 .transpose()
         };
         let prefill_mask = match key_mask(1)? {
-            Some(keys) => prefill_mask.f_add(&keys)?,
+            Some(keys) => prefill_mask.add_tensor(&keys, 1)?,
             None => prefill_mask,
         };
 
@@ -200,33 +200,25 @@ impl Model {
             let (visual_cos, visual_sin) = self.visual_rope(patch_height, patch_width)?;
             let padding_rows = m_vision - patch_height * patch_width;
             let rope_device = self.text_rope_cos.device();
-            let padding_cos = Tensor::f_ones(
+            let padding_cos = Tensor::ones(
                 [padding_rows, decoder::HEAD_DIM / 2],
                 (Kind::Float, rope_device),
             )?;
-            let padding_sin = Tensor::f_zeros(
+            let padding_sin = Tensor::zeros(
                 [padding_rows, decoder::HEAD_DIM / 2],
                 (Kind::Float, rope_device),
             )?;
-            cos.push(Tensor::f_cat(
-                &[
-                    visual_cos,
-                    padding_cos,
-                    self.text_rope_cos.f_narrow(0, 0, 1)?,
-                ],
+            cos.push(Tensor::cat(
+                &[visual_cos, padding_cos, self.text_rope_cos.narrow(0, 0, 1)?],
                 0,
             )?);
-            sin.push(Tensor::f_cat(
-                &[
-                    visual_sin,
-                    padding_sin,
-                    self.text_rope_sin.f_narrow(0, 0, 1)?,
-                ],
+            sin.push(Tensor::cat(
+                &[visual_sin, padding_sin, self.text_rope_sin.narrow(0, 0, 1)?],
                 0,
             )?);
         }
-        let cos = Tensor::f_stack(&cos, 0)?;
-        let sin = Tensor::f_stack(&sin, 0)?;
+        let cos = Tensor::stack(&cos, 0)?;
+        let sin = Tensor::stack(&sin, 0)?;
 
         let mut caches: Vec<LayerCache> = Vec::with_capacity(self.decoder.layers.len());
         for index in 0..self.decoder.layers.len() {
@@ -242,7 +234,7 @@ impl Model {
         let logits = self.decoder.logits(&hidden)?;
 
         let stops = |token: i64| token == self.eos_token_id || token == tokenizer.pad_token_id();
-        let first_tokens = Vec::<i64>::try_from(logits.f_argmax(-1, false)?)?;
+        let first_tokens = Vec::<i64>::try_from(logits.argmax(-1, false)?)?;
         let mut finished = first_tokens
             .iter()
             .map(|&token| stops(token))
@@ -262,12 +254,12 @@ impl Model {
                 .iter()
                 .map(|tokens| tokens.last().copied().unwrap_or(self.eos_token_id))
                 .collect::<Vec<_>>();
-            let current_input = Tensor::f_from_slice(&current)?
-                .f_view([rows as i64, 1])?
-                .f_to_device(device)?;
+            let current_input = Tensor::from_slice(&current)?
+                .view([rows as i64, 1])?
+                .to(device)?;
             let embedding = self.decoder.token_embeddings.forward(&current_input)?;
-            let cos_step = self.text_rope_cos.f_narrow(0, step, 1)?.f_unsqueeze(0)?;
-            let sin_step = self.text_rope_sin.f_narrow(0, step, 1)?.f_unsqueeze(0)?;
+            let cos_step = self.text_rope_cos.narrow(0, step, 1)?.unsqueeze(0)?;
+            let sin_step = self.text_rope_sin.narrow(0, step, 1)?.unsqueeze(0)?;
             hidden = embedding;
             let step_mask = key_mask(step + 1)?;
             for (index, layer) in self.decoder.layers.iter().enumerate() {
@@ -281,7 +273,7 @@ impl Model {
                 hidden = next_hidden_states;
             }
             let step_logits = self.decoder.logits(&hidden)?;
-            let next_tokens = Vec::<i64>::try_from(step_logits.f_argmax(-1, false)?)?;
+            let next_tokens = Vec::<i64>::try_from(step_logits.argmax(-1, false)?)?;
             for (row, &next_token) in next_tokens.iter().enumerate() {
                 if finished[row] {
                     continue;
@@ -302,29 +294,25 @@ impl Model {
     fn visual_rope(&self, height: i64, width: i64) -> koharu_torch::Result<(Tensor, Tensor)> {
         let device = self.text_rope_cos.device();
         let inv_freq = inverse_frequencies(decoder::HEAD_DIM / 2, decoder::ROPE_THETA, device)?;
-        let grid_y = Tensor::f_arange(height, (Kind::Float, device))?
-            .f_unsqueeze(1)?
-            .f_matmul(&inv_freq.f_unsqueeze(0)?)?;
-        let grid_x = Tensor::f_arange(width, (Kind::Float, device))?
-            .f_unsqueeze(1)?
-            .f_matmul(&inv_freq.f_unsqueeze(0)?)?;
-        let grid_y = grid_y
-            .f_unsqueeze(1)?
-            .f_expand([height, width, -1], false)?;
-        let grid_x = grid_x
-            .f_unsqueeze(0)?
-            .f_expand([height, width, -1], false)?;
-        let angles = Tensor::f_cat(&[grid_y, grid_x], -1)?.f_flatten(0, 1)?;
-        Ok((angles.f_cos()?, angles.f_sin()?))
+        let grid_y = Tensor::arange(height, (Kind::Float, device))?
+            .unsqueeze(1)?
+            .matmul(&inv_freq.unsqueeze(0)?)?;
+        let grid_x = Tensor::arange(width, (Kind::Float, device))?
+            .unsqueeze(1)?
+            .matmul(&inv_freq.unsqueeze(0)?)?;
+        let grid_y = grid_y.unsqueeze(1)?.expand([height, width, -1], false)?;
+        let grid_x = grid_x.unsqueeze(0)?.expand([height, width, -1], false)?;
+        let angles = Tensor::cat(&[grid_y, grid_x], -1)?.flatten_using_ints(0, 1)?;
+        Ok((angles.cos()?, angles.sin()?))
     }
 }
 
 fn inverse_frequencies(d_axis: i64, theta: f64, device: Device) -> koharu_torch::Result<Tensor> {
-    let dimensions = Tensor::f_arange_start_step(0, d_axis, 2, (Kind::Float, device))?;
-    (dimensions.f_div_scalar(d_axis as f64)?)
-        .f_mul_scalar(theta.ln())?
-        .f_exp()?
-        .f_reciprocal()
+    let dimensions = Tensor::arange_start_step(0, d_axis, 2, (Kind::Float, device))?;
+    (dimensions.div_scalar(d_axis as f64)?)
+        .mul_scalar(theta.ln())?
+        .exp()?
+        .reciprocal()
 }
 
 /// Applies an interleaved (even/odd pairs) rotary embedding over the last
@@ -343,28 +331,28 @@ fn apply_rotary_emb(
     let last = pairs_shape.len() - 1;
     pairs_shape[last] = d_axis;
     pairs_shape.push(2);
-    let cos = angles_cos.f_unsqueeze(2)?;
-    let sin = angles_sin.f_unsqueeze(2)?;
-    let x = x.f_to_kind(Kind::Float)?;
-    let pairs = x.f_reshape(&pairs_shape)?;
-    let even = pairs.f_select(-1, 0)?;
-    let odd = pairs.f_select(-1, 1)?;
-    let rotated_even = (even.f_mul(&cos)?).f_sub(&odd.f_mul(&sin)?)?;
-    let rotated_odd = (even.f_mul(&sin)?).f_add(&odd.f_mul(&cos)?)?;
-    Tensor::f_stack(&[rotated_even, rotated_odd], -1)?
-        .f_reshape(&original_size)?
-        .f_to_kind(original_kind)
+    let cos = angles_cos.unsqueeze(2)?;
+    let sin = angles_sin.unsqueeze(2)?;
+    let x = x.to_kind(Kind::Float)?;
+    let pairs = x.reshape(&pairs_shape)?;
+    let even = pairs.select_int(-1, 0)?;
+    let odd = pairs.select_int(-1, 1)?;
+    let rotated_even = (even.mul_tensor(&cos)?).sub_tensor(&odd.mul_tensor(&sin)?, 1)?;
+    let rotated_odd = (even.mul_tensor(&sin)?).add_tensor(&odd.mul_tensor(&cos)?, 1)?;
+    Tensor::stack(&[rotated_even, rotated_odd], -1)?
+        .reshape(&original_size)?
+        .to_kind(original_kind)
 }
 
 /// Converts a `[batch, keys]` padding mask into an additive SDPA bias,
 /// `[batch, 1, 1, keys]`, where `0` entries become forbidden keys.
 fn additive_mask(mask: &Tensor, kind: Kind) -> koharu_torch::Result<Tensor> {
-    mask.f_lt(0.5)?
-        .f_to_kind(Kind::Float)?
-        .f_mul_scalar(f32::MIN as f64)?
-        .f_to_kind(kind)?
-        .f_unsqueeze(1)?
-        .f_unsqueeze(1)
+    mask.lt_scalar(0.5)?
+        .to_kind(Kind::Float)?
+        .mul_scalar(f32::MIN as f64)?
+        .to_kind(kind)?
+        .unsqueeze(1)?
+        .unsqueeze(1)
 }
 
 #[derive(Debug)]
@@ -485,7 +473,7 @@ impl VisionEmbeddings {
             .iter()
             .map(|&[height, width]| self.position_embeddings(height, width))
             .collect::<koharu_torch::Result<Vec<_>>>()?;
-        patch_embeds.f_add(&Tensor::f_stack(&position_embeddings, 0)?)
+        patch_embeds.add_tensor(&Tensor::stack(&position_embeddings, 0)?, 1)
     }
 
     fn position_embeddings(&self, height: i64, width: i64) -> koharu_torch::Result<Tensor> {
@@ -495,24 +483,24 @@ impl VisionEmbeddings {
         let position_embeddings = self
             .position_embedding
             .ws
-            .f_reshape([size, size, siglip2::HIDDEN_SIZE])?
-            .f_permute([2, 0, 1])?
-            .f_unsqueeze(0)?
-            .f_to_kind(Kind::Float)?
-            .f_internal_upsample_bilinear2d_aa([height, width], false, None::<f64>, None::<f64>)?
-            .f_to_kind(self.position_embedding.ws.kind())?
-            .f_reshape([siglip2::HIDDEN_SIZE, height * width])?
-            .f_transpose(0, 1)?;
+            .reshape([size, size, siglip2::HIDDEN_SIZE])?
+            .permute([2, 0, 1])?
+            .unsqueeze(0)?
+            .to_kind(Kind::Float)?
+            .internal_upsample_bilinear2d_aa([height, width], false, None::<f64>, None::<f64>)?
+            .to_kind(self.position_embedding.ws.kind())?
+            .reshape([siglip2::HIDDEN_SIZE, height * width])?
+            .transpose_int(0, 1)?;
         // The upstream resize pads its output buffer to the full patch budget
         // by repeating the first row, matching the zero-padded pixel values.
         let num_patches = height * width;
         let max_patches = siglip2::MAX_NUM_PATCHES as i64;
         if num_patches < max_patches {
-            let first_row = position_embeddings.f_select(0, 0)?.f_unsqueeze(0)?;
-            Tensor::f_cat(
+            let first_row = position_embeddings.select_int(0, 0)?.unsqueeze(0)?;
+            Tensor::cat(
                 &[
                     position_embeddings,
-                    first_row.f_expand([max_patches - num_patches, -1], false)?,
+                    first_row.expand([max_patches - num_patches, -1], false)?,
                 ],
                 0,
             )
@@ -562,11 +550,12 @@ impl VisionEncoderLayer {
         let attended = self
             .attention
             .forward(&self.layer_norm1.forward(hidden_states)?, attention_mask)?;
-        let hidden_states = hidden_states.f_add(&attended)?;
-        hidden_states.f_add(
+        let hidden_states = hidden_states.add_tensor(&attended, 1)?;
+        hidden_states.add_tensor(
             &self
                 .mlp
                 .forward(&self.layer_norm2.forward(&hidden_states)?)?,
+            1,
         )
     }
 }
@@ -624,19 +613,19 @@ impl VisionAttention {
         let query = self
             .query
             .forward(hidden_states)?
-            .f_view(shape)?
-            .f_transpose(1, 2)?;
+            .view(shape)?
+            .transpose_int(1, 2)?;
         let key = self
             .key
             .forward(hidden_states)?
-            .f_view(shape)?
-            .f_transpose(1, 2)?;
+            .view(shape)?
+            .transpose_int(1, 2)?;
         let value = self
             .value
             .forward(hidden_states)?
-            .f_view(shape)?
-            .f_transpose(1, 2)?;
-        let attended = Tensor::f_scaled_dot_product_attention(
+            .view(shape)?
+            .transpose_int(1, 2)?;
+        let attended = Tensor::scaled_dot_product_attention(
             &query,
             &key,
             &value,
@@ -646,9 +635,9 @@ impl VisionAttention {
             (self.head_dim as f64).powf(-0.5),
             false,
         )?
-        .f_transpose(1, 2)?
-        .f_contiguous()?
-        .f_reshape([batch_size, sequence_length, self.num_heads * self.head_dim])?;
+        .transpose_int(1, 2)?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .reshape([batch_size, sequence_length, self.num_heads * self.head_dim])?;
         self.output.forward(&attended)
     }
 }
@@ -680,7 +669,7 @@ impl VisionMlp {
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         // Upstream activation is `gelu_pytorch_tanh`.
         self.fc2
-            .forward(&self.fc1.forward(hidden_states)?.f_gelu("tanh")?)
+            .forward(&self.fc1.forward(hidden_states)?.gelu("tanh")?)
     }
 }
 
@@ -731,7 +720,7 @@ impl Decoder {
 
     /// Logits of the final sequence position; generation consumes nothing else.
     fn logits(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
-        let last_hidden_state = hidden_states.f_select(1, hidden_states.size()[1] - 1)?;
+        let last_hidden_state = hidden_states.select_int(1, hidden_states.size()[1] - 1)?;
         self.output_head
             .forward(&self.final_norm.forward(&last_hidden_state)?)
     }
@@ -799,19 +788,19 @@ impl Projector {
                 }
             }
         }
-        let index = Tensor::f_from_slice(&index)?.f_to_device(visual_features.device())?;
+        let index = Tensor::from_slice(&index)?.to(visual_features.device())?;
         let tokens = visual_features
-            .f_reshape([rows * patches, d_vision])?
-            .f_index_select(0, &index)?
-            .f_view([rows, length, r * r, d_vision])?
+            .reshape([rows * patches, d_vision])?
+            .index_select(0, &index)?
+            .view([rows, length, r * r, d_vision])?
             // Channel c * r * r + k, as `F.pixel_unshuffle` orders them.
-            .f_transpose(2, 3)?
-            .f_reshape([rows, length, d_vision * r * r])?;
+            .transpose_int(2, 3)?
+            .reshape([rows, length, d_vision * r * r])?;
         let tokens = self.linear2.forward(
             &self
                 .linear1
                 .forward(&self.norm.forward(&tokens)?)?
-                .f_gelu("none")?,
+                .gelu("none")?,
         )?;
         Ok((self.out_norm.forward(&tokens)?, merged))
     }
@@ -850,10 +839,11 @@ impl DecoderLayer {
         let (attention, present) =
             self.attn
                 .forward(&normalized, attention_mask, rope, past_key_value)?;
-        let hidden_states = hidden_states.f_add(&self.attn_res_scale.f_mul(&attention)?)?;
+        let hidden_states =
+            hidden_states.add_tensor(&self.attn_res_scale.mul_tensor(&attention)?, 1)?;
         let ffn = self.ffn.forward(&self.ffn_norm.forward(&hidden_states)?)?;
         Ok((
-            hidden_states.f_add(&self.ffn_res_scale.f_mul(&ffn)?)?,
+            hidden_states.add_tensor(&self.ffn_res_scale.mul_tensor(&ffn)?, 1)?,
             present,
         ))
     }
@@ -927,40 +917,40 @@ impl GroupedQueryAttention {
         let query = apply_rotary_emb(
             &self
                 .q_norm
-                .forward(&self.w_q.forward(hidden_states)?.f_view(query_shape)?)?,
+                .forward(&self.w_q.forward(hidden_states)?.view(query_shape)?)?,
             cos,
             sin,
         )?
-        .f_transpose(1, 2)?;
+        .transpose_int(1, 2)?;
         let key = apply_rotary_emb(
             &self
                 .k_norm
-                .forward(&self.w_k.forward(hidden_states)?.f_view(kv_shape)?)?,
+                .forward(&self.w_k.forward(hidden_states)?.view(kv_shape)?)?,
             cos,
             sin,
         )?
-        .f_transpose(1, 2)?;
+        .transpose_int(1, 2)?;
         let value = self
             .w_v
             .forward(hidden_states)?
-            .f_view(kv_shape)?
-            .f_transpose(1, 2)?;
+            .view(kv_shape)?
+            .transpose_int(1, 2)?;
 
         let (key, value) = match past_key_value {
             Some(cache) => (
-                Tensor::f_cat(&[cache.key.f_alias()?, key], 2)?,
-                Tensor::f_cat(&[cache.value.f_alias()?, value], 2)?,
+                Tensor::cat(&[cache.key.alias()?, key], 2)?,
+                Tensor::cat(&[cache.value.alias()?, value], 2)?,
             ),
             None => (key, value),
         };
         let present = LayerCache {
-            key: key.f_alias()?,
-            value: value.f_alias()?,
+            key: key.alias()?,
+            value: value.alias()?,
         };
 
         // Native GQA lets CUDA select flash or memory-efficient SDPA kernels
         // instead of physically repeating K/V heads like the reference code.
-        let attention = Tensor::f_scaled_dot_product_attention(
+        let attention = Tensor::scaled_dot_product_attention(
             &query,
             &key,
             &value,
@@ -970,9 +960,9 @@ impl GroupedQueryAttention {
             (self.head_dim as f64).powf(-0.5),
             true,
         )?
-        .f_transpose(1, 2)?
-        .f_contiguous()?
-        .f_reshape([
+        .transpose_int(1, 2)?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .reshape([
             batch_size,
             sequence_length,
             self.query_heads * self.head_dim,
@@ -1009,8 +999,8 @@ impl SwiGlu {
             &self
                 .w_gate
                 .forward(hidden_states)?
-                .f_silu()?
-                .f_mul(&self.w_up.forward(hidden_states)?)?,
+                .silu()?
+                .mul_tensor(&self.w_up.forward(hidden_states)?)?,
         )
     }
 }
@@ -1029,15 +1019,15 @@ impl RmsNorm {
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let input_kind = hidden_states.kind();
-        let hidden_states = hidden_states.f_to_kind(Kind::Float)?;
-        let variance = hidden_states.f_pow_tensor_scalar(2.0)?.f_mean_dim(
+        let hidden_states = hidden_states.to_kind(Kind::Float)?;
+        let variance = hidden_states.pow_tensor_scalar(2.0)?.mean_dim(
             &[-1i64][..],
             true,
             Some(Kind::Float),
         )?;
         self.weight
-            .f_mul(&hidden_states)?
-            .f_mul(&variance.f_add_scalar(RMS_NORM_EPS)?.f_rsqrt()?)?
-            .f_to_kind(input_kind)
+            .mul_tensor(&hidden_states)?
+            .mul_tensor(&variance.add_scalar(RMS_NORM_EPS, 1)?.rsqrt()?)?
+            .to_kind(input_kind)
     }
 }

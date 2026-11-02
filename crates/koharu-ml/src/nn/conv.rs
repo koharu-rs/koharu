@@ -21,7 +21,7 @@ impl PaddingMode {
     }
 
     pub fn pad(self, xs: &Tensor, reversed_padding_repeated_twice: &[i64]) -> Result<Tensor> {
-        xs.f_pad(reversed_padding_repeated_twice, self.name(), None)
+        xs.pad(reversed_padding_repeated_twice, self.name(), None)
     }
 }
 
@@ -142,10 +142,11 @@ macro_rules! impl_forward {
         impl super::Module for $conv {
             fn forward(&self, xs: &Tensor) -> Result<Tensor> {
                 let (xs, padding) = match self.config.padding_mode {
-                    PaddingMode::Zeros => (xs.f_alias()?, self.config.padding),
+                    PaddingMode::Zeros => (xs.alias()?, self.config.padding),
                     mode => (mode.pad(xs, &self.reversed_padding_repeated_twice)?, $zero),
                 };
-                xs.$op(
+                Tensor::$op(
+                    &xs,
                     &self.ws,
                     self.bs.as_ref(),
                     self.config.stride,
@@ -158,4 +159,4 @@ macro_rules! impl_forward {
     };
 }
 
-impl_forward!(Conv2D, f_conv2d, [0, 0]);
+impl_forward!(Conv2D, conv2d, [0, 0]);

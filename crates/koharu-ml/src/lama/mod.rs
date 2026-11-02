@@ -167,41 +167,43 @@ impl Lama {
     ) -> Result<RgbImage> {
         let width = image.width();
         let height = image.height();
-        let image_tensor = Tensor::f_from_slice(image.as_raw())?
-            .f_view([i64::from(height), i64::from(width), 3])?
-            .f_to_device(self.device)?
-            .f_permute([2, 0, 1])?
-            .f_unsqueeze(0)?
-            .f_contiguous()?;
-        let mask_tensor = Tensor::f_from_slice(mask.as_raw())?
-            .f_view([i64::from(height), i64::from(width)])?
-            .f_to_device(self.device)?
-            .f_unsqueeze(0)?
-            .f_unsqueeze(0)?
-            .f_contiguous()?;
-        let model_image = processor::pad_img_to_modulo(
-            image_tensor.f_to_kind(Kind::Float)?.f_div_scalar(255.0)?,
-            8,
-        )?;
+        let image_tensor = Tensor::from_slice(image.as_raw())?
+            .view([i64::from(height), i64::from(width), 3])?
+            .to(self.device)?
+            .permute([2, 0, 1])?
+            .unsqueeze(0)?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)?;
+        let mask_tensor = Tensor::from_slice(mask.as_raw())?
+            .view([i64::from(height), i64::from(width)])?
+            .to(self.device)?
+            .unsqueeze(0)?
+            .unsqueeze(0)?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)?;
+        let model_image =
+            processor::pad_img_to_modulo(image_tensor.to_kind(Kind::Float)?.div_scalar(255.0)?, 8)?;
         let model_mask =
-            processor::pad_img_to_modulo(mask_tensor.f_gt(0.0)?.f_to_kind(Kind::Float)?, 8)?;
+            processor::pad_img_to_modulo(mask_tensor.gt_scalar(0.0)?.to_kind(Kind::Float)?, 8)?;
         let output = (self
             .model
             .forward(&model_image, &model_mask)?
-            .f_narrow(2, 0, i64::from(height))?
-            .f_narrow(3, 0, i64::from(width))?
-            .f_clamp(0.0, 1.0)?)
-        .f_mul_scalar(255.0)?;
-        let output = output.f_to_kind(Kind::Uint8)?;
+            .narrow(2, 0, i64::from(height))?
+            .narrow(3, 0, i64::from(width))?
+            .clamp(
+                Some(koharu_torch::Scalar::from(0.0)),
+                Some(koharu_torch::Scalar::from(1.0)),
+            )?)
+        .mul_scalar(255.0)?;
+        let output = output.to_kind(Kind::Uint8)?;
         let output = if options.sd_keep_unmasked_area {
-            let alpha = mask_tensor.f_to_kind(Kind::Float)?.f_div_scalar(255.0)?;
-            (output.f_to_kind(Kind::Float)?.f_mul(&alpha)?)
-                .f_add(
+            let alpha = mask_tensor.to_kind(Kind::Float)?.div_scalar(255.0)?;
+            (output.to_kind(Kind::Float)?.mul_tensor(&alpha)?)
+                .add_tensor(
                     &image_tensor
-                        .f_to_kind(Kind::Float)?
-                        .f_mul(&alpha.f_ones_like()?.f_sub(&alpha)?)?,
+                        .to_kind(Kind::Float)?
+                        .mul_tensor(&alpha.ones_like(None, None)?.sub_tensor(&alpha, 1)?)?,
+                    1,
                 )?
-                .f_to_kind(Kind::Uint8)?
+                .to_kind(Kind::Uint8)?
         } else {
             output
         };

@@ -41,6 +41,6 @@ pub fn linear<'a, T: Borrow<super::Path<'a>>>(
 
 impl super::Module for Linear {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        xs.f_linear(&self.ws, self.bs.as_ref())
+        Tensor::linear(xs, &self.ws, self.bs.as_ref())
     }
 }
