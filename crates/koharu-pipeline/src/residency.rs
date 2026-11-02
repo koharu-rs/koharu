@@ -12,13 +12,13 @@ use image::{DynamicImage, GrayImage, Luma};
 use koharu_ml::{
     aot_inpainting::{self, AotInpainting},
     baberu_ocr::BaberuOcr,
-    flux3_klein::{self, Flux3Klein},
+    flux3_klein::Flux3Klein,
     hayai_ocr::HayaiOcr,
     koharu_layout_highres::{self, KoharuLayoutHighres},
     lama::{self, Lama},
     manga_ocr::MangaOcr,
     paddle_ocr_vl_quantized::{self, PaddleOcrVlQuantized},
-    rorem_mixed::{self, RoremMixed},
+    rorem_mixed::RoremMixed,
 };
 use koharu_runtime::{Device, Devices};
 
@@ -55,9 +55,9 @@ pub(crate) enum Model {
         model: String,
         quantization: Option<String>,
     },
-    LaMa,
+    Lama,
     Aot,
-    Flux2Klein,
+    Flux3Klein,
     RoremMixed,
 }
 
@@ -67,7 +67,7 @@ impl Model {
     fn evictable(&self) -> bool {
         matches!(
             self,
-            Self::PaddleOcrVl | Self::Translator { .. } | Self::Flux2Klein | Self::RoremMixed
+            Self::PaddleOcrVl | Self::Translator { .. } | Self::Flux3Klein | Self::RoremMixed
         )
     }
 
@@ -91,9 +91,9 @@ pub(crate) enum Loaded {
     HayaiOcr(HayaiOcr),
     PaddleOcrVl(PaddleOcrVlQuantized),
     Translator(koharu_llm::Model),
-    LaMa(Lama),
+    Lama(Lama),
     Aot(AotInpainting),
-    Flux2Klein(Flux3Klein),
+    Flux3Klein(Flux3Klein),
     RoremMixed(RoremMixed),
 }
 
@@ -119,9 +119,9 @@ impl Loaded {
                 };
                 Self::Translator(koharu_llm::model(&selection, TRANSLATION_SIZE).await?)
             }
-            Model::LaMa => Self::LaMa(Lama::load(torch).await?),
+            Model::Lama => Self::Lama(Lama::load(torch).await?),
             Model::Aot => Self::Aot(AotInpainting::load(torch).await?),
-            Model::Flux2Klein => Self::Flux2Klein(Flux3Klein::load(&devices.ggml, budget).await?),
+            Model::Flux3Klein => Self::Flux3Klein(Flux3Klein::load(&devices.ggml, budget).await?),
             Model::RoremMixed => Self::RoremMixed(RoremMixed::load(&devices.ggml, budget).await?),
         })
     }
@@ -149,28 +149,14 @@ impl Loaded {
                 );
             }
             Self::Translator(_) => {}
-            Self::LaMa(model) => drop(model.inference(&tile, &mask, &lama::Options::default())?),
+            Self::Lama(model) => drop(model.inference(&tile, &mask, &lama::Options::default())?),
             Self::Aot(model) => {
                 drop(model.inference(&tile, &mask, &aot_inpainting::Options::default())?);
             }
-            Self::Flux2Klein(model) => {
-                let mask = DynamicImage::ImageLuma8(mask);
-                drop(model.inpaint(
-                    "",
-                    &tile,
-                    None,
-                    &mask,
-                    &flux3_klein::InpaintOptions::default(),
-                )?);
-            }
-            Self::RoremMixed(model) => {
-                let options = rorem_mixed::Options {
-                    prompt: String::new(),
-                    negative_prompt: String::new(),
-                    ..rorem_mixed::Options::default()
-                };
-                drop(model.inference(&tile, &mask, &options)?);
-            }
+            // stable-diffusion.cpp frees a generation's compute buffers when it
+            // ends, so a warm-up would cost a whole generation and leave the
+            // footprint where loading left it.
+            Self::Flux3Klein(_) | Self::RoremMixed(_) => {}
         }
         Ok(())
     }
