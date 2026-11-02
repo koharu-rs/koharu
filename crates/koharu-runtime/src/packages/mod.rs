@@ -1,22 +1,20 @@
 //! The native packages a device needs, each pinned to a version.
 
 mod cuda;
-mod native;
+mod ggml;
 mod rocm;
 mod torch;
 
 use std::{
-    ffi::CStr,
     fs::{File, create_dir_all},
     io::copy,
     mem::forget,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use fast_glob::glob_match;
 use flate2::read::GzDecoder;
-use koharu_llama_sys::ggml_backend_dev_t;
 
 use crate::{Backend, Device, Devices, store, transfer};
 
@@ -47,11 +45,11 @@ pub(crate) async fn start(gpu: &Device) -> Result<Devices, Failure> {
         _ => None,
     };
     let torch = torch::install(host, torch_backend).await.map_err(retry)?;
-    let llama = native::LLAMA
+    let llama = ggml::LLAMA
         .install(host, gpu.backend, |_| true)
         .await
         .map_err(retry)?;
-    let diffusion = native::DIFFUSION
+    let diffusion = ggml::DIFFUSION
         .install(host, gpu.backend, |_| true)
         .await
         .map_err(retry)?;
@@ -67,14 +65,14 @@ pub(crate) async fn start(gpu: &Device) -> Result<Devices, Failure> {
     let mut load = || -> Result<Devices> {
         torch::load(torch_backend, &torch)?;
         bound = true;
-        native::load_llama(&llama)?;
-        let ggml = listed(&gpu)?;
+        ggml::load_llama(&llama)?;
+        let ggml = ggml::listed(&gpu)?;
         let torch = if torch_backend == gpu.backend {
             ggml.clone()
         } else {
-            cpu()?
+            ggml::cpu()?
         };
-        native::load_diffusion(&diffusion)?;
+        ggml::load_diffusion(&diffusion)?;
         Ok(Devices { torch, ggml })
     };
     let devices = load().map_err(|error| Failure { error, last: bound })?;
@@ -90,55 +88,6 @@ pub(crate) async fn start(gpu: &Device) -> Result<Devices, Failure> {
     );
     store::remove_others(versions).await;
     Ok(devices)
-}
-
-/// `gpu` with llama.cpp's description, once llama.cpp lists it at its index
-/// under its name: a GPU is one llama.cpp found, at the index libtorch
-/// addresses it by, so a Vulkan loader on disk without a Vulkan device
-/// doesn't count.
-fn listed(gpu: &Device) -> Result<Device> {
-    let listed = unsafe {
-        (gpu.index < koharu_llama_sys::ggml_backend_dev_count())
-            .then(|| describe(koharu_llama_sys::ggml_backend_dev_get(gpu.index)))
-    };
-    match listed {
-        Some((name, description)) if name == gpu.name => Ok(Device {
-            description,
-            ..gpu.clone()
-        }),
-        _ => anyhow::bail!("llama.cpp doesn't list {} at {}", gpu.name, gpu.index),
-    }
-}
-
-/// The CPU, as llama.cpp lists it.
-fn cpu() -> Result<Device> {
-    let device = unsafe {
-        koharu_llama_sys::ggml_backend_dev_by_type(koharu_llama_sys::GGML_BACKEND_DEVICE_TYPE_CPU)
-    };
-    ensure!(!device.is_null(), "llama.cpp lists no CPU");
-    let (name, description) = unsafe { describe(device) };
-    Ok(Device {
-        name,
-        index: 0,
-        description,
-        backend: Backend::Cpu,
-        integrated: true,
-    })
-}
-
-/// A listed device's name and description.
-unsafe fn describe(device: ggml_backend_dev_t) -> (String, String) {
-    let text = |text| {
-        unsafe { CStr::from_ptr(text) }
-            .to_string_lossy()
-            .into_owned()
-    };
-    unsafe {
-        (
-            text(koharu_llama_sys::ggml_backend_dev_name(device)),
-            text(koharu_llama_sys::ggml_backend_dev_description(device)),
-        )
-    }
 }
 
 /// The platforms Koharu ships native packages for.
@@ -173,6 +122,50 @@ impl Host {
             Self::LinuxArm64 => "aarch64-unknown-linux-gnu",
             Self::MacosArm64 => "aarch64-apple-darwin",
         }
+    }
+}
+
+/// One of Koharu's own builds of a native library, released on GitHub as
+/// one archive per platform and backend.
+struct Release {
+    /// The GitHub repository the release is in, whose name the store uses.
+    repository: &'static str,
+    tag: &'static str,
+}
+
+impl Release {
+    /// Installs the archive for `host` and `backend`, named
+    /// `{triple}-{variant}.tar.gz`, which is complete when `complete` says so,
+    /// and returns its folder.
+    async fn install(
+        &self,
+        host: Host,
+        backend: Backend,
+        complete: impl Fn(&Path) -> bool + Send + Sync,
+    ) -> Result<PathBuf> {
+        let variant = match backend {
+            Backend::Cpu => "cpu",
+            Backend::Cuda { .. } => "cuda",
+            Backend::Rocm { .. } => "hip",
+            Backend::Metal => "metal",
+            Backend::Vulkan => "vulkan",
+        };
+        let archive = format!("{}-{variant}", host.triple());
+        let url = format!(
+            "https://github.com/{}/releases/download/{}/{archive}.tar.gz",
+            self.repository, self.tag
+        );
+        let name = self
+            .repository
+            .rsplit('/')
+            .next()
+            .unwrap_or(self.repository);
+        store::directory(
+            store::root().join(name).join(self.tag).join(&archive),
+            |folder| folder.is_dir() && complete(folder),
+            move |stage| async move { install_archive(&url, &stage, LIBRARIES).await },
+        )
+        .await
     }
 }
 

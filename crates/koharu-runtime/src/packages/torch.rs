@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::{Host, native::Release, preload};
+use super::{Host, Release, preload};
 use crate::Backend;
 
 /// The shim at the release `koharu-torch-sys`'s headers come from.
