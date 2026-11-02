@@ -90,38 +90,43 @@ pub(crate) async fn start(gpu: &Device) -> Result<Devices, Failure> {
     Ok(devices)
 }
 
-/// The platforms Koharu ships native packages for.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// The platforms Koharu ships native packages for, each named by the target
+/// triple Koharu's own releases name their archives with.
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, strum::EnumIter, strum::EnumProperty, strum::IntoStaticStr,
+)]
 enum Host {
+    #[strum(
+        serialize = "x86_64-pc-windows-msvc",
+        props(os = "windows", arch = "x86_64")
+    )]
     WindowsX64,
+    #[strum(
+        serialize = "x86_64-unknown-linux-gnu",
+        props(os = "linux", arch = "x86_64")
+    )]
     LinuxX64,
+    #[strum(
+        serialize = "aarch64-unknown-linux-gnu",
+        props(os = "linux", arch = "aarch64")
+    )]
     LinuxArm64,
+    #[strum(
+        serialize = "aarch64-apple-darwin",
+        props(os = "macos", arch = "aarch64")
+    )]
     MacosArm64,
 }
 
 impl Host {
     fn current() -> Result<Self> {
-        if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            Ok(Self::WindowsX64)
-        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            Ok(Self::LinuxX64)
-        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            Ok(Self::LinuxArm64)
-        } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            Ok(Self::MacosArm64)
-        } else {
-            anyhow::bail!("Koharu has no native packages for this platform")
-        }
-    }
-
-    /// The target triple Koharu's own releases name their archives with.
-    fn triple(self) -> &'static str {
-        match self {
-            Self::WindowsX64 => "x86_64-pc-windows-msvc",
-            Self::LinuxX64 => "x86_64-unknown-linux-gnu",
-            Self::LinuxArm64 => "aarch64-unknown-linux-gnu",
-            Self::MacosArm64 => "aarch64-apple-darwin",
-        }
+        use strum::{EnumProperty, IntoEnumIterator};
+        Self::iter()
+            .find(|host| {
+                host.get_str("os") == Some(std::env::consts::OS)
+                    && host.get_str("arch") == Some(std::env::consts::ARCH)
+            })
+            .context("Koharu has no native packages for this platform")
     }
 }
 
@@ -143,14 +148,8 @@ impl Release {
         backend: Backend,
         complete: impl Fn(&Path) -> bool + Send + Sync,
     ) -> Result<PathBuf> {
-        let variant = match backend {
-            Backend::Cpu => "cpu",
-            Backend::Cuda { .. } => "cuda",
-            Backend::Rocm { .. } => "hip",
-            Backend::Metal => "metal",
-            Backend::Vulkan => "vulkan",
-        };
-        let archive = format!("{}-{variant}", host.triple());
+        let (triple, variant): (&str, &str) = (host.into(), backend.into());
+        let archive = format!("{triple}-{variant}");
         let url = format!(
             "https://github.com/{}/releases/download/{}/{archive}.tar.gz",
             self.repository, self.tag
