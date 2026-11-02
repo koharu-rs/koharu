@@ -1,7 +1,9 @@
-/// The shim's functions, and libtorch's own C functions that make, inspect,
-/// and delete the tensors, strings, and generators the shim passes, and read
-/// its last error.
-const FUNCTIONS: &str = "^(koharu_torch_.*|aoti_torch_(new_tensor_handle|delete_tensor_object|create_tensor_from_blob_v2|copy_|get_(data_ptr|dim|numel|sizes|strides|dtype|device_type|device_index)|is_contiguous|grad_mode_(is_enabled|set_enabled))|torch_exception_get_what_without_backtrace|torch_string_(c_str|length)|torch_delete_(string|generator))$";
+/// The shim's functions and libtorch's own C API.
+const FUNCTIONS: &str = "^(koharu_torch|aoti_torch|torch)_.*";
+/// libtorch's per-backend C functions, which its headers declare whatever
+/// the build, but only some builds export: `aoti_torch_mps_*` only a Metal
+/// one, and `aoti_torch_cpu_*` only one with MKL and oneDNN.
+const BACKENDS: &str = "^aoti_torch_(mps|cpu)_.*";
 
 fn main() {
     koharu_bindgen::generate(|bindings| {
@@ -10,6 +12,7 @@ fn main() {
             // its header-only types.
             .clang_args(["-x", "c++", "-std=c++17"])
             .allowlist_function(FUNCTIONS)
+            .blocklist_function(BACKENDS)
             .allowlist_var("AOTI_TORCH_SUCCESS")
             .prepend_enum_name(false)
     });
