@@ -10,8 +10,8 @@ use tokio::{
 };
 
 use crate::{
-    Host, Inpainting, OcrModel, Outcome as Ended, PipelineConfig, Progress, Report, Run, State,
-    Step, Target,
+    Host, InpaintingModel, OcrModel, Outcome as Ended, PipelineConfig, Progress, Report, Run,
+    State, Step, Target,
     plan::{Job, Outcome, Place, Plan},
     residency::{IDLE, Model, Residency, TRANSLATION_SIZE},
     steps::{self, Context, LINE_HEIGHT, Prepared, Scope, TYPESETTER},
@@ -387,10 +387,10 @@ fn place(step: Step, config: &PipelineConfig) -> Place<Model> {
         }
         Step::Typesetting => Place::Cpu,
         Step::Inpainting => Place::Lane(match config.inpainting {
-            Inpainting::LaMa => Model::LaMa,
-            Inpainting::AotInpainting => Model::Aot,
-            Inpainting::Flux2Klein => Model::Flux2Klein,
-            Inpainting::RoremMixed => Model::RoremMixed,
+            InpaintingModel::Lama => Model::Lama,
+            InpaintingModel::AotInpainting => Model::Aot,
+            InpaintingModel::Flux3Klein => Model::Flux3Klein,
+            InpaintingModel::RoremMixed => Model::RoremMixed,
         }),
     }
 }
