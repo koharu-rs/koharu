@@ -831,13 +831,14 @@ fn color_luminance(color: [u8; 3]) -> u32 {
     u32::from(color[0]) * 54 + u32::from(color[1]) * 183 + u32::from(color[2]) * 19
 }
 
-/// Where the page's text is: every text block's mask, which the layout model
-/// fits to its glyphs.
+/// Where the page's lettering is: every text block's and onomatopoeia's mask,
+/// which the layout model fits to its glyphs. The model labels coloured or
+/// hand-lettered asides onomatopoeia too, so those are erased with the rest.
 pub(super) fn text_mask(detections: &[Detection], size: ImageSize) -> GrayImage {
     let mut output = GrayImage::new(size.width, size.height);
     for detection in detections
         .iter()
-        .filter(|detection| detection.label == "text")
+        .filter(|detection| matches!(detection.label.as_str(), "text" | "onomatopoeia"))
     {
         stamp_mask(&mut output, &detection.mask, 0, 0);
     }
