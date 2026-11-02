@@ -25,6 +25,7 @@ koharu-config = { path = "crates/koharu-config" }
 koharu-desktop = { path = "crates/koharu-desktop" }
 koharu-diffusion = { path = "crates/koharu-diffusion" }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys" }
+koharu-leptonica = { path = "crates/koharu-leptonica" }
 koharu-llama = { path = "crates/koharu-llama" }
 koharu-llama-sys = { path = "crates/koharu-llama-sys" }
 koharu-llm = { path = "crates/koharu-llm" }
@@ -50,7 +51,6 @@ base64 = "0.23.1"
 bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 blake3 = "1.8.7"
 bytes = "1.12.1"
-cc = { version = "1.5.1", features = ["parallel"] }
 clap = { version = "4.6.7", features = ["derive"] }
 color = "0.3.3"
 console = "0.16.6"

@@ -7,6 +7,7 @@
 //! https://github.com/roboflow/rf-detr/tree/4ab7c18729de9d02ffd0495795d0831b5630f01b
 
 mod config;
+mod measure;
 mod model;
 mod processor;
 
@@ -15,7 +16,10 @@ use image::DynamicImage;
 use koharu_runtime::Repository;
 use koharu_torch::Device;
 
-pub use self::processor::{Detection, Detections, Mask};
+pub use self::{
+    measure::Typography,
+    processor::{Detection, Detections, Mask},
+};
 
 use self::{
     config::{Config, Thresholds},
@@ -28,8 +32,15 @@ const REPOSITORY: Repository = Repository::model(
     "53fef6f1301f4cbd8324ddc24f554b3767fc9e45",
 );
 
+/// The lowest confidence an onomatopoeia detection keeps by default. The
+/// checkpoint recommends 0.3, but on 212 pages of Blue Archive's comics about
+/// two in five onomatopoeia scoring under 0.4 were drawn marks, such as anger
+/// veins, sweat drops, and motion lines, or lettering a text detection
+/// already covers.
+const ONOMATOPOEIA_THRESHOLD: f32 = 0.4;
+
 /// Each class's lowest confidence a detection keeps, between 0 and 1, or the
-/// checkpoint's recommended one.
+/// default: the checkpoint's recommended one, except for onomatopoeia.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Options {
     pub text: Option<f32>,
@@ -62,7 +73,10 @@ impl KoharuLayoutHighres {
             device,
             model,
             processor,
-            thresholds: config.recommended_thresholds,
+            thresholds: Thresholds {
+                onomatopoeia: ONOMATOPOEIA_THRESHOLD,
+                ..config.recommended_thresholds
+            },
         })
     }
 

@@ -1,0 +1,17 @@
+[package]
+name = "koharu-leptonica"
+version.workspace = true
+edition.workspace = true
+description = "Rust ports of Leptonica's image analysis."
+license = "MIT OR Apache-2.0 AND BSD-2-Clause"
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords = ["leptonica", "image-processing"]
+categories = ["multimedia::images"]
+publish = false
+
+[dependencies]
+image = { workspace = true }
+thiserror = { workspace = true }
