@@ -33,14 +33,14 @@ const FLAT_PIXELS: usize = 16;
 /// The scene's tile size.
 const TILE: i32 = 64;
 
-/// `[pipeline.processor."flux2-klein"]`.
+/// `[pipeline.processor."flux3-klein"]`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Flux2KleinConfig {
+pub struct Flux3KleinConfig {
     pub prompt: String,
 }
 
-impl Default for Flux2KleinConfig {
+impl Default for Flux3KleinConfig {
     fn default() -> Self {
         Self {
             prompt: "Remove the text and reconstruct the background.".to_owned(),
@@ -162,7 +162,7 @@ pub(super) fn run(model: &Loaded, works: Vec<Work>, context: &Context) -> Vec<Re
 fn inpaint(model: &Loaded, work: Work, context: &Context) -> Result<Edit> {
     let processor = &context.config.processor;
     match model {
-        Loaded::LaMa(model) => cleanup(context, work, "lama", CONTEXT, false, |image, mask| {
+        Loaded::Lama(model) => cleanup(context, work, "lama", CONTEXT, false, |image, mask| {
             model.inference(image, mask, &lama::Options::default())
         }),
         Loaded::Aot(model) => cleanup(
@@ -173,12 +173,12 @@ fn inpaint(model: &Loaded, work: Work, context: &Context) -> Result<Edit> {
             false,
             |image, mask| model.inference(image, mask, &aot_inpainting::Options::default()),
         ),
-        Loaded::Flux2Klein(model) => {
-            let prompt = &processor.flux2_klein.prompt;
+        Loaded::Flux3Klein(model) => {
+            let prompt = &processor.flux3_klein.prompt;
             cleanup(
                 context,
                 work,
-                "flux2-klein",
+                "flux3-klein",
                 DIFFUSION_CONTEXT,
                 true,
                 |image, mask| {

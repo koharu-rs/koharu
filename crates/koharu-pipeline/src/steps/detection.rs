@@ -18,16 +18,16 @@ use super::{Context, Prepared, Scope};
 use crate::Step;
 
 /// The software agent detection's layers name.
-pub(super) const MODEL: &str = "koharu-layout-rfdetr-seg-2xl";
+pub(super) const MODEL: &str = "koharu-layout-highres";
 /// A text block at least this share inside a balloon's mask is the
 /// balloon's dialogue.
 const DIALOGUE: f32 = 0.9;
 
-/// `[pipeline.processor."koharu-layout-rfdetr-seg-2xl"]`: confidence
+/// `[pipeline.processor."koharu-layout-highres"]`: confidence
 /// thresholds from 0 to 1, the model's own where unset.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct KoharuLayoutRFDetrSeg2XLConfig {
+pub struct KoharuLayoutHighresConfig {
     pub text_threshold: Option<f32>,
     pub bubble_threshold: Option<f32>,
     pub panel_threshold: Option<f32>,
@@ -129,7 +129,7 @@ pub(super) fn run(
     works: Vec<Work>,
     context: &Context,
 ) -> Vec<Result<Edit>> {
-    let settings = &context.config.processor.koharu_layout_rfdetr_seg_2xl;
+    let settings = &context.config.processor.koharu_layout_highres;
     let options = Options {
         text: settings.text_threshold,
         onomatopoeia: None,

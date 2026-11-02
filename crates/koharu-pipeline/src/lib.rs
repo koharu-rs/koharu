@@ -12,11 +12,10 @@ use koharu_scene::{Change, Edit, LayerId, PageId, Rect, Session};
 use tokio_util::sync::CancellationToken;
 
 pub use config::{
-    Detection, DetectionModel, Inpainting, InpaintingModel, OcrModel, PipelineConfig,
-    ProcessorConfig, TranslationConfig,
+    DetectionModel, InpaintingModel, OcrModel, PipelineConfig, ProcessorConfig, TranslationConfig,
 };
 pub use run::Pipeline;
-pub use steps::{Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, RoremMixedConfig};
+pub use steps::{Flux3KleinConfig, KoharuLayoutHighresConfig, RoremMixedConfig};
 
 /// The project a run reads and writes, through the app's session or a test's.
 pub trait Host: Send + Sync {

@@ -21,8 +21,8 @@ use kurbo::{Affine, BezPath, Point, Shape};
 use serde_json::{Map, Value};
 use tokio::task::block_in_place;
 
-pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
-pub use inpainting::{Flux2KleinConfig, RoremMixedConfig};
+pub use detection::KoharuLayoutHighresConfig;
+pub use inpainting::{Flux3KleinConfig, RoremMixedConfig};
 pub(crate) use typesetting::{LINE_HEIGHT, TYPESETTER};
 
 use crate::{PipelineConfig, Step, residency::Loaded};
@@ -121,7 +121,7 @@ pub(crate) async fn on_lane(
         | Loaded::HayaiOcr(_)
         | Loaded::PaddleOcrVl(_) => ocr::run(model, take!(Ocr), context).await,
         Loaded::Translator(model) => translation::run(model, take!(Translation), context).await,
-        Loaded::LaMa(_) | Loaded::Aot(_) | Loaded::Flux2Klein(_) | Loaded::RoremMixed(_) => {
+        Loaded::Lama(_) | Loaded::Aot(_) | Loaded::Flux3Klein(_) | Loaded::RoremMixed(_) => {
             block_in_place(|| inpainting::run(model, take!(Inpainting), context))
         }
     }
