@@ -87,12 +87,27 @@ impl KoharuLayoutHighres {
             bubble: options.bubble.unwrap_or(self.thresholds.bubble),
             panel: options.panel.unwrap_or(self.thresholds.panel),
         };
-        koharu_torch::no_grad(|| {
+        let mut detections = koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
             let output = self.model.forward(&pixel_values)?;
             self.processor
                 .postprocess(&output, image.width(), image.height(), thresholds)
-        })
+        })?;
+        // RF-DETR's lettering masks hug each stroke but miss counters and
+        // parts of strokes.
+        let page = image.to_rgb8();
+        for detection in &mut detections.detections {
+            if matches!(detection.label.as_str(), "text" | "onomatopoeia") {
+                detection.mask = measure::glyph_mask(&detection.mask, &page);
+                detection.area = detection
+                    .mask
+                    .pixels
+                    .iter()
+                    .filter(|&&pixel| pixel != 0)
+                    .count() as u32;
+            }
+        }
+        Ok(detections)
     }
 }
 
