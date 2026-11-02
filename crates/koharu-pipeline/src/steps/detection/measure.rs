@@ -2,19 +2,12 @@
 //! block's angle, direction, ink, and outline; a balloon's outline; the text
 //! mask; and the blocks' reading order.
 
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, VecDeque},
-};
+use std::{cmp::Ordering, collections::VecDeque};
 
 use image::{GrayImage, Luma, RgbImage};
-use imageproc::{
-    distance_transform::{Norm, distance_transform},
-    morphology::{close, dilate},
-};
+use imageproc::distance_transform::{Norm, distance_transform};
 use koharu_ml::koharu_layout_highres::{Detection, Mask};
 use koharu_scene::Direction;
-use rayon::prelude::*;
 
 const ANGLE_SNAP_DEGREES: f32 = 3.0;
 const ANGLE_SEARCH_HALF_STEPS: i32 = 90;
@@ -838,73 +831,15 @@ fn color_luminance(color: [u8; 3]) -> u32 {
     u32::from(color[0]) * 54 + u32::from(color[1]) * 183 + u32::from(color[2]) * 19
 }
 
-/// Where the page's text is: every text block's mask, closed so the strokes of
-/// one glyph join, by a radius of 6 pixels per 1024 of the page's longer side.
+/// Where the page's text is: every text block's mask, which the layout model
+/// fits to its glyphs.
 pub(super) fn text_mask(detections: &[Detection], size: ImageSize) -> GrayImage {
-    let radius = ((size.width.max(size.height) as f32 / 1024.0) * 6.0)
-        .round()
-        .clamp(1.0, 255.0) as u8;
-    let masks = detections
+    let mut output = GrayImage::new(size.width, size.height);
+    for detection in detections
         .iter()
         .filter(|detection| detection.label == "text")
-        .map(|detection| &detection.mask)
-        .filter(|mask| valid_mask(mask) && mask.width > 0 && mask.height > 0)
-        .collect::<Vec<_>>();
-    let mut output = GrayImage::new(size.width, size.height);
-    if masks.is_empty() {
-        return output;
-    }
-
-    // Two dilations can make instances interact before the final erosion.
-    // Conservatively group their expanded bounds, then retain a third-radius
-    // halo so the local erosion observes the same zero/page-edge neighborhood
-    // as a full-page operation.
-    let interaction_radius = u32::from(radius) * 2;
-    let mut parents = (0..masks.len()).collect::<Vec<_>>();
-    for left in 0..masks.len() {
-        for right in left + 1..masks.len() {
-            if rectangles_touch(
-                expand_mask_bounds(masks[left], interaction_radius, size),
-                expand_mask_bounds(masks[right], interaction_radius, size),
-            ) {
-                union(&mut parents, left, right);
-            }
-        }
-    }
-
-    let mut groups = BTreeMap::<usize, Vec<usize>>::new();
-    for index in 0..masks.len() {
-        let root = find(&mut parents, index);
-        groups.entry(root).or_default().push(index);
-    }
-    let local_masks = groups
-        .into_values()
-        .collect::<Vec<_>>()
-        .into_par_iter()
-        .filter_map(|group| {
-            let mut bounds = mask_bounds(masks[group[0]], size);
-            for &index in &group[1..] {
-                bounds = union_bounds(bounds, mask_bounds(masks[index], size));
-            }
-            bounds = expand_bounds(bounds, u32::from(radius) * 3, size);
-            let [left, top, right, bottom] = bounds;
-            if left >= right || top >= bottom {
-                return None;
-            }
-            let mut local = GrayImage::new(right - left, bottom - top);
-            for &index in &group {
-                stamp_mask(&mut local, masks[index], left, top);
-            }
-            let local = close(&dilate(&local, Norm::L2, radius), Norm::L2, radius);
-            Some((left, top, local))
-        })
-        .collect::<Vec<_>>();
-    for (left, top, local) in local_masks {
-        for (x, y, pixel) in local.enumerate_pixels() {
-            if pixel.0[0] != 0 {
-                output.put_pixel(left + x, top + y, Luma([u8::MAX]));
-            }
-        }
+    {
+        stamp_mask(&mut output, &detection.mask, 0, 0);
     }
     output
 }
@@ -942,57 +877,6 @@ fn stamp_mask(target: &mut GrayImage, mask: &Mask, origin_x: u32, origin_y: u32)
                 target.put_pixel(target_x, target_y, Luma([u8::MAX]));
             }
         }
-    }
-}
-
-fn mask_bounds(mask: &Mask, size: ImageSize) -> [u32; 4] {
-    [
-        mask.x.min(size.width),
-        mask.y.min(size.height),
-        mask.x.saturating_add(mask.width).min(size.width),
-        mask.y.saturating_add(mask.height).min(size.height),
-    ]
-}
-
-fn expand_mask_bounds(mask: &Mask, radius: u32, size: ImageSize) -> [u32; 4] {
-    expand_bounds(mask_bounds(mask, size), radius, size)
-}
-
-fn expand_bounds([left, top, right, bottom]: [u32; 4], radius: u32, size: ImageSize) -> [u32; 4] {
-    [
-        left.saturating_sub(radius),
-        top.saturating_sub(radius),
-        right.saturating_add(radius).min(size.width),
-        bottom.saturating_add(radius).min(size.height),
-    ]
-}
-
-fn union_bounds(left: [u32; 4], right: [u32; 4]) -> [u32; 4] {
-    [
-        left[0].min(right[0]),
-        left[1].min(right[1]),
-        left[2].max(right[2]),
-        left[3].max(right[3]),
-    ]
-}
-
-fn rectangles_touch(left: [u32; 4], right: [u32; 4]) -> bool {
-    left[0] <= right[2] && right[0] <= left[2] && left[1] <= right[3] && right[1] <= left[3]
-}
-
-fn find(parents: &mut [usize], mut index: usize) -> usize {
-    while parents[index] != index {
-        parents[index] = parents[parents[index]];
-        index = parents[index];
-    }
-    index
-}
-
-fn union(parents: &mut [usize], left: usize, right: usize) {
-    let left = find(parents, left);
-    let right = find(parents, right);
-    if left != right {
-        parents[right] = left;
     }
 }
 

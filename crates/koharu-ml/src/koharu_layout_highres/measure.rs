@@ -1,28 +1,32 @@
-//! The typography a detection shows, on the page under its mask: the lines'
-//! direction and tilt from the mask's shape, and the ink, its stroke width,
-//! and its colours from Leptonica's algorithms. RF-DETR's postprocessing
-//! stays as upstream has it; this runs after it, when a caller asks.
+//! The shape and typography of a detection's lettering, on the page under
+//! its mask. RF-DETR's postprocessing stays as upstream has it: `glyph_mask`
+//! reshapes a lettering mask after it, and `Detection::typography` measures
+//! one when a caller asks.
+
+use std::collections::{HashMap, HashSet};
 
 use image::{GrayImage, Luma, RgbImage, imageops};
 use imageproc::{
+    distance_transform::Norm,
     filter::gaussian_blur_f32,
     gradients::{horizontal_sobel, vertical_sobel},
+    morphology::{close, dilate},
     region_labelling::{Connectivity, connected_components},
 };
 use koharu_leptonica::{color_segment, find_stroke_width, otsu_adaptive_threshold};
 use serde::Serialize;
 
-use super::Detection;
+use super::{Detection, Mask};
 
 /// What a detection's lettering shows.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Typography {
-    /// Whether the lines run down the page: the mask is longer that way, at
-    /// its tilt.
+    /// Whether the lines run down the page: the lettering's block is longer
+    /// that way, at its tilt.
     pub vertical: bool,
     /// How far the lines turn clockwise from horizontal, or from vertical for
     /// vertical lines, in degrees within ±45°: the commonest direction of the
-    /// mask's edges. A turn that moves the lines' far end by less than a
+    /// block's edges. A turn that moves the lines' far end by less than a
     /// stroke is 0: it can't be told from the glyphs' ragged edges.
     pub tilt: f32,
     pub stroke_width: Option<f32>,
@@ -32,68 +36,28 @@ pub struct Typography {
 }
 
 impl Detection {
-    /// The detection's typography on `page`, or `None` when its mask holds
-    /// no ink. The ink is the side of an Otsu split of the mask's crop that
-    /// covers less of the mask, so light lettering on dark counts too.
+    /// The detection's typography on `page`, or `None` when its block holds
+    /// no ink.
     pub fn typography(&self, page: &RgbImage) -> Option<Typography> {
-        let mask = &self.mask;
-        let (width, height) = (
-            mask.width.min(page.width().saturating_sub(mask.x)),
-            mask.height.min(page.height().saturating_sub(mask.y)),
-        );
-        if width == 0 || height == 0 {
-            return None;
-        }
-        let crop = imageops::crop_imm(page, mask.x, mask.y, width, height).to_image();
-        let inside = |x: u32, y: u32| mask.pixels[(y * mask.width + x) as usize] != 0;
+        let block = block(&self.mask, page.width(), page.height());
+        let (crop, ink) = ink(&block, page)?;
+        let (width, height) = (block.width, block.height);
+        let inside = |x: u32, y: u32| block.pixels[(y * width + x) as usize] != 0;
 
-        // One tile covers the crop, so this is a single Otsu split.
-        let gray = imageops::grayscale(&crop);
-        let dark = otsu_adaptive_threshold(&gray, width.max(16), height.max(16), 0, 0, 0.1).ok()?;
-        // The mask hugs the lettering, so the paper is what the crop shows
-        // around it; with no paper around, the lettering is the smaller side.
-        let (mut around, mut dark_around, mut covered, mut dark_covered) = (0u32, 0u32, 0u32, 0u32);
-        for (x, y, pixel) in dark.enumerate_pixels() {
-            let is_dark = u32::from(pixel.0[0] != 0);
-            if inside(x, y) {
-                covered += 1;
-                dark_covered += is_dark;
-            } else {
-                around += 1;
-                dark_around += is_dark;
-            }
-        }
-        let light_ink = if around > 0 {
-            2 * dark_around > around
-        } else {
-            2 * dark_covered > covered
-        };
-        let ink = GrayImage::from_fn(width, height, |x, y| {
-            let is_dark = dark.get_pixel(x, y).0[0] != 0;
-            Luma([if inside(x, y) && is_dark != light_ink {
-                255
-            } else {
-                0
-            }])
-        });
-        if ink.pixels().all(|pixel| pixel.0[0] == 0) {
-            return None;
-        }
-
-        // The lettering mask is closed and hole-filled, so its edges are the
-        // sides and ends of its lines, and their commonest direction, modulo
-        // 90°, is the lines' tilt. The edges' gradients are averaged at four
-        // times their angle, which folds sides and ends onto one direction.
-        // Leptonica's skew finder, scoring the ink's profiles, flipped
-        // direction on 14% of blocks turned by up to 20° and followed only
-        // 82% of the turn; the mask's hull, by its minimum-area rectangle or
-        // narrowest side, tilted wherever columns of uneven length step.
-        // Only the mask's body counts, the parts at least a tenth the size of
-        // its largest: a stray fragment of a neighbour's mask is no line.
-        let shape = GrayImage::from_raw(mask.width, mask.height, mask.pixels.clone())
+        // The block's edges are the sides and ends of its lines, and their
+        // commonest direction, modulo 90°, is the lines' tilt. The edges'
+        // gradients are averaged at four times their angle, which folds sides
+        // and ends onto one direction. Leptonica's skew finder, scoring the
+        // ink's profiles, flipped direction on 14% of blocks turned by up to
+        // 20° and followed only 82% of the turn; the block's hull, by its
+        // minimum-area rectangle or narrowest side, tilted wherever columns
+        // of uneven length step. Only the block's body counts, the parts at
+        // least a tenth the size of its largest: a stray fragment of a
+        // neighbour's mask is no line.
+        let shape = GrayImage::from_raw(width, height, block.pixels.clone())
             .expect("a mask holds a byte a pixel");
         let parts = connected_components(&shape, Connectivity::Eight, Luma([0]));
-        let mut sizes = std::collections::HashMap::<u32, u32>::new();
+        let mut sizes = HashMap::<u32, u32>::new();
         for part in parts.pixels().filter(|part| part.0[0] != 0) {
             *sizes.entry(part.0[0]).or_default() += 1;
         }
@@ -101,13 +65,12 @@ impl Detection {
         let body = |part: u32| part != 0 && 10 * sizes[&part] >= largest;
         // A border, so the edges at the crop's sides have gradients too.
         let border = 4;
-        let body_image =
-            GrayImage::from_fn(mask.width + 2 * border, mask.height + 2 * border, |x, y| {
-                let inside = (border..border + mask.width).contains(&x)
-                    && (border..border + mask.height).contains(&y)
-                    && body(parts.get_pixel(x - border, y - border).0[0]);
-                Luma([if inside { 255 } else { 0 }])
-            });
+        let body_image = GrayImage::from_fn(width + 2 * border, height + 2 * border, |x, y| {
+            let inside = (border..border + width).contains(&x)
+                && (border..border + height).contains(&y)
+                && body(parts.get_pixel(x - border, y - border).0[0]);
+            Luma([if inside { 255 } else { 0 }])
+        });
         let smooth = gaussian_blur_f32(&body_image, 1.5);
         let (across, down) = (horizontal_sobel(&smooth), vertical_sobel(&smooth));
         let (mut cosine, mut sine) = (0.0f64, 0.0f64);
@@ -169,5 +132,184 @@ impl Detection {
             ink: ink_color,
             paper: paper_color,
         })
+    }
+}
+
+/// A text or onomatopoeia mask fitted to its glyphs: RF-DETR's mask, which
+/// hugs each stroke and its outline but misses counters and parts of
+/// strokes, with the ink its block holds, widened by 2 pixels per 1024 of the
+/// page's longer side for anti-aliased edges. The paper or art between
+/// glyphs stays out, so inpainting redraws only the lettering.
+pub(super) fn glyph_mask(mask: &Mask, page: &RgbImage) -> Mask {
+    let block = block(mask, page.width(), page.height());
+    let Some((_, ink)) = ink(&block, page) else {
+        return mask.clone();
+    };
+    let margin = scaled(2.0, page.width(), page.height());
+    let (left, top) = (
+        i64::from(block.x) - i64::from(margin),
+        i64::from(block.y) - i64::from(margin),
+    );
+    let mut canvas = GrayImage::new(block.width + 2 * margin, block.height + 2 * margin);
+    for (x, y, pixel) in ink.enumerate_pixels() {
+        if pixel.0[0] != 0 {
+            canvas.put_pixel(x + margin, y + margin, Luma([255]));
+        }
+    }
+    for (index, _) in mask
+        .pixels
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| **value != 0)
+    {
+        let x = i64::from(mask.x + index as u32 % mask.width) - left;
+        let y = i64::from(mask.y + index as u32 / mask.width) - top;
+        if (0..i64::from(canvas.width())).contains(&x)
+            && (0..i64::from(canvas.height())).contains(&y)
+        {
+            canvas.put_pixel(x as u32, y as u32, Luma([255]));
+        }
+    }
+    let fitted = dilate(&canvas, Norm::L2, margin as u8);
+    crop(&fitted, left, top, page.width(), page.height())
+}
+
+/// The lettering's block: `mask` closed and with its holes filled, so its
+/// lines are solid and its outline is their sides and ends. The radius is
+/// the pipeline's text-mask rule, 6 pixels per 1024 of the page's longer
+/// side.
+fn block(mask: &Mask, page_width: u32, page_height: u32) -> Mask {
+    if mask.width == 0 || mask.height == 0 {
+        return mask.clone();
+    }
+    let radius = scaled(6.0, page_width, page_height);
+    // Twice the radius, so the dilation never reaches the canvas's edge,
+    // where imageproc's erosion would keep it.
+    let pad = 2 * radius;
+    let mut canvas = GrayImage::new(mask.width + 2 * pad, mask.height + 2 * pad);
+    for (index, _) in mask
+        .pixels
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| **value != 0)
+    {
+        let (x, y) = (index as u32 % mask.width, index as u32 / mask.width);
+        canvas.put_pixel(x + pad, y + pad, Luma([255]));
+    }
+    let mut closed = close(&canvas, Norm::LInf, radius as u8);
+
+    // Background the canvas's edge can't reach is a hole.
+    let background = GrayImage::from_fn(closed.width(), closed.height(), |x, y| {
+        Luma([u8::MAX - closed.get_pixel(x, y).0[0]])
+    });
+    let regions = connected_components(&background, Connectivity::Four, Luma([0]));
+    let (width, height) = (closed.width(), closed.height());
+    let mut outside = HashSet::new();
+    for x in 0..width {
+        outside.insert(regions.get_pixel(x, 0).0[0]);
+        outside.insert(regions.get_pixel(x, height - 1).0[0]);
+    }
+    for y in 0..height {
+        outside.insert(regions.get_pixel(0, y).0[0]);
+        outside.insert(regions.get_pixel(width - 1, y).0[0]);
+    }
+    for (x, y, region) in regions.enumerate_pixels() {
+        if region.0[0] != 0 && !outside.contains(&region.0[0]) {
+            closed.put_pixel(x, y, Luma([255]));
+        }
+    }
+    let (left, top) = (
+        i64::from(mask.x) - i64::from(pad),
+        i64::from(mask.y) - i64::from(pad),
+    );
+    crop(&closed, left, top, page_width, page_height)
+}
+
+/// The block's crop of the page, and its ink: the side of one Otsu split of
+/// the crop that isn't the paper. The paper is what the crop shows around the
+/// block, or with none around, the side covering more of the block, so light
+/// lettering on dark counts too. `None` when the block holds no ink.
+fn ink(block: &Mask, page: &RgbImage) -> Option<(RgbImage, GrayImage)> {
+    let (width, height) = (block.width, block.height);
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let crop = imageops::crop_imm(page, block.x, block.y, width, height).to_image();
+    let inside = |x: u32, y: u32| block.pixels[(y * width + x) as usize] != 0;
+    // One tile covers the crop, so this is a single Otsu split.
+    let gray = imageops::grayscale(&crop);
+    let dark = otsu_adaptive_threshold(&gray, width.max(16), height.max(16), 0, 0, 0.1).ok()?;
+    let (mut around, mut dark_around, mut covered, mut dark_covered) = (0u32, 0u32, 0u32, 0u32);
+    for (x, y, pixel) in dark.enumerate_pixels() {
+        let is_dark = u32::from(pixel.0[0] != 0);
+        if inside(x, y) {
+            covered += 1;
+            dark_covered += is_dark;
+        } else {
+            around += 1;
+            dark_around += is_dark;
+        }
+    }
+    let light_ink = if around > 0 {
+        2 * dark_around > around
+    } else {
+        2 * dark_covered > covered
+    };
+    let ink = GrayImage::from_fn(width, height, |x, y| {
+        let is_dark = dark.get_pixel(x, y).0[0] != 0;
+        Luma([if inside(x, y) && is_dark != light_ink {
+            255
+        } else {
+            0
+        }])
+    });
+    ink.pixels()
+        .any(|pixel| pixel.0[0] != 0)
+        .then_some((crop, ink))
+}
+
+/// `per_1024` pixels for every 1024 of the page's longer side.
+fn scaled(per_1024: f32, page_width: u32, page_height: u32) -> u32 {
+    ((page_width.max(page_height) as f32 / 1024.0) * per_1024)
+        .round()
+        .clamp(1.0, 127.0) as u32
+}
+
+/// The covered part of `canvas`, placed at (`left`, `top`) on a page, cut to
+/// the page.
+fn crop(canvas: &GrayImage, left: i64, top: i64, page_width: u32, page_height: u32) -> Mask {
+    let on_page = |x: u32, y: u32| {
+        let (page_x, page_y) = (left + i64::from(x), top + i64::from(y));
+        (0..i64::from(page_width)).contains(&page_x)
+            && (0..i64::from(page_height)).contains(&page_y)
+    };
+    let covered: Vec<(u32, u32)> = canvas
+        .enumerate_pixels()
+        .filter(|&(x, y, pixel)| pixel.0[0] != 0 && on_page(x, y))
+        .map(|(x, y, _)| (x, y))
+        .collect();
+    let Some(min_x) = covered.iter().map(|&(x, _)| x).min() else {
+        return Mask {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            pixels: Vec::new(),
+        };
+    };
+    let min_y = covered.iter().map(|&(_, y)| y).min().unwrap_or(0);
+    let max_x = covered.iter().map(|&(x, _)| x).max().unwrap_or(0);
+    let max_y = covered.iter().map(|&(_, y)| y).max().unwrap_or(0);
+    let (width, height) = (max_x + 1 - min_x, max_y + 1 - min_y);
+    let mut pixels = vec![0u8; (width * height) as usize];
+    for &(x, y) in &covered {
+        pixels[((y - min_y) * width + x - min_x) as usize] = 255;
+    }
+    Mask {
+        x: (left + i64::from(min_x)) as u32,
+        y: (top + i64::from(min_y)) as u32,
+        width,
+        height,
+        pixels,
     }
 }
