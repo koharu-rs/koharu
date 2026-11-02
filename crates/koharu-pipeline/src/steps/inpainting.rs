@@ -1,6 +1,8 @@
 //! Inpainting: the cleanup raster's pixels under the text mask, from the
 //! scan.
 
+use std::collections::{HashMap, HashSet};
+
 use anyhow::{Result, ensure};
 use image::{DynamicImage, GrayImage, ImageBuffer, Luma, Rgb, RgbImage, imageops::FilterType};
 use imageproc::{
@@ -30,6 +32,13 @@ const FEATHER: f32 = 4.0;
 /// has at least this many pixels.
 const FLAT_EDGE: f32 = 3.0;
 const FLAT_PIXELS: usize = 16;
+/// An unmasked pixel this far from a balloon's paper colour, in any channel,
+/// is a line or art, not paper.
+const LINE_CONTRAST: u8 = 64;
+/// How much of a masked area may lie outside a balloon's shape while the
+/// balloon still holds it: on Blue Archive's comics, text the outline holds
+/// lay under a hundredth outside, and text crossing it a fifth or more.
+const OUTSIDE: f32 = 0.1;
 /// The scene's tile size.
 const TILE: i32 = 64;
 
@@ -228,12 +237,12 @@ pub(super) fn cleanup(
         height,
     };
     let area = work.area.map_or(page, |area| clamp(area, page));
-    let mut mask = GrayImage::new(width, height);
-    paint(&work.mask, 1, width, area, &mut mask);
-    let mask = dilate(&mask, Norm::LInf, GROW);
+    let mut painted = GrayImage::new(width, height);
+    paint(&work.mask, 1, width, area, &mut painted);
+    let mask = dilate(&painted, Norm::LInf, GROW);
     let mut output = scan;
     let mut pending = mask.clone();
-    fill_flat(&mut output, &mut pending, &work.balloons);
+    fill_flat(&mut output, &mut pending, &painted, &work.balloons);
     crops(&mut output, &pending, margin, feather, infer)?;
 
     let offset = work.current.offset;
@@ -317,9 +326,37 @@ fn paint(tiles: &Tiles, channels: usize, width: u32, area: Rect, page: &mut [u8]
 }
 
 /// Fills each balloon's masked text with its inside's one colour, when it
-/// has one, so the model never sees it.
-fn fill_flat(output: &mut RgbImage, pending: &mut GrayImage, balloons: &[Vec<(f32, f32)>]) {
+/// has one, so the model never sees it. BallonsTranslator fills only text a
+/// balloon's outline encloses:
+/// https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/textblock_mask.py#L365-L414
+/// A detected balloon's shape is approximate and takes in its outline, so
+/// here a masked area more than `OUTSIDE` outside the shape runs past the
+/// outline and goes to the model whole, which redraws the line under it,
+/// when a lettering in it, a part of `painted`, the mask before it grew,
+/// lies on both sides of the outline. Grown, a lettering inside can join one
+/// outside: then only the letterings inside are filled. In every area, a
+/// line or art the mask covers part of goes to the model, with a pixel
+/// around it.
+fn fill_flat(
+    output: &mut RgbImage,
+    pending: &mut GrayImage,
+    painted: &GrayImage,
+    balloons: &[Vec<(f32, f32)>],
+) {
     let (width, height) = output.dimensions();
+    let areas = connected_components(&*pending, Connectivity::Eight, Luma([0]));
+    let mut sizes = HashMap::<u32, u32>::new();
+    for area in areas.pixels().filter(|area| area[0] != 0) {
+        *sizes.entry(area[0]).or_default() += 1;
+    }
+    let parts = connected_components(painted, Connectivity::Eight, Luma([0]));
+    let (mut part_sizes, mut part_areas) = (HashMap::<u32, u32>::new(), HashMap::new());
+    for (x, y, part) in parts.enumerate_pixels().filter(|(_, _, part)| part[0] != 0) {
+        *part_sizes.entry(part[0]).or_default() += 1;
+        part_areas
+            .entry(part[0])
+            .or_insert_with(|| areas.get_pixel(x, y)[0]);
+    }
     for polygon in balloons {
         let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
         for &(x, y) in polygon {
@@ -363,7 +400,112 @@ fn fill_flat(output: &mut RgbImage, pending: &mut GrayImage, balloons: &[Vec<(f3
         if deviations.iter().copied().fold(0.0, f64::max) >= threshold {
             continue;
         }
-        for (x, y) in targets {
+        let (mut held, mut parts_held) = (HashMap::<u32, u32>::new(), HashMap::<u32, u32>::new());
+        for &(x, y) in &targets {
+            *held.entry(areas.get_pixel(x, y)[0]).or_default() += 1;
+            let part = parts.get_pixel(x, y)[0];
+            if part != 0 {
+                *parts_held.entry(part).or_default() += 1;
+            }
+        }
+        let inside_enough = |held: u32, size: u32| (1.0 - OUTSIDE) * size as f32 <= held as f32;
+        let straddling: HashSet<u32> = parts_held
+            .iter()
+            .filter(|&(part, &held)| {
+                let size = part_sizes[part];
+                OUTSIDE * (size as f32) < held as f32 && !inside_enough(held, size)
+            })
+            .map(|(part, _)| part_areas[part])
+            .collect();
+        let paper = |x: u32, y: u32| {
+            let pixel = output.get_pixel(x, y).0;
+            (0..3).all(|channel| pixel[channel].abs_diff(medians[channel]) <= LINE_CONTRAST)
+        };
+        let masked = |x: u32, y: u32| pending.get_pixel(x, y)[0] != 0;
+        let mixed =
+            |area: u32| !inside_enough(held[&area], sizes[&area]) && !straddling.contains(&area);
+        // A pixel the mask grew to belongs to every lettering it grew from.
+        let grow = i64::from(GROW);
+        let owners = |x: u32, y: u32| {
+            (-grow..=grow)
+                .flat_map(|dy| (-grow..=grow).map(move |dx| (dx, dy)))
+                .map(move |(dx, dy)| (i64::from(x) + dx, i64::from(y) + dy))
+                .filter(|&(nx, ny)| {
+                    (0..i64::from(width)).contains(&nx) && (0..i64::from(height)).contains(&ny)
+                })
+                .map(|(nx, ny)| parts.get_pixel(nx as u32, ny as u32)[0])
+                .filter(|&part| part != 0)
+        };
+        // In a mixed area, a lettering inside is filled only when paper alone
+        // borders it: one on the outline or on art the shape takes in goes
+        // to the model with the rest.
+        let mut bordered = HashSet::new();
+        for &(x, y) in &targets {
+            if !mixed(areas.get_pixel(x, y)[0]) {
+                continue;
+            }
+            let off_paper = [(0i64, -1i64), (0, 1), (-1, 0), (1, 0)]
+                .into_iter()
+                .map(|(dx, dy)| (i64::from(x) + dx, i64::from(y) + dy))
+                .filter(|&(nx, ny)| {
+                    (0..i64::from(width)).contains(&nx) && (0..i64::from(height)).contains(&ny)
+                })
+                .any(|(nx, ny)| !masked(nx as u32, ny as u32) && !paper(nx as u32, ny as u32));
+            if off_paper {
+                bordered.extend(owners(x, y));
+            }
+        }
+        targets.retain(|&(x, y)| {
+            let area = areas.get_pixel(x, y)[0];
+            if inside_enough(held[&area], sizes[&area]) {
+                return true;
+            }
+            if straddling.contains(&area) {
+                return false;
+            }
+            owners(x, y).all(|part| {
+                inside_enough(
+                    parts_held.get(&part).copied().unwrap_or(0),
+                    part_sizes[&part],
+                ) && !bordered.contains(&part)
+            })
+        });
+        let neighbours = |x: u32, y: u32| {
+            (-1i64..=1)
+                .flat_map(move |dy| (-1i64..=1).map(move |dx| (dx, dy)))
+                .map(move |(dx, dy)| (i64::from(x) + dx, i64::from(y) + dy))
+                .filter(|&(nx, ny)| {
+                    (0..i64::from(width)).contains(&nx) && (0..i64::from(height)).contains(&ny)
+                })
+                .map(|(nx, ny)| (nx as u32, ny as u32))
+        };
+        // Off-paper pixels under the mask that meet off-paper ones past it,
+        // and those they lead to under the mask.
+        let mut line: HashSet<(u32, u32)> = targets
+            .iter()
+            .copied()
+            .filter(|&(x, y)| {
+                !paper(x, y) && neighbours(x, y).any(|(nx, ny)| !masked(nx, ny) && !paper(nx, ny))
+            })
+            .collect();
+        let mut queue: Vec<(u32, u32)> = line.iter().copied().collect();
+        while let Some((x, y)) = queue.pop() {
+            for (nx, ny) in neighbours(x, y) {
+                if (left..right).contains(&nx)
+                    && (top..bottom).contains(&ny)
+                    && masked(nx, ny)
+                    && !paper(nx, ny)
+                    && line.insert((nx, ny))
+                {
+                    queue.push((nx, ny));
+                }
+            }
+        }
+        let filled: Vec<(u32, u32)> = targets
+            .into_iter()
+            .filter(|&(x, y)| !neighbours(x, y).any(|point| line.contains(&point)))
+            .collect();
+        for (x, y) in filled {
             output.put_pixel(x, y, Rgb(medians));
             pending.put_pixel(x, y, Luma([0]));
         }
