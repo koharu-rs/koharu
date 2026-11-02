@@ -40,7 +40,7 @@ impl Detection {
     /// no ink.
     pub fn typography(&self, page: &RgbImage) -> Option<Typography> {
         let block = block(&self.mask, page.width(), page.height());
-        let (crop, ink) = ink(&block, page)?;
+        let (crop, ink, _) = ink(&block, page, 0, None)?;
         let (width, height) = (block.width, block.height);
         let inside = |x: u32, y: u32| block.pixels[(y * width + x) as usize] != 0;
 
@@ -135,22 +135,48 @@ impl Detection {
     }
 }
 
-/// A text or onomatopoeia mask fitted to its glyphs: RF-DETR's mask, which
-/// hugs each stroke and its outline but misses counters and parts of
-/// strokes, with the ink its block holds, widened by 2 pixels per 1024 of the
-/// page's longer side for anti-aliased edges. The paper or art between
-/// glyphs stays out, so inpainting redraws only the lettering.
-pub(super) fn glyph_mask(mask: &Mask, page: &RgbImage) -> Mask {
-    let block = block(mask, page.width(), page.height());
-    let Some((_, ink)) = ink(&block, page) else {
-        return mask.clone();
-    };
-    let margin = scaled(2.0, page.width(), page.height());
-    let (left, top) = (
-        i64::from(block.x) - i64::from(margin),
-        i64::from(block.y) - i64::from(margin),
+/// A text or onomatopoeia mask fitted to its glyphs: RF-DETR's mask within
+/// its box, which hugs each stroke and its outline but misses counters and
+/// parts of strokes, with its block's ink, widened by 2 pixels per 1024 of the
+/// page's longer side for anti-aliased edges. The paper or art between glyphs
+/// stays out, so inpainting redraws only the lettering.
+pub(super) fn glyph_mask(mask: &Mask, bbox: [f32; 4], page: &RgbImage) -> Mask {
+    let (page_width, page_height) = (page.width(), page.height());
+    // RF-DETR's mask can stop a few pixels short of a glyph's ends, and LaMa
+    // grows even a sliver of ink left outside into a stroke, so the ink may
+    // reach as far past the block as the block's closing radius.
+    let reach = scaled(6.0, page_width, page_height);
+    // RF-DETR predicts each query's mask over the whole page, and a lettering
+    // mask can take in specks of other lettering far from its box, whose
+    // surroundings then sway the ink split. Its own glyphs can run past the
+    // box too, but by less than a glyph: the box, as much again as its
+    // narrower side around it, bounds the mask.
+    let [left, top, right, bottom] = bbox;
+    let slack = (right - left).min(bottom - top);
+    let clipped = GrayImage::from_fn(mask.width, mask.height, |x, y| {
+        let (page_x, page_y) = ((mask.x + x) as f32, (mask.y + y) as f32);
+        let kept = mask.pixels[(y * mask.width + x) as usize] != 0
+            && (left - slack..right + slack).contains(&page_x)
+            && (top - slack..bottom + slack).contains(&page_y);
+        Luma([if kept { 255 } else { 0 }])
+    });
+    let mask = crop(
+        &clipped,
+        i64::from(mask.x),
+        i64::from(mask.y),
+        page_width,
+        page_height,
     );
-    let mut canvas = GrayImage::new(block.width + 2 * margin, block.height + 2 * margin);
+    let block = block(&mask, page_width, page_height);
+    let Some((_, ink, [left, top])) = ink(&block, page, reach, Some(bbox)) else {
+        return mask;
+    };
+    let margin = scaled(2.0, page_width, page_height);
+    let (left, top) = (
+        i64::from(left) - i64::from(margin),
+        i64::from(top) - i64::from(margin),
+    );
+    let mut canvas = GrayImage::new(ink.width() + 2 * margin, ink.height() + 2 * margin);
     for (x, y, pixel) in ink.enumerate_pixels() {
         if pixel.0[0] != 0 {
             canvas.put_pixel(x + margin, y + margin, Luma([255]));
@@ -170,8 +196,50 @@ pub(super) fn glyph_mask(mask: &Mask, page: &RgbImage) -> Mask {
             canvas.put_pixel(x as u32, y as u32, Luma([255]));
         }
     }
+    // Inside the box, what the glyphs enclose is a counter or, in lettering
+    // outlined in a lighter colour, the glyph's own fill; the ink split takes
+    // only the outline there.
+    let [box_left, box_top, box_right, box_bottom] = bbox;
+    let mut enclosed = canvas.clone();
+    fill_holes(&mut enclosed);
+    for (x, y, pixel) in enclosed.enumerate_pixels() {
+        let (page_x, page_y) = ((left + i64::from(x)) as f32, (top + i64::from(y)) as f32);
+        if pixel.0[0] != 0
+            && (box_left..box_right).contains(&page_x)
+            && (box_top..box_bottom).contains(&page_y)
+        {
+            canvas.put_pixel(x, y, Luma([255]));
+        }
+    }
     let fitted = dilate(&canvas, Norm::L2, margin as u8);
-    crop(&fitted, left, top, page.width(), page.height())
+    crop(&fitted, left, top, page_width, page_height)
+}
+
+/// Fills what `canvas`'s marked pixels enclose: unmarked areas its edge
+/// can't reach.
+fn fill_holes(canvas: &mut GrayImage) {
+    let (width, height) = (canvas.width(), canvas.height());
+    if width == 0 || height == 0 {
+        return;
+    }
+    let background = GrayImage::from_fn(width, height, |x, y| {
+        Luma([u8::MAX - canvas.get_pixel(x, y).0[0]])
+    });
+    let regions = connected_components(&background, Connectivity::Four, Luma([0]));
+    let mut outside = HashSet::new();
+    for x in 0..width {
+        outside.insert(regions.get_pixel(x, 0).0[0]);
+        outside.insert(regions.get_pixel(x, height - 1).0[0]);
+    }
+    for y in 0..height {
+        outside.insert(regions.get_pixel(0, y).0[0]);
+        outside.insert(regions.get_pixel(width - 1, y).0[0]);
+    }
+    for (x, y, region) in regions.enumerate_pixels() {
+        if region.0[0] != 0 && !outside.contains(&region.0[0]) {
+            canvas.put_pixel(x, y, Luma([255]));
+        }
+    }
 }
 
 /// The lettering's block: `mask` closed and with its holes filled, so its
@@ -197,27 +265,7 @@ fn block(mask: &Mask, page_width: u32, page_height: u32) -> Mask {
         canvas.put_pixel(x + pad, y + pad, Luma([255]));
     }
     let mut closed = close(&canvas, Norm::LInf, radius as u8);
-
-    // Background the canvas's edge can't reach is a hole.
-    let background = GrayImage::from_fn(closed.width(), closed.height(), |x, y| {
-        Luma([u8::MAX - closed.get_pixel(x, y).0[0]])
-    });
-    let regions = connected_components(&background, Connectivity::Four, Luma([0]));
-    let (width, height) = (closed.width(), closed.height());
-    let mut outside = HashSet::new();
-    for x in 0..width {
-        outside.insert(regions.get_pixel(x, 0).0[0]);
-        outside.insert(regions.get_pixel(x, height - 1).0[0]);
-    }
-    for y in 0..height {
-        outside.insert(regions.get_pixel(0, y).0[0]);
-        outside.insert(regions.get_pixel(width - 1, y).0[0]);
-    }
-    for (x, y, region) in regions.enumerate_pixels() {
-        if region.0[0] != 0 && !outside.contains(&region.0[0]) {
-            closed.put_pixel(x, y, Luma([255]));
-        }
-    }
+    fill_holes(&mut closed);
     let (left, top) = (
         i64::from(mask.x) - i64::from(pad),
         i64::from(mask.y) - i64::from(pad),
@@ -225,20 +273,128 @@ fn block(mask: &Mask, page_width: u32, page_height: u32) -> Mask {
     crop(&closed, left, top, page_width, page_height)
 }
 
-/// The block's crop of the page, and its ink: the side of one Otsu split of
-/// the crop that isn't the paper. The paper is what the crop shows around the
-/// block, or with none around, the side covering more of the block, so light
-/// lettering on dark counts too. `None` when the block holds no ink.
-fn ink(block: &Mask, page: &RgbImage) -> Option<(RgbImage, GrayImage)> {
-    let (width, height) = (block.width, block.height);
-    if width == 0 || height == 0 {
+/// The page's crop around the block and the detection's box, `reach` pixels
+/// wider than both on every side, its ink, and the crop's place on the page.
+/// The ink is the side of one Otsu split of the crop that isn't the paper:
+/// inside the block, in the glyph ends it cut off, and on plain paper in the
+/// glyph-sized parts wholly inside the box or in line with it. The paper is
+/// what the crop shows around the block, or with none around, the side
+/// covering more of the block, so light lettering on dark counts too. `None`
+/// when the block holds no ink.
+fn ink(
+    block: &Mask,
+    page: &RgbImage,
+    reach: u32,
+    bbox: Option<[f32; 4]>,
+) -> Option<(RgbImage, GrayImage, [u32; 2])> {
+    if block.width == 0 || block.height == 0 {
         return None;
     }
-    let crop = imageops::crop_imm(page, block.x, block.y, width, height).to_image();
-    let inside = |x: u32, y: u32| block.pixels[(y * width + x) as usize] != 0;
-    // One tile covers the crop, so this is a single Otsu split.
+    let boxed = bbox.map(|[left, top, right, bottom]| {
+        [
+            left.floor().max(0.0) as u32,
+            top.floor().max(0.0) as u32,
+            (right.ceil().max(0.0) as u32).min(page.width()),
+            (bottom.ceil().max(0.0) as u32).min(page.height()),
+        ]
+    });
+    // The box, lengthened at both ends of its line by the line's width: a
+    // glyph the box cuts off lies in line with the others.
+    let lined = boxed.map(|[box_left, box_top, box_right, box_bottom]| {
+        let (box_width, box_height) = (
+            box_right.saturating_sub(box_left),
+            box_bottom.saturating_sub(box_top),
+        );
+        let line = box_width.min(box_height);
+        if box_height >= box_width {
+            [
+                box_left,
+                box_top.saturating_sub(line),
+                box_right,
+                (box_bottom + line).min(page.height()),
+            ]
+        } else {
+            [
+                box_left.saturating_sub(line),
+                box_top,
+                (box_right + line).min(page.width()),
+                box_bottom,
+            ]
+        }
+    });
+    let (mut left, mut top) = (block.x.saturating_sub(reach), block.y.saturating_sub(reach));
+    let (mut right, mut bottom) = (
+        (block.x + block.width + reach).min(page.width()),
+        (block.y + block.height + reach).min(page.height()),
+    );
+    // `reach` past the lengthened box too, so ink crossing its edge shows
+    // outside it.
+    if let Some([box_left, box_top, box_right, box_bottom]) = lined {
+        (left, top) = (
+            left.min(box_left.saturating_sub(reach)),
+            top.min(box_top.saturating_sub(reach)),
+        );
+        (right, bottom) = (
+            right.max((box_right + reach).min(page.width())),
+            bottom.max((box_bottom + reach).min(page.height())),
+        );
+    }
+    let (width, height) = (right - left, bottom - top);
+    let crop = imageops::crop_imm(page, left, top, width, height).to_image();
+    let (offset_x, offset_y) = (block.x - left, block.y - top);
+    let inside = |x: u32, y: u32| {
+        (offset_x..offset_x + block.width).contains(&x)
+            && (offset_y..offset_y + block.height).contains(&y)
+            && block.pixels[((y - offset_y) * block.width + x - offset_x) as usize] != 0
+    };
+    // One Otsu split of the block and the detection's box, without the
+    // reach around them, where art dark enough to take the split from faint
+    // lettering can lie. One tile covers the region, so the split is a
+    // threshold, read back from it to divide the whole crop.
     let gray = imageops::grayscale(&crop);
-    let dark = otsu_adaptive_threshold(&gray, width.max(16), height.max(16), 0, 0, 0.1).ok()?;
+    let [region_left, region_top, region_right, region_bottom] = boxed.map_or(
+        [left, top, right, bottom],
+        |[box_left, box_top, box_right, box_bottom]| {
+            [
+                box_left.min(block.x).max(left),
+                box_top.min(block.y).max(top),
+                box_right.max(block.x + block.width).min(right),
+                box_bottom.max(block.y + block.height).min(bottom),
+            ]
+        },
+    );
+    let (region_width, region_height) = (region_right - region_left, region_bottom - region_top);
+    let region = imageops::crop_imm(
+        &gray,
+        region_left - left,
+        region_top - top,
+        region_width,
+        region_height,
+    )
+    .to_image();
+    let split = otsu_adaptive_threshold(
+        &region,
+        region_width.max(16),
+        region_height.max(16),
+        0,
+        0,
+        0.1,
+    )
+    .ok()?;
+    let threshold = region
+        .pixels()
+        .zip(split.pixels())
+        .filter(|(_, below)| below.0[0] != 0)
+        .map(|(value, _)| u16::from(value.0[0]) + 1)
+        .max()
+        .unwrap_or(0);
+    let dark = GrayImage::from_fn(width, height, |x, y| {
+        Luma([if u16::from(gray.get_pixel(x, y).0[0]) < threshold {
+            255
+        } else {
+            0
+        }])
+    });
     let (mut around, mut dark_around, mut covered, mut dark_covered) = (0u32, 0u32, 0u32, 0u32);
     for (x, y, pixel) in dark.enumerate_pixels() {
         let is_dark = u32::from(pixel.0[0] != 0);
@@ -255,18 +411,150 @@ fn ink(block: &Mask, page: &RgbImage) -> Option<(RgbImage, GrayImage)> {
     } else {
         2 * dark_covered > covered
     };
+    let is_ink = |x: u32, y: u32| (dark.get_pixel(x, y).0[0] != 0) != light_ink;
+
+    // Past the block, ink that joins the block's and ends within `reach` is a
+    // glyph's end the mask cut off; ink that runs on is an outline, a border,
+    // or art.
+    let shape = GrayImage::from_fn(width, height, |x, y| {
+        Luma([if inside(x, y) { 255 } else { 0 }])
+    });
+    let near = dilate(&shape, Norm::LInf, reach as u8);
+    let ring = GrayImage::from_fn(width, height, |x, y| {
+        Luma([
+            if near.get_pixel(x, y).0[0] != 0 && !inside(x, y) && is_ink(x, y) {
+                255
+            } else {
+                0
+            },
+        ])
+    });
+    let parts = connected_components(&ring, Connectivity::Eight, Luma([0]));
+    let (mut joins, mut runs_on) = (HashSet::new(), HashSet::new());
+    for (x, y, part) in parts.enumerate_pixels() {
+        let part = part.0[0];
+        if part == 0 {
+            continue;
+        }
+        for (dx, dy) in (-1i64..=1).flat_map(|dx| (-1i64..=1).map(move |dy| (dx, dy))) {
+            let (nx, ny) = (i64::from(x) + dx, i64::from(y) + dy);
+            if !(0..i64::from(width)).contains(&nx) || !(0..i64::from(height)).contains(&ny) {
+                runs_on.insert(part);
+                continue;
+            }
+            let (nx, ny) = (nx as u32, ny as u32);
+            if near.get_pixel(nx, ny).0[0] == 0 {
+                runs_on.insert(part);
+            } else if inside(nx, ny) && is_ink(nx, ny) {
+                joins.insert(part);
+            }
+        }
+    }
+    // On plain paper every glyph-sized ink part wholly inside the box is
+    // lettering: RF-DETR's mask can miss a thin glyph, such as 一, whole. So
+    // is one in line with the box, past its ends, when the paper there is
+    // plain too: the box can miss it as well. The paper is plain when nearly
+    // all of it away from the ink's edges is near its median colour; on art
+    // no part counts.
+    let all_ink = GrayImage::from_fn(width, height, |x, y| {
+        Luma([if is_ink(x, y) { 255 } else { 0 }])
+    });
+    let pieces = connected_components(&all_ink, Connectivity::Eight, Luma([0]));
+    let mut lettering = HashSet::new();
+    if let (Some(boxed), Some(lined)) = (boxed, lined) {
+        let within = |[box_left, box_top, box_right, box_bottom]: [u32; 4], x: u32, y: u32| {
+            (box_left..box_right).contains(&(x + left))
+                && (box_top..box_bottom).contains(&(y + top))
+        };
+        let edges = dilate(&all_ink, Norm::LInf, 2);
+        let plain = |region: [u32; 4]| {
+            let mut channels = [Vec::new(), Vec::new(), Vec::new()];
+            for (x, y, pixel) in crop.enumerate_pixels() {
+                if within(region, x, y) && edges.get_pixel(x, y).0[0] == 0 {
+                    for (channel, value) in channels.iter_mut().zip(pixel.0) {
+                        channel.push(value);
+                    }
+                }
+            }
+            channels[0].len() >= 16 && {
+                let medians = channels.each_ref().map(|values| {
+                    let mut sorted = values.clone();
+                    let middle = sorted.len() / 2;
+                    sorted.select_nth_unstable(middle).1.to_owned()
+                });
+                let close = (0..channels[0].len())
+                    .filter(|&index| {
+                        (0..3).all(|channel| {
+                            channels[channel][index].abs_diff(medians[channel]) <= PAPER_TOLERANCE
+                        })
+                    })
+                    .count();
+                close as f32 >= PLAIN_PAPER * channels[0].len() as f32
+            }
+        };
+        let (plain_box, plain_line) = (plain(boxed), plain(lined));
+        if plain_box || plain_line {
+            // A glyph is no longer than its line is wide: a longer part, such
+            // as a ruled line under the text, is art.
+            let [box_left, box_top, box_right, box_bottom] = boxed;
+            let line = box_right
+                .saturating_sub(box_left)
+                .min(box_bottom.saturating_sub(box_top));
+            let mut extents = HashMap::<u32, [u32; 4]>::new();
+            let (mut leaves_box, mut leaves_line) = (HashSet::new(), HashSet::new());
+            for (x, y, piece) in pieces.enumerate_pixels() {
+                let piece = piece.0[0];
+                if piece == 0 {
+                    continue;
+                }
+                if !within(boxed, x, y) {
+                    leaves_box.insert(piece);
+                }
+                if !within(lined, x, y) {
+                    leaves_line.insert(piece);
+                }
+                let extent = extents.entry(piece).or_insert([x, y, x, y]);
+                *extent = [
+                    extent[0].min(x),
+                    extent[1].min(y),
+                    extent[2].max(x),
+                    extent[3].max(y),
+                ];
+            }
+            lettering = extents
+                .into_iter()
+                .filter(|(piece, [x0, y0, x1, y1])| {
+                    (x1 - x0 + 1).max(y1 - y0 + 1) <= line
+                        && ((plain_box && !leaves_box.contains(piece))
+                            || (plain_line && !leaves_line.contains(piece)))
+                })
+                .map(|(piece, _)| piece)
+                .collect();
+        }
+    }
     let ink = GrayImage::from_fn(width, height, |x, y| {
-        let is_dark = dark.get_pixel(x, y).0[0] != 0;
-        Luma([if inside(x, y) && is_dark != light_ink {
-            255
-        } else {
-            0
-        }])
+        let part = parts.get_pixel(x, y).0[0];
+        let cut_off = joins.contains(&part) && !runs_on.contains(&part);
+        Luma([
+            if (inside(x, y) && is_ink(x, y))
+                || cut_off
+                || lettering.contains(&pieces.get_pixel(x, y).0[0])
+            {
+                255
+            } else {
+                0
+            },
+        ])
     });
     ink.pixels()
         .any(|pixel| pixel.0[0] != 0)
-        .then_some((crop, ink))
+        .then_some((crop, ink, [left, top]))
 }
+
+/// How far from the paper's median colour, in every channel, a pixel of
+/// plain paper lies, and how much of it must.
+const PAPER_TOLERANCE: u8 = 32;
+const PLAIN_PAPER: f32 = 0.99;
 
 /// `per_1024` pixels for every 1024 of the page's longer side.
 fn scaled(per_1024: f32, page_width: u32, page_height: u32) -> u32 {
