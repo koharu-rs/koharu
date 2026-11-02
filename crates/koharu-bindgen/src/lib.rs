@@ -3,6 +3,8 @@
 //! It turns `extern` blocks into free functions with the same names and
 //! signatures that call through a table `load` fills from libraries opened at
 //! run time, so a `-sys` crate built this way can stand in for one that links.
+//! `load` resolves the symbols in a loop over a static list, so its stack
+//! frame doesn't grow with the number of bound functions.
 
 use std::{env, fs, path::PathBuf};
 
@@ -34,15 +36,9 @@ pub fn generate(configure: impl FnOnce(bindgen::Builder) -> bindgen::Builder) {
         .unwrap_or_else(|error| panic!("couldn't write {}: {error}", path.display()));
 }
 
-/// A bound function, with the ABI of the block that declares it.
-struct Function {
-    abi: syn::Abi,
-    item: ForeignItemFn,
-}
-
 /// bindgen's output with each `extern` block replaced by its wrappers.
 fn rewrite(file: syn::File) -> Result<String> {
-    let mut functions = Vec::new();
+    let mut symbols = Vec::new();
     let mut items = Vec::new();
     for item in file.items {
         let Item::ForeignMod(block) = item else {
@@ -55,27 +51,15 @@ fn rewrite(file: syn::File) -> Result<String> {
             if let ForeignItem::Fn(item) = item
                 && item.sig.variadic.is_none()
             {
-                items.push(syn::parse2(wrapper(&item)?)?);
-                functions.push(Function {
-                    abi: block.abi.clone(),
-                    item,
-                });
+                items.push(syn::parse2(wrapper(&item, &block.abi, symbols.len())?)?);
+                symbols.push(LitStr::new(
+                    &format!("{}\0", symbol(&item)),
+                    Span::call_site(),
+                ));
             }
         }
     }
-
-    let mut fields = Vec::new();
-    let mut checks = Vec::new();
-    let mut resolves = Vec::new();
-    for Function { abi, item } in &functions {
-        let name = &item.sig.ident;
-        let symbol = LitStr::new(&format!("{}\0", symbol(item)), Span::call_site());
-        let output = &item.sig.output;
-        let (_, _, types) = arguments(item)?;
-        fields.push(quote! { #name: unsafe #abi fn(#(#types),*) #output });
-        checks.push(quote! { __check(&libraries, #symbol, &mut missing); });
-        resolves.push(quote! { #name: unsafe { __resolve(&libraries, #symbol)? } });
-    }
+    let count = symbols.len();
 
     let attrs = file.attrs;
     let tokens = quote! {
@@ -95,12 +79,20 @@ fn rewrite(file: syn::File) -> Result<String> {
 
         impl ::std::error::Error for LoadError {}
 
-        struct __Functions {
-            #(#fields,)*
-        }
+        /// Each bound function's symbol, at the index its wrapper calls.
+        static __SYMBOLS: [&str; #count] = [#(#symbols),*];
 
-        static __LOADED: ::std::sync::OnceLock<(::std::vec::Vec<::libloading::Library>, __Functions)> =
-            ::std::sync::OnceLock::new();
+        /// A resolved function's address, which its wrapper gives its type.
+        struct __Function(*const ::std::ffi::c_void);
+
+        // Set once by `load`, then only read.
+        unsafe impl Send for __Function {}
+        unsafe impl Sync for __Function {}
+
+        static __LOADED: ::std::sync::OnceLock<(
+            ::std::vec::Vec<::libloading::Library>,
+            ::std::vec::Vec<__Function>,
+        )> = ::std::sync::OnceLock::new();
 
         /// Opens each library at its absolute path, in order, and resolves
         /// every function these bindings name before returning. A library
@@ -119,40 +111,30 @@ fn rewrite(file: syn::File) -> Result<String> {
                 libraries.push(library);
             }
             // Every missing function is named at once, not just the first.
+            let mut functions = ::std::vec::Vec::with_capacity(__SYMBOLS.len());
             let mut missing = ::std::vec::Vec::new();
-            #(#checks)*
+            for symbol in &__SYMBOLS {
+                let address = libraries.iter().find_map(|library| {
+                    unsafe { library.get::<*const ::std::ffi::c_void>(symbol.as_bytes()) }
+                        .ok()
+                        .map(|address| *address)
+                });
+                match address {
+                    Some(address) => functions.push(__Function(address)),
+                    None => missing.push(symbol.trim_end_matches('\0')),
+                }
+            }
             if !missing.is_empty() {
                 return Err(LoadError(::std::format!("no library exports {}", missing.join(", "))));
             }
-            let functions = __Functions {
-                #(#resolves,)*
-            };
             __LOADED
                 .set((libraries, functions))
                 .map_err(|_| LoadError("these bindings are already loaded".into()))
         }
 
-        fn __check(libraries: &[::libloading::Library], symbol: &'static str, missing: &mut ::std::vec::Vec<&'static str>) {
-            if unsafe { __resolve::<*const ::std::ffi::c_void>(libraries, symbol) }.is_err() {
-                missing.push(symbol.trim_end_matches('\0'));
-            }
-        }
-
-        unsafe fn __resolve<F: Copy>(
-            libraries: &[::libloading::Library],
-            symbol: &str,
-        ) -> ::std::result::Result<F, LoadError> {
-            libraries
-                .iter()
-                .find_map(|library| unsafe { library.get::<F>(symbol.as_bytes()) }.ok().map(|function| *function))
-                .ok_or_else(|| {
-                    LoadError(::std::format!("no library exports `{}`", symbol.trim_end_matches('\0')))
-                })
-        }
-
-        fn __functions() -> &'static __Functions {
+        fn __function(index: usize) -> *const ::std::ffi::c_void {
             match __LOADED.get() {
-                Some((_, functions)) => functions,
+                Some((_, functions)) => functions[index].0,
                 None => panic!("a native function was called before its library was loaded"),
             }
         }
@@ -182,11 +164,12 @@ fn rewrite(file: syn::File) -> Result<String> {
     ))
 }
 
-/// The free function that calls `function` through the table.
-fn wrapper(function: &ForeignItemFn) -> Result<TokenStream> {
+/// The free function that calls `function`, with the ABI `abi`, through the
+/// table's address at `index`.
+fn wrapper(function: &ForeignItemFn, abi: &syn::Abi, index: usize) -> Result<TokenStream> {
     let name = &function.sig.ident;
     let output = &function.sig.output;
-    let (inputs, arguments, _) = arguments(function)?;
+    let (inputs, arguments, types) = arguments(function)?;
     let attrs = function
         .attrs
         .iter()
@@ -195,7 +178,11 @@ fn wrapper(function: &ForeignItemFn) -> Result<TokenStream> {
     Ok(quote! {
         #(#attrs)*
         #vis unsafe fn #name(#(#inputs),*) #output {
-            unsafe { (__functions().#name)(#(#arguments),*) }
+            unsafe {
+                let function: unsafe #abi fn(#(#types),*) #output =
+                    ::std::mem::transmute(__function(#index));
+                function(#(#arguments),*)
+            }
         }
     })
 }
