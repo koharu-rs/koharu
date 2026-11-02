@@ -86,7 +86,7 @@ impl Model {
     }
 
     pub(super) fn forward(&self, pixel_values: &Tensor) -> Result<Output> {
-        let pixel_values = pixel_values.f_to_kind(self.var_store.kind())?;
+        let pixel_values = pixel_values.to_kind(self.var_store.kind())?;
         let features = self.backbone.forward(&pixel_values)?;
         let position_embeddings = features
             .iter()
@@ -95,18 +95,18 @@ impl Model {
         let transformer_output = self.transformer.forward(
             &features,
             &position_embeddings,
-            &self.refpoint_embed.ws.f_i(0..NUM_QUERIES)?,
-            &self.query_feat.ws.f_i(0..NUM_QUERIES)?,
+            &self.refpoint_embed.ws.i(0..NUM_QUERIES)?,
+            &self.query_feat.ws.i(0..NUM_QUERIES)?,
         )?;
 
         let hs = transformer_output.hs;
         let reference = transformer_output.references;
         let delta = self.bbox_embed.forward(&hs)?;
-        let pred_boxes = Tensor::f_cat(
+        let pred_boxes = Tensor::cat(
             &[
-                ((delta.f_i((.., .., .., 0..2))?).f_mul(&reference.f_i((.., .., .., 2..4))?)?)
-                    .f_add(&reference.f_i((.., .., .., 0..2))?)?,
-                (delta.f_i((.., .., .., 2..4))?.f_exp()?).f_mul(&reference.f_i((
+                ((delta.i((.., .., .., 0..2))?).mul_tensor(&reference.i((.., .., .., 2..4))?)?)
+                    .add_tensor(&reference.i((.., .., .., 0..2))?, 1)?,
+                (delta.i((.., .., .., 2..4))?.exp()?).mul_tensor(&reference.i((
                     ..,
                     ..,
                     ..,
@@ -115,11 +115,11 @@ impl Model {
             ],
             -1,
         )?
-        .f_i(-1)?;
-        let pred_logits = self.class_embed.forward(&hs)?.f_i(-1)?;
+        .i(-1)?;
+        let pred_logits = self.class_embed.forward(&hs)?.i(-1)?;
         let pred_masks =
             self.segmentation_head
-                .forward(&features[0], &hs.f_i(-1)?, (RESOLUTION, RESOLUTION))?;
+                .forward(&features[0], &hs.i(-1)?, (RESOLUTION, RESOLUTION))?;
         Ok(Output {
             pred_logits,
             pred_boxes,
@@ -185,7 +185,7 @@ impl DinoBackbone {
         pixel_values: &Tensor,
         hidden_states: &Tensor,
     ) -> koharu_torch::Result<Tensor> {
-        let hidden_states = self.layernorm.forward(hidden_states)?.f_i((.., 1..))?;
+        let hidden_states = self.layernorm.forward(hidden_states)?.i((.., 1..))?;
         let input_size = pixel_values.size();
         let batch_size = input_size[0];
         let height = input_size[2] / PATCH_SIZE;
@@ -196,24 +196,24 @@ impl DinoBackbone {
         let batch_windows = size[0];
         let tokens_per_window = size[1];
         hidden_states
-            .f_reshape([
+            .reshape([
                 batch_windows / (NUM_WINDOWS * NUM_WINDOWS),
                 NUM_WINDOWS * NUM_WINDOWS * tokens_per_window,
                 DINO_DIM,
             ])?
             // Preserve the upstream window reconstruction, including its
             // height/width ordering quirk.
-            .f_reshape([
+            .reshape([
                 batch_size * NUM_WINDOWS,
                 NUM_WINDOWS,
                 height_per_window,
                 width_per_window,
                 DINO_DIM,
             ])?
-            .f_permute([0, 2, 1, 3, 4])?
-            .f_reshape([batch_size, height, width, DINO_DIM])?
-            .f_permute([0, 3, 1, 2])?
-            .f_contiguous()
+            .permute([0, 2, 1, 3, 4])?
+            .reshape([batch_size, height, width, DINO_DIM])?
+            .permute([0, 3, 1, 2])?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)
     }
 }
 
@@ -255,41 +255,41 @@ impl DinoEmbeddings {
         let embeddings = self
             .projection
             .forward(pixel_values)?
-            .f_flatten(2, -1)?
-            .f_transpose(1, 2)?;
-        let embeddings = (Tensor::f_cat(
+            .flatten_using_ints(2, -1)?
+            .transpose_int(1, 2)?;
+        let embeddings = (Tensor::cat(
             &[
-                self.cls_token.f_expand([batch_size, -1, -1], false)?,
+                self.cls_token.expand([batch_size, -1, -1], false)?,
                 embeddings,
             ],
             1,
         )?)
-        .f_add(&self.position_embeddings)?;
+        .add_tensor(&self.position_embeddings, 1)?;
 
         let height = RESOLUTION / PATCH_SIZE;
         let width = RESOLUTION / PATCH_SIZE;
         let height_per_window = height / NUM_WINDOWS;
         let width_per_window = width / NUM_WINDOWS;
         let cls = embeddings
-            .f_i((.., ..1))?
-            .f_repeat([NUM_WINDOWS.pow(2), 1, 1])?;
+            .i((.., ..1))?
+            .repeat([NUM_WINDOWS.pow(2), 1, 1])?;
         let windows = embeddings
-            .f_i((.., 1..))?
-            .f_view([batch_size, height, width, DINO_DIM])?
-            .f_reshape([
+            .i((.., 1..))?
+            .view([batch_size, height, width, DINO_DIM])?
+            .reshape([
                 batch_size * NUM_WINDOWS,
                 height_per_window,
                 NUM_WINDOWS,
                 width_per_window,
                 DINO_DIM,
             ])?
-            .f_permute([0, 2, 1, 3, 4])?
-            .f_reshape([
+            .permute([0, 2, 1, 3, 4])?
+            .reshape([
                 batch_size * NUM_WINDOWS.pow(2),
                 height_per_window * width_per_window,
                 DINO_DIM,
             ])?;
-        Tensor::f_cat(&[cls, windows], 1)
+        Tensor::cat(&[cls, windows], 1)
     }
 }
 
@@ -323,28 +323,28 @@ impl DinoLayer {
         let shortcut = hidden_states;
         let attention_input = if run_full_attention {
             let size = hidden_states.size();
-            hidden_states.f_view([
+            hidden_states.view([
                 size[0] / NUM_WINDOWS.pow(2),
                 NUM_WINDOWS.pow(2) * size[1],
                 size[2],
             ])?
         } else {
-            hidden_states.f_alias()?
+            hidden_states.alias()?
         };
         let mut attention = self
             .attention
             .forward(&self.norm1.forward(&attention_input)?)?;
         if run_full_attention {
             let size = attention.size();
-            attention = attention.f_view([
+            attention = attention.view([
                 size[0] * NUM_WINDOWS.pow(2),
                 size[1] / NUM_WINDOWS.pow(2),
                 size[2],
             ])?;
         }
-        let hidden_states = shortcut.f_add(&attention.f_mul(&self.layer_scale1)?)?;
+        let hidden_states = shortcut.add_tensor(&attention.mul_tensor(&self.layer_scale1)?, 1)?;
         let layer_output = self.mlp.forward(&self.norm2.forward(&hidden_states)?)?;
-        hidden_states.f_add(&layer_output.f_mul(&self.layer_scale2)?)
+        hidden_states.add_tensor(&layer_output.mul_tensor(&self.layer_scale2)?, 1)
     }
 }
 
@@ -394,18 +394,18 @@ impl DinoAttention {
         let project = |linear: &nn::Linear| {
             linear
                 .forward(hidden_states)?
-                .f_view([batch_size, sequence_length, DINO_HEADS, head_dim])?
-                .f_permute([0, 2, 1, 3])
+                .view([batch_size, sequence_length, DINO_HEADS, head_dim])?
+                .permute([0, 2, 1, 3])
         };
         let query = project(&self.query)?;
         let key = project(&self.key)?;
         let value = project(&self.value)?;
-        let context = Tensor::f_scaled_dot_product_attention::<&Tensor>(
+        let context = Tensor::scaled_dot_product_attention(
             &query, &key, &value, None, 0.0, false, None, false,
         )?
-        .f_permute([0, 2, 1, 3])?
-        .f_contiguous()?
-        .f_view([batch_size, sequence_length, DINO_DIM])?;
+        .permute([0, 2, 1, 3])?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .view([batch_size, sequence_length, DINO_DIM])?;
         self.dense.forward(&context)
     }
 }
@@ -426,7 +426,7 @@ impl DinoMlp {
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.fc2
-            .forward(&self.fc1.forward(hidden_states)?.f_gelu("none")?)
+            .forward(&self.fc1.forward(hidden_states)?.gelu("none")?)
     }
 }
 
@@ -447,7 +447,7 @@ impl MultiScaleProjector {
 
     fn forward(&self, features: &[Tensor]) -> Result<Vec<Tensor>> {
         Ok(vec![self.norm.forward(
-            &self.stage.forward(&Tensor::f_cat(features, 1)?)?,
+            &self.stage.forward(&Tensor::cat(features, 1)?)?,
         )?])
     }
 }
@@ -477,12 +477,12 @@ impl C2f {
         let split = self
             .cv1
             .forward(xs)?
-            .f_split_with_sizes([self.hidden_channels, self.hidden_channels], 1)?;
-        let mut values = vec![split[0].f_alias()?, split[1].f_alias()?];
+            .split_with_sizes([self.hidden_channels, self.hidden_channels], 1)?;
+        let mut values = vec![split[0].alias()?, split[1].alias()?];
         for bottleneck in &self.bottlenecks {
             values.push(bottleneck.forward(values.last().unwrap())?);
         }
-        self.cv2.forward(&Tensor::f_cat(&values, 1)?)
+        self.cv2.forward(&Tensor::cat(&values, 1)?)
     }
 }
 
@@ -536,8 +536,12 @@ impl ConvX {
 
     fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         self.bn
-            .forward(&self.conv.forward(&xs.f_contiguous()?)?)?
-            .f_silu()
+            .forward(
+                &self
+                    .conv
+                    .forward(&xs.contiguous(koharu_torch::MemoryFormat::Contiguous)?)?,
+            )?
+            .silu()
     }
 }
 
@@ -551,8 +555,8 @@ impl ChannelLayerNorm {
 
     fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
         self.0
-            .forward(&xs.f_permute([0, 2, 3, 1])?)?
-            .f_permute([0, 3, 1, 2])
+            .forward(&xs.permute([0, 2, 3, 1])?)?
+            .permute([0, 3, 1, 2])
     }
 }
 
@@ -590,8 +594,10 @@ impl Transformer {
         let feature_size = features[0].size();
         let height = feature_size[2];
         let width = feature_size[3];
-        let memory = features[0].f_flatten(2, -1)?.f_transpose(1, 2)?;
-        let position = position_embeddings[0].f_flatten(2, -1)?.f_transpose(1, 2)?;
+        let memory = features[0].flatten_using_ints(2, -1)?.transpose_int(1, 2)?;
+        let position = position_embeddings[0]
+            .flatten_using_ints(2, -1)?
+            .transpose_int(1, 2)?;
         let (output_memory, output_proposals) =
             generate_encoder_output_proposals(&memory, height, width)?;
         let encoder = &self.encoder_groups[0];
@@ -600,27 +606,28 @@ impl Transformer {
             .forward(&encoder.output.forward(&output_memory)?)?;
         let encoder_class = encoder.class_embed.forward(&encoded_memory)?;
         let topk = encoder_class
-            .f_max_dim(-1, false)?
+            .max_dim(-1, false)?
             .0
-            .f_topk(NUM_QUERIES, 1, true, true)?
+            .topk(NUM_QUERIES, 1, true, true)?
             .1
-            .f_i(0)?;
-        let selected_memory = encoded_memory
-            .f_i(0)?
-            .f_index_select(0, &topk)?
-            .f_unsqueeze(0)?;
+            .i(0)?;
+        let selected_memory = encoded_memory.i(0)?.index_select(0, &topk)?.unsqueeze(0)?;
         let selected_proposals = output_proposals
-            .f_i(0)?
-            .f_index_select(0, &topk)?
-            .f_unsqueeze(0)?;
+            .i(0)?
+            .index_select(0, &topk)?
+            .unsqueeze(0)?;
         // The encoder box MLP is token-pointwise. Latest upstream gathers ranked
         // tokens first instead of evaluating and discarding every unselected box.
         let delta = encoder.bbox_embed.forward(&selected_memory)?;
-        let topk_boxes = Tensor::f_cat(
+        let topk_boxes = Tensor::cat(
             &[
-                ((delta.f_i((.., .., 0..2))?).f_mul(&selected_proposals.f_i((.., .., 2..4))?)?)
-                    .f_add(&selected_proposals.f_i((.., .., 0..2))?)?,
-                (delta.f_i((.., .., 2..4))?.f_exp()?).f_mul(&selected_proposals.f_i((
+                ((delta.i((.., .., 0..2))?).mul_tensor(&selected_proposals.i((
+                    ..,
+                    ..,
+                    2..4,
+                ))?)?)
+                .add_tensor(&selected_proposals.i((.., .., 0..2))?, 1)?,
+                (delta.i((.., .., 2..4))?.exp()?).mul_tensor(&selected_proposals.i((
                     ..,
                     ..,
                     2..4,
@@ -629,28 +636,28 @@ impl Transformer {
             -1,
         )?;
 
-        let learned_refpoints = refpoint_embed.f_unsqueeze(0)?;
+        let learned_refpoints = refpoint_embed.unsqueeze(0)?;
         let references =
-            Tensor::f_cat(
+            Tensor::cat(
                 &[
-                    ((learned_refpoints.f_i((.., .., 0..2))?).f_mul(&topk_boxes.f_i((
+                    ((learned_refpoints.i((.., .., 0..2))?).mul_tensor(&topk_boxes.i((
                         ..,
                         ..,
                         2..4,
                     ))?)?)
-                    .f_add(&topk_boxes.f_i((.., .., 0..2))?)?,
-                    (learned_refpoints.f_i((.., .., 2..4))?.f_exp()?)
-                        .f_mul(&topk_boxes.f_i((.., .., 2..4))?)?,
+                    .add_tensor(&topk_boxes.i((.., .., 0..2))?, 1)?,
+                    (learned_refpoints.i((.., .., 2..4))?.exp()?)
+                        .mul_tensor(&topk_boxes.i((.., .., 2..4))?)?,
                 ],
                 -1,
             )?;
-        let target = query_feat.f_unsqueeze(0)?;
+        let target = query_feat.unsqueeze(0)?;
         let hs = self
             .decoder
             .forward(&target, &memory, &position, &references, (height, width))?;
         Ok(TransformerOutput {
             hs,
-            references: references.f_unsqueeze(0)?,
+            references: references.unsqueeze(0)?,
         })
     }
 }
@@ -724,8 +731,8 @@ impl TransformerDecoder {
     ) -> Result<Tensor> {
         let sine = gen_sineembed_for_position(references)?;
         let query_position = self.ref_point_head.forward(&sine)?;
-        let reference_points = references.f_unsqueeze(2)?;
-        let mut output = target.f_alias()?;
+        let reference_points = references.unsqueeze(2)?;
+        let mut output = target.alias()?;
         let mut intermediate = Vec::with_capacity(self.layers.len());
         for layer in &self.layers {
             output = layer.forward(
@@ -740,7 +747,7 @@ impl TransformerDecoder {
         }
         intermediate.pop();
         intermediate.push(self.norm.forward(&output)?);
-        Ok(Tensor::f_stack(&intermediate, 0)?)
+        Ok(Tensor::stack(&intermediate, 0)?)
     }
 }
 
@@ -777,20 +784,20 @@ impl TransformerDecoderLayer {
         reference_points: &Tensor,
         spatial_shape: (i64, i64),
     ) -> Result<Tensor> {
-        let query_key = target.f_add(query_position)?;
+        let query_key = target.add_tensor(query_position, 1)?;
         let target2 = self.self_attn.forward(&query_key, target)?;
-        let target = self.norm1.forward(&target.f_add(&target2)?)?;
+        let target = self.norm1.forward(&target.add_tensor(&target2, 1)?)?;
         let target2 = self.cross_attn.forward(
-            &target.f_add(query_position)?,
+            &target.add_tensor(query_position, 1)?,
             reference_points,
             memory,
             spatial_shape,
         )?;
-        let target = self.norm2.forward(&target.f_add(&target2)?)?;
+        let target = self.norm2.forward(&target.add_tensor(&target2, 1)?)?;
         let target2 = self
             .linear2
-            .forward(&self.linear1.forward(&target)?.f_relu()?)?;
-        Ok(self.norm3.forward(&target.f_add(&target2)?)?)
+            .forward(&self.linear1.forward(&target)?.relu()?)?;
+        Ok(self.norm3.forward(&target.add_tensor(&target2, 1)?)?)
     }
 }
 
@@ -819,25 +826,25 @@ impl MultiheadAttention {
         let head_dim = HIDDEN_DIM / self.num_heads;
         // `_in_projection_packed` takes its three-linear branch because value
         // is distinct from the aliased query/key input.
-        let weights = self.in_proj_weight.f_chunk(3, 0)?;
-        let biases = self.in_proj_bias.f_chunk(3, 0)?;
-        let query = query_key.f_linear(&weights[0], Some(&biases[0]))?;
-        let key = query_key.f_linear(&weights[1], Some(&biases[1]))?;
-        let value = value.f_linear(&weights[2], Some(&biases[2]))?;
+        let weights = self.in_proj_weight.chunk(3, 0)?;
+        let biases = self.in_proj_bias.chunk(3, 0)?;
+        let query = Tensor::linear(query_key, &weights[0], Some(&biases[0]))?;
+        let key = Tensor::linear(query_key, &weights[1], Some(&biases[1]))?;
+        let value = Tensor::linear(value, &weights[2], Some(&biases[2]))?;
         let reshape = |tensor: &Tensor| {
             tensor
-                .f_view([batch_size, sequence_length, self.num_heads, head_dim])?
-                .f_transpose(1, 2)
+                .view([batch_size, sequence_length, self.num_heads, head_dim])?
+                .transpose_int(1, 2)
         };
         let query = reshape(&query)?;
         let key = reshape(&key)?;
         let value = reshape(&value)?;
-        let output = Tensor::f_scaled_dot_product_attention::<&Tensor>(
+        let output = Tensor::scaled_dot_product_attention(
             &query, &key, &value, None, 0.0, false, None, false,
         )?
-        .f_transpose(1, 2)?
-        .f_contiguous()?
-        .f_view([batch_size, sequence_length, HIDDEN_DIM])?;
+        .transpose_int(1, 2)?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .view([batch_size, sequence_length, HIDDEN_DIM])?;
         Ok(self.out_proj.forward(&output)?)
     }
 }
@@ -894,7 +901,7 @@ impl MultiscaleDeformableAttention {
         let num_points = 2;
         let head_dim = HIDDEN_DIM / num_heads;
         let value = self.value_proj.forward(memory)?;
-        let offsets = self.sampling_offsets.forward(query)?.f_view([
+        let offsets = self.sampling_offsets.forward(query)?.view([
             batch_size,
             num_queries,
             num_heads,
@@ -905,52 +912,53 @@ impl MultiscaleDeformableAttention {
         let weights = self
             .attention_weights
             .forward(query)?
-            .f_view([batch_size, num_queries, num_heads, num_points])?
-            .f_softmax(-1, None::<Kind>)?
-            .f_unsqueeze(3)?;
+            .view([batch_size, num_queries, num_heads, num_points])?
+            .softmax_int(-1, None::<Kind>)?
+            .unsqueeze(3)?;
         let locations = (reference_points
-            .f_i((.., .., .., 0..2))?
-            .f_unsqueeze(2)?
-            .f_unsqueeze(4)?)
-        .f_add(
-            &((offsets.f_div_scalar(num_points as f64)?).f_mul(
+            .i((.., .., .., 0..2))?
+            .unsqueeze(2)?
+            .unsqueeze(4)?)
+        .add_tensor(
+            &((offsets.div_scalar(num_points as f64)?).mul_tensor(
                 &reference_points
-                    .f_i((.., .., .., 2..4))?
-                    .f_unsqueeze(2)?
-                    .f_unsqueeze(4)?,
+                    .i((.., .., .., 2..4))?
+                    .unsqueeze(2)?
+                    .unsqueeze(4)?,
             )?)
-            .f_mul_scalar(0.5)?,
+            .mul_scalar(0.5)?,
+            1,
         )?;
 
         let value = value
-            .f_transpose(1, 2)?
-            .f_contiguous()?
-            .f_view([batch_size, num_heads, head_dim, -1])?;
-        let value = value.f_view([
+            .transpose_int(1, 2)?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+            .view([batch_size, num_heads, head_dim, -1])?;
+        let value = value.view([
             batch_size * num_heads,
             head_dim,
             spatial_shape.0,
             spatial_shape.1,
         ])?;
         let grid = locations
-            .f_mul_scalar(2.0)?
-            .f_sub_scalar(1.0)?
-            .f_i((.., .., .., 0))?
-            .f_transpose(1, 2)?
-            .f_flatten(0, 1)?;
-        let sampled = value.f_grid_sampler_2d(&grid, 0, 0, false)?;
-        let weights = weights.f_transpose(1, 2)?.f_reshape([
+            .mul_scalar(2.0)?
+            .sub_scalar(1.0, 1)?
+            .i((.., .., .., 0))?
+            .transpose_int(1, 2)?
+            .flatten_using_ints(0, 1)?;
+        let sampled = Tensor::grid_sampler_2d(&value, &grid, 0, 0, false)?;
+        let weights = weights.transpose_int(1, 2)?.reshape([
             batch_size * num_heads,
             1,
             num_queries,
             num_points,
         ])?;
         let output = sampled
-            .f_mul(&weights)?
-            .f_sum_dim_intlist(&[-1i64][..], false, None::<Kind>)?
-            .f_view([batch_size, HIDDEN_DIM, num_queries])?
-            .f_transpose(1, 2)?
-            .f_contiguous()?;
+            .mul_tensor(&weights)?
+            .sum_dim_intlist(&[-1i64][..], false, None::<Kind>)?
+            .view([batch_size, HIDDEN_DIM, num_queries])?
+            .transpose_int(1, 2)?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)?;
         Ok(self.output_proj.forward(&output)?)
     }
 }
@@ -965,54 +973,53 @@ fn generate_encoder_output_proposals(
     // x = 128 on, which moves the far cells' centres and can pull one past
     // the 0.99 cut-off back inside it.
     let options = (Kind::Float, memory.device());
-    let grid_y = Tensor::f_linspace(0.0, (height - 1) as f64, height, options)?;
-    let grid_x = Tensor::f_linspace(0.0, (width - 1) as f64, width, options)?;
-    let mesh = Tensor::f_meshgrid_indexing(&[grid_y, grid_x], "ij")?;
-    let grid = Tensor::f_cat(&[mesh[1].f_unsqueeze(-1)?, mesh[0].f_unsqueeze(-1)?], -1)?;
-    let scale = Tensor::f_from_slice(&[width as f32, height as f32])?
-        .f_to_device(memory.device())?
-        .f_view([1, 1, 2])?;
-    let grid = grid.f_unsqueeze(0)?.f_add_scalar(0.5)?.f_div(&scale)?;
-    let wh = (Tensor::f_ones_like(&grid)?).f_mul_scalar(0.05)?;
-    let proposals =
-        Tensor::f_cat(&[grid, wh], -1)?.f_reshape([memory.size()[0], height * width, 4])?;
+    let grid_y = Tensor::linspace(0.0, (height - 1) as f64, height, options)?;
+    let grid_x = Tensor::linspace(0.0, (width - 1) as f64, width, options)?;
+    let mesh = Tensor::meshgrid_indexing(&[grid_y, grid_x], "ij")?;
+    let grid = Tensor::cat(&[mesh[1].unsqueeze(-1)?, mesh[0].unsqueeze(-1)?], -1)?;
+    let scale = Tensor::from_slice(&[width as f32, height as f32])?
+        .to(memory.device())?
+        .view([1, 1, 2])?;
+    let grid = grid.unsqueeze(0)?.add_scalar(0.5, 1)?.div_tensor(&scale)?;
+    let wh = grid.ones_like(None, None)?.mul_scalar(0.05)?;
+    let proposals = Tensor::cat(&[grid, wh], -1)?.reshape([memory.size()[0], height * width, 4])?;
     let valid = proposals
-        .f_gt(0.01)?
-        .f_logical_and(&proposals.f_lt(0.99)?)?
-        .f_all_dim(-1, true)?;
+        .gt_scalar(0.01)?
+        .logical_and(&proposals.lt_scalar(0.99)?)?
+        .all_dim(-1, true)?;
     Ok((
-        memory.f_masked_fill(&valid.f_logical_not()?, 0.0)?,
+        memory.masked_fill_scalar(&valid.logical_not()?, 0.0)?,
         proposals
-            .f_masked_fill(&valid.f_logical_not()?, 0.0)?
-            .f_to_kind(memory.kind())?,
+            .masked_fill_scalar(&valid.logical_not()?, 0.0)?
+            .to_kind(memory.kind())?,
     ))
 }
 
 fn gen_sineembed_for_position(position: &Tensor) -> koharu_torch::Result<Tensor> {
     let dim = HIDDEN_DIM / 2;
-    let dim_t = Tensor::f_arange(dim, (position.kind(), position.device()))?;
+    let dim_t = Tensor::arange(dim, (position.kind(), position.device()))?;
     let exponent = dim_t
-        .f_floor_divide_scalar(2)?
-        .f_mul_scalar(2.0)?
-        .f_div_scalar(dim as f64)?;
+        .floor_divide_scalar(2)?
+        .mul_scalar(2.0)?
+        .div_scalar(dim as f64)?;
     // `10000 ** exponent` as upstream writes it, rounded once to the
     // position's kind: `exp(exponent * ln 10000)` would round the product to
     // BF16 first and put the frequencies off by up to 3%.
-    let dim_t = Tensor::f_pow_scalar(10000.0, &exponent)?;
+    let dim_t = Tensor::pow_scalar(10000.0, &exponent)?;
     let encode = |index: i64| {
-        let embedded = ((position.f_i((.., .., index))?.f_unsqueeze(-1)?)
-            .f_mul_scalar(2.0 * std::f64::consts::PI)?)
-        .f_div(&dim_t)?;
-        Tensor::f_stack(
+        let embedded = ((position.i((.., .., index))?.unsqueeze(-1)?)
+            .mul_scalar(2.0 * std::f64::consts::PI)?)
+        .div_tensor(&dim_t)?;
+        Tensor::stack(
             &[
-                embedded.f_slice(-1, 0, dim, 2)?.f_sin()?,
-                embedded.f_slice(-1, 1, dim, 2)?.f_cos()?,
+                embedded.slice_tensor(-1, 0, dim, 2)?.sin()?,
+                embedded.slice_tensor(-1, 1, dim, 2)?.cos()?,
             ],
             3,
         )?
-        .f_flatten(2, 3)
+        .flatten_using_ints(2, 3)
     };
-    Tensor::f_cat(&[encode(1)?, encode(0)?, encode(2)?, encode(3)?], 2)
+    Tensor::cat(&[encode(1)?, encode(0)?, encode(2)?, encode(3)?], 2)
 }
 
 fn sine_position_embedding(feature: &Tensor) -> koharu_torch::Result<Tensor> {
@@ -1021,36 +1028,36 @@ fn sine_position_embedding(feature: &Tensor) -> koharu_torch::Result<Tensor> {
     let height = size[2];
     let width = size[3];
     let options = (feature.kind(), feature.device());
-    let y = ((Tensor::f_arange_start(1, height + 1, options)?
-        .f_view([1, height, 1])?
-        .f_expand([batch_size, height, width], false)?)
-    .f_div_scalar(height as f64 + 1e-6)?)
-    .f_mul_scalar(2.0 * std::f64::consts::PI)?;
-    let x = ((Tensor::f_arange_start(1, width + 1, options)?
-        .f_view([1, 1, width])?
-        .f_expand([batch_size, height, width], false)?)
-    .f_div_scalar(width as f64 + 1e-6)?)
-    .f_mul_scalar(2.0 * std::f64::consts::PI)?;
-    let dim_t = Tensor::f_arange(HIDDEN_DIM / 2, options)?;
+    let y = ((Tensor::arange_start(1, height + 1, options)?
+        .view([1, height, 1])?
+        .expand([batch_size, height, width], false)?)
+    .div_scalar(height as f64 + 1e-6)?)
+    .mul_scalar(2.0 * std::f64::consts::PI)?;
+    let x = ((Tensor::arange_start(1, width + 1, options)?
+        .view([1, 1, width])?
+        .expand([batch_size, height, width], false)?)
+    .div_scalar(width as f64 + 1e-6)?)
+    .mul_scalar(2.0 * std::f64::consts::PI)?;
+    let dim_t = Tensor::arange(HIDDEN_DIM / 2, options)?;
     let exponent = dim_t
-        .f_floor_divide_scalar(2)?
-        .f_mul_scalar(2.0)?
-        .f_div_scalar((HIDDEN_DIM / 2) as f64)?;
-    let dim_t = exponent.f_mul_scalar(10000f64.ln())?.f_exp()?;
+        .floor_divide_scalar(2)?
+        .mul_scalar(2.0)?
+        .div_scalar((HIDDEN_DIM / 2) as f64)?;
+    let dim_t = exponent.mul_scalar(10000f64.ln())?.exp()?;
     let encode = |coordinates: Tensor| {
-        let embedded = (coordinates.f_unsqueeze(-1)?).f_div(&dim_t)?;
-        Tensor::f_stack(
+        let embedded = (coordinates.unsqueeze(-1)?).div_tensor(&dim_t)?;
+        Tensor::stack(
             &[
-                embedded.f_slice(-1, 0, HIDDEN_DIM / 2, 2)?.f_sin()?,
-                embedded.f_slice(-1, 1, HIDDEN_DIM / 2, 2)?.f_cos()?,
+                embedded.slice_tensor(-1, 0, HIDDEN_DIM / 2, 2)?.sin()?,
+                embedded.slice_tensor(-1, 1, HIDDEN_DIM / 2, 2)?.cos()?,
             ],
             4,
         )?
-        .f_flatten(3, 4)
+        .flatten_using_ints(3, 4)
     };
-    Tensor::f_cat(&[encode(y)?, encode(x)?], 3)?
-        .f_permute([0, 3, 1, 2])?
-        .f_to_kind(feature.kind())
+    Tensor::cat(&[encode(y)?, encode(x)?], 3)?
+        .permute([0, 3, 1, 2])?
+        .to_kind(feature.kind())
 }
 
 // https://github.com/roboflow/rf-detr/blob/4ab7c18729de9d02ffd0495795d0831b5630f01b/src/rfdetr/models/heads/segmentation.py
@@ -1093,7 +1100,7 @@ impl SegmentationHead {
         query_features: &Tensor,
         image_size: (i64, i64),
     ) -> koharu_torch::Result<Tensor> {
-        let mut spatial_features = spatial_features.f_upsample_bilinear2d(
+        let mut spatial_features = spatial_features.upsample_bilinear2d(
             [image_size.0 / 4, image_size.1 / 4],
             false,
             None,
@@ -1110,14 +1117,14 @@ impl SegmentationHead {
             .query_features_proj
             .forward(&self.query_features_block.forward(query_features)?)?;
         (query_features
-            .f_matmul(&spatial_features.f_flatten(2, -1)?)?
-            .f_view([
+            .matmul(&spatial_features.flatten_using_ints(2, -1)?)?
+            .view([
                 spatial_features.size()[0],
                 query_features.size()[1],
                 image_size.0 / 4,
                 image_size.1 / 4,
             ])?)
-        .f_add(&self.bias)
+        .add_tensor(&self.bias, 1)
     }
 }
 
@@ -1151,13 +1158,14 @@ impl DepthwiseConvBlock {
         let residual = xs;
         let xs = self
             .norm
-            .forward(&self.dwconv.forward(xs)?.f_permute([0, 2, 3, 1])?)?;
-        residual.f_add(
+            .forward(&self.dwconv.forward(xs)?.permute([0, 2, 3, 1])?)?;
+        residual.add_tensor(
             &self
                 .pwconv1
                 .forward(&xs)?
-                .f_gelu("none")?
-                .f_permute([0, 3, 1, 2])?,
+                .gelu("none")?
+                .permute([0, 3, 1, 2])?,
+            1,
         )
     }
 }
@@ -1189,13 +1197,14 @@ impl QueryMlpBlock {
     }
 
     fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
-        xs.f_add(
+        xs.add_tensor(
             &self.second.forward(
                 &self
                     .first
                     .forward(&self.norm_in.forward(xs)?)?
-                    .f_gelu("none")?,
+                    .gelu("none")?,
             )?,
+            1,
         )
     }
 }
@@ -1232,11 +1241,11 @@ impl Mlp {
     }
 
     fn forward(&self, xs: &Tensor) -> koharu_torch::Result<Tensor> {
-        let mut xs = xs.f_alias()?;
+        let mut xs = xs.alias()?;
         for (index, layer) in self.layers.iter().enumerate() {
             xs = layer.forward(&xs)?;
             if index + 1 != self.layers.len() {
-                xs = xs.f_relu()?;
+                xs = xs.relu()?;
             }
         }
         Ok(xs)

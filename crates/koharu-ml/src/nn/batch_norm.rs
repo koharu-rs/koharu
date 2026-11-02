@@ -74,7 +74,7 @@ pub fn batch_norm2d<'a, T: Borrow<super::Path<'a>>>(
 
 impl super::ModuleT for BatchNorm {
     fn forward_t(&self, xs: &Tensor, train: bool) -> Result<Tensor> {
-        let dim = xs.dim();
+        let dim = xs.size().len();
         let expected = if self.nd == 1 {
             dim == 2 || dim == 3
         } else {
@@ -90,7 +90,7 @@ impl super::ModuleT for BatchNorm {
         // The process-wide switch the runtime sets once, which keeps MIOpen
         // off where it isn't reliable.
         let cudnn = koharu_torch::Cuda::user_enabled_cudnn();
-        Tensor::f_batch_norm(
+        Tensor::batch_norm(
             xs,
             self.ws.as_ref(),
             self.bs.as_ref(),

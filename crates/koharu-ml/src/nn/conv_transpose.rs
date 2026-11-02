@@ -100,7 +100,8 @@ macro_rules! impl_forward {
     ($conv:ty, $op:ident) => {
         impl super::Module for $conv {
             fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-                xs.$op(
+                Tensor::$op(
+                    xs,
                     &self.ws,
                     self.bs.as_ref(),
                     self.config.stride,
@@ -114,4 +115,4 @@ macro_rules! impl_forward {
     };
 }
 
-impl_forward!(ConvTranspose2D, f_conv_transpose2d);
+impl_forward!(ConvTranspose2D, conv_transpose2d_input);

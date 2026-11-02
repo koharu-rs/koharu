@@ -75,7 +75,7 @@ impl MangaOcr {
                 .iter()
                 .map(|image| self.processor.preprocess(image, self.device))
                 .collect::<Result<Vec<_>>>()?;
-            let token_ids = self.model.forward(&Tensor::f_cat(&pixel_values, 0)?)?;
+            let token_ids = self.model.forward(&Tensor::cat(&pixel_values, 0)?)?;
             token_ids
                 .iter()
                 .map(|token_ids| self.tokenizer.decode(token_ids))

@@ -1,6 +1,9 @@
-//! The koharu-rs/torch shim's C API to libtorch, resolved from the runtime's
-//! build when `load` is called. The headers are copied verbatim from
-//! `RELEASE`.
+//! The koharu-rs/torch shim's C API to libtorch, with libtorch's own C
+//! functions for the tensors it passes, resolved from the runtime's build
+//! when `load` is called. libtorch's C headers are copied verbatim from
+//! `RELEASE`. `koharu_torch.h` and `koharu_torch_aten.h` come from
+//! koharu-rs/torch 7de8ef4, which generates the functions `RELEASE` exports
+//! with the same C types, named so a binding tells a dtype from a flag.
 
 #![allow(
     non_camel_case_types,
@@ -10,45 +13,7 @@
     clippy::all
 )]
 
-pub mod cuda;
-pub mod io;
-mod traits;
-
-pub use traits::{DoubleList, IntList, IntListOption};
-
-/// The koharu-rs/torch release the headers come from.
-pub const RELEASE: &str = "v2.13.0.7";
-
-#[repr(C)]
-pub struct C_scalar {
-    _private: [u8; 0],
-}
-
-#[repr(C)]
-pub struct C_tensor {
-    _private: [u8; 0],
-}
-
-#[repr(C)]
-pub struct C_optimizer {
-    _private: [u8; 0],
-}
-
-#[allow(clippy::upper_case_acronyms)]
-#[repr(C)]
-pub struct CIValue {
-    _private: [u8; 0],
-}
-
-#[repr(C)]
-pub struct CModule_ {
-    _private: [u8; 0],
-}
-
-pub type tensor = *mut C_tensor;
-pub type scalar = *mut C_scalar;
-pub type optimizer = *mut C_optimizer;
-pub type ivalue = *mut CIValue;
-pub type torch_module = *mut CModule_;
+/// The koharu-rs/torch release the runtime loads.
+pub const RELEASE: &str = "v2.15.0";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

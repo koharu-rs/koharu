@@ -53,7 +53,7 @@ pub fn layer_norm<'a, T: Borrow<super::Path<'a>>>(
 
 impl super::Module for LayerNorm {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        Tensor::f_layer_norm(
+        Tensor::layer_norm(
             xs,
             self.normalized_shape.as_slice(),
             self.ws.as_ref(),

@@ -88,16 +88,16 @@ impl Model {
         let rows = size[0] as usize;
         let device = pixel_values.device();
 
-        let pixel_values = pixel_values.f_to_kind(self.vs.kind())?;
+        let pixel_values = pixel_values.to_kind(self.vs.kind())?;
         let vision_hidden_states = self.vision_encoder.forward(&pixel_values)?;
-        let vision_embeds = self.projector.forward(&vision_hidden_states.f_narrow(
+        let vision_embeds = self.projector.forward(&vision_hidden_states.narrow(
             1,
             1,
             self.vision_num_tokens,
         )?)?;
-        let bos = Tensor::f_full([rows as i64, 1], self.bos_token_id, (Kind::Int64, device))?;
+        let bos = Tensor::full([rows as i64, 1], self.bos_token_id, (Kind::Int64, device))?;
         let text_embeds = self.model.embed_tokens.forward(&bos)?;
-        let inputs_embeds = Tensor::f_cat(&[vision_embeds, text_embeds], 1)?;
+        let inputs_embeds = Tensor::cat(&[vision_embeds, text_embeds], 1)?;
         let (hidden_states, mut cache) = self.model.forward(inputs_embeds, None)?;
         let mut logits = self.logits(&hidden_states)?;
 
@@ -141,19 +141,19 @@ impl Model {
                         .iter()
                         .map(|tokens| tokens.last().copied().unwrap_or(self.bos_token_id))
                         .collect::<Vec<_>>();
-                    let last_ids = Tensor::f_from_slice(&last_ids)?
-                        .f_view([rows as i64, 1])?
-                        .f_to_device(device)?;
-                    let banned = Tensor::f_from_slice(&banned)?
-                        .f_view([rows as i64, 1])?
-                        .f_to_device(device)?;
+                    let last_ids = Tensor::from_slice(&last_ids)?
+                        .view([rows as i64, 1])?
+                        .to(device)?;
+                    let banned = Tensor::from_slice(&banned)?
+                        .view([rows as i64, 1])?
+                        .to(device)?;
                     logits = logits
-                        .f_scatter_value(1, &last_ids, f64::NEG_INFINITY)?
-                        .f_where_self(&banned, &logits)?;
+                        .scatter_value(1, &last_ids, f64::NEG_INFINITY)?
+                        .where_self(&banned, &logits)?;
                 }
             }
 
-            let next_tokens = Vec::<i64>::try_from(logits.f_argmax(-1, false)?)?;
+            let next_tokens = Vec::<i64>::try_from(logits.argmax(-1, false)?)?;
             for (row, &next_token) in next_tokens.iter().enumerate() {
                 if finished[row] {
                     continue;
@@ -173,9 +173,9 @@ impl Model {
                 break;
             }
 
-            let next_ids = Tensor::f_from_slice(&next_tokens)?
-                .f_view([rows as i64, 1])?
-                .f_to_device(device)?;
+            let next_ids = Tensor::from_slice(&next_tokens)?
+                .view([rows as i64, 1])?
+                .to(device)?;
             let input_embeds = self.model.embed_tokens.forward(&next_ids)?;
             let (hidden_states, next_cache) = self.model.forward(input_embeds, Some(&cache))?;
             cache = next_cache;
@@ -187,10 +187,10 @@ impl Model {
     fn logits(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         // Generation only consumes the final position. Applying the tied head to
         // that row avoids materializing 256 unused vision-prefix logit rows.
-        let last_hidden_state = hidden_states.f_select(1, hidden_states.size()[1] - 1)?;
-        let logits = last_hidden_state.f_linear(&self.model.embed_tokens.ws, None::<&Tensor>)?;
+        let last_hidden_state = hidden_states.select_int(1, hidden_states.size()[1] - 1)?;
+        let logits = Tensor::linear(&last_hidden_state, &self.model.embed_tokens.ws, None)?;
         if let Some(cap) = self.final_logit_softcap {
-            logits.f_div_scalar(cap)?.f_tanh()?.f_mul_scalar(cap)
+            logits.div_scalar(cap)?.tanh()?.mul_scalar(cap)
         } else {
             Ok(logits)
         }
@@ -263,22 +263,22 @@ impl Dinov2Embeddings {
         let new_height = height / self.patch_size;
         let new_width = width / self.patch_size;
         let position_embeddings = if new_height * new_width == num_positions && height == width {
-            self.position_embeddings.f_alias()?
+            self.position_embeddings.alias()?
         } else {
             let positions_per_side = (num_positions as f64).sqrt() as i64;
-            let class_position = self.position_embeddings.f_narrow(1, 0, 1)?;
+            let class_position = self.position_embeddings.narrow(1, 0, 1)?;
             let target_kind = self.position_embeddings.kind();
             let patch_positions = self
                 .position_embeddings
-                .f_narrow(1, 1, num_positions)?
-                .f_reshape([1, positions_per_side, positions_per_side, -1])?
-                .f_permute([0, 3, 1, 2])?
-                .f_to_kind(Kind::Float)?
-                .f_upsample_bicubic2d([new_height, new_width], false, None::<f64>, None::<f64>)?
-                .f_to_kind(target_kind)?
-                .f_permute([0, 2, 3, 1])?
-                .f_reshape([1, -1, self.position_embeddings.size()[2]])?;
-            Tensor::f_cat(&[class_position, patch_positions], 1)?
+                .narrow(1, 1, num_positions)?
+                .reshape([1, positions_per_side, positions_per_side, -1])?
+                .permute([0, 3, 1, 2])?
+                .to_kind(Kind::Float)?
+                .upsample_bicubic2d([new_height, new_width], false, None::<f64>, None::<f64>)?
+                .to_kind(target_kind)?
+                .permute([0, 2, 3, 1])?
+                .reshape([1, -1, self.position_embeddings.size()[2]])?;
+            Tensor::cat(&[class_position, patch_positions], 1)?
         };
         self.interpolated_position_embeddings = Some(position_embeddings);
         Ok(())
@@ -288,12 +288,13 @@ impl Dinov2Embeddings {
         let batch_size = pixel_values.size()[0];
         let patch_tokens = self
             .patch_embeddings
-            .forward(&pixel_values.f_to_kind(self.patch_embeddings.projection.ws.kind())?)?;
-        let cls_tokens = self.cls_token.f_expand([batch_size, -1, -1], false)?;
-        (Tensor::f_cat(&[cls_tokens, patch_tokens], 1)?).f_add(
+            .forward(&pixel_values.to_kind(self.patch_embeddings.projection.ws.kind())?)?;
+        let cls_tokens = self.cls_token.expand([batch_size, -1, -1], false)?;
+        (Tensor::cat(&[cls_tokens, patch_tokens], 1)?).add_tensor(
             self.interpolated_position_embeddings
                 .as_ref()
                 .expect("DINOv2 positions are cached after loading"),
+            1,
         )
     }
 }
@@ -323,8 +324,8 @@ impl Dinov2PatchEmbeddings {
     fn forward(&self, pixel_values: &Tensor) -> koharu_torch::Result<Tensor> {
         self.projection
             .forward(pixel_values)?
-            .f_flatten(2, -1)?
-            .f_transpose(1, 2)
+            .flatten_using_ints(2, -1)?
+            .transpose_int(1, 2)
     }
 }
 
@@ -373,17 +374,19 @@ impl Dinov2Layer {
     }
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
-        let hidden_states = hidden_states.f_add(
+        let hidden_states = hidden_states.add_tensor(
             &self.layer_scale1.forward(
                 &self
                     .attention
                     .forward(&self.norm1.forward(hidden_states)?)?,
             )?,
+            1,
         )?;
-        hidden_states.f_add(
+        hidden_states.add_tensor(
             &self
                 .layer_scale2
                 .forward(&self.mlp.forward(&self.norm2.forward(&hidden_states)?)?)?,
+            1,
         )
     }
 }
@@ -453,19 +456,19 @@ impl Dinov2SelfAttention {
         let query = self
             .query
             .forward(hidden_states)?
-            .f_view(shape)?
-            .f_transpose(1, 2)?;
+            .view(shape)?
+            .transpose_int(1, 2)?;
         let key = self
             .key
             .forward(hidden_states)?
-            .f_view(shape)?
-            .f_transpose(1, 2)?;
+            .view(shape)?
+            .transpose_int(1, 2)?;
         let value = self
             .value
             .forward(hidden_states)?
-            .f_view(shape)?
-            .f_transpose(1, 2)?;
-        Tensor::f_scaled_dot_product_attention(
+            .view(shape)?
+            .transpose_int(1, 2)?;
+        Tensor::scaled_dot_product_attention(
             &query,
             &key,
             &value,
@@ -475,9 +478,9 @@ impl Dinov2SelfAttention {
             (self.head_dim as f64).powf(-0.5),
             false,
         )?
-        .f_transpose(1, 2)?
-        .f_contiguous()?
-        .f_reshape([batch_size, sequence_length, self.num_heads * self.head_dim])
+        .transpose_int(1, 2)?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .reshape([batch_size, sequence_length, self.num_heads * self.head_dim])
     }
 }
 
@@ -516,7 +519,7 @@ impl Dinov2LayerScale {
     }
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
-        hidden_states.f_mul(&self.lambda1)
+        hidden_states.mul_tensor(&self.lambda1)
     }
 }
 
@@ -546,7 +549,7 @@ impl Dinov2Mlp {
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.fc2
-            .forward(&self.fc1.forward(hidden_states)?.f_gelu("none")?)
+            .forward(&self.fc1.forward(hidden_states)?.gelu("none")?)
     }
 }
 
@@ -576,7 +579,7 @@ impl BaberuVisionProjector {
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         self.linear2
-            .forward(&self.linear1.forward(hidden_states)?.f_gelu("none")?)
+            .forward(&self.linear1.forward(hidden_states)?.gelu("none")?)
     }
 }
 
@@ -720,7 +723,7 @@ impl BaberuDecoderLayer {
         } else {
             attention
         };
-        let hidden_states = hidden_states.f_add(&attention)?;
+        let hidden_states = hidden_states.add_tensor(&attention, 1)?;
         let mlp = self
             .mlp
             .forward(&self.pre_ffn_norm.forward(&hidden_states)?)?;
@@ -729,7 +732,7 @@ impl BaberuDecoderLayer {
         } else {
             mlp
         };
-        Ok((hidden_states.f_add(&mlp)?, present))
+        Ok((hidden_states.add_tensor(&mlp, 1)?, present))
     }
 }
 
@@ -795,46 +798,46 @@ impl BaberuAttention {
         let mut query = self
             .q_proj
             .forward(hidden_states)?
-            .f_view([batch_size, q_len, self.num_heads, self.head_dim])?
-            .f_transpose(1, 2)?;
+            .view([batch_size, q_len, self.num_heads, self.head_dim])?
+            .transpose_int(1, 2)?;
         let mut key = self
             .k_proj
             .forward(hidden_states)?
-            .f_view([batch_size, q_len, self.num_kv_heads, self.head_dim])?
-            .f_transpose(1, 2)?;
+            .view([batch_size, q_len, self.num_kv_heads, self.head_dim])?
+            .transpose_int(1, 2)?;
         let mut value = self
             .v_proj
             .forward(hidden_states)?
-            .f_view([batch_size, q_len, self.num_kv_heads, self.head_dim])?
-            .f_transpose(1, 2)?;
+            .view([batch_size, q_len, self.num_kv_heads, self.head_dim])?
+            .transpose_int(1, 2)?;
         (query, key) = apply_rotary_pos_emb(&query, &key, cos, sin)?;
         if let Some(cache) = past_key_value {
-            key = Tensor::f_cat(&[cache.key.f_alias()?, key], 2)?;
-            value = Tensor::f_cat(&[cache.value.f_alias()?, value], 2)?;
+            key = Tensor::cat(&[cache.key.alias()?, key], 2)?;
+            value = Tensor::cat(&[cache.value.alias()?, value], 2)?;
         }
         let present = LayerCache {
-            key: key.f_alias()?,
-            value: value.f_alias()?,
+            key: key.alias()?,
+            value: value.alias()?,
         };
 
         let attention = if let Some(cap) = self.attn_softcap {
             let repeats = self.num_heads / self.num_kv_heads;
-            let expanded_key = key.f_repeat_interleave_self_int(repeats, 1, None::<i64>)?;
-            let expanded_value = value.f_repeat_interleave_self_int(repeats, 1, None::<i64>)?;
-            let mut scores = (query.f_matmul(&expanded_key.f_transpose(-1, -2)?)?)
-                .f_div_scalar((self.head_dim as f64).sqrt())?;
-            scores = scores.f_div_scalar(cap)?.f_tanh()?.f_mul_scalar(cap)?;
+            let expanded_key = key.repeat_interleave_self_int(repeats, 1, None::<i64>)?;
+            let expanded_value = value.repeat_interleave_self_int(repeats, 1, None::<i64>)?;
+            let mut scores = (query.matmul(&expanded_key.transpose_int(-1, -2)?)?)
+                .div_scalar((self.head_dim as f64).sqrt())?;
+            scores = scores.div_scalar(cap)?.tanh()?.mul_scalar(cap)?;
             if let Some(mask) = attention_mask {
-                scores = scores.f_add(mask)?;
+                scores = scores.add_tensor(mask, 1)?;
             }
             scores
-                .f_softmax(-1, Some(Kind::Float))?
-                .f_to_kind(query.kind())?
-                .f_matmul(&expanded_value)?
+                .softmax_int(-1, Some(Kind::Float))?
+                .to_kind(query.kind())?
+                .matmul(&expanded_value)?
         } else {
             // Native GQA avoids physically repeating K/V heads and lets CUDA
             // select flash or memory-efficient SDPA kernels.
-            Tensor::f_scaled_dot_product_attention(
+            Tensor::scaled_dot_product_attention(
                 &query,
                 &key,
                 &value,
@@ -845,11 +848,10 @@ impl BaberuAttention {
                 true,
             )?
         };
-        let attention = attention.f_transpose(1, 2)?.f_contiguous()?.f_view([
-            batch_size,
-            q_len,
-            self.num_heads * self.head_dim,
-        ])?;
+        let attention = attention
+            .transpose_int(1, 2)?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+            .view([batch_size, q_len, self.num_heads * self.head_dim])?;
         Ok((self.o_proj.forward(&attention)?, present))
     }
 }
@@ -897,8 +899,8 @@ impl BaberuMlp {
             &self
                 .gate_proj
                 .forward(hidden_states)?
-                .f_silu()?
-                .f_mul(&self.up_proj.forward(hidden_states)?)?,
+                .silu()?
+                .mul_tensor(&self.up_proj.forward(hidden_states)?)?,
         )
     }
 }
@@ -919,16 +921,16 @@ impl BaberuRmsNorm {
 
     fn forward(&self, hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
         let input_kind = hidden_states.kind();
-        let hidden_states = hidden_states.f_to_kind(Kind::Float)?;
-        let variance = hidden_states.f_pow_tensor_scalar(2.0)?.f_mean_dim(
+        let hidden_states = hidden_states.to_kind(Kind::Float)?;
+        let variance = hidden_states.pow_tensor_scalar(2.0)?.mean_dim(
             &[-1i64][..],
             true,
             Some(Kind::Float),
         )?;
         self.weight
-            .f_mul(&hidden_states)?
-            .f_mul(&variance.f_add_scalar(self.eps)?.f_rsqrt()?)?
-            .f_to_kind(input_kind)
+            .mul_tensor(&hidden_states)?
+            .mul_tensor(&variance.add_scalar(self.eps, 1)?.rsqrt()?)?
+            .to_kind(input_kind)
     }
 }
 
@@ -940,17 +942,17 @@ struct BaberuRotaryEmbedding {
 
 impl BaberuRotaryEmbedding {
     fn new(dim: i64, max_seq_len: i64, theta: f64, device: Device, kind: Kind) -> Result<Self> {
-        let positions = Tensor::f_arange(max_seq_len, (Kind::Float, device))?.f_unsqueeze(1)?;
-        let dimensions = Tensor::f_arange_start_step(0, dim, 2, (Kind::Float, device))?;
-        let inv_freq = (dimensions.f_div_scalar(dim as f64)?)
-            .f_mul_scalar(theta.ln())?
-            .f_exp()?
-            .f_reciprocal()?;
-        let frequencies = positions.f_matmul(&inv_freq.f_unsqueeze(0)?)?;
-        let embeddings = Tensor::f_cat(&[frequencies.f_alias()?, frequencies], 1)?;
+        let positions = Tensor::arange(max_seq_len, (Kind::Float, device))?.unsqueeze(1)?;
+        let dimensions = Tensor::arange_start_step(0, dim, 2, (Kind::Float, device))?;
+        let inv_freq = (dimensions.div_scalar(dim as f64)?)
+            .mul_scalar(theta.ln())?
+            .exp()?
+            .reciprocal()?;
+        let frequencies = positions.matmul(&inv_freq.unsqueeze(0)?)?;
+        let embeddings = Tensor::cat(&[frequencies.alias()?, frequencies], 1)?;
         Ok(Self {
-            cos: embeddings.f_cos()?.f_to_kind(kind)?,
-            sin: embeddings.f_sin()?.f_to_kind(kind)?,
+            cos: embeddings.cos()?.to_kind(kind)?,
+            sin: embeddings.sin()?.to_kind(kind)?,
         })
     }
 
@@ -961,11 +963,11 @@ impl BaberuRotaryEmbedding {
     ) -> koharu_torch::Result<(Tensor, Tensor)> {
         Ok((
             self.cos
-                .f_narrow(0, past_len, sequence_length)?
-                .f_unsqueeze(0)?,
+                .narrow(0, past_len, sequence_length)?
+                .unsqueeze(0)?,
             self.sin
-                .f_narrow(0, past_len, sequence_length)?
-                .f_unsqueeze(0)?,
+                .narrow(0, past_len, sequence_length)?
+                .unsqueeze(0)?,
         ))
     }
 }
@@ -976,20 +978,21 @@ fn apply_rotary_pos_emb(
     cos: &Tensor,
     sin: &Tensor,
 ) -> koharu_torch::Result<(Tensor, Tensor)> {
-    let cos = cos.f_unsqueeze(1)?;
-    let sin = sin.f_unsqueeze(1)?;
+    let cos = cos.unsqueeze(1)?;
+    let sin = sin.unsqueeze(1)?;
     Ok((
-        (query.f_mul(&cos)?).f_add(&rotate_half(query)?.f_mul(&sin)?)?,
-        key.f_mul(&cos)?.f_add(&rotate_half(key)?.f_mul(&sin)?)?,
+        (query.mul_tensor(&cos)?).add_tensor(&rotate_half(query)?.mul_tensor(&sin)?, 1)?,
+        key.mul_tensor(&cos)?
+            .add_tensor(&rotate_half(key)?.mul_tensor(&sin)?, 1)?,
     ))
 }
 
 fn rotate_half(hidden_states: &Tensor) -> koharu_torch::Result<Tensor> {
-    let half = hidden_states.size()[hidden_states.dim() - 1] / 2;
-    Tensor::f_cat(
+    let half = hidden_states.size()[hidden_states.size().len() - 1] / 2;
+    Tensor::cat(
         &[
-            (hidden_states.f_narrow(-1, half, half)?).f_neg()?,
-            hidden_states.f_narrow(-1, 0, half)?,
+            (hidden_states.narrow(-1, half, half)?).neg()?,
+            hidden_states.narrow(-1, 0, half)?,
         ],
         -1,
     )
@@ -1004,11 +1007,11 @@ fn apply_repetition_penalty(
     ids: &Tensor,
     penalty: f64,
 ) -> koharu_torch::Result<Tensor> {
-    let score = scores.f_gather(1, ids, false)?;
+    let score = scores.gather(1, ids, false)?;
     let score = score
-        .f_mul_scalar(penalty)?
-        .f_where_self(&score.f_lt(0.0)?, &score.f_div_scalar(penalty)?)?;
-    scores.f_scatter(1, ids, &score)
+        .mul_scalar(penalty)?
+        .where_self(&score.lt_scalar(0.0)?, &score.div_scalar(penalty)?)?;
+    scores.scatter_src(1, ids, &score)
 }
 
 /// The rows' ids as one `[rows, n]` tensor on `device` for
@@ -1027,9 +1030,9 @@ fn penalty_ids(rows: &[Vec<i64>], device: koharu_torch::Device) -> koharu_torch:
                 .chain(std::iter::repeat_n(first, width - row.len())),
         );
     }
-    Tensor::f_from_slice(&padded)?
-        .f_view([rows.len() as i64, width as i64])?
-        .f_to_device(device)
+    Tensor::from_slice(&padded)?
+        .view([rows.len() as i64, width as i64])?
+        .to(device)
 }
 
 fn causal_mask(
@@ -1038,10 +1041,10 @@ fn causal_mask(
     kind: Kind,
     device: Device,
 ) -> koharu_torch::Result<Tensor> {
-    Tensor::f_full([q_len, kv_len], f64::NEG_INFINITY, (kind, device))?
-        .f_triu(kv_len - q_len + 1)?
-        .f_unsqueeze(0)?
-        .f_unsqueeze(0)
+    Tensor::full([q_len, kv_len], f64::NEG_INFINITY, (kind, device))?
+        .triu(kv_len - q_len + 1)?
+        .unsqueeze(0)?
+        .unsqueeze(0)
 }
 
 fn layer_norm(path: &nn::Path<'_>, hidden_size: i64, eps: f64) -> Result<nn::LayerNorm> {

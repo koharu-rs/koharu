@@ -48,11 +48,11 @@ impl ImageProcessor {
         );
         let image = image.to_rgb8();
         let (height, width) = (i64::from(image.height()), i64::from(image.width()));
-        let pixels = Tensor::f_from_slice(image.as_raw())?
-            .f_view([height, width, 3])?
-            .f_permute([2, 0, 1])?
-            .f_to_device(device)?
-            .f_to_kind(Kind::Float)?;
+        let pixels = Tensor::from_slice(image.as_raw())?
+            .view([height, width, 3])?
+            .permute([2, 0, 1])?
+            .to(device)?
+            .to_kind(Kind::Float)?;
         // LongestMaxSize scales both sides by one factor and rounds them as
         // Python's round() does.
         let scale = self.resolution as f64 / height.max(width) as f64;
@@ -64,41 +64,41 @@ impl ImageProcessor {
             // cv2.INTER_AREA, which is separable.
             let rows = area_weights(height, resized_height, device)?;
             let columns = area_weights(width, resized_width, device)?;
-            rows.f_matmul(&pixels)?
-                .f_matmul(&columns.f_transpose(0, 1)?)?
+            rows.matmul(&pixels)?
+                .matmul(&columns.transpose_int(0, 1)?)?
         } else {
             // cv2.INTER_LINEAR. OpenCV weighs 8-bit pixels in 11-bit fixed
             // point, so a pixel can differ from training's by one level.
             pixels
-                .f_unsqueeze(0)?
-                .f_upsample_bilinear2d([resized_height, resized_width], false, None, None)?
-                .f_squeeze_dim(0)?
+                .unsqueeze(0)?
+                .upsample_bilinear2d([resized_height, resized_width], false, None, None)?
+                .squeeze_dim(0)?
         };
         // cv2.resize returns 8-bit pixels. Ties round to even here, but
         // OpenCV's path for shrinking by exactly 2 rounds them up, so a pixel
         // there can also differ by one level.
-        let resized = resized.f_round()?;
+        let resized = resized.round()?;
 
-        let canvas = Tensor::f_full(
+        let canvas = Tensor::full(
             [3, self.resolution, self.resolution],
             255.0,
             (Kind::Float, device),
         )?;
         canvas
-            .f_narrow(1, 0, resized_height)?
-            .f_narrow(2, 0, resized_width)?
-            .f_copy_(&resized)?;
-        let mean = Tensor::f_from_slice(&[0.485f32, 0.456, 0.406])?
-            .f_view([3, 1, 1])?
-            .f_to_device(device)?;
-        let std = Tensor::f_from_slice(&[0.229f32, 0.224, 0.225])?
-            .f_view([3, 1, 1])?
-            .f_to_device(device)?;
+            .narrow(1, 0, resized_height)?
+            .narrow(2, 0, resized_width)?
+            .copy_(&resized, false)?;
+        let mean = Tensor::from_slice(&[0.485f32, 0.456, 0.406])?
+            .view([3, 1, 1])?
+            .to(device)?;
+        let std = Tensor::from_slice(&[0.229f32, 0.224, 0.225])?
+            .view([3, 1, 1])?
+            .to(device)?;
         Ok(canvas
-            .f_div_scalar(255.0)?
-            .f_sub(&mean)?
-            .f_div(&std)?
-            .f_unsqueeze(0)?)
+            .div_scalar(255.0)?
+            .sub_tensor(&mean, 1)?
+            .div_tensor(&std)?
+            .unsqueeze(0)?)
     }
 
     pub(super) fn postprocess(
@@ -130,21 +130,21 @@ impl ImageProcessor {
 
         // PostProcess ranks every query/class pair, including the checkpoint's
         // fifth background logit slot, before applying the caller threshold.
-        let (scores, indexes) = output.pred_logits.f_sigmoid()?.f_view([1, -1])?.f_topk(
-            self.num_select,
-            1,
-            true,
-            true,
-        )?;
-        let scores = scores.f_i(0)?;
-        let indexes = indexes.f_i(0)?;
-        let query_indexes = indexes.f_floor_divide_scalar(5)?;
-        let labels = indexes.f_remainder(5)?;
-        let thresholds = Tensor::f_from_slice(&thresholds.with_background())?
-            .f_to_device(scores.device())?
-            .f_index_select(0, &labels)?;
-        let keep = scores.f_gt_tensor(&thresholds)?;
-        let selected = keep.f_nonzero()?.f_view([-1])?;
+        let (scores, indexes) =
+            output
+                .pred_logits
+                .sigmoid()?
+                .view([1, -1])?
+                .topk(self.num_select, 1, true, true)?;
+        let scores = scores.i(0)?;
+        let indexes = indexes.i(0)?;
+        let query_indexes = indexes.floor_divide_scalar(5)?;
+        let labels = indexes.remainder_scalar(5)?;
+        let thresholds = Tensor::from_slice(&thresholds.with_background())?
+            .to(scores.device())?
+            .index_select(0, &labels)?;
+        let keep = scores.gt_tensor(&thresholds)?;
+        let selected = keep.nonzero()?.view([-1])?;
 
         if selected.size()[0] == 0 {
             return Ok(Detections {
@@ -154,28 +154,28 @@ impl ImageProcessor {
             });
         }
 
-        let scores = scores.f_index_select(0, &selected)?;
-        let labels = labels.f_index_select(0, &selected)?;
-        let query_indexes = query_indexes.f_index_select(0, &selected)?;
-        let boxes = output
-            .pred_boxes
-            .f_i(0)?
-            .f_index_select(0, &query_indexes)?;
-        let center = boxes.f_i((.., 0..2))?;
-        let half_size = (boxes.f_i((.., 2..4))?).f_div_scalar(2.0)?;
-        let boxes = (Tensor::f_cat(&[center.f_sub(&half_size)?, center.f_add(&half_size)?], 1)?)
-            .f_mul_scalar(f64::from(square))?;
+        let scores = scores.index_select(0, &selected)?;
+        let labels = labels.index_select(0, &selected)?;
+        let query_indexes = query_indexes.index_select(0, &selected)?;
+        let boxes = output.pred_boxes.i(0)?.index_select(0, &query_indexes)?;
+        let center = boxes.i((.., 0..2))?;
+        let half_size = (boxes.i((.., 2..4))?).div_scalar(2.0)?;
+        let boxes = (Tensor::cat(
+            &[
+                center.sub_tensor(&half_size, 1)?,
+                center.add_tensor(&half_size, 1)?,
+            ],
+            1,
+        )?)
+        .mul_scalar(f64::from(square))?;
 
         // Gathering before interpolation is output-equivalent to upstream and
         // avoids allocating resized masks for candidates rejected by threshold.
-        let masks = output
-            .pred_masks
-            .f_i(0)?
-            .f_index_select(0, &query_indexes)?;
+        let masks = output.pred_masks.i(0)?.index_select(0, &query_indexes)?;
 
-        let floats = Tensor::f_cat(&[scores.f_unsqueeze(1)?, boxes], 1)?;
-        let floats = Vec::<f32>::try_from(floats.f_reshape([-1])?)?;
-        let labels = Vec::<i64>::try_from(labels.f_reshape([-1])?)?;
+        let floats = Tensor::cat(&[scores.unsqueeze(1)?, boxes], 1)?;
+        let floats = Vec::<f32>::try_from(floats.reshape([-1])?)?;
+        let labels = Vec::<i64>::try_from(labels.reshape([-1])?)?;
 
         let mut detections = Vec::with_capacity(labels.len());
         for (index, label) in labels.into_iter().enumerate() {
@@ -185,40 +185,40 @@ impl ImageProcessor {
             // contract without retaining an N-by-page tensor, then keep only
             // its non-zero page-space extent.
             let mask = masks
-                .f_i(index as i64)?
-                .f_unsqueeze(0)?
-                .f_unsqueeze(0)?
-                .f_upsample_bilinear2d([i64::from(square), i64::from(square)], false, None, None)?
-                .f_narrow(2, 0, i64::from(image_height))?
-                .f_narrow(3, 0, i64::from(image_width))?
-                .f_gt(0.0)?
-                .f_to_kind(Kind::Uint8)?;
+                .i(index as i64)?
+                .unsqueeze(0)?
+                .unsqueeze(0)?
+                .upsample_bilinear2d([i64::from(square), i64::from(square)], false, None, None)?
+                .narrow(2, 0, i64::from(image_height))?
+                .narrow(3, 0, i64::from(image_width))?
+                .gt_scalar(0.0)?
+                .to_kind(Kind::Uint8)?;
             let rows = mask
-                .f_count_nonzero_dim_intlist(&[0i64, 1, 3][..])?
-                .f_gt(0)?
-                .f_to_kind(Kind::Int64)?;
+                .count_nonzero_dim_intlist(&[0i64, 1, 3][..])?
+                .gt_scalar(0)?
+                .to_kind(Kind::Int64)?;
             let columns = mask
-                .f_count_nonzero_dim_intlist(&[0i64, 1, 2][..])?
-                .f_gt(0)?
-                .f_to_kind(Kind::Int64)?;
-            let occupied = Tensor::f_stack(
+                .count_nonzero_dim_intlist(&[0i64, 1, 2][..])?
+                .gt_scalar(0)?
+                .to_kind(Kind::Int64)?;
+            let occupied = Tensor::stack(
                 &[
-                    mask.f_count_nonzero(None)?,
-                    columns.f_argmax(None, false)?,
-                    rows.f_argmax(None, false)?,
+                    mask.count_nonzero(None)?,
+                    columns.argmax(None, false)?,
+                    rows.argmax(None, false)?,
                     columns
-                        .f_flip([0])?
-                        .f_argmax(None, false)?
-                        .f_sub_scalar(i64::from(image_width))?
-                        .f_neg()?,
-                    rows.f_flip([0])?
-                        .f_argmax(None, false)?
-                        .f_sub_scalar(i64::from(image_height))?
-                        .f_neg()?,
+                        .flip([0])?
+                        .argmax(None, false)?
+                        .sub_scalar(i64::from(image_width), 1)?
+                        .neg()?,
+                    rows.flip([0])?
+                        .argmax(None, false)?
+                        .sub_scalar(i64::from(image_height), 1)?
+                        .neg()?,
                 ],
                 0,
             )?;
-            let occupied = Vec::<i64>::try_from(occupied.f_reshape([-1])?)?;
+            let occupied = Vec::<i64>::try_from(occupied.reshape([-1])?)?;
             let area = occupied[0].clamp(0, i64::from(u32::MAX)) as u32;
             let (x, y, right, bottom) = if area == 0 {
                 (0, 0, 0, 0)
@@ -236,14 +236,14 @@ impl ImageProcessor {
                 Vec::new()
             } else {
                 Vec::<u8>::try_from(
-                    (mask.f_i((
+                    (mask.i((
                         0,
                         0,
                         i64::from(y)..i64::from(bottom),
                         i64::from(x)..i64::from(right),
                     ))?)
-                    .f_mul_scalar(255)?
-                    .f_reshape([-1])?,
+                    .mul_scalar(255)?
+                    .reshape([-1])?,
                 )?
             };
             let label_id = label as usize;
@@ -297,9 +297,9 @@ fn area_weights(input: i64, output: i64, device: Device) -> Result<Tensor> {
             row[last as usize] += ((end - last as f64).min(1.0).min(cell) / cell) as f32;
         }
     }
-    Ok(Tensor::f_from_slice(&weights)?
-        .f_view([output, input])?
-        .f_to_device(device)?)
+    Ok(Tensor::from_slice(&weights)?
+        .view([output, input])?
+        .to(device)?)
 }
 
 fn validate_thresholds(thresholds: Thresholds) -> Result<()> {
