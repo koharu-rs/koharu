@@ -3,7 +3,10 @@ use std::ffi::CString;
 use serde::Serialize;
 
 /// The API a device computes through, with what a model needs to know of it.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize)]
+/// As a `&'static str` it's the name Koharu's native builds give its variant:
+/// `cpu`, `cuda`, `hip`, `metal`, or `vulkan`.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, strum::IntoStaticStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum Backend {
     Cpu,
     /// The compute capability, such as 120 for 12.0.
@@ -11,6 +14,7 @@ pub enum Backend {
         compute_capability: u32,
     },
     /// The AMD GPU's LLVM target, such as `gfx1100`.
+    #[strum(serialize = "hip")]
     Rocm {
         target: &'static str,
     },
