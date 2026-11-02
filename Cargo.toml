@@ -74,7 +74,7 @@ rayon = "1.12.0"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23.2", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
-sysinfo = { version = "0.39.6", features = ["system"] }
+sysinfo = { version = "0.40.1", features = ["system"] }
 rars = "0.12.2"
 zip = { version = "9.0.2", features = ["deflate"] }
 dirs = "7.0.0"
