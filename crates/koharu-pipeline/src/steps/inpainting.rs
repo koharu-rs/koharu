@@ -351,11 +351,19 @@ fn fill_flat(
     }
     let parts = connected_components(painted, Connectivity::Eight, Luma([0]));
     let (mut part_sizes, mut part_areas) = (HashMap::<u32, u32>::new(), HashMap::new());
+    let mut part_bounds = HashMap::<u32, [u32; 4]>::new();
     for (x, y, part) in parts.enumerate_pixels().filter(|(_, _, part)| part[0] != 0) {
         *part_sizes.entry(part[0]).or_default() += 1;
         part_areas
             .entry(part[0])
             .or_insert_with(|| areas.get_pixel(x, y)[0]);
+        let bounds = part_bounds.entry(part[0]).or_insert([x, y, x, y]);
+        *bounds = [
+            bounds[0].min(x),
+            bounds[1].min(y),
+            bounds[2].max(x),
+            bounds[3].max(y),
+        ];
     }
     for polygon in balloons {
         let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
@@ -439,22 +447,35 @@ fn fill_flat(
         // In a mixed area, a lettering inside is filled only when paper alone
         // borders it: one on the outline or on art the shape takes in goes
         // to the model with the rest.
-        let mut bordered = HashSet::new();
-        for &(x, y) in &targets {
-            if !mixed(areas.get_pixel(x, y)[0]) {
-                continue;
-            }
-            let off_paper = [(0i64, -1i64), (0, 1), (-1, 0), (1, 0)]
-                .into_iter()
-                .map(|(dx, dy)| (i64::from(x) + dx, i64::from(y) + dy))
-                .filter(|&(nx, ny)| {
-                    (0..i64::from(width)).contains(&nx) && (0..i64::from(height)).contains(&ny)
-                })
-                .any(|(nx, ny)| !masked(nx as u32, ny as u32) && !paper(nx as u32, ny as u32));
-            if off_paper {
-                bordered.extend(owners(x, y));
-            }
-        }
+        // Its border is just past what the mask grew to around it, inside
+        // the shape or not.
+        let candidates: HashSet<u32> = targets
+            .iter()
+            .filter(|&&(x, y)| mixed(areas.get_pixel(x, y)[0]))
+            .flat_map(|&(x, y)| owners(x, y))
+            .collect();
+        let step = i64::from(GROW) + 1;
+        let bordered: HashSet<u32> = candidates
+            .into_iter()
+            .filter(|part| {
+                let [x0, y0, x1, y1] = part_bounds[part];
+                (y0..=y1)
+                    .flat_map(|y| (x0..=x1).map(move |x| (x, y)))
+                    .filter(|&(x, y)| parts.get_pixel(x, y)[0] == *part)
+                    .any(|(x, y)| {
+                        [(0, -step), (0, step), (-step, 0), (step, 0)]
+                            .into_iter()
+                            .map(|(dx, dy)| (i64::from(x) + dx, i64::from(y) + dy))
+                            .filter(|&(nx, ny)| {
+                                (0..i64::from(width)).contains(&nx)
+                                    && (0..i64::from(height)).contains(&ny)
+                            })
+                            .any(|(nx, ny)| {
+                                !masked(nx as u32, ny as u32) && !paper(nx as u32, ny as u32)
+                            })
+                    })
+            })
+            .collect();
         targets.retain(|&(x, y)| {
             let area = areas.get_pixel(x, y)[0];
             if inside_enough(held[&area], sizes[&area]) {
