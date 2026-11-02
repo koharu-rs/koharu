@@ -39,8 +39,15 @@ const REPOSITORY: Repository = Repository::model(
 /// already covers.
 const ONOMATOPOEIA_THRESHOLD: f32 = 0.4;
 
+/// The lowest confidence a bubble detection keeps by default. The checkpoint
+/// recommends 0.5, but on the same pages most bubbles scoring between 0.4 and
+/// 0.5 were plain speech bubbles, and inpainting fills only a detected
+/// bubble's text with its paper.
+const BUBBLE_THRESHOLD: f32 = 0.4;
+
 /// Each class's lowest confidence a detection keeps, between 0 and 1, or the
-/// default: the checkpoint's recommended one, except for onomatopoeia.
+/// default: the checkpoint's recommended one, except for onomatopoeia and
+/// bubbles.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Options {
     pub text: Option<f32>,
@@ -75,6 +82,7 @@ impl KoharuLayoutHighres {
             processor,
             thresholds: Thresholds {
                 onomatopoeia: ONOMATOPOEIA_THRESHOLD,
+                bubble: BUBBLE_THRESHOLD,
                 ..config.recommended_thresholds
             },
         })
@@ -98,7 +106,7 @@ impl KoharuLayoutHighres {
         let page = image.to_rgb8();
         for detection in &mut detections.detections {
             if matches!(detection.label.as_str(), "text" | "onomatopoeia") {
-                detection.mask = measure::glyph_mask(&detection.mask, &page);
+                detection.mask = measure::glyph_mask(&detection.mask, detection.bbox, &page);
                 detection.area = detection
                     .mask
                     .pixels
