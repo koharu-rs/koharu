@@ -8,16 +8,9 @@
 //! area_for_downscale="image")`, then `PadIfNeeded` to a square with the page
 //! top-left on white (255), then RF-DETR's `Normalize`. Predictions map back
 //! by one scale to a square of the page's long side, cropped to the page.
-//! Lettering masks are then closed and hole-filled, Koharu's one divergence
-//! (see `cover_glyphs`).
 
 use anyhow::{Result, ensure};
-use image::{DynamicImage, GrayImage, Luma};
-use imageproc::{
-    distance_transform::Norm,
-    morphology::close,
-    region_labelling::{Connectivity, connected_components},
-};
+use image::DynamicImage;
 use koharu_torch::{Device, IndexOp, Kind, Tensor};
 use serde::Serialize;
 
@@ -254,30 +247,23 @@ impl ImageProcessor {
                 )?
             };
             let label_id = label as usize;
-            let label = self
-                .class_names
-                .get(label_id)
-                .cloned()
-                .unwrap_or_else(|| "__background__".to_owned());
-            let mut mask = Mask {
-                x,
-                y,
-                width,
-                height,
-                pixels,
-            };
-            let mut area = area;
-            if matches!(label.as_str(), "text" | "onomatopoeia") {
-                mask = cover_glyphs(&mask, image_width, image_height);
-                area = mask.pixels.iter().filter(|&&pixel| pixel != 0).count() as u32;
-            }
             detections.push(Detection {
                 label_id,
-                label,
+                label: self
+                    .class_names
+                    .get(label_id)
+                    .cloned()
+                    .unwrap_or_else(|| "__background__".to_owned()),
                 score: floats[index * 5],
                 bbox: floats[index * 5 + 1..index * 5 + 5].try_into().unwrap(),
                 area,
-                mask,
+                mask: Mask {
+                    x,
+                    y,
+                    width,
+                    height,
+                    pixels,
+                },
             });
         }
 
@@ -286,83 +272,6 @@ impl ImageProcessor {
             image_height,
             detections,
         })
-    }
-}
-
-/// A lettering mask closed and with its holes filled, so it covers whole
-/// glyphs. RF-DETR's lettering masks hug each stroke and miss counters and
-/// the gaps between strokes. The radius is the pipeline's text-mask rule, 6
-/// pixels per 1024 of the page's longer side.
-fn cover_glyphs(mask: &Mask, page_width: u32, page_height: u32) -> Mask {
-    if mask.width == 0 || mask.height == 0 {
-        return mask.clone();
-    }
-    let radius = ((page_width.max(page_height) as f32 / 1024.0) * 6.0)
-        .round()
-        .clamp(1.0, 127.0) as u32;
-    // Twice the radius, so the dilation never reaches the canvas's edge,
-    // where imageproc's erosion would keep it.
-    let pad = 2 * radius;
-    let mut canvas = GrayImage::new(mask.width + 2 * pad, mask.height + 2 * pad);
-    for (index, &value) in mask.pixels.iter().enumerate() {
-        if value != 0 {
-            let (x, y) = (index as u32 % mask.width, index as u32 / mask.width);
-            canvas.put_pixel(x + pad, y + pad, Luma([255]));
-        }
-    }
-    let mut closed = close(&canvas, Norm::LInf, radius as u8);
-
-    // Background the canvas's edge can't reach is a hole.
-    let background = GrayImage::from_fn(closed.width(), closed.height(), |x, y| {
-        Luma([u8::MAX - closed.get_pixel(x, y).0[0]])
-    });
-    let regions = connected_components(&background, Connectivity::Four, Luma([0]));
-    let (width, height) = (closed.width(), closed.height());
-    let mut outside = std::collections::HashSet::new();
-    for x in 0..width {
-        outside.insert(regions.get_pixel(x, 0).0[0]);
-        outside.insert(regions.get_pixel(x, height - 1).0[0]);
-    }
-    for y in 0..height {
-        outside.insert(regions.get_pixel(0, y).0[0]);
-        outside.insert(regions.get_pixel(width - 1, y).0[0]);
-    }
-    for (x, y, region) in regions.enumerate_pixels() {
-        if region.0[0] != 0 && !outside.contains(&region.0[0]) {
-            closed.put_pixel(x, y, Luma([255]));
-        }
-    }
-
-    // The canvas in page space, cut to the covered part inside the page.
-    let (left, top) = (
-        i64::from(mask.x) - i64::from(pad),
-        i64::from(mask.y) - i64::from(pad),
-    );
-    let inside = |x: u32, y: u32| {
-        let (page_x, page_y) = (left + i64::from(x), top + i64::from(y));
-        (0..i64::from(page_width)).contains(&page_x)
-            && (0..i64::from(page_height)).contains(&page_y)
-    };
-    let covered: Vec<(u32, u32)> = closed
-        .enumerate_pixels()
-        .filter(|&(x, y, pixel)| pixel.0[0] != 0 && inside(x, y))
-        .map(|(x, y, _)| (x, y))
-        .collect();
-    let min_x = covered.iter().map(|&(x, _)| x).min().unwrap_or(0);
-    let min_y = covered.iter().map(|&(_, y)| y).min().unwrap_or(0);
-    let max_x = covered.iter().map(|&(x, _)| x).max().unwrap_or(0);
-    let max_y = covered.iter().map(|&(_, y)| y).max().unwrap_or(0);
-    let (out_width, out_height) = (max_x + 1 - min_x, max_y + 1 - min_y);
-    let mut pixels = vec![0u8; (out_width * out_height) as usize];
-    for &(x, y) in &covered {
-        pixels[((y - min_y) * out_width + x - min_x) as usize] = 255;
-    }
-    Mask {
-        x: (left + i64::from(min_x)) as u32,
-        y: (top + i64::from(min_y)) as u32,
-        width: out_width,
-        height: out_height,
-        pixels,
     }
 }
 
