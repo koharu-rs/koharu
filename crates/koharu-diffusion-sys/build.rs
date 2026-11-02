@@ -1,10 +1,8 @@
-/// The functions Koharu calls; bindgen brings the types they take.
-const FUNCTIONS: &str = "^(sd_ctx_params_init|new_sd_ctx|free_sd_ctx|sd_ctx_supports_image_generation|sd_img_gen_params_init|generate_image|free_sd_image_generation_result|sd_set_log_callback|sd_commit)$";
+/// stable-diffusion.cpp's API: everything its header declares, but not the C
+/// library functions of the system headers it includes, which the library
+/// doesn't export.
+const HEADER: &str = r".*[\\/]stable-diffusion\.h";
 
 fn main() {
-    koharu_bindgen::generate(|bindings| {
-        bindings
-            .allowlist_function(FUNCTIONS)
-            .prepend_enum_name(false)
-    });
+    koharu_bindgen::generate(|bindings| bindings.allowlist_file(HEADER).prepend_enum_name(false));
 }
