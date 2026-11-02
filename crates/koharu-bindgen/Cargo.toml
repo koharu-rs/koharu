@@ -2,7 +2,7 @@
 name = "koharu-bindgen"
 version.workspace = true
 edition.workspace = true
-description = "Bindings for C libraries that Koharu loads at run time or links."
+description = "Bindings for C libraries that Koharu loads at run time."
 license = "MIT OR Apache-2.0"
 authors.workspace = true
 readme.workspace = true

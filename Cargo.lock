@@ -5400,11 +5400,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-leptonica-sys"
+name = "koharu-leptonica"
 version = "0.83.5"
 dependencies = [
- "cc",
- "koharu-bindgen",
+ "image",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -5476,6 +5476,7 @@ dependencies = [
  "image",
  "imageproc",
  "koharu-diffusion",
+ "koharu-leptonica",
  "koharu-llm",
  "koharu-runtime",
  "koharu-torch",
