@@ -11,6 +11,7 @@ mod measure;
 mod model;
 mod order;
 mod processor;
+mod suppress;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
@@ -90,7 +91,7 @@ impl KoharuLayoutHighres {
     }
 
     /// The page's text and onomatopoeia in reading order, then its bubbles
-    /// and panels.
+    /// and panels, one detection to an object.
     pub fn inference(&self, image: &DynamicImage, options: &Options) -> Result<Detections> {
         let thresholds = Thresholds {
             text: options.text.unwrap_or(self.thresholds.text),
@@ -104,6 +105,7 @@ impl KoharuLayoutHighres {
             self.processor
                 .postprocess(&output, image.width(), image.height(), thresholds)
         })?;
+        suppress::suppress(&mut detections.detections);
         // RF-DETR's lettering masks hug each stroke but miss counters and
         // parts of strokes.
         let page = image.to_rgb8();
