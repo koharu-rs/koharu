@@ -2,7 +2,7 @@
 //! block's angle, direction, ink, and outline; a balloon's outline; and the
 //! text mask.
 
-use std::{cmp::Ordering, collections::VecDeque};
+use std::collections::VecDeque;
 
 use image::{GrayImage, Luma, RgbImage};
 use imageproc::distance_transform::{Norm, distance_transform};
@@ -881,37 +881,6 @@ fn stamp_mask(target: &mut GrayImage, mask: &Mask, origin_x: u32, origin_y: u32)
     }
 }
 
-fn detection_order(left: &Detection, right: &Detection) -> Ordering {
-    left.bbox[1]
-        .total_cmp(&right.bbox[1])
-        .then_with(|| right.bbox[0].total_cmp(&left.bbox[0]))
-        .then_with(|| left.label.cmp(&right.label))
-}
-
-/// Drops each detection overlapping a more confident one of its label by
-/// `threshold` or more, and keeps the rest in their order, so text stays in
-/// the model's reading order.
-pub(super) fn non_maximum_suppression(detections: &mut Vec<Detection>, threshold: f32) {
-    let mut ranked: Vec<usize> = (0..detections.len()).collect();
-    ranked.sort_by(|&left, &right| {
-        let (left, right) = (&detections[left], &detections[right]);
-        right
-            .score
-            .total_cmp(&left.score)
-            .then_with(|| detection_order(left, right))
-    });
-    let mut kept = vec![false; detections.len()];
-    for candidate in ranked {
-        let candidate_detection = &detections[candidate];
-        kept[candidate] = !detections.iter().zip(&kept).any(|(existing, &kept)| {
-            kept && existing.label == candidate_detection.label
-                && intersection_over_union(existing.bbox, candidate_detection.bbox) >= threshold
-        });
-    }
-    let mut kept = kept.into_iter();
-    detections.retain(|_| kept.next() == Some(true));
-}
-
 pub(super) fn mask_containment(container: &Mask, value: &Mask, bounds: [f32; 4]) -> f32 {
     if !valid_mask(container) || !valid_mask(value) {
         return 0.0;
@@ -955,23 +924,4 @@ pub(super) fn mask_containment(container: &Mask, value: &Mask, bounds: [f32; 4])
     } else {
         intersection as f32 / value_area as f32
     }
-}
-
-fn intersection_over_union(left: [f32; 4], right: [f32; 4]) -> f32 {
-    let intersection = intersection_area(left, right);
-    let union = area(left) + area(right) - intersection;
-    if union <= 0.0 {
-        0.0
-    } else {
-        intersection / union
-    }
-}
-
-fn intersection_area(left: [f32; 4], right: [f32; 4]) -> f32 {
-    (left[2].min(right[2]) - left[0].max(right[0])).max(0.0)
-        * (left[3].min(right[3]) - left[1].max(right[1])).max(0.0)
-}
-
-pub(super) fn area(bounds: [f32; 4]) -> f32 {
-    (bounds[2] - bounds[0]).max(0.0) * (bounds[3] - bounds[1]).max(0.0)
 }
