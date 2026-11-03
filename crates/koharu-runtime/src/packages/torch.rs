@@ -1,4 +1,5 @@
-//! libtorch with Koharu's C shim, built and released from `koharu-rs/torch`.
+//! libtorch and Koharu's C shim to it, built and released apart from
+//! `koharu-rs/torch`.
 
 use std::path::{Path, PathBuf};
 
@@ -7,10 +8,19 @@ use anyhow::Result;
 use super::{Host, Release, preload};
 use crate::Backend;
 
-/// The shim at the release `koharu-torch-sys`'s headers come from.
-static RELEASE: Release = Release {
+/// libtorch at the release the shim was built against. It keeps the store
+/// folder of the releases that shipped both, so installing it removes them.
+static LIBTORCH: Release = Release {
     repository: "koharu-rs/torch",
-    tag: koharu_torch_sys::RELEASE,
+    package: "torch",
+    tag: koharu_torch_sys::LIBTORCH,
+};
+
+/// The shim at the release `koharu-torch-sys`'s headers come from.
+static SHIM: Release = Release {
+    repository: "koharu-rs/torch",
+    package: "koharu-torch",
+    tag: koharu_torch_sys::SHIM,
 };
 
 /// libtorch's own libraries for a GPU's `backend`, in load order, before the
@@ -80,29 +90,38 @@ fn libraries(backend: Backend) -> &'static [&'static str] {
     }
 }
 
-pub(super) async fn install(host: Host, backend: Backend) -> Result<PathBuf> {
+/// Installs libtorch and the shim, and returns their folders.
+pub(super) async fn install(host: Host, backend: Backend) -> Result<(PathBuf, PathBuf)> {
     let libraries = libraries(backend);
-    let complete = move |folder: &Path| {
-        libraries
-            .iter()
-            .all(|library| folder.join(library).is_file())
-            && folder.join(shim()).is_file()
-    };
     let variant = match backend {
         Backend::Vulkan => Backend::Cpu,
         backend => backend,
     };
-    RELEASE.install(host, variant, complete).await
+    let libtorch = LIBTORCH
+        .install(host, variant, move |folder| {
+            libraries
+                .iter()
+                .all(|library| folder.join(library).is_file())
+        })
+        .await?;
+    let shim = SHIM
+        .install(host, variant, |folder| {
+            folder.join(shim_library()).is_file()
+        })
+        .await?;
+    Ok((libtorch, shim))
 }
 
-pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
+/// Loads libtorch from its folder, then the shim from its own. The shim
+/// finds libtorch's libraries already loaded, not beside it.
+pub(super) fn load(backend: Backend, libtorch: &Path, shim: &Path) -> Result<()> {
     for library in libraries(backend) {
-        preload(&folder.join(library), false)?;
+        preload(&libtorch.join(library), false)?;
     }
     // libtorch's own C functions for the shim's tensors live in torch_cpu.
     koharu_torch_sys::load(&[
-        &folder.join(shim()),
-        &folder.join(libloading::library_filename("torch_cpu")),
+        &shim.join(shim_library()),
+        &libtorch.join(libloading::library_filename("torch_cpu")),
     ])?;
     set_cudnn(backend)
 }
@@ -113,15 +132,12 @@ pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
 fn set_cudnn(backend: Backend) -> Result<()> {
     let cudnn = !(cfg!(windows) && matches!(backend, Backend::Rocm { .. }));
     let error = unsafe {
-        koharu_torch_sys::koharu_torch_set_setting(
-            koharu_torch_sys::KOHARU_TORCH_CUDNN_ENABLED,
-            i64::from(cudnn),
-        )
+        koharu_torch_sys::aten_set_setting(koharu_torch_sys::ATEN_CUDNN_ENABLED, i64::from(cudnn))
     };
     anyhow::ensure!(error == 0, "libtorch has no cuDNN setting");
     Ok(())
 }
 
-fn shim() -> std::ffi::OsString {
+fn shim_library() -> std::ffi::OsString {
     libloading::library_filename("koharu-torch")
 }

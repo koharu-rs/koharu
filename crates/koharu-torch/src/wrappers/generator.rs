@@ -1,8 +1,7 @@
 //! Random number generators.
 
 use koharu_torch_sys::{
-    koharu_torch_create_generator, koharu_torch_generator_set_seed, torch_delete_generator,
-    AtenGeneratorHandle,
+    aten_create_generator, aten_generator_set_seed, torch_delete_generator, AtenGeneratorHandle,
 };
 
 use super::utils::check;
@@ -21,12 +20,12 @@ impl Generator {
     pub fn new(device: Device) -> Result<Generator> {
         let (device_type, index) = device.c_parts();
         let mut c_generator = std::ptr::null_mut();
-        check(unsafe { koharu_torch_create_generator(device_type, index, &mut c_generator) })?;
+        check(unsafe { aten_create_generator(device_type, index, &mut c_generator) })?;
         Ok(Generator { c_generator })
     }
 
     pub fn set_seed(&self, seed: u64) -> Result<()> {
-        check(unsafe { koharu_torch_generator_set_seed(self.c_generator, seed) })
+        check(unsafe { aten_generator_set_seed(self.c_generator, seed) })
     }
 }
 

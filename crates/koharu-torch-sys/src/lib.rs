@@ -1,9 +1,8 @@
 //! The koharu-rs/torch shim's C API to libtorch, with libtorch's own C API
 //! apart from its per-backend functions, resolved from the runtime's build
-//! when `load` is called. libtorch's C headers are copied verbatim from
-//! `RELEASE`. `koharu_torch.h` and `koharu_torch_aten.h` come from
-//! koharu-rs/torch 7de8ef4, which generates the functions `RELEASE` exports
-//! with the same C types, named so a binding tells a dtype from a flag.
+//! when `load` is called. Every header is copied verbatim from `SHIM`'s
+//! `include.tar.gz`: the shim's own, whose C types are named so a binding
+//! tells a dtype from a flag, and the libtorch C headers they include.
 
 #![allow(
     non_camel_case_types,
@@ -13,7 +12,11 @@
     clippy::all
 )]
 
-/// The koharu-rs/torch release the runtime loads.
-pub const RELEASE: &str = "v2.15.0";
+/// The koharu-rs/torch shim release the runtime loads.
+pub const SHIM: &str = "2.15.0+koharu.2";
+
+/// The koharu-rs/torch libtorch release `SHIM` was built against, which the
+/// runtime loads beside it.
+pub const LIBTORCH: &str = "2.15.0+libtorch.1";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

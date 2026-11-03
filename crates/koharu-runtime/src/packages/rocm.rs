@@ -10,7 +10,7 @@ use anyhow::Result;
 use super::{Host, install_archive, preload};
 use crate::store;
 
-const VERSION: &str = "10.0.0";
+const VERSION: &str = "10.1.0";
 const INDEX: &str = "https://stable.repo.amd.com/rocm/core/whl-next";
 
 /// The libraries the others need, in load order.
@@ -20,8 +20,8 @@ const LOAD: &[&str] = &[
     "_rocm_sdk_core/bin/rocm_kpack.dll",
     "_rocm_sdk_core/bin/rocm-openblas.dll",
     "_rocm_sdk_core/bin/amdhip64_7.dll",
-    "_rocm_sdk_core/bin/hiprtc-builtins0715.dll",
-    "_rocm_sdk_core/bin/hiprtc0715.dll",
+    "_rocm_sdk_core/bin/hiprtc-builtins0716.dll",
+    "_rocm_sdk_core/bin/hiprtc0716.dll",
     "_rocm_sdk_libraries/bin/rocrand.dll",
     "_rocm_sdk_libraries/bin/hiprand.dll",
     "_rocm_sdk_libraries/bin/origami.dll",
@@ -51,7 +51,6 @@ const LOAD: &[&str] = &[
     "_rocm_sdk_core/lib/libhiprtc.so.7",
     "_rocm_sdk_core/lib/rocm_sysdeps/lib/librocm_sysdeps_liblzma.so.5",
     "_rocm_sdk_core/lib/host-math/lib/librocm-openblas.so.0",
-    "_rocm_sdk_core/lib/librocm_smi64.so.1",
     "_rocm_sdk_libraries/lib/librocroller.so.1",
     "_rocm_sdk_libraries/lib/liborigami.so.1",
     "_rocm_sdk_libraries/lib/libhipblaslt.so.1",
