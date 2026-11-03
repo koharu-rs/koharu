@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 
 use image::{GrayImage, Luma, RgbImage};
 use imageproc::distance_transform::{Norm, distance_transform};
-use koharu_ml::koharu_layout_highres::{Detection, Mask};
+use koharu_ml::koharu_layout_highres::{Lettering, Mask};
 use koharu_scene::Direction;
 
 const ANGLE_SNAP_DEGREES: f32 = 3.0;
@@ -54,11 +54,11 @@ struct MaskPixel {
 // projection-profile sharpness supplies the line axis. Whole-block PCA is
 // deliberately avoided because a tall multiline horizontal block otherwise
 // looks vertical.
-pub(super) fn measure(image: &RgbImage, detection: &Detection) -> Option<Measured> {
-    let mask = &detection.mask;
+pub(super) fn measure(image: &RgbImage, lettering: &Lettering) -> Option<Measured> {
+    let mask = &lettering.mask;
     let width = image.width();
     let height = image.height();
-    let [bbox_left, bbox_top, bbox_right, bbox_bottom] = detection.bbox;
+    let [bbox_left, bbox_top, bbox_right, bbox_bottom] = lettering.bbox;
     let [left, top, right, bottom] = mask_window(
         [
             bbox_left - TYPOGRAPHY_SAMPLE_MARGIN,
@@ -111,7 +111,7 @@ pub(super) fn measure(image: &RgbImage, detection: &Detection) -> Option<Measure
     } else {
         median_color(&background)
     };
-    let (angle_degrees, vertical) = mask_angle(&points, detection.bbox);
+    let (angle_degrees, vertical) = mask_angle(&points, lettering.bbox);
     let (color, stroke_color, stroke_width) =
         infer_text_paint(&pixels, background, local_width, local_height);
     Some(Measured {
@@ -834,13 +834,13 @@ fn color_luminance(color: [u8; 3]) -> u32 {
 /// Where the page's lettering is: every text block's and onomatopoeia's mask,
 /// which the layout model fits to its glyphs. The model labels coloured or
 /// hand-lettered asides onomatopoeia too, so those are erased with the rest.
-pub(super) fn text_mask(detections: &[Detection], size: ImageSize) -> GrayImage {
+pub(super) fn text_mask<'a>(
+    lettering: impl IntoIterator<Item = &'a Lettering>,
+    size: ImageSize,
+) -> GrayImage {
     let mut output = GrayImage::new(size.width, size.height);
-    for detection in detections
-        .iter()
-        .filter(|detection| matches!(detection.label.as_str(), "text" | "onomatopoeia"))
-    {
-        stamp_mask(&mut output, &detection.mask, 0, 0);
+    for lettering in lettering {
+        stamp_mask(&mut output, &lettering.mask, 0, 0);
     }
     output
 }

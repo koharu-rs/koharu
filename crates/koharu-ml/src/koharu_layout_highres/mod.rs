@@ -7,10 +7,12 @@
 //! https://github.com/roboflow/rf-detr/tree/4ab7c18729de9d02ffd0495795d0831b5630f01b
 
 mod config;
+mod layout;
 mod measure;
 mod model;
 mod order;
 mod processor;
+mod rooms;
 mod suppress;
 
 use anyhow::{Context, Result};
@@ -19,14 +21,16 @@ use koharu_runtime::Repository;
 use koharu_torch::Device;
 
 pub use self::{
+    layout::{Bubble, Kind, Layout, Lettering, Panel},
     measure::Typography,
-    processor::{Detection, Detections, Mask},
+    processor::Mask,
+    rooms::rooms,
 };
 
 use self::{
     config::{Config, Thresholds},
     model::Model,
-    processor::ImageProcessor,
+    processor::{Detection, ImageProcessor},
 };
 
 const REPOSITORY: Repository = Repository::model(
@@ -90,9 +94,10 @@ impl KoharuLayoutHighres {
         })
     }
 
-    /// The page's text and onomatopoeia in reading order, then its bubbles
-    /// and panels, one detection to an object.
-    pub fn inference(&self, image: &DynamicImage, options: &Options) -> Result<Detections> {
+    /// The page's layout: its text and onomatopoeia in reading order, its
+    /// bubbles with the room each of their texts has, and its panels, one
+    /// detection to an object.
+    pub fn inference(&self, image: &DynamicImage, options: &Options) -> Result<Layout> {
         let thresholds = Thresholds {
             text: options.text.unwrap_or(self.thresholds.text),
             onomatopoeia: options.onomatopoeia.unwrap_or(self.thresholds.onomatopoeia),
@@ -105,23 +110,18 @@ impl KoharuLayoutHighres {
             self.processor
                 .postprocess(&output, image.width(), image.height(), thresholds)
         })?;
-        suppress::suppress(&mut detections.detections);
+        suppress::suppress(&mut detections);
         // RF-DETR's lettering masks hug each stroke but miss counters and
         // parts of strokes.
         let page = image.to_rgb8();
-        for detection in &mut detections.detections {
+        for detection in &mut detections {
             if matches!(detection.label.as_str(), "text" | "onomatopoeia") {
                 detection.mask = measure::glyph_mask(&detection.mask, detection.bbox, &page);
-                detection.area = detection
-                    .mask
-                    .pixels
-                    .iter()
-                    .filter(|&&pixel| pixel != 0)
-                    .count() as u32;
             }
         }
-        order::sort(&mut detections.detections);
-        Ok(detections)
+        suppress::merge(&mut detections);
+        order::sort(&mut detections);
+        Ok(layout::build(detections, image.width(), image.height()))
     }
 }
 
@@ -131,7 +131,7 @@ mod tests {
 
     use anyhow::Result;
 
-    use super::{KoharuLayoutHighres, Options};
+    use super::{KoharuLayoutHighres, Mask, Options};
 
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires CUDA"]
@@ -149,8 +149,12 @@ mod tests {
         // geometry and mask area in addition to bounded confidence differences.
         // The tolerances cover BF16 runs of both RF-DETR and this port; the
         // lower panel's right edge moves from 685 to 702 px between them.
-        let best = &result.detections[0];
-        assert_eq!(best.label, "bubble");
+        let area = |mask: &Mask| mask.pixels.iter().filter(|&&pixel| pixel != 0).count();
+        let best = result
+            .bubbles
+            .iter()
+            .max_by(|left, right| left.score.total_cmp(&right.score))
+            .expect("a bubble");
         assert!((best.score - 0.977_458_1).abs() < 0.01);
         for (actual, expected) in best
             .bbox
@@ -159,19 +163,17 @@ mod tests {
         {
             assert!((actual - expected).abs() < 6.0);
         }
-        assert!(best.area.abs_diff(18_968) < 100);
+        assert!(area(&best.mask).abs_diff(18_968) < 100);
 
         let lower_panel = result
-            .detections
+            .panels
             .iter()
-            .find(|detection| detection.label == "panel" && detection.bbox[1] > 700.0)
+            .find(|panel| panel.bbox[1] > 700.0)
             .expect("lower page panel");
         let middle_panel = result
-            .detections
+            .panels
             .iter()
-            .find(|detection| {
-                detection.label == "panel" && detection.bbox[1] > 500.0 && detection.bbox[1] < 700.0
-            })
+            .find(|panel| panel.bbox[1] > 500.0 && panel.bbox[1] < 700.0)
             .expect("middle page panel");
         for (actual, expected) in
             lower_panel
@@ -188,8 +190,8 @@ mod tests {
         {
             assert!((actual - expected).abs() < 5.0);
         }
-        assert!(lower_panel.area.abs_diff(137_080) < 4_000);
-        assert!(middle_panel.area.abs_diff(143_571) < 1_500);
+        assert!(area(&lower_panel.mask).abs_diff(137_080) < 4_000);
+        assert!(area(&middle_panel.mask).abs_diff(143_571) < 1_500);
         Ok(())
     }
 }

@@ -4,8 +4,8 @@
 mod measure;
 
 use anyhow::Result;
-use image::{DynamicImage, GrayImage};
-use koharu_ml::koharu_layout_highres::{Detection, Detections, KoharuLayoutHighres, Options};
+use image::DynamicImage;
+use koharu_ml::koharu_layout_highres::{Kind, KoharuLayoutHighres, Layout, Lettering, Options};
 use koharu_scene::{
     Edit, Frame, Layer, LayerId, LayerView, MaskContent, Op, PageView, Read, Rect, Ref, Session,
 };
@@ -164,29 +164,34 @@ pub(super) fn edit(
     context: &Context,
     work: Work,
     scan: &DynamicImage,
-    output: Detections,
+    layout: Layout,
 ) -> Result<Edit> {
-    let Detections {
-        mut detections,
-        image_width: width,
-        image_height: height,
-    } = output;
-    if let Some(area) = work.area {
-        detections.retain(|detection| overlaps(detection.bbox.map(f64::from), area));
-    }
-    let rgb = scan.to_rgb8();
-    let of_label = |label: &str| -> Vec<&Detection> {
-        detections
-            .iter()
-            .filter(|detection| detection.label == label)
-            .collect()
+    let (width, height) = (layout.width, layout.height);
+    let in_area = |bbox: [f32; 4]| {
+        work.area
+            .is_none_or(|area| overlaps(bbox.map(f64::from), area))
     };
-    let (balloons, blocks) = (of_label("bubble"), of_label("text"));
+    let lettering: Vec<&Lettering> = layout
+        .lettering
+        .iter()
+        .filter(|lettering| in_area(lettering.bbox))
+        .collect();
+    let balloons: Vec<_> = layout
+        .bubbles
+        .iter()
+        .filter(|bubble| in_area(bubble.bbox))
+        .collect();
+    let blocks: Vec<&Lettering> = lettering
+        .iter()
+        .copied()
+        .filter(|lettering| lettering.kind == Kind::Text)
+        .collect();
+    let rgb = scan.to_rgb8();
     let measured: Vec<Option<Measured>> = blocks
         .par_iter()
         .map(|block| measure::measure(&rgb, block))
         .collect();
-    let mask = measure::text_mask(&detections, ImageSize { width, height });
+    let mask = measure::text_mask(lettering.iter().copied(), ImageSize { width, height });
 
     let ingredients = [work.from_scan];
     let mut ops = Vec::new();
@@ -252,14 +257,10 @@ pub(super) fn edit(
     let balloons_out = balloons
         .iter()
         .map(|balloon| {
-            let mask = &balloon.mask;
-            let path = GrayImage::from_raw(mask.width, mask.height, mask.pixels.clone())
-                .and_then(|pixels| super::outline(&pixels, mask.x, mask.y))
-                .unwrap_or_else(|| box_path(balloon.bbox));
             json!({
                 "kind": "shape",
                 "name": "Balloon",
-                "path": path,
+                "path": balloon.outline.to_svg(),
                 "fill": null,
                 "stroke": null,
                 "attributes": {"koharu": {"region": "bubble", "confidence": balloon.score}},
@@ -348,7 +349,7 @@ fn replace(
 
 /// A hidden text with no content yet: the block's box, its rotation about
 /// the box's centre, and the direction and ink measured from the scan.
-fn text_block(block: &Detection, measured: Option<Measured>, dialogue: bool) -> Value {
+fn text_block(block: &Lettering, measured: Option<Measured>, dialogue: bool) -> Value {
     let [left, top, right, bottom] = block.bbox.map(f64::from);
     let (width, height) = ((right - left).max(1.0), (bottom - top).max(1.0));
     let angle = measured.map_or(0.0, |measured| f64::from(measured.angle_degrees));
@@ -409,10 +410,6 @@ fn add(
 
 fn label(name: &str) -> Ref {
     Ref::try_from(format!("${name}")).expect("a valid label")
-}
-
-fn box_path([left, top, right, bottom]: [f32; 4]) -> String {
-    format!("M{left} {top} L{right} {top} L{right} {bottom} L{left} {bottom} Z")
 }
 
 /// A layer's box on the page: a text's frame, a shape's path.

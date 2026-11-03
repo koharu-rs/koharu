@@ -24,6 +24,7 @@ koharu-leptonica = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
+kurbo = { workspace = true }
 memmap2 = { workspace = true }
 safetensors = { workspace = true }
 serde = { workspace = true }

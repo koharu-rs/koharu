@@ -5496,6 +5496,7 @@ dependencies = [
  "koharu-llm",
  "koharu-runtime",
  "koharu-torch",
+ "kurbo",
  "memmap2",
  "safetensors",
  "serde",
