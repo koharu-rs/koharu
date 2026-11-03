@@ -65,7 +65,7 @@ pub struct Lama {
 
 impl Lama {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device)?;
+        let (device, kind) = crate::backend::torch(device);
         let [weights] = REPOSITORY
             .resolve(["lama-manga.safetensors"])
             .await

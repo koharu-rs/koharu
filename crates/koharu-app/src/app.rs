@@ -1,4 +1,5 @@
 use anyhow::{Context as _, Result};
+use futures::StreamExt as _;
 use tauri::{AppHandle, Manager as _, WindowEvent};
 use tauri_runtime_cef::{Cef, CefRuntime};
 use tokio::sync::Mutex;

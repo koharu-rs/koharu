@@ -1,17 +1,15 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, OnceLock},
-};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result};
 use hf_hub::{
     HFClient, RepoType, RepoTypeAny,
     progress::{DownloadEvent, ProgressEvent, ProgressHandler},
 };
+use tokio::sync::OnceCell;
 
 use crate::{
     store,
-    transfer::{Activity, USER_AGENT},
+    transfer::{self, Activity, USER_AGENT},
 };
 
 /// A Hugging Face model or dataset at a pinned commit.
@@ -55,7 +53,12 @@ impl Repository {
     pub async fn resolve<const N: usize>(&self, names: [&str; N]) -> Result<[PathBuf; N]> {
         let paths = names.map(|name| self.path(name));
         for (name, path) in names.iter().zip(&paths) {
-            store::file(path.clone(), |folder| self.fetch(name, folder)).await?;
+            store::install(
+                path.clone(),
+                |path| path.is_file(),
+                |folder| self.fetch(name, folder),
+            )
+            .await?;
         }
         Ok(paths)
     }
@@ -72,7 +75,8 @@ impl Repository {
         let (owner, repository) = hf_hub::split_id(self.id);
         let activity = Arc::new(Activity::start(name.rsplit('/').next().unwrap_or(name)));
         let fetched = async {
-            Ok(client()?
+            Ok(client()
+                .await?
                 .repository(self.kind, owner, repository)
                 .download_file()
                 .filename(name)
@@ -96,18 +100,22 @@ impl Repository {
     }
 }
 
-/// The Hub's client. Files go to the store, not the Hub's own cache.
-fn client() -> Result<&'static HFClient> {
-    static CLIENT: OnceLock<HFClient> = OnceLock::new();
-    if let Some(client) = CLIENT.get() {
-        return Ok(client);
-    }
-    let client = HFClient::builder()
-        .user_agent(USER_AGENT)
-        .cache_enabled(false)
-        .build()
-        .context("couldn't build the Hugging Face client")?;
-    Ok(CLIENT.get_or_init(|| client))
+/// The Hub's client, over the transfers' own. Files go to the store, not the
+/// Hub's own cache.
+async fn client() -> Result<&'static HFClient> {
+    static CLIENT: OnceCell<HFClient> = OnceCell::const_new();
+    CLIENT
+        .get_or_try_init(|| async {
+            HFClient::builder()
+                .client(transfer::client().await?.clone())
+                // The client sends it already; the Hub's own client for
+                // redirects takes it from here.
+                .user_agent(USER_AGENT)
+                .cache_enabled(false)
+                .build()
+                .context("couldn't build the Hugging Face client")
+        })
+        .await
 }
 
 impl ProgressHandler for Activity {

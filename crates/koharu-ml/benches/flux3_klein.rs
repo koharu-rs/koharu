@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
     let mask = image::open(fixtures.join("mask_4k.png"))?;
     let options = InpaintOptions::default();
 
-    let device = &koharu_runtime::devices().await?.ggml;
+    let device = koharu_runtime::device().await?;
     let model = Flux3Klein::load(device, device.memory().free).await?;
 
     let output = model.inpaint("Remove the masked content.", &image, None, &mask, &options)?;

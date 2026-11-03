@@ -34,7 +34,7 @@ pub struct MangaOcr {
 
 impl MangaOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device)?;
+        let (device, kind) = crate::backend::torch(device);
         let [config, weights, processor, vocabulary] = REPOSITORY
             .resolve([
                 "config.json",

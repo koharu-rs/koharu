@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(cli.input)?;
 
-    let device = &koharu_runtime::devices().await?.torch;
+    let device = koharu_runtime::device().await?;
     let model = BaberuOcr::load(device).await?;
     for text in model.inference(&[image])? {
         println!("{text}");
