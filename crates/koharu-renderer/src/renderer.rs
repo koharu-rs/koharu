@@ -420,10 +420,16 @@ impl Renderer {
                 grow: *fit == koharu_scene::Fit::Grow,
                 anchor: *anchor,
             },
-            TextFrame::Path { path, fit, anchor } => Room::Path {
+            TextFrame::Path {
+                path,
+                fit,
+                anchor,
+                inset,
+            } => Room::Path {
                 outline: parse(path.as_str())?,
                 shrink: *fit == PathFit::Shrink,
                 anchor: *anchor,
+                inset: *inset as f32,
             },
         };
         if spans.is_empty() {
