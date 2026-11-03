@@ -13,6 +13,7 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
