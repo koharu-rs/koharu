@@ -8,11 +8,6 @@ mod translation;
 mod typesetting;
 
 use anyhow::{Result, bail};
-use image::GrayImage;
-use imageproc::{
-    contours::{BorderType, find_contours_with_threshold},
-    geometry::{approximate_polygon_dp, arc_length, contour_area},
-};
 use koharu_scene::{
     Action, Author, Edit, File, Frame, Layer, LayerId, LayerView, Op, PageId, PageView, PointerBuf,
     ProjectId, Read, Rect, Relationship, Session, SoftwareAgent,
@@ -306,43 +301,12 @@ fn balloon_of(block: &LayerView, balloons: &[(&LayerView, BezPath)]) -> Option<u
         .map(|(index, _)| index)
 }
 
-/// A mask's outline as SVG path data in page pixels: its largest outer
-/// contour, simplified. `(x, y)` is the mask's corner on the page.
-fn outline(mask: &GrayImage, x: u32, y: u32) -> Option<String> {
-    let mut padded = GrayImage::new(mask.width() + 2, mask.height() + 2);
-    image::imageops::replace(&mut padded, mask, 1, 1);
-    let contours = find_contours_with_threshold::<i32>(&padded, 0);
-    let contour = contours
-        .iter()
-        .filter(|contour| contour.border_type == BorderType::Outer)
-        .max_by(|left, right| contour_area(&left.points).total_cmp(&contour_area(&right.points)))?;
-    if contour.points.len() < 3 {
-        return None;
-    }
-    let epsilon = (arc_length(&contour.points, true) * 0.001).max(f64::EPSILON);
-    let points = approximate_polygon_dp(&contour.points, epsilon, true);
-    if points.len() < 3 {
-        return None;
-    }
-    let mut path = String::new();
-    for (index, point) in points.iter().enumerate() {
-        let command = if index == 0 { 'M' } else { 'L' };
-        let (px, py) = (
-            i64::from(point.x - 1) + i64::from(x),
-            i64::from(point.y - 1) + i64::from(y),
-        );
-        path.push_str(&format!("{command}{px} {py} "));
-    }
-    path.push('Z');
-    Some(path)
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
 
     use image::{DynamicImage, Rgb, RgbImage};
-    use koharu_ml::koharu_layout_highres::{Detection, Detections, Mask};
+    use koharu_ml::koharu_layout_highres::{Bubble, Kind, Layout, Lettering, Mask};
     use koharu_scene::{Change, Hash, Ref, Size};
     use serde_json::json;
 
@@ -370,29 +334,29 @@ mod tests {
         }
     }
 
-    fn detected(
-        label: &str,
-        [left, top, right, bottom]: [u32; 4],
-        inside: impl Fn(u32, u32) -> bool,
-    ) -> Detection {
+    fn mask([left, top, right, bottom]: [u32; 4], inside: impl Fn(u32, u32) -> bool) -> Mask {
         let (width, height) = (right - left, bottom - top);
-        let pixels: Vec<u8> = (0..height)
-            .flat_map(|y| (0..width).map(move |x| (x, y)))
-            .map(|(x, y)| u8::from(inside(left + x, top + y)) * u8::MAX)
-            .collect();
-        Detection {
-            label_id: 0,
-            label: label.to_owned(),
+        Mask {
+            x: left,
+            y: top,
+            width,
+            height,
+            pixels: (0..height)
+                .flat_map(|y| (0..width).map(move |x| (x, y)))
+                .map(|(x, y)| u8::from(inside(left + x, top + y)) * u8::MAX)
+                .collect(),
+        }
+    }
+
+    fn text(bbox: [u32; 4], inside: impl Fn(u32, u32) -> bool) -> Lettering {
+        Lettering {
+            kind: Kind::Text,
             score: 0.9,
-            bbox: [left, top, right, bottom].map(|value| value as f32),
-            area: pixels.iter().filter(|pixel| **pixel != 0).count() as u32,
-            mask: Mask {
-                x: left,
-                y: top,
-                width,
-                height,
-                pixels,
-            },
+            bbox: bbox.map(|value| value as f32),
+            mask: mask(bbox, inside),
+            bubble: Some(0),
+            panel: None,
+            room: None,
         }
     }
 
@@ -484,14 +448,23 @@ mod tests {
             let page = view(&host);
             let work =
                 prepared(host.read(|session| detection::read(session, &page, &scope, &context))?);
-            let output = Detections {
-                image_width: 256,
-                image_height: 256,
-                detections: vec![
-                    detected("bubble", [28, 68, 229, 189], balloon),
-                    detected("text", [100, 90, 156, 110], ink),
-                    detected("text", [100, 146, 156, 166], ink),
+            let bubble = [28, 68, 229, 189];
+            let output = Layout {
+                width: 256,
+                height: 256,
+                lettering: vec![
+                    text([100, 90, 156, 110], ink),
+                    text([100, 146, 156, 166], ink),
                 ],
+                bubbles: vec![Bubble {
+                    score: 0.9,
+                    bbox: bubble.map(|value| value as f32),
+                    mask: mask(bubble, balloon),
+                    outline: kurbo::Ellipse::new((128.0, 128.0), (100.0, 60.0), 0.0).to_path(0.1),
+                    lettering: vec![0, 1],
+                    panel: None,
+                }],
+                panels: Vec::new(),
             };
             let scan = DynamicImage::ImageRgb8(scan.clone());
             host.apply(detection::edit(&context, work, &scan, output)?)?;

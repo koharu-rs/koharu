@@ -1,16 +1,13 @@
 //! Typesetting: the project's "Dialogue" style, and each translation's
 //! frame, style, and direction, without a model.
 
-use std::{cmp::Reverse, collections::BinaryHeap};
-
 use anyhow::Result;
-use image::{GrayImage, ImageBuffer, Luma};
-use imageproc::distance_transform::euclidean_squared_distance_transform;
+use koharu_ml::koharu_layout_highres::rooms;
 use koharu_scene::{
     Bounds, CharStyle, Direction, Edit, Frame, Layer, LayerId, LayerView, Op, PageView, Pointer,
     ProjectId, Read, Session, StyleId, Transform,
 };
-use kurbo::{BezPath, Point, Shape};
+use kurbo::BezPath;
 use serde_json::{Map, json};
 
 use super::{Context, Prepared, Scope};
@@ -212,40 +209,72 @@ pub(super) fn run(project: ProjectId, redo: bool, work: Work) -> Result<Edit> {
         }
     }
 
-    // Each balloon's regions, one per block, from a watershed seeded by its
-    // blocks on its distance from its edge.
-    let regions: Vec<Option<Regions>> = work
-        .balloons
-        .iter()
-        .enumerate()
-        .map(|(index, balloon)| {
-            let seeds: Vec<usize> = (0..work.blocks.len())
-                .filter(|&block| work.blocks[block].balloon == Some(index))
-                .collect();
-            (seeds.len() > 1)
-                .then(|| regions(&balloon.path, &seeds, &work.blocks))
-                .flatten()
-        })
-        .collect();
+    // A translation inside a balloon with other blocks gets its room there:
+    // one room for each translation, and one for each block none covers.
+    let inside = |translation: &Translation| {
+        let first = work.blocks[translation.covers[0]].balloon?;
+        translation
+            .covers
+            .iter()
+            .all(|&block| work.blocks[block].balloon == Some(first))
+            .then_some(first)
+    };
+    let bounds = |block: usize| {
+        let Bounds {
+            x,
+            y,
+            width,
+            height,
+        } = work.blocks[block].bounds;
+        kurbo::Rect::new(x, y, x + width, y + height)
+    };
+    let mut room_of: Vec<Option<String>> = vec![None; work.translations.len()];
+    for (index, balloon) in work.balloons.iter().enumerate() {
+        let blocks: Vec<usize> = (0..work.blocks.len())
+            .filter(|&block| work.blocks[block].balloon == Some(index))
+            .collect();
+        if blocks.len() < 2 {
+            continue;
+        }
+        let Ok(outline) = BezPath::from_svg(&balloon.path) else {
+            continue;
+        };
+        let translations: Vec<usize> = (0..work.translations.len())
+            .filter(|&translation| inside(&work.translations[translation]) == Some(index))
+            .collect();
+        let covered: Vec<usize> = translations
+            .iter()
+            .flat_map(|&translation| work.translations[translation].covers.clone())
+            .collect();
+        let groups: Vec<Vec<kurbo::Rect>> = translations
+            .iter()
+            .map(|&translation| {
+                work.translations[translation]
+                    .covers
+                    .iter()
+                    .map(|&block| bounds(block))
+                    .collect()
+            })
+            .chain(
+                blocks
+                    .iter()
+                    .filter(|block| !covered.contains(block))
+                    .map(|&block| vec![bounds(block)]),
+            )
+            .collect();
+        for (translation, room) in translations.into_iter().zip(rooms(&outline, &groups)) {
+            room_of[translation] = Some(room.to_svg());
+        }
+    }
 
-    for translation in &work.translations {
+    for (index, translation) in work.translations.iter().enumerate() {
         let first = &work.blocks[translation.covers[0]];
-        let balloon = first.balloon.filter(|&balloon| {
-            translation
-                .covers
-                .iter()
-                .all(|&block| work.blocks[block].balloon == Some(balloon))
-        });
-        let (frame, transform, parent) = match balloon {
+        let (frame, transform, parent) = match inside(translation) {
             Some(balloon) => {
-                let whole = || json!({"path": {"path": work.balloons[balloon].path, "anchor": "center"}, "box": null});
-                let frame = match &regions[balloon] {
-                    Some(regions) => regions.outline(&translation.covers).map_or_else(
-                        whole,
-                        |path| json!({"path": {"path": path, "anchor": "center"}, "box": null}),
-                    ),
-                    None => whole(),
-                };
+                let path = room_of[index]
+                    .as_deref()
+                    .unwrap_or(&work.balloons[balloon].path);
+                let frame = json!({"path": {"path": path, "anchor": "center"}, "box": null});
                 (
                     frame,
                     Transform::default(),
@@ -306,98 +335,4 @@ pub(super) fn run(project: ProjectId, redo: bool, work: Work) -> Result<Edit> {
         Vec::new(),
         ops,
     ))
-}
-
-/// A balloon cut into one region per seed block.
-struct Regions {
-    /// The balloon's pixels, from `(x, y)` on the page, each labelled with
-    /// its block's index in the page's blocks plus one; 0 is outside.
-    labels: ImageBuffer<Luma<u32>, Vec<u32>>,
-    x: u32,
-    y: u32,
-}
-
-impl Regions {
-    /// The outline of the union of `blocks`' regions.
-    fn outline(&self, blocks: &[usize]) -> Option<String> {
-        let mask = GrayImage::from_fn(self.labels.width(), self.labels.height(), |x, y| {
-            let label = self.labels.get_pixel(x, y)[0] as usize;
-            Luma([u8::from(label > 0 && blocks.contains(&(label - 1))) * u8::MAX])
-        });
-        super::outline(&mask, self.x, self.y)
-    }
-}
-
-/// A seeded watershed on the balloon's distance from its edge, so each border
-/// falls where the balloon narrows. Each block seeds the balloon's pixels
-/// under its box.
-fn regions(path: &str, seeds: &[usize], blocks: &[Block]) -> Option<Regions> {
-    let path = BezPath::from_svg(path).ok()?;
-    let rect = path.bounding_box();
-    let (x, y) = (
-        rect.x0.floor().max(0.0) as u32,
-        rect.y0.floor().max(0.0) as u32,
-    );
-    let (width, height) = (
-        (rect.x1.ceil() as u32).saturating_sub(x) + 2,
-        (rect.y1.ceil() as u32).saturating_sub(y) + 2,
-    );
-    // Local pixel (lx, ly) is page pixel (x + lx - 1, y + ly - 1), so a
-    // one-pixel margin outside the balloon rings it.
-    let page = |lx: u32, ly: u32| Point::new(f64::from(x + lx) - 0.5, f64::from(y + ly) - 0.5);
-    let outside = GrayImage::from_fn(width, height, |lx, ly| {
-        Luma([u8::from(!path.contains(page(lx, ly))) * u8::MAX])
-    });
-    let distance = euclidean_squared_distance_transform(&outside);
-    let mut labels = ImageBuffer::<Luma<u32>, Vec<u32>>::new(width, height);
-    let mut queue = BinaryHeap::new();
-    let mut order = 0u64;
-    for &block in seeds {
-        let Bounds {
-            x: bx,
-            y: by,
-            width: bw,
-            height: bh,
-        } = blocks[block].bounds;
-        for ly in 0..height {
-            for lx in 0..width {
-                let point = page(lx, ly);
-                let inside_box =
-                    point.x >= bx && point.x < bx + bw && point.y >= by && point.y < by + bh;
-                if inside_box
-                    && outside.get_pixel(lx, ly)[0] == 0
-                    && labels.get_pixel(lx, ly)[0] == 0
-                {
-                    labels.put_pixel(lx, ly, Luma([block as u32 + 1]));
-                    queue.push((distance.get_pixel(lx, ly)[0] as u64, Reverse(order), lx, ly));
-                    order += 1;
-                }
-            }
-        }
-    }
-    // Lowest on -distance first: the balloon's middle floods before its necks.
-    while let Some((_, _, lx, ly)) = queue.pop() {
-        let label = labels.get_pixel(lx, ly)[0];
-        for (nx, ny) in [
-            (lx.wrapping_sub(1), ly),
-            (lx + 1, ly),
-            (lx, ly.wrapping_sub(1)),
-            (lx, ly + 1),
-        ] {
-            if nx < width
-                && ny < height
-                && outside.get_pixel(nx, ny)[0] == 0
-                && labels.get_pixel(nx, ny)[0] == 0
-            {
-                labels.put_pixel(nx, ny, Luma([label]));
-                queue.push((distance.get_pixel(nx, ny)[0] as u64, Reverse(order), nx, ny));
-                order += 1;
-            }
-        }
-    }
-    Some(Regions {
-        labels,
-        x: x.saturating_sub(1),
-        y: y.saturating_sub(1),
-    })
 }

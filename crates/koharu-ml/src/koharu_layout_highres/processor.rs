@@ -12,7 +12,6 @@
 use anyhow::{Result, ensure};
 use image::DynamicImage;
 use koharu_torch::{Device, IndexOp, Kind, Tensor};
-use serde::Serialize;
 
 use super::{
     config::{Config, Thresholds},
@@ -111,7 +110,7 @@ impl ImageProcessor {
         image_width: u32,
         image_height: u32,
         thresholds: Thresholds,
-    ) -> Result<Detections> {
+    ) -> Result<Vec<Detection>> {
         validate_thresholds(thresholds)?;
         let logits_size = output.pred_logits.size();
         ensure!(
@@ -151,11 +150,7 @@ impl ImageProcessor {
         let selected = keep.nonzero()?.view([-1])?;
 
         if selected.size()[0] == 0 {
-            return Ok(Detections {
-                image_width,
-                image_height,
-                detections: Vec::new(),
-            });
+            return Ok(Vec::new());
         }
 
         let scores = scores.index_select(0, &selected)?;
@@ -253,17 +248,14 @@ impl ImageProcessor {
                     .reshape([-1])?,
                 )?
             };
-            let label_id = label as usize;
             detections.push(Detection {
-                label_id,
                 label: self
                     .class_names
-                    .get(label_id)
+                    .get(label as usize)
                     .cloned()
                     .unwrap_or_else(|| "__background__".to_owned()),
                 score: floats[index * 5],
                 bbox: floats[index * 5 + 1..index * 5 + 5].try_into().unwrap(),
-                area,
                 mask: Mask {
                     x,
                     y,
@@ -274,11 +266,7 @@ impl ImageProcessor {
             });
         }
 
-        Ok(Detections {
-            image_width,
-            image_height,
-            detections,
-        })
+        Ok(detections)
     }
 }
 
@@ -353,22 +341,13 @@ fn validate_thresholds(thresholds: Thresholds) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Detections {
-    pub image_width: u32,
-    pub image_height: u32,
-    pub detections: Vec<Detection>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Detection {
-    pub label_id: usize,
-    pub label: String,
-    pub score: f32,
-    pub bbox: [f32; 4],
-    pub area: u32,
-    #[serde(skip_serializing)]
-    pub mask: Mask,
+/// One query's detection, before `layout` relates them.
+#[derive(Debug, Clone)]
+pub(super) struct Detection {
+    pub(super) label: String,
+    pub(super) score: f32,
+    pub(super) bbox: [f32; 4],
+    pub(super) mask: Mask,
 }
 
 #[derive(Debug, Clone)]

@@ -12,9 +12,9 @@ use imageproc::{
     drawing::{draw_filled_circle_mut, draw_text_mut, text_size},
 };
 use koharu_ml::koharu_layout_highres::{
-    Detection, Detections, KoharuLayoutHighres, Mask, Options, Typography,
+    Bubble, Kind, KoharuLayoutHighres, Layout, Lettering, Mask, Options, Typography,
 };
-use serde::Serialize;
+use serde_json::{Value, json};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -51,19 +51,10 @@ struct Cli {
     panel_threshold: Option<f32>,
 }
 
-/// A detection with the typography Leptonica measured in it.
-#[derive(Serialize)]
-struct Measured<'a> {
-    #[serde(flatten)]
-    detection: &'a Detection,
-    typography: Option<Typography>,
-}
-
-#[derive(Serialize)]
+/// The layout with the typography measured in each lettering.
 struct Page<'a> {
-    image_width: u32,
-    image_height: u32,
-    detections: Vec<Measured<'a>>,
+    layout: &'a Layout,
+    typography: Vec<Option<Typography>>,
 }
 
 #[tokio::main]
@@ -114,18 +105,17 @@ async fn main() -> Result<()> {
             .decode()
             .with_context(|| format!("failed to open {}", path.display()))?;
         let started = Instant::now();
-        let detections = model.inference(&image, &options)?;
+        let layout = model.inference(&image, &options)?;
         let inferred = started.elapsed();
-        let page = measure(&image, &detections);
+        let page = measure(&image, &layout);
         let measured = started.elapsed() - inferred;
         eprintln!(
-            "{}: {} detections, {} measured; inference {:.0} ms, measurement {:.0} ms",
+            "{}: {} lettering, {} bubbles, {} panels, {} measured; inference {:.0} ms, measurement {:.0} ms",
             path.display(),
-            detections.detections.len(),
-            page.detections
-                .iter()
-                .filter(|detection| detection.typography.is_some())
-                .count(),
+            layout.lettering.len(),
+            layout.bubbles.len(),
+            layout.panels.len(),
+            page.typography.iter().flatten().count(),
             inferred.as_secs_f64() * 1000.0,
             measured.as_secs_f64() * 1000.0,
         );
@@ -150,7 +140,7 @@ async fn main() -> Result<()> {
                 .save(&output)
                 .with_context(|| format!("failed to save {}", output.display()))?;
         }
-        let json = serde_json::to_string_pretty(&page)?;
+        let json = serde_json::to_string_pretty(&page.json())?;
         match cli.output.as_deref() {
             Some(output) => std::fs::write(target(output, "json"), json)?,
             None if !folder => println!("{json}"),
@@ -160,22 +150,51 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// The typography of each text and onomatopoeia detection.
-fn measure<'a>(image: &DynamicImage, detections: &'a Detections) -> Page<'a> {
+/// The typography of each lettering.
+fn measure<'a>(image: &DynamicImage, layout: &'a Layout) -> Page<'a> {
     let page = image.to_rgb8();
     Page {
-        image_width: detections.image_width,
-        image_height: detections.image_height,
-        detections: detections
-            .detections
+        layout,
+        typography: layout
+            .lettering
             .iter()
-            .map(|detection| Measured {
-                detection,
-                typography: matches!(detection.label.as_str(), "text" | "onomatopoeia")
-                    .then(|| detection.typography(&page))
-                    .flatten(),
-            })
+            .map(|lettering| lettering.typography(&page))
             .collect(),
+    }
+}
+
+impl Page<'_> {
+    /// The layout as JSON: boxes, relations by index, and outlines and rooms
+    /// as SVG path data in page pixels.
+    fn json(&self) -> Value {
+        let layout = self.layout;
+        json!({
+            "width": layout.width,
+            "height": layout.height,
+            "lettering": layout.lettering.iter().zip(&self.typography).map(|(lettering, typography)| json!({
+                "kind": match lettering.kind {
+                    Kind::Text => "text",
+                    Kind::Onomatopoeia => "onomatopoeia",
+                },
+                "score": lettering.score,
+                "bbox": lettering.bbox,
+                "bubble": lettering.bubble,
+                "panel": lettering.panel,
+                "room": lettering.room.as_ref().map(|room| room.to_svg()),
+                "typography": typography,
+            })).collect::<Vec<_>>(),
+            "bubbles": layout.bubbles.iter().map(|bubble| json!({
+                "score": bubble.score,
+                "bbox": bubble.bbox,
+                "outline": bubble.outline.to_svg(),
+                "lettering": bubble.lettering,
+                "panel": bubble.panel,
+            })).collect::<Vec<_>>(),
+            "panels": layout.panels.iter().map(|panel| json!({
+                "score": panel.score,
+                "bbox": panel.bbox,
+            })).collect::<Vec<_>>(),
+        })
     }
 }
 
@@ -198,16 +217,13 @@ const BLACK: [u8; 3] = [0, 0, 0];
 fn annotate(image: &mut RgbaImage, page: &Page<'_>, font: &FontArc, font_size: f32) {
     // Sizes are for a 1500-pixel page and scale with it.
     let scale = (image.width().max(image.height()) as f32 / 1500.0).max(0.5);
-    let lettering = page
-        .detections
-        .iter()
-        .filter(|measured| matches!(measured.detection.label.as_str(), "text" | "onomatopoeia"));
+    let lettering = &page.layout.lettering;
 
     // One union, so overlapping masks invert once.
     let width = image.width();
     let mut inverted = vec![false; (width * image.height()) as usize];
-    for measured in lettering.clone() {
-        let mask = &measured.detection.mask;
+    for lettering in lettering {
+        let mask = &lettering.mask;
         for (index, _) in mask
             .pixels
             .iter()
@@ -231,32 +247,22 @@ fn annotate(image: &mut RgbaImage, page: &Page<'_>, font: &FontArc, font_size: f
         }
     }
 
-    for measured in lettering.clone() {
-        let [x1, y1, x2, y2] = measured.detection.bbox;
-        let color = if measured.detection.label == "text" {
-            TEXT
-        } else {
-            ONOMATOPOEIA
+    for lettering in lettering {
+        let [x1, y1, x2, y2] = lettering.bbox;
+        let color = match lettering.kind {
+            Kind::Text => TEXT,
+            Kind::Onomatopoeia => ONOMATOPOEIA,
         };
         fill(image, (x1, y1, x2 - x1, y2 - y1), 0.0, color, 0.25);
     }
 
-    for measured in &page.detections {
-        if measured.detection.label == "bubble" {
-            dot_edge(image, &measured.detection.mask, scale);
-        }
+    for Bubble { mask, .. } in &page.layout.bubbles {
+        dot_edge(image, mask, scale);
     }
 
-    for measured in lettering {
-        if let Some(typography) = &measured.typography {
-            label(
-                image,
-                measured.detection,
-                typography,
-                font,
-                font_size * scale,
-                scale,
-            );
+    for (lettering, typography) in lettering.iter().zip(&page.typography) {
+        if let Some(typography) = typography {
+            label(image, lettering, typography, font, font_size * scale, scale);
         }
     }
 }
@@ -289,7 +295,7 @@ fn dot_edge(image: &mut RgbaImage, mask: &Mask, scale: f32) {
 /// The label under a lettering mask's box.
 fn label(
     image: &mut RgbaImage,
-    detection: &Detection,
+    lettering: &Lettering,
     typography: &Typography,
     font: &FontArc,
     size: f32,
@@ -307,7 +313,7 @@ fn label(
     let width =
         padding + swatch + padding + text_width + stroke.map_or(0.0, |_| padding + bar) + padding;
     let height = swatch.max(stroke.unwrap_or(0.0)) + 2.0 * padding;
-    let [x1, _, _, y2] = detection.bbox;
+    let [x1, _, _, y2] = lettering.bbox;
     let x = x1.clamp(0.0, (image.width() as f32 - width).max(0.0));
     let y = (y2 + 2.0 * scale).clamp(0.0, (image.height() as f32 - height).max(0.0));
     let middle = y + height / 2.0;

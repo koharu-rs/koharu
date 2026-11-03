@@ -1,7 +1,7 @@
-//! The shape and typography of a detection's lettering, on the page under
-//! its mask. RF-DETR's postprocessing stays as upstream has it: `glyph_mask`
-//! reshapes a lettering mask after it, and `Detection::typography` measures
-//! one when a caller asks.
+//! The shape and typography of lettering, on the page under its mask.
+//! RF-DETR's postprocessing stays as upstream has it: `glyph_mask` reshapes a
+//! lettering mask after it, and `Lettering::typography` measures one when a
+//! caller asks.
 
 use std::collections::{HashMap, HashSet};
 
@@ -16,7 +16,7 @@ use imageproc::{
 use koharu_leptonica::{color_segment, find_stroke_width, otsu_adaptive_threshold};
 use serde::Serialize;
 
-use super::{Detection, Mask};
+use super::{Lettering, Mask};
 
 /// What a detection's lettering shows.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -35,8 +35,8 @@ pub struct Typography {
     pub paper: Option<[u8; 3]>,
 }
 
-impl Detection {
-    /// The detection's typography on `page`, or `None` when its block holds
+impl Lettering {
+    /// The lettering's typography on `page`, or `None` when its block holds
     /// no ink.
     pub fn typography(&self, page: &RgbImage) -> Option<Typography> {
         let block = block(&self.mask, page.width(), page.height());

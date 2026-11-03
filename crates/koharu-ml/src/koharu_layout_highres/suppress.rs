@@ -2,7 +2,7 @@
 //! the network as RF-DETR's maintainers advise (roboflow/rf-detr#187 and
 //! #434): its one-to-one matching only teaches the model to avoid them.
 
-use super::Detection;
+use super::{Detection, Mask};
 
 /// A detection overlapping a more confident one of its label by at least
 /// this IoU is the same object, as in supervision's `with_nms` default. The
@@ -10,17 +10,26 @@ use super::Detection;
 /// hardly any among the other classes.
 const IOU: f32 = 0.5;
 
-/// Text with at least this share of the smaller box inside the other is
-/// the same block, a fragment of it, or it merged with an aside. Training
-/// labels nest text in text only 9 times among 127,678 boxes, but
-/// onomatopoeia, bubbles and panels hundreds of times, so only text is
-/// suppressed this way. On 212 pages of Blue Archive's comics, this kept the
-/// right box of 11 fragment pairs of 11 and 15 merged pairs of 22, where IoU
-/// alone kept 5 of each.
-const NESTED_TEXT: f32 = 0.8;
+/// A box with at least this share of it inside another nests in it. Text
+/// nesting in text is the same block, a fragment of it, or it merged with an
+/// aside: training labels nest text in text only 9 times among 127,678
+/// boxes. On 212 pages of Blue Archive's comics, suppressing nested text kept
+/// the right box of 11 fragment pairs of 11 and 15 merged pairs of 22, where
+/// IoU alone kept 5 of each. Bubbles and panels nest hundreds of times, so
+/// nesting alone suppresses only text.
+const NESTED: f32 = 0.8;
+
+/// Onomatopoeia whose boxes overlap as duplicates' do, and that share at
+/// least this share of the smaller one's glyphs, are the same lettering
+/// detected twice. Of the 435 onomatopoeia pairs in the training labels whose
+/// boxes nest, only 4.1% share this much: the rest are separate lettering
+/// whose boxes happen to nest. Glyphs alone aren't enough either, since a
+/// mask can spill onto the next word's glyphs.
+const SHARED_GLYPHS: f32 = 0.5;
 
 /// Drops each detection that duplicates a more confident one, keeping the
-/// rest in their order.
+/// rest in their order. Onomatopoeia are left to `merge`, which needs their
+/// glyphs.
 pub(super) fn suppress(detections: &mut Vec<Detection>) {
     let mut ranked: Vec<usize> = (0..detections.len()).collect();
     ranked.sort_by(|&left, &right| detections[right].score.total_cmp(&detections[left].score));
@@ -35,16 +44,111 @@ pub(super) fn suppress(detections: &mut Vec<Detection>) {
     detections.retain(|_| kept.next() == Some(true));
 }
 
+/// Merges onomatopoeia detected twice into one, as supervision's
+/// non-maximum merging does: the union of their boxes and of their glyphs,
+/// with their scores weighted by box area. Keeping the more confident alone
+/// could keep a fragment: a word's half can outscore the whole. A merge can
+/// make a box that now overlaps another, as supervision's groups chain, so
+/// it repeats until nothing merges.
+pub(super) fn merge(detections: &mut Vec<Detection>) {
+    let (mut kept, mut onomatopoeia): (Vec<Detection>, Vec<Detection>) = detections
+        .drain(..)
+        .partition(|detection| detection.label != "onomatopoeia");
+    loop {
+        let count = onomatopoeia.len();
+        onomatopoeia = merge_pass(onomatopoeia);
+        if onomatopoeia.len() == count {
+            break;
+        }
+    }
+    kept.extend(onomatopoeia);
+    *detections = kept;
+}
+
+/// Merges each onomatopoeia into the first more confident one it
+/// duplicates.
+fn merge_pass(mut onomatopoeia: Vec<Detection>) -> Vec<Detection> {
+    onomatopoeia.sort_by(|left, right| right.score.total_cmp(&left.score));
+    let mut merged: Vec<Detection> = Vec::new();
+    for candidate in onomatopoeia {
+        match merged.iter_mut().find(|other| {
+            let (iou, nested) = overlap(other.bbox, candidate.bbox);
+            (iou >= IOU || nested >= NESTED)
+                && shared(&other.mask, &candidate.mask) >= SHARED_GLYPHS
+        }) {
+            Some(other) => {
+                let (a, b) = (area(other.bbox), area(candidate.bbox));
+                if a + b > 0.0 {
+                    other.score = (other.score * a + candidate.score * b) / (a + b);
+                }
+                other.bbox = [
+                    other.bbox[0].min(candidate.bbox[0]),
+                    other.bbox[1].min(candidate.bbox[1]),
+                    other.bbox[2].max(candidate.bbox[2]),
+                    other.bbox[3].max(candidate.bbox[3]),
+                ];
+                other.mask = union(&other.mask, &candidate.mask);
+            }
+            None => merged.push(candidate),
+        }
+    }
+    merged
+}
+
+/// The share of the smaller mask's set pixels that the other also sets.
+fn shared(left: &Mask, right: &Mask) -> f32 {
+    let count = |mask: &Mask| mask.pixels.iter().filter(|&&pixel| pixel != 0).count();
+    let (smaller, larger) = if count(left) <= count(right) {
+        (left, right)
+    } else {
+        (right, left)
+    };
+    let set = count(smaller);
+    if set == 0 {
+        return 0.0;
+    }
+    let both = (0..smaller.height)
+        .flat_map(|y| (0..smaller.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            smaller.pixels[(y * smaller.width + x) as usize] != 0
+                && larger.contains(smaller.x + x, smaller.y + y)
+        })
+        .count();
+    both as f32 / set as f32
+}
+
+/// The pixels either mask sets, over both masks' extent.
+fn union(left: &Mask, right: &Mask) -> Mask {
+    let (x, y) = (left.x.min(right.x), left.y.min(right.y));
+    let width = (left.x + left.width).max(right.x + right.width) - x;
+    let height = (left.y + left.height).max(right.y + right.height) - y;
+    Mask {
+        x,
+        y,
+        width,
+        height,
+        pixels: (0..height)
+            .flat_map(|row| (0..width).map(move |column| (x + column, y + row)))
+            .map(|(px, py)| u8::from(left.contains(px, py) || right.contains(px, py)) * u8::MAX)
+            .collect(),
+    }
+}
+
 fn duplicate(kept: &Detection, candidate: &Detection) -> bool {
-    if kept.label != candidate.label {
+    if kept.label != candidate.label || candidate.label == "onomatopoeia" {
         return false;
     }
-    let (left, right) = (kept.bbox, candidate.bbox);
-    let overlap = (left[2].min(right[2]) - left[0].max(right[0])).max(0.0)
+    let (iou, nested) = overlap(kept.bbox, candidate.bbox);
+    iou >= IOU || candidate.label == "text" && nested >= NESTED
+}
+
+/// Two boxes' IoU, and the share of the smaller inside the other.
+fn overlap(left: [f32; 4], right: [f32; 4]) -> (f32, f32) {
+    let both = (left[2].min(right[2]) - left[0].max(right[0])).max(0.0)
         * (left[3].min(right[3]) - left[1].max(right[1])).max(0.0);
     let (left, right) = (area(left), area(right));
-    overlap >= IOU * (left + right - overlap)
-        || candidate.label == "text" && overlap >= NESTED_TEXT * left.min(right)
+    let ratio = |whole: f32| if whole > 0.0 { both / whole } else { 0.0 };
+    (ratio(left + right - both), ratio(left.min(right)))
 }
 
 fn area(bbox: [f32; 4]) -> f32 {
@@ -53,15 +157,13 @@ fn area(bbox: [f32; 4]) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{super::Mask, Detection, suppress};
+    use super::{super::Mask, Detection, merge, suppress};
 
     fn detection(label: &str, score: f32, bbox: [f32; 4]) -> Detection {
         Detection {
-            label_id: 0,
             label: label.to_owned(),
             score,
             bbox,
-            area: 0,
             mask: Mask {
                 x: 0,
                 y: 0,
@@ -102,6 +204,60 @@ mod tests {
                 .map(|detection| detection.bbox)
                 .collect::<Vec<_>>(),
             kept
+        );
+    }
+
+    #[test]
+    fn onomatopoeia_detected_twice_merge_and_nested_ones_stay() {
+        // Glyphs as filled rectangles on a 100 × 100 page.
+        let glyphs = |strokes: &[[u32; 4]]| Mask {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            pixels: (0..100)
+                .flat_map(|y| (0..100).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    let inside = strokes
+                        .iter()
+                        .any(|&[x0, y0, x1, y1]| (x0..x1).contains(&x) && (y0..y1).contains(&y));
+                    u8::from(inside) * u8::MAX
+                })
+                .collect(),
+        };
+        let onomatopoeia = |score, bbox, strokes: &[[u32; 4]]| Detection {
+            mask: glyphs(strokes),
+            ..detection("onomatopoeia", score, bbox)
+        };
+        let mut page = vec![
+            // A word of two strokes, and its lower stroke scoring higher.
+            onomatopoeia(
+                0.47,
+                [10.0, 10.0, 40.0, 90.0],
+                &[[10, 10, 40, 40], [10, 60, 40, 90]],
+            ),
+            onomatopoeia(0.49, [10.0, 55.0, 40.0, 90.0], &[[10, 60, 40, 90]]),
+            // Another word inside the first's box, in its own glyphs.
+            onomatopoeia(0.6, [15.0, 45.0, 35.0, 55.0], &[[15, 45, 35, 55]]),
+            // A word beside the first whose mask spills onto its glyphs.
+            onomatopoeia(0.5, [38.0, 10.0, 70.0, 40.0], &[[10, 10, 40, 40]]),
+        ];
+
+        merge(&mut page);
+
+        let mut boxes: Vec<[f32; 4]> = page.iter().map(|detection| detection.bbox).collect();
+        boxes.sort_by(|left, right| {
+            left[0]
+                .total_cmp(&right[0])
+                .then(left[1].total_cmp(&right[1]))
+        });
+        assert_eq!(
+            boxes,
+            [
+                [10.0, 10.0, 40.0, 90.0],
+                [15.0, 45.0, 35.0, 55.0],
+                [38.0, 10.0, 70.0, 40.0]
+            ]
         );
     }
 }
