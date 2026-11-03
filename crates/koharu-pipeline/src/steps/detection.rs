@@ -174,7 +174,6 @@ pub(super) fn edit(
     if let Some(area) = work.area {
         detections.retain(|detection| overlaps(detection.bbox.map(f64::from), area));
     }
-    measure::non_maximum_suppression(&mut detections, 0.5);
     let rgb = scan.to_rgb8();
     let of_label = |label: &str| -> Vec<&Detection> {
         detections
