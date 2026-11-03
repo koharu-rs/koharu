@@ -4,13 +4,13 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-use super::{Host, LIBRARIES, find, install_archive, preload};
+use super::{Host, LIBRARIES, install_archive, preload};
 use crate::store;
 
 struct Wheel {
     project: &'static str,
     version: &'static str,
-    /// The libraries it holds, in load order.
+    /// The libraries it holds, in load order, at their paths in the wheel.
     windows: &'static [&'static str],
     linux: &'static [&'static str],
     /// The platform tags of its x86-64 and ARM64 Linux wheels; every
@@ -23,8 +23,8 @@ const WHEELS: &[Wheel] = &[
     Wheel {
         project: "nvidia-cuda-runtime",
         version: "13.3.29",
-        windows: &["cudart64_13.dll"],
-        linux: &["libcudart.so.13"],
+        windows: &["nvidia/cu13/bin/x86_64/cudart64_13.dll"],
+        linux: &["nvidia/cu13/lib/libcudart.so.13"],
         manylinux: [
             "manylinux2014_x86_64.manylinux_2_17_x86_64",
             "manylinux2014_aarch64.manylinux_2_17_aarch64",
@@ -33,8 +33,8 @@ const WHEELS: &[Wheel] = &[
     Wheel {
         project: "nvidia-nvjitlink",
         version: "13.3.33",
-        windows: &["nvJitLink_130_0.dll"],
-        linux: &["libnvJitLink.so.13"],
+        windows: &["nvidia/cu13/bin/x86_64/nvJitLink_130_0.dll"],
+        linux: &["nvidia/cu13/lib/libnvJitLink.so.13"],
         manylinux: [
             "manylinux2010_x86_64.manylinux_2_12_x86_64",
             "manylinux2014_aarch64.manylinux_2_17_aarch64",
@@ -43,8 +43,14 @@ const WHEELS: &[Wheel] = &[
     Wheel {
         project: "nvidia-cuda-nvrtc",
         version: "13.3.33",
-        windows: &["nvrtc-builtins64_133.dll", "nvrtc64_130_0.dll"],
-        linux: &["libnvrtc-builtins.so.13.3", "libnvrtc.so.13"],
+        windows: &[
+            "nvidia/cu13/bin/x86_64/nvrtc-builtins64_133.dll",
+            "nvidia/cu13/bin/x86_64/nvrtc64_130_0.dll",
+        ],
+        linux: &[
+            "nvidia/cu13/lib/libnvrtc-builtins.so.13.3",
+            "nvidia/cu13/lib/libnvrtc.so.13",
+        ],
         manylinux: [
             "manylinux2010_x86_64.manylinux_2_12_x86_64",
             "manylinux2014_aarch64.manylinux_2_17_aarch64",
@@ -53,15 +59,21 @@ const WHEELS: &[Wheel] = &[
     Wheel {
         project: "nvidia-cublas",
         version: "13.6.0.2",
-        windows: &["cublasLt64_13.dll", "cublas64_13.dll"],
-        linux: &["libcublasLt.so.13", "libcublas.so.13"],
+        windows: &[
+            "nvidia/cu13/bin/x86_64/cublasLt64_13.dll",
+            "nvidia/cu13/bin/x86_64/cublas64_13.dll",
+        ],
+        linux: &[
+            "nvidia/cu13/lib/libcublasLt.so.13",
+            "nvidia/cu13/lib/libcublas.so.13",
+        ],
         manylinux: ["manylinux_2_27_x86_64", "manylinux_2_27_aarch64"],
     },
     Wheel {
         project: "nvidia-cufft",
         version: "12.3.0.29",
-        windows: &["cufft64_12.dll"],
-        linux: &["libcufft.so.12"],
+        windows: &["nvidia/cu13/bin/x86_64/cufft64_12.dll"],
+        linux: &["nvidia/cu13/lib/libcufft.so.12"],
         manylinux: [
             "manylinux2014_x86_64.manylinux_2_17_x86_64",
             "manylinux2014_aarch64.manylinux_2_17_aarch64",
@@ -70,15 +82,15 @@ const WHEELS: &[Wheel] = &[
     Wheel {
         project: "nvidia-curand",
         version: "10.4.3.29",
-        windows: &["curand64_10.dll"],
-        linux: &["libcurand.so.10"],
+        windows: &["nvidia/cu13/bin/x86_64/curand64_10.dll"],
+        linux: &["nvidia/cu13/lib/libcurand.so.10"],
         manylinux: ["manylinux_2_27_x86_64", "manylinux_2_27_aarch64"],
     },
     Wheel {
         project: "nvidia-cusparse",
         version: "12.8.2.51",
-        windows: &["cusparse64_12.dll"],
-        linux: &["libcusparse.so.12"],
+        windows: &["nvidia/cu13/bin/x86_64/cusparse64_12.dll"],
+        linux: &["nvidia/cu13/lib/libcusparse.so.12"],
         manylinux: [
             "manylinux2014_x86_64.manylinux_2_17_x86_64",
             "manylinux2014_aarch64.manylinux_2_17_aarch64",
@@ -87,36 +99,42 @@ const WHEELS: &[Wheel] = &[
     Wheel {
         project: "nvidia-cusolver",
         version: "12.2.6.9",
-        windows: &["cusolver64_12.dll", "cusolverMg64_12.dll"],
-        linux: &["libcusolver.so.12", "libcusolverMg.so.12"],
+        windows: &[
+            "nvidia/cu13/bin/x86_64/cusolver64_12.dll",
+            "nvidia/cu13/bin/x86_64/cusolverMg64_12.dll",
+        ],
+        linux: &[
+            "nvidia/cu13/lib/libcusolver.so.12",
+            "nvidia/cu13/lib/libcusolverMg.so.12",
+        ],
         manylinux: ["manylinux_2_27_x86_64", "manylinux_2_27_aarch64"],
     },
     Wheel {
         project: "nvidia-cudnn-cu13",
         version: "9.25.1.1",
         windows: &[
-            "cudnn64_9.dll",
-            "cudnn_adv64_9.dll",
-            "cudnn_cnn64_9.dll",
-            "cudnn_engines_precompiled64_9.dll",
-            "cudnn_engines_runtime_compiled64_9.dll",
-            "cudnn_engines_tensor_ir64_9.dll",
-            "cudnn_ext64_9.dll",
-            "cudnn_graph64_9.dll",
-            "cudnn_heuristic64_9.dll",
-            "cudnn_ops64_9.dll",
+            "nvidia/cudnn/bin/cudnn64_9.dll",
+            "nvidia/cudnn/bin/cudnn_adv64_9.dll",
+            "nvidia/cudnn/bin/cudnn_cnn64_9.dll",
+            "nvidia/cudnn/bin/cudnn_engines_precompiled64_9.dll",
+            "nvidia/cudnn/bin/cudnn_engines_runtime_compiled64_9.dll",
+            "nvidia/cudnn/bin/cudnn_engines_tensor_ir64_9.dll",
+            "nvidia/cudnn/bin/cudnn_ext64_9.dll",
+            "nvidia/cudnn/bin/cudnn_graph64_9.dll",
+            "nvidia/cudnn/bin/cudnn_heuristic64_9.dll",
+            "nvidia/cudnn/bin/cudnn_ops64_9.dll",
         ],
         linux: &[
-            "libcudnn.so.9",
-            "libcudnn_adv.so.9",
-            "libcudnn_cnn.so.9",
-            "libcudnn_engines_precompiled.so.9",
-            "libcudnn_engines_runtime_compiled.so.9",
-            "libcudnn_engines_tensor_ir.so.9",
-            "libcudnn_ext.so.9",
-            "libcudnn_graph.so.9",
-            "libcudnn_heuristic.so.9",
-            "libcudnn_ops.so.9",
+            "nvidia/cudnn/lib/libcudnn.so.9",
+            "nvidia/cudnn/lib/libcudnn_adv.so.9",
+            "nvidia/cudnn/lib/libcudnn_cnn.so.9",
+            "nvidia/cudnn/lib/libcudnn_engines_precompiled.so.9",
+            "nvidia/cudnn/lib/libcudnn_engines_runtime_compiled.so.9",
+            "nvidia/cudnn/lib/libcudnn_engines_tensor_ir.so.9",
+            "nvidia/cudnn/lib/libcudnn_ext.so.9",
+            "nvidia/cudnn/lib/libcudnn_graph.so.9",
+            "nvidia/cudnn/lib/libcudnn_heuristic.so.9",
+            "nvidia/cudnn/lib/libcudnn_ops.so.9",
         ],
         manylinux: ["manylinux_2_27_x86_64", "manylinux_2_27_aarch64"],
     },
@@ -130,30 +148,35 @@ impl Wheel {
             self.linux
         }
     }
+
+    /// PyPI's stable path for the wheel for `host`, which redirects to where
+    /// it's stored.
+    fn url(&self, host: Host) -> Result<String> {
+        let platform = match host {
+            Host::WindowsX64 => "win_amd64",
+            Host::LinuxX64 => self.manylinux[0],
+            Host::LinuxArm64 => self.manylinux[1],
+            Host::MacosArm64 => anyhow::bail!("CUDA's wheels don't exist for macOS"),
+        };
+        let filename = format!(
+            "{}-{}-py3-none-{platform}.whl",
+            self.project.replace('-', "_"),
+            self.version
+        );
+        let first = &self.project[..1];
+        Ok(format!(
+            "https://files.pythonhosted.org/packages/py3/{first}/{}/{filename}",
+            self.project
+        ))
+    }
 }
 
 /// Installs every wheel and returns their folders, in load order.
 pub(super) async fn install(host: Host) -> Result<Vec<PathBuf>> {
     let mut folders = Vec::new();
     for wheel in WHEELS {
-        let platform = match host {
-            Host::WindowsX64 => "win_amd64",
-            Host::LinuxX64 => wheel.manylinux[0],
-            Host::LinuxArm64 => wheel.manylinux[1],
-            Host::MacosArm64 => anyhow::bail!("CUDA's wheels don't exist for macOS"),
-        };
-        let filename = format!(
-            "{}-{}-py3-none-{platform}.whl",
-            wheel.project.replace('-', "_"),
-            wheel.version
-        );
-        // PyPI's stable path for a file, which redirects to where it's stored.
-        let first = &wheel.project[..1];
-        let url = format!(
-            "https://files.pythonhosted.org/packages/py3/{first}/{}/{filename}",
-            wheel.project
-        );
-        let folder = store::directory(
+        let url = wheel.url(host)?;
+        let folder = store::install(
             store::root()
                 .join("cuda")
                 .join(wheel.project)
@@ -162,9 +185,12 @@ pub(super) async fn install(host: Host) -> Result<Vec<PathBuf>> {
                 wheel
                     .libraries()
                     .iter()
-                    .all(|name| find(folder, name).is_ok())
+                    .all(|library| folder.join(library).is_file())
             },
-            move |stage| async move { install_archive(&url, &stage, LIBRARIES).await },
+            move |stage| async move {
+                install_archive(&url, &stage, LIBRARIES).await?;
+                Ok(stage)
+            },
         )
         .await?;
         folders.push(folder);
@@ -174,8 +200,8 @@ pub(super) async fn install(host: Host) -> Result<Vec<PathBuf>> {
 
 pub(super) fn load(folders: &[PathBuf]) -> Result<()> {
     for (wheel, folder) in WHEELS.iter().zip(folders) {
-        for name in wheel.libraries() {
-            preload(&find(folder, name)?, false)?;
+        for library in wheel.libraries() {
+            preload(&folder.join(library), false)?;
         }
     }
     Ok(())

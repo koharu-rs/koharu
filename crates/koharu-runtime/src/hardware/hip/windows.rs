@@ -65,7 +65,7 @@ impl OpenCl {
     }
 }
 
-pub(super) fn probe() -> Vec<Device> {
+pub(in crate::hardware) fn probe() -> Vec<Device> {
     let Some(opencl) = OpenCl::load() else {
         return Vec::new();
     };

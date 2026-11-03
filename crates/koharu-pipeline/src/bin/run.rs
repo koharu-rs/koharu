@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
         session: Mutex::new(session),
         started: Mutex::new(HashMap::new()),
     });
-    let pipeline = Pipeline::new(koharu_runtime::devices().await?);
+    let pipeline = Pipeline::new(koharu_runtime::device().await?);
     let cancel = CancellationToken::new();
     tokio::spawn({
         let cancel = cancel.clone();

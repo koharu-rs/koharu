@@ -20,7 +20,7 @@ use koharu_ml::{
     paddle_ocr_vl_quantized::{self, PaddleOcrVlQuantized},
     rorem_mixed::RoremMixed,
 };
-use koharu_runtime::{Device, Devices};
+use koharu_runtime::Device;
 
 /// A loaded model stays this long after its last use, Ollama's default.
 pub(crate) const IDLE: Duration = Duration::from_secs(5 * 60);
@@ -98,13 +98,12 @@ pub(crate) enum Loaded {
 }
 
 impl Loaded {
-    async fn load(model: &Model, devices: &'static Devices, budget: u64) -> Result<Self> {
-        let torch = &devices.torch;
+    async fn load(model: &Model, device: &'static Device, budget: u64) -> Result<Self> {
         Ok(match model {
-            Model::Layout => Self::Layout(KoharuLayoutHighres::load(torch).await?),
-            Model::MangaOcr => Self::MangaOcr(MangaOcr::load(torch).await?),
-            Model::BaberuOcr => Self::BaberuOcr(BaberuOcr::load(torch).await?),
-            Model::HayaiOcr => Self::HayaiOcr(HayaiOcr::load(torch).await?),
+            Model::Layout => Self::Layout(KoharuLayoutHighres::load(device).await?),
+            Model::MangaOcr => Self::MangaOcr(MangaOcr::load(device).await?),
+            Model::BaberuOcr => Self::BaberuOcr(BaberuOcr::load(device).await?),
+            Model::HayaiOcr => Self::HayaiOcr(HayaiOcr::load(device).await?),
             Model::PaddleOcrVl => {
                 Self::PaddleOcrVl(PaddleOcrVlQuantized::load(OCR_SEQUENCES).await?)
             }
@@ -119,10 +118,10 @@ impl Loaded {
                 };
                 Self::Translator(koharu_llm::model(&selection, TRANSLATION_SIZE).await?)
             }
-            Model::Lama => Self::Lama(Lama::load(torch).await?),
-            Model::Aot => Self::Aot(AotInpainting::load(torch).await?),
-            Model::Flux3Klein => Self::Flux3Klein(Flux3Klein::load(&devices.ggml, budget).await?),
-            Model::RoremMixed => Self::RoremMixed(RoremMixed::load(&devices.ggml, budget).await?),
+            Model::Lama => Self::Lama(Lama::load(device).await?),
+            Model::Aot => Self::Aot(AotInpainting::load(device).await?),
+            Model::Flux3Klein => Self::Flux3Klein(Flux3Klein::load(device, budget).await?),
+            Model::RoremMixed => Self::RoremMixed(RoremMixed::load(device, budget).await?),
         })
     }
 
@@ -169,7 +168,10 @@ struct Slot {
 }
 
 pub(crate) struct Residency {
-    devices: &'static Devices,
+    /// The device models are placed in and measured on. libtorch's models
+    /// run on the CPU instead where it has no build for its backend, and
+    /// take none of its memory.
+    device: &'static Device,
     slots: Vec<Slot>,
     /// Each model's footprint, measured at its first load and kept until
     /// Koharu exits.
@@ -177,19 +179,12 @@ pub(crate) struct Residency {
 }
 
 impl Residency {
-    pub(crate) fn new(devices: &'static Devices) -> Self {
+    pub(crate) fn new(device: &'static Device) -> Self {
         Self {
-            devices,
+            device,
             slots: Vec::new(),
             footprints: BTreeMap::new(),
         }
-    }
-
-    /// The device whose memory models are measured and placed in: ggml's,
-    /// the GPU, which libtorch shares unless it runs on the CPU, where its
-    /// models take none of it.
-    fn gpu(&self) -> &'static Device {
-        &self.devices.ggml
     }
 
     pub(crate) fn is_loaded(&self, model: &Model) -> bool {
@@ -210,10 +205,10 @@ impl Residency {
             return Ok(&mut self.slots[index].loaded);
         }
         self.make_room(model, &next_use).await?;
-        let before = self.gpu().memory().free;
-        let loaded = Loaded::load(model, self.devices, before.saturating_sub(RESERVE)).await?;
+        let before = self.device.memory().free;
+        let loaded = Loaded::load(model, self.device, before.saturating_sub(RESERVE)).await?;
         loaded.warm_up().await?;
-        let footprint = before.saturating_sub(self.gpu().memory().free);
+        let footprint = before.saturating_sub(self.device.memory().free);
         self.footprints.entry(model.clone()).or_insert(footprint);
         self.slots.push(Slot {
             model: model.clone(),
@@ -234,7 +229,7 @@ impl Residency {
     ) -> Result<()> {
         let footprint = self.footprints.get(model).copied();
         loop {
-            let room = self.gpu().memory().free.saturating_sub(RESERVE);
+            let room = self.device.memory().free.saturating_sub(RESERVE);
             if footprint.is_some_and(|footprint| room >= footprint) {
                 return Ok(());
             }
@@ -273,12 +268,12 @@ impl Residency {
     /// Unloads the model at `index` and waits for its memory to show free.
     async fn unload(&mut self, index: usize) {
         let slot = self.slots.swap_remove(index);
-        let before = self.gpu().memory().free;
+        let before = self.device.memory().free;
         let expected = self.footprints.get(&slot.model).copied().unwrap_or(0);
         drop(slot);
         let deadline = Instant::now() + RECOVERY_WAIT;
         while Instant::now() < deadline
-            && (self.gpu().memory().free.saturating_sub(before) as f64)
+            && (self.device.memory().free.saturating_sub(before) as f64)
                 < expected as f64 * RECOVERY_SHARE
         {
             tokio::time::sleep(RECOVERY_POLL).await;

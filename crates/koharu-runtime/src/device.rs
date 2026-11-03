@@ -22,7 +22,8 @@ pub enum Backend {
     Vulkan,
 }
 
-/// A device a library runs models on.
+/// The device models run on, as llama.cpp lists it. libtorch, which has no
+/// Vulkan build, runs on the CPU in a Vulkan device's place.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct Device {
     /// llama.cpp's name for it, such as `CUDA0` or `CPU`.
@@ -35,16 +36,6 @@ pub struct Device {
     pub backend: Backend,
     /// Whether it shares the system's memory.
     pub integrated: bool,
-}
-
-/// Where each library runs models.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
-pub struct Devices {
-    /// libtorch's: the GPU, or the CPU where libtorch has no build for the
-    /// GPU's backend.
-    pub torch: Device,
-    /// llama.cpp's and stable-diffusion.cpp's, which share ggml: the GPU.
-    pub ggml: Device,
 }
 
 /// A device's memory, in bytes.

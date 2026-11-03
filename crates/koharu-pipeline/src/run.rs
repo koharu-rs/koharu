@@ -39,11 +39,11 @@ enum Event {
 }
 
 impl Pipeline {
-    /// A pipeline on `devices`. It must be made inside a multi-threaded tokio
+    /// A pipeline on `device`. It must be made inside a multi-threaded tokio
     /// runtime, where it unloads idle models and runs blocking model calls in
     /// place.
-    pub fn new(devices: &'static koharu_runtime::Devices) -> Self {
-        let residency = Arc::new(Mutex::new(Residency::new(devices)));
+    pub fn new(device: &'static koharu_runtime::Device) -> Self {
+        let residency = Arc::new(Mutex::new(Residency::new(device)));
         let idle = tokio::spawn(expire(Arc::clone(&residency)));
         Self {
             residency,
