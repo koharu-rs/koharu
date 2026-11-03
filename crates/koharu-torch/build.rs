@@ -11,16 +11,16 @@ use quote::{format_ident, quote};
 use syn::{FnArg, Item, Pat};
 
 /// What the shim's operator functions are named after.
-const PREFIX: &str = "koharu_torch_aten_";
+const PREFIX: &str = "aten_";
 
 /// The parameters a factory's TensorOptions become, which a caller passes as
 /// one `(Kind, Device)`.
 const OPTIONS: [(&str, &str); 5] = [
-    ("dtype", "*mutKoharuTorchDtype"),
-    ("layout", "*mutKoharuTorchLayout"),
-    ("device", "*mutKoharuTorchDeviceType"),
+    ("dtype", "*mutAtenDtype"),
+    ("layout", "*mutAtenLayout"),
+    ("device", "*mutAtenDeviceType"),
     ("device_index_", "i32"),
-    ("pin_memory", "*mutKoharuTorchBool"),
+    ("pin_memory", "*mutAtenBool"),
 ];
 
 fn main() {
@@ -29,6 +29,13 @@ fn main() {
     let source = fs::read_to_string(&bindings)
         .unwrap_or_else(|error| panic!("couldn't read {bindings}: {error}"));
     let file = syn::parse_file(&source).expect("bindgen writes Rust");
+    // The shim's hand-written functions share the operators' prefix, so
+    // koharu-torch-sys lists the operators.
+    let list = env::var("DEP_KOHARU_TORCH_OPERATORS").expect("koharu-torch-sys passes it");
+    println!("cargo::rerun-if-changed={list}");
+    let operators =
+        fs::read_to_string(&list).unwrap_or_else(|error| panic!("couldn't read {list}: {error}"));
+    let operators: BTreeSet<&str> = operators.lines().collect();
 
     let mut names = BTreeSet::new();
     let mut functions = Vec::new();
@@ -37,9 +44,14 @@ fn main() {
             continue;
         };
         let c_name = function.sig.ident;
-        let Some(operator) = c_name.to_string().strip_prefix(PREFIX).map(str::to_owned) else {
+        if !operators.contains(c_name.to_string().as_str()) {
             continue;
-        };
+        }
+        let operator = c_name
+            .to_string()
+            .strip_prefix(PREFIX)
+            .unwrap_or_else(|| panic!("operator `{c_name}` isn't named after `{PREFIX}`"))
+            .to_owned();
         let parameters = function
             .sig
             .inputs
@@ -202,25 +214,25 @@ fn operator_function(
                 ("*mutf64", false) => {
                     function.result(&ident, quote! { 0.0 }, quote! { f64 }, quote! { #ident })
                 }
-                ("*mutKoharuTorchBool", false) => function.result(
+                ("*mutAtenBool", false) => function.result(
                     &ident,
                     quote! { 0 },
                     quote! { bool },
                     quote! { #ident != 0 },
                 ),
-                ("*mutKoharuTorchDtype", false) => function.result(
+                ("*mutAtenDtype", false) => function.result(
                     &ident,
                     quote! { 0 },
                     quote! { Kind },
                     quote! { Kind::from_c_int(#ident)? },
                 ),
-                ("*mutKoharuTorchQScheme", false) => function.result(
+                ("*mutAtenQScheme", false) => function.result(
                     &ident,
                     quote! { 0 },
                     quote! { QScheme },
                     quote! { QScheme::from_c_int(#ident)? },
                 ),
-                ("*mutKoharuTorchScalar", false) => function.result(
+                ("*mutAtenScalar", false) => function.result(
                     &ident,
                     quote! { Scalar::Int(0).c_scalar() },
                     quote! { Scalar },
@@ -332,44 +344,44 @@ fn operator_function(
             ("*mut*constf64", true, false) => {
                 function.optional_list(&ident, quote! { Option<&[f64]> }, quote! { #ident })
             }
-            ("KoharuTorchBool", false, false) => {
+            ("AtenBool", false, false) => {
                 function.inputs.push(quote! { #ident: bool });
                 function.arguments.push(quote! { i32::from(#ident) });
             }
-            ("*mutKoharuTorchBool", false, false) => function.optional(
+            ("*mutAtenBool", false, false) => function.optional(
                 &ident,
                 quote! { impl Into<Option<bool>> },
                 quote! { #ident.into().map(i32::from) },
             ),
-            ("*constKoharuTorchBool", true, false) => return None,
-            ("KoharuTorchDtype", false, false) => {
+            ("*constAtenBool", true, false) => return None,
+            ("AtenDtype", false, false) => {
                 function.inputs.push(quote! { #ident: Kind });
                 function.arguments.push(quote! { #ident.c_int() });
             }
-            ("*mutKoharuTorchDtype", false, false) => function.optional(
+            ("*mutAtenDtype", false, false) => function.optional(
                 &ident,
                 quote! { impl Into<Option<Kind>> },
                 quote! { #ident.into().map(Kind::c_int) },
             ),
-            ("KoharuTorchLayout", false, false) => {
+            ("AtenLayout", false, false) => {
                 function.inputs.push(quote! { #ident: Layout });
                 function.arguments.push(quote! { #ident.c_int() });
             }
-            ("*mutKoharuTorchLayout", false, false) => function.optional(
+            ("*mutAtenLayout", false, false) => function.optional(
                 &ident,
                 quote! { impl Into<Option<Layout>> },
                 quote! { #ident.into().map(Layout::c_int) },
             ),
-            ("KoharuTorchMemoryFormat", false, false) => {
+            ("AtenMemoryFormat", false, false) => {
                 function.inputs.push(quote! { #ident: MemoryFormat });
                 function.arguments.push(quote! { #ident.c_int() });
             }
-            ("*mutKoharuTorchMemoryFormat", false, false) => function.optional(
+            ("*mutAtenMemoryFormat", false, false) => function.optional(
                 &ident,
                 quote! { impl Into<Option<MemoryFormat>> },
                 quote! { #ident.into().map(MemoryFormat::c_int) },
             ),
-            ("KoharuTorchDeviceType", false, true) => {
+            ("AtenDeviceType", false, true) => {
                 let (device, index) = (
                     format_ident!("{parameter}__type"),
                     format_ident!("{parameter}__index"),
@@ -380,7 +392,7 @@ fn operator_function(
                     .push(quote! { let (#device, #index) = #ident.c_parts(); });
                 function.arguments.push(quote! { #device, #index });
             }
-            ("*mutKoharuTorchDeviceType", false, true) => {
+            ("*mutAtenDeviceType", false, true) => {
                 let (device, index) = (
                     format_ident!("{parameter}__type"),
                     format_ident!("{parameter}__index"),
@@ -397,16 +409,16 @@ fn operator_function(
                     #device.as_mut().map_or(std::ptr::null_mut(), |device| device as *mut _), #index
                 });
             }
-            ("KoharuTorchScalar", false, false) => {
+            ("AtenScalar", false, false) => {
                 function.inputs.push(quote! { #ident: impl Into<Scalar> });
                 function.arguments.push(quote! { #ident.into().c_scalar() });
             }
-            ("*mutKoharuTorchScalar", false, false) => function.optional(
+            ("*mutAtenScalar", false, false) => function.optional(
                 &ident,
                 quote! { impl Into<Option<Scalar>> },
                 quote! { #ident.into().map(Scalar::c_scalar) },
             ),
-            ("*constKoharuTorchScalar", true, false) => function.list(
+            ("*constAtenScalar", true, false) => function.list(
                 &ident,
                 quote! { &[Scalar] },
                 quote! { #ident.iter().map(|scalar| scalar.c_scalar()).collect::<Vec<_>>() },

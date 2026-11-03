@@ -8,8 +8,11 @@ use crate::{Backend, store};
 /// One of Koharu's own builds of a native library, released on GitHub as
 /// one archive per platform and backend.
 pub(super) struct Release {
-    /// The GitHub repository the release is in, whose name the store uses.
+    /// The GitHub repository the release is in.
     pub(super) repository: &'static str,
+    /// The store folder its versions install in. The store keeps one version
+    /// per folder, so two packages released from one repository need two.
+    pub(super) package: &'static str,
     pub(super) tag: &'static str,
 }
 
@@ -29,13 +32,11 @@ impl Release {
             "https://github.com/{}/releases/download/{}/{archive}.tar.gz",
             self.repository, self.tag
         );
-        let name = self
-            .repository
-            .rsplit('/')
-            .next()
-            .unwrap_or(self.repository);
         store::install(
-            store::root().join(name).join(self.tag).join(&archive),
+            store::root()
+                .join(self.package)
+                .join(self.tag)
+                .join(&archive),
             |folder| folder.is_dir() && complete(folder),
             move |stage| async move {
                 install_archive(&url, &stage, LIBRARIES).await?;

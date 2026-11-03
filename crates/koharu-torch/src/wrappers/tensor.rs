@@ -25,7 +25,7 @@ impl Tensor {
             .iter()
             .map(|&c_tensor| Tensor { c_tensor })
             .collect();
-        unsafe { koharu_torch_free(array.cast()) };
+        unsafe { aten_free(array.cast()) };
         tensors
     }
 
@@ -198,7 +198,7 @@ impl std::fmt::Debug for Tensor {
 impl std::fmt::Display for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut string = std::ptr::null_mut();
-        check(unsafe { koharu_torch_tensor_to_string(self.c_tensor, &mut string) })
+        check(unsafe { aten_tensor_to_string(self.c_tensor, &mut string) })
             .map_err(|_| std::fmt::Error)?;
         let (mut data, mut len) = (std::ptr::null(), 0);
         let read = check(unsafe { torch_string_c_str(string, &mut data) })

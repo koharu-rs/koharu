@@ -38,23 +38,29 @@ struct Installed {
     cuda: Option<Vec<PathBuf>>,
     /// ROCm, for an AMD GPU.
     rocm: Option<PathBuf>,
-    torch: PathBuf,
+    libtorch: PathBuf,
+    /// Koharu's C shim to libtorch.
+    shim: PathBuf,
     llama: PathBuf,
     diffusion: PathBuf,
 }
 
 impl Installed {
     async fn install(host: Host, backend: Backend) -> Result<Self> {
+        let cuda = match backend {
+            Backend::Cuda { .. } => Some(cuda::install(host).await?),
+            _ => None,
+        };
+        let rocm = match backend {
+            Backend::Rocm { target } => Some(rocm::install(host, target).await?),
+            _ => None,
+        };
+        let (libtorch, shim) = torch::install(host, backend).await?;
         Ok(Self {
-            cuda: match backend {
-                Backend::Cuda { .. } => Some(cuda::install(host).await?),
-                _ => None,
-            },
-            rocm: match backend {
-                Backend::Rocm { target } => Some(rocm::install(host, target).await?),
-                _ => None,
-            },
-            torch: torch::install(host, backend).await?,
+            cuda,
+            rocm,
+            libtorch,
+            shim,
             llama: ggml::LLAMA.install(host, backend, |_| true).await?,
             diffusion: ggml::DIFFUSION.install(host, backend, |_| true).await?,
         })
@@ -72,7 +78,7 @@ impl Installed {
             gpu.index = rocm::load(rocm, target)?;
             gpu.name = format!("ROCm{}", gpu.index);
         }
-        torch::load(gpu.backend, &self.torch)?;
+        torch::load(gpu.backend, &self.libtorch, &self.shim)?;
         ggml::load_llama(&self.llama)?;
         let device = ggml::listed(&gpu)?;
         ggml::load_diffusion(&self.diffusion)?;
@@ -86,7 +92,7 @@ impl Installed {
         versions.extend(
             self.rocm
                 .iter()
-                .chain([&self.torch, &self.llama, &self.diffusion])
+                .chain([&self.libtorch, &self.shim, &self.llama, &self.diffusion])
                 .filter_map(|folder| folder.parent().map(Path::to_owned)),
         );
         versions

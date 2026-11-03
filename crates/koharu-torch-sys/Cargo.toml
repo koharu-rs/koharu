@@ -19,6 +19,7 @@ links = "koharu-torch"
 libloading = { workspace = true }
 
 [build-dependencies]
+bindgen = { workspace = true }
 koharu-bindgen = { workspace = true }
 
 # Only the generated bindings use it.
