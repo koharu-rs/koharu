@@ -9,6 +9,7 @@
 mod config;
 mod measure;
 mod model;
+mod order;
 mod processor;
 
 use anyhow::{Context, Result};
@@ -88,6 +89,8 @@ impl KoharuLayoutHighres {
         })
     }
 
+    /// The page's text and onomatopoeia in reading order, then its bubbles
+    /// and panels.
     pub fn inference(&self, image: &DynamicImage, options: &Options) -> Result<Detections> {
         let thresholds = Thresholds {
             text: options.text.unwrap_or(self.thresholds.text),
@@ -115,6 +118,7 @@ impl KoharuLayoutHighres {
                     .count() as u32;
             }
         }
+        order::sort(&mut detections.detections);
         Ok(detections)
     }
 }
