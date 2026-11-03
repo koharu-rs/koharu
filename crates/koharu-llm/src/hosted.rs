@@ -4,6 +4,7 @@
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
+use backon::{ExponentialBuilder, Retryable};
 use bytes::Bytes;
 use rig_core::{
     catalog::Catalog,
@@ -132,7 +133,8 @@ fn openai(provider: Provider, providers: &Providers) -> Result<OpenAIConfig> {
 #[derive(Clone, Default)]
 pub(crate) struct Http(ReqwestClient);
 
-const RETRIES: u32 = 3;
+/// A second, then two, then four.
+const BACKOFF: ExponentialBuilder = ExponentialBuilder::new();
 
 /// rig's own client, for the requests Koharu makes outside rig.
 fn reqwest() -> Result<reqwest::Client> {
@@ -142,31 +144,33 @@ fn reqwest() -> Result<reqwest::Client> {
         .context("couldn't build the HTTP client")
 }
 
-/// How long to wait before sending again after `error`, or `None` when it
-/// isn't worth sending again.
-fn wait(error: &http_client::Error, attempt: u32) -> Option<Duration> {
+/// Whether `error` is a 429 or 5xx reply, worth sending again.
+fn retryable(error: &http_client::Error) -> bool {
+    matches!(
+        error,
+        http_client::Error::InvalidStatusCodeWithDetails { status, .. }
+            if status.as_u16() == 429 || status.is_server_error()
+    )
+}
+
+/// The wait `error` names in place of `backoff`'s, until `backoff` runs out.
+fn retry_after(error: &http_client::Error, backoff: Option<Duration>) -> Option<Duration> {
+    let backoff = backoff?;
     let http_client::Error::InvalidStatusCodeWithDetails {
         status,
         body,
         headers,
     } = error
     else {
-        return None;
+        return Some(backoff);
     };
-    if attempt >= RETRIES || !(status.as_u16() == 429 || status.is_server_error()) {
-        return None;
-    }
     let report = ProviderError::from(http_client::Error::InvalidStatusCodeWithDetails {
         status: *status,
         body: body.clone(),
         headers: headers.clone(),
     })
     .report();
-    Some(
-        report
-            .retry_after(SystemTime::now())
-            .unwrap_or(Duration::from_secs(1 << attempt)),
-    )
+    Some(report.retry_after(SystemTime::now()).unwrap_or(backoff))
 }
 
 impl HttpClientExt for Http {
@@ -180,20 +184,13 @@ impl HttpClientExt for Http {
     {
         let client = self.0.clone();
         let (parts, body) = request.into_parts();
-        let body = body.into();
+        let body: Bytes = body.into();
         async move {
-            let mut attempt = 0;
-            loop {
-                let request = http::Request::from_parts(parts.clone(), body.clone());
-                match client.send(request).await {
-                    Err(error) => match wait(&error, attempt) {
-                        Some(wait) => tokio::time::sleep(wait).await,
-                        None => return Err(error),
-                    },
-                    reply => return reply,
-                }
-                attempt += 1;
-            }
+            (|| client.send(http::Request::from_parts(parts.clone(), body.clone())))
+                .retry(BACKOFF)
+                .when(retryable)
+                .adjust(retry_after)
+                .await
         }
     }
 
@@ -218,18 +215,11 @@ impl HttpClientExt for Http {
         let (parts, body) = request.into_parts();
         let body: Bytes = body.into();
         async move {
-            let mut attempt = 0;
-            loop {
-                let request = http::Request::from_parts(parts.clone(), body.clone());
-                match client.send_streaming(request).await {
-                    Err(error) => match wait(&error, attempt) {
-                        Some(wait) => tokio::time::sleep(wait).await,
-                        None => return Err(error),
-                    },
-                    reply => return reply,
-                }
-                attempt += 1;
-            }
+            (|| client.send_streaming(http::Request::from_parts(parts.clone(), body.clone())))
+                .retry(BACKOFF)
+                .when(retryable)
+                .adjust(retry_after)
+                .await
         }
     }
 }
