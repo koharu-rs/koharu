@@ -12,6 +12,7 @@ use crate::Device;
 /// llama.cpp at the release `koharu-llama-sys`'s headers come from.
 pub(super) static LLAMA: Release = Release {
     repository: "koharu-rs/llama",
+    package: "llama",
     tag: koharu_llama_sys::RELEASE,
 };
 
@@ -19,6 +20,7 @@ pub(super) static LLAMA: Release = Release {
 /// from.
 pub(super) static DIFFUSION: Release = Release {
     repository: "koharu-rs/diffusion",
+    package: "diffusion",
     tag: koharu_diffusion_sys::RELEASE,
 };
 

@@ -1,9 +1,8 @@
 //! Scalar elements.
 
 use koharu_torch_sys::{
-    KoharuTorchScalar, KoharuTorchScalar__bindgen_ty_1,
-    KoharuTorchScalar__bindgen_ty_1__bindgen_ty_1, KOHARU_TORCH_SCALAR_BOOL,
-    KOHARU_TORCH_SCALAR_COMPLEX, KOHARU_TORCH_SCALAR_FLOAT, KOHARU_TORCH_SCALAR_INT,
+    AtenScalar, AtenScalar__bindgen_ty_1, AtenScalar__bindgen_ty_1__bindgen_ty_1, ATEN_SCALAR_BOOL,
+    ATEN_SCALAR_COMPLEX, ATEN_SCALAR_FLOAT, ATEN_SCALAR_INT,
 };
 
 use crate::{Result, TchError};
@@ -19,38 +18,29 @@ pub enum Scalar {
 }
 
 impl Scalar {
-    pub(crate) fn c_scalar(self) -> KoharuTorchScalar {
+    pub(crate) fn c_scalar(self) -> AtenScalar {
         let (type_, value) = match self {
-            Scalar::Bool(b) => (
-                KOHARU_TORCH_SCALAR_BOOL,
-                KoharuTorchScalar__bindgen_ty_1 { b },
-            ),
-            Scalar::Int(i) => (
-                KOHARU_TORCH_SCALAR_INT,
-                KoharuTorchScalar__bindgen_ty_1 { i },
-            ),
-            Scalar::Float(f) => (
-                KOHARU_TORCH_SCALAR_FLOAT,
-                KoharuTorchScalar__bindgen_ty_1 { f },
-            ),
+            Scalar::Bool(b) => (ATEN_SCALAR_BOOL, AtenScalar__bindgen_ty_1 { b }),
+            Scalar::Int(i) => (ATEN_SCALAR_INT, AtenScalar__bindgen_ty_1 { i }),
+            Scalar::Float(f) => (ATEN_SCALAR_FLOAT, AtenScalar__bindgen_ty_1 { f }),
             Scalar::Complex { real, imag } => (
-                KOHARU_TORCH_SCALAR_COMPLEX,
-                KoharuTorchScalar__bindgen_ty_1 {
-                    c: KoharuTorchScalar__bindgen_ty_1__bindgen_ty_1 { real, imag },
+                ATEN_SCALAR_COMPLEX,
+                AtenScalar__bindgen_ty_1 {
+                    c: AtenScalar__bindgen_ty_1__bindgen_ty_1 { real, imag },
                 },
             ),
         };
-        KoharuTorchScalar { type_, value }
+        AtenScalar { type_, value }
     }
 
-    pub(crate) fn from_c_scalar(scalar: KoharuTorchScalar) -> Result<Scalar> {
+    pub(crate) fn from_c_scalar(scalar: AtenScalar) -> Result<Scalar> {
         // The tag says which field the shim wrote.
         unsafe {
             Ok(match scalar.type_ {
-                KOHARU_TORCH_SCALAR_BOOL => Scalar::Bool(scalar.value.b),
-                KOHARU_TORCH_SCALAR_INT => Scalar::Int(scalar.value.i),
-                KOHARU_TORCH_SCALAR_FLOAT => Scalar::Float(scalar.value.f),
-                KOHARU_TORCH_SCALAR_COMPLEX => Scalar::Complex {
+                ATEN_SCALAR_BOOL => Scalar::Bool(scalar.value.b),
+                ATEN_SCALAR_INT => Scalar::Int(scalar.value.i),
+                ATEN_SCALAR_FLOAT => Scalar::Float(scalar.value.f),
+                ATEN_SCALAR_COMPLEX => Scalar::Complex {
                     real: scalar.value.c.real,
                     imag: scalar.value.c.imag,
                 },
