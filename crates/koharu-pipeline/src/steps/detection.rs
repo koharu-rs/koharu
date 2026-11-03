@@ -175,7 +175,6 @@ pub(super) fn edit(
         detections.retain(|detection| overlaps(detection.bbox.map(f64::from), area));
     }
     measure::non_maximum_suppression(&mut detections, 0.5);
-    measure::sort_by_layout(&mut detections);
     let rgb = scan.to_rgb8();
     let of_label = |label: &str| -> Vec<&Detection> {
         detections
