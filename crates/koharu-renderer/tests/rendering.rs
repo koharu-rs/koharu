@@ -76,22 +76,32 @@ fn word_in_box(width: f64, language: &str) -> ResolvedText {
 }
 
 #[test]
-fn a_long_word_shrinks_then_hyphenates_then_breaks() {
+fn a_long_word_hyphenates_before_it_shrinks_and_breaks_last() {
     // With room, the word sets at its size.
     assert_eq!(word_in_box(4000.0, "en").scale, 1.0);
 
-    // A box a little narrower than the word: it shrinks and stays whole.
-    let shrunk = word_in_box(300.0, "en");
+    // A box a little narrower than the word: it hyphenates by its language
+    // and keeps its size.
+    let hyphenated = word_in_box(300.0, "en");
+    assert!(
+        hyphenated.scale == 1.0 && !hyphenated.hyphens.is_empty(),
+        "{hyphenated:?}"
+    );
+    assert!(hyphenated.broken.is_empty() && !hyphenated.overflowed);
+
+    // Without a language there are no hyphenation points, so it shrinks and
+    // stays whole.
+    let shrunk = word_in_box(300.0, "und");
     assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.5, "{shrunk:?}");
     assert!(shrunk.hyphens.is_empty() && shrunk.broken.is_empty() && !shrunk.overflowed);
 
-    // Too narrow even at half size: it hyphenates by its language.
+    // Too narrow to set its parts whole: it still hyphenates, shrinking.
     let hyphenated = word_in_box(120.0, "en");
     assert!(!hyphenated.hyphens.is_empty(), "{hyphenated:?}");
     assert!(hyphenated.broken.is_empty() && !hyphenated.overflowed);
 
-    // Without a language there are no hyphenation points, so it breaks
-    // between letters instead.
+    // And without a language, too narrow even at half size: it breaks
+    // between letters.
     let broken = word_in_box(120.0, "und");
     assert!(
         broken.hyphens.is_empty() && !broken.broken.is_empty(),
@@ -153,6 +163,32 @@ fn path_text_anchored_at_an_edge_fits_beside_it() {
     let frame = renderer.render(&session, page).unwrap();
     let text = frame.layer(layer(&change, "text")).unwrap().text().unwrap();
     assert!(!text.overflowed && text.scale == 1.0, "{text:?}");
+}
+
+#[test]
+fn a_balloon_merely_full_shrinks_without_hyphens() {
+    // No word is wider than its line, so a hyphen in "al-ready" would only
+    // save shrinking by a little.
+    let (_dir, session, page, change) = page(
+        800,
+        400,
+        vec![json!({
+            "op": "add_layer", "id": "$text", "page": "$page", "index": 0, "layer": {
+                "kind": "text",
+                "content": "I can't believe it's already over.",
+                "language": "en",
+                "style": {"chars": {"family": "Arial", "size": 34.0}, "align": "center"},
+                "frame": {"path": {"path": "M380 200 A180 115 0 1 0 740 200 A180 115 0 1 0 380 200 Z", "anchor": "center"}},
+            },
+        })],
+    );
+    let renderer = Renderer::new(TypesettingConfig::default());
+    let frame = renderer.render(&session, page).unwrap();
+    let text = text(&frame, &change, "text");
+    assert!(
+        text.scale < 1.0 && text.hyphens.is_empty() && !text.overflowed,
+        "{text:?}"
+    );
 }
 
 fn text<'a>(frame: &'a Frame, change: &Change, name: &str) -> &'a ResolvedText {

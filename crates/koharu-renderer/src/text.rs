@@ -54,6 +54,8 @@ pub(crate) enum Room {
         outline: BezPath,
         shrink: bool,
         anchor: Anchor,
+        /// The air between the text and the outline, in ems.
+        inset: f32,
     },
 }
 
@@ -119,8 +121,8 @@ pub(crate) struct Laid {
     pub bounds: Rect,
 }
 
-/// The break modes tried in order: words only, then hyphens, then breaks
-/// anywhere in a word.
+/// Where lines may break: between words, then also at hyphenation points,
+/// then anywhere in a word.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Mode {
     Words,
@@ -193,35 +195,63 @@ pub(crate) fn layout(input: &Input) -> Result<Laid> {
         Room::Box { shrink, .. } | Room::Path { shrink, .. } => shrink,
     };
     let floor = if shrink { FLOOR } else { 1.0 };
-    // Each mode is tried only when the ones before can't fit the text.
+    let mut modes = vec![prepared.segments(Mode::Words)?];
+    let set = prepared.place(&modes[0].0, &modes[0].1, 1.0)?;
+    if !set.overflowed {
+        return Ok(prepared.draw(&modes[0].0, &modes[0].1, set));
+    }
     // Vertical text is CJK, which breaks between characters and has no
     // hyphenation.
-    let mut placed = None;
-    for mode in [Mode::Words, Mode::Hyphens, Mode::Anywhere] {
-        if mode == Mode::Hyphens && input.vertical {
-            continue;
-        }
-        let segments = prepared.segments(mode)?;
-        let measures: Vec<Measure> = segments.iter().map(|s| s.measure.clone()).collect();
-        let fitted = largest_fit(floor, |scale| prepared.place(&segments, &measures, scale))?;
-        let fits = !fitted.overflowed;
-        placed = Some((segments, measures, fitted));
-        if fits {
-            break;
-        }
+    if !input.vertical
+        && input
+            .language
+            .as_deref()
+            .and_then(hyphenation_lang_from_tag)
+            .is_some()
+    {
+        modes.push(prepared.segments(Mode::Hyphens)?);
     }
-    let (segments, measures, placed) = placed.expect("a mode ran");
-    Ok(prepared.draw(&segments, &measures, placed))
+    let (mut mode, mut placed) = largest_fit(floor, |scale| {
+        let (segments, measures) = &modes[0];
+        let words = prepared.place(segments, measures, scale)?;
+        // A word wider than its line, alone on it, is hyphenated before the
+        // text shrinks, since shrinking until it fits takes a balloon's
+        // narrow lines toward the floor. Lines that are merely full shrink,
+        // as Comicraft avoids a hyphen whenever it can.
+        let long = words.lines.iter().any(|line| {
+            line.segments.len() == 1
+                && layout::length(measures, line.segments.clone(), scale) > line.room + 0.01
+        });
+        match modes.get(1) {
+            Some((segments, measures)) if words.overflowed && (long || scale <= floor) => {
+                Ok((1, prepared.place(segments, measures, scale)?))
+            }
+            _ => Ok((0, words)),
+        }
+    })?;
+    // Breaking anywhere in a word is the last resort, once nothing else fits
+    // at the floor.
+    if placed.overflowed {
+        modes.push(prepared.segments(Mode::Anywhere)?);
+        mode = modes.len() - 1;
+        let (segments, measures) = &modes[mode];
+        placed = largest_fit(floor, |scale| {
+            Ok((mode, prepared.place(segments, measures, scale)?))
+        })?
+        .1;
+    }
+    let (segments, measures) = &modes[mode];
+    Ok(prepared.draw(segments, measures, placed))
 }
 
-/// The largest scale from 1 down to `floor` at which the text fits, else the
-/// text at `floor`. It probes down from the top, because a path's room
-/// changes with the line count, so a smaller size can fail where a larger one
-/// fits.
-fn largest_fit(floor: f32, at: impl Fn(f32) -> Result<Placed>) -> Result<Placed> {
+/// The largest scale from 1 down to `floor` at which `at` fits the text, else
+/// the text at `floor`, with what `at` returned beside it. It probes down from
+/// the top, because a path's room changes with the line count, so a smaller
+/// size can fail where a larger one fits.
+fn largest_fit<T>(floor: f32, at: impl Fn(f32) -> Result<(T, Placed)>) -> Result<(T, Placed)> {
     const PROBES: usize = 8;
     let mut last = at(1.0)?;
-    if !last.overflowed || floor >= 1.0 {
+    if !last.1.overflowed || floor >= 1.0 {
         return Ok(last);
     }
     let step = (1.0 - floor) / PROBES as f32;
@@ -229,7 +259,7 @@ fn largest_fit(floor: f32, at: impl Fn(f32) -> Result<Placed>) -> Result<Placed>
     for probe in 1..=PROBES {
         let scale = 1.0 - step * probe as f32;
         let candidate = at(scale)?;
-        if candidate.overflowed {
+        if candidate.1.overflowed {
             above = scale;
             last = candidate;
             continue;
@@ -238,7 +268,7 @@ fn largest_fit(floor: f32, at: impl Fn(f32) -> Result<Placed>) -> Result<Placed>
         for _ in 0..8 {
             let middle = (low + high) * 0.5;
             let candidate = at(middle)?;
-            if candidate.overflowed {
+            if candidate.1.overflowed {
                 high = middle;
             } else {
                 low = middle;
@@ -427,7 +457,8 @@ impl Prepared<'_> {
         }
     }
 
-    fn segments(&mut self, mode: Mode) -> Result<Vec<Segment>> {
+    /// The text's segments broken by `mode`, and their measures.
+    fn segments(&mut self, mode: Mode) -> Result<(Vec<Segment>, Vec<Measure>)> {
         let text = &self.input.text;
         let mut ranges = Vec::new();
         for segment in self.breaker(mode).line_segments(text) {
@@ -502,7 +533,8 @@ impl Prepared<'_> {
                 size,
             });
         }
-        Ok(segments)
+        let measures = segments.iter().map(|s| s.measure.clone()).collect();
+        Ok((segments, measures))
     }
 
     /// Shapes `range` into pieces of one span and one direction.
@@ -781,9 +813,9 @@ impl Prepared<'_> {
                     overflowed: lines.overflowed || (!*grow && total > extent + 0.01),
                 }
             }
-            Room::Path { anchor, .. } => {
+            Room::Path { anchor, inset, .. } => {
                 let outline = self.outline.as_ref().expect("a path frame has an outline");
-                self.place_in(outline, measures, segments, scale, *anchor)
+                self.place_in(outline, measures, segments, scale, *anchor, *inset)
             }
         })
     }
@@ -812,9 +844,10 @@ impl Prepared<'_> {
     }
 
     /// Lines in a closed path: every line count the path's block extent holds
-    /// is tried, each line taking the widest span of the inside along its
-    /// band, less half the size of air on each side, and the cheapest count
-    /// that fits wins.
+    /// is tried, and the cheapest count that fits wins. Each line takes the
+    /// widest span inside the outline all along its band widened by the
+    /// inset, with the inset taken off both ends: the outline eroded by the
+    /// inset, band by band.
     fn place_in(
         &self,
         outline: &Outline,
@@ -822,9 +855,10 @@ impl Prepared<'_> {
         segments: &[Segment],
         scale: f32,
         anchor: Anchor,
+        inset: f32,
     ) -> Placed {
         let pitch = self.pitch(segments, scale).max(0.01);
-        let air = segments.iter().map(|s| s.size).fold(0.0, f32::max) * scale * 0.5;
+        let air = segments.iter().map(|s| s.size).fold(0.0, f32::max) * scale * inset;
         let bounds = outline.bounds;
         let extent = bounds.height() as f32;
         let most = (((extent - 2.0 * air) / pitch).floor() as usize).max(1);

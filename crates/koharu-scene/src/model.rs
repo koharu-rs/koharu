@@ -375,7 +375,28 @@ pub enum Frame {
         fit: PathFit,
         #[serde(default)]
         anchor: Anchor,
+        /// The air between the text and the path in ems, as CSS's
+        /// `shape-padding: 1em`, so it shrinks with the text. One is
+        /// Comicraft's letter width of air.
+        #[serde(default = "one_em", deserialize_with = "inset")]
+        inset: f64,
     },
+}
+
+fn one_em() -> f64 {
+    1.0
+}
+
+/// An inset, which as CSS's `shape-padding` can't be negative.
+fn inset<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    let inset = f64::deserialize(deserializer)?;
+    if inset >= 0.0 {
+        Ok(inset)
+    } else {
+        Err(serde::de::Error::custom(format!(
+            "an inset of {inset} is negative"
+        )))
+    }
 }
 
 /// What a mask is made of.
