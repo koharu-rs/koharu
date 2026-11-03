@@ -77,7 +77,11 @@ fn parent(detections: &[Detection], panel: usize, panels: &[usize]) -> Option<us
 /// The panel lettering is read in: the one holding most of it, the smallest
 /// of those holding as much, so lettering in a panel set in another is read
 /// in the inner one; or else one beside it.
-fn holder(detections: &[Detection], lettering: usize, panels: &[usize]) -> Option<usize> {
+pub(super) fn holder(
+    detections: &[Detection],
+    lettering: usize,
+    panels: &[usize],
+) -> Option<usize> {
     let bbox = detections[lettering].bbox;
     let holding = panels
         .iter()
@@ -254,11 +258,9 @@ mod tests {
 
     fn detection(label: &str, bbox: [f32; 4]) -> Detection {
         Detection {
-            label_id: 0,
             label: label.to_owned(),
             score: 1.0,
             bbox,
-            area: 0,
             mask: Mask {
                 x: 0,
                 y: 0,
