@@ -103,9 +103,13 @@ fn preload(path: &Path, global: bool) -> Result<()> {
         use libloading::os::windows::{
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, Library,
         };
+        // The wheels' paths use forward slashes, but the loader finds the
+        // library's folder, where its dependencies are, only in a path with
+        // backslashes; rebuilt from its components, the path has them.
+        let path: std::path::PathBuf = path.components().collect();
         unsafe {
             Library::load_with_flags(
-                path,
+                &path,
                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
             )
         }
