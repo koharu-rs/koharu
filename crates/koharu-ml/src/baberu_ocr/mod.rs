@@ -39,7 +39,7 @@ pub struct BaberuOcr {
 
 impl BaberuOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device)?;
+        let (device, kind) = crate::backend::torch(device);
         let [config, generation, weights, vocabulary] = BABERU
             .resolve([
                 "config.json",
@@ -119,7 +119,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        let device = &koharu_runtime::devices().await?.torch;
+        let device = koharu_runtime::device().await?;
         let model = BaberuOcr::load(device).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");

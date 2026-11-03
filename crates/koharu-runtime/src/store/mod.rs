@@ -1,11 +1,19 @@
+//! The store packages and models install into, one version folder each.
+
+mod cleanup;
+mod lock;
+
 use std::{
-    fs::{File, OpenOptions},
     future::Future,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 
 use anyhow::{Context, Result, ensure};
+use tempfile::TempDir;
+
+pub(crate) use cleanup::remove_others;
+use lock::lock;
 
 /// The one store everything installs into: the `store` folder beside the
 /// executable in Windows release builds, where the installer puts Koharu,
@@ -26,25 +34,37 @@ pub(crate) fn root() -> &'static Path {
     &ROOT
 }
 
-pub(crate) async fn directory<Valid, Install, Pending>(
+/// Installs `target`, a file or a folder, once: `write` fills a staging
+/// folder on the store's own volume and returns what it wrote there, which
+/// moves into place once `valid` says it's complete.
+pub(crate) async fn install<Valid, Write, Pending>(
     target: PathBuf,
     valid: Valid,
-    install: Install,
+    write: Write,
 ) -> Result<PathBuf>
 where
     Valid: Fn(&Path) -> bool + Send + Sync,
-    Install: FnOnce(PathBuf) -> Pending + Send,
-    Pending: Future<Output = Result<()>> + Send,
+    Write: FnOnce(PathBuf) -> Pending + Send,
+    Pending: Future<Output = Result<PathBuf>> + Send,
 {
     if valid(&target) {
         return Ok(target);
     }
 
-    let _guard = Lock::acquire(&target).await?;
+    let _lock = lock(&target).await?;
     if valid(&target) {
         return Ok(target);
     }
 
+    let stage = stage(&target)?;
+    let staged = write(stage.path().to_owned()).await?;
+    ensure!(valid(&staged), "installer produced an incomplete package");
+    publish(&staged, target, valid)
+}
+
+/// A staging folder beside `target`, on the store's own volume, once an
+/// incomplete `target` is removed.
+fn stage(target: &Path) -> Result<TempDir> {
     let parent = target
         .parent()
         .with_context(|| format!("{} has no parent directory", target.display()))?;
@@ -52,133 +72,33 @@ where
         .try_exists()
         .with_context(|| format!("failed to inspect {}", target.display()))?
     {
-        std::fs::remove_dir_all(&target)
+        std::fs::remove_dir_all(target)
             .with_context(|| format!("failed to replace incomplete {}", target.display()))?;
     }
-    let stage = tempfile::Builder::new()
+    tempfile::Builder::new()
         .prefix(".install-")
         .tempdir_in(parent)
-        .with_context(|| format!("failed to stage {}", target.display()))?;
-    install(stage.path().to_owned()).await?;
-    ensure!(
-        valid(stage.path()),
-        "installer produced an incomplete package"
-    );
+        .with_context(|| format!("failed to stage {}", target.display()))
+}
 
-    match std::fs::rename(stage.path(), &target) {
+/// Moves `staged` into place as `target`; a valid `target` that another
+/// install published first wins.
+fn publish(staged: &Path, target: PathBuf, valid: impl Fn(&Path) -> bool) -> Result<PathBuf> {
+    match std::fs::rename(staged, &target) {
         Ok(()) => Ok(target),
         Err(_) if valid(&target) => Ok(target),
         Err(error) => Err(error).with_context(|| format!("failed to publish {}", target.display())),
     }
 }
 
-/// Installs the file `target` once: `install` writes it into a staging
-/// folder on the store's own volume and returns where, and it moves into
-/// place from there.
-pub(crate) async fn file<Install, Pending>(target: PathBuf, install: Install) -> Result<PathBuf>
-where
-    Install: FnOnce(PathBuf) -> Pending + Send,
-    Pending: Future<Output = Result<PathBuf>> + Send,
-{
-    if target.is_file() {
-        return Ok(target);
-    }
-
-    let _guard = Lock::acquire(&target).await?;
-    if target.is_file() {
-        return Ok(target);
-    }
-
-    let parent = target
-        .parent()
-        .with_context(|| format!("{} has no parent directory", target.display()))?;
-    let stage = tempfile::Builder::new()
-        .prefix(".install-")
-        .tempdir_in(parent)
-        .with_context(|| format!("failed to stage {}", target.display()))?;
-    let staged = install(stage.path().to_owned()).await?;
-    ensure!(staged.is_file(), "installer did not create a file");
-    std::fs::rename(&staged, &target)
-        .with_context(|| format!("failed to publish {}", target.display()))?;
-    Ok(target)
-}
-
-/// Holds a target against every other install of it, in this process or
-/// another, until dropped; closing the file releases the lock.
-struct Lock(#[allow(dead_code)] File);
-
-impl Lock {
-    async fn acquire(target: &Path) -> Result<Self> {
-        let parent = target
-            .parent()
-            .with_context(|| format!("{} has no parent directory", target.display()))?;
-        tokio::fs::create_dir_all(parent)
-            .await
-            .with_context(|| format!("failed to create {}", parent.display()))?;
-
-        let name = target
-            .file_name()
-            .with_context(|| format!("{} has no file name", target.display()))?
-            .to_string_lossy();
-        let path = target.with_file_name(format!(".{name}.lock"));
-        tokio::task::spawn_blocking(move || {
-            let file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(false)
-                .open(&path)
-                .with_context(|| format!("failed to open {}", path.display()))?;
-            file.lock()
-                .with_context(|| format!("failed to lock {}", path.display()))?;
-            Ok(Self(file))
-        })
-        .await
-        .context("runtime store lock task failed")?
-    }
-}
-
-/// Removes every other version beside each of `versions`, the version
-/// folders a start installed. A version another running Koharu still holds
-/// open stays, and a later start removes it.
-pub(crate) async fn remove_others(versions: Vec<PathBuf>) {
-    let removed = tokio::task::spawn_blocking(move || {
-        for version in versions {
-            let (Some(package), Some(keep)) = (version.parent(), version.file_name()) else {
-                continue;
-            };
-            let Ok(entries) = std::fs::read_dir(package) else {
-                continue;
-            };
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                if name == keep || name.to_string_lossy().starts_with('.') {
-                    continue;
-                }
-                let path = entry.path();
-                let result = if path.is_dir() {
-                    std::fs::remove_dir_all(&path)
-                } else {
-                    std::fs::remove_file(&path)
-                };
-                match result {
-                    Ok(()) => tracing::info!("removed {}", path.display()),
-                    Err(error) => tracing::warn!("couldn't remove {}: {error}", path.display()),
-                }
-            }
-        }
-    })
-    .await;
-    if let Err(error) = removed {
-        tracing::warn!("removing older versions failed: {error}");
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
+    use std::{
+        fs::OpenOptions,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
     };
 
     use super::*;
@@ -192,14 +112,14 @@ mod tests {
             let target = target.clone();
             let attempts = attempts.clone();
             async move {
-                directory(
+                install(
                     target,
                     |path| path.join("ready").is_file(),
                     move |stage| async move {
                         attempts.fetch_add(1, Ordering::Relaxed);
                         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                         tokio::fs::write(stage.join("ready"), b"ok").await?;
-                        Ok(())
+                        Ok(stage)
                     },
                 )
                 .await
@@ -218,14 +138,14 @@ mod tests {
         let target = root.path().join("runtime");
         let winner = target.clone();
 
-        let installed = directory(
+        let installed = install(
             target.clone(),
             |path| path.join("ready").is_file(),
             move |stage| async move {
                 tokio::fs::write(stage.join("ready"), b"staged").await?;
                 tokio::fs::create_dir_all(&winner).await?;
                 tokio::fs::write(winner.join("ready"), b"winner").await?;
-                Ok(())
+                Ok(stage)
             },
         )
         .await
@@ -252,7 +172,7 @@ mod tests {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(directory(
+                .block_on(install(
                     target.clone(),
                     |path| path.join("ready").is_file(),
                     move |stage| async move {
@@ -262,7 +182,7 @@ mod tests {
                             .open(target.with_file_name("install-attempt"))?;
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                         tokio::fs::write(stage.join("ready"), b"ok").await?;
-                        Ok(())
+                        Ok(stage)
                     },
                 ))
                 .unwrap();

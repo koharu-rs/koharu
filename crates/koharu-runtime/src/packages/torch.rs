@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use super::{Host, Release, preload};
 use crate::Backend;
@@ -13,12 +13,13 @@ static RELEASE: Release = Release {
     tag: koharu_torch_sys::RELEASE,
 };
 
-/// libtorch's own libraries for `backend`, in load order, before the shim,
-/// or `None` where libtorch has no build for it: Vulkan. On macOS the root
-/// goes first, so dyld resolves libtorch's weak C++ symbols inside one local
-/// image group instead of publishing them globally.
-fn libraries(backend: Backend) -> Option<&'static [&'static str]> {
-    Some(match backend {
+/// libtorch's own libraries for a GPU's `backend`, in load order, before the
+/// shim. libtorch has no Vulkan build, so a Vulkan GPU's models run on its
+/// CPU one. On macOS the root goes first, so dyld resolves libtorch's weak
+/// C++ symbols inside one local image group instead of publishing them
+/// globally.
+fn libraries(backend: Backend) -> &'static [&'static str] {
+    match backend {
         Backend::Cuda { .. } if cfg!(windows) => &[
             "c10.dll",
             "c10_cuda.dll",
@@ -62,47 +63,40 @@ fn libraries(backend: Backend) -> Option<&'static [&'static str]> {
             "libc10.dylib",
         ],
         // Its OpenMP runtime first.
-        Backend::Cpu if cfg!(windows) => &[
+        Backend::Cpu | Backend::Vulkan if cfg!(windows) => &[
             "libiomp5md.dll",
             "c10.dll",
             "torch_global_deps.dll",
             "torch_cpu.dll",
             "torch.dll",
         ],
-        Backend::Cpu => &[
+        Backend::Cpu | Backend::Vulkan => &[
             "libgomp.so.1",
             "libc10.so",
             "libtorch_global_deps.so",
             "libtorch_cpu.so",
             "libtorch.so",
         ],
-        Backend::Vulkan => return None,
-    })
-}
-
-/// The backend libtorch runs a GPU's models on: the GPU's own where libtorch
-/// has a build for it, and the CPU otherwise.
-pub(super) fn backend(gpu: Backend) -> Backend {
-    if libraries(gpu).is_some() {
-        gpu
-    } else {
-        Backend::Cpu
     }
 }
 
 pub(super) async fn install(host: Host, backend: Backend) -> Result<PathBuf> {
-    let libraries = libraries(backend).context("libtorch has no build for this backend")?;
+    let libraries = libraries(backend);
     let complete = move |folder: &Path| {
         libraries
             .iter()
             .all(|library| folder.join(library).is_file())
             && folder.join(shim()).is_file()
     };
-    RELEASE.install(host, backend, complete).await
+    let variant = match backend {
+        Backend::Vulkan => Backend::Cpu,
+        backend => backend,
+    };
+    RELEASE.install(host, variant, complete).await
 }
 
 pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
-    for library in libraries(backend).context("libtorch has no build for this backend")? {
+    for library in libraries(backend) {
         preload(&folder.join(library), false)?;
     }
     // libtorch's own C functions for the shim's tensors live in torch_cpu.
@@ -110,8 +104,13 @@ pub(super) fn load(backend: Backend, folder: &Path) -> Result<()> {
         &folder.join(shim()),
         &folder.join(libloading::library_filename("torch_cpu")),
     ])?;
-    // libtorch's cuDNN switch also turns MIOpen on and off; MIOpen isn't
-    // reliable on Windows. Set once, before any model runs.
+    set_cudnn(backend)
+}
+
+/// Sets libtorch's cuDNN switch once, before any model runs: on, but off for
+/// ROCm on Windows, since the switch also turns MIOpen on and off and MIOpen
+/// isn't reliable on Windows.
+fn set_cudnn(backend: Backend) -> Result<()> {
     let cudnn = !(cfg!(windows) && matches!(backend, Backend::Rocm { .. }));
     let error = unsafe {
         koharu_torch_sys::koharu_torch_set_setting(

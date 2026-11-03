@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let device = &koharu_runtime::devices().await?.torch;
+    let device = koharu_runtime::device().await?;
     let model = KoharuLayoutHighres::load(device).await?;
     let options = Options {
         text: cli.text_threshold,

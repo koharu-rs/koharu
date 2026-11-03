@@ -39,7 +39,7 @@ pub struct AotInpainting {
 
 impl AotInpainting {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device)?;
+        let (device, kind) = crate::backend::torch(device);
         let [weights] = REPOSITORY
             .resolve(["model.safetensors"])
             .await

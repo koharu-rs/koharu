@@ -159,8 +159,3 @@ fn load_library() -> Option<Library> {
     // The unversioned name may resolve to a toolkit stub instead of the driver.
     unsafe { Library::new("libcuda.so.1").ok() }
 }
-
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
-fn load_library() -> Option<Library> {
-    None
-}

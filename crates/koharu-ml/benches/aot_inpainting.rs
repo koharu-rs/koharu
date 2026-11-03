@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let image = image::open(fixtures.join("image_4k.jpg"))?;
     let mask = image::open(fixtures.join("mask_4k.png"))?.to_luma8();
 
-    let device = &koharu_runtime::devices().await?.torch;
+    let device = koharu_runtime::device().await?;
     let model = AotInpainting::load(device).await?;
     model.inference(&image, &mask, &Options::default())?;
 

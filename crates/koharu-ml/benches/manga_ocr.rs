@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
         .join("ocr")
         .join("title.png");
 
-    let device = &koharu_runtime::devices().await?.torch;
+    let device = koharu_runtime::device().await?;
     let image = image::open(&input)?;
     let model = MangaOcr::load(device).await?;
 

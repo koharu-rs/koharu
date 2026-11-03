@@ -84,7 +84,7 @@ pub(super) async fn install(host: Host, target: &'static str) -> Result<PathBuf>
         Host::LinuxX64 => "linux_x86_64",
         _ => anyhow::bail!("ROCm wheels exist only for Windows and Linux on x86-64"),
     };
-    store::directory(
+    store::install(
         store::root().join("rocm").join(VERSION).join(target),
         |folder| LOAD.iter().all(|library| folder.join(library).is_file()),
         move |stage| async move {
@@ -111,7 +111,8 @@ pub(super) async fn install(host: Host, target: &'static str) -> Result<PathBuf>
                 &stage,
                 &["_rocm_sdk_libraries/**/*"],
             )
-            .await
+            .await?;
+            Ok(stage)
         },
     )
     .await
@@ -124,7 +125,11 @@ pub(super) fn load(folder: &Path, expected: &str) -> Result<usize> {
     for library in LOAD {
         preload(&folder.join(library), true)?;
     }
+    index(folder, expected)
+}
 
+/// The index of the GPU with `expected` as its target among those HIP lists.
+fn index(folder: &Path, expected: &str) -> Result<usize> {
     type GetDeviceCount = unsafe extern "C" fn(*mut i32) -> i32;
     type GetDeviceProperties = unsafe extern "C" fn(*mut c_void, i32) -> i32;
 
@@ -148,28 +153,31 @@ pub(super) fn load(folder: &Path, expected: &str) -> Result<usize> {
         if unsafe { get_device_properties(properties.0.as_mut_ptr().cast(), index) } != 0 {
             continue;
         }
-        // The properties' architecture name, such as `gfx1100:sramecc-:xnack-`.
-        let target = properties
-            .0
-            .windows(3)
-            .enumerate()
-            .find_map(|(start, bytes)| {
-                if bytes != b"gfx" {
-                    return None;
-                }
-                let length = properties.0[start + 3..]
-                    .iter()
-                    .take_while(|byte| byte.is_ascii_alphanumeric())
-                    .count();
-                let target = std::str::from_utf8(&properties.0[start..start + 3 + length]).ok()?;
-                target[3..]
-                    .bytes()
-                    .any(|byte| byte.is_ascii_digit())
-                    .then_some(target)
-            });
-        if target == Some(expected) {
+        if architecture(&properties.0) == Some(expected) {
             return Ok(index as usize);
         }
     }
     anyhow::bail!("HIP lists no {expected}")
+}
+
+/// The target in a device's properties, such as `gfx1100` of its
+/// architecture name `gfx1100:sramecc-:xnack-`.
+fn architecture(properties: &[u8]) -> Option<&str> {
+    properties
+        .windows(3)
+        .enumerate()
+        .find_map(|(start, bytes)| {
+            if bytes != b"gfx" {
+                return None;
+            }
+            let length = properties[start + 3..]
+                .iter()
+                .take_while(|byte| byte.is_ascii_alphanumeric())
+                .count();
+            let target = std::str::from_utf8(&properties[start..start + 3 + length]).ok()?;
+            target[3..]
+                .bytes()
+                .any(|byte| byte.is_ascii_digit())
+                .then_some(target)
+        })
 }

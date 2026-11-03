@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?.to_luma8();
 
-    let device = &koharu_runtime::devices().await?.torch;
+    let device = koharu_runtime::device().await?;
     let model = AotInpainting::load(device).await?;
     let inpainted = model.inference(
         &image,

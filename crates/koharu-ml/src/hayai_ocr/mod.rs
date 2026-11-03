@@ -37,7 +37,7 @@ pub struct HayaiOcr {
 
 impl HayaiOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device)?;
+        let (device, kind) = crate::backend::torch(device);
         let [config, weights, tokenizer] = REPOSITORY
             .resolve(["config.json", "model.safetensors", "tokenizer.json"])
             .await
@@ -91,7 +91,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        let device = &koharu_runtime::devices().await?.torch;
+        let device = koharu_runtime::device().await?;
         let model = HayaiOcr::load(device).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");

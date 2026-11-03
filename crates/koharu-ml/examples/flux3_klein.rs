@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     let mask = cli.mask.as_ref().map(image::open).transpose()?;
     let reference = cli.reference.as_ref().map(image::open).transpose()?;
 
-    let device = &koharu_runtime::devices().await?.ggml;
+    let device = koharu_runtime::device().await?;
     let pipeline = Flux3Klein::load(device, device.memory().free).await?;
 
     let output = if let Some(mask) = mask.as_ref() {

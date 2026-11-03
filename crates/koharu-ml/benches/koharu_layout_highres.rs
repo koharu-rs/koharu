@@ -9,7 +9,7 @@ async fn main() -> Result<()> {
     let input =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/object_detection/1.jpg");
 
-    let device = &koharu_runtime::devices().await?.torch;
+    let device = koharu_runtime::device().await?;
     let image = image::open(input)?;
     let model = KoharuLayoutHighres::load(device).await?;
 
