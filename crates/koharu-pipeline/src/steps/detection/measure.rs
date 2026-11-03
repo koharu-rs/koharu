@@ -1,6 +1,6 @@
 //! What detection measures from the model's masks and the scan: each text
-//! block's angle, direction, ink, and outline; a balloon's outline; the text
-//! mask; and the blocks' reading order.
+//! block's angle, direction, ink, and outline; a balloon's outline; and the
+//! text mask.
 
 use std::{cmp::Ordering, collections::VecDeque};
 
@@ -888,132 +888,28 @@ fn detection_order(left: &Detection, right: &Detection) -> Ordering {
         .then_with(|| left.label.cmp(&right.label))
 }
 
+/// Drops each detection overlapping a more confident one of its label by
+/// `threshold` or more, and keeps the rest in their order, so text stays in
+/// the model's reading order.
 pub(super) fn non_maximum_suppression(detections: &mut Vec<Detection>, threshold: f32) {
-    detections.sort_by(|left, right| {
+    let mut ranked: Vec<usize> = (0..detections.len()).collect();
+    ranked.sort_by(|&left, &right| {
+        let (left, right) = (&detections[left], &detections[right]);
         right
             .score
             .total_cmp(&left.score)
             .then_with(|| detection_order(left, right))
     });
-    let mut kept = Vec::with_capacity(detections.len());
-    for candidate in detections.drain(..) {
-        let suppressed = kept.iter().any(|existing: &Detection| {
-            existing.label == candidate.label
-                && intersection_over_union(existing.bbox, candidate.bbox) >= threshold
+    let mut kept = vec![false; detections.len()];
+    for candidate in ranked {
+        let candidate_detection = &detections[candidate];
+        kept[candidate] = !detections.iter().zip(&kept).any(|(existing, &kept)| {
+            kept && existing.label == candidate_detection.label
+                && intersection_over_union(existing.bbox, candidate_detection.bbox) >= threshold
         });
-        if !suppressed {
-            kept.push(candidate);
-        }
     }
-    *detections = kept;
-}
-
-pub(super) fn sort_by_layout(detections: &mut Vec<Detection>) {
-    let order = layout_order(detections);
-    let mut values = std::mem::take(detections)
-        .into_iter()
-        .map(Some)
-        .collect::<Vec<_>>();
-    *detections = order
-        .into_iter()
-        .map(|index| {
-            values[index]
-                .take()
-                .expect("layout order contains each detection once")
-        })
-        .collect();
-}
-
-fn layout_order(detections: &[Detection]) -> Vec<usize> {
-    let panels = indices_with_label(detections, "panel");
-    let bubbles = indices_with_label(detections, "bubble");
-    let texts = indices_with_label(detections, "text");
-
-    let mut panel_for_bubble = vec![None; detections.len()];
-    for &bubble in &bubbles {
-        panel_for_bubble[bubble] = best_container(detections, bubble, &panels);
-    }
-    let mut bubble_for_text = vec![None; detections.len()];
-    let mut panel_for_text = vec![None; detections.len()];
-    for &text in &texts {
-        let bubble = best_container(detections, text, &bubbles);
-        bubble_for_text[text] = bubble;
-        panel_for_text[text] = bubble
-            .and_then(|bubble| panel_for_bubble[bubble])
-            .or_else(|| best_container(detections, text, &panels));
-    }
-
-    let mut parent = vec![None; detections.len()];
-    for bubble in bubbles {
-        parent[bubble] = panel_for_bubble[bubble];
-    }
-    for text in texts {
-        parent[text] = bubble_for_text[text].or(panel_for_text[text]);
-    }
-
-    let mut roots = Vec::new();
-    let mut children = vec![Vec::new(); detections.len()];
-    for (index, parent) in parent.into_iter().enumerate() {
-        if let Some(parent) = parent {
-            children[parent].push(index);
-        } else {
-            roots.push(index);
-        }
-    }
-    sort_spatial(detections, &mut roots);
-    for siblings in &mut children {
-        sort_spatial(detections, siblings);
-    }
-
-    let mut order = Vec::with_capacity(detections.len());
-    for root in roots {
-        append_layout_subtree(root, &children, &mut order);
-    }
-    order
-}
-
-fn indices_with_label(detections: &[Detection], label: &str) -> Vec<usize> {
-    detections
-        .iter()
-        .enumerate()
-        .filter_map(|(index, detection)| (detection.label == label).then_some(index))
-        .collect()
-}
-
-fn append_layout_subtree(index: usize, children: &[Vec<usize>], order: &mut Vec<usize>) {
-    order.push(index);
-    for &child in &children[index] {
-        append_layout_subtree(child, children, order);
-    }
-}
-
-fn sort_spatial(detections: &[Detection], indices: &mut [usize]) {
-    indices.sort_by(|&left, &right| {
-        detection_order(&detections[left], &detections[right])
-            .then_with(|| detections[right].score.total_cmp(&detections[left].score))
-            .then_with(|| left.cmp(&right))
-    });
-}
-
-fn best_container(detections: &[Detection], value: usize, candidates: &[usize]) -> Option<usize> {
-    candidates
-        .iter()
-        .copied()
-        .filter(|&candidate| containment(detections[candidate].bbox, detections[value].bbox) >= 0.5)
-        .min_by(|&left, &right| {
-            area(detections[left].bbox)
-                .total_cmp(&area(detections[right].bbox))
-                .then_with(|| detection_order(&detections[left], &detections[right]))
-                .then_with(|| left.cmp(&right))
-        })
-}
-
-fn containment(container: [f32; 4], value: [f32; 4]) -> f32 {
-    let value_area = area(value);
-    if value_area <= 0.0 {
-        return 0.0;
-    }
-    intersection_area(container, value) / value_area
+    let mut kept = kept.into_iter();
+    detections.retain(|_| kept.next() == Some(true));
 }
 
 pub(super) fn mask_containment(container: &Mask, value: &Mask, bounds: [f32; 4]) -> f32 {
