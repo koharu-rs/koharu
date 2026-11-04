@@ -15,7 +15,7 @@
     "@koharu/bridge": "workspace:*",
     "@koharu/ui": "workspace:*",
     "@sentry/nextjs": "^11.10.0",
-    "@tanstack/react-query": "^5.105.0",
+    "@tanstack/react-query": "^5.105.1",
     "@tanstack/react-virtual": "^3.14.21",
     "@tauri-apps/api": "3.0.0-alpha.3",
     "@tauri-apps/plugin-opener": "3.0.0-alpha.3",
@@ -30,7 +30,7 @@
     "react": "^19.3.1",
     "react-colorful": "^5.8.1",
     "react-dom": "^19.3.0",
-    "react-i18next": "^17.1.9",
+    "react-i18next": "^17.1.10",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "zustand": "^5.0.16"
