@@ -32,13 +32,25 @@ pub struct MangaOcr {
     tokenizer: Tokenizer,
 }
 
+const WEIGHTS: &str = "model.safetensors";
+
 impl MangaOcr {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = REPOSITORY
+            .resolve([WEIGHTS])
+            .await
+            .context("failed to resolve Manga OCR's files")?;
+        Ok(weights.into())
+    }
+
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [config, weights, processor, vocabulary] = REPOSITORY
             .resolve([
                 "config.json",
-                "model.safetensors",
+                WEIGHTS,
                 "preprocessor_config.json",
                 "vocab.txt",
             ])
@@ -70,7 +82,7 @@ impl MangaOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::no_grad(|| {
+        koharu_torch::inference_mode(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image, self.device))

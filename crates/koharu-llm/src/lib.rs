@@ -167,6 +167,23 @@ impl Model {
     }
 }
 
+/// The files a local model puts on the device, fetched first if the store
+/// doesn't have them; none for a hosted one.
+pub async fn weights(selection: &Selection) -> Result<Vec<std::path::PathBuf>> {
+    if selection.provider != Provider::Local {
+        return Ok(Vec::new());
+    }
+    let entry = local::catalog::entry(&selection.model)?;
+    let quantization = entry.quantization(selection.quantization.as_deref())?;
+    let [model] = entry.repository.resolve([quantization.file]).await?;
+    let mut weights = vec![model];
+    if let Some(projector) = entry.projector {
+        let [projector] = entry.repository.resolve([projector]).await?;
+        weights.push(projector);
+    }
+    Ok(weights)
+}
+
 /// The model `selection` names, as a rig model; a local one loads with
 /// `size`, which a hosted one doesn't use.
 pub async fn model(selection: &Selection, size: Size) -> Result<Model> {

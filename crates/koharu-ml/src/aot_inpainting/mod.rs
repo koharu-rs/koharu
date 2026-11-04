@@ -37,11 +37,23 @@ pub struct AotInpainting {
     model: Model,
 }
 
+const WEIGHTS: &str = "model.safetensors";
+
 impl AotInpainting {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = REPOSITORY
+            .resolve([WEIGHTS])
+            .await
+            .context("failed to resolve AOT inpainting's files")?;
+        Ok(weights.into())
+    }
+
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [weights] = REPOSITORY
-            .resolve(["model.safetensors"])
+            .resolve([WEIGHTS])
             .await
             .context("failed to resolve AOT inpainting's files")?;
 
@@ -72,7 +84,7 @@ impl AotInpainting {
             image.width() > 0 && image.height() > 0,
             "image dimensions must be non-zero"
         );
-        koharu_torch::no_grad(|| {
+        koharu_torch::inference_mode(|| {
             let input = processor::preprocess(&image, mask, options.max_side, self.device)?;
             let output = self.model.forward(&input.image, &input.mask)?;
             processor::postprocess(&output, &input, &image, mask)

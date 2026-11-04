@@ -69,7 +69,7 @@ impl VarStore {
         let tensors = SafeTensors::deserialize(&mapping)
             .map_err(|err| TchError::FileFormat(format!("{file}: {err}")))?;
         let mut unused = tensors.names().into_iter().collect::<BTreeSet<_>>();
-        let _guard = koharu_torch::no_grad_guard();
+        let _guard = koharu_torch::InferenceMode::enter();
         for (name, variable) in variables.iter_mut() {
             let Ok(view) = tensors.tensor(name) else {
                 if optional.contains(name) {

@@ -3,5 +3,5 @@
 mod convert;
 pub mod index;
 
-pub use super::wrappers::tensor::{no_grad, no_grad_guard, NoGradGuard, Tensor};
+pub use super::wrappers::tensor::{inference_mode, InferenceMode, Tensor};
 pub use index::{IndexOp, NewAxis, TensorIndexer};
