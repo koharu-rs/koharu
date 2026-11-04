@@ -1,8 +1,9 @@
 //! Devices on which tensor computations are run.
 
 use koharu_torch_sys::{
-    aten_accelerator, aten_has, aten_set_setting, aten_setting, aten_synchronize, AtenSetting,
-    ATEN_CUDNN_BENCHMARK, ATEN_CUDNN_ENABLED, ATEN_HAS_CUDNN,
+    aten_accelerator, aten_empty_cache, aten_has, aten_memory_stats, aten_set_setting,
+    aten_setting, aten_synchronize, AtenMemoryStats, AtenSetting, ATEN_CUDNN_BENCHMARK,
+    ATEN_CUDNN_ENABLED, ATEN_HAS_CUDNN,
 };
 
 use super::utils::check;
@@ -56,9 +57,24 @@ impl Cuda {
 
     /// Waits for all kernels in all streams on a CUDA device to complete.
     pub fn synchronize(device_index: i64) -> Result<()> {
-        let index = i32::try_from(device_index)
-            .map_err(|_| TchError::Convert(format!("no device {device_index}")))?;
-        check(unsafe { aten_synchronize(index) })
+        check(unsafe { aten_synchronize(index(device_index)?) })
+    }
+
+    /// What the caching allocator holds on a device now.
+    pub fn memory(device_index: i64) -> Result<AllocatorMemory> {
+        let mut stats = unsafe { std::mem::zeroed::<AtenMemoryStats>() };
+        check(unsafe { aten_memory_stats(index(device_index)?, &mut stats) })?;
+        let count = |count: i64| u64::try_from(count).unwrap_or(0);
+        Ok(AllocatorMemory {
+            reserved: count(stats.reserved_bytes.current),
+            active: count(stats.active_bytes.current),
+            ooms: count(stats.num_ooms),
+        })
+    }
+
+    /// Returns the caching allocator's unused device memory to the device.
+    pub fn empty_cache() -> Result<()> {
+        check(unsafe { aten_empty_cache() })
     }
 
     /// Returns true if cudnn is enabled by the user.
@@ -82,6 +98,22 @@ impl Cuda {
     pub fn cudnn_set_benchmark(b: bool) {
         set_setting(ATEN_CUDNN_BENCHMARK, i64::from(b))
     }
+}
+
+/// The caching allocator's device memory, in bytes: what it holds from the
+/// device, and how much of that tensors use. The rest it keeps for its own next
+/// allocations until `Cuda::empty_cache`. `ooms` counts the allocations it has
+/// failed for lack of memory, which tells an out-of-memory error from any other
+/// without reading its message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AllocatorMemory {
+    pub reserved: u64,
+    pub active: u64,
+    pub ooms: u64,
+}
+
+fn index(device_index: i64) -> Result<i32> {
+    i32::try_from(device_index).map_err(|_| TchError::Convert(format!("no device {device_index}")))
 }
 
 fn setting(setting: AtenSetting) -> i64 {

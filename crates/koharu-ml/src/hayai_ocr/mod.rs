@@ -35,11 +35,23 @@ pub struct HayaiOcr {
     tokenizer: Tokenizer,
 }
 
+const WEIGHTS: &str = "model.safetensors";
+
 impl HayaiOcr {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = REPOSITORY
+            .resolve([WEIGHTS])
+            .await
+            .context("failed to resolve Hayai OCR's files")?;
+        Ok(weights.into())
+    }
+
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [config, weights, tokenizer] = REPOSITORY
-            .resolve(["config.json", "model.safetensors", "tokenizer.json"])
+            .resolve(["config.json", WEIGHTS, "tokenizer.json"])
             .await
             .context("failed to resolve Hayai OCR's files")?;
         let config: HayaiConfig = serde_json::from_slice(&fs_err::read(&config)?)?;
@@ -68,7 +80,7 @@ impl HayaiOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::no_grad(|| {
+        koharu_torch::inference_mode(|| {
             let inputs = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))

@@ -58,14 +58,26 @@ pub struct PaddleOcrVlQuantized {
     model: koharu_llm::Model,
 }
 
+const WEIGHTS: [&str; 2] = [
+    "PaddleOCR-VL-1.6-GGUF.gguf",
+    "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
+];
+
 impl PaddleOcrVlQuantized {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = REPOSITORY
+            .resolve(WEIGHTS)
+            .await
+            .context("failed to resolve quantized PaddleOCR-VL-1.6's files")?;
+        Ok(weights.into())
+    }
+
     /// Loads the model to decode `sequences` crops together.
     pub async fn load(sequences: u32) -> Result<Self> {
         let [model, projector] = REPOSITORY
-            .resolve([
-                "PaddleOCR-VL-1.6-GGUF.gguf",
-                "PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
-            ])
+            .resolve(WEIGHTS)
             .await
             .context("failed to resolve quantized PaddleOCR-VL-1.6's files")?;
         let model = koharu_llm::load(

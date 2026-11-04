@@ -219,40 +219,34 @@ impl AsRef<Tensor> for Tensor {
     }
 }
 
-fn grad_set_enabled(enabled: bool) -> bool {
-    let previous = unsafe { aoti_torch_grad_mode_is_enabled() };
-    unsafe { aoti_torch_grad_mode_set_enabled(enabled) };
-    previous
-}
-
-/// Runs a closure without keeping track of gradients.
-pub fn no_grad<T, F>(f: F) -> T
-where
-    F: FnOnce() -> T,
-{
-    let _guard = no_grad_guard();
+/// Runs a closure in libtorch's inference mode.
+pub fn inference_mode<T>(f: impl FnOnce() -> T) -> T {
+    let _guard = InferenceMode::enter();
     f()
 }
 
-/// A RAII guard that prevents gradient tracking until deallocated.
-pub struct NoGradGuard {
-    enabled: bool,
+/// c10::InferenceMode on the calling thread until dropped: no gradients, and
+/// none of autograd's per-operator bookkeeping. A tensor made in it can't be
+/// changed in place outside it.
+#[must_use]
+pub struct InferenceMode {
+    // c10 restores the previous mode when a guard is deleted on the thread that
+    // made it, so the raw pointer also keeps the guard on that thread.
+    guard: AtenInferenceModeHandle,
 }
 
-/// Disables gradient tracking, this will be enabled back when the
-/// returned value gets deallocated.
-/// Note that it is important to bind this to a name like `_guard`
-/// and not to `_` as the latter would immediately drop the guard.
-/// See <https://internals.rust-lang.org/t/pre-rfc-must-bind/12658/46>
-/// for more details.
-pub fn no_grad_guard() -> NoGradGuard {
-    NoGradGuard {
-        enabled: grad_set_enabled(false),
+impl InferenceMode {
+    pub fn enter() -> Self {
+        let mut guard = std::ptr::null_mut();
+        check(unsafe { aten_create_inference_mode(&mut guard) })
+            .expect("libtorch enters inference mode");
+        Self { guard }
     }
 }
 
-impl Drop for NoGradGuard {
+impl Drop for InferenceMode {
     fn drop(&mut self) {
-        grad_set_enabled(self.enabled);
+        check(unsafe { aten_delete_inference_mode(self.guard) })
+            .expect("libtorch leaves inference mode");
     }
 }

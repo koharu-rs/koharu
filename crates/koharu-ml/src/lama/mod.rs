@@ -63,11 +63,23 @@ pub struct Lama {
     model: Model,
 }
 
+const WEIGHTS: &str = "lama-manga.safetensors";
+
 impl Lama {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = REPOSITORY
+            .resolve([WEIGHTS])
+            .await
+            .context("failed to resolve LaMa's files")?;
+        Ok(weights.into())
+    }
+
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [weights] = REPOSITORY
-            .resolve(["lama-manga.safetensors"])
+            .resolve([WEIGHTS])
             .await
             .context("failed to resolve LaMa's files")?;
 
@@ -95,7 +107,7 @@ impl Lama {
             image.width() > 0 && image.height() > 0,
             "image dimensions must be non-zero"
         );
-        koharu_torch::no_grad(|| match options.hd_strategy {
+        koharu_torch::inference_mode(|| match options.hd_strategy {
             HdStrategy::Crop
                 if image.width().max(image.height()) > options.hd_strategy_crop_trigger_size =>
             {
