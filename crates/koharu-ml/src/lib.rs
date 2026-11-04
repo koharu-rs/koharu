@@ -12,4 +12,5 @@ pub mod manga_ocr;
 pub mod paddle_ocr_vl_quantized;
 pub mod rorem_mixed;
 
+pub use backend::{release_torch_cache, torch_cache, torch_ooms};
 pub use koharu_runtime::Device;

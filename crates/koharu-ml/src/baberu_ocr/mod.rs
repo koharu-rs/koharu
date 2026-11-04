@@ -37,14 +37,26 @@ pub struct BaberuOcr {
     generation: BaberuGenerationConfig,
 }
 
+const WEIGHTS: &str = "model.safetensors";
+
 impl BaberuOcr {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = BABERU
+            .resolve([WEIGHTS])
+            .await
+            .context("failed to resolve Baberu OCR's files")?;
+        Ok(weights.into())
+    }
+
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [config, generation, weights, vocabulary] = BABERU
             .resolve([
                 "config.json",
                 "generation_config.json",
-                "model.safetensors",
+                WEIGHTS,
                 "tokenizer/vocab.json",
             ])
             .await
@@ -88,7 +100,7 @@ impl BaberuOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::no_grad(|| {
+        koharu_torch::inference_mode(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))

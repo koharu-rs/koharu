@@ -70,11 +70,23 @@ pub struct KoharuLayoutHighres {
     thresholds: Thresholds,
 }
 
+const WEIGHTS: &str = "model.safetensors";
+
 impl KoharuLayoutHighres {
+    /// The files `load` puts on the device, fetched first if the store doesn't
+    /// have them.
+    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
+        let weights = REPOSITORY
+            .resolve([WEIGHTS])
+            .await
+            .context("failed to resolve Koharu Layout HighRes's files")?;
+        Ok(weights.into())
+    }
+
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [config, weights] = REPOSITORY
-            .resolve(["config.json", "model.safetensors"])
+            .resolve(["config.json", WEIGHTS])
             .await
             .context("failed to resolve Koharu Layout HighRes's files")?;
         let config: Config = serde_json::from_slice(&fs_err::read(&config)?)?;
@@ -104,7 +116,7 @@ impl KoharuLayoutHighres {
             bubble: options.bubble.unwrap_or(self.thresholds.bubble),
             panel: options.panel.unwrap_or(self.thresholds.panel),
         };
-        let mut detections = koharu_torch::no_grad(|| {
+        let mut detections = koharu_torch::inference_mode(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
             let output = self.model.forward(&pixel_values)?;
             self.processor
