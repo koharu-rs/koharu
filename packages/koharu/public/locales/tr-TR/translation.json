@@ -62,6 +62,8 @@
   "colorPicker": {
     "brushColor": "Fırça rengi",
     "hexCode": "Onaltılık renk kodu",
+    "recent": "Son kullanılan renkler",
+    "recentColor": "Son kullanılan renk {{color}}",
     "sampleCanvas": "Tuvalden renk seç",
     "transparent": "Şeffaf"
   },
