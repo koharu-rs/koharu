@@ -44,7 +44,7 @@ koharu-secrets = { path = "crates/koharu-secrets" }
 # external dependencies
 alphanumeric-sort = "1.5.8"
 arc-swap = "1.9.2"
-hayro = "0.8.0"
+hayro = "0.9.0"
 image = "0.25.10"
 webp = { version = "0.3.1" }
 fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
