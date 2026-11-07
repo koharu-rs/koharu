@@ -981,6 +981,10 @@ function FontSizeField({
           aria-label={t('inspector.fontSize')}
           placeholder={t('inspector.auto')}
           className='px-2 text-left'
+          onKeyDown={(event) => {
+            // Base UI commits a typed value only on blur, so Enter blurs to commit it.
+            if (event.key === 'Enter') event.currentTarget.blur()
+          }}
         />
         <DropdownMenu>
           <DropdownMenuTrigger
