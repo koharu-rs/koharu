@@ -1,16 +1,12 @@
-//! Hosted models through rig's providers, on rig's own HTTP client, and the
+//! Hosted models through rig's providers, on Koharu's HTTP client, and the
 //! models each provider lists, with what rig's catalog says each can do.
 
-use std::time::{Duration, SystemTime};
+mod http;
 
 use anyhow::{Context, Result, bail};
-use backon::{ExponentialBuilder, Retryable};
-use bytes::Bytes;
 use rig_core::{
-    catalog::Catalog,
+    catalog::{Catalog, ModelFacts, ModelSpec, ReasoningSupport},
     driver::DynModel,
-    error::ProviderError,
-    http_client::{self, HttpClientExt, LazyBody, MultipartForm, StreamingResponse},
     operation::Completion,
     providers::{
         anthropic::wire::AnthropicConfig,
@@ -19,14 +15,15 @@ use rig_core::{
             OpenAIConfig,
             wire::{DEEPSEEK, MINIMAX, OPENROUTER},
         },
-        registry::ProviderId,
+        registry::{ConnectOptions, Format, ProviderId},
         xai,
     },
 };
-use rig_reqwest::ReqwestClient;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+pub(crate) use http::{Http, reqwest};
 
 use crate::{ModelInfo, Provider};
 
@@ -66,45 +63,89 @@ const LM_STUDIO: &str = "http://localhost:1234";
 /// Ollama's OpenAI-compatible endpoint.
 const OPENAI_COMPATIBLE: &str = "http://localhost:11434/v1";
 
+impl Provider {
+    /// The vendor rig's registry and catalog know this provider as; the ones
+    /// on the user's own server have none.
+    pub(crate) fn vendor(self) -> Option<ProviderId> {
+        let vendor = match self {
+            Self::OpenAi => "openai",
+            Self::ChatGpt => "chatgpt",
+            Self::Claude => "anthropic",
+            Self::Gemini => "gcp.gemini",
+            Self::Xai => "xai",
+            Self::DeepSeek => "deepseek",
+            Self::MiniMax => "minimax",
+            Self::OpenRouter => "openrouter",
+            Self::Local | Self::LmStudio | Self::OpenAiCompatible => return None,
+        };
+        ProviderId::catalog(vendor)
+    }
+}
+
 /// The provider's API key, which must be set for a provider that needs one.
 fn key(provider: Provider) -> Result<String> {
     optional_key(provider)?.with_context(|| format!("{provider} has no API key"))
 }
 
 fn optional_key(provider: Provider) -> Result<Option<String>> {
-    Ok(koharu_config::secret(&provider.to_string())?.map(|key| key.expose_secret().to_owned()))
+    Ok(koharu_config::secrets::get(&provider.to_string())?
+        .map(|key| key.expose_secret().to_owned()))
 }
 
-pub(crate) async fn model(provider: Provider, id: &str) -> Result<DynModel<Completion>> {
-    let http = Http::default();
-    let providers: Providers = koharu_config::get()?;
-    Ok(match provider {
-        Provider::Local => bail!("a local model isn't hosted"),
-        Provider::ChatGpt => crate::chatgpt::model(id, http).await?,
-        Provider::Claude => AnthropicConfig::new(key(provider)?)
-            .connect(http)
-            .completion(id)
-            .erase(),
-        Provider::Gemini => GeminiConfig::new(key(provider)?)
-            .connect(http)
-            .completion(id)
-            .erase(),
-        Provider::OpenAi => openai(provider, &providers)?
-            .connect(http)
-            .responses(id)
-            .erase(),
-        Provider::Xai => openai(provider, &providers)?
-            .connect(http)
-            .completion(id)
-            .erase(),
-        Provider::DeepSeek
-        | Provider::MiniMax
-        | Provider::OpenRouter
-        | Provider::LmStudio
-        | Provider::OpenAiCompatible => {
-            openai(provider, &providers)?.connect(http).chat(id).erase()
+pub(crate) fn model(provider: Provider, id: &str) -> Result<DynModel<Completion>> {
+    let Some(vendor) = provider.vendor() else {
+        return own_server(provider, id);
+    };
+    let (key, http) = match provider {
+        // The HTTP client puts the sign-in's credential on each request.
+        Provider::ChatGpt => (String::new(), crate::chatgpt::http()?),
+        _ => (key(provider)?, Http::default()),
+    };
+    Ok(Catalog::builtin().connect_with(&spec(vendor, id), options(provider, key, http))?)
+}
+
+/// Given a key, rig reads no environment variables.
+fn options(provider: Provider, key: String, http: Http) -> ConnectOptions {
+    let options = ConnectOptions::new().api_key(key).http(http);
+    match provider {
+        // rig's primary format for MiniMax is Anthropic's; Koharu's mapping of
+        // how it keeps to a schema is for its OpenAI dialect.
+        Provider::MiniMax => options.format(Format::OpenAi),
+        _ => options,
+    }
+}
+
+/// What the catalog says of `id`, or nothing certain of a model newer than it.
+fn spec(vendor: ProviderId, id: &str) -> ModelSpec {
+    match Catalog::builtin().get(vendor, id) {
+        Some(found) => {
+            // The catalog also answers for dated ids, which go out as asked.
+            let mut spec = found.spec.clone();
+            spec.id = id.to_owned();
+            spec
         }
-    })
+        None => unlisted(vendor, id),
+    }
+}
+
+/// A model rig's catalog doesn't know: rig refuses nothing it might do, and its
+/// limits are unknown.
+fn unlisted(vendor: ProviderId, id: &str) -> ModelSpec {
+    ModelSpec::new(vendor, id)
+        .with_tools(true)
+        .with_reasoning(ReasoningSupport::Unknown { default: None })
+}
+
+/// A provider on the user's own server, which rig's registry refuses as a
+/// vendor it can't configure.
+fn own_server(provider: Provider, id: &str) -> Result<DynModel<Completion>> {
+    let providers: Providers = koharu_config::get()?;
+    let vendor = ProviderId::declare(&provider.to_string())?;
+    let mut model = openai(provider, &providers)?
+        .connect(Http::default())
+        .chat(id);
+    model.wire = model.wire.with_facts(ModelFacts::new(unlisted(vendor, id)));
+    Ok(model.erase())
 }
 
 /// How rig reaches a provider that speaks OpenAI's dialect.
@@ -127,99 +168,27 @@ fn openai(provider: Provider, providers: &Providers) -> Result<OpenAIConfig> {
     })
 }
 
-/// rig's own client, shared by the process, sending a 429 or 5xx reply
-/// again, up to three times, after the wait rig reads from it, or a second,
-/// then two, then four when it names none; rig itself retries nothing.
-#[derive(Clone, Default)]
-pub(crate) struct Http(ReqwestClient);
-
-/// A second, then two, then four.
-const BACKOFF: ExponentialBuilder = ExponentialBuilder::new();
-
-/// rig's own client, for the requests Koharu makes outside rig.
-fn reqwest() -> Result<reqwest::Client> {
-    ReqwestClient::default()
-        .inner()
-        .cloned()
-        .context("couldn't build the HTTP client")
-}
-
-/// Whether `error` is a 429 or 5xx reply, worth sending again.
-fn retryable(error: &http_client::Error) -> bool {
-    matches!(
-        error,
-        http_client::Error::InvalidStatusCodeWithDetails { status, .. }
-            if status.as_u16() == 429 || status.is_server_error()
-    )
-}
-
-/// The wait `error` names in place of `backoff`'s, until `backoff` runs out.
-fn retry_after(error: &http_client::Error, backoff: Option<Duration>) -> Option<Duration> {
-    let backoff = backoff?;
-    let http_client::Error::InvalidStatusCodeWithDetails {
-        status,
-        body,
-        headers,
-    } = error
-    else {
-        return Some(backoff);
-    };
-    let report = ProviderError::from(http_client::Error::InvalidStatusCodeWithDetails {
-        status: *status,
-        body: body.clone(),
-        headers: headers.clone(),
-    })
-    .report();
-    Some(report.retry_after(SystemTime::now()).unwrap_or(backoff))
-}
-
-impl HttpClientExt for Http {
-    fn send<T, U>(
-        &self,
-        request: http::Request<T>,
-    ) -> impl Future<Output = http_client::Result<http::Response<LazyBody<U>>>> + Send + 'static
-    where
-        T: Into<Bytes> + Send,
-        U: From<Bytes> + Send + 'static,
-    {
-        let client = self.0.clone();
-        let (parts, body) = request.into_parts();
-        let body: Bytes = body.into();
-        async move {
-            (|| client.send(http::Request::from_parts(parts.clone(), body.clone())))
-                .retry(BACKOFF)
-                .when(retryable)
-                .adjust(retry_after)
-                .await
-        }
-    }
-
-    fn send_multipart<U>(
-        &self,
-        request: http::Request<MultipartForm>,
-    ) -> impl Future<Output = http_client::Result<http::Response<LazyBody<U>>>> + Send + 'static
-    where
-        U: From<Bytes> + Send + 'static,
-    {
-        self.0.send_multipart(request)
-    }
-
-    fn send_streaming<T>(
-        &self,
-        request: http::Request<T>,
-    ) -> impl Future<Output = http_client::Result<StreamingResponse>> + Send
-    where
-        T: Into<Bytes> + Send,
-    {
-        let client = self.0.clone();
-        let (parts, body) = request.into_parts();
-        let body: Bytes = body.into();
-        async move {
-            (|| client.send_streaming(http::Request::from_parts(parts.clone(), body.clone())))
-                .retry(BACKOFF)
-                .when(retryable)
-                .adjust(retry_after)
-                .await
+impl ModelInfo {
+    /// A hosted model, with what `spec`, its catalog entry if it has one, says
+    /// it can do.
+    pub(crate) fn hosted(
+        provider: Provider,
+        id: String,
+        name: String,
+        spec: Option<&ModelSpec>,
+    ) -> Self {
+        Self {
+            provider,
+            id,
+            name,
+            quantizations: Vec::new(),
+            images: spec.is_some_and(|spec| spec.input.image),
+            tools: spec.is_some_and(|spec| spec.tools),
+            reasoning: spec.is_some_and(|spec| spec.reasoning.supported()),
+            languages: None,
+            context_window: spec.and_then(|spec| spec.context_window),
+            max_output_tokens: spec.and_then(|spec| spec.max_output_tokens),
+            pricing: spec.and_then(|spec| spec.pricing),
         }
     }
 }
@@ -257,22 +226,7 @@ pub(crate) async fn models(provider: Provider) -> Result<Vec<ModelInfo>> {
                 .await?
         }
     };
-    // The catalog's vendor for the provider's models; an OpenAI-compatible
-    // server's models have none.
-    let vendor = match provider {
-        Provider::OpenAi => Some("openai"),
-        Provider::Claude => Some("anthropic"),
-        Provider::Gemini => Some("gcp.gemini"),
-        Provider::Xai => Some("xai"),
-        Provider::DeepSeek => Some("deepseek"),
-        Provider::MiniMax => Some("minimax"),
-        Provider::OpenRouter => Some("openrouter"),
-        _ => None,
-    }
-    .map(|vendor| {
-        ProviderId::catalog(vendor).with_context(|| format!("rig's catalog has no {vendor}"))
-    })
-    .transpose()?;
+    let vendor = provider.vendor();
     let catalog = Catalog::builtin();
     Ok(listed
         .into_iter()
@@ -286,17 +240,8 @@ pub(crate) async fn models(provider: Provider) -> Result<Vec<ModelInfo>> {
             if spec.is_some_and(|spec| !spec.tools && !spec.structured_output) {
                 return None;
             }
-            Some(ModelInfo {
-                provider,
-                name: model.name.unwrap_or_else(|| model.id.clone()),
-                id: model.id,
-                quantizations: Vec::new(),
-                images: spec.is_some_and(|spec| spec.input.image),
-                tools: spec.is_some_and(|spec| spec.tools),
-                reasoning: spec.is_some_and(|spec| spec.reasoning.supported()),
-                json: provider.json(),
-                languages: None,
-            })
+            let name = model.name.unwrap_or_else(|| model.id.clone());
+            Some(ModelInfo::hosted(provider, model.id, name, spec))
         })
         .collect())
 }
@@ -332,14 +277,11 @@ async fn lm_studio(providers: &Providers) -> Result<Vec<ModelInfo>> {
         })
         .filter_map(|model| {
             let id = model.get("key")?.as_str()?.to_owned();
+            let name = model
+                .get("display_name")
+                .and_then(Value::as_str)
+                .map_or_else(|| id.clone(), str::to_owned);
             Some(ModelInfo {
-                provider: Provider::LmStudio,
-                name: model
-                    .get("display_name")
-                    .and_then(Value::as_str)
-                    .map_or_else(|| id.clone(), str::to_owned),
-                id,
-                quantizations: Vec::new(),
                 images: model
                     .pointer("/capabilities/vision")
                     .and_then(Value::as_bool)
@@ -349,9 +291,57 @@ async fn lm_studio(providers: &Providers) -> Result<Vec<ModelInfo>> {
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
                 reasoning: model.pointer("/capabilities/reasoning").is_some(),
-                json: Provider::LmStudio.json(),
-                languages: None,
+                ..ModelInfo::hosted(Provider::LmStudio, id, name, None)
             })
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every vendor is one rig's registry can connect, in its OpenAI, Anthropic,
+    /// or Gemini format, and a model the catalog doesn't list keeps its id.
+    #[test]
+    fn every_vendor_connects() {
+        for provider in [
+            Provider::OpenAi,
+            Provider::ChatGpt,
+            Provider::Claude,
+            Provider::Gemini,
+            Provider::Xai,
+            Provider::DeepSeek,
+            Provider::MiniMax,
+            Provider::OpenRouter,
+        ] {
+            let vendor = provider.vendor().unwrap();
+            let spec = spec(vendor, "a-model-from-next-year");
+            let model = Catalog::builtin()
+                .connect_with(&spec, options(provider, "key".to_owned(), Http::default()))
+                .unwrap();
+            assert_eq!(model.spec().unwrap().id, "a-model-from-next-year");
+        }
+    }
+
+    #[test]
+    fn a_listed_model_keeps_what_the_catalog_says() {
+        let vendor = Provider::OpenAi.vendor().unwrap();
+        let listed = Catalog::builtin()
+            .iter()
+            .find(|spec| spec.provider.vendor() == vendor.vendor() && spec.context_window.is_some())
+            .unwrap();
+        assert_eq!(
+            spec(vendor, &listed.id).context_window,
+            listed.context_window
+        );
+    }
+
+    #[test]
+    fn a_model_the_catalog_does_not_list_refuses_nothing() {
+        let vendor = Provider::OpenAi.vendor().unwrap();
+        let spec = spec(vendor, "a-model-from-next-year");
+        assert!(spec.tools && spec.reasoning.supported());
+        assert_eq!(spec.context_window, None);
+    }
 }

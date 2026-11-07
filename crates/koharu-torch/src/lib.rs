@@ -1,6 +1,6 @@
 mod error;
-pub use error::TchError;
-pub type Result<T> = std::result::Result<T, error::TchError>;
+pub use error::Error;
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 pub(crate) mod wrappers;
 pub use wrappers::device::{AllocatorMemory, Cuda, Device};
@@ -11,4 +11,4 @@ pub use wrappers::scalar::Scalar;
 pub use wrappers::utils::{IntList, IntListOption};
 
 mod tensor;
-pub use tensor::{index, inference_mode, IndexOp, InferenceMode, NewAxis, Tensor, TensorIndexer};
+pub use tensor::{IndexOp, InferenceMode, NewAxis, Tensor, TensorIndexer, index, inference_mode};

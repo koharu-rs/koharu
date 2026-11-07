@@ -4,7 +4,7 @@ use thiserror::Error;
 
 /// Main library error type.
 #[derive(Error, Debug)]
-pub enum TchError {
+pub enum Error {
     /// Conversion error.
     #[error("conversion error: {0}")]
     Convert(String),

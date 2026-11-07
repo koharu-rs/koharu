@@ -1022,7 +1022,7 @@ fn penalty_ids(rows: &[Vec<i64>], device: koharu_torch::Device) -> koharu_torch:
     let mut padded = Vec::with_capacity(rows.len() * width);
     for row in rows {
         let first = *row.first().ok_or_else(|| {
-            koharu_torch::TchError::Shape("a repetition penalty row has no ids".to_owned())
+            koharu_torch::Error::Shape("a repetition penalty row has no ids".to_owned())
         })?;
         padded.extend(
             row.iter()

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::lama::{Lama, Options};
+use koharu_ml::lama::Lama;
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let device = koharu_runtime::device().await?;
 
     let model = Lama::load(device).await?;
-    let inpainted = model.inference(&image, &mask, &Options::default())?;
+    let inpainted = model.inference(&image, &mask)?;
     inpainted.save(cli.output)?;
 
     Ok(())

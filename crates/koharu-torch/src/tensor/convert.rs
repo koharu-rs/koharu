@@ -1,15 +1,15 @@
 //! Implement conversion traits for tensors
 use super::Tensor;
-use crate::{kind::Element, Device, TchError};
+use crate::{Device, Error, kind::Element};
 use half::{bf16, f16};
 use std::convert::TryFrom;
 
 impl<T: Element + Copy> TryFrom<&Tensor> for Vec<T> {
-    type Error = TchError;
+    type Error = Error;
     fn try_from(tensor: &Tensor) -> Result<Self, Self::Error> {
         let size = tensor.size();
         if size.len() != 1 {
-            Err(TchError::Convert(format!(
+            Err(Error::Convert(format!(
                 "Attempting to convert a Tensor with {} dimensions to flat vector",
                 size.len()
             )))?;
@@ -21,79 +21,18 @@ impl<T: Element + Copy> TryFrom<&Tensor> for Vec<T> {
     }
 }
 
-impl<T: Element + Copy> TryFrom<&Tensor> for Vec<Vec<T>> {
-    type Error = TchError;
-    fn try_from(tensor: &Tensor) -> Result<Self, Self::Error> {
-        let (s1, s2) = tensor.size2()?;
-        let s1 = s1 as usize;
-        let s2 = s2 as usize;
-        let num_elem = s1 * s2;
-        // TODO: Try to remove this intermediary copy.
-        let mut all_elems = vec![T::ZERO; num_elem];
-        tensor
-            .to_kind(T::KIND)?
-            .copy_data(&mut all_elems, num_elem)?;
-        let out = (0..s1)
-            .map(|i1| (0..s2).map(|i2| all_elems[i1 * s2 + i2]).collect())
-            .collect();
-        Ok(out)
-    }
-}
-
-impl<T: Element + Copy> TryFrom<&Tensor> for Vec<Vec<Vec<T>>> {
-    type Error = TchError;
-    fn try_from(tensor: &Tensor) -> Result<Self, Self::Error> {
-        let (s1, s2, s3) = tensor.size3()?;
-        let s1 = s1 as usize;
-        let s2 = s2 as usize;
-        let s3 = s3 as usize;
-        let num_elem = s1 * s2 * s3;
-        // TODO: Try to remove this intermediary copy.
-        let mut all_elems = vec![T::ZERO; num_elem];
-        tensor
-            .to_kind(T::KIND)?
-            .copy_data(&mut all_elems, num_elem)?;
-        let out = (0..s1)
-            .map(|i1| {
-                (0..s2)
-                    .map(|i2| {
-                        (0..s3)
-                            .map(|i3| all_elems[i1 * s2 * s3 + i2 * s3 + i3])
-                            .collect()
-                    })
-                    .collect()
-            })
-            .collect();
-        Ok(out)
-    }
-}
-
 impl<T: Element + Copy> TryFrom<Tensor> for Vec<T> {
-    type Error = TchError;
+    type Error = Error;
     fn try_from(tensor: Tensor) -> Result<Self, Self::Error> {
         Vec::<T>::try_from(&tensor)
     }
 }
 
-impl<T: Element + Copy> TryFrom<Tensor> for Vec<Vec<T>> {
-    type Error = TchError;
-    fn try_from(tensor: Tensor) -> Result<Self, Self::Error> {
-        Vec::<Vec<T>>::try_from(&tensor)
-    }
-}
-
-impl<T: Element + Copy> TryFrom<Tensor> for Vec<Vec<Vec<T>>> {
-    type Error = TchError;
-    fn try_from(tensor: Tensor) -> Result<Self, Self::Error> {
-        Vec::<Vec<Vec<T>>>::try_from(&tensor)
-    }
-}
-
 /// One element of a tensor that holds exactly one.
-fn element<T: Element + Copy>(tensor: &Tensor) -> Result<T, TchError> {
+fn element<T: Element + Copy>(tensor: &Tensor) -> Result<T, Error> {
     let numel = tensor.numel()?;
     if numel != 1 {
-        return Err(TchError::Convert(format!(
+        return Err(Error::Convert(format!(
             "expected exactly one element, got {numel}"
         )));
     }
@@ -108,7 +47,7 @@ fn element<T: Element + Copy>(tensor: &Tensor) -> Result<T, TchError> {
 macro_rules! from_tensor {
     ($typ:ident) => {
         impl TryFrom<&Tensor> for $typ {
-            type Error = TchError;
+            type Error = Error;
 
             fn try_from(tensor: &Tensor) -> Result<Self, Self::Error> {
                 element(tensor)
@@ -116,7 +55,7 @@ macro_rules! from_tensor {
         }
 
         impl TryFrom<Tensor> for $typ {
-            type Error = TchError;
+            type Error = Error;
 
             fn try_from(tensor: Tensor) -> Result<Self, Self::Error> {
                 element(&tensor)
@@ -137,7 +76,7 @@ from_tensor!(bool);
 from_tensor!(bf16);
 
 impl<T: Element> TryFrom<&Vec<T>> for Tensor {
-    type Error = TchError;
+    type Error = Error;
 
     fn try_from(value: &Vec<T>) -> Result<Self, Self::Error> {
         Self::from_slice(value.as_slice())
@@ -145,7 +84,7 @@ impl<T: Element> TryFrom<&Vec<T>> for Tensor {
 }
 
 impl<T: Element> TryFrom<Vec<T>> for Tensor {
-    type Error = TchError;
+    type Error = Error;
 
     fn try_from(value: Vec<T>) -> Result<Self, Self::Error> {
         Self::try_from(&value)

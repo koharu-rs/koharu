@@ -9,21 +9,25 @@ use fast_image_resize::{FilterType, ResizeAlg};
 use image::{GrayImage, Luma, RgbImage};
 use imageproc::{distance_transform::Norm, morphology::dilate};
 
+/// Pillow's default for a `resize` that names no filter, the reference script's
+/// for both inputs.
+const BICUBIC: ResizeAlg = ResizeAlg::Convolution(FilterType::CatmullRom);
 const LANCZOS: ResizeAlg = ResizeAlg::Convolution(FilterType::Lanczos3);
 
 /// The page at the model's square `resolution`.
 pub(super) fn resize_image(image: &RgbImage, resolution: u32) -> Result<RgbImage> {
-    crate::image::resize(image, resolution, resolution, LANCZOS)
+    crate::image::resize(image, resolution, resolution, BICUBIC)
 }
 
-/// The mask made binary at half, at the model's square `resolution`, and
-/// grown by `dilation` pixels there.
+/// The mask at the model's square `resolution`, made binary at half as the
+/// reference pipeline's mask processor does after the resize, and grown by
+/// `dilation` pixels there. The reference script's own dilation names an
+/// undefined variable, so it has no behavior to follow.
 pub(super) fn resize_mask(mask: &GrayImage, resolution: u32, dilation: u8) -> Result<GrayImage> {
-    let mut binary = mask.clone();
-    for pixel in binary.pixels_mut() {
+    let mut output = crate::image::resize(mask, resolution, resolution, BICUBIC)?;
+    for pixel in output.pixels_mut() {
         *pixel = Luma([if pixel.0[0] < 128 { 0 } else { 255 }]);
     }
-    let mut output = crate::image::resize(&binary, resolution, resolution, ResizeAlg::Nearest)?;
     if dilation > 0 {
         output = dilate(&output, Norm::LInf, dilation);
     }

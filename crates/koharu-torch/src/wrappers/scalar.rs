@@ -1,11 +1,11 @@
 //! Scalar elements.
 
 use koharu_torch_sys::{
-    AtenScalar, AtenScalar__bindgen_ty_1, AtenScalar__bindgen_ty_1__bindgen_ty_1, ATEN_SCALAR_BOOL,
-    ATEN_SCALAR_COMPLEX, ATEN_SCALAR_FLOAT, ATEN_SCALAR_INT,
+    ATEN_SCALAR_BOOL, ATEN_SCALAR_COMPLEX, ATEN_SCALAR_FLOAT, ATEN_SCALAR_INT, AtenScalar,
+    AtenScalar__bindgen_ty_1, AtenScalar__bindgen_ty_1__bindgen_ty_1,
 };
 
-use crate::{Result, TchError};
+use crate::{Error, Result};
 
 /// A single scalar value, of the type ATen's type promotion reads: an
 /// integer added to an integer tensor keeps it an integer tensor.
@@ -44,7 +44,7 @@ impl Scalar {
                     real: scalar.value.c.real,
                     imag: scalar.value.c.imag,
                 },
-                tag => return Err(TchError::Convert(format!("a scalar of unknown type {tag}"))),
+                tag => return Err(Error::Convert(format!("a scalar of unknown type {tag}"))),
             })
         }
     }

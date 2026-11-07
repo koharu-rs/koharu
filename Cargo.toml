@@ -83,7 +83,7 @@ llguidance = "1.9.1"
 log = "0.4.34"
 loro = "1.17.1"
 memmap2 = "0.9.11"
-minijinja = "3.0.0"
+minijinja = { version = "3.0.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
 minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
 parking_lot = "0.13.0"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "59cb4c49bd236df04d8e37d4764253f29ca6600a" }
@@ -98,9 +98,10 @@ reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking"
 revision = { version = "0.30.0", features = ["uuid"] }
 rfd = "0.17.2"
 # rig breaks its API in every release.
-rig-agent = { version = "=0.45.0", default-features = false }
-rig-core = { version = "=0.45.0", default-features = false }
-rig-reqwest = { version = "=0.45.0", default-features = false }
+rig-agent = { version = "=0.46.0", default-features = false }
+rig-core = { version = "=0.46.0", default-features = false }
+rig-memory = { version = "=0.46.0", default-features = false }
+rig-reqwest = { version = "=0.46.0", default-features = false }
 safetensors = "0.8.0"
 schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
 secrecy = "0.10.3"

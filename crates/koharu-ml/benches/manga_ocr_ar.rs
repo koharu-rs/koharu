@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::manga_ocr::MangaOcr;
+use koharu_ml::manga_ocr_ar::MangaOcrAr;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -14,10 +14,10 @@ async fn main() -> Result<()> {
 
     let device = koharu_runtime::device().await?;
     let image = image::open(&input)?;
-    let model = MangaOcr::load(device).await?;
+    let model = MangaOcrAr::load(device).await?;
 
     let warmup = model.inference(std::slice::from_ref(&image))?;
-    assert_eq!(warmup, ["対策委員会です！"]);
+    assert_eq!(warmup, ["対策委員会です!"]);
     black_box(warmup);
 
     let mut criterion = Criterion::default()
@@ -25,13 +25,17 @@ async fn main() -> Result<()> {
         .warm_up_time(Duration::from_secs(3))
         .measurement_time(Duration::from_secs(10))
         .configure_from_args();
-    let benchmark = format!("manga_ocr/inference/{}x{}", image.width(), image.height());
+    let benchmark = format!(
+        "manga_ocr_ar/inference/{}x{}",
+        image.width(),
+        image.height()
+    );
 
     criterion.bench_function(&benchmark, |bencher| {
         bencher.iter(|| {
             let text = model
                 .inference(black_box(std::slice::from_ref(&image)))
-                .expect("Manga OCR inference failed");
+                .expect("manga-ocr-ar inference failed");
             black_box(text);
         });
     });
