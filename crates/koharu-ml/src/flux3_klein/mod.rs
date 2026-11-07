@@ -90,22 +90,9 @@ pub struct Flux3Klein {
 }
 
 impl Flux3Klein {
-    /// The files `load` puts on the device, fetched first if the store doesn't
-    /// have them.
-    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
-        let paths = Self::paths().await?;
-        Ok(vec![paths.transformer, paths.text_encoder, paths.vae])
-    }
-
     /// Loads the model once for generation and inpainting, its weights
     /// placed to fit `max_vram` bytes of the device.
     pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
-        let paths = Self::paths().await?;
-        let model = Model::new(device, max_vram, &paths)?;
-        Ok(Self { model })
-    }
-
-    async fn paths() -> Result<ModelPaths> {
         let paths = async {
             // The model card's recommended file.
             let [transformer] = TRANSFORMER
@@ -122,10 +109,11 @@ impl Flux3Klein {
                 text_encoder,
                 vae,
             })
-        };
-        paths
-            .await
-            .context("failed to resolve FLUX.3 Image Klein's files")
+        }
+        .await
+        .context("failed to resolve FLUX.3 Image Klein's files")?;
+        let model = Model::new(device, max_vram, &paths)?;
+        Ok(Self { model })
     }
 
     /// Images of `prompt`, conditioned on `references`.

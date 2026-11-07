@@ -15,13 +15,11 @@ publish.workspace = true
 anyhow = { workspace = true }
 fast_image_resize = { workspace = true }
 fs-err = { workspace = true }
-futures = { workspace = true }
 icu_properties = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
 koharu-diffusion = { workspace = true }
 koharu-leptonica = { workspace = true }
-koharu-llm = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
 kurbo = { workspace = true }
@@ -40,10 +38,6 @@ tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [[bench]]
-name = "aot_inpainting"
-harness = false
-
-[[bench]]
 name = "lama"
 harness = false
 
@@ -52,7 +46,7 @@ name = "flux3_klein"
 harness = false
 
 [[bench]]
-name = "manga_ocr"
+name = "manga_ocr_ar"
 harness = false
 
 [[bench]]

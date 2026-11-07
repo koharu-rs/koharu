@@ -1,10 +1,15 @@
 //! The native packages a device needs, each pinned to a version.
 
 mod archive;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 mod cuda;
 mod ggml;
 mod host;
 mod release;
+#[cfg(all(
+    target_arch = "x86_64",
+    any(target_os = "linux", target_os = "windows")
+))]
 mod rocm;
 mod torch;
 
@@ -14,89 +19,71 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use futures::future::BoxFuture;
 
 use self::{
-    archive::{LIBRARIES, install_archive},
+    archive::{LIBRARIES, extract},
     host::Host,
     release::Release,
 };
 use crate::{Backend, Device, store};
 
-/// Installs what `gpu` needs, loads it, and removes the other versions the
-/// store holds of what it installed.
+/// A native package a GPU needs. Its folder in the store follows from the host
+/// and the GPU, so `load` finds what `download` put there.
+trait Package: Send + Sync {
+    /// Downloads it into the store.
+    fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>>;
+
+    /// Loads it from the store for the life of the process, and updates `gpu`
+    /// with what that shows.
+    fn load(&self, host: Host, gpu: &mut Device) -> Result<()>;
+
+    /// The version folders it uses in the store. A start removes the other
+    /// versions beside them.
+    fn versions(&self) -> Vec<PathBuf>;
+}
+
+/// The packages a GPU with `backend` needs, in dependency order: CUDA or ROCm,
+/// libtorch, llama.cpp, then stable-diffusion.cpp.
+fn packages(backend: Backend) -> Vec<Box<dyn Package>> {
+    let mut packages: Vec<Box<dyn Package>> = Vec::new();
+    match backend {
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        Backend::Cuda { .. } => packages.push(Box::new(cuda::Cuda)),
+        #[cfg(all(
+            target_arch = "x86_64",
+            any(target_os = "linux", target_os = "windows")
+        ))]
+        Backend::Rocm { target } => packages.push(Box::new(rocm::Rocm { target })),
+        _ => {}
+    }
+    packages.push(Box::new(torch::Torch));
+    packages.push(Box::new(ggml::Llama));
+    packages.push(Box::new(ggml::Diffusion));
+    packages
+}
+
+/// Downloads what `gpu` needs and loads it. Everything downloads before anything
+/// loads, so a transfer that fails leaves nothing loaded. Old versions go in
+/// the background, so models don't wait for them. Returns `gpu` as its packages
+/// see it.
 pub(crate) async fn start(gpu: &Device) -> Result<Device> {
-    let installed = Installed::install(Host::current()?, gpu.backend).await?;
-    let device = installed.load(gpu)?;
-    store::remove_others(installed.versions()).await;
-    Ok(device)
-}
-
-/// The folders of the packages a GPU needs. Everything installs before
-/// anything loads, so a transfer that fails leaves nothing loaded.
-struct Installed {
-    /// CUDA's wheels, for an NVIDIA GPU.
-    cuda: Option<Vec<PathBuf>>,
-    /// ROCm, for an AMD GPU.
-    rocm: Option<PathBuf>,
-    libtorch: PathBuf,
-    /// Koharu's C shim to libtorch.
-    shim: PathBuf,
-    llama: PathBuf,
-    diffusion: PathBuf,
-}
-
-impl Installed {
-    async fn install(host: Host, backend: Backend) -> Result<Self> {
-        let cuda = match backend {
-            Backend::Cuda { .. } => Some(cuda::install(host).await?),
-            _ => None,
-        };
-        let rocm = match backend {
-            Backend::Rocm { target } => Some(rocm::install(host, target).await?),
-            _ => None,
-        };
-        let (libtorch, shim) = torch::install(host, backend).await?;
-        Ok(Self {
-            cuda,
-            rocm,
-            libtorch,
-            shim,
-            llama: ggml::LLAMA.install(host, backend, |_| true).await?,
-            diffusion: ggml::DIFFUSION.install(host, backend, |_| true).await?,
-        })
+    let host = Host::current()?;
+    let packages = packages(gpu.backend);
+    for package in &packages {
+        package.download(host, gpu.backend).await?;
     }
-
-    /// Loads the packages in dependency order: CUDA or ROCm, libtorch,
-    /// llama.cpp, then stable-diffusion.cpp. Returns `gpu` as llama.cpp lists
-    /// it.
-    fn load(&self, gpu: &Device) -> Result<Device> {
-        let mut gpu = gpu.clone();
-        if let Some(cuda) = &self.cuda {
-            cuda::load(cuda)?;
-        }
-        if let (Some(rocm), Backend::Rocm { target }) = (&self.rocm, gpu.backend) {
-            gpu.index = rocm::load(rocm, target)?;
-            gpu.name = format!("ROCm{}", gpu.index);
-        }
-        torch::load(gpu.backend, &self.libtorch, &self.shim)?;
-        ggml::load_llama(&self.llama)?;
-        let device = ggml::listed(&gpu)?;
-        ggml::load_diffusion(&self.diffusion)?;
-        Ok(device)
+    let mut gpu = gpu.clone();
+    for package in &packages {
+        package.load(host, &mut gpu)?;
     }
-
-    /// The version folders installed: CUDA's wheels install at theirs, and
-    /// the other packages one level below theirs.
-    fn versions(self) -> Vec<PathBuf> {
-        let mut versions = self.cuda.unwrap_or_default();
-        versions.extend(
-            self.rocm
-                .iter()
-                .chain([&self.libtorch, &self.shim, &self.llama, &self.diffusion])
-                .filter_map(|folder| folder.parent().map(Path::to_owned)),
-        );
-        versions
-    }
+    tokio::spawn(store::remove_others(
+        packages
+            .iter()
+            .flat_map(|package| package.versions())
+            .collect(),
+    ));
+    Ok(gpu)
 }
 
 /// Loads a library that bound ones depend on (CUDA's, ROCm's, and libtorch's

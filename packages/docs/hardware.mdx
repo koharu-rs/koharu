@@ -31,8 +31,8 @@ Startup chooses a shared ML device from the available backends: Metal on Apple s
   </Tab>
   <Tab title='Vulkan and CPU'>
     Vulkan provides an accelerator option on Windows and Linux for llama.cpp and diffusion models,
-    such as local translation, PaddleOCR-VL, FLUX.2 Klein, and RORem. Torch has no Vulkan build, so
-    detection, the other OCR models, LaMa, and AOT run on CPU on a Vulkan-only machine. If no
+    such as local translation, FLUX.2 Klein, and RORem. Torch has no Vulkan build, so
+    detection, the other OCR models, and LaMa run on CPU on a Vulkan-only machine. If no
     complete accelerator path initializes, Koharu falls back to CPU. CPU inference requires no GPU
     SDK and is slower.
   </Tab>

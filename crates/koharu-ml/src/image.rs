@@ -1,4 +1,4 @@
-//! The resize every processor goes through, each naming the filter its
+//! The resize most processors go through, each naming the filter its
 //! upstream resizes with, and reflect padding's mirrored index.
 
 use anyhow::{Context, Result};
@@ -7,6 +7,11 @@ use image::{ImageBuffer, Pixel};
 
 /// `image` resized to `width` by `height` with `algorithm`; one already that
 /// size is copied as it is.
+///
+/// Pillow and torchvision go horizontally first and clip to `u8` between their
+/// passes. Asked for both at once, `fast_image_resize` goes vertically first on
+/// `u8`, which differs by tens of levels where a filter overshoots at a text
+/// edge, so each pass is asked for on its own.
 pub(crate) fn resize<P>(
     image: &ImageBuffer<P, Vec<u8>>,
     width: u32,
@@ -17,13 +22,15 @@ where
     P: Pixel<Subpixel = u8>,
     ImageBuffer<P, Vec<u8>>: IntoImageView + IntoImageViewMut,
 {
+    let options = ResizeOptions::new().resize_alg(algorithm).use_alpha(false);
+    let mut resizer = Resizer::new();
+    let mut horizontal = ImageBuffer::new(width, image.height());
+    resizer
+        .resize(image, &mut horizontal, &options)
+        .context("failed to resize an image")?;
     let mut output = ImageBuffer::new(width, height);
-    Resizer::new()
-        .resize(
-            image,
-            &mut output,
-            &ResizeOptions::new().resize_alg(algorithm).use_alpha(false),
-        )
+    resizer
+        .resize(&horizontal, &mut output, &options)
         .context("failed to resize an image")?;
     Ok(output)
 }

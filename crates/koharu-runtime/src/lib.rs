@@ -14,7 +14,7 @@ pub use device::{Backend, Device, Memory};
 pub use huggingface::Repository;
 pub use transfer::{State, Transfer, transfers};
 
-/// Where every model runs: the best GPU, once what it needs is installed and
+/// Where every model runs: the best GPU, once what it needs is downloaded and
 /// loaded. Every caller shares that start, and a failed one is tried again on
 /// the next call.
 pub async fn device() -> anyhow::Result<&'static Device> {

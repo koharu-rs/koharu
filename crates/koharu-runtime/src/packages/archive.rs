@@ -18,7 +18,7 @@ pub(super) const LIBRARIES: &[&str] = &["**/*.dll", "**/*.dylib", "**/*.so", "**
 
 /// Fetches an archive into `stage`, on the store's own volume, and extracts
 /// the files matching `patterns` off the async threads.
-pub(super) async fn install_archive(
+pub(super) async fn extract(
     url: &str,
     stage: &Path,
     patterns: &'static [&'static str],
@@ -31,14 +31,14 @@ pub(super) async fn install_archive(
     transfer::fetch(url, &archive).await?;
     let stage = stage.to_owned();
     tokio::task::spawn_blocking(move || {
-        extract(&archive, &stage, patterns)?;
+        unpack(&archive, &stage, patterns)?;
         std::fs::remove_file(&archive)?;
         Ok(())
     })
     .await?
 }
 
-fn extract(archive: &Path, destination: &Path, patterns: &[&str]) -> Result<()> {
+fn unpack(archive: &Path, destination: &Path, patterns: &[&str]) -> Result<()> {
     let selected = |path: &Path| {
         patterns
             .iter()

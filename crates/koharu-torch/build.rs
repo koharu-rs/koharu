@@ -8,10 +8,7 @@ use std::{collections::BTreeSet, env, fs, path::PathBuf};
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{FnArg, Item, Pat};
-
-/// What the shim's operator functions are named after.
-const PREFIX: &str = "aten_";
+use syn::{FnArg, Item, ItemFn, Pat};
 
 /// The parameters a factory's TensorOptions become, which a caller passes as
 /// one `(Kind, Device)`.
@@ -26,72 +23,43 @@ const OPTIONS: [(&str, &str); 5] = [
 fn main() {
     let bindings = env::var("DEP_KOHARU_TORCH_BINDINGS").expect("koharu-torch-sys passes it");
     println!("cargo::rerun-if-changed={bindings}");
-    let source = fs::read_to_string(&bindings)
-        .unwrap_or_else(|error| panic!("couldn't read {bindings}: {error}"));
-    let file = syn::parse_file(&source).expect("bindgen writes Rust");
-    // The shim's hand-written functions share the operators' prefix, so
-    // koharu-torch-sys lists the operators.
-    let list = env::var("DEP_KOHARU_TORCH_OPERATORS").expect("koharu-torch-sys passes it");
-    println!("cargo::rerun-if-changed={list}");
-    let operators =
-        fs::read_to_string(&list).unwrap_or_else(|error| panic!("couldn't read {list}: {error}"));
-    let operators: BTreeSet<&str> = operators.lines().collect();
+    let bindings = fs::read_to_string(bindings).expect("couldn't read the bindings");
+    let file = syn::parse_file(&bindings).expect("bindgen writes Rust");
+    // The shim's hand-written functions share the operators' prefix, so only
+    // this header tells them apart.
+    let header = env::var("DEP_KOHARU_TORCH_OPERATORS").expect("koharu-torch-sys passes it");
+    println!("cargo::rerun-if-changed={header}");
+    let header = fs::read_to_string(header).expect("couldn't read the operators' header");
+    let operators: BTreeSet<&str> = header
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .collect();
 
-    let mut names = BTreeSet::new();
-    let mut functions = Vec::new();
-    for item in file.items {
-        let Item::Fn(function) = item else {
-            continue;
-        };
-        let c_name = function.sig.ident;
-        if !operators.contains(c_name.to_string().as_str()) {
-            continue;
-        }
-        let operator = c_name
-            .to_string()
-            .strip_prefix(PREFIX)
-            .unwrap_or_else(|| panic!("operator `{c_name}` isn't named after `{PREFIX}`"))
-            .to_owned();
-        let parameters = function
-            .sig
-            .inputs
-            .iter()
-            .map(|input| {
-                let FnArg::Typed(argument) = input else {
-                    panic!("`{c_name}` takes a receiver");
-                };
-                let Pat::Ident(name) = argument.pat.as_ref() else {
-                    panic!("`{c_name}` has an unnamed parameter");
-                };
-                let ty = argument.ty.as_ref();
-                (
-                    name.ident.to_string(),
-                    quote!(#ty).to_string().replace(' ', ""),
-                )
-            })
-            .collect::<Vec<_>>();
-        let name = name(&operator);
-        assert!(
-            names.insert(name.to_string()),
-            "two operators are named `{name}`"
-        );
-        if let Some(function) = operator_function(&c_name, &name, &parameters) {
-            functions.push(function);
-        }
-    }
+    let functions: Vec<TokenStream> = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Fn(function) if operators.contains(function.sig.ident.to_string().as_str()) => {
+                operator_function(function)
+            }
+            _ => None,
+        })
+        .collect();
 
     let file = syn::parse2::<syn::File>(quote! { impl Tensor { #(#functions)* } })
         .expect("the generated methods are valid Rust");
     let path =
         PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets it")).join("tensor_generated.rs");
-    fs::write(&path, prettyplease::unparse(&file))
-        .unwrap_or_else(|error| panic!("couldn't write {}: {error}", path.display()));
+    fs::write(path, prettyplease::unparse(&file)).expect("couldn't write the methods");
 }
 
-/// The operator's Rust name: its C name in lower case, with `internal_` for
-/// the leading underscores of a private operator.
-fn name(operator: &str) -> Ident {
-    let lower = operator.to_lowercase();
+/// The operator's Rust name: its C name in lower case without `aten_`, with
+/// `internal_` for the leading underscores of a private operator.
+fn name(c_name: &Ident) -> Ident {
+    let lower = c_name
+        .to_string()
+        .strip_prefix("aten_")
+        .expect("the shim names its operators `aten_*`")
+        .to_lowercase();
     let public = lower.trim_start_matches('_');
     let name = if public.len() == lower.len() {
         lower.clone()
@@ -112,6 +80,12 @@ struct Function {
 }
 
 impl Function {
+    /// An argument the C function takes as `argument`, with nothing to set up.
+    fn plain(&mut self, parameter: &Ident, ty: TokenStream, argument: TokenStream) {
+        self.inputs.push(quote! { #parameter: #ty });
+        self.arguments.push(argument);
+    }
+
     /// An optional argument: `value` is an `Option`, and the C function takes
     /// a pointer to it, null for `None`.
     fn optional(&mut self, parameter: &Ident, ty: TokenStream, value: TokenStream) {
@@ -144,29 +118,33 @@ impl Function {
             #parameter.map_or(0, |list| list.len() as i64)
         });
     }
-
-    /// A result the C function writes through a pointer to `initial`.
-    fn result(
-        &mut self,
-        parameter: &Ident,
-        initial: TokenStream,
-        ty: TokenStream,
-        value: TokenStream,
-    ) {
-        self.setup.push(quote! { let mut #parameter = #initial; });
-        self.arguments.push(quote! { &mut #parameter });
-        self.results.push((ty, value));
-    }
 }
 
-/// The method or function calling `c_name`, or `None` for an operator that
-/// takes a fixed-length bool list: the shim reads the schema's length, which
-/// the binding doesn't carry, so a shorter slice would be read past its end.
-fn operator_function(
-    c_name: &Ident,
-    name: &Ident,
-    parameters: &[(String, String)],
-) -> Option<TokenStream> {
+/// The method or function calling the operator's C function, or `None` for one
+/// that takes a fixed-length bool list: the shim reads the schema's length,
+/// which the binding doesn't carry, so a shorter slice would be read past its
+/// end.
+fn operator_function(c_function: &ItemFn) -> Option<TokenStream> {
+    let c_name = &c_function.sig.ident;
+    let parameters: Vec<(String, String)> = c_function
+        .sig
+        .inputs
+        .iter()
+        .map(|input| {
+            let FnArg::Typed(argument) = input else {
+                unreachable!("a wrapper has no receiver");
+            };
+            let Pat::Ident(name) = argument.pat.as_ref() else {
+                unreachable!("a wrapper names its parameters");
+            };
+            let ty = argument.ty.as_ref();
+            (
+                name.ident.to_string(),
+                quote!(#ty).to_string().replace(' ', ""),
+            )
+        })
+        .collect();
+
     let mut function = Function::default();
     let mut index = 0;
     while index < parameters.len() {
@@ -179,68 +157,59 @@ fn operator_function(
         } else {
             parameter
         };
-        let next = |suffix: &str| {
-            parameters
-                .get(index + 1)
-                .is_some_and(|(next, _)| *next == format!("{header_name}{suffix}"))
-        };
+        // The length or device index that goes with this parameter.
+        let paired = parameters
+            .get(index + 1)
+            .and_then(|(next, _)| next.strip_prefix(header_name))
+            .filter(|suffix| matches!(*suffix, "_len_" | "_index_"));
 
         if parameter
             .strip_prefix("ret")
             .is_some_and(|n| n.parse::<u32>().is_ok())
         {
-            match (ty.as_str(), next("_len_")) {
-                ("*mutAtenTensorHandle", false) => function.result(
-                    &ident,
-                    quote! { std::ptr::null_mut() },
+            let len = format_ident!("{parameter}_len_");
+            let null = quote! { std::ptr::null_mut() };
+            let (initial, output, value) = match (ty.as_str(), paired) {
+                ("*mutAtenTensorHandle", None) => (
+                    null,
                     quote! { Tensor },
                     quote! { Tensor { c_tensor: #ident } },
                 ),
-                ("*mut*mutAtenTensorHandle", true) => {
-                    let len = format_ident!("{parameter}_len_");
+                ("*mut*mutAtenTensorHandle", Some("_len_")) => {
                     function.setup.push(quote! { let mut #len = 0; });
-                    function.result(
-                        &ident,
-                        quote! { std::ptr::null_mut() },
+                    (
+                        null,
                         quote! { Vec<Tensor> },
                         quote! { unsafe { Tensor::from_array(#ident, #len) } },
-                    );
-                    function.arguments.push(quote! { &mut #len });
-                    index += 1;
+                    )
                 }
-                ("*muti64", false) => {
-                    function.result(&ident, quote! { 0 }, quote! { i64 }, quote! { #ident })
-                }
-                ("*mutf64", false) => {
-                    function.result(&ident, quote! { 0.0 }, quote! { f64 }, quote! { #ident })
-                }
-                ("*mutAtenBool", false) => function.result(
-                    &ident,
-                    quote! { 0 },
-                    quote! { bool },
-                    quote! { #ident != 0 },
-                ),
-                ("*mutAtenDtype", false) => function.result(
-                    &ident,
+                ("*muti64", None) => (quote! { 0 }, quote! { i64 }, quote! { #ident }),
+                ("*mutf64", None) => (quote! { 0.0 }, quote! { f64 }, quote! { #ident }),
+                ("*mutAtenBool", None) => (quote! { 0 }, quote! { bool }, quote! { #ident != 0 }),
+                ("*mutAtenDtype", None) => (
                     quote! { 0 },
                     quote! { Kind },
                     quote! { Kind::from_c_int(#ident)? },
                 ),
-                ("*mutAtenQScheme", false) => function.result(
-                    &ident,
+                ("*mutAtenQScheme", None) => (
                     quote! { 0 },
                     quote! { QScheme },
                     quote! { QScheme::from_c_int(#ident)? },
                 ),
-                ("*mutAtenScalar", false) => function.result(
-                    &ident,
+                ("*mutAtenScalar", None) => (
                     quote! { Scalar::Int(0).c_scalar() },
                     quote! { Scalar },
                     quote! { Scalar::from_c_scalar(#ident)? },
                 ),
                 _ => panic!("`{c_name}` returns `{parameter}: {ty}`, which has no Rust type here"),
+            };
+            function.setup.push(quote! { let mut #ident = #initial; });
+            function.arguments.push(quote! { &mut #ident });
+            if paired.is_some() {
+                function.arguments.push(quote! { &mut #len });
             }
-            index += 1;
+            function.results.push((output, value));
+            index += 1 + usize::from(paired.is_some());
             continue;
         }
         assert!(
@@ -277,29 +246,27 @@ fn operator_function(
             continue;
         }
 
-        let (len, device_index) = (next("_len_"), next("_index_"));
-        match (ty.as_str(), len, device_index) {
+        match (ty.as_str(), paired) {
             // The schema's `self`, wherever it is, as in where.self(condition,
             // self, other).
-            ("AtenTensorHandle", false, false) if parameter == "self_" => {
+            ("AtenTensorHandle", None) if parameter == "self_" => {
                 function.receiver = true;
                 function.arguments.push(quote! { self.c_tensor });
             }
-            ("AtenTensorHandle", false, false) => {
-                function.inputs.push(quote! { #ident: &Tensor });
-                function.arguments.push(quote! { #ident.c_tensor });
+            ("AtenTensorHandle", None) => {
+                function.plain(&ident, quote! { &Tensor }, quote! { #ident.c_tensor })
             }
-            ("*mutAtenTensorHandle", false, false) => function.optional(
+            ("*mutAtenTensorHandle", None) => function.optional(
                 &ident,
                 quote! { Option<&Tensor> },
                 quote! { #ident.map(|tensor| tensor.c_tensor) },
             ),
-            ("*constAtenTensorHandle", true, false) => function.list(
+            ("*constAtenTensorHandle", Some("_len_")) => function.list(
                 &ident,
                 quote! { &[impl Borrow<Tensor>] },
                 quote! { #ident.iter().map(|tensor| tensor.borrow().c_tensor).collect::<Vec<_>>() },
             ),
-            ("*mut*constAtenTensorHandle", true, false) => {
+            ("*mut*constAtenTensorHandle", Some("_len_")) => {
                 let pointers = format_ident!("{parameter}__pointers");
                 function.inputs.push(quote! { #ident: &[Option<&Tensor>] });
                 function.setup.push(quote! {
@@ -316,72 +283,67 @@ fn operator_function(
                     .arguments
                     .push(quote! { #pointers.as_mut_ptr(), #pointers.len() as i64 });
             }
-            ("i64", false, false) | ("f64", false, false) | ("i32", false, false) => {
+            ("i64" | "f64" | "i32", None) => {
                 let ty = format_ident!("{ty}");
-                function.inputs.push(quote! { #ident: #ty });
-                function.arguments.push(quote! { #ident });
+                function.plain(&ident, quote! { #ty }, quote! { #ident });
             }
-            ("*muti64", false, false) => function.optional(
+            ("*muti64", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<i64>> },
                 quote! { #ident.into() },
             ),
-            ("*mutf64", false, false) => function.optional(
+            ("*mutf64", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<f64>> },
                 quote! { #ident.into() },
             ),
-            ("*consti64", true, false) => function.list(
+            ("*consti64", Some("_len_")) => function.list(
                 &ident,
                 quote! { impl IntList },
                 quote! { #ident.int_list() },
             ),
-            ("*mut*consti64", true, false) => function.optional_list(
+            ("*mut*consti64", Some("_len_")) => function.optional_list(
                 &ident,
                 quote! { impl IntListOption },
                 quote! { #ident.int_list_option() },
             ),
-            ("*mut*constf64", true, false) => {
+            ("*mut*constf64", Some("_len_")) => {
                 function.optional_list(&ident, quote! { Option<&[f64]> }, quote! { #ident })
             }
-            ("AtenBool", false, false) => {
-                function.inputs.push(quote! { #ident: bool });
-                function.arguments.push(quote! { i32::from(#ident) });
+            ("AtenBool", None) => {
+                function.plain(&ident, quote! { bool }, quote! { i32::from(#ident) })
             }
-            ("*mutAtenBool", false, false) => function.optional(
+            ("*mutAtenBool", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<bool>> },
                 quote! { #ident.into().map(i32::from) },
             ),
-            ("*constAtenBool", true, false) => return None,
-            ("AtenDtype", false, false) => {
-                function.inputs.push(quote! { #ident: Kind });
-                function.arguments.push(quote! { #ident.c_int() });
+            ("*constAtenBool", Some("_len_")) => return None,
+            ("AtenDtype", None) => {
+                function.plain(&ident, quote! { Kind }, quote! { #ident.c_int() })
             }
-            ("*mutAtenDtype", false, false) => function.optional(
+            ("*mutAtenDtype", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<Kind>> },
                 quote! { #ident.into().map(Kind::c_int) },
             ),
-            ("AtenLayout", false, false) => {
-                function.inputs.push(quote! { #ident: Layout });
-                function.arguments.push(quote! { #ident.c_int() });
+            ("AtenLayout", None) => {
+                function.plain(&ident, quote! { Layout }, quote! { #ident.c_int() })
             }
-            ("*mutAtenLayout", false, false) => function.optional(
+            ("*mutAtenLayout", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<Layout>> },
                 quote! { #ident.into().map(Layout::c_int) },
             ),
-            ("AtenMemoryFormat", false, false) => {
-                function.inputs.push(quote! { #ident: MemoryFormat });
-                function.arguments.push(quote! { #ident.c_int() });
+            ("AtenMemoryFormat", None) => {
+                function.plain(&ident, quote! { MemoryFormat }, quote! { #ident.c_int() })
             }
-            ("*mutAtenMemoryFormat", false, false) => function.optional(
+            ("*mutAtenMemoryFormat", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<MemoryFormat>> },
                 quote! { #ident.into().map(MemoryFormat::c_int) },
             ),
-            ("AtenDeviceType", false, true) => {
+            ("AtenDeviceType", Some("_index_")) => {
                 let (device, index) = (
                     format_ident!("{parameter}__type"),
                     format_ident!("{parameter}__index"),
@@ -392,7 +354,7 @@ fn operator_function(
                     .push(quote! { let (#device, #index) = #ident.c_parts(); });
                 function.arguments.push(quote! { #device, #index });
             }
-            ("*mutAtenDeviceType", false, true) => {
+            ("*mutAtenDeviceType", Some("_index_")) => {
                 let (device, index) = (
                     format_ident!("{parameter}__type"),
                     format_ident!("{parameter}__index"),
@@ -409,28 +371,29 @@ fn operator_function(
                     #device.as_mut().map_or(std::ptr::null_mut(), |device| device as *mut _), #index
                 });
             }
-            ("AtenScalar", false, false) => {
-                function.inputs.push(quote! { #ident: impl Into<Scalar> });
-                function.arguments.push(quote! { #ident.into().c_scalar() });
-            }
-            ("*mutAtenScalar", false, false) => function.optional(
+            ("AtenScalar", None) => function.plain(
+                &ident,
+                quote! { impl Into<Scalar> },
+                quote! { #ident.into().c_scalar() },
+            ),
+            ("*mutAtenScalar", None) => function.optional(
                 &ident,
                 quote! { impl Into<Option<Scalar>> },
                 quote! { #ident.into().map(Scalar::c_scalar) },
             ),
-            ("*constAtenScalar", true, false) => function.list(
+            ("*constAtenScalar", Some("_len_")) => function.list(
                 &ident,
                 quote! { &[Scalar] },
                 quote! { #ident.iter().map(|scalar| scalar.c_scalar()).collect::<Vec<_>>() },
             ),
-            ("*const::std::os::raw::c_char", false, false) => {
+            ("*const::std::os::raw::c_char", None) => {
                 function.inputs.push(quote! { #ident: &str });
                 function
                     .setup
                     .push(quote! { let #ident = std::ffi::CString::new(#ident)?; });
                 function.arguments.push(quote! { #ident.as_ptr() });
             }
-            ("*mut*const::std::os::raw::c_char", false, false) => {
+            ("*mut*const::std::os::raw::c_char", None) => {
                 let pointer = format_ident!("{parameter}__pointer");
                 function.inputs.push(quote! { #ident: Option<&str> });
                 function.setup.push(quote! {
@@ -441,14 +404,14 @@ fn operator_function(
                     #pointer.as_mut().map_or(std::ptr::null_mut(), |pointer| pointer as *mut _)
                 });
             }
-            ("*mutAtenGeneratorHandle", false, false) => function.optional(
+            ("*mutAtenGeneratorHandle", None) => function.optional(
                 &ident,
                 quote! { Option<&Generator> },
                 quote! { #ident.map(|generator| generator.c_generator) },
             ),
             _ => panic!("`{c_name}` takes `{parameter}: {ty}`, which has no Rust type here"),
         }
-        index += 1 + usize::from(len) + usize::from(device_index);
+        index += 1 + usize::from(paired.is_some());
     }
 
     let Function {
@@ -458,6 +421,7 @@ fn operator_function(
         arguments,
         results,
     } = function;
+    let name = name(c_name);
     let receiver = receiver.then(|| quote! { &self, });
     let (types, values): (Vec<_>, Vec<_>) = results.into_iter().unzip();
     let (output, value) = match types.len() {

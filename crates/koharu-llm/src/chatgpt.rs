@@ -3,18 +3,14 @@
 
 use anyhow::{Context, Result, bail};
 use rig_core::{
-    driver::DynModel,
+    catalog::Catalog,
     error::BoxError,
-    operation::Completion,
-    providers::{
-        chatgpt::{
-            self,
-            auth::{
-                AuthSource, Authenticator, DeviceCodeHandler, DeviceCodePrompt, SignInMethod,
-                SignInPrompt, TokenStore,
-            },
+    providers::chatgpt::{
+        self,
+        auth::{
+            AuthSource, Authenticator, DeviceCodeHandler, DeviceCodePrompt, SignInMethod,
+            SignInPrompt, TokenStore,
         },
-        openai::OpenAIConfig,
     },
     wasm_compat::WasmBoxedFuture,
 };
@@ -25,12 +21,12 @@ use crate::{ModelInfo, Provider, hosted::Http};
 
 /// rig's sign-in record, kept as a secret under the key rig names,
 /// `chatgpt`.
-struct Secrets;
+pub(crate) struct Secrets;
 
 impl TokenStore for Secrets {
     fn load<'a>(&'a self, key: &'a str) -> WasmBoxedFuture<'a, Result<Option<String>, BoxError>> {
         Box::pin(async move {
-            Ok(koharu_config::secret(key)?.map(|record| record.expose_secret().to_owned()))
+            Ok(koharu_config::secrets::get(key)?.map(|record| record.expose_secret().to_owned()))
         })
     }
 
@@ -39,11 +35,16 @@ impl TokenStore for Secrets {
         key: &'a str,
         record: &'a str,
     ) -> WasmBoxedFuture<'a, Result<(), BoxError>> {
-        Box::pin(async move { Ok(koharu_config::set_secret(key, &SecretString::from(record))?) })
+        Box::pin(async move {
+            Ok(koharu_config::secrets::set(
+                key,
+                &SecretString::from(record),
+            )?)
+        })
     }
 
     fn delete<'a>(&'a self, key: &'a str) -> WasmBoxedFuture<'a, Result<(), BoxError>> {
-        Box::pin(async move { Ok(koharu_config::delete_secret(key)?) })
+        Box::pin(async move { Ok(koharu_config::secrets::delete(key)?) })
     }
 }
 
@@ -72,21 +73,17 @@ pub async fn sign_out() -> Result<()> {
     Ok(())
 }
 
-/// `id` with the signed-in plan's current token, refreshed by rig when it
-/// has expired.
-pub(crate) async fn model(id: &str, http: Http) -> Result<DynModel<Completion>> {
-    let context = authenticator(DeviceCodeHandler::default())
-        .auth_context(&http)
-        .await
-        .context("ChatGPT isn't signed in")?;
-    let mut config = OpenAIConfig::with_key(&chatgpt::DIALECT, context.api_key);
-    config.account_id = context.account_id;
-    Ok(config.connect(http).completion(id).erase())
+/// The HTTP client for the signed-in plan's models.
+pub(crate) fn http() -> Result<Http> {
+    if koharu_config::secrets::get(chatgpt::PROVIDER_NAME)?.is_none() {
+        bail!("ChatGPT isn't signed in");
+    }
+    Ok(Http::signed_in(authenticator(DeviceCodeHandler::default())))
 }
 
 /// Codex's model list for the signed-in plan, or none when nobody signed in.
 pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
-    if koharu_config::secret(chatgpt::PROVIDER_NAME)?.is_none() {
+    if koharu_config::secrets::get(chatgpt::PROVIDER_NAME)?.is_none() {
         return Ok(Vec::new());
     }
     let context = authenticator(DeviceCodeHandler::default())
@@ -108,6 +105,8 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
         .get("models")
         .and_then(Value::as_array)
         .context("Codex's model list has no `models` array")?;
+    let vendor = Provider::ChatGpt.vendor();
+    let catalog = Catalog::builtin();
     Ok(models
         .iter()
         .filter(|model| {
@@ -119,24 +118,23 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
         })
         .filter_map(|model| {
             let id = model.get("slug")?.as_str()?.to_owned();
+            let name = model
+                .get("display_name")
+                .and_then(Value::as_str)
+                .unwrap_or(&id)
+                .to_owned();
             let reasoning = model
                 .get("supported_reasoning_levels")
                 .and_then(Value::as_array)
                 .is_some_and(|levels| !levels.is_empty());
+            let spec = vendor
+                .and_then(|vendor| catalog.get(vendor, &id))
+                .map(|found| found.spec);
             Some(ModelInfo {
-                provider: Provider::ChatGpt,
-                name: model
-                    .get("display_name")
-                    .and_then(Value::as_str)
-                    .unwrap_or(&id)
-                    .to_owned(),
-                id,
-                quantizations: Vec::new(),
                 images: true,
                 tools: true,
                 reasoning,
-                json: Provider::ChatGpt.json(),
-                languages: None,
+                ..ModelInfo::hosted(Provider::ChatGpt, id, name, spec)
             })
         })
         .collect())

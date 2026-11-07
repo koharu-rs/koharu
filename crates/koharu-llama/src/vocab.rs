@@ -562,6 +562,8 @@ pub enum VocabType {
     PLAMO2 = koharu_llama_sys::LLAMA_VOCAB_TYPE_PLAMO2 as _,
     /// Dummy tokenizer for testing: rolling hash of fixed-size chunks -> tokens, tokens -> hex
     TEST = koharu_llama_sys::LLAMA_VOCAB_TYPE_TEST as _,
+    /// PLaMo-3 tokenizer with pre-segmentation and dynamic programming
+    PLAMO3 = koharu_llama_sys::LLAMA_VOCAB_TYPE_PLAMO3 as _,
 }
 
 /// There was an error converting a `llama_vocab_type` to a `VocabType`.

@@ -10,8 +10,7 @@ Koharu is a local-first manga translator: a Rust workspace with a TypeScript int
 
 ## Changes
 
-- Never add backward compatibility. When an API, schema, file format, configuration, or ownership boundary changes, update every in-repository consumer and delete the replaced form: no alias, forwarding layer, compatibility parser, upgrade decoder, stub, or disabled flag.
-- Removing a subsystem removes its calls and dependencies in the same change.
+- Never add backward compatibility. When an API, schema, file format, configuration, or ownership boundary changes, delete the replaced form: no alias, forwarding layer, compatibility parser, upgrade decoder, stub, or disabled flag.
 - Prefer a coherent ownership redesign over cosmetic renaming. Defaults and provider-specific behavior belong to the component that owns them, not to a central list of special cases.
 - Make the smallest change that solves the problem. Leave unrelated configuration, documentation, generated files, and workflows alone. A feature does not land beside drive-by cleanup.
 - When two changes implement the same workflow, keep one and extend the existing command or configuration.
@@ -67,7 +66,6 @@ Koharu is a local-first manga translator: a Rust workspace with a TypeScript int
 
 ## Contributing
 
-- A new product feature, significant UI change, model or provider integration, platform integration, public API, schema change, or architectural refactor needs an issue discussion first. Small fixes, documentation, translations, and tests can go straight to a pull request.
 - A human reviews the whole diff and can explain every change. Do not submit an unreviewed autonomous patch.
 - Keep pull-request text short: problem, change, and verification.
 - Never add an AI assistant as a commit co-author, for example through a `Co-Authored-By` trailer.

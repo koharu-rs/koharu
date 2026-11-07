@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::lama::{Lama, Options};
+use koharu_ml::lama::Lama;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -18,7 +18,6 @@ async fn main() -> Result<()> {
 
     let device = koharu_runtime::device().await?;
     let model = Lama::load(device).await?;
-    let config = Options::default();
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -29,7 +28,7 @@ async fn main() -> Result<()> {
     criterion.bench_function("lama/inference/3840x2074", |bencher| {
         bencher.iter(|| {
             let output = model
-                .inference(black_box(&image), black_box(&mask), black_box(&config))
+                .inference(black_box(&image), black_box(&mask))
                 .expect("LaMa inference failed");
             black_box(output);
         });

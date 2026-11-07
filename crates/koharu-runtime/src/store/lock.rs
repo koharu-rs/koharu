@@ -1,37 +1,35 @@
-use std::{
-    fs::{File, OpenOptions},
-    path::Path,
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use fs_err::{File, OpenOptions};
 
-/// Locks `target` against every other install of it, in this process or
-/// another, until the returned file closes.
-pub(super) async fn lock(target: &Path) -> Result<File> {
-    let parent = target
-        .parent()
-        .with_context(|| format!("{} has no parent directory", target.display()))?;
-    tokio::fs::create_dir_all(parent)
-        .await
-        .with_context(|| format!("failed to create {}", parent.display()))?;
-
+/// The lock file beside `target`.
+pub(super) fn lock_file(target: &Path) -> Result<PathBuf> {
     let name = target
         .file_name()
-        .with_context(|| format!("{} has no file name", target.display()))?
-        .to_string_lossy();
-    let path = target.with_file_name(format!(".{name}.lock"));
-    tokio::task::spawn_blocking(move || {
+        .with_context(|| format!("{} has no file name", target.display()))?;
+    Ok(target.with_file_name(format!(".{}.lock", name.to_string_lossy())))
+}
+
+/// Locks `target` against every other use of it, in this process or another,
+/// until the returned file closes.
+pub(super) async fn lock(target: &Path) -> Result<File> {
+    let path = lock_file(target)?;
+    let parent = target
+        .parent()
+        .with_context(|| format!("{} has no parent folder", target.display()))?
+        .to_owned();
+    let file = tokio::task::spawn_blocking(move || -> std::io::Result<_> {
+        fs_err::create_dir_all(parent)?;
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .open(&path)
-            .with_context(|| format!("failed to open {}", path.display()))?;
-        file.lock()
-            .with_context(|| format!("failed to lock {}", path.display()))?;
+            .open(path)?;
+        file.lock()?;
         Ok(file)
     })
-    .await
-    .context("runtime store lock task failed")?
+    .await??;
+    Ok(file)
 }

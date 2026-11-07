@@ -2,26 +2,25 @@
 
 mod agent;
 mod chatgpt;
+mod context;
 mod hosted;
 mod local;
+mod model;
 
-use std::path::Path;
-
-use anyhow::{Context, Result, bail};
-use rig_core::{
-    completion::{CompletionRequest, Message},
-    driver::DynModel,
-    operation::Completion,
-};
+use anyhow::Result;
+use rig_core::catalog::Pricing;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 pub use agent::{Agent, AgentConfig, Event, Host, Invocation, Tool};
 pub use chatgpt::{sign_in, sign_out};
+pub use context::Context;
 pub use hosted::{Endpoint, Providers};
 pub use local::{Sampling, Size};
+pub use model::Model;
+pub use rig_agent::agent::AgentBuilder;
 /// rig, whose requests and streams every model here takes and gives.
 pub use rig_core as rig;
+pub use rig_memory::{CompactReason, SummaryPrompts};
 
 /// Who answers a request.
 #[derive(
@@ -72,16 +71,6 @@ pub enum Provider {
     OpenAiCompatible,
 }
 
-impl Provider {
-    /// How the provider's models keep to a JSON schema.
-    fn json(self) -> Json {
-        match self {
-            Self::ChatGpt | Self::DeepSeek | Self::MiniMax => Json::Instructions,
-            _ => Json::Schema,
-        }
-    }
-}
-
 /// A model the user picked.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Selection {
@@ -102,91 +91,10 @@ impl Default for Selection {
     }
 }
 
-/// How a model keeps to a JSON schema.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Json {
-    /// The schema goes with the request, and the provider holds the answer
-    /// to it; the local engine holds it with a grammar.
-    Schema,
-    /// The schema goes in the instructions, with the provider's JSON mode
-    /// where it has one.
-    Instructions,
-}
-
-/// A model to send rig's requests to.
-#[derive(Clone, Debug)]
-pub struct Model {
-    pub completion: DynModel<Completion>,
-    provider: Provider,
-}
-
-impl Model {
-    /// `request`, asking for an answer `schema` describes in the way this
-    /// model keeps to one. The caller still checks the answer, as rig fails
-    /// open on structured output.
-    #[must_use]
-    pub fn structured(
-        &self,
-        mut request: CompletionRequest,
-        schema: schemars::Schema,
-    ) -> CompletionRequest {
-        match self.provider.json() {
-            Json::Schema => request.output_schema = Some(schema),
-            Json::Instructions => {
-                // After the leading instructions, so a system prompt stays
-                // first.
-                let at = request
-                    .chat_history
-                    .iter()
-                    .take_while(|message| matches!(***message, Message::System { .. }))
-                    .count();
-                let content = format!(
-                    "Answer with JSON alone, as this JSON schema describes:\n{}",
-                    schema.as_value()
-                );
-                request
-                    .chat_history
-                    .insert(at, std::sync::Arc::new(Message::System { content }));
-            }
-        }
-        let params = match self.provider {
-            // rig drops a DeepSeek schema, so DeepSeek is asked for JSON mode.
-            Provider::DeepSeek => Some(json!({"response_format": {"type": "json_object"}})),
-            // Only providers that keep to the schema serve the request.
-            Provider::OpenRouter => Some(json!({"provider": {"require_parameters": true}})),
-            _ => None,
-        };
-        if let Some(params) = params {
-            request.additional_params = Some(match request.additional_params.take() {
-                Some(held) => rig_core::json_utils::merge(held, params),
-                None => params,
-            });
-        }
-        request
-    }
-}
-
-/// The files a local model puts on the device, fetched first if the store
-/// doesn't have them; none for a hosted one.
-pub async fn weights(selection: &Selection) -> Result<Vec<std::path::PathBuf>> {
-    if selection.provider != Provider::Local {
-        return Ok(Vec::new());
-    }
-    let entry = local::catalog::entry(&selection.model)?;
-    let quantization = entry.quantization(selection.quantization.as_deref())?;
-    let [model] = entry.repository.resolve([quantization.file]).await?;
-    let mut weights = vec![model];
-    if let Some(projector) = entry.projector {
-        let [projector] = entry.repository.resolve([projector]).await?;
-        weights.push(projector);
-    }
-    Ok(weights)
-}
-
-/// The model `selection` names, as a rig model; a local one loads with
-/// `size`, which a hosted one doesn't use.
-pub async fn model(selection: &Selection, size: Size) -> Result<Model> {
+/// The model `selection` names, as a rig model, its files fetched first if the
+/// store doesn't have them; a local one loads with `size`, which a hosted one
+/// doesn't use.
+pub async fn connect(selection: &Selection, size: Size) -> Result<Model> {
     let completion = match selection.provider {
         Provider::Local => {
             let entry = local::catalog::entry(&selection.model)?;
@@ -205,41 +113,22 @@ pub async fn model(selection: &Selection, size: Size) -> Result<Model> {
                 }
             };
             local::load(
-                entry.id.to_owned(),
-                model,
-                projector,
+                local::Loading {
+                    id: entry.id.to_owned(),
+                    model,
+                    projector,
+                    defaults: entry.sampling.clone(),
+                    markup: entry.markup,
+                },
                 size,
-                entry.sampling.clone(),
             )
             .await?
         }
-        provider => hosted::model(provider, &selection.model).await?,
+        provider => hosted::model(provider, &selection.model)?,
     };
     Ok(Model {
         completion,
         provider: selection.provider,
-    })
-}
-
-/// A GGUF outside the catalog, such as PaddleOCR-VL's, with its vision
-/// projector, as a local model.
-pub async fn load(model: &Path, projector: Option<&Path>, size: Size) -> Result<Model> {
-    let id = model
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .with_context(|| format!("{} has no UTF-8 name", model.display()))?
-        .to_owned();
-    let completion = local::load(
-        id,
-        model.to_owned(),
-        projector.map(Path::to_owned),
-        size,
-        Sampling::default(),
-    )
-    .await?;
-    Ok(Model {
-        completion,
-        provider: Provider::Local,
     })
 }
 
@@ -255,10 +144,14 @@ pub struct ModelInfo {
     pub images: bool,
     pub tools: bool,
     pub reasoning: bool,
-    pub json: Json,
     /// The languages a local model translates into, as BCP 47 tags; `None`
     /// for any.
     pub languages: Option<&'static [&'static str]>,
+    /// What rig's catalog says of a hosted model; a local model's window
+    /// depends on how it loads.
+    pub context_window: Option<u32>,
+    pub max_output_tokens: Option<u32>,
+    pub pricing: Option<Pricing>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -290,10 +183,14 @@ pub async fn models() -> Vec<ModelInfo> {
                 })
                 .collect(),
             images: entry.projector.is_some(),
-            tools: false,
-            reasoning: entry.reasoning,
-            json: Json::Schema,
+            tools: entry.markup.is_some_and(|markup| markup.call.is_some()),
+            reasoning: entry
+                .markup
+                .is_some_and(|markup| markup.reasoning.is_some()),
             languages: entry.languages,
+            context_window: None,
+            max_output_tokens: None,
+            pricing: None,
         })
         .collect::<Vec<_>>();
     let listed = futures::future::join_all(
@@ -310,13 +207,6 @@ pub async fn models() -> Vec<ModelInfo> {
         }
     }
     models
-}
-
-fn hosted_only(provider: Provider) -> Result<()> {
-    if provider == Provider::Local {
-        bail!("local models don't take tools, so the agent runs on a hosted model");
-    }
-    Ok(())
 }
 
 #[cfg(test)]

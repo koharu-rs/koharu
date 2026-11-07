@@ -90,8 +90,7 @@ The detection model finds text regions, speech bubbles, and segmentation masks.
 
 OCR reads source text from detected regions.
 
-- [PaddleOCR VL 1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6)
-- [Manga OCR](https://huggingface.co/mayocream/manga-ocr)
+- [manga-ocr-ar-experimental](https://huggingface.co/muscgab/manga-ocr-ar-experimental) (CC BY-NC-SA 4.0)
 - [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)
 - [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova)
 
@@ -102,7 +101,6 @@ Inpainting reconstructs the image behind source text before the translation is r
 - [FLUX.3 Image Klein](https://huggingface.co/unsloth/flux-3-image-klein-GGUF)
 - [RORem mixed](https://huggingface.co/mayocream/RORem-mixed-GGUF)
 - [LaMa](https://huggingface.co/mayocream/lama-manga)
-- [AOT GAN](https://huggingface.co/mayocream/aot-inpainting)
 
 ### Large Language Models
 
@@ -111,7 +109,6 @@ Translation can use a local language model or a remote API.
 #### General-Purpose Local Models
 
 - LFM 2.5: [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF)
-- Ministral 3: [ministral-3-8b-instruct](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF)
 - Gemma 4: [gemma4-e2b-it](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF), [gemma4-e4b-it](https://huggingface.co/unsloth/gemma-4-E4B-it-qat-GGUF), [gemma4-12b-it](https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF), [gemma4-26b-a4b-it](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF), [gemma4-31b-it](https://huggingface.co/unsloth/gemma-4-31B-it-qat-GGUF)
 - Qwen 3.5: [qwen3.5-0.8b](https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF), [qwen3.5-2b](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF), [qwen3.5-4b](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF), [qwen3.5-9b](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF), [qwen3.5-27b](https://huggingface.co/unsloth/Qwen3.5-27B-GGUF), [qwen3.5-35b-a3b](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF)
 - Qwen 3.6: [qwen3.6-27b](https://huggingface.co/unsloth/Qwen3.6-27B-GGUF), [qwen3.6-35b-a3b](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF)
