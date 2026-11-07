@@ -15,7 +15,7 @@ mod tensor_generated {
 
     use koharu_torch_sys::*;
 
-    use super::utils::{check, IntList, IntListOption};
+    use super::utils::{IntList, IntListOption, check};
     use crate::{Device, Generator, Kind, Layout, MemoryFormat, QScheme, Result, Scalar, Tensor};
 
     include!(concat!(env!("OUT_DIR"), "/tensor_generated.rs"));

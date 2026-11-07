@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 
-use koharu_torch::{Kind, Result, TchError, Tensor};
+use koharu_torch::{Error, Kind, Result, Tensor};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BatchNormConfig {
@@ -81,7 +81,7 @@ impl super::ModuleT for BatchNorm {
             dim == self.nd + 2
         };
         if !expected {
-            return Err(TchError::Shape(format!(
+            return Err(Error::Shape(format!(
                 "a {}d batch norm can't take a {:?} input",
                 self.nd,
                 xs.size()

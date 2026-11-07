@@ -7,7 +7,7 @@ use super::{
     kind::{self, Kind},
     utils::check,
 };
-use crate::{Result, TchError};
+use crate::{Error, Result};
 
 /// A tensor: an owned libtorch AtenTensorHandle.
 #[must_use]
@@ -44,7 +44,7 @@ impl Tensor {
     pub fn size2(&self) -> Result<(i64, i64)> {
         match self.size().as_slice() {
             &[s0, s1] => Ok((s0, s1)),
-            size => Err(TchError::Shape(format!("expected two dims, got {size:?}"))),
+            size => Err(Error::Shape(format!("expected two dims, got {size:?}"))),
         }
     }
 
@@ -52,9 +52,7 @@ impl Tensor {
     pub fn size3(&self) -> Result<(i64, i64, i64)> {
         match self.size().as_slice() {
             &[s0, s1, s2] => Ok((s0, s1, s2)),
-            size => Err(TchError::Shape(format!(
-                "expected three dims, got {size:?}"
-            ))),
+            size => Err(Error::Shape(format!("expected three dims, got {size:?}"))),
         }
     }
 
@@ -62,7 +60,7 @@ impl Tensor {
     pub fn size4(&self) -> Result<(i64, i64, i64, i64)> {
         match self.size().as_slice() {
             &[s0, s1, s2, s3] => Ok((s0, s1, s2, s3)),
-            size => Err(TchError::Shape(format!("expected four dims, got {size:?}"))),
+            size => Err(Error::Shape(format!("expected four dims, got {size:?}"))),
         }
     }
 
@@ -128,7 +126,7 @@ impl Tensor {
     pub fn from_data_size(data: &[u8], size: &[i64], kind: Kind) -> Result<Tensor> {
         let numel = size.iter().product::<i64>() as usize;
         if data.len() != numel * kind.elt_size_in_bytes() {
-            return Err(TchError::Shape(format!(
+            return Err(Error::Shape(format!(
                 "{} bytes for {size:?} elements of {kind:?}",
                 data.len()
             )));
@@ -144,20 +142,20 @@ impl Tensor {
     /// Copies `numel` elements from `self` to `dst`.
     pub fn copy_data<T: kind::Element>(&self, dst: &mut [T], numel: usize) -> Result<()> {
         if T::KIND != self.f_kind()? {
-            return Err(TchError::Kind(format!(
+            return Err(Error::Kind(format!(
                 "incoherent elt kind, {:?} != {:?}",
                 self.f_kind(),
                 T::KIND
             )));
         }
         if dst.len() < numel {
-            return Err(TchError::Shape(format!("slice len < {numel}")));
+            return Err(Error::Shape(format!("slice len < {numel}")));
         }
         let host = self
             .to(Device::Cpu)?
             .contiguous(crate::MemoryFormat::Contiguous)?;
         if (host.numel()? as usize) < numel {
-            return Err(TchError::Shape(format!("tensor numel < {numel}")));
+            return Err(Error::Shape(format!("tensor numel < {numel}")));
         }
         unsafe {
             std::ptr::copy_nonoverlapping(host.data_ptr().cast::<T>(), dst.as_mut_ptr(), numel)

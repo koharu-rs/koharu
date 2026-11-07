@@ -6,9 +6,15 @@ use std::{
 };
 
 use anyhow::Result;
+use futures::future::BoxFuture;
 
-use super::{Host, install_archive, preload};
-use crate::store;
+use super::{Host, Package, extract, preload};
+use crate::{Backend, Device, store};
+
+pub(super) struct Rocm {
+    /// The AMD GPU's LLVM target, whose kernels it downloads.
+    pub(super) target: &'static str,
+}
 
 const VERSION: &str = "10.1.0";
 const INDEX: &str = "https://stable.repo.amd.com/rocm/core/whl-next";
@@ -75,56 +81,79 @@ const HIP: &str = "_rocm_sdk_core/bin/amdhip64_7.dll";
 #[cfg(not(windows))]
 const HIP: &str = "_rocm_sdk_core/lib/libamdhip64.so.7";
 
-/// Installs ROCm with `target`'s kernels. Libraries come with their data
-/// files, such as rocBLAS's kernels, so each wheel's tree is kept whole.
-pub(super) async fn install(host: Host, target: &'static str) -> Result<PathBuf> {
-    let platform = match host {
-        Host::WindowsX64 => "win_amd64",
-        Host::LinuxX64 => "linux_x86_64",
-        _ => anyhow::bail!("ROCm wheels exist only for Windows and Linux on x86-64"),
-    };
-    store::install(
-        store::root().join("rocm").join(VERSION).join(target),
-        |folder| LOAD.iter().all(|library| folder.join(library).is_file()),
-        move |stage| async move {
-            let wheel = |project: &str, name: &str| {
-                format!("{INDEX}/{project}/{name}-{VERSION}-py3-none-{platform}.whl")
-            };
-            install_archive(
-                &wheel("rocm-sdk-core", "rocm_sdk_core"),
-                &stage,
-                &["_rocm_sdk_core/**/*"],
-            )
-            .await?;
-            install_archive(
-                &wheel("rocm-sdk-libraries", "rocm_sdk_libraries"),
-                &stage,
-                &["_rocm_sdk_libraries/**/*"],
-            )
-            .await?;
-            install_archive(
-                &wheel(
-                    &format!("rocm-sdk-device-{target}"),
-                    &format!("rocm_sdk_device_{target}"),
-                ),
-                &stage,
-                &["_rocm_sdk_libraries/**/*"],
-            )
-            .await?;
-            Ok(stage)
-        },
-    )
-    .await
+impl Rocm {
+    fn folder(&self) -> PathBuf {
+        version().join(self.target)
+    }
 }
 
-/// Loads ROCm and returns the index of the GPU with `expected` as its target
-/// among the GPUs HIP lists, which can differ from the order the system probe
-/// saw.
-pub(super) fn load(folder: &Path, expected: &str) -> Result<usize> {
-    for library in LOAD {
-        preload(&folder.join(library), true)?;
+fn version() -> PathBuf {
+    store::root().join("rocm").join(VERSION)
+}
+
+impl Package for Rocm {
+    /// Downloads ROCm with the target's kernels. Libraries come with their data
+    /// files, such as rocBLAS's kernels, so each wheel's tree is kept whole.
+    fn download(&self, host: Host, _: Backend) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            let target = self.target;
+            let platform = match host {
+                Host::WindowsX64 => "win_amd64",
+                Host::LinuxX64 => "linux_x86_64",
+                _ => anyhow::bail!("ROCm wheels exist only for Windows and Linux on x86-64"),
+            };
+            store::put(
+                &version(),
+                self.folder(),
+                |folder| LOAD.iter().all(|library| folder.join(library).is_file()),
+                move |stage| async move {
+                    let wheel = |project: &str, name: &str| {
+                        format!("{INDEX}/{project}/{name}-{VERSION}-py3-none-{platform}.whl")
+                    };
+                    extract(
+                        &wheel("rocm-sdk-core", "rocm_sdk_core"),
+                        &stage,
+                        &["_rocm_sdk_core/**/*"],
+                    )
+                    .await?;
+                    extract(
+                        &wheel("rocm-sdk-libraries", "rocm_sdk_libraries"),
+                        &stage,
+                        &["_rocm_sdk_libraries/**/*"],
+                    )
+                    .await?;
+                    extract(
+                        &wheel(
+                            &format!("rocm-sdk-device-{target}"),
+                            &format!("rocm_sdk_device_{target}"),
+                        ),
+                        &stage,
+                        &["_rocm_sdk_libraries/**/*"],
+                    )
+                    .await?;
+                    Ok(stage)
+                },
+            )
+            .await?;
+            Ok(())
+        })
     }
-    index(folder, expected)
+
+    /// Loads ROCm and readdresses `gpu` by its index among the GPUs HIP lists,
+    /// which can differ from the order the system probe saw.
+    fn load(&self, _: Host, gpu: &mut Device) -> Result<()> {
+        let folder = self.folder();
+        for library in LOAD {
+            preload(&folder.join(library), true)?;
+        }
+        gpu.index = index(&folder, self.target)?;
+        gpu.name = format!("ROCm{}", gpu.index);
+        Ok(())
+    }
+
+    fn versions(&self) -> Vec<PathBuf> {
+        vec![version()]
+    }
 }
 
 /// The index of the GPU with `expected` as its target among those HIP lists.

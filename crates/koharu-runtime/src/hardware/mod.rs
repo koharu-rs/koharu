@@ -12,6 +12,9 @@ mod vulkan;
 
 use std::cmp::Reverse;
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub(crate) use cuda::hold_primary_context;
+
 use crate::{Backend, Device};
 
 /// The GPUs Koharu supports on this machine, best first.

@@ -27,9 +27,9 @@ Koharu は使用する機能に必要なネイティブライブラリとモデ�
     Apple シリコン搭載 macOS では、対応するローカル推論に Metal を使います。
   </Tab>
   <Tab title='Vulkan と CPU'>
-    Windows と Linux では、ローカル翻訳、PaddleOCR-VL、FLUX.2 Klein、RORem などの llama.cpp と
+    Windows と Linux では、ローカル翻訳、FLUX.2 Klein、RORem などの llama.cpp と
     diffusion のモデルに Vulkan を使えます。Torch には Vulkan ビルドがないため、Vulkan
-    しか使えない環境では検出、その他の OCR モデル、LaMa、AOT は CPU
+    しか使えない環境では検出、その他の OCR モデル、LaMa は CPU
     で動作します。アクセラレーターを初期化できない場合は CPU にフォールバックします。CPU 推論に GPU
     SDK は不要ですが、処理は遅くなります。
   </Tab>

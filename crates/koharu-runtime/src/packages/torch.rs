@@ -1,15 +1,18 @@
 //! libtorch and Koharu's C shim to it, built and released apart from
 //! `koharu-rs/torch`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
+use futures::future::BoxFuture;
 
-use super::{Host, Release, preload};
-use crate::Backend;
+use super::{Host, Package, Release, preload};
+use crate::{Backend, Device};
+
+pub(super) struct Torch;
 
 /// libtorch at the release the shim was built against. It keeps the store
-/// folder of the releases that shipped both, so installing it removes them.
+/// folder of the releases that shipped both, so a start removes them.
 static LIBTORCH: Release = Release {
     repository: "koharu-rs/torch",
     package: "torch",
@@ -90,40 +93,53 @@ fn libraries(backend: Backend) -> &'static [&'static str] {
     }
 }
 
-/// Installs libtorch and the shim, and returns their folders.
-pub(super) async fn install(host: Host, backend: Backend) -> Result<(PathBuf, PathBuf)> {
-    let libraries = libraries(backend);
-    let variant = match backend {
+/// The archive libtorch comes in for `backend`.
+fn variant(backend: Backend) -> Backend {
+    match backend {
         Backend::Vulkan => Backend::Cpu,
         backend => backend,
-    };
-    let libtorch = LIBTORCH
-        .install(host, variant, move |folder| {
-            libraries
-                .iter()
-                .all(|library| folder.join(library).is_file())
-        })
-        .await?;
-    let shim = SHIM
-        .install(host, variant, |folder| {
-            folder.join(shim_library()).is_file()
-        })
-        .await?;
-    Ok((libtorch, shim))
+    }
 }
 
-/// Loads libtorch from its folder, then the shim from its own. The shim
-/// finds libtorch's libraries already loaded, not beside it.
-pub(super) fn load(backend: Backend, libtorch: &Path, shim: &Path) -> Result<()> {
-    for library in libraries(backend) {
-        preload(&libtorch.join(library), false)?;
+impl Package for Torch {
+    /// Downloads libtorch and the shim.
+    fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            let libraries = libraries(backend);
+            LIBTORCH
+                .download(host, variant(backend), move |folder| {
+                    libraries
+                        .iter()
+                        .all(|library| folder.join(library).is_file())
+                })
+                .await?;
+            SHIM.download(host, variant(backend), |folder| {
+                folder.join(shim_library()).is_file()
+            })
+            .await
+        })
     }
-    // libtorch's own C functions for the shim's tensors live in torch_cpu.
-    koharu_torch_sys::load(&[
-        &shim.join(shim_library()),
-        &libtorch.join(libloading::library_filename("torch_cpu")),
-    ])?;
-    set_cudnn(backend)
+
+    /// Loads libtorch from its folder, then the shim from its own. The shim
+    /// finds libtorch's libraries already loaded, not beside it.
+    fn load(&self, host: Host, gpu: &mut Device) -> Result<()> {
+        let backend = gpu.backend;
+        let libtorch = LIBTORCH.folder(host, variant(backend));
+        let shim = SHIM.folder(host, variant(backend));
+        for library in libraries(backend) {
+            preload(&libtorch.join(library), false)?;
+        }
+        // libtorch's own C functions for the shim's tensors live in torch_cpu.
+        koharu_torch_sys::load(&[
+            &shim.join(shim_library()),
+            &libtorch.join(libloading::library_filename("torch_cpu")),
+        ])?;
+        set_cudnn(backend)
+    }
+
+    fn versions(&self) -> Vec<PathBuf> {
+        vec![LIBTORCH.version(), SHIM.version()]
+    }
 }
 
 /// Sets libtorch's cuDNN switch once, before any model runs: on, but off for

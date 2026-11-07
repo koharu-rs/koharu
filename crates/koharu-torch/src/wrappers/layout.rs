@@ -1,7 +1,7 @@
 //! libtorch's tensor layout, memory format, and quantization scheme, which
 //! cross the C API as their c10 values.
 
-use crate::{Result, TchError};
+use crate::{Error, Result};
 
 /// A tensor layout: c10::Layout.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -55,11 +55,7 @@ impl QScheme {
             2 => QScheme::PerTensorSymmetric,
             3 => QScheme::PerChannelSymmetric,
             4 => QScheme::PerChannelAffineFloatQParams,
-            _ => {
-                return Err(TchError::Convert(format!(
-                    "unknown quantization scheme {v}"
-                )))
-            }
+            _ => return Err(Error::Convert(format!("unknown quantization scheme {v}"))),
         })
     }
 }

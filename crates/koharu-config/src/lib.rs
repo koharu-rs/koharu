@@ -1,7 +1,7 @@
 //! Koharu's settings and secrets.
 
 mod error;
-mod secrets;
+pub mod secrets;
 
 use std::{
     collections::BTreeSet,
@@ -21,12 +21,11 @@ use toml::de::DeTable;
 use toml_edit::{DocumentMut, Item, TableLike};
 
 pub use error::{Error, Result};
-pub use secrecy::{ExposeSecret, SecretString};
-pub use secrets::{delete_secret, secret, set_secret};
 
-/// A component's settings: a table in `config.toml` that the component owns,
-/// with the type's `Default` for whatever the file leaves out.
-pub trait Section: Default + Serialize + DeserializeOwned {
+/// A component's settings: a table in `config.toml` that the component owns.
+/// Its defaults are what an empty table deserializes to, so a type needs
+/// `#[serde(default)]`; without it, `get` fails whatever the file holds.
+pub trait Section: Serialize + DeserializeOwned {
     /// The table's name, such as `pipeline`.
     const NAME: &'static str;
 }
@@ -36,8 +35,10 @@ pub fn get<T: Section>() -> Result<T> {
     read(&home()?.join("config.toml"))
 }
 
-/// Runs `edit` on the section as the file holds it now and writes the keys
-/// whose values it changed, before returning.
+/// Runs `edit` on the section as the file holds it now and writes what it
+/// changed, before returning. `get` then reads back exactly what `edit` left:
+/// if the file couldn't hold that, this fails and the file stays as it was. A
+/// key of the section set back to its default leaves the file.
 pub fn update<T: Section>(edit: impl FnOnce(&mut T)) -> Result<()> {
     write(&home()?.join("config.toml"), edit)
 }
@@ -49,37 +50,46 @@ fn home() -> Result<PathBuf> {
 }
 
 fn read<T: Section>(path: &Path) -> Result<T> {
-    match read_text(path)? {
-        Some(text) => section(path, &text),
-        None => Ok(T::default()),
-    }
+    section(path, &read_text(path)?.unwrap_or_default())
 }
 
 fn write<T: Section>(path: &Path, edit: impl FnOnce(&mut T)) -> Result<()> {
     let _held = lock(path)?;
     let text = read_text(path)?.unwrap_or_default();
     let mut value: T = section(path, &text)?;
-    let before = table(&value)?;
+    let before = table(&value);
     edit(&mut value);
-    let after = table(&value)?;
+    let after = table(&value);
     if before == after {
         return Ok(());
     }
 
-    let mut document: DocumentMut =
-        text.parse()
-            .map_err(|error: toml_edit::TomlError| Error::Toml {
-                path: path.into(),
-                message: error.to_string(),
-            })?;
+    let defaults = table(&empty_section::<T>(path)?);
+    let mut document: DocumentMut = text
+        .parse()
+        .map_err(|error: toml_edit::TomlError| invalid(path, error))?;
     let item = document.entry(T::NAME).or_insert_with(implicit_table);
     if !item.is_table_like() {
         *item = implicit_table();
     }
     if let Some(table) = item.as_table_like_mut() {
-        edit_table(table, &before, &after);
+        edit_table(table, &before, &after, Some(&defaults));
     }
-    save(path, document.to_string().as_bytes())
+    let text = document.to_string();
+    if table(&section::<T>(path, &text)?) != after {
+        return Err(invalid(
+            path,
+            format!("[{}] wouldn't read back as it was set", T::NAME),
+        ));
+    }
+    save(path, text.as_bytes())
+}
+
+fn invalid(path: &Path, message: impl ToString) -> Error {
+    Error::Invalid {
+        path: path.into(),
+        message: message.to_string(),
+    }
 }
 
 /// The file's bytes, or nothing when it doesn't exist; any other error fails,
@@ -97,41 +107,35 @@ fn read_file(path: &Path) -> Result<Option<Vec<u8>>> {
 
 fn read_text(path: &Path) -> Result<Option<String>> {
     read_file(path)?
-        .map(|bytes| {
-            String::from_utf8(bytes).map_err(|_| Error::Toml {
-                path: path.into(),
-                message: "it isn't UTF-8".into(),
-            })
-        })
+        .map(|bytes| String::from_utf8(bytes).map_err(|_| invalid(path, "it isn't UTF-8")))
         .transpose()
 }
 
 fn section<T: Section>(path: &Path, text: &str) -> Result<T> {
     let root = DeTable::parse(text).map_err(|mut error| {
         error.set_input(Some(text));
-        Error::Toml {
-            path: path.into(),
-            message: error.to_string(),
-        }
+        invalid(path, error)
     })?;
     let Some((_, value)) = root
         .into_inner()
         .into_iter()
         .find(|(key, _)| key.get_ref().as_ref() == T::NAME)
     else {
-        return Ok(T::default());
+        return empty_section(path);
     };
     serde_ignored::deserialize(value.into_deserializer(), |key| {
         warn_unknown(path, T::NAME, &key.to_string());
     })
     .map_err(|mut error: toml::de::Error| {
         error.set_input(Some(text));
-        Error::Section {
-            path: path.into(),
-            section: T::NAME,
-            message: error.to_string(),
-        }
+        invalid(path, format!("[{}]: {error}", T::NAME))
     })
+}
+
+/// The section with nothing in its table, which holds its defaults.
+fn empty_section<T: Section>(path: &Path) -> Result<T> {
+    toml::from_str("")
+        .map_err(|error: toml::de::Error| invalid(path, format!("[{}]: {error}", T::NAME)))
 }
 
 /// Logs a key the section's type doesn't know, once per key in a process, as
@@ -148,36 +152,52 @@ fn warn_unknown(path: &Path, section: &str, key: &str) {
     }
 }
 
-fn table<T: Section>(value: &T) -> Result<toml::Table> {
-    let error = |message: String| Error::Serialize {
-        section: T::NAME,
-        message,
-    };
-    match toml::Value::try_from(value).map_err(|error_| error(error_.to_string()))? {
-        toml::Value::Table(table) => Ok(table),
-        other => Err(error(format!("it's a {}", other.type_str()))),
+/// The section as a table. A section that isn't one is a bug in its type, so
+/// this panics rather than reporting it to whoever is changing a setting.
+fn table<T: Section>(value: &T) -> toml::Table {
+    match toml::Value::try_from(value) {
+        Ok(toml::Value::Table(table)) => table,
+        Ok(other) => panic!("[{}] is a {}, not a table", T::NAME, other.type_str()),
+        Err(error) => panic!("[{}] can't be written as a table: {error}", T::NAME),
     }
 }
 
 /// Writes the keys whose values differ between `before` and `after` into
 /// `table`: keys `after` sets or changes, and keys only `before` has. Every
 /// other key keeps its text, so a default nobody changed stays out of the
-/// file and comments stay where they are.
-fn edit_table(table: &mut dyn TableLike, before: &toml::Table, after: &toml::Table) {
+/// file and comments stay where they are. With `defaults`, a key set back to
+/// its default leaves the file. Only a section has them: inside a nested table
+/// a missing key falls back to that type's own defaults, or fails.
+fn edit_table(
+    table: &mut dyn TableLike,
+    before: &toml::Table,
+    after: &toml::Table,
+    defaults: Option<&toml::Table>,
+) {
     for (key, value) in after {
         let old = before.get(key);
         if old == Some(value) {
             continue;
         }
+        if defaults.is_some_and(|defaults| defaults.get(key) == Some(value)) {
+            table.remove(key);
+            continue;
+        }
         if let toml::Value::Table(value) = value {
+            // A table new to the file goes in whole: what it leaves out would
+            // come from its type's defaults, not from what it was changed from.
+            let held = table.get(key).is_some_and(Item::is_table_like);
             let item = table.entry(key).or_insert(implicit_table());
             if !item.is_table_like() {
                 *item = implicit_table();
             }
             let empty = toml::Table::new();
-            let old = old.and_then(toml::Value::as_table).unwrap_or(&empty);
+            let old = old
+                .and_then(toml::Value::as_table)
+                .filter(|_| held)
+                .unwrap_or(&empty);
             if let Some(inner) = item.as_table_like_mut() {
-                edit_table(inner, old, value);
+                edit_table(inner, old, value, None);
             }
             continue;
         }
@@ -349,7 +369,7 @@ mod tests {
         assert!(error.contains("retries"), "{error}");
         assert!(matches!(
             write(&path, |pipeline: &mut Pipeline| pipeline.retries = 3),
-            Err(Error::Section { .. })
+            Err(Error::Invalid { .. })
         ));
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
@@ -358,5 +378,148 @@ mod tests {
                 retries = "three"
             "#}
         );
+    }
+
+    #[derive(Debug, Default, Deserialize, Serialize)]
+    struct NoDefaults {
+        a: u32,
+        b: u32,
+    }
+
+    impl Section for NoDefaults {
+        const NAME: &'static str = "no-defaults";
+    }
+
+    #[test]
+    fn a_section_without_defaults_fails_whatever_the_file_holds() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+
+        assert!(matches!(
+            read::<NoDefaults>(&path),
+            Err(Error::Invalid { .. })
+        ));
+        fs::write(
+            &path,
+            indoc! {"
+                [no-defaults]
+                a = 1
+            "},
+        )
+        .unwrap();
+        assert!(matches!(
+            read::<NoDefaults>(&path),
+            Err(Error::Invalid { .. })
+        ));
+    }
+
+    /// Required fields with its own `Default`, so a table holding only some of
+    /// them doesn't deserialize.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct Selection {
+        provider: String,
+        model: String,
+    }
+
+    impl Default for Selection {
+        fn default() -> Self {
+            Self {
+                provider: "local".into(),
+                model: "gemma".into(),
+            }
+        }
+    }
+
+    #[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
+    #[serde(default)]
+    struct Agent {
+        model: Selection,
+    }
+
+    impl Section for Agent {
+        const NAME: &'static str = "agent";
+    }
+
+    #[test]
+    fn a_nested_table_new_to_the_file_goes_in_whole() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+
+        write(&path, |agent: &mut Agent| {
+            agent.model.model = "other".into();
+        })
+        .unwrap();
+
+        assert_eq!(
+            read::<Agent>(&path).unwrap().model,
+            Selection {
+                provider: "local".into(),
+                model: "other".into(),
+            }
+        );
+    }
+
+    #[derive(Debug, Deserialize, PartialEq, Serialize)]
+    #[serde(default)]
+    struct Tuned {
+        retries: u32,
+        name: Option<String>,
+    }
+
+    impl Default for Tuned {
+        fn default() -> Self {
+            Self {
+                retries: 5,
+                name: Some("default".into()),
+            }
+        }
+    }
+
+    impl Section for Tuned {
+        const NAME: &'static str = "tuned";
+    }
+
+    #[test]
+    fn a_value_set_back_to_its_default_leaves_the_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(
+            &path,
+            indoc! {"
+                [tuned]
+                retries = 9
+                later = 1
+            "},
+        )
+        .unwrap();
+
+        write(&path, |tuned: &mut Tuned| tuned.retries = 5).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            indoc! {"
+                [tuned]
+                later = 1
+            "}
+        );
+    }
+
+    #[test]
+    fn a_value_the_file_cant_hold_fails_and_keeps_the_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        let text = indoc! {"
+            [tuned]
+            retries = 9
+        "};
+        fs::write(&path, text).unwrap();
+
+        // TOML has no null, and a missing key reads as the default.
+        assert!(matches!(
+            write(&path, |tuned: &mut Tuned| tuned.name = None),
+            Err(Error::Invalid { .. })
+        ));
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
     }
 }

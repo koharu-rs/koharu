@@ -3,14 +3,14 @@ name = "koharu-torch-sys"
 version.workspace = true
 edition.workspace = true
 description = "The koharu-rs/torch shim's C API to libtorch, bound to the build Koharu's runtime loads."
-license = "MIT OR Apache-2.0"
+license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
 categories = ["external-ffi-bindings", "science"]
-publish = true
+publish.workspace = true
 build = "build.rs"
 # Nothing is linked; the key passes the bindings' path to koharu-torch.
 links = "koharu-torch"
@@ -19,9 +19,4 @@ links = "koharu-torch"
 libloading = { workspace = true }
 
 [build-dependencies]
-bindgen = { workspace = true }
 koharu-bindgen = { workspace = true }
-
-# Only the generated bindings use it.
-[package.metadata.cargo-machete]
-ignored = ["libloading"]

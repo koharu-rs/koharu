@@ -3,9 +3,12 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use futures::future::BoxFuture;
 
-use super::{Host, LIBRARIES, install_archive, preload};
-use crate::store;
+use super::{Host, LIBRARIES, Package, extract, preload};
+use crate::{Backend, Device, store};
+
+pub(super) struct Cuda;
 
 struct Wheel {
     project: &'static str,
@@ -141,6 +144,13 @@ const WHEELS: &[Wheel] = &[
 ];
 
 impl Wheel {
+    fn folder(&self) -> PathBuf {
+        store::root()
+            .join("cuda")
+            .join(self.project)
+            .join(self.version)
+    }
+
     fn libraries(&self) -> &'static [&'static str] {
         if cfg!(windows) {
             self.windows
@@ -171,38 +181,43 @@ impl Wheel {
     }
 }
 
-/// Installs every wheel and returns their folders, in load order.
-pub(super) async fn install(host: Host) -> Result<Vec<PathBuf>> {
-    let mut folders = Vec::new();
-    for wheel in WHEELS {
-        let url = wheel.url(host)?;
-        let folder = store::install(
-            store::root()
-                .join("cuda")
-                .join(wheel.project)
-                .join(wheel.version),
-            |folder| {
-                wheel
-                    .libraries()
-                    .iter()
-                    .all(|library| folder.join(library).is_file())
-            },
-            move |stage| async move {
-                install_archive(&url, &stage, LIBRARIES).await?;
-                Ok(stage)
-            },
-        )
-        .await?;
-        folders.push(folder);
+impl Package for Cuda {
+    fn download(&self, host: Host, _: Backend) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            for wheel in WHEELS {
+                let url = wheel.url(host)?;
+                let folder = wheel.folder();
+                store::put(
+                    &folder,
+                    folder.clone(),
+                    |folder| {
+                        wheel
+                            .libraries()
+                            .iter()
+                            .all(|library| folder.join(library).is_file())
+                    },
+                    move |stage| async move {
+                        extract(&url, &stage, LIBRARIES).await?;
+                        Ok(stage)
+                    },
+                )
+                .await?;
+            }
+            Ok(())
+        })
     }
-    Ok(folders)
-}
 
-pub(super) fn load(folders: &[PathBuf]) -> Result<()> {
-    for (wheel, folder) in WHEELS.iter().zip(folders) {
-        for library in wheel.libraries() {
-            preload(&folder.join(library), false)?;
+    fn load(&self, _: Host, gpu: &mut Device) -> Result<()> {
+        for wheel in WHEELS {
+            for library in wheel.libraries() {
+                preload(&wheel.folder().join(library), false)?;
+            }
         }
+        crate::hardware::hold_primary_context(gpu.index);
+        Ok(())
     }
-    Ok(())
+
+    fn versions(&self) -> Vec<PathBuf> {
+        WHEELS.iter().map(Wheel::folder).collect()
+    }
 }

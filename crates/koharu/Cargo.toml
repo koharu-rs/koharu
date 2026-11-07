@@ -34,12 +34,3 @@ windows = { workspace = true, features = ["Win32_System_Console"] }
 
 [build-dependencies]
 tauri-build = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    "serde_json",
-    "tauri-build",
-    "tauri-plugin-opener",
-    "tauri-plugin-process",
-    "tauri-plugin-updater",
-]

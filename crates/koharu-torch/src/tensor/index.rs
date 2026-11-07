@@ -52,7 +52,7 @@
 //! shape mismatch error due to advanced indexing rule. Another distinction
 //! is that `i` guarantees the input and result tensor shares the same
 //! underlying storage, while NumPy may copy the tensor in certain scenarios.
-use crate::{Result, TchError, Tensor};
+use crate::{Error, Result, Tensor};
 use std::ops::{
     Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
@@ -244,8 +244,8 @@ where
 
 impl Tensor {
     fn f_indexer(&self, index_spec: &[TensorIndexer]) -> Result<Tensor> {
-        use std::ops::Bound::*;
         use TensorIndexer::*;
+        use std::ops::Bound::*;
 
         // Make sure n. non-newaxis does not exceed n. of dimensions
         let n_newaxis = index_spec
@@ -254,7 +254,7 @@ impl Tensor {
             .count();
 
         if index_spec.len() > self.size().len() + n_newaxis {
-            return Err(TchError::Shape(format!(
+            return Err(Error::Shape(format!(
                 "too many indices for tensor of dimension {}",
                 self.size().len()
             )));
@@ -265,7 +265,7 @@ impl Tensor {
             use crate::Kind::*;
             if let IndexSelect(tensor) = spec {
                 if tensor.size().len() != 1 {
-                    return Err(TchError::Shape(
+                    return Err(Error::Shape(
                         "Multi-dimensional tensor is not supported for indexing".to_string(),
                     ));
                 }
@@ -275,7 +275,9 @@ impl Tensor {
                     Int8 => {}
                     Int => {}
                     _ => {
-                        return Err(TchError::Kind(format!("the kind of tensors used as indices must be one of {Int64:?}, {Int16:?}, {Int8:?}, {Int:?}")));
+                        return Err(Error::Kind(format!(
+                            "the kind of tensors used as indices must be one of {Int64:?}, {Int16:?}, {Int8:?}, {Int:?}"
+                        )));
                     }
                 }
             }

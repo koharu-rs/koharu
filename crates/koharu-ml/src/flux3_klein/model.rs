@@ -1,10 +1,10 @@
 //! Native FLUX.3 Image Klein model assembly.
 //!
 //! Component mapping follows stable-diffusion.cpp at:
-//! https://github.com/leejet/stable-diffusion.cpp/blob/be486498eadc29dc3cd234d944c2180ed42b1415/docs/flux3.md
+//! https://github.com/leejet/stable-diffusion.cpp/blob/58bb3c1b1cd4749e94e39f537e9adfce295dcaee/docs/flux3.md
 //! which builds the Qwen3-VL text encoder, the FLUX.2 autoencoder, and the
 //! flow-map denoiser in:
-//! https://github.com/leejet/stable-diffusion.cpp/blob/be486498eadc29dc3cd234d944c2180ed42b1415/src/model/integrations/flux3.cpp
+//! https://github.com/leejet/stable-diffusion.cpp/blob/58bb3c1b1cd4749e94e39f537e9adfce295dcaee/src/model/integrations/flux3.cpp
 
 use std::{path::PathBuf, sync::Mutex};
 

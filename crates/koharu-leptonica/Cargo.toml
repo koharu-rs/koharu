@@ -10,7 +10,7 @@ homepage.workspace = true
 repository.workspace = true
 keywords = ["leptonica", "image-processing"]
 categories = ["multimedia::images"]
-publish = false
+publish.workspace = true
 
 [dependencies]
 image = { workspace = true }

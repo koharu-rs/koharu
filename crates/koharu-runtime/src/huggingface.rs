@@ -53,7 +53,8 @@ impl Repository {
     pub async fn resolve<const N: usize>(&self, names: [&str; N]) -> Result<[PathBuf; N]> {
         let paths = names.map(|name| self.path(name));
         for (name, path) in names.iter().zip(&paths) {
-            store::install(
+            store::put(
+                path,
                 path.clone(),
                 |path| path.is_file(),
                 |folder| self.fetch(name, folder),

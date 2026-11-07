@@ -21,6 +21,7 @@ http = { workspace = true }
 indoc = { workspace = true }
 koharu-config = { workspace = true }
 koharu-llama = { workspace = true, features = ["llguidance", "mtmd"] }
+koharu-llama-sys = { workspace = true }
 koharu-runtime = { workspace = true }
 llguidance = { workspace = true }
 minijinja = { workspace = true }
@@ -28,6 +29,7 @@ minijinja-contrib = { workspace = true }
 reqwest = { workspace = true }
 rig-agent = { workspace = true }
 rig-core = { workspace = true }
+rig-memory = { workspace = true }
 rig-reqwest = { workspace = true }
 schemars = { workspace = true }
 secrecy = { workspace = true }

@@ -1,4 +1,5 @@
-/// llama.cpp's, ggml's, and mtmd's public API.
+/// llama.cpp's, ggml's, and mtmd's public API; the wrapper's `llama_rs_` names
+/// fall under `llama_`.
 const FUNCTIONS: &str = "^(ggml|gguf|llama|mtmd)_.*";
 const TYPES: &str = "^(ggml|gguf|llama|mtmd)_.*";
 const VARIABLES: &str = "^(GGML|GGUF|LLAMA|MTMD)_.*";

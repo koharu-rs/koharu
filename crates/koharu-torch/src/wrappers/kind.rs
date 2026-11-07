@@ -56,7 +56,7 @@ impl Kind {
         }
     }
 
-    pub(crate) fn from_c_int(v: i32) -> Result<Kind, crate::TchError> {
+    pub(crate) fn from_c_int(v: i32) -> Result<Kind, crate::Error> {
         match v {
             0 => Ok(Kind::Uint8),
             1 => Ok(Kind::Int8),
@@ -78,7 +78,7 @@ impl Kind {
             24 => Ok(Kind::Float8e4m3fn),
             25 => Ok(Kind::Float8e5m2fnuz),
             26 => Ok(Kind::Float8e4m3fnuz),
-            _ => Err(crate::TchError::UnknownKind(v)),
+            _ => Err(crate::Error::UnknownKind(v)),
         }
     }
 

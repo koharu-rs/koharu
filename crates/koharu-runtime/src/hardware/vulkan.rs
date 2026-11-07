@@ -1,6 +1,6 @@
 use crate::{Backend, Device};
 
-/// The first Vulkan device, when a Vulkan loader is installed; llama.cpp
+/// The first Vulkan device, when the system has a Vulkan loader; llama.cpp
 /// says later whether the loader finds one.
 pub(super) fn probe() -> Option<Device> {
     let loader = if cfg!(target_os = "windows") {

@@ -61,28 +61,9 @@ pub struct RoremMixed {
 }
 
 impl RoremMixed {
-    /// The files `load` puts on the device, fetched first if the store doesn't
-    /// have them.
-    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
-        let paths = Self::paths().await?;
-        Ok(vec![
-            paths.diffusion_model,
-            paths.version_marker,
-            paths.vae,
-            paths.clip_l,
-            paths.clip_g,
-        ])
-    }
-
     /// Loads the model, its weights placed to fit `max_vram` bytes of the
     /// device.
     pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
-        let paths = Self::paths().await?;
-        let model = Model::new(device, max_vram, &paths)?;
-        Ok(Self { model })
-    }
-
-    async fn paths() -> Result<ModelPaths> {
         let paths = async {
             let [diffusion_model, version_marker] = ROREM
                 .resolve([
@@ -104,8 +85,11 @@ impl RoremMixed {
                 clip_l,
                 clip_g,
             })
-        };
-        paths.await.context("failed to resolve RORem mixed's files")
+        }
+        .await
+        .context("failed to resolve RORem mixed's files")?;
+        let model = Model::new(device, max_vram, &paths)?;
+        Ok(Self { model })
     }
 
     /// `image` repainted where `mask` is white.

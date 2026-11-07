@@ -1,7 +1,7 @@
 //! Random number generators.
 
 use koharu_torch_sys::{
-    aten_create_generator, aten_generator_set_seed, torch_delete_generator, AtenGeneratorHandle,
+    AtenGeneratorHandle, aten_create_generator, aten_generator_set_seed, torch_delete_generator,
 };
 
 use super::utils::check;

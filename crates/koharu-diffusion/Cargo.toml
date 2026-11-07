@@ -3,14 +3,14 @@ name = "koharu-diffusion"
 version.workspace = true
 edition.workspace = true
 description = "stable-diffusion.cpp for Koharu's diffusion models."
-license = "MIT OR Apache-2.0"
+license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords = ["stable-diffusion", "diffusion", "image-generation", "machine-learning", "bindings"]
 categories = ["api-bindings", "multimedia::images", "science"]
-publish = false
+publish.workspace = true
 
 [dependencies]
 image = { workspace = true }

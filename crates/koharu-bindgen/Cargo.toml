@@ -2,18 +2,17 @@
 name = "koharu-bindgen"
 version.workspace = true
 edition.workspace = true
-description = "Bindings for C libraries that Koharu loads at run time."
-license = "MIT OR Apache-2.0"
+description = "Bindings for C libraries opened at runtime."
+license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords = ["bindgen", "ffi", "code-generation", "dynamic-loading", "bindings"]
 categories = ["development-tools::ffi", "development-tools::build-utils"]
-publish = true
+publish.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 bindgen = { workspace = true }
 prettyplease = { workspace = true }
 proc-macro2 = { workspace = true }

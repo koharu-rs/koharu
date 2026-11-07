@@ -21,65 +21,17 @@ const REPOSITORY: Repository = Repository::model(
     "f91c85b26913b3e83f9877867b4c336da3675238",
 );
 
-/// How a page larger than the model's comfortable size reaches it, IOPaint's
-/// `HDStrategy`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum HdStrategy {
-    /// The whole page at its size.
-    Original,
-    /// The page shrunk to `hd_strategy_resize_limit` on its long side.
-    Resize,
-    /// A crop around each masked region, with `hd_strategy_crop_margin` around it.
-    #[default]
-    Crop,
-}
-
-/// IOPaint's request settings LaMa reads, at IOPaint's defaults:
-/// https://github.com/Sanster/IOPaint/blob/61a759fb3f332bacdce8b2813f4837495c9b86e0/iopaint/schema.py#L206-L214
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Options {
-    pub hd_strategy: HdStrategy,
-    pub hd_strategy_crop_trigger_size: u32,
-    pub hd_strategy_crop_margin: u32,
-    pub hd_strategy_resize_limit: u32,
-    pub sd_keep_unmasked_area: bool,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            hd_strategy: HdStrategy::Crop,
-            hd_strategy_crop_trigger_size: 800,
-            hd_strategy_crop_margin: 128,
-            hd_strategy_resize_limit: 1280,
-            sd_keep_unmasked_area: true,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Lama {
     device: Device,
     model: Model,
 }
 
-const WEIGHTS: &str = "lama-manga.safetensors";
-
 impl Lama {
-    /// The files `load` puts on the device, fetched first if the store doesn't
-    /// have them.
-    pub async fn weights() -> Result<Vec<std::path::PathBuf>> {
-        let weights = REPOSITORY
-            .resolve([WEIGHTS])
-            .await
-            .context("failed to resolve LaMa's files")?;
-        Ok(weights.into())
-    }
-
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::backend::torch(device);
         let [weights] = REPOSITORY
-            .resolve([WEIGHTS])
+            .resolve(["lama-manga.safetensors"])
             .await
             .context("failed to resolve LaMa's files")?;
 
@@ -89,13 +41,11 @@ impl Lama {
     }
 
     /// `image` repainted where `mask` is white, IOPaint's
-    /// `InpaintModel.__call__`.
-    pub fn inference(
-        &self,
-        image: &DynamicImage,
-        mask: &GrayImage,
-        options: &Options,
-    ) -> Result<RgbImage> {
+    /// `InpaintModel.__call__` at its defaults: a page over 800 pixels on its
+    /// long side goes a crop at a time, with a margin of 128 around each masked
+    /// region.
+    /// https://github.com/Sanster/IOPaint/blob/61a759fb3f332bacdce8b2813f4837495c9b86e0/iopaint/schema.py#L206-L214
+    pub fn inference(&self, image: &DynamicImage, mask: &GrayImage) -> Result<RgbImage> {
         let image = image.to_rgb8();
         ensure!(
             image.dimensions() == mask.dimensions(),
@@ -107,76 +57,38 @@ impl Lama {
             image.width() > 0 && image.height() > 0,
             "image dimensions must be non-zero"
         );
-        koharu_torch::inference_mode(|| match options.hd_strategy {
-            HdStrategy::Crop
-                if image.width().max(image.height()) > options.hd_strategy_crop_trigger_size =>
-            {
-                let boxes = processor::boxes_from_mask(mask);
-                let mut crop_results = Vec::with_capacity(boxes.len());
-                for bounding_box in boxes {
-                    let crop_box = processor::crop_box(
-                        image.width(),
-                        image.height(),
-                        bounding_box,
-                        options.hd_strategy_crop_margin,
-                    );
-                    let [left, top, right, bottom] = crop_box;
-                    let crop_image =
-                        image::imageops::crop_imm(&image, left, top, right - left, bottom - top)
-                            .to_image();
-                    let crop_mask =
-                        image::imageops::crop_imm(mask, left, top, right - left, bottom - top)
-                            .to_image();
-                    crop_results.push((
-                        self.pad_forward(&crop_image, &crop_mask, options)?,
-                        crop_box,
-                    ));
-                }
+        koharu_torch::inference_mode(|| {
+            if image.width().max(image.height()) <= 800 {
+                return self.pad_forward(&image, mask);
+            }
 
-                let mut result = image;
-                for (crop_result, [left, top, _, _]) in crop_results {
-                    image::imageops::replace(&mut result, &crop_result, left.into(), top.into());
-                }
-                Ok(result)
+            let boxes = processor::boxes_from_mask(mask);
+            let mut crop_results = Vec::with_capacity(boxes.len());
+            for bounding_box in boxes {
+                let crop_box =
+                    processor::crop_box(image.width(), image.height(), bounding_box, 128);
+                let [left, top, right, bottom] = crop_box;
+                let crop_image =
+                    image::imageops::crop_imm(&image, left, top, right - left, bottom - top)
+                        .to_image();
+                let crop_mask =
+                    image::imageops::crop_imm(mask, left, top, right - left, bottom - top)
+                        .to_image();
+                crop_results.push((self.pad_forward(&crop_image, &crop_mask)?, crop_box));
             }
-            HdStrategy::Resize
-                if image.width().max(image.height()) > options.hd_strategy_resize_limit =>
-            {
-                let (width, height) = processor::resize_dimensions(
-                    image.width(),
-                    image.height(),
-                    options.hd_strategy_resize_limit,
-                );
-                let resized_image = crate::image::resize(&image, width, height, processor::RESIZE)?;
-                let resized_mask = crate::image::resize(mask, width, height, processor::RESIZE)?;
-                let resized_result = self.pad_forward(&resized_image, &resized_mask, options)?;
-                let mut result = crate::image::resize(
-                    &resized_result,
-                    image.width(),
-                    image.height(),
-                    processor::RESIZE,
-                )?;
-                for (index, value) in mask.as_raw().iter().enumerate() {
-                    if *value < 127 {
-                        let offset = index * 3;
-                        result.as_flat_samples_mut().samples[offset..offset + 3]
-                            .copy_from_slice(&image.as_raw()[offset..offset + 3]);
-                    }
-                }
-                Ok(result)
+
+            let mut result = image;
+            for (crop_result, [left, top, _, _]) in crop_results {
+                image::imageops::replace(&mut result, &crop_result, left.into(), top.into());
             }
-            _ => self.pad_forward(&image, mask, options),
+            Ok(result)
         })
     }
 
     /// IOPaint's `_pad_forward`: the image and mask padded to a multiple of 8,
-    /// through the network, and cropped back.
-    fn pad_forward(
-        &self,
-        image: &RgbImage,
-        mask: &GrayImage,
-        options: &Options,
-    ) -> Result<RgbImage> {
+    /// through the network, cropped back, and blended over the image by the
+    /// mask, its default `sd_keep_unmasked_area`.
+    fn pad_forward(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
         let width = image.width();
         let height = image.height();
         let image_tensor = Tensor::from_slice(image.as_raw())?
@@ -206,19 +118,15 @@ impl Lama {
             )?)
         .mul_scalar(255.0)?;
         let output = output.to_kind(Kind::Uint8)?;
-        let output = if options.sd_keep_unmasked_area {
-            let alpha = mask_tensor.to_kind(Kind::Float)?.div_scalar(255.0)?;
-            (output.to_kind(Kind::Float)?.mul_tensor(&alpha)?)
-                .add_tensor(
-                    &image_tensor
-                        .to_kind(Kind::Float)?
-                        .mul_tensor(&alpha.ones_like(None, None)?.sub_tensor(&alpha, 1)?)?,
-                    1,
-                )?
-                .to_kind(Kind::Uint8)?
-        } else {
-            output
-        };
+        let alpha = mask_tensor.to_kind(Kind::Float)?.div_scalar(255.0)?;
+        let output = (output.to_kind(Kind::Float)?.mul_tensor(&alpha)?)
+            .add_tensor(
+                &image_tensor
+                    .to_kind(Kind::Float)?
+                    .mul_tensor(&alpha.ones_like(None, None)?.sub_tensor(&alpha, 1)?)?,
+                1,
+            )?
+            .to_kind(Kind::Uint8)?;
         processor::post_process(&output, width, height)
     }
 }

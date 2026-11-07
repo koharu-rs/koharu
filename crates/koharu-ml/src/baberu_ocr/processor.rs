@@ -82,7 +82,7 @@ impl BaberuImageProcessor {
         // complete bubble to a fixed square with Pillow's bicubic filter.
         // `fast_image_resize` uses the same Catmull-Rom convolution but can
         // differ at coefficient rounding; on the 280x53 fixture its byte sum is
-        // 355 below Pillow across 150,528 channels, with identical decoded IDs.
+        // 182 below Pillow across 150,528 channels, with identical decoded IDs.
         let image = image.to_rgb8();
         let image = if image.width() == self.size && image.height() == self.size {
             image
@@ -192,7 +192,7 @@ mod tests {
             [255, 255, 255, 255, 255, 114, 254]
         );
         let sum = pixels.iter().map(|value| u64::from(*value)).sum::<u64>();
-        assert!((sum as i64 - 32_934_996).abs() <= 355);
+        assert!((sum as i64 - 32_934_996).abs() <= 182);
     }
 
     #[test]

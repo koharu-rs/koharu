@@ -1,5 +1,5 @@
 use std::{
-    ffi::{CStr, c_char, c_int, c_uint},
+    ffi::{CStr, c_char, c_int, c_uint, c_void},
     sync::OnceLock,
 };
 
@@ -22,6 +22,7 @@ type DeviceGetAttribute = unsafe extern "C" fn(*mut c_int, c_int, c_int) -> c_in
 type DeviceGetName = unsafe extern "C" fn(*mut c_char, c_int, c_int) -> c_int;
 type DeviceTotalMemory = unsafe extern "C" fn(*mut usize, c_int) -> c_int;
 type DriverGetVersion = unsafe extern "C" fn(*mut c_int) -> c_int;
+type DevicePrimaryCtxRetain = unsafe extern "C" fn(*mut *mut c_void, c_int) -> c_int;
 
 struct Cuda {
     // Keep the library loaded for as long as its function pointers are used.
@@ -31,6 +32,7 @@ struct Cuda {
     get_device_attribute: DeviceGetAttribute,
     get_device_name: DeviceGetName,
     get_device_memory: DeviceTotalMemory,
+    retain_primary_context: DevicePrimaryCtxRetain,
 }
 
 impl Cuda {
@@ -73,6 +75,9 @@ impl Cuda {
                 get_device_name: *library.get::<DeviceGetName>(b"cuDeviceGetName\0").ok()?,
                 get_device_memory: *library
                     .get::<DeviceTotalMemory>(b"cuDeviceTotalMem_v2\0")
+                    .ok()?,
+                retain_primary_context: *library
+                    .get::<DevicePrimaryCtxRetain>(b"cuDevicePrimaryCtxRetain\0")
                     .ok()?,
                 _library: library,
                 device_count,
@@ -131,14 +136,43 @@ impl Cuda {
     }
 }
 
-pub(super) fn probe() -> Vec<(Device, u64)> {
+fn driver() -> Option<&'static Cuda> {
     static DRIVER: OnceLock<Option<Cuda>> = OnceLock::new();
-    let Some(driver) = DRIVER.get_or_init(Cuda::load) else {
+    DRIVER.get_or_init(Cuda::load).as_ref()
+}
+
+pub(super) fn probe() -> Vec<(Device, u64)> {
+    let Some(driver) = driver() else {
         return Vec::new();
     };
     (0..driver.device_count)
         .filter_map(|index| driver.device(index))
         .collect()
+}
+
+/// Holds a reference to the primary context of the device at `index` for the
+/// rest of the process.
+///
+/// libtorch destroys its cached cuFFT plans in a static destructor as its DLL
+/// shuts down. A `torch_cuda.dll` built by the CUDA 13.3 toolkit has let the
+/// context go by then, while the driver, loaded first by the probe, still runs
+/// `cufftDestroy` for real and reads the context's freed memory: an access
+/// violation as the process exits. libtorch and llama.cpp use this same context,
+/// so this only creates it before their first use.
+pub(crate) fn hold_primary_context(index: usize) {
+    let Some(driver) = driver() else {
+        return;
+    };
+    let (mut handle, mut context) = (0, std::ptr::null_mut());
+    let status = unsafe {
+        match (driver.get_device)(&mut handle, index as c_int) {
+            0 => (driver.retain_primary_context)(&mut context, handle),
+            status => status,
+        }
+    };
+    if status != 0 {
+        tracing::warn!(status, "couldn't hold the CUDA primary context");
+    }
 }
 
 #[cfg(target_os = "windows")]

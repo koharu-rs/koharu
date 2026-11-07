@@ -3,14 +3,14 @@ name = "koharu-runtime"
 version.workspace = true
 edition.workspace = true
 description = "Gets Koharu ready to run models on this machine's GPU."
-license = "MIT OR Apache-2.0"
+license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords = ["koharu", "runtime", "cuda", "libtorch", "machine-learning"]
 categories = ["development-tools", "science"]
-publish = false
+publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
@@ -18,6 +18,7 @@ backon = { workspace = true }
 dirs = { workspace = true }
 fast-glob = { workspace = true }
 flate2 = { workspace = true }
+fs-err = { workspace = true }
 futures = { workspace = true }
 hf-hub = { workspace = true }
 koharu-diffusion-sys = { workspace = true }

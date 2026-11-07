@@ -3,14 +3,14 @@ name = "koharu-llama-sys"
 version.workspace = true
 edition.workspace = true
 description = "llama.cpp's C API, bound to the build Koharu's runtime loads."
-license = "MIT OR Apache-2.0"
+license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords = ["llama", "llm", "ffi", "bindings", "machine-learning"]
 categories = ["external-ffi-bindings", "science"]
-publish = true
+publish.workspace = true
 build = "build.rs"
 
 [dependencies]
@@ -18,7 +18,3 @@ libloading = { workspace = true }
 
 [build-dependencies]
 koharu-bindgen = { workspace = true }
-
-# Only the generated bindings use it.
-[package.metadata.cargo-machete]
-ignored = ["libloading"]

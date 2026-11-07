@@ -25,8 +25,8 @@ Koharu 会下载所用功能需要的原生库与模型文件。运行发行版�
   <Tab title='Apple 芯片'>Apple 芯片 macOS 上受支持的本地推理使用 Metal。</Tab>
   <Tab title='Vulkan 与 CPU'>
     在 Windows 和 Linux 上，Vulkan 可为 llama.cpp 和 diffusion
-    模型（例如本地翻译、PaddleOCR-VL、FLUX.2 Klein 和 RORem）提供加速。Torch 没有 Vulkan
-    构建，因此在只有 Vulkan 的机器上，检测、其他 OCR 模型、LaMa 和 AOT 会在 CPU
+    模型（例如本地翻译、FLUX.2 Klein 和 RORem）提供加速。Torch 没有 Vulkan
+    构建，因此在只有 Vulkan 的机器上，检测、其他 OCR 模型和 LaMa 会在 CPU
     上运行。如果没有完整的加速路径能初始化，Koharu 会回退到 CPU。CPU 推理无需 GPU SDK，但速度较慢。
   </Tab>
 </Tabs>

@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::ops::Div;
 use std::sync::{Mutex, PoisonError};
 
-use koharu_torch::{Device, Kind, Result, TchError, Tensor};
+use koharu_torch::{Device, Error, Kind, Result, Tensor};
 use safetensors::{Dtype, SafeTensors};
 
 /// The separator between a weight name's parts.
@@ -61,13 +61,13 @@ impl VarStore {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         let optional = self.optional.lock().unwrap_or_else(PoisonError::into_inner);
-        let unreadable = |err: std::io::Error| TchError::FileFormat(format!("{file}: {err}"));
+        let unreadable = |err: std::io::Error| Error::FileFormat(format!("{file}: {err}"));
         let handle = std::fs::File::open(path).map_err(unreadable)?;
         // The file isn't changed while it's mapped: the runtime's store keeps
         // it read-only once it's pinned and checked.
         let mapping = unsafe { memmap2::Mmap::map(&handle) }.map_err(unreadable)?;
         let tensors = SafeTensors::deserialize(&mapping)
-            .map_err(|err| TchError::FileFormat(format!("{file}: {err}")))?;
+            .map_err(|err| Error::FileFormat(format!("{file}: {err}")))?;
         let mut unused = tensors.names().into_iter().collect::<BTreeSet<_>>();
         let _guard = koharu_torch::InferenceMode::enter();
         for (name, variable) in variables.iter_mut() {
@@ -75,11 +75,11 @@ impl VarStore {
                 if optional.contains(name) {
                     continue;
                 }
-                return Err(TchError::TensorNameNotFound(name.clone(), file));
+                return Err(Error::TensorNameNotFound(name.clone(), file));
             };
             let shape = view.shape().iter().map(|&x| x as i64).collect::<Vec<_>>();
             if shape != variable.size() {
-                return Err(TchError::Shape(format!(
+                return Err(Error::Shape(format!(
                     "`{name}` is {shape:?} in {file} but {:?} in the model",
                     variable.size()
                 )));
@@ -96,7 +96,7 @@ impl VarStore {
                 Dtype::F32 => Kind::Float,
                 Dtype::F64 => Kind::Double,
                 dtype => {
-                    return Err(TchError::Convert(format!(
+                    return Err(Error::Convert(format!(
                         "`{name}` in {file} is {dtype:?}, which libtorch doesn't take"
                     )));
                 }
@@ -106,7 +106,7 @@ impl VarStore {
         }
         if !unused.is_empty() {
             let names = unused.into_iter().collect::<Vec<_>>().join(", ");
-            return Err(TchError::FileFormat(format!(
+            return Err(Error::FileFormat(format!(
                 "{file} has weights the model doesn't declare: {names}"
             )));
         }
@@ -189,7 +189,7 @@ impl<'a> Path<'a> {
         let path = self.path(name);
         let mut variables = self.var_store.variables();
         if variables.contains_key(&path) {
-            return Err(TchError::Convert(format!("`{path}` is declared twice")));
+            return Err(Error::Convert(format!("`{path}` is declared twice")));
         }
         let view = tensor.alias()?;
         variables.insert(path, tensor);

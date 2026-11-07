@@ -6,21 +6,9 @@
 //! https://github.com/Sanster/IOPaint/blob/61a759fb3f332bacdce8b2813f4837495c9b86e0/iopaint/helper.py#L187-L267
 
 use anyhow::{Context, Result};
-use fast_image_resize::{FilterType, ResizeAlg};
 use image::{GrayImage, RgbImage};
 use imageproc::contours::{BorderType, find_contours_with_threshold};
 use koharu_torch::{Device, Kind, Tensor};
-
-pub(super) fn resize_dimensions(width: u32, height: u32, size_limit: u32) -> (u32, u32) {
-    let ratio = size_limit as f64 / width.max(height) as f64;
-    (
-        (width as f64 * ratio + 0.5) as u32,
-        (height as f64 * ratio + 0.5) as u32,
-    )
-}
-
-/// IOPaint resizes with OpenCV's `INTER_CUBIC`.
-pub(super) const RESIZE: ResizeAlg = ResizeAlg::Convolution(FilterType::CatmullRom);
 
 pub(super) fn boxes_from_mask(mask: &GrayImage) -> Vec<[u32; 4]> {
     let width = mask.width();

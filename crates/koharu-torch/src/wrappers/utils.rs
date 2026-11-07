@@ -1,10 +1,10 @@
 use std::ffi::CStr;
 
 use koharu_torch_sys::{
-    torch_exception_get_what_without_backtrace, AOTITorchError, AOTI_TORCH_SUCCESS,
+    AOTI_TORCH_SUCCESS, AOTITorchError, torch_exception_get_what_without_backtrace,
 };
 
-use crate::{Result, TchError};
+use crate::{Error, Result};
 
 /// Turns a libtorch C function's error code into the message of the
 /// exception it caught on this thread.
@@ -13,7 +13,7 @@ pub(crate) fn check(code: AOTITorchError) -> Result<()> {
         return Ok(());
     }
     let what = unsafe { torch_exception_get_what_without_backtrace() };
-    Err(TchError::Torch(if what.is_null() {
+    Err(Error::Torch(if what.is_null() {
         format!("libtorch error {code}")
     } else {
         unsafe { CStr::from_ptr(what) }

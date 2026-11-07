@@ -1,5 +1,7 @@
-//! llama.cpp's C API, resolved from the runtime's build when `load` is called.
-//! The headers are copied verbatim from `RELEASE`.
+//! llama.cpp's C API and the `llama_rs_` C wrapper of its common library,
+//! resolved from the runtime's build when `load` is called. The headers are
+//! copied verbatim: llama.cpp's from `RELEASE`, and the wrapper's from
+//! koharu-rs/llama's `cmake/wrapper`, which builds into that release.
 
 #![allow(
     non_camel_case_types,
@@ -10,6 +12,6 @@
 )]
 
 /// The llama.cpp release the headers come from.
-pub const RELEASE: &str = "b12001";
+pub const RELEASE: &str = "b12143";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

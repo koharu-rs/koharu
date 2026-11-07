@@ -1,13 +1,13 @@
 //! Devices on which tensor computations are run.
 
 use koharu_torch_sys::{
+    ATEN_CUDNN_BENCHMARK, ATEN_CUDNN_ENABLED, ATEN_HAS_CUDNN, AtenMemoryStats, AtenSetting,
     aten_accelerator, aten_empty_cache, aten_has, aten_memory_stats, aten_set_setting,
-    aten_setting, aten_synchronize, AtenMemoryStats, AtenSetting, ATEN_CUDNN_BENCHMARK,
-    ATEN_CUDNN_ENABLED, ATEN_HAS_CUDNN,
+    aten_setting, aten_synchronize,
 };
 
 use super::utils::check;
-use crate::{Result, TchError};
+use crate::{Error, Result};
 
 /// c10::DeviceType's values for the devices Koharu runs on. A HIP build of
 /// libtorch reports its GPUs as CUDA ones.
@@ -113,7 +113,7 @@ pub struct AllocatorMemory {
 }
 
 fn index(device_index: i64) -> Result<i32> {
-    i32::try_from(device_index).map_err(|_| TchError::Convert(format!("no device {device_index}")))
+    i32::try_from(device_index).map_err(|_| Error::Convert(format!("no device {device_index}")))
 }
 
 fn setting(setting: AtenSetting) -> i64 {
@@ -141,7 +141,7 @@ impl Device {
             CPU => Ok(Device::Cpu),
             CUDA => Ok(Device::Cuda(usize::try_from(index).unwrap_or(0))),
             MPS => Ok(Device::Mps),
-            _ => Err(TchError::Convert(format!(
+            _ => Err(Error::Convert(format!(
                 "unsupported device type {device_type}"
             ))),
         }
