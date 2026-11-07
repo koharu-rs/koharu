@@ -343,12 +343,26 @@ fn is_chinese_or_japanese_language(language: &str) -> bool {
 }
 
 fn inset(rect: LayoutBox, [top, right, bottom, left]: [f32; 4]) -> LayoutBox {
+    // Automatic balloon flow can produce cells only a few pixels wide. A fixed inset would leave
+    // no layout area and abort the whole export, so an inset that would consume an axis entirely
+    // shrinks to keep half of it. Boxes the inset fits are laid out exactly as before.
+    let (left, right) = fit_inset(rect.width, left, right);
+    let (top, bottom) = fit_inset(rect.height, top, bottom);
     LayoutBox {
         x: rect.x + left,
         y: rect.y + top,
         width: (rect.width - left - right).max(0.0),
         height: (rect.height - top - bottom).max(0.0),
     }
+}
+
+fn fit_inset(extent: f32, start: f32, end: f32) -> (f32, f32) {
+    let total = start + end;
+    if total < extent || total <= 0.0 {
+        return (start, end);
+    }
+    let scale = extent.max(0.0) * 0.5 / total;
+    (start * scale, end * scale)
 }
 
 fn placement(rect: LayoutBox, width: f32, height: f32) -> (f32, f32) {
@@ -442,7 +456,106 @@ mod tests {
     use koharu_scene::EntityId;
 
     use super::*;
-    use crate::fonts::FontSystem;
+    use crate::fonts::{FontRequest, FontSystem, Fonts};
+
+    #[test]
+    fn inset_keeps_layout_area_in_cells_narrower_than_the_inset() {
+        let cell = LayoutBox {
+            x: 10.0,
+            y: 20.0,
+            width: 7.0,
+            height: 43.0,
+        };
+        let bounds = inset(cell, [4.0; 4]);
+        assert!(bounds.width > 0.0 && bounds.height > 0.0);
+        assert_eq!(bounds.width, 3.5);
+        assert_eq!(bounds.x, 11.75);
+        // An axis the inset fits keeps its exact inset.
+        assert_eq!((bounds.y, bounds.height), (24.0, 35.0));
+
+        // An inset that exactly consumes an axis would leave zero width, so it shrinks too.
+        let exact = inset(
+            LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 8.0,
+                height: 30.0,
+            },
+            [4.0; 4],
+        );
+        assert_eq!((exact.x, exact.width), (2.0, 4.0));
+
+        // The same applies to height, independently of width.
+        let short = inset(
+            LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 30.0,
+                height: 5.0,
+            },
+            [4.0; 4],
+        );
+        assert_eq!((short.x, short.width), (4.0, 22.0));
+        assert_eq!((short.y, short.height), (1.25, 2.5));
+
+        // A genuinely empty cell stays empty, so the renderer still rejects it.
+        let empty = inset(
+            LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 30.0,
+            },
+            [4.0; 4],
+        );
+        assert_eq!(empty.width, 0.0);
+    }
+
+    /// The cell from #1127: automatic balloon flow produced a 7 x 43 px cell, the 4 px inset
+    /// left no layout width, and rendering (and with it the whole export) failed.
+    #[tokio::test]
+    async fn balloon_cell_narrower_than_the_inset_still_renders() {
+        let family = FontSystem::new()
+            .first_font()
+            .unwrap()
+            .family_name()
+            .to_owned();
+        let descriptor = TextNodeDescriptor {
+            entity: EntityId::new(),
+            text: "Test".to_owned(),
+            language: None,
+            width: 7.0,
+            height: 43.0,
+            balloon_contour: Some(vec![(0.0, 0.0), (7.0, 0.0), (7.0, 43.0), (0.0, 43.0)]),
+            preferred_font: Some(family.clone()),
+            font_families: vec![family],
+            font_weight: None,
+            font_style: None,
+            font_size: None,
+            minimum_font_size: 9.0,
+            auto_fit: true,
+            alignment: TextAlign::Center,
+            writing_mode: WritingMode::Horizontal,
+            foreground_color: [0, 0, 0, 255],
+            stroke: None,
+            line_height: 1.2,
+            letter_spacing: 0.0,
+            word_spacing: 0.0,
+            text_inset: [4.0; 4],
+            point_text: false,
+        };
+        let fonts = Fonts::new();
+        fonts
+            .prepare(&[FontRequest {
+                family: descriptor.font_families[0].clone(),
+                weight: None,
+                style: None,
+            }])
+            .await
+            .unwrap();
+        let rendered = TextRenderer::new().render_descriptor(&descriptor, &fonts);
+        assert!(rendered.is_ok(), "{:?}", rendered.err());
+    }
 
     #[test]
     fn automatic_size_preserves_free_text_default_and_balloon_extent() {
