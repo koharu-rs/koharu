@@ -523,6 +523,41 @@ impl Project {
         self.commit(patch).await
     }
 
+    pub(crate) async fn set_translations(
+        &mut self,
+        updates: Vec<(EntityId, Option<String>)>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let updates = updates
+            .into_iter()
+            .map(|(layer, text)| {
+                let content = Self::text_content(&snapshot, layer)?;
+                let language = snapshot
+                    .component::<SceneTranslation>(content)?
+                    .and_then(|translation| translation.language);
+                Ok((layer, content, language, text))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let patch = snapshot.patch(|edit| {
+            for (layer, content, language, text) in updates {
+                edit.promote_entity_to_user(layer)?;
+                edit.promote_entity_to_user(content)?;
+                match text {
+                    Some(text) => edit.set(
+                        content,
+                        &SceneTranslation {
+                            text: Authored::user(text),
+                            language,
+                        },
+                    ),
+                    None => edit.remove::<SceneTranslation>(content),
+                }?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch).await
+    }
+
     pub(crate) async fn set_typography(
         &mut self,
         updates: Vec<TypographyUpdate>,
@@ -1442,6 +1477,69 @@ mod tests {
                 .label,
             "latest manual"
         );
+    }
+
+    #[tokio::test]
+    async fn bulk_set_translations_applies_every_update_in_one_commit() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("bulk", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let (_, first) = project
+            .add_text_box(
+                page,
+                Frame {
+                    x: 5.0,
+                    y: 5.0,
+                    width: 100.0,
+                    height: 32.0,
+                    angle_degrees: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+        let (_, second) = project
+            .add_text_box(
+                page,
+                Frame {
+                    x: 5.0,
+                    y: 40.0,
+                    width: 100.0,
+                    height: 32.0,
+                    angle_degrees: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        let base = project.revision();
+        let commit = project
+            .set_translations(vec![
+                (first, Some("Olá".to_owned())),
+                (second, Some("Mundo".to_owned())),
+            ])
+            .await
+            .unwrap();
+
+        let snapshot = project.snapshot();
+        assert_eq!(snapshot.revision(), commit.revision);
+        assert_eq!(commit.revision, base.next().unwrap());
+
+        let read = |layer: EntityId| -> String {
+            let content = Project::text_content(&snapshot, layer).unwrap();
+            snapshot
+                .component::<SceneTranslation>(content)
+                .unwrap()
+                .unwrap()
+                .text
+                .value
+        };
+        assert_eq!(read(first), "Olá");
+        assert_eq!(read(second), "Mundo");
     }
 
     #[test]
