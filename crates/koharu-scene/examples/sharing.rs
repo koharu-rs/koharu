@@ -1,148 +1,90 @@
-//! One session shared by the editor and a background model. The model reads
-//! under the lock, works without it, and applies its result naming what it
-//! read; if the user changed that meanwhile, the result is stale and nothing
-//! is written. An edit that changes nothing adds no undo step.
+//! One session shared by the editor and a background model. The model reads a
+//! snapshot of the project, which stays as it was while the editor goes on,
+//! and holds the session only to apply its result. An edit that changes
+//! nothing adds no undo step.
 //!
 //! `cargo run -p koharu-scene --example sharing`
 
 use std::{
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex, MutexGuard, PoisonError},
     thread,
 };
 
-use koharu_scene::{
-    Action, Author, Edit, Error, LayerId, Op, Pointer, Session, Size, SoftwareAgent,
-};
-use serde_json::{Map, Value, json};
+use koharu_scene::{Content, Created, Edit, Session};
+use serde_json::{Value, json};
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-fn user_edit(session: &Session, label: &str, ops: Vec<Op>) -> Edit {
-    Edit {
-        project: session.id(),
+fn edit(label: &str, ops: Vec<Value>) -> Result<Edit> {
+    Ok(Edit {
         label: label.to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
-        ops,
-    }
+        ops: ops
+            .into_iter()
+            .map(serde_json::from_value)
+            .collect::<std::result::Result<_, _>>()?,
+    })
 }
 
-fn op(value: Value) -> Op {
-    serde_json::from_value(value).expect("a valid op")
-}
-
-/// A model run in the background: read under the lock, compute without it,
-/// and apply under it. `between` runs after the read, standing in for
-/// whatever the user does while the model works.
-fn run_model(
-    session: &Arc<Mutex<Session>>,
-    layer: LayerId,
-    between: impl FnOnce(),
-) -> koharu_scene::Result<()> {
-    let content = Pointer::from_static("/content");
-    let (text, read) = session.lock().expect("not poisoned").read(layer, content)?;
-    between();
-    let result = text.as_str().unwrap_or_default().to_uppercase();
-    let mut session = session.lock().expect("not poisoned");
-    let edit = Edit {
-        project: session.id(),
-        label: "Shout".to_owned(),
-        author: Author::Model {
-            action: Action {
-                action: "c2pa.edited".to_owned(),
-                software_agent: SoftwareAgent {
-                    name: "shouter".to_owned(),
-                    version: None,
-                },
-                digital_source_type: None,
-                parameters: Map::new(),
-            },
-        },
-        reads: Vec::new(),
-        ops: vec![Op::SetText {
-            layer: layer.into(),
-            text: result,
-            ingredients: vec![read.parent_of()],
-        }],
-    };
-    session.apply(edit).map(|_| ())
+fn lock(session: &Mutex<Session>) -> MutexGuard<'_, Session> {
+    session.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("chapter.koharu"))?;
-    let change = session.apply(user_edit(&session, "Set up", vec![
-        Op::AddPage {
-            id: Some("$page".to_owned().try_into()?),
-            index: 0,
-            size: Size { width: 800, height: 1200 },
-        },
-        op(json!({"op": "add_layer", "page": "$page", "index": 0, "layer": {"kind": "text", "content": "hello"}})),
-    ]))?;
-    let text = match &change.created[1] {
-        koharu_scene::Created::Layer { id, .. } => *id,
-        _ => unreachable!("the layer comes second"),
+    let session = Arc::new(Mutex::new(Session::create(dir.path().join("shared.khr"))?));
+    let change = lock(&session).apply(edit("Detect", vec![
+        json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 600}}),
+        json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "block", "source": {
+            "frame": {"box": {"bounds": {"x": 10.0, "y": 10.0, "width": 40.0, "height": 80.0}}}, "content": "おはよう",
+        }}}),
+    ])?)?;
+    let Some(Created::Layer { id: block, .. }) = change.created.get(1).cloned() else {
+        return Err("no block".into());
     };
-    // `Session` is `Send` and `Sync`, so it can sit behind a mutex that the
-    // UI and background work share.
-    let session = Arc::new(Mutex::new(session));
 
-    // The model works on another thread; the user edits the same text before
-    // it finishes, so its result is stale and rejected.
-    let (read_done, after_read) = mpsc::channel();
-    let (edited, after_edit) = mpsc::channel::<()>();
-    let worker = thread::spawn({
-        let session = session.clone();
-        move || {
-            run_model(&session, text, || {
-                read_done.send(()).expect("the main thread waits");
-                after_edit.recv().expect("the main thread edits");
-            })
-        }
-    });
-    after_read.recv()?;
-    {
-        let mut session = session.lock().expect("not poisoned");
-        let edit = user_edit(
-            &session,
-            "Edit text",
-            vec![Op::SetText {
-                layer: text.into(),
-                text: "hello there".to_owned(),
-                ingredients: Vec::new(),
-            }],
-        );
-        session.apply(edit)?;
-    }
-    edited.send(())?;
-    let result = worker.join().expect("the worker finished");
-    assert!(matches!(result, Err(Error::Stale { .. })));
-    println!("the model's result was stale: {}", result.unwrap_err());
+    // The model translates from a snapshot, without holding the session.
+    let snapshot = lock(&session).project();
+    let model = {
+        let session = Arc::clone(&session);
+        thread::spawn(move || -> Result<()> {
+            let Content::Block(source) = &snapshot.layer(block)?.content else {
+                return Err("not a block".into());
+            };
+            let text = format!("Good morning ({})", source.source.content.text());
+            lock(&session).apply(edit(
+                "Translate",
+                vec![json!({"op": "set_text", "layer": block, "text": text})],
+            )?)?;
+            Ok(())
+        })
+    };
 
-    // Run again with nothing in between, and it lands.
-    let worker = thread::spawn({
-        let session = session.clone();
-        move || run_model(&session, text, || {})
-    });
-    worker.join().expect("the worker finished")?;
-    let mut session = Arc::into_inner(session)
-        .expect("the workers are done")
-        .into_inner()?;
-    let shown = session.read(text, Pointer::from_static("/content"))?.0;
-    assert_eq!(shown, "HELLO THERE");
-    println!("the rerun wrote {shown}");
-
-    // An edit that changes nothing writes nothing and adds no undo step.
-    let before = session.history();
-    let change = session.apply(user_edit(
-        &session,
+    // Meanwhile the editor renames the block.
+    lock(&session).apply(edit(
         "Rename",
-        vec![op(json!({
-            "op": "update_layer", "layer": text, "patch": {"name": ""},
-        }))],
-    ))?;
-    assert!(change.layers.is_empty() && change.pages.changed.is_empty());
-    assert_eq!(session.history(), before);
-    println!("a no-op edit left the history at {:?}", before.undo);
+        vec![json!({"op": "update_layer", "layer": block, "patch": {"name": "Greeting"}})],
+    )?)?;
+    model.join().map_err(|_| "the model panicked")??;
+
+    let mut session = lock(&session);
+    let history = session.history();
+    let same = session.apply(edit(
+        "Rename",
+        vec![json!({"op": "update_layer", "layer": block, "patch": {"name": "Greeting"}})],
+    )?)?;
+    assert!(same.layers.is_empty() && session.history() == history);
+    let project = session.project();
+    let layer = project.layer(block)?;
+    let Content::Block(done) = &layer.content else {
+        return Err("not a block".into());
+    };
+    println!(
+        "{}: {}",
+        layer.name,
+        done.translation
+            .as_ref()
+            .map(|text| text.content.text())
+            .unwrap_or_default()
+    );
     Ok(())
 }

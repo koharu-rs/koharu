@@ -9,7 +9,8 @@ draw the same frame, so every export matches what the editor shows.
 | Item | What it does |
 |---|---|
 | `Renderer::new(typesetting)` | A renderer. Cloning it shares its fonts, caches, and GPU, which start on first use |
-| `Renderer::render(&session, page)` | A `Frame` of the page at its current revision |
+| `Renderer::render(&session, page)` | A `Frame` of the page at its current revision: its background, then its layers |
+| `Renderer::lay_out(layer, &text)` | A text laid out as a render would, for one nothing draws, such as a block's source |
 | `Renderer::rasterize(&frame)` | The frame's area at one output pixel per page pixel, as a `Raster` of straight-alpha RGBA and its corner |
 | `Renderer::gpu()` | The `Gpu`, which the desktop canvas draws frames with |
 | `Renderer::load_fonts(&frame).await` | Downloads the bundled fonts the frame's text asked for |
@@ -17,9 +18,13 @@ draw the same frame, so every export matches what the editor shows.
 | `Renderer::font_preview(family).await` | A WebP of the family's name set in it, 96 pixels tall |
 | `Renderer::set_typesetting(config)` | Follows a changed `[typesetting]` preference, and text lays out again |
 | `Frame::draw(view)` | The `Strip`s that draw a `View`: a page rectangle at a scale |
-| `Frame::layers()`, `layer(id)` | Each `Layer` as the frame drew it: bounds, visibility, and a text's `ResolvedText` |
-| `Frame::cropped(id)`, `unstroked(id)` | One layer alone, as a PSD's pixel layer needs it |
-| `Frame::mask(id)` | A layer's masks merged into one coverage |
+| `Frame::layers()`, `layer(id)` | Each thing the frame drew, by `NodeId`: bounds, visibility, and a text's `ResolvedText` |
+| `Frame::cropped(id)`, `unstroked(id)` | One thing alone, as a PSD's pixel layer needs it |
+| `Frame::mask(id)` | Its masks merged into one coverage |
+
+A `NodeId` names a layer, the page's background, or a block's clean-up or translation, which a
+block draws apart: its clean-up through its mask, then its translation. A panel shows its
+children only inside its outline, and no outline is drawn.
 | `Frame::needs_fonts()` | Whether some text draws with a fallback until `load_fonts` |
 
 A frame is immutable and cheap to clone. Layer trees are fixed when it renders, so a view can
@@ -28,9 +33,8 @@ be drawn again without touching the session.
 ## Frames
 
 `render` builds each layer's content in parallel, then assembles the page's tree. Content is
-retained by what changes it, such as a layer's hash, its text style's, and the font generation,
-so a render after an edit reuses every layer the edit didn't touch. Retained content may take
-2 GiB. A page or an imported image may be up to 32,768 pixels on a side and 268,435,456 pixels.
+retained by what changes it, such as a text's canonical JSON hash and the font generation, so a render after an
+edit reuses every layer the edit didn't touch. Retained content may take 2 GiB. A page or an imported image may be up to 32,768 pixels on a side and 268,435,456 pixels.
 
 The scene's 64×64 tiles assemble into one image, which is drawn as 512×512 tiles at full size
 and at halved levels, so a pass draws only the tiles it meets at the level its scale needs.

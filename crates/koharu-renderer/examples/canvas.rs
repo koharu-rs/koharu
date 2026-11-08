@@ -7,8 +7,8 @@
 
 use std::time::Instant;
 
-use koharu_renderer::{Frame, Renderer, TypesettingConfig, View};
-use koharu_scene::{Author, Created, Edit, LayerId, LayerKind, Op, Session};
+use koharu_renderer::{Frame, NodeId, Renderer, TypesettingConfig, View};
+use koharu_scene::{Created, Edit, LayerKind, Op, Project, Session};
 use serde_json::{Value, json};
 use vello::{
     kurbo::{Point, Rect},
@@ -21,7 +21,7 @@ const WINDOW: (f64, f64) = (1280.0, 800.0);
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("episode.koharu"))?;
+    let mut session = Session::create(dir.path().join("episode.khr"))?;
 
     // A webtoon episode: balloons down a tall page, and a narration box set
     // too small for its text.
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
         "content": "Years later, she would still remember the night the sky fell.",
         "frame": {"box": {"bounds": {"x": 140.0, "y": 3700.0, "width": 400.0, "height": 60.0}, "fit": "none"}},
     }}));
-    let change = session.apply(edit(&session, ops)?)?;
+    let change = session.apply(edit(ops)?)?;
     let page = change.pages.added[0];
     let line = |index: usize| {
         change.created.iter().find_map(|created| match created {
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
     // The window, zoomed to 200% on the second balloon. Each strip renders
     // into a texture of its own, which the canvas places at `strip.rect`.
     let balloon = frame
-        .layer(line(1).expect("the line"))
+        .layer(NodeId::Layer(line(1).expect("the line")))
         .and_then(|layer| layer.bounds())
         .expect("it draws");
     let view = View {
@@ -99,27 +99,27 @@ fn main() -> Result<()> {
     }
     println!("drew the 200% view in {} strip(s)", strips.len());
 
-    if let Some(layer) = topmost(&frame, view.rect.center()) {
-        println!(
-            "under the pointer: the {:?} layer {layer}",
-            frame.layer(layer).expect("drawn").kind()
-        );
+    if let Some(node) = topmost(&frame, &session.project(), view.rect.center()) {
+        println!("under the pointer: {node:?}");
     }
     for layer in frame
         .layers()
         .filter(|layer| layer.text().is_some_and(|text| text.overflowed))
     {
-        println!("overflow mark on {} over {:?}", layer.id(), layer.bounds());
+        println!(
+            "overflow mark on {:?} over {:?}",
+            layer.id(),
+            layer.bounds()
+        );
     }
 
     let retype = Op::SetText {
         layer: line(1).expect("the line").into(),
         text: "Let's get ice cream after school.".to_owned(),
-        ingredients: Vec::new(),
     };
     session.apply(Edit {
         ops: vec![retype],
-        ..edit(&session, Vec::new())?
+        ..edit(Vec::new())?
     })?;
     let started = Instant::now();
     renderer.render(&session, page)?;
@@ -127,25 +127,35 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// The topmost layer drawing at `point`: the last in the page's order, as
-/// layers draw first to last. Groups and masks draw nothing of their own.
-fn topmost(frame: &Frame, point: Point) -> Option<LayerId> {
+/// The topmost thing drawing at `point`: the last in the page's order, as
+/// layers draw first to last. Containers and masks draw nothing of their own,
+/// but a page's background and a block's clean-up and translation do. A
+/// clean-up isn't a layer of the tree, so the project doesn't find it.
+fn topmost(frame: &Frame, project: &Project, point: Point) -> Option<NodeId> {
+    let draws = |node: NodeId| match node {
+        NodeId::Layer(id) => project.layer(id).map_or(true, |layer| {
+            !matches!(
+                layer.kind(),
+                LayerKind::Group
+                    | LayerKind::Panel
+                    | LayerKind::Balloon
+                    | LayerKind::Block
+                    | LayerKind::Mask
+            )
+        }),
+        NodeId::Background | NodeId::Translation(_) => true,
+    };
     frame
         .layers()
-        .filter(|layer| {
-            layer.visible() && !matches!(layer.kind(), LayerKind::Group | LayerKind::Mask)
-        })
+        .filter(|layer| layer.visible() && draws(layer.id()))
         .filter(|layer| layer.bounds().is_some_and(|bounds| bounds.contains(point)))
         .last()
         .map(|layer| layer.id())
 }
 
-fn edit(session: &Session, ops: Vec<Value>) -> Result<Edit> {
+fn edit(ops: Vec<Value>) -> Result<Edit> {
     Ok(Edit {
-        project: session.id(),
         label: "Letter".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
         ops: ops
             .into_iter()
             .map(serde_json::from_value)

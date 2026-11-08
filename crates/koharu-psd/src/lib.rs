@@ -3,15 +3,16 @@
 mod blocks;
 mod engine_data;
 
-use koharu_renderer::{Frame, Raster, Renderer};
-use koharu_scene::{Blend, FillRule, Layer, LayerView, MaskContent, PageId, Path, Session};
+use koharu_renderer::{Frame, NodeId, Raster, Renderer};
+use koharu_scene::{
+    Background, Balloon, Blend, Block, Content, FillRule, Layer, LayerId, PageId, Path, Rgba,
+    Session, Shape,
+};
 use kurbo::BezPath;
 use photocraft_psd::{
     BlendMode, ChannelData, Compression, GroupSpec, LayerMask, LayerRecord, LayerSpec, MaskData,
     MaskSpec, PixelData, PsdBuilder, PsdError, SectionType, TaggedBlock, Version,
 };
-
-use crate::blocks::Component;
 
 /// The most pixels a PSD holds on a side; larger documents need PSB.
 const MAX_SIDE: u32 = 30_000;
@@ -38,12 +39,31 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// The names of the layers a PSD needs where the scene has none, in the app's
+/// language. A type layer takes its text as its name, as Photoshop names it.
+#[derive(Clone, Debug)]
+pub struct Labels {
+    /// The page's background, the bottom pixel layer.
+    pub background: String,
+    /// A block's clean-up.
+    pub cleanup: String,
+    /// The hidden shape holding a balloon's outline.
+    pub outline: String,
+}
+
 /// `page` as a PSD: the renderer's composite as the merged image, and each
 /// layer with its own pixels, properties, and masks; shapes and text also
-/// keep what lets Photoshop edit them. The page is rendered once, so call it
-/// off the UI thread.
-pub fn export(session: &Session, renderer: &Renderer, page: PageId) -> Result<Vec<u8>> {
-    let view = session.page(page)?;
+/// keep what lets Photoshop edit them. PSD has no panels, balloons, or
+/// blocks, so each becomes a folder of ordinary layers. The page is rendered
+/// once, so call it off the UI thread.
+pub fn export(
+    session: &Session,
+    renderer: &Renderer,
+    page: PageId,
+    labels: &Labels,
+) -> Result<Vec<u8>> {
+    let project = session.project();
+    let view = project.page(page)?;
     let (width, height) = (view.size.width, view.size.height);
     if width > MAX_SIDE || height > MAX_SIDE {
         return Err(Error::TooLarge { width, height });
@@ -52,11 +72,15 @@ pub fn export(session: &Session, renderer: &Renderer, page: PageId) -> Result<Ve
     let mut export = Export {
         renderer,
         frame: &frame,
+        labels,
         size: (width, height),
         builder: PsdBuilder::new(width, height).resolution(72.0),
         folders: Vec::new(),
         texts: 0,
     };
+    if let Some(background) = view.background {
+        export.background(background)?;
+    }
     for layer in &view.layers {
         export.layer(layer)?;
     }
@@ -91,6 +115,7 @@ pub fn export(session: &Session, renderer: &Renderer, page: PageId) -> Result<Ve
 struct Export<'a> {
     renderer: &'a Renderer,
     frame: &'a Frame,
+    labels: &'a Labels,
     size: (u32, u32),
     builder: PsdBuilder,
     /// Each group's blocks and mask, which the builder can't give its folder
@@ -99,98 +124,236 @@ struct Export<'a> {
     texts: i32,
 }
 
+/// A pixel layer's properties.
+struct Leaf<'n> {
+    name: &'n str,
+    visible: bool,
+    opacity: u8,
+    blend: Blend,
+}
+
+fn alpha(opacity: impl Into<f32>) -> u8 {
+    (opacity.into() * 255.0).round() as u8
+}
+
 impl Export<'_> {
-    fn layer(&mut self, view: &LayerView) -> Result<()> {
-        let (name, visible, locked, opacity, blend) = match &view.layer {
-            Layer::Group(layer) => (
-                &layer.name,
-                layer.visible,
-                layer.locked,
-                layer.opacity,
-                layer.blend,
-            ),
-            Layer::Image(layer) => (
-                &layer.name,
-                layer.visible,
-                layer.locked,
-                layer.opacity,
-                layer.blend,
-            ),
-            Layer::Raster(layer) => (
-                &layer.name,
-                layer.visible,
-                layer.locked,
-                layer.opacity,
-                layer.blend,
-            ),
-            Layer::Shape(layer) => (
-                &layer.name,
-                layer.visible,
-                layer.locked,
-                layer.opacity,
-                layer.blend,
-            ),
-            Layer::Text(layer) => (
-                &layer.name,
-                layer.visible,
-                layer.locked,
-                layer.opacity,
-                layer.blend,
-            ),
-            // A mask is its layer's, never one of the drawn children.
-            Layer::Mask(_) => return Ok(()),
+    fn background(&mut self, background: Background) -> Result<()> {
+        let name = self.labels.background.clone();
+        self.leaf(
+            Some(NodeId::Background),
+            Leaf {
+                name: &name,
+                visible: background.visible,
+                opacity: 255,
+                blend: Blend::Normal,
+            },
+            Vec::new(),
+            None,
+        )
+    }
+
+    fn layer(&mut self, layer: &Layer) -> Result<()> {
+        let leaf = Leaf {
+            name: &layer.name,
+            visible: layer.visible,
+            opacity: alpha(layer.opacity),
+            blend: layer.blend,
         };
-        let opacity = (opacity * 255.0).round() as u8;
         let mut blocks = Vec::new();
-        if locked {
+        if layer.locked {
             blocks.push(TaggedBlock::protection(LOCK_ALL));
         }
-        match &view.layer {
-            Layer::Group(_) => {
-                self.builder.begin_group(GroupSpec {
-                    name: name.clone(),
-                    blend_mode: blend_mode(blend),
-                    opacity,
-                    visible,
-                    open: true,
-                });
-                for child in &view.children {
-                    self.layer(child)?;
-                }
-                self.builder.end_group()?;
-                let (mask, vector) = self.masks(view, false)?;
-                blocks.extend(vector);
-                self.folders.push((blocks, mask));
+        let node = NodeId::Layer(layer.id);
+        match &layer.content {
+            // A mask is its layer's, never one of the drawn children.
+            Content::Mask(_) => return Ok(()),
+            Content::Group(_) => {
+                self.folder(layer, blocks, |export| export.children(layer))?;
                 return Ok(());
             }
-            Layer::Shape(shape) => blocks.extend(blocks::shape(shape, self.size)?),
+            // A panel's folder is masked by its outline.
+            Content::Panel(panel) => {
+                blocks.push(blocks::vector_mask(
+                    &parse(&panel.outline)?,
+                    FillRule::NonZero,
+                    self.size,
+                ));
+                self.folder(layer, blocks, |export| export.children(layer))?;
+                return Ok(());
+            }
+            Content::Balloon(balloon) => {
+                self.folder(layer, blocks, |export| {
+                    export.outline(balloon)?;
+                    export.children(layer)
+                })?;
+                return Ok(());
+            }
+            Content::Block(block) => {
+                self.folder(layer, blocks, |export| export.block(layer.id, block))?;
+                return Ok(());
+            }
+            Content::Shape(shape) => blocks.extend(blocks::shape(shape, self.size)?),
             // A text that draws nothing has no runs to style, so it stays an
             // empty pixel layer.
-            Layer::Text(text) => {
-                if let Some(drawn) = self.frame.layer(view.id)
-                    && let Some(resolved) = drawn.text()
+            Content::Text(text) => {
+                if let Some(resolved) = self.frame.layer(node).and_then(|drawn| drawn.text())
                     && !resolved.runs.is_empty()
                 {
                     blocks.extend(blocks::type_layer(text, resolved, self.texts));
                     self.texts += 1;
                 }
             }
-            _ => {}
+            Content::Image(_) | Content::Raster(_) => {}
         }
-        let has_vector_mask = blocks.iter().any(|block| &block.key == b"vmsk");
-        let (mask, vector) = self.masks(view, has_vector_mask)?;
-        blocks.extend(vector);
-        // Under a stroke effect the pixels are the glyphs alone, as Photoshop
-        // draws the effect around them.
-        let own = if blocks.iter().any(|block| &block.key == b"lfx2") {
-            self.frame.unstroked(view.id)?
-        } else {
-            self.frame.cropped(view.id)?
+        let mask = self.masks(layer)?;
+        self.leaf(Some(node), leaf, blocks, mask)
+    }
+
+    fn children(&mut self, layer: &Layer) -> Result<()> {
+        for child in &layer.children {
+            self.layer(child)?;
+        }
+        Ok(())
+    }
+
+    /// A folder for `layer`, with what `inside` adds, its blocks, and its
+    /// masks.
+    fn folder(
+        &mut self,
+        layer: &Layer,
+        blocks: Vec<TaggedBlock>,
+        inside: impl FnOnce(&mut Self) -> Result<()>,
+    ) -> Result<()> {
+        self.builder.begin_group(GroupSpec {
+            name: layer.name.clone(),
+            blend_mode: blend_mode(layer.blend),
+            opacity: alpha(layer.opacity),
+            visible: layer.visible,
+            open: true,
+        });
+        inside(self)?;
+        self.builder.end_group()?;
+        let mask = self.masks(layer)?;
+        self.folders.push((blocks, mask));
+        Ok(())
+    }
+
+    /// A balloon's outline as a hidden shape layer, white like a new Clip
+    /// Studio Paint balloon, so showing it draws the balloon.
+    fn outline(&mut self, balloon: &Balloon) -> Result<()> {
+        let shape = Shape {
+            path: balloon.outline.clone(),
+            fill_rule: FillRule::NonZero,
+            fill: Some(Rgba([1.0, 1.0, 1.0, 1.0])),
+            stroke: None,
         };
-        let Raster { image, left, top } = self.renderer.rasterize(&own)?;
+        let name = self.labels.outline.clone();
+        let blocks = blocks::shape(&shape, self.size)?;
+        self.leaf(
+            None,
+            Leaf {
+                name: &name,
+                visible: false,
+                opacity: 255,
+                blend: Blend::Normal,
+            },
+            blocks,
+            None,
+        )
+    }
+
+    /// A block's parts, bottom to top: its clean-up, masked by its mask; its
+    /// source as a hidden type layer; and its translation as a type layer.
+    fn block(&mut self, id: LayerId, block: &Block) -> Result<()> {
+        let cleanup = &block.cleanup;
+        let node = NodeId::Layer(cleanup.id);
+        let mask = self.user_mask(node)?;
+        let name = match cleanup.name.is_empty() {
+            true => self.labels.cleanup.clone(),
+            false => cleanup.name.clone(),
+        };
+        self.leaf(
+            Some(node),
+            Leaf {
+                name: &name,
+                visible: cleanup.visible,
+                opacity: alpha(cleanup.opacity),
+                blend: cleanup.blend,
+            },
+            Vec::new(),
+            mask,
+        )?;
+
+        let source = &block.source;
+        let mut blocks = Vec::new();
+        if let Some(resolved) = self.renderer.lay_out(id, source)?
+            && !resolved.runs.is_empty()
+        {
+            blocks.extend(blocks::type_layer(source, &resolved, self.texts));
+            self.texts += 1;
+        }
+        let name = source.content.text();
+        self.leaf(
+            None,
+            Leaf {
+                name: &name,
+                visible: false,
+                opacity: 255,
+                blend: Blend::Normal,
+            },
+            blocks,
+            None,
+        )?;
+
+        let Some(text) = &block.translation else {
+            return Ok(());
+        };
+        let translation = NodeId::Translation(id);
+        let mut blocks = Vec::new();
+        if let Some(resolved) = self.frame.layer(translation).and_then(|drawn| drawn.text())
+            && !resolved.runs.is_empty()
+        {
+            blocks.extend(blocks::type_layer(text, resolved, self.texts));
+            self.texts += 1;
+        }
+        let name = text.content.text();
+        self.leaf(
+            Some(translation),
+            Leaf {
+                name: &name,
+                visible: true,
+                opacity: 255,
+                blend: Blend::Normal,
+            },
+            blocks,
+            None,
+        )
+    }
+
+    /// A pixel layer: what `node` drew, or nothing for what no frame draws.
+    fn leaf(
+        &mut self,
+        node: Option<NodeId>,
+        leaf: Leaf,
+        blocks: Vec<TaggedBlock>,
+        mask: Option<MaskSpec>,
+    ) -> Result<()> {
+        let Raster { image, left, top } = match node {
+            // Under a stroke effect the pixels are the glyphs alone, as
+            // Photoshop draws the effect around them.
+            Some(node) if blocks.iter().any(|block| &block.key == b"lfx2") => {
+                self.renderer.rasterize(&self.frame.unstroked(node)?)?
+            }
+            Some(node) => self.renderer.rasterize(&self.frame.cropped(node)?)?,
+            None => Raster {
+                image: Default::default(),
+                left: 0,
+                top: 0,
+            },
+        };
         let (width, height) = image.dimensions();
         self.builder.push_layer(LayerSpec {
-            name: name.clone(),
+            name: leaf.name.to_owned(),
             left,
             top,
             width,
@@ -198,13 +361,13 @@ impl Export<'_> {
             pixels: PixelData::Rgba8(image.into_raw()),
             // Pass-through only means something for a group; a single layer
             // composites the same in normal.
-            blend_mode: match blend {
+            blend_mode: match leaf.blend {
                 Blend::PassThrough => BlendMode::Normal,
                 blend => blend_mode(blend),
             },
-            opacity,
+            opacity: leaf.opacity,
             fill_opacity: None,
-            visible,
+            visible: leaf.visible,
             clipping: false,
             mask,
             extra_blocks: blocks,
@@ -212,48 +375,23 @@ impl Export<'_> {
         Ok(())
     }
 
-    /// A layer's shown masks: as one vector mask when every one is a path
-    /// and the layer has no vector mask of its own, else merged into one user
-    /// mask the renderer draws, cropped to what it covers.
-    fn masks(
-        &self,
-        view: &LayerView,
-        has_vector_mask: bool,
-    ) -> Result<(Option<MaskSpec>, Option<TaggedBlock>)> {
-        let shown: Vec<_> = view
-            .masks
+    /// A layer's shown masks merged into its one user mask, as PSD has one
+    /// layer mask a layer.
+    fn masks(&self, layer: &Layer) -> Result<Option<MaskSpec>> {
+        match layer
+            .children
             .iter()
-            .filter_map(|mask| match &mask.layer {
-                Layer::Mask(mask) if mask.visible => Some(mask),
-                _ => None,
-            })
-            .collect();
-        if shown.is_empty() {
-            return Ok((None, None));
+            .any(|child| child.is_mask() && child.visible)
+        {
+            true => self.user_mask(NodeId::Layer(layer.id)),
+            false => Ok(None),
         }
-        if !has_vector_mask {
-            let components = shown
-                .iter()
-                .map(|mask| match &mask.content {
-                    // An empty path has no subpath to carry its operation.
-                    MaskContent::Path { path } => Ok(Some(parse(path)?)
-                        .filter(|path| !path.elements().is_empty())
-                        .map(|path| Component {
-                            path,
-                            mode: mask.mode,
-                            // The renderer fills path masks by the non-zero
-                            // rule.
-                            fill_rule: FillRule::NonZero,
-                        })),
-                    MaskContent::Pixels { .. } => Ok(None),
-                })
-                .collect::<Result<Option<Vec<_>>>>()?;
-            if let Some(components) = components {
-                return Ok((None, Some(blocks::vector_mask(&components, self.size))));
-            }
-        }
-        let Some(mask) = self.frame.mask(view.id)? else {
-            return Ok((None, None));
+    }
+
+    /// `node`'s masks merged into one user mask, cropped to what it covers.
+    fn user_mask(&self, node: NodeId) -> Result<Option<MaskSpec>> {
+        let Some(mask) = self.frame.mask(node)? else {
+            return Ok(None);
         };
         let coverage = self.renderer.rasterize(&mask)?;
         let image = &coverage.image;
@@ -267,20 +405,17 @@ impl Export<'_> {
         let data = (y0..y1)
             .flat_map(|y| (x0..x1).map(move |x| image.get_pixel(x, y)[3]))
             .collect();
-        Ok((
-            Some(MaskSpec {
-                rect: photocraft_psd::Rect::from_xywh(
-                    coverage.left + x0 as i32,
-                    coverage.top + y0 as i32,
-                    x1 - x0,
-                    y1 - y0,
-                ),
-                data,
-                default_color: 0,
-                disabled: false,
-            }),
-            None,
-        ))
+        Ok(Some(MaskSpec {
+            rect: photocraft_psd::Rect::from_xywh(
+                coverage.left + x0 as i32,
+                coverage.top + y0 as i32,
+                x1 - x0,
+                y1 - y0,
+            ),
+            data,
+            default_color: 0,
+            disabled: false,
+        }))
     }
 }
 

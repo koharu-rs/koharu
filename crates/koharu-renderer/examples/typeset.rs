@@ -1,15 +1,15 @@
-//! What the pipeline does once a page is translated: one text layer per
-//! source block, set in its balloon's outline and naming one dialogue style.
-//! The renderer fits each line; when the editor sets the style larger, every
-//! line fits again on the next render.
+//! What the pipeline does once a page is translated: one block per text, in
+//! its balloon, its translation set in the balloon's outline at the page's
+//! dialogue size. The renderer fits each line; when typesetting sets every
+//! translation larger, each one fits again on the next render.
 //!
-//! The scan and its inpainting would sit under these layers; they don't
-//! change how the text fits, so the example leaves them out.
+//! The scan and the clean-ups would sit under these texts; they don't change
+//! how the text fits, so the example leaves them out.
 //!
 //! `cargo run -p koharu-renderer --example typeset`
 
-use koharu_renderer::{Frame, Renderer, TypesettingConfig};
-use koharu_scene::{Author, Change, Created, Edit, Session, StyleId};
+use koharu_renderer::{Frame, NodeId, Renderer, TypesettingConfig};
+use koharu_scene::{Change, Created, Edit, LayerId, Session};
 use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -32,55 +32,75 @@ const BALLOONS: [(&str, &str); 3] = [
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("chapter.koharu"))?;
-    let dialogue = StyleId::new();
+    let mut session = Session::create(dir.path().join("chapter.khr"))?;
     let mut ops = vec![
         json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 640, "height": 640}}),
-        json!({"op": "add_text_style", "id": dialogue, "style": {
-            "name": "Dialogue", "style": {"chars": {"size": 22.0}, "align": "center"},
-        }}),
     ];
-    for (index, (outline, english)) in BALLOONS.iter().enumerate() {
-        ops.push(json!({"op": "add_layer", "id": format!("$balloon{}", index + 1), "page": "$page", "index": index, "layer": {
-            "kind": "text", "content": english, "text_style": dialogue, "language": "en",
-            "frame": {"path": {"path": outline, "anchor": "center"}},
+    for (index, (outline, _)) in BALLOONS.iter().enumerate() {
+        let balloon = format!("$balloon{index}");
+        ops.push(json!({"op": "add_layer", "id": balloon, "page": "$page", "index": index, "layer": {"kind": "balloon", "outline": outline}}));
+        ops.push(json!({"op": "add_layer", "id": format!("$text{index}"), "page": "$page", "parent": balloon, "index": 0, "layer": {
+            "kind": "block", "source": {"frame": {"path": {"path": outline}}, "language": "ja"},
         }}));
     }
     let change = apply(&mut session, ops)?;
     let page = change.pages.added[0];
+    let blocks = texts(&change);
+
+    let mut ops = Vec::new();
+    for (block, (outline, english)) in blocks.iter().zip(BALLOONS) {
+        ops.push(json!({"op": "set_text", "layer": block, "text": english}));
+        ops.push(
+            json!({"op": "update_layer", "layer": block, "patch": {"translation": {
+                "language": "en",
+                "style": {"chars": {"size": 22.0}, "align": "center"},
+                "frame": {"path": {"path": outline, "anchor": "center"}},
+            }}}),
+        );
+    }
+    apply(&mut session, ops)?;
 
     let renderer = Renderer::new(TypesettingConfig::default());
     println!("the dialogue at 22 px:");
-    report(&renderer.render(&session, page)?, &change);
+    report(&renderer.render(&session, page)?, &blocks);
 
-    apply(
-        &mut session,
-        vec![
-            json!({"op": "update_text_style", "style": dialogue, "patch": {
-                "style": {"chars": {"size": 30.0}},
-            }}),
-        ],
-    )?;
+    let ops = blocks
+        .iter()
+        .map(|block| json!({"op": "update_layer", "layer": block, "patch": {"translation": {"style": {"chars": {"size": 30.0}}}}}))
+        .collect();
+    apply(&mut session, ops)?;
     println!("the dialogue at 30 px:");
-    report(&renderer.render(&session, page)?, &change);
+    report(&renderer.render(&session, page)?, &blocks);
     Ok(())
 }
 
-/// How each text fit, as the canvas's inspector shows it.
-fn report(frame: &Frame, change: &Change) {
-    for created in &change.created {
-        let Created::Layer {
-            id,
-            label: Some(label),
-        } = created
+/// The blocks, in the order the balloons were added.
+fn texts(change: &Change) -> Vec<LayerId> {
+    change
+        .created
+        .iter()
+        .filter_map(|created| match created {
+            Created::Layer {
+                id,
+                label: Some(label),
+            } if label.starts_with("text") => Some(*id),
+            _ => None,
+        })
+        .collect()
+}
+
+/// How each translation fit, as the canvas's inspector shows it.
+fn report(frame: &Frame, blocks: &[LayerId]) {
+    for (index, block) in blocks.iter().enumerate() {
+        let Some(text) = frame
+            .layer(NodeId::Translation(*block))
+            .and_then(|layer| layer.text())
         else {
             continue;
         };
-        let Some(text) = frame.layer(*id).and_then(|layer| layer.text()) else {
-            continue;
-        };
         println!(
-            "  {label}: drawn at {:.0}% of its size, {} hyphen(s){}",
+            "  balloon {}: drawn at {:.0}% of its size, {} hyphen(s){}",
+            index + 1,
             text.scale * 100.0,
             text.hyphens.len(),
             if text.overflowed { ", overflowing" } else { "" },
@@ -93,10 +113,7 @@ fn report(frame: &Frame, change: &Change) {
 
 fn apply(session: &mut Session, ops: Vec<Value>) -> Result<Change> {
     let edit = Edit {
-        project: session.id(),
         label: "Typeset".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
         ops: ops
             .into_iter()
             .map(serde_json::from_value)

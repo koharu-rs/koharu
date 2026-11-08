@@ -1,186 +1,116 @@
-//! A project's lifecycle: create it, import a page, add one layer of every
-//! kind, write pixels, read everything back, save, reopen, and compact.
+//! A project's life: create it, import a page, add one layer of every kind,
+//! write pixels, read everything back, and reopen it. One session holds a
+//! project at a time.
 //!
 //! `cargo run -p koharu-scene --example project`
 
-use koharu_scene::{
-    Answer, Author, Change, Created, Edit, Hash, Layer, LayerId, Op, PageId, Query, Rect, Ref,
-    Session, Size,
-};
+use std::io::Cursor;
+
+use koharu_scene::{Created, Edit, Hash, Op, Rect, Session};
 use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// `$name`: a page or layer created earlier in the same edit.
-fn label(name: &str) -> Ref {
-    Ref::try_from(format!("${name}")).expect("a valid label")
-}
-
-/// A layer in its JSON form, which is what commands and tools send.
-fn layer(value: Value) -> Box<Layer> {
-    Box::new(serde_json::from_value(value).expect("a valid layer"))
-}
-
-fn add(page: Ref, parent: Option<Ref>, index: usize, id: &str, value: Value) -> Op {
-    Op::AddLayer {
-        id: Some(label(id)),
-        page,
-        parent,
-        index,
-        layer: layer(value),
-        ingredients: Vec::new(),
-    }
-}
-
-fn layer_id(change: &Change, name: &str) -> LayerId {
-    change
-        .created
-        .iter()
-        .find_map(|created| match created {
-            Created::Layer { id, label } if label.as_deref() == Some(name) => Some(*id),
-            _ => None,
-        })
-        .expect("the layer was created")
-}
-
-fn page_id(change: &Change, name: &str) -> PageId {
-    change
-        .created
-        .iter()
-        .find_map(|created| match created {
-            Created::Page { id, label } if label.as_deref() == Some(name) => Some(*id),
-            _ => None,
-        })
-        .expect("the page was created")
+fn edit(label: &str, ops: Vec<Value>) -> Result<Edit> {
+    Ok(Edit {
+        label: label.to_owned(),
+        ops: ops
+            .into_iter()
+            .map(serde_json::from_value)
+            .collect::<std::result::Result<_, _>>()?,
+    })
 }
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let path = dir.path().join("chapter.koharu");
+    let path = dir.path().join("chapter.khr");
     let mut session = Session::create(&path)?;
 
-    // An imported file is kept byte for byte and named by the hash of its
-    // bytes; an image layer names it by that hash.
-    let scan = b"any image bytes; the project never decodes them".to_vec();
+    // The scan is kept byte for byte, and the page takes its size.
+    let mut scan = Vec::new();
+    image::RgbaImage::from_pixel(256, 384, image::Rgba([240, 240, 240, 255]))
+        .write_to(&mut Cursor::new(&mut scan), image::ImageFormat::Png)?;
     let file = Hash::of(&scan);
+    session.apply(Edit {
+        label: "Import".into(),
+        ops: vec![Op::AddFile { bytes: scan }],
+    })?;
+    let change = session.apply(edit(
+        "Import",
+        vec![json!({"op": "add_page", "index": 0, "background": file})],
+    )?)?;
+    let page = change.pages.added[0];
 
-    // One edit, one undo step. Later ops name what earlier ones created by
-    // the `$label` they gave as `id`.
-    let page = label("page");
-    let change = session.apply(Edit {
-        project: session.id(),
-        label: "Import page".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
+    let outline = "M8 8 L248 8 L248 376 L8 376 Z";
+    let change = session.apply(edit("Add layers", vec![
+        json!({"op": "add_layer", "id": "$panel", "page": page, "index": 0, "layer": {"kind": "panel", "name": "Panel", "outline": outline}}),
+        json!({"op": "add_layer", "id": "$balloon", "page": page, "parent": "$panel", "index": 0, "layer": {"kind": "balloon", "name": "Balloon", "outline": "M40 40 L120 40 L120 160 L40 160 Z"}}),
+        json!({"op": "add_layer", "id": "$block", "page": page, "parent": "$balloon", "index": 0, "layer": {
+            "kind": "block", "name": "Text",
+            "source": {"frame": {"box": {"bounds": {"x": 60.0, "y": 50.0, "width": 40.0, "height": 100.0}}}, "content": "こんにちは", "direction": "vertical", "language": "ja"},
+        }}),
+        json!({"op": "add_layer", "id": "$group", "page": page, "index": 1, "layer": {"kind": "group", "name": "Notes"}}),
+        json!({"op": "add_layer", "page": page, "parent": "$group", "index": 0, "layer": {"kind": "raster", "name": "Paint"}}),
+        json!({"op": "add_layer", "page": page, "parent": "$group", "index": 1, "layer": {"kind": "shape", "name": "Star", "path": "M10 10 L20 30 L0 30 Z", "fill": [1.0, 0.8, 0.0, 1.0]}}),
+        json!({"op": "add_layer", "page": page, "parent": "$group", "index": 2, "layer": {"kind": "text", "name": "Note", "content": "Hello", "language": "en"}}),
+        json!({"op": "add_layer", "page": page, "parent": "$group", "index": 3, "layer": {"kind": "image", "name": "Scan copy", "file": file}}),
+        json!({"op": "add_layer", "id": "$mask", "page": page, "parent": "$group", "index": 0, "layer": {"kind": "mask"}}),
+        json!({"op": "write_pixels", "layer": "$mask", "rect": {"x": 8, "y": 8, "width": 240, "height": 368}, "pixels": vec![255u8; 240 * 368]}),
+    ])?)?;
+    // A block's mask and clean-up are layers of its own, labelled from the
+    // block's label.
+    let labelled = |name: &str| {
+        change.created.iter().find_map(|created| match created {
+            Created::Layer {
+                label: Some(label),
+                id,
+            } if label == name => Some(*id),
+            _ => None,
+        })
+    };
+    let (mask, cleanup) = (
+        labelled("block.mask").ok_or("no mask")?,
+        labelled("block.cleanup").ok_or("no clean-up")?,
+    );
+    let rect = Rect {
+        x: 60,
+        y: 50,
+        width: 40,
+        height: 100,
+    };
+    session.apply(Edit {
+        label: "Clean".into(),
         ops: vec![
-            Op::AddFile {
-                media_type: "image/png".to_owned(),
-                bytes: scan.clone(),
+            Op::WritePixels {
+                layer: mask.into(),
+                rect,
+                pixels: vec![255; 40 * 100],
             },
-            Op::AddPage {
-                id: Some(page.clone()),
-                index: 0,
-                size: Size {
-                    width: 1200,
-                    height: 1700,
-                },
+            Op::WritePixels {
+                layer: cleanup.into(),
+                rect,
+                pixels: [255, 255, 255, 255].repeat(40 * 100),
             },
-            // Children are drawn first to last, so the scan goes first.
-            add(page.clone(), None, 0, "scan", json!({"kind": "image", "name": "Scan", "file": file})),
-            add(page.clone(), None, 1, "inpaint", json!({"kind": "raster", "name": "Inpaint"})),
-            add(page.clone(), None, 2, "balloon", json!({"kind": "group", "name": "Balloon"})),
-            add(page.clone(), Some(label("balloon")), 0, "outline", json!({
-                "kind": "shape",
-                "name": "Outline",
-                "path": "M100 100 H400 V300 H100 Z",
-                "fill": [1.0, 1.0, 1.0, 1.0],
-                "stroke": {"color": [0.0, 0.0, 0.0, 1.0], "width": 3.0},
-            })),
-            add(page.clone(), Some(label("balloon")), 1, "line", json!({
-                "kind": "text",
-                "name": "Line",
-                "content": [{"insert": "Hello, ", "attributes": {"weight": 700}}, {"insert": "world"}],
-                "style": {"chars": {"family": "Anime Ace", "size": 24.0}, "align": "center"},
-                "frame": {"box": {"bounds": {"x": 110.0, "y": 110.0, "width": 280.0, "height": 180.0}}},
-                "language": "en",
-            })),
-            // A mask limits its parent and is never drawn; its index counts
-            // among the parent's masks.
-            add(page.clone(), Some(label("balloon")), 0, "mask", json!({
-                "kind": "mask",
-                "content": {"path": {"path": "M100 100 H400 V300 H100 Z"}},
-            })),
         ],
     })?;
-    let (page, inpaint, balloon) = (
-        page_id(&change, "page"),
-        layer_id(&change, "inpaint"),
-        layer_id(&change, "balloon"),
-    );
-    println!("created {} pages and layers", change.created.len());
 
-    // Pixels are tiled, 64×64 each; a 128×96 write touches four tiles.
-    let (width, height) = (128, 96);
-    let pixels = [200, 40, 40, 255].repeat((width * height) as usize);
-    session.apply(Edit {
-        project: session.id(),
-        label: "Paint".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
-        ops: vec![Op::WritePixels {
-            layer: inpaint.into(),
-            rect: Rect {
-                x: 0,
-                y: 0,
-                width,
-                height,
-            },
-            pixels,
-        }],
-    })?;
-    let tiles = session.tiles(inpaint, None)?;
-    assert_eq!(tiles.tiles.len(), 4);
+    let project = session.project();
+    for layer in project.layers_of(page)? {
+        println!("{:?} {:?}", layer.kind(), layer.name);
+    }
+    let cleanup = session.tiles(cleanup, None)?;
     println!(
-        "the raster holds {} tiles of {:?}",
-        tiles.tiles.len(),
-        tiles.format
+        "clean-up: {} tiles, {:?}",
+        cleanup.tiles.len(),
+        cleanup.format
     );
 
-    // Reads return owned views: the project, a page's tree, one layer, or a
-    // file's bytes. `query` answers the same questions as data.
-    let project = session.project()?;
-    assert_eq!(project.pages.len(), 1);
-    let view = session.page(page)?;
-    assert_eq!(view.layers.len(), 3);
-    let group = session.layer(balloon)?;
-    assert_eq!((group.view.children.len(), group.view.masks.len()), (2, 1));
-    assert_eq!(session.file(&file)?.bytes, scan);
-    let Answer::History(history) = session.query(Query::GetHistory)? else {
-        unreachable!("history answers with history")
-    };
-    println!("undo would revert {:?}", history.undo);
-
-    // Saving writes the whole document with its history; reopening checks
-    // every layer, so unknown core data fails to open.
-    session.save()?;
-    // A project is open in one session at a time: opening it again fails
-    // until this session is dropped, so switching projects drops the old
-    // session first.
-    let error = Session::open(&path)
-        .err()
-        .expect("the project is already open");
-    assert_eq!(serde_json::to_value(&error)?["error"], "storage");
-    println!("a second open failed: {error}");
     drop(session);
-    let mut session = Session::open(&path)?;
-    assert_eq!(session.page(page)?, view);
-    println!("reopened {} with the same page", path.display());
-
-    // Compacting drops history, and with it the files and tiles nothing
-    // names any more.
-    session.compact()?;
-    drop(session);
-    assert_eq!(Session::open(&path)?.page(page)?, view);
-    println!("compacted");
+    let reopened = Session::open(&path)?;
+    assert_eq!(reopened.project(), project);
+    println!(
+        "reopened {} layers",
+        reopened.project().layers_of(page)?.len()
+    );
     Ok(())
 }

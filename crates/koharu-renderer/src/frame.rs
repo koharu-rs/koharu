@@ -3,10 +3,10 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use koharu_scene::{Blend, LayerId, LayerKind, MaskMode, PageId, Revision};
+use koharu_scene::{Blend, LayerId, MaskMode, PageId, Revision};
 use vello::{
     Scene,
-    kurbo::{Affine, BezPath, Rect},
+    kurbo::{Affine, BezPath, Rect, Shape as _},
     peniko::{BlendMode, Color, Compose, Fill, Mix},
 };
 
@@ -26,18 +26,27 @@ pub(crate) struct FrameData {
     /// What the frame draws, in page pixels: the page, or one layer's bounds.
     pub area: Rect,
     pub nodes: Vec<Node>,
-    /// The page's layers, which the frames drawn from it share.
-    pub layers: Arc<HashMap<LayerId, Layer>>,
-    /// Layer ids in the page's order, parents first.
-    pub order: Arc<[LayerId]>,
+    /// What the page drew, which the frames drawn from it share.
+    pub layers: Arc<HashMap<NodeId, Layer>>,
+    /// What the page drew, in its order, parents first.
+    pub order: Arc<[NodeId]>,
     pub missing: Arc<[FontRequest]>,
 }
 
-/// One layer as the frame drew it.
+/// One thing a frame draws. Most are layers, a block's clean-up among them,
+/// but a page's background belongs to the page, and a block draws its
+/// translation apart, as PSD export takes it apart.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum NodeId {
+    Background,
+    Layer(LayerId),
+    Translation(LayerId),
+}
+
+/// One thing as the frame drew it.
 #[derive(Clone)]
 pub struct Layer {
-    pub(crate) id: LayerId,
-    pub(crate) kind: LayerKind,
+    pub(crate) id: NodeId,
     pub(crate) visible: bool,
     pub(crate) bounds: Option<Rect>,
     pub(crate) text: Option<Arc<ResolvedText>>,
@@ -45,13 +54,8 @@ pub struct Layer {
 
 impl Layer {
     #[must_use]
-    pub fn id(&self) -> LayerId {
+    pub fn id(&self) -> NodeId {
         self.id
-    }
-
-    #[must_use]
-    pub fn kind(&self) -> LayerKind {
-        self.kind
     }
 
     /// Whether it and everything above it show.
@@ -66,7 +70,7 @@ impl Layer {
         self.bounds
     }
 
-    /// For a text layer, the laid-out runs.
+    /// For a text layer or a translation, the laid-out runs.
     #[must_use]
     pub fn text(&self) -> Option<&ResolvedText> {
         self.text.as_deref()
@@ -92,7 +96,7 @@ pub(crate) enum Content {
 
 #[derive(Clone)]
 pub(crate) struct Node {
-    pub id: LayerId,
+    pub id: NodeId,
     pub visible: bool,
     pub opacity: f32,
     pub blend: Blend,
@@ -115,6 +119,16 @@ pub(crate) enum MaskShape {
         tiled: Arc<Tiled>,
         transform: Affine,
     },
+}
+
+impl MaskShape {
+    /// What it covers, in page pixels.
+    fn bounds(&self) -> Rect {
+        match self {
+            Self::Path(path) => path.bounding_box(),
+            Self::Pixels { tiled, transform } => tiled.bounds(*transform),
+        }
+    }
 }
 
 /// A view of the page: the page-pixel rectangle it shows, at `scale` output
@@ -150,11 +164,11 @@ impl Frame {
     }
 
     #[must_use]
-    pub fn layer(&self, id: LayerId) -> Option<&Layer> {
+    pub fn layer(&self, id: NodeId) -> Option<&Layer> {
         self.0.layers.get(&id)
     }
 
-    /// Every layer in the page's order, parents first.
+    /// Everything drawn, in the page's order, parents first.
     pub fn layers(&self) -> impl Iterator<Item = &Layer> {
         self.0.order.iter().filter_map(|id| self.0.layers.get(id))
     }
@@ -169,17 +183,17 @@ impl Frame {
     /// Only `layer`'s own content, shown, over its bounds rounded out to
     /// whole pixels: without its opacity, blend mode, or masks, which a PSD
     /// records as layer properties.
-    pub fn cropped(&self, layer: LayerId) -> Result<Self> {
+    pub fn cropped(&self, layer: NodeId) -> Result<Self> {
         self.own(layer, true)
     }
 
     /// `cropped`, but a text without its strokes, which a PSD writes as a
     /// stroke effect.
-    pub fn unstroked(&self, layer: LayerId) -> Result<Self> {
+    pub fn unstroked(&self, layer: NodeId) -> Result<Self> {
         self.own(layer, false)
     }
 
-    fn own(&self, layer: LayerId, strokes: bool) -> Result<Self> {
+    fn own(&self, layer: NodeId, strokes: bool) -> Result<Self> {
         let node = self.node(layer)?;
         let content = match &node.content {
             Content::Vector {
@@ -206,29 +220,42 @@ impl Frame {
         ))
     }
 
-    /// `layer`'s masks merged into one coverage over the page, as white with
-    /// the coverage in alpha; `None` when it has no masks.
-    pub fn mask(&self, layer: LayerId) -> Result<Option<Self>> {
+    /// `layer`'s masks merged into one coverage, as white with the coverage in
+    /// alpha; `None` when it has no masks. When the first shown mask adds,
+    /// the coverage starts empty, so the frame covers only what the adding
+    /// masks do; otherwise it covers the page.
+    pub fn mask(&self, layer: NodeId) -> Result<Option<Self>> {
         let node = self.node(layer)?;
         if node.masks.is_empty() {
             return Ok(None);
         }
+        let shown: Vec<&MaskNode> = node.masks.iter().filter(|mask| mask.visible).collect();
+        let area = match shown.first() {
+            Some(first) if first.mode == MaskMode::Add => shown
+                .iter()
+                .filter(|mask| mask.mode == MaskMode::Add)
+                .map(|mask| mask.shape.bounds())
+                .filter(|bounds| bounds.area() > 0.0)
+                .reduce(|a, b| a.union(b))
+                .map_or(Rect::ZERO, |bounds| bounds.intersect(self.0.area).expand()),
+            _ => self.0.area,
+        };
         Ok(Some(self.with(
-            self.0.area,
+            area,
             Node {
                 id: layer,
                 visible: true,
                 opacity: 1.0,
                 blend: Blend::Normal,
-                content: Content::Coverage(self.0.area),
+                content: Content::Coverage(area),
                 children: Vec::new(),
                 masks: node.masks.clone(),
             },
         )))
     }
 
-    fn node(&self, id: LayerId) -> Result<&Node> {
-        fn find(nodes: &[Node], id: LayerId) -> Option<&Node> {
+    fn node(&self, id: NodeId) -> Result<&Node> {
+        fn find(nodes: &[Node], id: NodeId) -> Option<&Node> {
             nodes.iter().find_map(|node| {
                 (node.id == id)
                     .then_some(node)
@@ -236,7 +263,7 @@ impl Frame {
             })
         }
         find(&self.0.nodes, id)
-            .ok_or_else(|| Error::invalid(format!("layer {id} isn't drawn in this frame")))
+            .ok_or_else(|| Error::invalid(format!("{id:?} isn't drawn in this frame")))
     }
 
     /// A frame of this page drawing only `node` over `area`.
@@ -482,7 +509,7 @@ fn mix(blend: Blend) -> Mix {
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{Author, Edit, Op, Rect as PixelRect, Ref, Session};
+    use koharu_scene::{Edit, Op, Rect as PixelRect, Ref, Session};
     use serde_json::json;
 
     use super::*;
@@ -493,8 +520,8 @@ mod tests {
     #[test]
     fn a_view_maps_page_pixels_to_its_output() {
         // A white raster under a red square from (256, 256) to (512, 512).
-        let dir = tempfile::tempdir().unwrap();
-        let mut session = Session::create(dir.path().join("test.koharu")).unwrap();
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
         let ops = vec![
             json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1024, "height": 1024}}),
             json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
@@ -504,10 +531,10 @@ mod tests {
         ];
         let mut ops: Vec<Op> = ops
             .into_iter()
-            .map(|op| serde_json::from_value(op).unwrap())
+            .map(|op| serde_json::from_value(op).expect("an op"))
             .collect();
         ops.push(Op::WritePixels {
-            layer: Ref::try_from("$paper".to_owned()).unwrap(),
+            layer: Ref::try_from("$paper".to_owned()).expect("a label"),
             rect: PixelRect {
                 x: 0,
                 y: 0,
@@ -518,19 +545,18 @@ mod tests {
         });
         let change = session
             .apply(Edit {
-                project: session.id(),
                 label: "test".into(),
-                author: Author::User { via: None },
-                reads: Vec::new(),
                 ops,
             })
-            .unwrap();
+            .expect("an edit");
         let renderer = Renderer::new(TypesettingConfig::default());
         let Ok(gpu) = renderer.gpu() else {
             eprintln!("skipped without a GPU");
             return;
         };
-        let frame = renderer.render(&session, change.pages.added[0]).unwrap();
+        let frame = renderer
+            .render(&session, change.pages.added[0])
+            .expect("a frame");
         let pixels = |view: View| {
             let strips = frame.draw(view);
             assert_eq!(strips.len(), 1);
@@ -538,7 +564,7 @@ mod tests {
                 strips[0].rect.width() as u32,
                 strips[0].rect.height() as u32,
             );
-            gpu.read(&strips[0].scene, width, height).unwrap()
+            gpu.read(&strips[0].scene, width, height).expect("pixels")
         };
         const RED: [u8; 4] = [255, 0, 0, 255];
         const WHITE: [u8; 4] = [255; 4];

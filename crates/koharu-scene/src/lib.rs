@@ -1,27 +1,34 @@
-//! Koharu's scene graph on Loro.
-//!
-//! A [`Session`] alone owns an open project's document. Reads return owned
-//! values; every change is an [`Edit`], checked in full before anything is
-//! written and committed as one undo step. The UI, the pipeline, MCP clients,
-//! and the in-app agent all use the same [`Op`] and [`Query`] types, and
-//! [`tools()`] generates the agent and MCP tools from them.
+//! Koharu's scene graph: Photoshop's layers, a page background, and the parts
+//! of a manga page as typed kinds. The README is the design.
 
+mod change;
 mod color;
-mod doc;
+mod edit;
 mod error;
-mod model;
-mod op;
-mod overrides;
+mod ids;
+mod kinds;
+mod layer;
+mod project;
 mod query;
 mod session;
-mod state;
+mod store;
+mod text;
 mod tiles;
 mod tools;
+mod values;
 
-pub use error::{Error, Kind, Result};
-pub use loro::TextDelta;
-pub use model::*;
-pub use op::{Author, Edit, Op};
-pub use query::{Answer, Query};
-pub use session::Session;
-pub use tools::{ToolCall, ToolSpec, compact, tool_call, tools};
+pub use change::{Change, Created, History, PageChanges};
+pub use color::{Color, Rgba};
+pub use edit::{Edit, Op};
+pub use error::{Error, Result};
+pub use icu_locale_core::LanguageIdentifier;
+pub use ids::{Hash, LayerId, PageId, ProjectId, Ref, Revision, Uuid};
+pub use kinds::*;
+pub use layer::{Attributes, Layer, NewLayer, PixelFormat};
+pub use project::{Background, Page, Project};
+pub use query::{Answer, PageSummary, ProjectAnswer, Query};
+pub use session::{EXTENSION, Session};
+pub use text::{CharStyle, RichText, Span, Text, TextStyle};
+pub use tiles::{Tile, Tiles};
+pub use tools::{ToolCall, ToolSpec, tool_call, tools};
+pub use values::*;

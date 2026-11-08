@@ -1,5 +1,5 @@
 //! Pixel writes and reads, where each 64×64 tile is compressed on its own,
-//! and opening a project, which reads every layer through Loro.
+//! and opening a project, which checks every layer.
 //!
 //! A page is 2048×2896 RGBA, about a scanned manga page, filled with gradients
 //! and low noise so zlib does the work a scan would give it.
@@ -7,31 +7,27 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use koharu_scene::{Author, Created, Edit, LayerId, Op, Rect, Session};
+use koharu_scene::{Created, Edit, LayerId, Op, Rect, Session};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
 const WIDTH: u32 = 2048;
 const HEIGHT: u32 = 2896;
 
-fn edit(session: &Session, ops: Vec<Op>) -> Edit {
+fn edit(ops: Vec<Value>) -> Edit {
     Edit {
-        project: session.id(),
         label: "bench".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
-        ops,
+        ops: ops
+            .into_iter()
+            .map(|op| serde_json::from_value(op).expect("a valid op"))
+            .collect(),
     }
 }
 
-fn op(value: Value) -> Op {
-    serde_json::from_value(value).expect("a valid op")
-}
-
-fn write(session: &Session, layer: LayerId, pixels: Vec<u8>) -> Edit {
-    edit(
-        session,
-        vec![Op::WritePixels {
+fn write(layer: LayerId, pixels: Vec<u8>) -> Edit {
+    Edit {
+        label: "bench".to_owned(),
+        ops: vec![Op::WritePixels {
             layer: layer.into(),
             rect: Rect {
                 x: 0,
@@ -41,7 +37,7 @@ fn write(session: &Session, layer: LayerId, pixels: Vec<u8>) -> Edit {
             },
             pixels,
         }],
-    )
+    }
 }
 
 /// A page of RGBA pixels: smooth gradients with low noise, as in a scan.
@@ -67,25 +63,22 @@ fn page_pixels(seed: u32) -> Vec<u8> {
 
 /// A project in a fresh directory with one page holding one empty raster.
 fn raster() -> (TempDir, Session, LayerId) {
-    let dir = TempDir::new().unwrap();
-    let mut session = Session::create(dir.path().join("bench.koharu")).unwrap();
+    let dir = TempDir::new().expect("a temporary directory");
+    let mut session = Session::create(dir.path().join("bench.khr")).expect("a project");
     let change = session
-        .apply(edit(
-            &session,
-            vec![
-                op(json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": WIDTH, "height": HEIGHT}})),
-                op(json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "raster"}})),
-            ],
-        ))
-        .unwrap();
+        .apply(edit(vec![
+            json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": WIDTH, "height": HEIGHT}}),
+            json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "raster"}}),
+        ]))
+        .expect("an edit");
     let layer = change
         .created
         .iter()
         .find_map(|created| match created {
             Created::Layer { id, .. } => Some(*id),
-            _ => None,
+            Created::Page { .. } => None,
         })
-        .unwrap();
+        .expect("a raster");
     (dir, session, layer)
 }
 
@@ -97,7 +90,7 @@ fn pixels(c: &mut Criterion) {
         b.iter_batched(
             || (raster(), first.clone()),
             |((dir, mut session, layer), pixels)| {
-                session.apply(write(&session, layer, pixels)).unwrap();
+                session.apply(write(layer, pixels)).expect("a paint");
                 (dir, session)
             },
             BatchSize::PerIteration,
@@ -107,24 +100,20 @@ fn pixels(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let (dir, mut session, layer) = raster();
-                session
-                    .apply(write(&session, layer, first.clone()))
-                    .unwrap();
+                session.apply(write(layer, first.clone())).expect("a paint");
                 ((dir, session, layer), second.clone())
             },
             |((dir, mut session, layer), pixels)| {
-                session.apply(write(&session, layer, pixels)).unwrap();
+                session.apply(write(layer, pixels)).expect("a paint");
                 (dir, session)
             },
             BatchSize::PerIteration,
         );
     });
     let (_dir, mut session, layer) = raster();
-    session
-        .apply(write(&session, layer, first.clone()))
-        .unwrap();
+    session.apply(write(layer, first.clone())).expect("a paint");
     group.bench_function("decode a full raster", |b| {
-        b.iter(|| black_box(session.tiles(layer, None).unwrap()));
+        b.iter(|| black_box(session.tiles(layer, None).expect("tiles")));
     });
     group.finish();
 }
@@ -133,15 +122,15 @@ fn pixels(c: &mut Criterion) {
 fn open(c: &mut Criterion) {
     const PAGES: usize = 20;
     const TEXTS: usize = 30;
-    let dir = TempDir::new().unwrap();
-    let path = dir.path().join("bench.koharu");
-    let mut session = Session::create(&path).unwrap();
+    let dir = TempDir::new().expect("a temporary directory");
+    let path = dir.path().join("bench.khr");
+    let mut session = Session::create(&path).expect("a project");
     for index in 0..PAGES {
-        let mut ops = vec![op(
+        let mut ops = vec![
             json!({"op": "add_page", "id": "$p", "index": index, "size": {"width": WIDTH, "height": HEIGHT}}),
-        )];
+        ];
         ops.extend((0..TEXTS).map(|text| {
-            op(json!({
+            json!({
                 "op": "add_layer", "page": "$p", "index": text,
                 "layer": {
                     "kind": "text",
@@ -149,14 +138,13 @@ fn open(c: &mut Criterion) {
                     "frame": {"box": {"bounds": {"x": 100.0, "y": 100.0, "width": 300.0, "height": 400.0}}},
                     "language": "ja",
                 },
-            }))
+            })
         }));
-        session.apply(edit(&session, ops)).unwrap();
+        session.apply(edit(ops)).expect("a page");
     }
-    session.save().unwrap();
     drop(session);
     c.bench_function("open a project of 20 pages with 30 texts each", |b| {
-        b.iter(|| black_box(Session::open(&path).unwrap()));
+        b.iter(|| black_box(Session::open(&path).expect("it opens")));
     });
 }
 

@@ -5,7 +5,7 @@
 
 use koharu_renderer::ResolvedText;
 use koharu_scene::{
-    Align, Color, Direction, FillRule, Frame as TextFrame, MaskMode, ShapeLayer, TextLayer,
+    Align, Color, Direction, FillRule, Frame as TextFrame, Shape as SceneShape, Text,
 };
 use kurbo::{Affine, BezPath, PathEl, Point};
 use photocraft_psd::{
@@ -20,47 +20,21 @@ use crate::{
     parse,
 };
 
-/// One component of a vector mask: a path, how it combines with the
-/// components before it, and the rule it fills by.
-pub(crate) struct Component {
-    pub path: BezPath,
-    pub mode: MaskMode,
-    pub fill_rule: FillRule,
-}
-
-/// A `vmsk` block for `components` in order, starting full unless the first
-/// one adds. A component's first subpath carries its operation, after
-/// psd-tools 1 adding, 2 subtracting, and 3 intersecting, and the rest join
-/// it, as ag-psd's `writeVectorMask` writes them; bytes 4–5 of each length
-/// record hold the subpath's fill rule, 1 for even-odd and 2 for non-zero.
-pub(crate) fn vector_mask(components: &[Component], size: (u32, u32)) -> TaggedBlock {
-    let mut subpaths = Vec::new();
-    let mut rules = Vec::new();
-    for component in components {
-        for (index, mut subpath) in knots(&component.path, size).into_iter().enumerate() {
-            subpath.operation = match (index, component.mode) {
-                (0, MaskMode::Add) => 1,
-                (0, MaskMode::Subtract) => 2,
-                (0, MaskMode::Intersect) => 3,
-                _ => -1,
-            };
-            subpaths.push(subpath);
-            rules.push(match component.fill_rule {
-                FillRule::EvenOdd => 1u16,
-                FillRule::NonZero => 2,
-            });
-        }
+/// A `vmsk` block showing what `path` fills by `fill_rule`. Its first subpath
+/// adds, psd-tools' operation 1, and the rest join it, as ag-psd's
+/// `writeVectorMask` writes them; bytes 4–5 of each length record hold the
+/// subpath's fill rule, 1 for even-odd and 2 for non-zero.
+pub(crate) fn vector_mask(path: &BezPath, fill_rule: FillRule, size: (u32, u32)) -> TaggedBlock {
+    let mut subpaths = knots(path, size);
+    if let Some(first) = subpaths.first_mut() {
+        first.operation = 1;
     }
-    let full = components
-        .first()
-        .is_some_and(|component| component.mode != MaskMode::Add);
-    let mut path = PathData::from_subpaths(&subpaths, full);
-    for (record, rule) in path
-        .records
-        .iter_mut()
-        .filter(|record| record.is_length())
-        .zip(rules)
-    {
+    let rule: u16 = match fill_rule {
+        FillRule::EvenOdd => 1,
+        FillRule::NonZero => 2,
+    };
+    let mut path = PathData::from_subpaths(&subpaths, false);
+    for record in path.records.iter_mut().filter(|record| record.is_length()) {
         record.data[4..6].copy_from_slice(&rule.to_be_bytes());
     }
     let mask = VectorMaskBlock {
@@ -177,29 +151,24 @@ fn rgb(color: Color) -> Value {
 /// stroke, the fill moves to `vscg`, which names its kind first, as ag-psd
 /// writes it; a stroke without a fill turns the fill off. A shape with
 /// neither draws nothing and gets no blocks.
-pub(crate) fn shape(layer: &ShapeLayer, size: (u32, u32)) -> Result<Vec<TaggedBlock>> {
+pub(crate) fn shape(layer: &SceneShape, size: (u32, u32)) -> Result<Vec<TaggedBlock>> {
     if layer.fill.is_none() && layer.stroke.is_none() {
         return Ok(Vec::new());
     }
-    let mut blocks = vec![vector_mask(
-        &[Component {
-            path: parse(&layer.path)?,
-            mode: MaskMode::Add,
-            fill_rule: layer.fill_rule,
-        }],
-        size,
-    )];
+    let mut blocks = vec![vector_mask(&parse(&layer.path)?, layer.fill_rule, size)];
     let content = |color: Color| Descriptor::new("null").with("Clr ", rgb(color));
     let Some(stroke) = &layer.stroke else {
         blocks.extend(
             layer
                 .fill
-                .map(|fill| block(*b"SoCo", versioned(content(fill)))),
+                .map(|fill| block(*b"SoCo", versioned(content(Color::from(fill))))),
         );
         return Ok(blocks);
     };
     let mut vscg = b"SoCo".to_vec();
-    vscg.extend(versioned(content(layer.fill.unwrap_or(stroke.color))));
+    vscg.extend(versioned(content(Color::from(
+        layer.fill.unwrap_or(stroke.color),
+    ))));
     let style = Descriptor::new("strokeStyle")
         .with("strokeStyleVersion", Value::Integer(2))
         .with("strokeEnabled", Value::Boolean(true))
@@ -224,10 +193,12 @@ pub(crate) fn shape(layer: &ShapeLayer, size: (u32, u32)) -> Result<Vec<TaggedBl
         .with("strokeStyleStrokeAdjust", Value::Boolean(false))
         .with("strokeStyleLineDashSet", Value::List(Vec::new()))
         .with("strokeStyleBlendMode", enumerated("BlnM", "Nrml"))
-        .with("strokeStyleOpacity", opacity(stroke.color))
+        .with("strokeStyleOpacity", opacity(Color::from(stroke.color)))
         .with(
             "strokeStyleContent",
-            Value::Descriptor(Descriptor::new("solidColorLayer").with("Clr ", rgb(stroke.color))),
+            Value::Descriptor(
+                Descriptor::new("solidColorLayer").with("Clr ", rgb(Color::from(stroke.color))),
+            ),
         )
         .with("strokeStyleResolution", Value::Double(72.0));
     blocks.extend([block(*b"vscg", vscg), block(*b"vstk", versioned(style))]);
@@ -237,13 +208,13 @@ pub(crate) fn shape(layer: &ShapeLayer, size: (u32, u32)) -> Result<Vec<TaggedBl
 const CR: u16 = b'\r' as u16;
 const LF: u16 = b'\n' as u16;
 
-/// A text layer's blocks as the renderer laid it out, which drew at least one
+/// A text's blocks as the renderer laid it out, which drew at least one
 /// run: a type layer (`TySh`) holding its transform, a text descriptor with
 /// the EngineData, and a warp descriptor; and, when every run shares one
 /// stroke, an Outside stroke effect (`lfx2` with `FrFX`), how Photoshop
 /// strokes type outside its glyphs as the renderer does. Strokes that differ
 /// by span stay in the pixels only.
-pub(crate) fn type_layer(layer: &TextLayer, text: &ResolvedText, index: i32) -> Vec<TaggedBlock> {
+pub(crate) fn type_layer(layer: &Text, text: &ResolvedText, index: i32) -> Vec<TaggedBlock> {
     let vertical = layer.direction == Direction::Vertical;
     let frame = text.frame;
     // Point type hangs from where its first line stands, by its alignment;

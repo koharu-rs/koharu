@@ -11,7 +11,7 @@ flowchart TB
   ui["packages/koharu: React + Next.js"] --> bridge["packages/bridge: 协议 + WASM"]
   entry["crates/koharu: 启动"] --> app["koharu-app"]
   bridge -->|"命令与通道"| app
-  app --> scene["koharu-scene"] --> storage["koharu-storage"]
+  app --> scene["koharu-scene"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["原生运行时"]
   app --> llm["koharu-llm"]
   pipeline --> llm
@@ -40,7 +40,7 @@ flowchart TB
 
 ## 场景与处理
 
-`koharu-scene` 拥有权威项目、层级、组件、关系、补丁、修订和会话撤销。`koharu-storage` 持久化不透明的完整状态与不可变 blob。
+`koharu-scene` 拥有权威项目、层级、组件、关系、补丁、修订、会话撤销和项目文件。
 
 `koharu-pipeline` 负责页面阶段调度、模型生命周期、进度、取消和增量提交。`koharu-ml` 拥有视觉模型；`koharu-llm` 负责本地和托管语言模型以及智能体。
 

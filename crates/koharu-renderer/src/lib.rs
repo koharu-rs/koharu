@@ -18,7 +18,7 @@ mod types;
 
 pub use config::TypesettingConfig;
 pub use error::{Error, Result};
-pub use frame::{Frame, Layer, Strip, View};
+pub use frame::{Frame, Layer, NodeId, Strip, View};
 pub use raster::Gpu;
 pub use renderer::{Raster, Renderer};
 pub use text::{ResolvedText, TextRun};

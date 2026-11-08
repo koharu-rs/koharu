@@ -11,7 +11,7 @@ flowchart TB
   ui["packages/koharu: React + Next.js"] --> bridge["packages/bridge: protocol + WASM"]
   entry["crates/koharu: startup"] --> app["koharu-app"]
   bridge -->|"commands and channels"| app
-  app --> scene["koharu-scene"] --> storage["koharu-storage"]
+  app --> scene["koharu-scene"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["native runtimes"]
   app --> llm["koharu-llm"]
   pipeline --> llm
@@ -40,7 +40,7 @@ Independent typed channels carry project, canvas, job, download, and resource up
 
 ## Scene and processing
 
-`koharu-scene` owns the canonical project, hierarchy, components, relations, patches, revisions, and session undo. `koharu-storage` persists opaque complete state payloads and immutable blobs.
+`koharu-scene` owns the canonical project, hierarchy, components, relations, patches, revisions, session undo, and the project file.
 
 `koharu-pipeline` owns page-stage scheduling, model lifetime, progress, cancellation, and incremental commits. `koharu-ml` owns the vision models; `koharu-llm` owns the local and hosted language models and the agent.
 

@@ -1,6 +1,5 @@
-//! Pixels as 64×64 tiles keyed by tile position, each compressed with zlib
-//! on its own, as GIMP and Krita store them. Only tiles holding pixels are
-//! stored.
+//! Pixels as 64×64 tiles keyed by tile position, each compressed with zlib on
+//! its own, as GIMP stores them. Only tiles holding pixels are stored.
 
 use std::{
     collections::BTreeMap,
@@ -8,19 +7,35 @@ use std::{
 };
 
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
-use loro::LoroBinaryValue;
 use rayon::prelude::*;
 
-use crate::{Error, PixelFormat, Rect, Result, Tile};
+use crate::{Error, Offset, PixelFormat, Rect, Result};
 
-const SIZE: i32 = 64;
+pub(crate) const SIZE: i64 = 64;
+/// zlib level 3 through `zlib-rs` encoded Manga109 tiles three times faster
+/// than level 6 through `miniz_oxide`, for 4% more bytes.
+const LEVEL: u32 = 3;
 
-/// Compressed tiles by tile position. The bytes are shared, so copying a
-/// map copies no pixels.
-pub(crate) type TileMap = BTreeMap<(i32, i32), LoroBinaryValue>;
+/// Decoded tiles at tile coordinates, on a grid whose origin sits at `offset`
+/// on the page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Tiles {
+    pub offset: Offset,
+    pub format: PixelFormat,
+    pub tiles: Vec<Tile>,
+}
 
-/// Tiles that changed: `None` for one that became empty.
-pub(crate) type Changes = BTreeMap<(i32, i32), Option<LoroBinaryValue>>;
+#[derive(Clone, Debug, PartialEq)]
+pub struct Tile {
+    pub x: i32,
+    pub y: i32,
+    pub pixels: Vec<u8>,
+}
+
+/// A stored tile: its position and compressed bytes.
+pub(crate) type Stored = (i32, i32, Vec<u8>);
+/// A written tile: its position, and its compressed bytes unless it's now empty.
+pub(crate) type Written = (i32, i32, Option<Vec<u8>>);
 
 pub(crate) fn bytes_per_pixel(format: PixelFormat) -> usize {
     match format {
@@ -29,22 +44,29 @@ pub(crate) fn bytes_per_pixel(format: PixelFormat) -> usize {
     }
 }
 
-pub(crate) fn key((x, y): (i32, i32)) -> String {
-    format!("{x},{y}")
-}
-
-pub(crate) fn parse_key(key: &str) -> Option<(i32, i32)> {
-    let (x, y) = key.split_once(',')?;
-    Some((x.parse().ok()?, y.parse().ok()?))
-}
-
 fn tile_len(format: PixelFormat) -> usize {
     (SIZE * SIZE) as usize * bytes_per_pixel(format)
 }
 
+/// The tile columns and rows `rect` touches, or `None` when it's empty.
+pub(crate) fn covered(rect: Rect) -> Option<((i64, i64), (i64, i64))> {
+    if rect.width == 0 || rect.height == 0 {
+        return None;
+    }
+    let (left, top) = (i64::from(rect.x), i64::from(rect.y));
+    let (right, bottom) = (left + i64::from(rect.width), top + i64::from(rect.height));
+    Some((
+        (left.div_euclid(SIZE), (right - 1).div_euclid(SIZE)),
+        (top.div_euclid(SIZE), (bottom - 1).div_euclid(SIZE)),
+    ))
+}
+
+/// Inflates a tile, reading no more than a tile can hold, so a crafted one
+/// can't exhaust memory before it is found wrong.
 fn decompress(bytes: &[u8], format: PixelFormat) -> Result<Vec<u8>> {
     let mut raw = Vec::with_capacity(tile_len(format));
     ZlibDecoder::new(bytes)
+        .take(tile_len(format) as u64 + 1)
         .read_to_end(&mut raw)
         .map_err(Error::corrupt)?;
     if raw.len() != tile_len(format) {
@@ -53,30 +75,30 @@ fn decompress(bytes: &[u8], format: PixelFormat) -> Result<Vec<u8>> {
     Ok(raw)
 }
 
-/// Writes `pixels` over `rect`, replacing what was there, and returns the
-/// tiles that changed. Each tile is decoded, written, and encoded on its own,
-/// so tiles run in parallel; the map changes afterwards.
+/// Writes `pixels` over `rect` on the `current` compressed tiles, and returns
+/// each tile `rect` touches with its new bytes, or `None` for one now empty.
+/// Each tile is decoded, written, and encoded on its own, so tiles run in
+/// parallel.
 pub(crate) fn write(
-    tiles: &mut TileMap,
+    current: &[Stored],
     format: PixelFormat,
     rect: Rect,
     pixels: &[u8],
-) -> Result<Changes> {
+) -> Result<Vec<Written>> {
+    let Some(((first_x, last_x), (first_y, last_y))) = covered(rect) else {
+        return Ok(Vec::new());
+    };
     let bpp = bytes_per_pixel(format);
-    let size = i64::from(SIZE);
     let (left, top) = (i64::from(rect.x), i64::from(rect.y));
     let (right, bottom) = (left + i64::from(rect.width), top + i64::from(rect.height));
-    let mut changed = Changes::new();
-    if rect.width == 0 || rect.height == 0 {
-        return Ok(changed);
-    }
-    let positions: Vec<(i64, i64)> = (top.div_euclid(size)..=(bottom - 1).div_euclid(size))
-        .flat_map(|ty| {
-            (left.div_euclid(size)..=(right - 1).div_euclid(size)).map(move |tx| (tx, ty))
-        })
+    let current: BTreeMap<(i32, i32), &[u8]> = current
+        .iter()
+        .map(|(x, y, bytes)| ((*x, *y), bytes.as_slice()))
         .collect();
-    let current: &TileMap = tiles;
-    let written: Vec<((i32, i32), Option<LoroBinaryValue>)> = positions
+    let positions: Vec<(i64, i64)> = (first_y..=last_y)
+        .flat_map(|y| (first_x..=last_x).map(move |x| (x, y)))
+        .collect();
+    positions
         .into_par_iter()
         .map(|(tx, ty)| {
             let position = (tx as i32, ty as i32);
@@ -84,10 +106,10 @@ pub(crate) fn write(
                 Some(bytes) => decompress(bytes, format)?,
                 None => vec![0; tile_len(format)],
             };
-            let (origin_x, origin_y) = (tx * size, ty * size);
-            let (from_x, to_x) = (left.max(origin_x), right.min(origin_x + size));
+            let (origin_x, origin_y) = (tx * SIZE, ty * SIZE);
+            let (from_x, to_x) = (left.max(origin_x), right.min(origin_x + SIZE));
             let width = (to_x - from_x) as usize * bpp;
-            for y in top.max(origin_y)..bottom.min(origin_y + size) {
+            for y in top.max(origin_y)..bottom.min(origin_y + SIZE) {
                 let source =
                     ((y - top) as usize * rect.width as usize + (from_x - left) as usize) * bpp;
                 let target =
@@ -99,57 +121,26 @@ pub(crate) fn write(
                 PixelFormat::Gray8 => raw.iter().all(|&value| value == 0),
             };
             if empty {
-                return Ok((position, None));
+                return Ok((position.0, position.1, None));
             }
-            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::new(LEVEL));
             encoder
                 .write_all(&raw)
                 .expect("writing to a Vec cannot fail");
             let bytes = encoder.finish().expect("writing to a Vec cannot fail");
-            Ok((position, Some(LoroBinaryValue::from(bytes))))
+            Ok((position.0, position.1, Some(bytes)))
         })
-        .collect::<Result<_>>()?;
-    for (position, bytes) in written {
-        match bytes {
-            Some(bytes) => {
-                tiles.insert(position, bytes.clone());
-                changed.insert(position, Some(bytes));
-            }
-            None => {
-                if tiles.remove(&position).is_some() {
-                    changed.insert(position, None);
-                }
-            }
-        }
-    }
-    Ok(changed)
+        .collect()
 }
 
-/// The tiles overlapping `rect` (all of them without one), decoded in
-/// parallel.
-pub(crate) fn decode(
-    tiles: &TileMap,
-    format: PixelFormat,
-    rect: Option<Rect>,
-) -> Result<Vec<Tile>> {
-    let wanted: Vec<_> = tiles
-        .iter()
-        .filter(|&(&(x, y), _)| {
-            rect.is_none_or(|rect| {
-                let (left, top) = (x * SIZE, y * SIZE);
-                left < rect.x.saturating_add_unsigned(rect.width)
-                    && rect.x < left + SIZE
-                    && top < rect.y.saturating_add_unsigned(rect.height)
-                    && rect.y < top + SIZE
-            })
-        })
-        .collect();
-    wanted
-        .into_par_iter()
-        .map(|(&(x, y), bytes)| {
+/// Decodes compressed tiles in parallel.
+pub(crate) fn decode(tiles: &[Stored], format: PixelFormat) -> Result<Vec<Tile>> {
+    tiles
+        .par_iter()
+        .map(|(x, y, bytes)| {
             Ok(Tile {
-                x,
-                y,
+                x: *x,
+                y: *y,
                 pixels: decompress(bytes, format)?,
             })
         })

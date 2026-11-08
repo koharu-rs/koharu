@@ -19,5 +19,6 @@ photocraft-psd = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+image = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

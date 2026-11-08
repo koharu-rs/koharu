@@ -27,7 +27,7 @@ pub(crate) fn check_size(width: u32, height: u32) -> Result<()> {
 
 pub(crate) fn decode(file: &Hash, bytes: &[u8]) -> Result<RgbaImage> {
     let image = |source: ImageError| Error::Image {
-        file: file.clone(),
+        file: *file,
         source,
     };
     let reader = || {
