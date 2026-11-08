@@ -8,7 +8,7 @@
 //!
 //! `cargo run -p koharu-renderer --example typeset`
 
-use koharu_renderer::{Frame, NodeId, Renderer, TypesettingConfig};
+use koharu_renderer::{Frame, Renderer, RendererConfig};
 use koharu_scene::{Change, Created, Edit, LayerId, Session};
 use serde_json::{Value, json};
 
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
     }
     apply(&mut session, ops)?;
 
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     println!("the dialogue at 22 px:");
     report(&renderer.render(&session, page)?, &blocks);
 
@@ -93,8 +93,8 @@ fn texts(change: &Change) -> Vec<LayerId> {
 fn report(frame: &Frame, blocks: &[LayerId]) {
     for (index, block) in blocks.iter().enumerate() {
         let Some(text) = frame
-            .layer(NodeId::Translation(*block))
-            .and_then(|layer| layer.text())
+            .translation(*block)
+            .and_then(|translation| translation.text())
         else {
             continue;
         };

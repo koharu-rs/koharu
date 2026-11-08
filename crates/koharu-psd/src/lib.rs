@@ -3,10 +3,10 @@
 mod blocks;
 mod engine_data;
 
-use koharu_renderer::{Frame, NodeId, Raster, Renderer};
+use koharu_renderer::{Drawn, Frame, Raster, Renderer};
 use koharu_scene::{
-    Background, Balloon, Blend, Block, Content, FillRule, Layer, LayerId, PageId, Path, Rgba,
-    Session, Shape,
+    Background, Balloon, Blend, Block, Content, FillRule, Layer, LayerId, Offset, PageId, Path,
+    Rgba, Session, Shape,
 };
 use kurbo::BezPath;
 use photocraft_psd::{
@@ -35,6 +35,9 @@ pub enum Error {
 
     #[error("a {width}×{height} page is larger than a PSD's {MAX_SIDE} pixels on a side")]
     TooLarge { width: u32, height: u32 },
+
+    #[error("the rendered page has no {0}")]
+    NotDrawn(String),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -136,11 +139,18 @@ fn alpha(opacity: impl Into<f32>) -> u8 {
     (opacity.into() * 255.0).round() as u8
 }
 
+/// What a frame drew, which a render draws for every layer, the page's
+/// background, and each translation; `what` names it when it's missing.
+fn drawn<'f>(found: Option<Drawn<'f>>, what: impl FnOnce() -> String) -> Result<Drawn<'f>> {
+    found.ok_or_else(|| Error::NotDrawn(what()))
+}
+
 impl Export<'_> {
     fn background(&mut self, background: Background) -> Result<()> {
         let name = self.labels.background.clone();
+        let drawn = drawn(self.frame.background(), || "background".to_owned())?;
         self.leaf(
-            Some(NodeId::Background),
+            Some(drawn),
             Leaf {
                 name: &name,
                 visible: background.visible,
@@ -163,10 +173,12 @@ impl Export<'_> {
         if layer.locked {
             blocks.push(TaggedBlock::protection(LOCK_ALL));
         }
-        let node = NodeId::Layer(layer.id);
+        // A mask is its layer's, never one of the drawn children.
+        if let Content::Mask(_) = layer.content {
+            return Ok(());
+        }
+        let drawn = drawn(self.frame.layer(layer.id), || format!("layer {}", layer.id))?;
         match &layer.content {
-            // A mask is its layer's, never one of the drawn children.
-            Content::Mask(_) => return Ok(()),
             Content::Group(_) => {
                 self.folder(layer, blocks, |export| export.children(layer))?;
                 return Ok(());
@@ -196,17 +208,17 @@ impl Export<'_> {
             // A text that draws nothing has no runs to style, so it stays an
             // empty pixel layer.
             Content::Text(text) => {
-                if let Some(resolved) = self.frame.layer(node).and_then(|drawn| drawn.text())
+                if let Some(resolved) = drawn.text()
                     && !resolved.runs.is_empty()
                 {
                     blocks.extend(blocks::type_layer(text, resolved, self.texts));
                     self.texts += 1;
                 }
             }
-            Content::Image(_) | Content::Raster(_) => {}
+            Content::Mask(_) | Content::Image(_) | Content::Raster(_) => {}
         }
         let mask = self.masks(layer)?;
-        self.leaf(Some(node), leaf, blocks, mask)
+        self.leaf(Some(drawn), leaf, blocks, mask)
     }
 
     fn children(&mut self, layer: &Layer) -> Result<()> {
@@ -266,14 +278,16 @@ impl Export<'_> {
     /// source as a hidden type layer; and its translation as a type layer.
     fn block(&mut self, id: LayerId, block: &Block) -> Result<()> {
         let cleanup = &block.cleanup;
-        let node = NodeId::Layer(cleanup.id);
-        let mask = self.user_mask(node)?;
+        let cleaned = drawn(self.frame.layer(cleanup.id), || {
+            format!("clean-up {}", cleanup.id)
+        })?;
+        let mask = self.user_mask(cleaned)?;
         let name = match cleanup.name.is_empty() {
             true => self.labels.cleanup.clone(),
             false => cleanup.name.clone(),
         };
         self.leaf(
-            Some(node),
+            Some(cleaned),
             Leaf {
                 name: &name,
                 visible: cleanup.visible,
@@ -308,9 +322,11 @@ impl Export<'_> {
         let Some(text) = &block.translation else {
             return Ok(());
         };
-        let translation = NodeId::Translation(id);
+        let translation = drawn(self.frame.translation(id), || {
+            format!("translation of block {id}")
+        })?;
         let mut blocks = Vec::new();
-        if let Some(resolved) = self.frame.layer(translation).and_then(|drawn| drawn.text())
+        if let Some(resolved) = translation.text()
             && !resolved.runs.is_empty()
         {
             blocks.extend(blocks::type_layer(text, resolved, self.texts));
@@ -330,32 +346,31 @@ impl Export<'_> {
         )
     }
 
-    /// A pixel layer: what `node` drew, or nothing for what no frame draws.
+    /// A pixel layer: what `drawn` is, or nothing for what no frame draws.
     fn leaf(
         &mut self,
-        node: Option<NodeId>,
+        drawn: Option<Drawn<'_>>,
         leaf: Leaf,
         blocks: Vec<TaggedBlock>,
         mask: Option<MaskSpec>,
     ) -> Result<()> {
-        let Raster { image, left, top } = match node {
+        let Raster { image, offset } = match drawn {
             // Under a stroke effect the pixels are the glyphs alone, as
             // Photoshop draws the effect around them.
-            Some(node) if blocks.iter().any(|block| &block.key == b"lfx2") => {
-                self.renderer.rasterize(&self.frame.unstroked(node)?)?
+            Some(drawn) if blocks.iter().any(|block| &block.key == b"lfx2") => {
+                self.renderer.rasterize(&drawn.unstroked())?
             }
-            Some(node) => self.renderer.rasterize(&self.frame.cropped(node)?)?,
+            Some(drawn) => self.renderer.rasterize(&drawn.cropped())?,
             None => Raster {
                 image: Default::default(),
-                left: 0,
-                top: 0,
+                offset: Offset::default(),
             },
         };
         let (width, height) = image.dimensions();
         self.builder.push_layer(LayerSpec {
             name: leaf.name.to_owned(),
-            left,
-            top,
+            left: offset.x,
+            top: offset.y,
             width,
             height,
             pixels: PixelData::Rgba8(image.into_raw()),
@@ -383,14 +398,16 @@ impl Export<'_> {
             .iter()
             .any(|child| child.is_mask() && child.visible)
         {
-            true => self.user_mask(NodeId::Layer(layer.id)),
+            true => self.user_mask(drawn(self.frame.layer(layer.id), || {
+                format!("layer {}", layer.id)
+            })?),
             false => Ok(None),
         }
     }
 
-    /// `node`'s masks merged into one user mask, cropped to what it covers.
-    fn user_mask(&self, node: NodeId) -> Result<Option<MaskSpec>> {
-        let Some(mask) = self.frame.mask(node)? else {
+    /// `drawn`'s masks merged into one user mask, cropped to what it covers.
+    fn user_mask(&self, drawn: Drawn<'_>) -> Result<Option<MaskSpec>> {
+        let Some(mask) = drawn.mask() else {
             return Ok(None);
         };
         let coverage = self.renderer.rasterize(&mask)?;
@@ -407,8 +424,8 @@ impl Export<'_> {
             .collect();
         Ok(Some(MaskSpec {
             rect: photocraft_psd::Rect::from_xywh(
-                coverage.left + x0 as i32,
-                coverage.top + y0 as i32,
+                coverage.offset.x + x0 as i32,
+                coverage.offset.y + y0 as i32,
                 x1 - x0,
                 y1 - y0,
             ),

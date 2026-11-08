@@ -8,7 +8,7 @@ draw the same frame, so every export matches what the editor shows.
 
 | Item | What it does |
 |---|---|
-| `Renderer::new(typesetting)` | A renderer. Cloning it shares its fonts, caches, and GPU, which start on first use |
+| `Renderer::new(config)` | A renderer. Cloning it shares its fonts, caches, and GPU, which start on first use |
 | `Renderer::render(&session, page)` | A `Frame` of the page at its current revision: its background, then its layers |
 | `Renderer::lay_out(layer, &text)` | A text laid out as a render would, for one nothing draws, such as a block's source |
 | `Renderer::rasterize(&frame)` | The frame's area at one output pixel per page pixel, as a `Raster` of straight-alpha RGBA and its corner |
@@ -16,16 +16,17 @@ draw the same frame, so every export matches what the editor shows.
 | `Renderer::load_fonts(&frame).await` | Downloads the bundled fonts the frame's text asked for |
 | `Renderer::available_fonts().await` | Every font family, system and bundled |
 | `Renderer::font_preview(family).await` | A WebP of the family's name set in it, 96 pixels tall |
-| `Renderer::set_typesetting(config)` | Follows a changed `[typesetting]` preference, and text lays out again |
+| `Renderer::set_config(config)` | Follows a changed `[renderer]` preference, and text lays out again |
 | `Frame::draw(view)` | The `Strip`s that draw a `View`: a page rectangle at a scale |
-| `Frame::layers()`, `layer(id)` | Each thing the frame drew, by `NodeId`: bounds, visibility, and a text's `ResolvedText` |
-| `Frame::cropped(id)`, `unstroked(id)` | One thing alone, as a PSD's pixel layer needs it |
-| `Frame::mask(id)` | Its masks merged into one coverage |
-
-A `NodeId` names a layer, the page's background, or a block's clean-up or translation, which a
-block draws apart: its clean-up through its mask, then its translation. A panel shows its
-children only inside its outline, and no outline is drawn.
+| `Frame::layers()` | Everything the frame drew, as `Drawn` handles, parents first |
+| `Frame::layer(id)`, `background()`, `translation(block)` | What a layer drew, a block's clean-up among them; the page's background; a block's translation |
+| `Drawn::bounds()`, `visible()`, `text()` | What it covers, whether it and everything above it show, and a text's `ResolvedText` |
+| `Drawn::cropped()`, `unstroked()` | It alone, as a PSD's pixel layer needs it |
+| `Drawn::mask()` | Its masks merged into one coverage |
 | `Frame::needs_fonts()` | Whether some text draws with a fallback until `load_fonts` |
+
+A block draws its clean-up through its mask, then its translation, each apart, as PSD export
+takes them apart. A panel shows its children only inside its outline, and no outline is drawn.
 
 A frame is immutable and cheap to clone. Layer trees are fixed when it renders, so a view can
 be drawn again without touching the session.
@@ -57,8 +58,10 @@ A view whose images need more becomes several strips across it.
 
 ## Text
 
-A text layer's spans are shaped with HarfRust, broken into lines, fitted to the frame, and drawn
-as glyph runs. `ResolvedText` keeps what that resolved for the inspector and PSD export.
+A text layer is cut into runs of one span, font, script, direction, and orientation, and each
+run is shaped once with HarfRust. Lines are measured from those glyphs, fitted to the frame,
+arranged as positioned glyphs, and painted; a line edge where HarfRust marks breaking unsafe is
+shaped again on its own. `ResolvedText` keeps what that resolved for the inspector and PSD export.
 
 | Frame | Lines |
 |---|---|
@@ -75,17 +78,25 @@ as glyph runs. `ResolvedText` keeps what that resolved for the inspector and PSD
   letters on each side, and at most two lines in a row end with a hyphen. These are Photoshop's
   defaults.
 - **Overflow.** Text that nothing holds still draws, running past its frame.
-- **Vertical text.** Columns run right to left. `!` and `?` set in full-width forms, and a run of
-  two or three sits upright side by side in one cell. It doesn't hyphenate.
-- **Right-to-left text.** Runs are ordered by each byte's bidi level, and a first paragraph that
-  runs right to left starts its lines on the right.
+- **Paragraphs.** An empty one keeps its span's leading, as Photoshop's does.
+- **Vertical text.** Columns run right to left. What Unicode's Vertical_Orientation rotates, such
+  as Latin letters and digits, is set sideways, a quarter turn clockwise, as Photoshop and CSS's
+  `text-orientation: mixed` set it. `!` and `?` set in full-width forms, and a run of two or
+  three sits upright side by side in one cell. It doesn't hyphenate.
+- **Right-to-left text.** A line's runs show in the order the Unicode Bidirectional Algorithm gives
+  their levels, and the lines of a paragraph that runs right to left start on the right.
 - **Strokes.** They draw under every fill, as Photoshop draws an outside stroke under its type.
 
 ## Fonts
 
-A span's font chain is its family, then `[typesetting]`'s `font_families`, then Arial, then
-fontique's fallback for the text's scripts, then a list of symbol and emoji families. Fallback
-never splits a grapheme.
+A span's font chain is its family, then `[renderer]`'s `font_families`, then Arial, then
+fontique's fallback for the text's scripts in its language, then a list of symbol and emoji
+families. A text with no language takes Japanese from kana and Korean from Hangul. Fallback never
+splits a grapheme, and a character no font of the chain has is listed in `ResolvedText::uncovered`.
+
+fontique keeps Han's fallback for no language and for Simplified Chinese in one place, and the
+first query to ask fills it. The renderer asks for Simplified Chinese first, so Chinese text never
+gets the system language's font, such as a Japanese one.
 
 If the system doesn't have the chain's first family, it can come from the `mayocream/fonts`
 dataset, pinned to one commit so its index, faces, and previews all match. Faces download only when

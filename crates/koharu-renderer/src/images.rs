@@ -7,16 +7,16 @@ use koharu_scene::Hash;
 
 use crate::{Error, Result};
 
-/// The largest surface the renderer draws or decodes.
+/// The longest side of a surface the renderer draws or decodes.
 const MAX_SIDE: u32 = 32_768;
-const MAX_PIXELS: u64 = 268_435_456;
 
 pub(crate) fn check_size(width: u32, height: u32) -> Result<()> {
     if width == 0
         || height == 0
         || width > MAX_SIDE
         || height > MAX_SIDE
-        || u64::from(width) * u64::from(height) > MAX_PIXELS
+        // 2^28 pixels, a gigabyte of RGBA.
+        || u64::from(width) * u64::from(height) > 268_435_456
     {
         return Err(Error::invalid(format!(
             "a {width}×{height} surface is past the renderer's limits"

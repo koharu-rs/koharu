@@ -4,7 +4,7 @@
 
 use std::io::Cursor;
 
-use koharu_renderer::{Frame, NodeId, Raster, Renderer, ResolvedText, TypesettingConfig};
+use koharu_renderer::{Frame, Raster, Renderer, RendererConfig, ResolvedText};
 use koharu_scene::{Change, Created, Edit, Hash, LayerId, Op, PageId, Session};
 use serde_json::{Value, json};
 
@@ -28,10 +28,6 @@ fn layer(change: &Change, name: &str) -> LayerId {
             _ => None,
         })
         .expect("a labelled layer")
-}
-
-fn node(change: &Change, name: &str) -> NodeId {
-    NodeId::Layer(layer(change, name))
 }
 
 /// A project with one `width`×`height` page holding `layers`, each labelled.
@@ -87,7 +83,7 @@ fn gpu(renderer: &Renderer) -> bool {
 
 fn text<'a>(frame: &'a Frame, change: &Change, name: &str) -> &'a ResolvedText {
     frame
-        .layer(node(change, name))
+        .layer(layer(change, name))
         .and_then(|layer| layer.text())
         .expect("a laid-out text")
 }
@@ -107,7 +103,7 @@ fn word_in_box(width: f64, language: &str) -> ResolvedText {
             },
         })],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, page).expect("a frame");
     text(&frame, &change, "text").clone()
 }
@@ -163,10 +159,10 @@ fn vertical_point_text_sets_columns_leftwards_from_its_origin() {
             },
         })],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, page).expect("a frame");
     let bounds = frame
-        .layer(node(&change, "text"))
+        .layer(layer(&change, "text"))
         .and_then(|layer| layer.bounds())
         .expect("bounds");
     // Two columns 48 px apart, the first at the origin's left.
@@ -195,7 +191,7 @@ fn path_text_anchored_at_an_edge_fits_beside_it() {
             },
         })],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, page).expect("a frame");
     let text = text(&frame, &change, "text");
     assert!(!text.overflowed && text.scale == 1.0, "{text:?}");
@@ -218,7 +214,7 @@ fn a_balloon_merely_full_shrinks_without_hyphens() {
             },
         })],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, page).expect("a frame");
     let text = text(&frame, &change, "text");
     assert!(
@@ -237,7 +233,7 @@ fn a_text_lays_out_again_only_when_its_layout_changes() {
             json!({"op": "add_layer", "id": "$kept", "page": "$page", "index": 1, "layer": {"kind": "text", "content": "Kept"}}),
         ],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let before = renderer.render(&session, page).expect("a frame");
     let edited = layer(&change, "edited");
     apply(
@@ -267,7 +263,7 @@ fn a_text_lays_out_again_only_when_its_layout_changes() {
     let moved = renderer.render(&session, page).expect("a frame");
     let x0 = |frame: &Frame| {
         frame
-            .layer(node(&change, "kept"))
+            .layer(layer(&change, "kept"))
             .and_then(|layer| layer.bounds())
             .expect("bounds")
             .x0
@@ -292,7 +288,7 @@ fn text_runs_count_utf16_units_and_split_where_spans_do() {
             },
         })],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, page).expect("a frame");
     let mut runs: Vec<_> = text(&frame, &change, "text")
         .runs
@@ -321,11 +317,11 @@ fn text_a_box_cannot_hold_overflows_and_still_draws() {
             },
         })],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, page).expect("a frame");
     assert!(text(&frame, &change, "text").overflowed);
     let bounds = frame
-        .layer(node(&change, "text"))
+        .layer(layer(&change, "text"))
         .and_then(|layer| layer.bounds())
         .expect("bounds");
     assert!(
@@ -349,7 +345,7 @@ fn masks_apply_in_order_and_cropping_drops_them() {
             json!({"op": "write_pixels", "layer": "$corner", "rect": {"x": 0, "y": 0, "width": 32, "height": 32}, "pixels": vec![255u8; 32 * 32]}),
         ],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
@@ -357,9 +353,9 @@ fn masks_apply_in_order_and_cropping_drops_them() {
     // the raster.
     let alphas = |raster: Raster| {
         [(16, 48), (16, 16), (48, 48)].map(|(x, y): (i32, i32)| {
-            let at = u32::try_from(x - raster.left)
+            let at = u32::try_from(x - raster.offset.x)
                 .ok()
-                .zip(u32::try_from(y - raster.top).ok());
+                .zip(u32::try_from(y - raster.offset.y).ok());
             at.and_then(|(x, y)| raster.image.get_pixel_checked(x, y))
                 .map_or(0, |pixel| pixel[3])
         })
@@ -370,12 +366,14 @@ fn masks_apply_in_order_and_cropping_drops_them() {
         [255, 0, 0]
     );
 
-    let paint = node(&change, "paint");
-    let cropped = renderer
-        .rasterize(&frame.cropped(paint).expect("a frame"))
-        .expect("pixels");
+    let paint = frame.layer(layer(&change, "paint")).expect("drawn");
+    let cropped = renderer.rasterize(&paint.cropped()).expect("pixels");
     assert_eq!(
-        (cropped.left, cropped.top, cropped.image.dimensions()),
+        (
+            cropped.offset.x,
+            cropped.offset.y,
+            cropped.image.dimensions()
+        ),
         (0, 0, (64, 64))
     );
     assert_eq!(alphas(cropped), [255; 3]);
@@ -383,10 +381,10 @@ fn masks_apply_in_order_and_cropping_drops_them() {
     // The mask frame covers only what its adding mask does, and draws no
     // image, which once left the next frame's images transparent in vello.
     let mask = renderer
-        .rasterize(&frame.mask(paint).expect("a frame").expect("masks"))
+        .rasterize(&paint.mask().expect("masks"))
         .expect("pixels");
     assert_eq!(
-        (mask.left, mask.top, mask.image.dimensions()),
+        (mask.offset.x, mask.offset.y, mask.image.dimensions()),
         (0, 0, (32, 64))
     );
     assert_eq!(alphas(mask), [255, 0, 0]);
@@ -417,22 +415,20 @@ fn a_hidden_layer_stays_out_of_the_page_but_exports_at_its_offset() {
             json!({"op": "write_pixels", "layer": "$draft", "rect": {"x": 0, "y": 0, "width": 16, "height": 16}, "pixels": vec![255u8; 16 * 16 * 4]}),
         ],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
     let frame = renderer.render(&session, page).expect("a frame");
-    let draft = node(&change, "draft");
-    assert!(!frame.layer(draft).expect("drawn").visible());
+    let draft = frame.layer(layer(&change, "draft")).expect("drawn");
+    assert!(!draft.visible());
     let page_pixels = renderer.rasterize(&frame).expect("pixels");
     assert_eq!(page_pixels.image.get_pixel(20, 12)[3], 0);
 
     // Its own pixels are what it painted, not the 64×64 tile holding them.
-    let own = renderer
-        .rasterize(&frame.cropped(draft).expect("a frame"))
-        .expect("pixels");
+    let own = renderer.rasterize(&draft.cropped()).expect("pixels");
     assert_eq!(
-        (own.left, own.top, own.image.dimensions()),
+        (own.offset.x, own.offset.y, own.image.dimensions()),
         (16, 8, (16, 16))
     );
     assert!(own.image.pixels().all(|pixel| pixel[3] == 255));
@@ -453,13 +449,13 @@ fn an_image_draws_through_its_transform() {
             }}),
         ],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
     let frame = renderer.render(&session, page).expect("a frame");
     let bounds = frame
-        .layer(node(&change, "photo"))
+        .layer(layer(&change, "photo"))
         .and_then(|layer| layer.bounds())
         .expect("bounds");
     assert_eq!(
@@ -484,12 +480,12 @@ fn the_background_draws_under_every_layer() {
             json!({"op": "write_pixels", "layer": "$paint", "rect": {"x": 0, "y": 0, "width": 32, "height": 64}, "pixels": red}),
         ],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
     let frame = renderer.render(&session, page).expect("a frame");
-    assert!(frame.layer(NodeId::Background).expect("drawn").visible());
+    assert!(frame.background().expect("drawn").visible());
     let pixels = renderer.rasterize(&frame).expect("pixels").image;
     assert_eq!(
         pixels.get_pixel(16, 32).0,
@@ -522,7 +518,7 @@ fn cleaned() -> (tempfile::TempDir, Session, PageId, Change) {
 fn a_block_shows_its_cleanup_only_inside_its_mask_under_its_translation() {
     let (_dir, mut session, page, change) = cleaned();
     let block = layer(&change, "block");
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
@@ -553,14 +549,10 @@ fn a_block_shows_its_cleanup_only_inside_its_mask_under_its_translation() {
     );
     let frame = renderer.render(&session, page).expect("a frame");
     let bounds = frame
-        .layer(NodeId::Translation(block))
+        .translation(block)
         .and_then(|layer| layer.bounds())
         .expect("a translation");
-    assert!(
-        frame
-            .layer(NodeId::Layer(layer(&change, "block.cleanup")))
-            .is_some()
-    );
+    assert!(frame.layer(layer(&change, "block.cleanup")).is_some());
     let pixels = renderer.rasterize(&frame).expect("pixels").image;
     let inked = (bounds.x0.max(0.0) as u32..(bounds.x1.min(32.0) as u32))
         .flat_map(|x| (bounds.y0.max(0.0) as u32..bounds.y1.min(64.0) as u32).map(move |y| (x, y)))
@@ -578,7 +570,7 @@ fn a_block_shows_its_cleanup_only_inside_its_mask_under_its_translation() {
 fn hiding_a_block_shows_the_background_again() {
     let (_dir, mut session, page, change) = cleaned();
     let block = layer(&change, "block");
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
@@ -607,7 +599,7 @@ fn a_panel_clips_its_children_and_a_layer_on_the_page_crosses_it() {
             json!({"op": "write_pixels", "layer": "$inside", "rect": {"x": 0, "y": 0, "width": 64, "height": 64}, "pixels": vec![255u8; 64 * 64 * 4]}),
         ],
     );
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     if !gpu(&renderer) {
         return;
     }
