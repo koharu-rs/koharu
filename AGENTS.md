@@ -10,12 +10,13 @@ Koharu is a local-first manga translator: a Rust workspace with a TypeScript int
 
 ## Changes
 
-- Never add backward compatibility. When an API, schema, file format, configuration, or ownership boundary changes, delete the replaced form: no alias, forwarding layer, compatibility parser, upgrade decoder, stub, or disabled flag.
+- Never add backward compatibility, except that a project file a release wrote keeps opening. When an API, schema, file format, configuration, or ownership boundary changes, delete the replaced form: no alias, forwarding layer, compatibility parser, upgrade decoder, stub, or disabled flag.
+- Changing a released project format ships an upgrade to the new one, which leaves the file as it was if it fails. A format no release wrote gets no upgrade.
 - Prefer a coherent ownership redesign over cosmetic renaming. Defaults and provider-specific behavior belong to the component that owns them, not to a central list of special cases.
 - Make the smallest change that solves the problem. Leave unrelated configuration, documentation, generated files, and workflows alone. A feature does not land beside drive-by cleanup.
 - When two changes implement the same workflow, keep one and extend the existing command or configuration.
 - If the code you are changing has moved, rebase onto its new owner. Do not port a patch onto a deleted tree.
-- Invalid input fails closed, whether it is a project file, configuration, or model output. Do not add a repair or defaulting layer that can change meaning.
+- Invalid configuration and model output fail closed. A project file fails to open only when it doesn't parse, isn't this app's format or version, or would crash a reader; its structure is kept by the operations that write it, not checked again. Do not add a repair or defaulting layer that can change meaning.
 
 ## Code
 

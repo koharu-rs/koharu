@@ -2,7 +2,7 @@
 name = "koharu-scene"
 version.workspace = true
 edition.workspace = true
-description = "Koharu's scene graph on Loro."
+description = "Koharu's scene graph: layers and manga kinds, stored in SQLite."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
@@ -14,19 +14,25 @@ publish.workspace = true
 [dependencies]
 blake3 = { workspace = true }
 color = { workspace = true }
+derive_more = { workspace = true }
 flate2 = { workspace = true }
 icu_locale_core = { workspace = true }
+image = { workspace = true }
+imbl = { workspace = true }
+indoc = { workspace = true }
 json-patch = { workspace = true }
 jsonptr = { workspace = true }
-koharu-storage = { workspace = true }
 kurbo = { workspace = true }
-loro = { workspace = true }
 rayon = { workspace = true }
+rusqlite = { workspace = true }
 schemars = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_json_canonicalizer = { workspace = true }
+serde_rusqlite = { workspace = true }
+serde_with = { workspace = true }
+similar = { workspace = true }
 specta = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }

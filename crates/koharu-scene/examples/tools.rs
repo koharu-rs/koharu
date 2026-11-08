@@ -1,125 +1,82 @@
 //! What an agent or MCP client does: list the tools, call them, and read
-//! answers without hashes. The host runs each call on the session as the
-//! user, names the agent with `via`, and gives single-op tools its own
-//! translated undo label.
+//! their answers, which are the project's own values.
 //!
 //! `cargo run -p koharu-scene --example tools`
 
-use koharu_scene::{
-    Author, Edit, Error, PageId, Session, Size, SoftwareAgent, ToolCall, compact, tool_call, tools,
-};
-use serde_json::{Value, json};
+use koharu_scene::{Answer, Edit, Session, ToolCall, tool_call, tools};
+use serde_json::json;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-/// Runs one tool call the way the app's host does, and returns what the agent
-/// sees.
-fn run(session: &mut Session, name: &str, arguments: Value) -> koharu_scene::Result<Value> {
-    match tool_call(name, arguments)? {
+/// Runs a call as the host does: an edit gets a label, and a query an answer.
+fn call(
+    session: &mut Session,
+    name: &str,
+    arguments: serde_json::Value,
+) -> Result<serde_json::Value> {
+    Ok(match tool_call(name, arguments)? {
         ToolCall::Edit { label, ops } => {
             let change = session.apply(Edit {
-                project: session.id(),
-                // `apply_edit` carries the agent's label; for a single op the
-                // app supplies a translated one.
-                label: label.unwrap_or_else(|| "Agent edit".to_owned()),
-                author: Author::User {
-                    via: Some(SoftwareAgent {
-                        name: "assistant".to_owned(),
-                        version: None,
-                    }),
-                },
-                reads: Vec::new(),
+                label: label.unwrap_or_else(|| name.to_owned()),
                 ops,
             })?;
-            Ok(json!({"created": change.created}))
+            serde_json::to_value(change)?
         }
-        ToolCall::Query(query) => Ok(compact(&session.query(query)?)),
-    }
+        ToolCall::Query(query) => serde_json::to_value(session.query(query)?)?,
+    })
 }
 
 fn main() -> Result<()> {
-    let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("chapter.koharu"))?;
-    // Pages come from imports, not from tools.
-    let change = session.apply(Edit {
-        project: session.id(),
-        label: "Import".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
-        ops: vec![koharu_scene::Op::AddPage {
-            id: None,
-            index: 0,
-            size: Size {
-                width: 1200,
-                height: 1700,
-            },
-        }],
-    })?;
-    let page: PageId = change.pages.added[0];
-
-    // One tool per op an agent may send, `apply_edit` for several at once,
-    // and one per query. Ops that carry bytes, editor deltas, or pixels are
-    // not tools.
     for tool in tools() {
-        let kind = if tool.writes { "edit" } else { "read" };
-        let summary = tool.description.lines().next().unwrap_or_default();
-        println!("{:<16} {kind}  {summary}", tool.name);
+        println!(
+            "{} ({}): {}",
+            tool.name,
+            if tool.writes { "writes" } else { "reads" },
+            tool.description
+        );
     }
-    let names: Vec<&str> = tools().iter().map(|tool| tool.name.as_str()).collect();
-    assert!(
-        names.contains(&"add_layer")
-            && names.contains(&"apply_edit")
-            && names.contains(&"get_page")
-    );
-    assert!(!names.contains(&"add_page") && !names.contains(&"write_pixels"));
 
-    // A single op.
-    let created = run(
-        &mut session,
-        "add_layer",
-        json!({
-            "page": page, "index": 0, "layer": {"kind": "text", "content": "Hi!"},
-        }),
-    )?;
-    let text = created["created"][0]["id"].clone();
+    let dir = tempfile::tempdir()?;
+    let mut session = Session::create(dir.path().join("agent.khr"))?;
+    let change = session.apply(Edit {
+        label: "Import".into(),
+        ops: vec![serde_json::from_value(
+            json!({"op": "add_page", "index": 0, "size": {"width": 400, "height": 600}}),
+        )?],
+    })?;
+    let page = change.pages.added[0];
 
-    // Several ops as one undo step; later ops name earlier ones by `$label`.
-    run(
+    let added = call(
         &mut session,
         "apply_edit",
-        json!({
-            "label": "Add a balloon",
-            "ops": [
-                {"op": "add_layer", "id": "$balloon", "page": page, "index": 1, "layer": {"kind": "group", "name": "Balloon"}},
-                {"op": "add_layer", "page": page, "parent": "$balloon", "index": 0, "layer": {
-                    "kind": "shape", "path": "M0 0 H100 V60 H0 Z", "fill": [1.0, 1.0, 1.0, 1.0],
-                }},
-                {"op": "move_layer", "layer": text, "parent": "$balloon", "index": 1},
-            ],
-        }),
+        json!({"label": "Add texts", "ops": [
+            {"op": "add_layer", "id": "$b", "page": page, "index": 0, "layer": {"kind": "balloon", "outline": "M0 0 L200 0 L200 200 L0 200 Z"}},
+            {"op": "add_layer", "id": "$t", "page": page, "parent": "$b", "index": 0, "layer": {"kind": "block", "source": {"frame": {"box": {"bounds": {"x": 10.0, "y": 10.0, "width": 40.0, "height": 80.0}}}, "content": "ありがとう"}}},
+        ]}),
     )?;
-    assert_eq!(session.history().undo.as_deref(), Some("Add a balloon"));
-    run(
+    let block = added["created"]
+        .as_array()
+        .and_then(|created| created.iter().find(|created| created["label"] == "t"))
+        .map(|created| created["id"].clone())
+        .ok_or("no block")?;
+    call(
+        &mut session,
+        "set_text",
+        json!({"layer": block, "text": "Thank you"}),
+    )?;
+    call(
         &mut session,
         "update_layer",
-        json!({"layer": text, "patch": {"style": {"chars": {"size": 26.0}}}}),
+        json!({"layer": block, "patch": {"translation": {"language": "en"}}}),
     )?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&call(&mut session, "get_layer", json!({"layer": block}))?)?
+    );
 
-    // Answers come compacted: no hashes, and each action reduced to what it
-    // was and who did it.
-    let answer = run(&mut session, "get_page", json!({"page": page}))?;
-    assert!(answer["layers"][0].get("hash").is_none());
-    println!("{}", serde_json::to_string_pretty(&answer)?);
-
-    // Mistakes come back as errors the agent can read and correct.
-    let error = run(&mut session, "rename_layer", json!({})).unwrap_err();
-    assert!(matches!(error, Error::Invalid { .. }));
-    let error = run(
-        &mut session,
-        "update_layer",
-        json!({"layer": text, "patch": {"colour": "red"}}),
-    )
-    .unwrap_err();
-    println!("{}", serde_json::to_value(&error)?);
+    let Answer::History(history) = session.query(koharu_scene::Query::GetHistory)? else {
+        return Err("not a history".into());
+    };
+    println!("undo: {:?}", history.undo());
     Ok(())
 }

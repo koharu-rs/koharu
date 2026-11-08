@@ -30,6 +30,7 @@ quick_cache = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_json_canonicalizer = { workspace = true }
 skrifa = { workspace = true }
 specta = { workspace = true }
 thiserror = { workspace = true }

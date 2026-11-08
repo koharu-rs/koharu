@@ -8,15 +8,15 @@
 
 use std::collections::HashMap;
 
-use koharu_renderer::{Renderer, TypesettingConfig};
-use koharu_scene::{Author, Created, Edit, LayerKind, Session};
+use koharu_renderer::{NodeId, Renderer, TypesettingConfig};
+use koharu_scene::{Created, Edit, LayerKind, Session};
 use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("poster.koharu"))?;
+    let mut session = Session::create(dir.path().join("poster.khr"))?;
     let red: Vec<u8> = [220, 40, 60, 255].repeat(64 * 64);
     let ops: Vec<Value> = vec![
         json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 320, "height": 240}}),
@@ -25,8 +25,9 @@ fn main() -> Result<()> {
         }}),
         json!({"op": "write_pixels", "layer": "$paint", "rect": {"x": 0, "y": 0, "width": 64, "height": 64}, "pixels": red}),
         json!({"op": "add_layer", "id": "$stripe", "page": "$page", "parent": "$paint", "index": 0, "layer": {
-            "kind": "mask", "mode": "subtract", "content": {"path": {"path": "M40 60 H104 V70 H40 Z"}},
+            "kind": "mask", "mode": "subtract", "offset": {"x": 40, "y": 60},
         }}),
+        json!({"op": "write_pixels", "layer": "$stripe", "rect": {"x": 0, "y": 0, "width": 64, "height": 10}, "pixels": vec![255u8; 64 * 10]}),
         json!({"op": "add_layer", "id": "$evening", "page": "$page", "index": 1, "layer": {
             "kind": "group", "blend": "multiply", "opacity": 0.6,
         }}),
@@ -46,10 +47,7 @@ fn main() -> Result<()> {
         }}),
     ];
     let change = session.apply(Edit {
-        project: session.id(),
         label: "Make the poster".to_owned(),
-        author: Author::User { via: None },
-        reads: Vec::new(),
         ops: ops
             .into_iter()
             .map(serde_json::from_value)
@@ -62,13 +60,14 @@ fn main() -> Result<()> {
             Created::Layer {
                 id,
                 label: Some(label),
-            } => Some((*id, label.as_str())),
+            } => Some((NodeId::Layer(*id), label.as_str())),
             _ => None,
         })
         .collect();
 
     let renderer = Renderer::new(TypesettingConfig::default());
     let frame = renderer.render(&session, change.pages.added[0])?;
+    let project = session.project();
     let composite = renderer.rasterize(&frame)?;
     println!(
         "composite: {}×{}",
@@ -79,7 +78,10 @@ fn main() -> Result<()> {
     for layer in frame.layers() {
         let label = labels[&layer.id()];
         let hidden = if layer.visible() { "" } else { ", hidden" };
-        match layer.kind() {
+        let NodeId::Layer(id) = layer.id() else {
+            continue;
+        };
+        match project.layer(id)?.kind() {
             // A mask is merged into its layer's mask.
             LayerKind::Mask => continue,
             LayerKind::Group => println!("{label}: a folder{hidden}"),

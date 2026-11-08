@@ -6,14 +6,15 @@
 
 use std::sync::LazyLock;
 
-use schemars::{JsonSchema, Schema, SchemaGenerator, generate::SchemaSettings, json_schema};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_json::{Map, Value, json};
-
-use crate::{
-    Answer, Error, Layer, LayerKind, LayerView, NamedStyle, Op, PageView, Query, Result, StyleView,
-    doc::Key,
+use schemars::{
+    JsonSchema, Schema, SchemaGenerator,
+    generate::SchemaSettings,
+    transform::{RecursiveTransform, Transform},
 };
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_json::{Value, json};
+
+use crate::{Blend, Error, LayerKind, NewLayer, Op, Query, Result};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolSpec {
@@ -24,9 +25,8 @@ pub struct ToolSpec {
     pub writes: bool,
 }
 
-/// A parsed tool call. The host wraps an edit with the author and the reads
-/// it tracks, and with its own translated label for a single op tool, which
-/// has none.
+/// A parsed tool call. The host wraps an edit with its own translated label
+/// for a single op tool, which has none.
 #[derive(Clone, Debug)]
 pub enum ToolCall {
     Edit { label: Option<String>, ops: Vec<Op> },
@@ -40,21 +40,13 @@ pub fn tools() -> &'static [ToolSpec] {
 }
 
 fn build() -> Vec<ToolSpec> {
-    let (ops, mut defs) = variants::<Op>("op");
-    let (queries, query_defs) = variants::<Query>("query");
-    defs.extend(query_defs);
-    let spec = |name: &str, description: &str, schema: Value, writes: bool| {
-        let mut schema = schema;
-        let used = reachable(&schema, &defs);
-        if !used.is_empty() {
-            schema["$defs"] = Value::Object(used);
-        }
-        ToolSpec {
-            name: name.to_owned(),
-            description: description.to_owned(),
-            input_schema: schema,
-            writes,
-        }
+    let ops = variants::<Op>("op");
+    let queries = variants::<Query>("query");
+    let spec = |name: &str, description: &str, input_schema: Value, writes: bool| ToolSpec {
+        name: name.to_owned(),
+        description: description.to_owned(),
+        input_schema,
+        writes,
     };
     let mut tools: Vec<ToolSpec> = ops
         .iter()
@@ -84,10 +76,10 @@ fn build() -> Vec<ToolSpec> {
 /// Parses a call to one of `tools()`.
 pub fn tool_call(name: &str, arguments: Value) -> Result<ToolCall> {
     let Some(tool) = tools().iter().find(|tool| tool.name == name) else {
-        return Err(Error::rejected(format!("there is no tool named {name}")));
+        return Err(Error::Rejected(format!("there is no tool named {name}")));
     };
     let Value::Object(mut arguments) = arguments else {
-        return Err(Error::rejected(format!("{name} takes an object")));
+        return Err(Error::Rejected(format!("{name} takes an object")));
     };
     if name == "apply_edit" {
         #[derive(Deserialize)]
@@ -106,7 +98,7 @@ pub fn tool_call(name: &str, arguments: Value) -> Result<ToolCall> {
                     .iter()
                     .any(|tool| tool.writes && tool.name == tag && tag != "apply_edit")
                 {
-                    return Err(Error::rejected(format!("{tag:?} is not an op tool")));
+                    return Err(Error::Rejected(format!("{tag:?} is not an op tool")));
                 }
                 parse(op)
             })
@@ -118,7 +110,7 @@ pub fn tool_call(name: &str, arguments: Value) -> Result<ToolCall> {
     }
     let tag = if tool.writes { "op" } else { "query" };
     if arguments.contains_key(tag) {
-        return Err(Error::rejected(format!("arguments can't contain `{tag}`")));
+        return Err(Error::Rejected(format!("arguments can't contain `{tag}`")));
     }
     arguments.insert(tag.to_owned(), Value::String(name.to_owned()));
     let value = Value::Object(arguments);
@@ -132,102 +124,30 @@ pub fn tool_call(name: &str, arguments: Value) -> Result<ToolCall> {
 }
 
 fn parse<T: DeserializeOwned>(value: Value) -> Result<T> {
-    serde_json::from_value(value).map_err(|error| Error::rejected(error.to_string()))
+    serde_json::from_value(value).map_err(|error| Error::Rejected(error.to_string()))
 }
 
-/// An answer as agents see it: no hashes, which the host keeps for them, and
-/// each action reduced to what it was and who did it.
-pub fn compact(answer: &Answer) -> Value {
-    match answer {
-        Answer::Project(project) => json!({
-            "id": project.id,
-            "version": project.version,
-            "pages": project.pages.iter().map(compact_page).collect::<Vec<_>>(),
-            "styles": project.styles.iter().map(compact_style).collect::<Vec<_>>(),
-        }),
-        Answer::Page(page) => compact_page(page),
-        Answer::Layer(answer) => json!({
-            "page": answer.page,
-            "parent": answer.parent,
-            "view": compact_layer(&answer.view),
-        }),
-        Answer::Style(view) => compact_style(view),
-        other => serde_json::to_value(other).expect("answers serialize"),
-    }
-}
-
-fn compact_page(page: &PageView) -> Value {
-    json!({
-        "id": page.id,
-        "size": page.size,
-        "layers": page.layers.iter().map(compact_layer).collect::<Vec<_>>(),
-    })
-}
-
-fn compact_origin(origin: &[crate::ActionRecord]) -> Vec<Value> {
-    origin
-        .iter()
-        .map(|record| json!({ "action": record.action.action, "by": record.action.software_agent.name }))
-        .collect()
-}
-
-fn compact_style(view: &StyleView) -> Value {
-    json!({
-        "id": view.id,
-        "style": view.style,
-        "origin": compact_origin(&view.origin),
-        "overrides": view.overrides,
-        "stale": view.stale,
-    })
-}
-
-fn compact_layer(view: &LayerView) -> Value {
-    json!({
-        "id": view.id,
-        "layer": view.layer,
-        "origin": compact_origin(&view.origin),
-        "overrides": view.overrides,
-        "stale": view.stale,
-        "style_overrides": view.style_overrides,
-        "children": view.children.iter().map(compact_layer).collect::<Vec<_>>(),
-        "masks": view.masks.iter().map(compact_layer).collect::<Vec<_>>(),
-    })
-}
-
-fn root_schema<T: JsonSchema>() -> Map<String, Value> {
+/// Each variant of a tagged enum as `(tag, description, schema)`, with every
+/// subschema inlined.
+fn variants<T: JsonSchema>(tag: &str) -> Vec<(String, String, Value)> {
     let schema = SchemaSettings::draft2020_12()
+        .with(|settings| settings.inline_subschemas = true)
         .into_generator()
         .into_root_schema_for::<T>();
-    match schema.to_value() {
-        Value::Object(map) => map,
-        _ => unreachable!("a root schema is an object"),
-    }
-}
-
-/// Each variant of a tagged enum as `(tag, description, schema)`, and the
-/// shared definitions.
-#[allow(clippy::type_complexity)]
-fn variants<T: JsonSchema>(tag: &str) -> (Vec<(String, String, Value)>, Map<String, Value>) {
-    let mut root = root_schema::<T>();
-    let defs = match root.remove("$defs") {
-        Some(Value::Object(defs)) => defs,
-        _ => Map::new(),
+    let Some(Value::Array(variants)) = schema.get("oneOf") else {
+        return Vec::new();
     };
-    let Some(Value::Array(variants)) = root.remove("oneOf") else {
-        return (Vec::new(), defs);
-    };
-    let variants = variants
-        .into_iter()
+    variants
+        .iter()
         .filter_map(|variant| {
             let name = variant["properties"][tag]["const"].as_str()?.to_owned();
             let description = variant["description"]
                 .as_str()
                 .unwrap_or_default()
                 .to_owned();
-            Some((name, description, variant))
+            Some((name, description, variant.clone()))
         })
-        .collect();
-    (variants, defs)
+        .collect()
 }
 
 fn without_tag(schema: &Value, tag: &str) -> Value {
@@ -241,136 +161,74 @@ fn without_tag(schema: &Value, tag: &str) -> Value {
     schema
 }
 
-/// The definitions `schema` refers to, directly or through each other.
-fn reachable(schema: &Value, defs: &Map<String, Value>) -> Map<String, Value> {
-    fn refs<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
-        match value {
-            Value::Object(map) => {
-                if let Some(name) = map
-                    .get("$ref")
-                    .and_then(Value::as_str)
-                    .and_then(|r| r.strip_prefix("#/$defs/"))
-                {
-                    out.push(name);
-                }
-                map.values().for_each(|value| refs(value, out));
-            }
-            Value::Array(items) => items.iter().for_each(|item| refs(item, out)),
-            _ => {}
-        }
-    }
-    let mut used = Map::new();
-    let mut pending = Vec::new();
-    refs(schema, &mut pending);
-    while let Some(name) = pending.pop() {
-        if !used.contains_key(name)
-            && let Some(def) = defs.get(name)
-        {
-            used.insert(name.to_owned(), def.clone());
-            refs(def, &mut pending);
-        }
-    }
-    used
-}
-
-/// The schema of `update_layer`'s patch: every layer kind with nothing
-/// required, `null` allowed everywhere, and `kind` and a text's `content`
-/// left out. It registers `LayerPatch` and its `Partial…` definitions.
+/// The schema of `update_layer`'s patch: a new layer's values with nothing
+/// required and `null` allowed where a value is optional, without what a
+/// patch can't name: `kind`, `attributes`, and a text's `content`, a
+/// translation's included.
 pub(crate) fn layer_patch(generator: &mut SchemaGenerator) -> Schema {
-    if !generator.definitions().contains_key("LayerPatch") {
-        let mut layer = root_schema::<Layer>();
-        let defs = generator.definitions_mut();
-        if let Some(Value::Object(layer_defs)) = layer.remove("$defs") {
-            for (name, schema) in layer_defs {
-                defs.insert(format!("Partial{name}"), partial(schema));
-            }
-        }
-        let variants: Vec<Value> = match layer.remove("oneOf") {
-            Some(Value::Array(variants)) => variants
-                .into_iter()
-                .map(|mut variant| {
-                    let text = variant["properties"][Key::Kind.as_ref()]["const"]
-                        == LayerKind::Text.as_ref();
-                    if let Some(Value::Object(properties)) = variant.get_mut("properties") {
-                        properties.remove(Key::Kind.as_ref());
-                        if text {
-                            properties.remove(Key::Content.as_ref());
+    let mut schema = generator.subschema_for::<NewLayer>();
+    if let Some(Value::Object(properties)) = schema.get_mut("properties") {
+        properties.remove("attributes");
+        // A new layer's defaults leave the values every layer has out of
+        // `required`, and its kind picks a blend it leaves out, but a stored
+        // layer has every value, so none clears.
+        properties.insert(
+            "blend".to_owned(),
+            generator.subschema_for::<Blend>().into(),
+        );
+        let own: Vec<Value> = properties.keys().cloned().map(Value::from).collect();
+        schema.insert("required".to_owned(), own.into());
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(Value::Array(variants)) = schema.get_mut(key) {
+            for variant in variants {
+                let kind = variant["properties"]["kind"]["const"].clone();
+                let Some(Value::Object(properties)) = variant.get_mut("properties") else {
+                    continue;
+                };
+                properties.remove("kind");
+                if kind == LayerKind::Text.as_ref() {
+                    properties.remove("content");
+                }
+                if kind == LayerKind::Block.as_ref()
+                    && let Some(translation) = properties.get_mut("translation")
+                {
+                    RecursiveTransform(|schema: &mut Schema| {
+                        if let Some(Value::Object(properties)) = schema.get_mut("properties") {
+                            properties.remove("content");
                         }
-                    }
-                    partial(variant)
-                })
-                .collect(),
-            _ => Vec::new(),
-        };
-        defs.insert("LayerPatch".to_owned(), json!({ "anyOf": variants }));
-    }
-    json_schema!({
-        "description": "A JSON Merge Patch over the layer's properties; null clears an optional property.",
-        "$ref": "#/$defs/LayerPatch",
-    })
-}
-
-/// The schema of `update_text_style`'s patch: a style with nothing required
-/// and `null` allowed everywhere. It registers `StylePatch`.
-pub(crate) fn style_patch(generator: &mut SchemaGenerator) -> Schema {
-    if !generator.definitions().contains_key("StylePatch") {
-        let mut style = root_schema::<NamedStyle>();
-        let defs = generator.definitions_mut();
-        if let Some(Value::Object(style_defs)) = style.remove("$defs") {
-            for (name, schema) in style_defs {
-                defs.insert(format!("Partial{name}"), partial(schema));
+                    })
+                    .transform(
+                        <&mut Schema>::try_from(translation).expect("a property is a schema"),
+                    );
+                }
             }
         }
-        style.remove("$schema");
-        style.remove("title");
-        defs.insert("StylePatch".to_owned(), partial(Value::Object(style)));
     }
-    json_schema!({
-        "description": "A JSON Merge Patch over the style's values; null clears an optional value.",
-        "$ref": "#/$defs/StylePatch",
-    })
+    RecursiveTransform(partial).transform(&mut schema);
+    schema.insert(
+        "description".to_owned(),
+        "A JSON Merge Patch over the layer's values; null clears an optional value.".into(),
+    );
+    schema
 }
 
-/// A schema with nothing required and `null` allowed for every property,
-/// visiting each subschema once.
-fn partial(schema: Value) -> Value {
-    let Value::Object(mut map) = schema else {
-        return schema;
-    };
-    map.remove("required");
-    map.remove("default");
-    if let Some(Value::String(reference)) = map.get_mut("$ref")
-        && let Some(name) = reference.strip_prefix("#/$defs/")
-    {
-        *reference = format!("#/$defs/Partial{name}");
+/// One schema with nothing required, and `null` allowed for what wasn't
+/// required, which a merge patch clears to its default or to none.
+fn partial(schema: &mut Schema) {
+    let required = schema.remove("required").unwrap_or_default();
+    schema.remove("default");
+    if let Some(variants) = schema.remove("oneOf") {
+        schema.insert("anyOf".to_owned(), variants);
     }
-    if let Some(Value::Object(properties)) = map.remove("properties") {
-        let properties = properties
-            .into_iter()
-            .map(|(key, schema)| {
-                (
-                    key,
-                    json!({ "anyOf": [partial(schema), { "type": "null" }] }),
-                )
-            })
-            .collect();
-        map.insert("properties".to_owned(), Value::Object(properties));
-    }
-    if let Some(variants) = map.remove("oneOf") {
-        map.insert("anyOf".to_owned(), variants);
-    }
-    for key in ["anyOf", "allOf", "prefixItems"] {
-        if let Some(Value::Array(items)) = map.remove(key) {
-            map.insert(
-                key.to_owned(),
-                Value::Array(items.into_iter().map(partial).collect()),
-            );
+    if let Some(Value::Object(properties)) = schema.get_mut("properties") {
+        for (key, property) in properties.iter_mut() {
+            let optional = required
+                .as_array()
+                .is_none_or(|required| !required.contains(&Value::from(key.as_str())));
+            if optional {
+                *property = json!({ "anyOf": [property.take(), { "type": "null" }] });
+            }
         }
     }
-    for key in ["items", "additionalProperties"] {
-        if let Some(child) = map.remove(key) {
-            map.insert(key.to_owned(), partial(child));
-        }
-    }
-    Value::Object(map)
 }

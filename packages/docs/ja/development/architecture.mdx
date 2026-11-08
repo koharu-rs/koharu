@@ -11,7 +11,7 @@ flowchart TB
   ui["packages/koharu: React + Next.js"] --> bridge["packages/bridge: プロトコル + WASM"]
   entry["crates/koharu: 起動"] --> app["koharu-app"]
   bridge -->|"コマンドとチャンネル"| app
-  app --> scene["koharu-scene"] --> storage["koharu-storage"]
+  app --> scene["koharu-scene"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["ネイティブランタイム"]
   app --> llm["koharu-llm"]
   pipeline --> llm
@@ -40,7 +40,7 @@ flowchart TB
 
 ## シーンと処理
 
-`koharu-scene` は正規プロジェクト、階層、コンポーネント、関係、パッチ、リビジョン、セッション undo を所有します。`koharu-storage` は不透明な完全状態と不変 blob を永続化します。
+`koharu-scene` は正規プロジェクト、階層、コンポーネント、関係、パッチ、リビジョン、セッション undo、プロジェクトファイルを所有します。
 
 `koharu-pipeline` はページ・段階のスケジューリング、モデル寿命、進捗、停止、逐次コミットを担当します。`koharu-ml` は画像モデル、`koharu-llm` はローカル・ホスト型の言語モデルとエージェントを担当します。
 

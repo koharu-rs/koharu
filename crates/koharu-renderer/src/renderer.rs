@@ -11,8 +11,9 @@ use std::{
 
 use image::RgbaImage;
 use koharu_scene::{
-    Align, Direction, FillRule, Frame as TextFrame, Hash, LanguageIdentifier, Layer as SceneLayer,
-    LayerId, LayerKind, LayerView, MaskContent, PageId, PathFit, PixelFormat, Session, Tiles,
+    Align, Background, Block, Content as SceneContent, Direction, FillRule, Frame as TextFrame,
+    Hash, LanguageIdentifier, Layer as SceneLayer, LayerId, Mask, Offset, PageId, PathFit,
+    PixelFormat, Project, Session, Shape, Text, Tiles,
 };
 use parking_lot::RwLock;
 use rayon::prelude::*;
@@ -25,7 +26,7 @@ use vello::{
 use crate::{
     Error, Result, TypesettingConfig,
     fonts::{FontPreview, FontRequest, Fonts},
-    frame::{Content, Frame, FrameData, Layer, MaskNode, MaskShape, Node, View},
+    frame::{Content, Frame, FrameData, Layer, MaskNode, MaskShape, Node, NodeId, View},
     images,
     raster::Gpu,
     text::{self, Input, ResolvedText, Room, Span},
@@ -61,14 +62,26 @@ pub struct Raster {
     pub top: i32,
 }
 
-/// What a layer's retained content is keyed by: only what changes it.
+/// What retained content is keyed by: only what changes it. Texts and shapes
+/// key on the hash of their canonical JSON (RFC 8785), so the key stays the
+/// same for equal values whatever order a map's keys come in.
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Key {
-    /// The layer's hash, its text style's, and the font generation.
-    Text(Hash, Option<Hash>, u64),
+    /// A text's hash and the font generation.
+    Text(Hash, u64),
     Shape(Hash),
     Image(Hash),
     Tiles(Hash),
+}
+
+/// What a piece of retained content is built from.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Text(LayerId, &'a Text),
+    Shape(&'a Shape),
+    Image(Hash),
+    /// The picture of the layer or block part with this id.
+    Tiles(LayerId),
 }
 
 #[derive(Clone)]
@@ -94,6 +107,12 @@ impl quick_cache::Weighter<Key, Cached> for Weight {
             _ => 1024,
         }
     }
+}
+
+fn canonical(value: &impl serde::Serialize) -> Result<Hash> {
+    let bytes = serde_json_canonicalizer::to_vec(value)
+        .map_err(|error| Error::invalid(format!("a value has no canonical JSON: {error}")))?;
+    Ok(Hash::of(&bytes))
 }
 
 impl Renderer {
@@ -129,17 +148,16 @@ impl Renderer {
             .map_err(|error| Error::Backend(anyhow::anyhow!(error)))
     }
 
-    /// Renders `page` as `session` holds it. Layers whose content is
-    /// unchanged reuse what an earlier render built.
+    /// Renders `page` as `session` holds it: its background, then its layers.
+    /// Content that is unchanged reuses what an earlier render built.
     pub fn render(&self, session: &Session, page: PageId) -> Result<Frame> {
-        let view = session.page(page)?;
+        let project = session.project();
+        let view = project.page(page)?;
         images::check_size(view.size.width, view.size.height)?;
         // Build what isn't retained across rayon first; assembling the tree
         // then finds it all.
-        let mut flat = Vec::new();
-        flatten(&view.layers, &mut flat);
-        flat.par_iter().for_each(|layer| {
-            let _ = self.content(session, layer);
+        sources(&project, page)?.par_iter().for_each(|source| {
+            let _ = self.content(session, *source);
         });
         let mut builder = Builder {
             renderer: self,
@@ -148,11 +166,13 @@ impl Renderer {
             order: Vec::new(),
             missing: Vec::new(),
         };
-        let nodes = view
-            .layers
-            .iter()
-            .map(|layer| builder.node(layer, true))
-            .collect::<Result<Vec<_>>>()?;
+        let mut nodes = Vec::new();
+        if let Some(background) = view.background {
+            nodes.push(builder.background(background)?);
+        }
+        for layer in &view.layers {
+            nodes.push(builder.node(layer, true)?);
+        }
         let mut missing = builder.missing;
         missing.sort();
         missing.dedup();
@@ -172,12 +192,22 @@ impl Renderer {
         })))
     }
 
+    /// Lays out `text`, which `layer` holds, as a render would: for a text
+    /// nothing draws, such as a block's source in a PSD. `None` when it has no
+    /// characters.
+    pub fn lay_out(&self, layer: LayerId, text: &Text) -> Result<Option<Arc<ResolvedText>>> {
+        match self.text_content(layer, text)? {
+            Cached::Vector { text, .. } => Ok(text),
+            Cached::Pixels(_) => Ok(None),
+        }
+    }
+
     /// Draws a frame's area at one output pixel per page pixel and reads it
     /// back.
     pub fn rasterize(&self, frame: &Frame) -> Result<Raster> {
         let area = frame.area();
         let (width, height) = (area.width().ceil() as u32, area.height().ceil() as u32);
-        images::check_size(width, height)?;
+        // What draws nothing, such as a block with no clean-up, is empty.
         if width == 0 || height == 0 {
             return Ok(Raster {
                 image: RgbaImage::new(width, height),
@@ -185,6 +215,7 @@ impl Renderer {
                 top: area.y0.floor() as i32,
             });
         }
+        images::check_size(width, height)?;
         let gpu = self.gpu()?;
         let mut image = RgbaImage::new(width, height);
         for strip in frame.draw(View {
@@ -286,43 +317,26 @@ impl Renderer {
         .map_err(|error| Error::Backend(error.into()))?
     }
 
-    /// A layer's content, retained by what it depends on.
-    fn content(&self, session: &Session, view: &LayerView) -> Result<Option<Cached>> {
-        let key = match &view.layer {
-            SceneLayer::Group(_) => return Ok(None),
-            SceneLayer::Mask(mask) => match &mask.content {
-                MaskContent::Path { .. } => return Ok(None),
-                MaskContent::Pixels { .. } => Key::Tiles(session.tiles_hash(view.id)?),
-            },
-            SceneLayer::Raster(_) => Key::Tiles(session.tiles_hash(view.id)?),
-            SceneLayer::Image(image) => Key::Image(image.file.clone()),
-            SceneLayer::Shape(_) => Key::Shape(view.hash.clone()),
-            SceneLayer::Text(text) => {
-                let style = text
-                    .text_style
-                    .map(|style| session.style(style))
-                    .transpose()?
-                    .map(|style| style.hash);
-                Key::Text(
-                    view.hash.clone(),
-                    style,
-                    self.0.generation.load(Ordering::Relaxed),
-                )
-            }
+    /// Content, retained by what it depends on.
+    fn content(&self, session: &Session, source: Source) -> Result<Cached> {
+        let key = match source {
+            Source::Text(layer, text) => return self.text_content(layer, text),
+            Source::Shape(shape) => Key::Shape(canonical(shape)?),
+            Source::Image(file) => Key::Image(file),
+            Source::Tiles(layer) => Key::Tiles(session.tiles_hash(layer)?),
         };
         if let Some(cached) = self.0.cache.get(&key) {
-            return Ok(Some(cached));
+            return Ok(cached);
         }
-        let cached = match (&view.layer, &key) {
-            (SceneLayer::Raster(_) | SceneLayer::Mask(_), _) => {
-                Cached::Pixels(assemble(session.tiles(view.id, None)?)?.map(Arc::new))
+        let cached = match source {
+            Source::Tiles(layer) => {
+                Cached::Pixels(assemble(session.tiles(layer, None)?)?.map(Arc::new))
             }
-            (SceneLayer::Image(image), _) => {
-                let file = session.file(&image.file)?;
-                let decoded = images::decode(&image.file, &file.bytes)?;
+            Source::Image(file) => {
+                let decoded = images::decode(&file, &session.file(&file)?)?;
                 Cached::Pixels(Some(Arc::new(Tiled::new((0, 0), decoded))))
             }
-            (SceneLayer::Shape(shape), _) => {
+            Source::Shape(shape) => {
                 let path = parse(shape.path.as_str())?;
                 let mut scene = Scene::new();
                 let fill = match shape.fill_rule {
@@ -330,7 +344,7 @@ impl Renderer {
                     FillRule::EvenOdd => Fill::EvenOdd,
                 };
                 if let Some(color) = shape.fill {
-                    scene.fill(fill, Affine::IDENTITY, color, None, &path);
+                    scene.fill(fill, Affine::IDENTITY, Color::from(color), None, &path);
                 }
                 let mut bounds = path.bounding_box();
                 if let Some(stroke) = &shape.stroke {
@@ -338,7 +352,13 @@ impl Renderer {
                     let style = Stroke::new(stroke.width)
                         .with_join(Join::Miter)
                         .with_caps(Cap::Butt);
-                    scene.stroke(&style, Affine::IDENTITY, stroke.color, None, &path);
+                    scene.stroke(
+                        &style,
+                        Affine::IDENTITY,
+                        Color::from(stroke.color),
+                        None,
+                        &path,
+                    );
                     bounds = bounds.inflate(stroke.width * 2.0, stroke.width * 2.0);
                 }
                 Cached::Vector {
@@ -349,23 +369,36 @@ impl Renderer {
                     missing: Vec::new(),
                 }
             }
-            (SceneLayer::Text(layer), _) => self.text(session, view.id, layer)?,
-            _ => unreachable!("every keyed layer is built"),
+            Source::Text(..) => unreachable!("texts return above"),
         };
         self.0.cache.insert(key, cached.clone());
-        Ok(Some(cached))
+        Ok(cached)
     }
 
-    fn text(
-        &self,
-        session: &Session,
-        id: LayerId,
-        layer: &koharu_scene::TextLayer,
-    ) -> Result<Cached> {
-        let style = match layer.text_style {
-            Some(named) => layer.style.or(&session.style(named)?.style.style),
-            None => layer.style.clone(),
-        };
+    fn text_content(&self, id: LayerId, layer: &Text) -> Result<Cached> {
+        // The transform places the layout when it's drawn, so moving a text
+        // keeps its layout. Naming every field fails to build when one is
+        // added, until the key says whether it counts.
+        let Text {
+            content,
+            style,
+            frame,
+            direction,
+            language,
+            transform: _,
+        } = layer;
+        let laid_out = canonical(&(content, style, frame, direction, language))?;
+        let key = Key::Text(laid_out, self.0.generation.load(Ordering::Relaxed));
+        if let Some(cached) = self.0.cache.get(&key) {
+            return Ok(cached);
+        }
+        let cached = self.text(id, layer)?;
+        self.0.cache.insert(key, cached.clone());
+        Ok(cached)
+    }
+
+    fn text(&self, id: LayerId, layer: &Text) -> Result<Cached> {
+        let style = &layer.style;
         let language =
             (layer.language != LanguageIdentifier::UNKNOWN).then(|| layer.language.to_string());
         let families = self.0.typesetting.read().font_families.clone();
@@ -396,9 +429,11 @@ impl Renderer {
                 range: start..text.len(),
                 fonts,
                 size: chars.size.unwrap_or(DEFAULT_SIZE) as f32,
-                fill: chars.fill.unwrap_or(Color::BLACK),
+                fill: chars.fill.map_or(Color::BLACK, Color::from),
                 stroke: match (chars.stroke, chars.stroke_width) {
-                    (Some(color), Some(width)) if width > 0.0 => Some((color, width as f32)),
+                    (Some(color), Some(width)) if width > 0.0 => {
+                        Some((Color::from(color), width as f32))
+                    }
                     _ => None,
                 },
             });
@@ -461,22 +496,48 @@ impl Renderer {
     }
 }
 
-/// Every layer and mask in a page's tree.
-fn flatten<'a>(layers: &'a [LayerView], out: &mut Vec<&'a LayerView>) {
-    for layer in layers {
-        out.push(layer);
-        flatten(&layer.children, out);
-        flatten(&layer.masks, out);
+/// Everything a page's content is built from: its background, and each
+/// layer's pixels, image, shape, or text.
+fn sources(project: &Project, page: PageId) -> Result<Vec<Source<'_>>> {
+    let mut out: Vec<Source> = project
+        .page(page)?
+        .background
+        .map(|background| Source::Image(background.file))
+        .into_iter()
+        .collect();
+    for layer in project.layers_of(page)? {
+        match &layer.content {
+            SceneContent::Raster(_) | SceneContent::Mask(_) => {
+                out.push(Source::Tiles(layer.id));
+            }
+            SceneContent::Image(image) => out.push(Source::Image(image.file)),
+            SceneContent::Shape(shape) => out.push(Source::Shape(shape)),
+            SceneContent::Text(text) => out.push(Source::Text(layer.id, text)),
+            SceneContent::Block(block) => {
+                out.push(Source::Tiles(block.cleanup.id));
+                out.push(Source::Tiles(block.mask.id));
+                if let Some(text) = &block.translation {
+                    out.push(Source::Text(layer.id, text));
+                }
+            }
+            _ => {}
+        }
     }
+    Ok(out)
 }
 
 fn parse(path: &str) -> Result<BezPath> {
     BezPath::from_svg(path).map_err(|error| Error::invalid(format!("invalid path data: {error}")))
 }
 
+/// Where a picture's grid sits on the page.
+fn offset(offset: Offset) -> Affine {
+    Affine::translate((f64::from(offset.x), f64::from(offset.y)))
+}
+
 /// The scene's 64×64 tiles as one image, cropped to its painted pixels and
-/// placed relative to the layer's offset; a pixel mask's grey becomes alpha
-/// under white. Tiles spread wider than a page could hold fail.
+/// placed relative to the plane's offset; a grey plane becomes alpha under
+/// white. Tiles spread wider than a page could hold fail.
 fn assemble(tiles: Tiles) -> Result<Option<Tiled>> {
     const TILE: i32 = 64;
     let Some(x0) = tiles.tiles.iter().map(|tile| tile.x).min() else {
@@ -533,141 +594,224 @@ fn assemble(tiles: Tiles) -> Result<Option<Tiled>> {
 struct Builder<'r, 's> {
     renderer: &'r Renderer,
     session: &'s Session,
-    layers: HashMap<LayerId, Layer>,
-    order: Vec<LayerId>,
+    layers: HashMap<NodeId, Layer>,
+    order: Vec<NodeId>,
     missing: Vec<FontRequest>,
 }
 
 impl Builder<'_, '_> {
-    fn node(&mut self, view: &LayerView, shown: bool) -> Result<Node> {
-        let (visible, opacity, blend) = match &view.layer {
-            SceneLayer::Group(layer) => (layer.visible, layer.opacity, layer.blend),
-            SceneLayer::Image(layer) => (layer.visible, layer.opacity, layer.blend),
-            SceneLayer::Raster(layer) => (layer.visible, layer.opacity, layer.blend),
-            SceneLayer::Shape(layer) => (layer.visible, layer.opacity, layer.blend),
-            SceneLayer::Text(layer) => (layer.visible, layer.opacity, layer.blend),
-            SceneLayer::Mask(layer) => (layer.visible, 1.0, koharu_scene::Blend::Normal),
-        };
-        self.order.push(view.id);
-        let children = view
-            .children
-            .iter()
-            .map(|child| self.node(child, shown && visible))
-            .collect::<Result<Vec<_>>>()?;
-        let masks = view
-            .masks
-            .iter()
-            .map(|mask| self.mask(mask, shown && visible))
-            .collect::<Result<Vec<_>>>()?;
-        let (content, bounds, text) = match self.renderer.content(self.session, view)? {
-            None => {
-                let bounds = children
-                    .iter()
-                    .filter_map(|child| self.layers.get(&child.id).and_then(Layer::bounds))
-                    .reduce(|a, b| a.union(b));
-                (Content::None, bounds, None)
-            }
-            Some(Cached::Vector {
-                scene,
-                strokes,
-                bounds,
-                text,
-                missing,
-            }) => {
-                self.missing.extend(missing);
-                let transform = match &view.layer {
-                    SceneLayer::Text(layer) => Affine::from(layer.transform),
-                    _ => Affine::IDENTITY,
-                };
-                let shown_bounds =
-                    (bounds.area() > 0.0).then(|| transform.transform_rect_bbox(bounds));
-                (
-                    Content::Vector {
-                        scene,
-                        strokes,
-                        transform,
-                    },
-                    shown_bounds,
-                    text,
-                )
-            }
-            Some(Cached::Pixels(None)) => (Content::None, None, None),
-            Some(Cached::Pixels(Some(tiled))) => {
-                let transform = match &view.layer {
-                    SceneLayer::Image(layer) => Affine::from(layer.transform),
-                    SceneLayer::Raster(layer) => {
-                        Affine::translate((f64::from(layer.offset.x), f64::from(layer.offset.y)))
-                    }
-                    _ => Affine::IDENTITY,
-                };
-                let bounds = transform.transform_rect_bbox(Rect::new(
-                    f64::from(tiled.origin.0),
-                    f64::from(tiled.origin.1),
-                    f64::from(tiled.origin.0) + f64::from(tiled.width),
-                    f64::from(tiled.origin.1) + f64::from(tiled.height),
-                ));
-                (Content::Pixels { tiled, transform }, Some(bounds), None)
-            }
-        };
+    fn record(
+        &mut self,
+        id: NodeId,
+        visible: bool,
+        bounds: Option<Rect>,
+        text: Option<Arc<ResolvedText>>,
+    ) {
         self.layers.insert(
-            view.id,
+            id,
             Layer {
-                id: view.id,
-                kind: LayerKind::from(&view.layer),
-                visible: shown && visible,
+                id,
+                visible,
                 bounds,
                 text,
             },
         );
+    }
+
+    fn pixels(&self, source: Source, transform: Affine) -> Result<(Content, Option<Rect>)> {
+        Ok(match self.renderer.content(self.session, source)? {
+            Cached::Pixels(Some(tiled)) => {
+                let bounds = tiled.bounds(transform);
+                (Content::Pixels { tiled, transform }, Some(bounds))
+            }
+            _ => (Content::None, None),
+        })
+    }
+
+    fn vector(
+        &mut self,
+        source: Source,
+        transform: Affine,
+    ) -> Result<(Content, Option<Rect>, Option<Arc<ResolvedText>>)> {
+        let Cached::Vector {
+            scene,
+            strokes,
+            bounds,
+            text,
+            missing,
+        } = self.renderer.content(self.session, source)?
+        else {
+            return Ok((Content::None, None, None));
+        };
+        self.missing.extend(missing);
+        let shown = (bounds.area() > 0.0).then(|| transform.transform_rect_bbox(bounds));
+        Ok((
+            Content::Vector {
+                scene,
+                strokes,
+                transform,
+            },
+            shown,
+            text,
+        ))
+    }
+
+    fn background(&mut self, background: Background) -> Result<Node> {
+        let id = NodeId::Background;
+        self.order.push(id);
+        let (content, bounds) = self.pixels(Source::Image(background.file), Affine::IDENTITY)?;
+        self.record(id, background.visible, bounds, None);
         Ok(Node {
-            id: view.id,
-            visible,
-            opacity,
-            blend,
+            id,
+            visible: background.visible,
+            opacity: 1.0,
+            blend: koharu_scene::Blend::Normal,
+            content,
+            children: Vec::new(),
+            masks: Vec::new(),
+        })
+    }
+
+    fn node(&mut self, layer: &SceneLayer, shown: bool) -> Result<Node> {
+        let id = NodeId::Layer(layer.id);
+        let shown_here = shown && layer.visible;
+        self.order.push(id);
+        let mut children = layer
+            .children
+            .iter()
+            .filter(|child| !child.is_mask())
+            .map(|child| self.node(child, shown_here))
+            .collect::<Result<Vec<_>>>()?;
+        let mut masks = layer
+            .children
+            .iter()
+            .filter(|child| child.is_mask())
+            .map(|mask| self.mask(mask, shown_here))
+            .collect::<Result<Vec<_>>>()?;
+        let (content, bounds, text) = match &layer.content {
+            SceneContent::Group(_) | SceneContent::Balloon(_) => (Content::None, None, None),
+            // A panel shows its children only inside its outline, as a Clip
+            // Studio Paint frame border folder does.
+            SceneContent::Panel(panel) => {
+                masks.push(MaskNode {
+                    visible: true,
+                    mode: koharu_scene::MaskMode::Add,
+                    shape: MaskShape::Path(Arc::new(parse(panel.outline.as_str())?)),
+                });
+                (Content::None, None, None)
+            }
+            SceneContent::Block(block) => {
+                children = self.block(layer.id, block, shown_here)?;
+                (Content::None, None, None)
+            }
+            SceneContent::Text(text) => {
+                self.vector(Source::Text(layer.id, text), Affine::from(text.transform))?
+            }
+            SceneContent::Shape(shape) => self.vector(Source::Shape(shape), Affine::IDENTITY)?,
+            SceneContent::Image(image) => {
+                let (content, bounds) =
+                    self.pixels(Source::Image(image.file), Affine::from(image.transform))?;
+                (content, bounds, None)
+            }
+            SceneContent::Raster(raster) => {
+                let (content, bounds) =
+                    self.pixels(Source::Tiles(layer.id), offset(raster.offset))?;
+                (content, bounds, None)
+            }
+            SceneContent::Mask(_) => {
+                return Err(Error::invalid(format!(
+                    "mask {} is drawn only as its parent's",
+                    layer.id
+                )));
+            }
+        };
+        let bounds = match content {
+            Content::None => children
+                .iter()
+                .filter_map(|child| self.layers.get(&child.id).and_then(Layer::bounds))
+                .reduce(|a, b| a.union(b)),
+            _ => bounds,
+        };
+        self.record(id, shown_here, bounds, text);
+        Ok(Node {
+            id,
+            visible: layer.visible,
+            opacity: f32::from(layer.opacity),
+            blend: layer.blend,
             content,
             children,
             masks,
         })
     }
 
-    fn mask(&mut self, view: &LayerView, shown: bool) -> Result<MaskNode> {
-        let SceneLayer::Mask(mask) = &view.layer else {
-            return Err(Error::invalid(format!("layer {} is not a mask", view.id)));
-        };
-        self.order.push(view.id);
-        let (shape, bounds) = match &mask.content {
-            MaskContent::Path { path } => {
-                let path = parse(path.as_str())?;
-                let bounds = path.bounding_box();
-                (MaskShape::Path(Arc::new(path)), Some(bounds))
-            }
-            MaskContent::Pixels { offset } => match self.renderer.content(self.session, view)? {
-                Some(Cached::Pixels(Some(tiled))) => {
-                    let transform = Affine::translate((f64::from(offset.x), f64::from(offset.y)));
-                    let bounds = transform.transform_rect_bbox(Rect::new(
-                        f64::from(tiled.origin.0),
-                        f64::from(tiled.origin.1),
-                        f64::from(tiled.origin.0) + f64::from(tiled.width),
-                        f64::from(tiled.origin.1) + f64::from(tiled.height),
-                    ));
+    /// A block draws its clean-up through its mask, then its translation; its
+    /// source is never drawn.
+    fn block(&mut self, block: LayerId, value: &Block, shown: bool) -> Result<Vec<Node>> {
+        let cleanup = &value.cleanup;
+        let id = NodeId::Layer(cleanup.id);
+        self.order.push(id);
+        let (content, bounds) =
+            self.pixels(Source::Tiles(cleanup.id), offset(cleanup.content.offset))?;
+        let (shape, _) = self.mask_shape(value.mask.id, &value.mask.content)?;
+        self.record(id, shown && cleanup.visible, bounds, None);
+        let mut nodes = vec![Node {
+            id,
+            visible: cleanup.visible,
+            opacity: f32::from(cleanup.opacity),
+            blend: cleanup.blend,
+            content,
+            children: Vec::new(),
+            masks: vec![MaskNode {
+                visible: value.mask.visible,
+                mode: value.mask.content.mode,
+                shape,
+            }],
+        }];
+        if let Some(text) = &value.translation {
+            let translation = NodeId::Translation(block);
+            self.order.push(translation);
+            let (content, bounds, resolved) =
+                self.vector(Source::Text(block, text), Affine::from(text.transform))?;
+            self.record(translation, shown, bounds, resolved);
+            nodes.push(Node {
+                id: translation,
+                visible: true,
+                opacity: 1.0,
+                blend: koharu_scene::Blend::Normal,
+                content,
+                children: Vec::new(),
+                masks: Vec::new(),
+            });
+        }
+        Ok(nodes)
+    }
+
+    /// The pixels of a mask, a mask layer's or a block's, as the shape it
+    /// covers.
+    fn mask_shape(&self, id: LayerId, mask: &Mask) -> Result<(MaskShape, Option<Rect>)> {
+        Ok(
+            match self.renderer.content(self.session, Source::Tiles(id))? {
+                Cached::Pixels(Some(tiled)) => {
+                    let transform = offset(mask.offset);
+                    let bounds = tiled.bounds(transform);
                     (MaskShape::Pixels { tiled, transform }, Some(bounds))
                 }
-                // An empty pixel mask covers nothing.
+                // An empty mask covers nothing.
                 _ => (MaskShape::Path(Arc::new(BezPath::new())), None),
             },
+        )
+    }
+
+    fn mask(&mut self, layer: &SceneLayer, shown: bool) -> Result<MaskNode> {
+        let SceneContent::Mask(mask) = &layer.content else {
+            return Err(Error::invalid(format!("layer {} is not a mask", layer.id)));
         };
-        self.layers.insert(
-            view.id,
-            Layer {
-                id: view.id,
-                kind: LayerKind::Mask,
-                visible: shown && mask.visible,
-                bounds,
-                text: None,
-            },
-        );
+        let id = NodeId::Layer(layer.id);
+        self.order.push(id);
+        let (shape, bounds) = self.mask_shape(layer.id, mask)?;
+        self.record(id, shown && layer.visible, bounds, None);
         Ok(MaskNode {
-            visible: mask.visible,
+            visible: layer.visible,
             mode: mask.mode,
             shape,
         })

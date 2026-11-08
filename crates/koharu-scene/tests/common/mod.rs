@@ -1,111 +1,89 @@
-//! Helpers the integration tests share; each test file uses a few of them.
 #![allow(dead_code)]
 
-pub use koharu_scene::*;
-pub use serde_json::{Value, json};
-pub use tempfile::TempDir;
+use std::path::PathBuf;
 
-/// A path for a new project in a directory removed when the guard drops.
-pub fn path() -> (TempDir, std::path::PathBuf) {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("test.koharu");
+use koharu_scene::{Change, Content, Created, Edit, Layer, LayerId, Op, PageId, Session};
+use serde_json::{Value, json};
+use tempfile::TempDir;
+
+pub fn path() -> (TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("test.khr");
     (dir, path)
 }
 
-/// A new project with one 640×960 page.
+/// A new project holding one 64×64 page.
 pub fn session() -> (TempDir, Session, PageId) {
     let (dir, path) = path();
-    let mut session = Session::create(path).unwrap();
+    let mut session = Session::create(&path).expect("a new project");
     let page = page(&mut session);
     (dir, session, page)
 }
 
-pub fn user() -> Author {
-    Author::User { via: None }
-}
-
-pub fn model(action: &str, name: &str) -> Author {
-    Author::Model {
-        action: Action {
-            action: action.into(),
-            software_agent: SoftwareAgent {
-                name: name.into(),
-                version: None,
-            },
-            digital_source_type: None,
-            parameters: Default::default(),
-        },
-    }
-}
-
-pub fn edit(session: &Session, author: Author, ops: Vec<Op>) -> Edit {
+pub fn edit(ops: Vec<Op>) -> Edit {
     Edit {
-        project: session.id(),
-        label: "test".into(),
-        author,
-        reads: vec![],
+        label: "test".to_owned(),
         ops,
     }
 }
 
 pub fn op(value: Value) -> Op {
-    serde_json::from_value(value).unwrap()
+    serde_json::from_value(value).expect("a valid op")
 }
 
-pub fn label(name: &str) -> Ref {
-    Ref::try_from(format!("${name}")).unwrap()
+pub fn apply(session: &mut Session, ops: Vec<Value>) -> koharu_scene::Result<Change> {
+    session.apply(edit(ops.into_iter().map(op).collect()))
 }
 
-pub fn pointer(path: &str) -> PointerBuf {
-    PointerBuf::parse(path).unwrap()
-}
-
+/// Adds a 64×64 page at the end.
 pub fn page(session: &mut Session) -> PageId {
-    let change = session
-        .apply(edit(
-            session,
-            user(),
-            vec![op(
-                json!({"op": "add_page", "index": 0, "size": {"width": 640, "height": 960}}),
-            )],
-        ))
-        .unwrap();
+    let index = session.project().pages().count();
+    let change = apply(
+        session,
+        vec![json!({"op": "add_page", "index": index, "size": {"width": 64, "height": 64}})],
+    )
+    .expect("a page");
     change.pages.added[0]
 }
 
 pub fn created_layer(change: &Change, index: usize) -> LayerId {
     match &change.created[index] {
         Created::Layer { id, .. } => *id,
-        other => panic!("{other:?}"),
+        other => panic!("created {other:?}, not a layer"),
     }
 }
 
-pub fn name(layer: &Layer) -> &str {
-    match layer {
-        Layer::Group(layer) => &layer.name,
-        Layer::Image(layer) => &layer.name,
-        Layer::Raster(layer) => &layer.name,
-        Layer::Shape(layer) => &layer.name,
-        Layer::Text(layer) => &layer.name,
-        Layer::Mask(layer) => &layer.name,
+/// Adds `layer` under `parent`, or at the top of `page`, at the end.
+pub fn add(session: &mut Session, page: PageId, parent: Option<LayerId>, layer: Value) -> LayerId {
+    let project = session.project();
+    let index = match parent {
+        Some(parent) => project.layer(parent).expect("the parent").children.len(),
+        None => project.page(page).expect("the page").layers.len(),
+    };
+    let change = apply(
+        session,
+        vec![json!({"op": "add_layer", "page": page, "parent": parent, "index": index, "layer": layer})],
+    )
+    .expect("a layer");
+    created_layer(&change, 0)
+}
+
+pub fn layer(session: &Session, id: LayerId) -> Layer {
+    session.project().layer(id).expect("the layer").clone()
+}
+
+/// A block's mask and clean-up.
+pub fn parts(session: &Session, block: LayerId) -> (LayerId, LayerId) {
+    match &layer(session, block).content {
+        Content::Block(block) => (block.mask.id, block.cleanup.id),
+        other => panic!("{other:?} is not a block"),
     }
 }
 
-pub fn text(session: &Session, layer: LayerId) -> TextLayer {
-    match session.layer(layer).unwrap().view.layer {
-        Layer::Text(text) => *text,
-        other => panic!("{other:?}"),
-    }
+pub fn block(x: f64) -> Value {
+    json!({"kind": "block", "source": {"frame": {"box": {"bounds": {"x": x, "y": 0.0, "width": 10.0, "height": 10.0}}}}})
 }
 
-/// Spans that carry marks.
-pub fn marked(text: &RichText) -> Vec<&Span> {
-    text.0
-        .iter()
-        .filter(|span| span.attributes != CharStyle::default())
-        .collect()
-}
-
-pub fn delta(value: Value) -> Vec<TextDelta> {
-    serde_json::from_value(value).unwrap()
+pub fn outline() -> Value {
+    json!("M0 0 L64 0 L64 64 L0 64 Z")
 }

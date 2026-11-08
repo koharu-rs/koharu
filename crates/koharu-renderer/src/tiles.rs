@@ -66,6 +66,16 @@ impl Tiled {
         }
     }
 
+    /// Where the pixels land on the page through `transform`.
+    pub fn bounds(&self, transform: Affine) -> Rect {
+        transform.transform_rect_bbox(Rect::new(
+            f64::from(self.origin.0),
+            f64::from(self.origin.1),
+            f64::from(self.origin.0) + f64::from(self.width),
+            f64::from(self.origin.1) + f64::from(self.height),
+        ))
+    }
+
     /// What the full-size pixels and their tiles take, for the cache.
     pub fn bytes(&self) -> u64 {
         u64::from(self.width) * u64::from(self.height) * 4 * 2

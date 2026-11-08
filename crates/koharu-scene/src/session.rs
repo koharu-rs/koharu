@@ -1,356 +1,359 @@
-//! The session: the only owner of an open project's document.
+//! The session: the open project, its file, and its undo history. Every
+//! committed edit is durable, so there's no save.
 
-use std::{
-    collections::{BTreeSet, HashSet},
-    path::Path,
-    sync::{
-        Arc, Mutex, MutexGuard, PoisonError,
-        atomic::{AtomicBool, Ordering},
-    },
-};
-
-use loro::{
-    CommitOptions, ExportMode, LoroDoc, LoroValue, Subscription, TreeID, UndoItemMeta, UndoManager,
-    event::{Diff, DiffEvent},
-};
+use std::path::{Path, PathBuf};
 
 use crate::{
-    Change, Edit, Error, History, LayerId, PageChanges, PageId, ProjectId, Result, StyleId,
-    doc::{self, Key},
-    op::{self, Planned},
-    state::{Index, State},
+    Change, Edit, Error, Hash, History, LayerId, Project, ProjectId, Rect, Result, Revision, Tiles,
+    change, edit, project::Picture, store::Store, tiles,
 };
 
-/// One open project. Edits, undo, and redo go through it, and it saves when
-/// its caller says so: when edits pause, and when the project closes.
+/// A project file's extension, without the dot.
+pub const EXTENSION: &str = "khr";
+
+/// How many steps history keeps before it drops the oldest, Photoshop's
+/// History panel default.
+const STEPS: usize = 20;
+
+/// One open project, holding the file's lock until it's dropped.
 pub struct Session {
-    file: koharu_storage::Document,
-    pub(crate) doc: LoroDoc,
-    pub(crate) id: ProjectId,
-    /// Page order, layer pages, and files, kept so nothing rescans.
-    pub(crate) index: Index,
-    undo: UndoManager,
-    /// The label of the undo step being pushed.
-    label: Arc<Mutex<String>>,
-    /// Where undo and redo landed; recorded only while one runs.
-    events: Arc<Events>,
-    _subscription: Subscription,
-    /// Set when a write failed partway; nothing more is written or saved.
-    poisoned: bool,
+    store: Store,
+    path: PathBuf,
+    project: Project,
+    revision: Revision,
+    undo: Vec<Step>,
+    redo: Vec<Step>,
 }
 
-#[derive(Default)]
-struct Events {
-    recording: AtomicBool,
-    touched: Mutex<Touched>,
-}
-
-#[derive(Default)]
-struct Touched {
-    pages: BTreeSet<usize>,
-    nodes: Vec<(usize, TreeID)>,
-    layers: BTreeSet<LayerId>,
-    styles: BTreeSet<StyleId>,
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+/// A project to go back to: the one before an edit, on the undo stack, or the
+/// one after it, on the redo stack.
+struct Step {
+    label: String,
+    project: Project,
+    revision: Revision,
 }
 
 impl Session {
     pub fn create(path: impl AsRef<Path>) -> Result<Self> {
-        let doc = LoroDoc::new();
-        doc::configure(&doc);
-        let id = ProjectId::new();
-        let project = doc::project(&doc);
-        project.insert(Key::Id.as_ref(), id.to_string())?;
-        project.insert(Key::Version.as_ref(), doc::VERSION.to_string())?;
-        doc.commit();
-        let file = koharu_storage::Document::create(path, &doc.export(ExportMode::Snapshot)?)?;
-        Ok(Self::assemble(file, doc, id, Index::default()))
+        let path = path.as_ref();
+        let (store, project) = Store::create(path)?;
+        Ok(Self::assemble(store, path, project))
     }
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let (file, doc) = koharu_storage::Document::open(path)?;
-        doc::configure(&doc);
-        let (id, index) = validate(&doc)?;
-        Ok(Self::assemble(file, doc, id, index))
+        let path = path.as_ref();
+        let (store, project) = Store::open(path)?;
+        Ok(Self::assemble(store, path, project))
     }
 
-    fn assemble(file: koharu_storage::Document, doc: LoroDoc, id: ProjectId, index: Index) -> Self {
-        let label = Arc::new(Mutex::new(String::new()));
-        let mut undo = UndoManager::new(&doc);
-        let pushed = label.clone();
-        undo.set_on_push(Some(Box::new(move |_, _, _| UndoItemMeta {
-            value: LoroValue::from(lock(&pushed).clone()),
-            cursors: Vec::new(),
-        })));
-        let popped = label.clone();
-        undo.set_on_pop(Some(Box::new(move |_, _, meta| {
-            if let LoroValue::String(value) = meta.value {
-                *lock(&popped) = value.to_string();
-            }
-        })));
-        let events = Arc::new(Events::default());
-        let recorder = events.clone();
-        let subscription = doc.subscribe_root(Arc::new(move |event: DiffEvent<'_>| {
-            if !recorder.recording.load(Ordering::Relaxed) {
-                return;
-            }
-            let mut touched = lock(&recorder.touched);
-            for diff in &event.events {
-                let (page, nodes, layer, style) = doc::locate(diff.path);
-                touched.layers.extend(layer);
-                touched.styles.extend(style);
-                if let Diff::Map(map) = &diff.diff
-                    && doc::is_styles(diff.path)
-                {
-                    touched.styles.extend(
-                        map.updated
-                            .keys()
-                            .filter_map(|key| key.parse::<StyleId>().ok()),
-                    );
-                }
-                let Some(page) = page else {
-                    continue;
-                };
-                touched.pages.insert(page);
-                touched
-                    .nodes
-                    .extend(nodes.into_iter().map(|node| (page, node)));
-                match &diff.diff {
-                    Diff::Tree(tree) => touched
-                        .nodes
-                        .extend(tree.diff.iter().map(|item| (page, item.target))),
-                    Diff::Map(map) if doc::is_store(diff.path) => {
-                        touched.layers.extend(
-                            map.updated
-                                .keys()
-                                .filter_map(|key| key.parse::<LayerId>().ok()),
-                        );
-                    }
-                    _ => {}
-                }
-            }
-        }));
+    fn assemble(store: Store, path: &Path, project: Project) -> Self {
         Self {
-            file,
-            doc,
-            id,
-            index,
-            undo,
-            label,
-            events,
-            _subscription: subscription,
-            poisoned: false,
+            store,
+            path: path.to_owned(),
+            project,
+            revision: Revision::new(),
+            undo: Vec::new(),
+            redo: Vec::new(),
         }
     }
 
     #[must_use]
     pub fn id(&self) -> ProjectId {
-        self.id
+        self.project.id
     }
 
     #[must_use]
     pub fn path(&self) -> &Path {
-        self.file.path()
+        &self.path
     }
 
+    /// The file's format version.
+    pub(crate) fn version(&self) -> Result<String> {
+        self.store.version()
+    }
+
+    /// The project as it is now, in O(1). It takes no lock and stays as it is
+    /// while edits go on.
     #[must_use]
-    pub fn revision(&self) -> crate::Revision {
-        doc::revision(&self.doc)
+    pub fn project(&self) -> Project {
+        self.project.clone()
     }
 
-    /// Saves with history. Containers never read are exported from their
-    /// loaded bytes, so this decodes no pixels.
-    pub fn save(&mut self) -> Result<()> {
-        self.usable()?;
-        Ok(self.file.save(&self.doc.export(ExportMode::Snapshot)?)?)
-    }
-
-    /// Saves without history, dropping files and tiles nothing names any
-    /// more. Loro decodes every container to do it, so it suits rare moments
-    /// such as closing.
-    pub fn compact(&mut self) -> Result<()> {
-        self.usable()?;
-        let frontiers = self.doc.oplog_frontiers();
-        Ok(self
-            .file
-            .save(&self.doc.export(ExportMode::shallow_snapshot(&frontiers))?)?)
+    /// Lasts as long as this session: equal revisions are the same document.
+    #[must_use]
+    pub fn revision(&self) -> Revision {
+        self.revision.clone()
     }
 
     #[must_use]
     pub fn history(&self) -> History {
-        let label = |meta: Option<UndoItemMeta>| match meta?.value {
-            LoroValue::String(value) => Some(value.to_string()),
-            _ => None,
-        };
         History {
-            undo: label(self.undo.top_undo_meta()),
-            redo: label(self.undo.top_redo_meta()),
+            steps: self
+                .undo
+                .iter()
+                .chain(self.redo.iter().rev())
+                .map(|step| step.label.clone())
+                .collect(),
+            current: self.undo.len(),
         }
     }
 
-    /// Checks `edit` in full, then writes it as one undo step.
+    /// Runs `edit` as one undo step. If it fails, nothing changes.
     pub fn apply(&mut self, edit: Edit) -> Result<Change> {
-        self.usable()?;
-        if edit.project != self.id {
-            return Err(Error::WrongProject {
-                expected: self.id,
-                got: edit.project,
+        let tx = self.store.begin()?;
+        let (next, created) = edit::run(&self.project, &edit, &tx)?;
+        tx.write_diff(&self.project, &next)?;
+        // An edit that changes nothing still commits, so a file it added is
+        // kept, but it adds no undo step.
+        tx.commit()?;
+        let (pages, layers) = change::changed(&self.project, &next);
+        if next != self.project {
+            let before = std::mem::replace(&mut self.project, next);
+            self.undo.push(Step {
+                label: edit.label,
+                project: before,
+                revision: std::mem::replace(&mut self.revision, Revision::new()),
             });
-        }
-        let Planned {
-            writes,
-            created,
-            kept,
-            pages,
-            layers,
-            styles,
-            index,
-        } = op::plan(&self.doc, &self.index, &edit)?;
-        if !writes.is_empty() {
-            if let Err(error) = op::execute(&self.doc, writes) {
-                self.poisoned = true;
-                return Err(error);
+            if self.undo.len() > STEPS {
+                self.undo.remove(0);
             }
-            *lock(&self.label) = edit.label.clone();
-            self.doc
-                .commit_with(CommitOptions::new().commit_msg(&edit.label));
-            if let Some(index) = index {
-                self.index = index;
-            }
+            self.redo.clear();
         }
         Ok(Change {
             revision: self.revision(),
             created,
             pages,
             layers,
-            styles,
-            kept,
             history: self.history(),
         })
     }
 
+    /// The picture `layer` owns: a raster's or a mask's, or a block's mask's
+    /// or clean-up's.
+    fn picture(&self, layer: LayerId) -> Result<Picture> {
+        self.project
+            .picture(layer)
+            .ok_or_else(|| match self.project.index.contains_key(&layer) {
+                true => Error::Rejected(format!("layer {layer} has no pixels")),
+                false => Error::NotFound(format!("layer {layer}")),
+            })
+    }
+
+    /// A picture's tiles overlapping `rect`, or all of them. The lock is held
+    /// only to read bytes, because decoding fans out on rayon, whose threads
+    /// may be waiting for it.
+    pub fn tiles(&self, layer: LayerId, rect: Option<Rect>) -> Result<Tiles> {
+        let Picture { format, offset, .. } = self.picture(layer)?;
+        let range = match rect {
+            Some(rect) => match tiles::covered(rect) {
+                Some(range) => Some(range),
+                None => {
+                    return Ok(Tiles {
+                        offset,
+                        format,
+                        tiles: Vec::new(),
+                    });
+                }
+            },
+            None => None,
+        };
+        let wanted: Vec<(&(i32, i32), &Hash)> = self
+            .project
+            .tiles(layer)
+            .into_iter()
+            .flatten()
+            .filter(|((x, y), _)| {
+                range.is_none_or(|((x0, x1), (y0, y1))| {
+                    (x0..=x1).contains(&i64::from(*x)) && (y0..=y1).contains(&i64::from(*y))
+                })
+            })
+            .collect();
+        let bytes = self.store.blobs(wanted.iter().map(|(_, hash)| *hash))?;
+        let stored: Vec<_> = wanted
+            .iter()
+            .zip(bytes)
+            .map(|(((x, y), _), bytes)| (*x, *y, bytes))
+            .collect();
+        Ok(Tiles {
+            offset,
+            format,
+            tiles: tiles::decode(&stored, format)?,
+        })
+    }
+
+    /// A hash of a picture's tiles, which changes whenever its pixels do,
+    /// taken without reading them.
+    pub fn tiles_hash(&self, layer: LayerId) -> Result<Hash> {
+        self.picture(layer)?;
+        let mut hasher = blake3::Hasher::new();
+        for ((x, y), hash) in self.project.tiles(layer).into_iter().flatten() {
+            hasher.update(&x.to_le_bytes());
+            hasher.update(&y.to_le_bytes());
+            hasher.update(hash.as_bytes());
+        }
+        Ok(hasher.finalize().into())
+    }
+
+    /// An imported file's bytes.
+    pub fn file(&self, hash: &Hash) -> Result<Vec<u8>> {
+        let mut bytes = self.store.blobs([hash])?;
+        Ok(bytes.pop().expect("one hash reads one blob"))
+    }
+
     pub fn undo(&mut self) -> Result<Option<Change>> {
-        self.step(UndoManager::undo)
+        match self.undo.len() {
+            0 => Ok(None),
+            current => self.go_to(current - 1),
+        }
     }
 
     pub fn redo(&mut self) -> Result<Option<Change>> {
-        self.step(UndoManager::redo)
+        match self.redo.is_empty() {
+            true => Ok(None),
+            false => self.go_to(self.undo.len() + 1),
+        }
     }
 
-    fn step(
-        &mut self,
-        step: fn(&mut UndoManager) -> loro::LoroResult<bool>,
-    ) -> Result<Option<Change>> {
-        self.usable()?;
-        *lock(&self.events.touched) = Touched::default();
-        self.events.recording.store(true, Ordering::Relaxed);
-        // A failed undo or redo rolls back and keeps its step (Loro 1.17).
-        let stepped = step(&mut self.undo);
-        self.events.recording.store(false, Ordering::Relaxed);
-        if !stepped? {
+    /// Goes to the project as it was after `step` of the history's steps, 0
+    /// being as it opened, as selecting a state in Photoshop's History panel
+    /// does. Every step between is undone or redone in one write, which can't
+    /// conflict: the file holds the current project, whatever it was.
+    pub fn go_to(&mut self, step: usize) -> Result<Option<Change>> {
+        let current = self.undo.len();
+        let total = current + self.redo.len();
+        if step > total {
+            return Err(Error::Rejected(format!(
+                "step {step} is past the last of {total}"
+            )));
+        }
+        if step == current {
             return Ok(None);
         }
-        let touched = std::mem::take(&mut *lock(&self.events.touched));
-        // The document already changed, so an index that can't be rebuilt
-        // must stop further edits.
-        let after = Index::load(&self.doc).inspect_err(|_| self.poisoned = true)?;
-        let before = std::mem::replace(&mut self.index, after);
-        let after = &self.index;
-
-        let maps = doc::page_maps(&self.doc)?;
-        let mut layers = touched.layers;
-        for (page, node) in touched.nodes {
-            if let Some(map) = maps.get(page)
-                && let Ok(meta) = doc::tree(map).and_then(|tree| Ok(tree.get_meta(node)?))
-                && let Ok(id) = doc::id(&meta)
-            {
-                layers.insert(id);
-            }
+        let target = match step < current {
+            true => &self.undo[step].project,
+            false => &self.redo[total - step].project,
+        };
+        let tx = self.store.begin()?;
+        tx.write_diff(&self.project, target)?;
+        tx.commit()?;
+        let before = self.project.clone();
+        while self.undo.len() > step {
+            shift(
+                &mut self.project,
+                &mut self.revision,
+                &mut self.undo,
+                &mut self.redo,
+            );
         }
-        let before_layers: HashSet<&LayerId> = before.layers.keys().collect();
-        let after_layers: HashSet<&LayerId> = after.layers.keys().collect();
-        layers.extend(before_layers.symmetric_difference(&after_layers).copied());
-
-        let mut changed: BTreeSet<PageId> = touched
-            .pages
-            .iter()
-            .filter_map(|page| after.pages.get(*page).copied())
-            .collect();
-        changed.extend(
-            layers
-                .iter()
-                .filter_map(|layer| after.layers.get(layer).or_else(|| before.layers.get(layer))),
-        );
-        let (before_pages, after_pages): (HashSet<_>, HashSet<_>) =
-            (before.pages.iter().collect(), after.pages.iter().collect());
-        let added: Vec<PageId> = after
-            .pages
-            .iter()
-            .filter(|page| !before_pages.contains(page))
-            .copied()
-            .collect();
-        let removed: Vec<PageId> = before
-            .pages
-            .iter()
-            .filter(|page| !after_pages.contains(page))
-            .copied()
-            .collect();
-        let kept_before = before
-            .pages
-            .iter()
-            .filter(|page| after_pages.contains(page));
-        let kept_after = after
-            .pages
-            .iter()
-            .filter(|page| before_pages.contains(page));
-        let reordered = !kept_before.eq(kept_after);
-        changed.retain(|page| after_pages.contains(page) && !added.contains(page));
+        while self.undo.len() < step {
+            shift(
+                &mut self.project,
+                &mut self.revision,
+                &mut self.redo,
+                &mut self.undo,
+            );
+        }
+        let (pages, layers) = change::changed(&before, &self.project);
         Ok(Some(Change {
             revision: self.revision(),
             created: Vec::new(),
-            pages: PageChanges {
-                added,
-                removed,
-                reordered,
-                changed,
-            },
+            pages,
             layers,
-            styles: touched.styles,
-            kept: Vec::new(),
             history: self.history(),
         }))
     }
-
-    fn usable(&self) -> Result<()> {
-        if self.poisoned {
-            Err(Error::Poisoned)
-        } else {
-            Ok(())
-        }
-    }
 }
 
-/// Checks a loaded document: a version this build reads, then every page and
-/// layer, so unknown core data fails to open.
-fn validate(doc: &LoroDoc) -> Result<(ProjectId, Index)> {
-    // Koharu never writes a pre-release, which would sort below its release.
-    let version = doc::version(doc)?;
-    if version.major != doc::VERSION.major || version > doc::VERSION || !version.pre.is_empty() {
-        return Err(Error::Version(version.to_string()));
+/// Moves the top step of `from` to `to`, making its project current and
+/// keeping the one it replaces in its place.
+fn shift(project: &mut Project, revision: &mut Revision, from: &mut Vec<Step>, to: &mut Vec<Step>) {
+    let step = from.pop().expect("a step to move");
+    to.push(Step {
+        label: step.label,
+        project: std::mem::replace(project, step.project),
+        revision: std::mem::replace(revision, step.revision),
+    });
+}
+
+// This limits the file behind the session, which only the crate can do.
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::{Created, Op};
+
+    #[test]
+    fn an_edit_that_runs_out_of_space_changes_nothing() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let ops = [
+            json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 512, "height": 512}}),
+            json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "raster"}}),
+        ];
+        let change = session
+            .apply(Edit {
+                label: "test".to_owned(),
+                ops: ops
+                    .into_iter()
+                    .map(|op| serde_json::from_value(op).expect("an op"))
+                    .collect(),
+            })
+            .expect("an edit");
+        let Created::Layer { id: raster, .. } = change.created[1] else {
+            panic!("{change:?}")
+        };
+        let limit = |session: &Session, pages: i64| {
+            session
+                .store
+                .conn()
+                .query_row(&format!("PRAGMA max_page_count = {pages}"), [], |_| Ok(()))
+                .expect("a limit");
+        };
+        let pages: i64 = session
+            .store
+            .conn()
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .expect("a page count");
+        limit(&session, pages);
+
+        // Noise doesn't compress, so these tiles can't fit.
+        let mut state = 1u32;
+        let pixels: Vec<u8> = (0..512 * 512 * 4)
+            .map(|_| {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (state >> 24) as u8
+            })
+            .collect();
+        let paint = Edit {
+            label: "paint".to_owned(),
+            ops: vec![Op::WritePixels {
+                layer: raster.into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 512,
+                    height: 512,
+                },
+                pixels,
+            }],
+        };
+        let (project, history, revision) =
+            (session.project(), session.history(), session.revision());
+        let error = session.apply(paint.clone()).expect_err("the disk is full");
+        assert!(
+            matches!(&error, Error::Sql(error) if error.sqlite_error_code() == Some(rusqlite::ErrorCode::DiskFull)),
+            "{error:?}"
+        );
+        assert_eq!(session.project(), project);
+        assert_eq!((session.history(), session.revision()), (history, revision));
+
+        // With room again, the next edit works, and so does undo.
+        limit(&session, 1 << 30);
+        session.apply(paint).expect("a paint");
+        let painted = session.tiles(raster, None).expect("tiles");
+        assert_eq!(painted.tiles.len(), 64);
+        session.undo().expect("undo").expect("a step");
+        assert!(session.tiles(raster, None).expect("tiles").tiles.is_empty());
     }
-    let id = doc::id(&doc::project(doc))?;
-    let index = Index::load(doc)?;
-    let mut state = State::new(doc, &index);
-    for page in &index.pages {
-        for node in state.page(*page)?.nodes.values() {
-            node.layer()?;
-        }
-    }
-    for style in &index.styles {
-        state.style(*style)?.style()?;
-    }
-    Ok((id, index))
 }

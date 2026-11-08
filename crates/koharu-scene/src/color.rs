@@ -1,39 +1,28 @@
-//! Colours as `[r, g, b, a]`. `color`'s own serde writes
-//! `{"components": [r, g, b, a]}`, and it has no specta or schemars support,
-//! so colour fields name these modules and their schema type.
+//! Colours as `[r, g, b, a]`, as Figma's `Color` is. `color`'s own serde writes
+//! `{"components": [...]}` and has no schemars or specta support, so layers
+//! hold the components and convert at the edge.
 
 use color::{AlphaColor, Srgb};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-/// An sRGB colour with straight alpha, serialized as `[r, g, b, a]`, each
-/// from 0 to 1, as Figma's `Color` is.
+/// An sRGB colour with straight alpha.
 pub type Color = AlphaColor<Srgb>;
 
-pub(crate) mod array {
-    use super::{Color, Deserialize, Deserializer, Serialize, Serializer};
+/// An sRGB colour with straight alpha, each component from 0 to 1.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(transparent)]
+pub struct Rgba(pub [f32; 4]);
 
-    pub fn serialize<S: Serializer>(color: &Color, serializer: S) -> Result<S::Ok, S::Error> {
-        color.components.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Color, D::Error> {
-        <[f32; 4]>::deserialize(deserializer).map(Color::new)
+impl From<Rgba> for Color {
+    fn from(Rgba(components): Rgba) -> Self {
+        Self::new(components)
     }
 }
 
-pub(crate) mod option {
-    use super::{Color, Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<S: Serializer>(
-        color: &Option<Color>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        color.map(|color| color.components).serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Color>, D::Error> {
-        Option::<[f32; 4]>::deserialize(deserializer).map(|c| c.map(Color::new))
+impl From<Color> for Rgba {
+    fn from(color: Color) -> Self {
+        Self(color.components)
     }
 }
