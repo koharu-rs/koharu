@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use koharu_renderer::{Frame, NodeId, Renderer, TypesettingConfig, View};
+use koharu_renderer::{Drawn, Frame, Renderer, RendererConfig, View};
 use koharu_scene::{Created, Edit, LayerKind, Op, Project, Session};
 use serde_json::{Value, json};
 use vello::{
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         })
     };
 
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let gpu = renderer.gpu()?;
     let started = Instant::now();
     let frame = renderer.render(&session, page)?;
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
     // The window, zoomed to 200% on the second balloon. Each strip renders
     // into a texture of its own, which the canvas places at `strip.rect`.
     let balloon = frame
-        .layer(NodeId::Layer(line(1).expect("the line")))
+        .layer(line(1).expect("the line"))
         .and_then(|layer| layer.bounds())
         .expect("it draws");
     let view = View {
@@ -99,8 +99,8 @@ fn main() -> Result<()> {
     }
     println!("drew the 200% view in {} strip(s)", strips.len());
 
-    if let Some(node) = topmost(&frame, &session.project(), view.rect.center()) {
-        println!("under the pointer: {node:?}");
+    if let Some(drawn) = topmost(&frame, &session.project(), view.rect.center()) {
+        println!("under the pointer: {drawn:?}");
     }
     for layer in frame
         .layers()
@@ -108,7 +108,7 @@ fn main() -> Result<()> {
     {
         println!(
             "overflow mark on {:?} over {:?}",
-            layer.id(),
+            layer.layer(),
             layer.bounds()
         );
     }
@@ -131,26 +131,26 @@ fn main() -> Result<()> {
 /// layers draw first to last. Containers and masks draw nothing of their own,
 /// but a page's background and a block's clean-up and translation do. A
 /// clean-up isn't a layer of the tree, so the project doesn't find it.
-fn topmost(frame: &Frame, project: &Project, point: Point) -> Option<NodeId> {
-    let draws = |node: NodeId| match node {
-        NodeId::Layer(id) => project.layer(id).map_or(true, |layer| {
-            !matches!(
-                layer.kind(),
-                LayerKind::Group
-                    | LayerKind::Panel
-                    | LayerKind::Balloon
-                    | LayerKind::Block
-                    | LayerKind::Mask
-            )
-        }),
-        NodeId::Background | NodeId::Translation(_) => true,
+fn topmost<'a>(frame: &'a Frame, project: &Project, point: Point) -> Option<Drawn<'a>> {
+    let draws = |drawn: &Drawn| {
+        drawn.layer().is_none_or(|id| {
+            project.layer(id).map_or(true, |layer| {
+                !matches!(
+                    layer.kind(),
+                    LayerKind::Group
+                        | LayerKind::Panel
+                        | LayerKind::Balloon
+                        | LayerKind::Block
+                        | LayerKind::Mask
+                )
+            })
+        })
     };
     frame
         .layers()
-        .filter(|layer| layer.visible() && draws(layer.id()))
-        .filter(|layer| layer.bounds().is_some_and(|bounds| bounds.contains(point)))
+        .filter(|drawn| drawn.visible() && draws(drawn))
+        .filter(|drawn| drawn.bounds().is_some_and(|bounds| bounds.contains(point)))
         .last()
-        .map(|layer| layer.id())
 }
 
 fn edit(ops: Vec<Value>) -> Result<Edit> {

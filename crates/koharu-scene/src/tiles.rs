@@ -11,7 +11,7 @@ use rayon::prelude::*;
 
 use crate::{Error, Offset, PixelFormat, Rect, Result};
 
-pub(crate) const SIZE: i64 = 64;
+pub(crate) const SIZE: i64 = Tile::SIZE as i64;
 /// zlib level 3 through `zlib-rs` encoded Manga109 tiles three times faster
 /// than level 6 through `miniz_oxide`, for 4% more bytes.
 const LEVEL: u32 = 3;
@@ -25,11 +25,17 @@ pub struct Tiles {
     pub tiles: Vec<Tile>,
 }
 
+/// A tile at tile coordinates, its pixels in rows.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tile {
     pub x: i32,
     pub y: i32,
     pub pixels: Vec<u8>,
+}
+
+impl Tile {
+    /// The pixels on a tile's side.
+    pub const SIZE: u32 = 64;
 }
 
 /// A stored tile: its position and compressed bytes.

@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use koharu_renderer::{NodeId, Renderer, TypesettingConfig};
+use koharu_renderer::{Renderer, RendererConfig};
 use koharu_scene::{Created, Edit, LayerKind, Session};
 use serde_json::{Value, json};
 
@@ -60,12 +60,12 @@ fn main() -> Result<()> {
             Created::Layer {
                 id,
                 label: Some(label),
-            } => Some((NodeId::Layer(*id), label.as_str())),
+            } => Some((*id, label.as_str())),
             _ => None,
         })
         .collect();
 
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, change.pages.added[0])?;
     let project = session.project();
     let composite = renderer.rasterize(&frame)?;
@@ -76,25 +76,25 @@ fn main() -> Result<()> {
     );
 
     for layer in frame.layers() {
-        let label = labels[&layer.id()];
-        let hidden = if layer.visible() { "" } else { ", hidden" };
-        let NodeId::Layer(id) = layer.id() else {
+        let Some(id) = layer.layer() else {
             continue;
         };
+        let label = labels[&id];
+        let hidden = if layer.visible() { "" } else { ", hidden" };
         match project.layer(id)?.kind() {
             // A mask is merged into its layer's mask.
             LayerKind::Mask => continue,
             LayerKind::Group => println!("{label}: a folder{hidden}"),
             _ => {
-                let own = renderer.rasterize(&frame.cropped(layer.id())?)?;
+                let own = renderer.rasterize(&layer.cropped())?;
                 let (width, height) = own.image.dimensions();
                 println!(
                     "{label}: {width}×{height} at ({}, {}){hidden}",
-                    own.left, own.top
+                    own.offset.x, own.offset.y
                 );
             }
         }
-        if let Some(mask) = frame.mask(layer.id())? {
+        if let Some(mask) = layer.mask() {
             let coverage = renderer.rasterize(&mask)?;
             println!(
                 "  and a mask over the page, {} pixels covered",

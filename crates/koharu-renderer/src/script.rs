@@ -38,6 +38,21 @@ pub(crate) fn fontique_scripts(text: &str) -> Vec<fontique::Script> {
     scripts
 }
 
+/// The language of a text that names none, from scripts only one language
+/// writes: kana is Japanese and Hangul Korean. Han falls back to Chinese.
+pub(crate) fn implied_language(text: &str) -> Option<&'static str> {
+    let scripts = CodePointMapData::<IcuScript>::new();
+    let mut korean = false;
+    for character in text.chars() {
+        match scripts.get(character) {
+            IcuScript::Hiragana | IcuScript::Katakana => return Some("ja"),
+            IcuScript::Hangul => korean = true,
+            _ => {}
+        }
+    }
+    korean.then_some("ko")
+}
+
 pub(crate) fn harfrust_script(script: IcuScript) -> Option<Script> {
     Script::from_iso15924_tag(Tag::new(&script_tag(fallback_script(script))?))
 }

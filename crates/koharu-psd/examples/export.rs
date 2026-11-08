@@ -7,7 +7,7 @@
 use std::io::Cursor;
 
 use koharu_psd::{Labels, export};
-use koharu_renderer::{Renderer, TypesettingConfig};
+use koharu_renderer::{Renderer, RendererConfig};
 use koharu_scene::{Edit, Hash, Session};
 use photocraft_psd::PsdFile;
 use serde_json::{Value, json};
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
             .collect::<std::result::Result<_, _>>()?,
     })?;
 
-    let renderer = Renderer::new(TypesettingConfig::default());
+    let renderer = Renderer::new(RendererConfig::default());
     let labels = Labels {
         background: "Background".into(),
         cleanup: "Clean-up".into(),
