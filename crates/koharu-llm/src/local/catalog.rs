@@ -8,9 +8,6 @@ use super::{
     markup::{self, Markup},
 };
 
-pub(crate) const DEFAULT_MODEL: &str = "gemma4-12b-it";
-pub(crate) const DEFAULT_QUANTIZATION: &str = "Q4_K_XL";
-
 pub(crate) struct Entry {
     pub(crate) id: &'static str,
     pub(crate) name: &'static str,
@@ -21,6 +18,9 @@ pub(crate) struct Entry {
     /// The tool-call and reasoning markup its chat template writes; a model
     /// without any reads its whole reply as its answer.
     pub(crate) markup: Option<&'static Markup>,
+    /// Trained only to translate: it calls no tools and doesn't reason,
+    /// whatever markup its template writes.
+    pub(crate) translator: bool,
     pub(crate) sampling: Sampling,
     /// The languages it translates into, as BCP 47 tags; `None` for all.
     pub(crate) languages: Option<&'static [&'static str]>,
@@ -56,6 +56,23 @@ const fn sampling(temperature: f64, top_k: u32, top_p: f64) -> Sampling {
         reasoning_effort: None,
     }
 }
+
+/// Greedy decoding with no penalties and a 1,000-token answer, as the
+/// translation models' cards decode.
+const GREEDY: Sampling = Sampling {
+    temperature: Some(0.0),
+    max_tokens: Some(1000),
+    top_p: None,
+    seed: None,
+    top_k: None,
+    min_p: None,
+    repeat_penalty: None,
+    repeat_last_n: None,
+    frequency_penalty: None,
+    presence_penalty: None,
+    enable_thinking: None,
+    reasoning_effort: None,
+};
 
 impl Entry {
     pub(crate) fn quantization(&self, id: Option<&str>) -> anyhow::Result<&'static Quantization> {
@@ -96,6 +113,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: None,
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         // The model card's settings, which name no top-p.
         sampling: Sampling {
             top_p: None,
@@ -120,6 +138,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -136,6 +155,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -153,6 +173,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -170,6 +191,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -187,6 +209,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -236,6 +259,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::GEMMA4_NO_TOOLS),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -290,6 +314,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::GEMMA4_NO_TOOLS),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -307,6 +332,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -324,6 +350,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -341,6 +368,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         markup: Some(&markup::GEMMA4),
+        translator: false,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -364,6 +392,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -387,6 +416,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -410,6 +440,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -433,6 +464,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -456,6 +488,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -479,6 +512,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -502,6 +536,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -536,6 +571,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -559,6 +595,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -593,6 +630,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -627,6 +665,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -661,6 +700,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -725,6 +765,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.6-27B-Uncensored-HauhauCS-Balanced-f16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -784,6 +825,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -848,7 +890,123 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
+        translator: false,
         sampling: sampling(0.2, 20, 0.8),
+        languages: None,
+    },
+    Entry {
+        id: "index-translate-2b",
+        name: "Index-Translate 2B",
+        repository: Repository::model(
+            "IndexTeam/Index-Translate-2B-GGUF",
+            "3a0eca6ce931d88d00614d427ab3ed8ff0743902",
+        ),
+        quantizations: &[
+            Quantization::new("Q4_K_M", "Q4_K_M", "Index-Translate-2B.Q4_K_M.gguf"),
+            Quantization::new("Q2_K", "Q2_K", "Index-Translate-2B.Q2_K.gguf"),
+            Quantization::new("Q3_K_S", "Q3_K_S", "Index-Translate-2B.Q3_K_S.gguf"),
+            Quantization::new("Q3_K_M", "Q3_K_M", "Index-Translate-2B.Q3_K_M.gguf"),
+            Quantization::new("Q3_K_L", "Q3_K_L", "Index-Translate-2B.Q3_K_L.gguf"),
+            Quantization::new("IQ4_XS", "IQ4_XS", "Index-Translate-2B.IQ4_XS.gguf"),
+            Quantization::new("Q4_K_S", "Q4_K_S", "Index-Translate-2B.Q4_K_S.gguf"),
+            Quantization::new("Q5_K_S", "Q5_K_S", "Index-Translate-2B.Q5_K_S.gguf"),
+            Quantization::new("Q5_K_M", "Q5_K_M", "Index-Translate-2B.Q5_K_M.gguf"),
+            Quantization::new("Q6_K", "Q6_K", "Index-Translate-2B.Q6_K.gguf"),
+            Quantization::new("Q8_0", "Q8_0", "Index-Translate-2B.Q8_0.gguf"),
+            Quantization::new("F16", "F16", "Index-Translate-2B.f16.gguf"),
+        ],
+        // The Q8_0 projector, which the card recommends for local use.
+        projector: Some("Index-Translate-2B.mmproj-Q8_0.gguf"),
+        markup: Some(&markup::FUNCTION_TAGS),
+        translator: true,
+        sampling: GREEDY,
+        languages: None,
+    },
+    Entry {
+        id: "index-translate-9b",
+        name: "Index-Translate 9B",
+        repository: Repository::model(
+            "IndexTeam/Index-Translate-9B-GGUF",
+            "645939fbab839a656f1bc39975a872bc8ad749f8",
+        ),
+        quantizations: &[
+            Quantization::new("Q4_K_M", "Q4_K_M", "Index-Translate-9B.Q4_K_M.gguf"),
+            Quantization::new("Q2_K", "Q2_K", "Index-Translate-9B.Q2_K.gguf"),
+            Quantization::new("Q3_K_S", "Q3_K_S", "Index-Translate-9B.Q3_K_S.gguf"),
+            Quantization::new("Q3_K_M", "Q3_K_M", "Index-Translate-9B.Q3_K_M.gguf"),
+            Quantization::new("Q3_K_L", "Q3_K_L", "Index-Translate-9B.Q3_K_L.gguf"),
+            Quantization::new("IQ4_XS", "IQ4_XS", "Index-Translate-9B.IQ4_XS.gguf"),
+            Quantization::new("Q4_K_S", "Q4_K_S", "Index-Translate-9B.Q4_K_S.gguf"),
+            Quantization::new("Q5_K_S", "Q5_K_S", "Index-Translate-9B.Q5_K_S.gguf"),
+            Quantization::new("Q5_K_M", "Q5_K_M", "Index-Translate-9B.Q5_K_M.gguf"),
+            Quantization::new("Q6_K", "Q6_K", "Index-Translate-9B.Q6_K.gguf"),
+            Quantization::new("Q8_0", "Q8_0", "Index-Translate-9B.Q8_0.gguf"),
+            Quantization::new("F16", "F16", "Index-Translate-9B.f16.gguf"),
+        ],
+        // The Q8_0 projector, which the card recommends for local use.
+        projector: Some("Index-Translate-9B.mmproj-Q8_0.gguf"),
+        markup: Some(&markup::FUNCTION_TAGS),
+        translator: true,
+        sampling: GREEDY,
+        languages: None,
+    },
+    Entry {
+        id: "index-translate-35b-a3b-preview",
+        name: "Index-Translate 35B A3B Preview",
+        repository: Repository::model(
+            "IndexTeam/Index-Translate-35B-A3B-preview-GGUF",
+            "3319ce338363a181c6c20c06b7379063d9baf484",
+        ),
+        quantizations: &[
+            Quantization::new(
+                "Q4_K_M",
+                "Q4_K_M",
+                "Index-Translate-35B-A3B-preview.Q4_K_M.gguf",
+            ),
+            Quantization::new("Q2_K", "Q2_K", "Index-Translate-35B-A3B-preview.Q2_K.gguf"),
+            Quantization::new(
+                "Q3_K_S",
+                "Q3_K_S",
+                "Index-Translate-35B-A3B-preview.Q3_K_S.gguf",
+            ),
+            Quantization::new(
+                "Q3_K_M",
+                "Q3_K_M",
+                "Index-Translate-35B-A3B-preview.Q3_K_M.gguf",
+            ),
+            Quantization::new(
+                "Q3_K_L",
+                "Q3_K_L",
+                "Index-Translate-35B-A3B-preview.Q3_K_L.gguf",
+            ),
+            Quantization::new(
+                "IQ4_XS",
+                "IQ4_XS",
+                "Index-Translate-35B-A3B-preview.IQ4_XS.gguf",
+            ),
+            Quantization::new(
+                "Q4_K_S",
+                "Q4_K_S",
+                "Index-Translate-35B-A3B-preview.Q4_K_S.gguf",
+            ),
+            Quantization::new(
+                "Q5_K_S",
+                "Q5_K_S",
+                "Index-Translate-35B-A3B-preview.Q5_K_S.gguf",
+            ),
+            Quantization::new(
+                "Q5_K_M",
+                "Q5_K_M",
+                "Index-Translate-35B-A3B-preview.Q5_K_M.gguf",
+            ),
+            Quantization::new("Q6_K", "Q6_K", "Index-Translate-35B-A3B-preview.Q6_K.gguf"),
+            Quantization::new("Q8_0", "Q8_0", "Index-Translate-35B-A3B-preview.Q8_0.gguf"),
+        ],
+        // The Q8_0 projector, which the card recommends for local use.
+        projector: Some("Index-Translate-35B-A3B-preview.mmproj-Q8_0.gguf"),
+        markup: Some(&markup::FUNCTION_TAGS),
+        translator: true,
+        sampling: GREEDY,
         languages: None,
     },
 ];
@@ -871,11 +1029,5 @@ mod tests {
                 );
             }
         }
-        assert!(
-            entry(DEFAULT_MODEL)
-                .unwrap()
-                .quantization(Some(DEFAULT_QUANTIZATION))
-                .is_ok()
-        );
     }
 }

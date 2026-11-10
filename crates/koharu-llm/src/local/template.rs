@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use koharu_llama::model::LlamaModel;
 use minijinja::{
     Environment, Error, ErrorKind, context,
+    syntax::SyntaxConfig,
     value::{Serde, Value as Jinja},
 };
 use serde_json::Value;
@@ -89,6 +90,15 @@ fn environment(source: String) -> Result<Environment<'static>> {
         .replace("{%- generation -%}", "")
         .replace("{%- endgeneration -%}", "");
     let mut environment = Environment::new();
+    // llama.cpp's lexer strips blocks for chat templates (common/jinja/lexer.cpp),
+    // as Transformers does.
+    environment.set_syntax(
+        SyntaxConfig::builder()
+            .trim_blocks(true)
+            .lstrip_blocks(true)
+            .build()
+            .context("couldn't configure minijinja's syntax")?,
+    );
     minijinja_contrib::add_to_environment(&mut environment);
     environment.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
     environment.add_function(
@@ -138,6 +148,21 @@ mod tests {
         };
         assert_eq!(template.render(&rendering(None)).unwrap(), "xhigh");
         assert_eq!(template.render(&rendering(Some("low"))).unwrap(), "low");
+    }
+
+    /// llama.cpp strips blocks in chat templates.
+    #[test]
+    fn blocks_strip_as_llama_cpp_strips_them() {
+        let template = Template::from_source("  {% if true %}\nHi\n{% endif %}");
+        let prompt = template
+            .render(&Rendering {
+                messages: &[],
+                tools: &[],
+                thinking: false,
+                effort: None,
+            })
+            .expect("the template renders");
+        assert_eq!(prompt, "Hi\n");
     }
 
     #[test]
