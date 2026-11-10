@@ -51,13 +51,13 @@ console = "0.16.6"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 derive_more = { version = "2.1.1", features = ["display", "from", "from_str"] }
 dirs = "7.0.0"
-encoding_rs = "0.8.42"
+encoding_rs = "0.8.44"
 enumflags2 = "0.7.12"
 fast-glob = "1.1.2"
 fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
-flate2 = { version = "1.1.10", features = ["zlib-rs"] }
+flate2 = { version = "1.1.11", features = ["zlib-rs"] }
 fontique = "0.12.0"
-fs-err = "3.3.1"
+fs-err = "3.3.2"
 futures = "0.3.34"
 half = "2.7.1"
 harfrust = "0.15.0"
@@ -65,37 +65,37 @@ hashbrown = "0.17.1"
 hf-hub = "1.0.0"
 http = "1.5.0"
 hypher = "0.1.8"
-icu_locale_core = { version = "2.3.0", features = ["alloc", "serde"] }
-icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
-icu_properties = { version = "2.3.0", features = ["compiled_data"] }
-icu_segmenter = { version = "2.3.0", features = ["compiled_data"] }
+icu_locale_core = { version = "2.4.0", features = ["alloc", "serde"] }
+icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
+icu_properties = { version = "2.4.0", features = ["compiled_data"] }
+icu_segmenter = { version = "2.4.0", features = ["compiled_data"] }
 image = "0.25.10"
 imageproc = "0.27.0"
 imbl = { version = "7.0.2", features = ["serde"] }
 indoc = "2.0.8"
 jieba-rs = "0.11.0"
-json-patch = { version = "4.2.0", default-features = false }
-jsonptr = "0.7.1"
+json-patch = { version = "5.0.0", default-features = false }
+jsonptr = "0.8.2"
 keyring = "4.2.0"
 kurbo = "0.13.1"
 libloading = "0.9.0"
 llguidance = "1.9.1"
-log = "0.4.34"
-memmap2 = "0.9.11"
-minijinja = { version = "3.0.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
-minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
+log = "0.4.35"
+memmap2 = "0.9.12"
+minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
+minijinja-contrib = { version = "3.1.0", features = ["pycompat"] }
 parking_lot = "0.13.0"
-photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "59cb4c49bd236df04d8e37d4764253f29ca6600a" }
+photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97e5b4b1d9a03c3ef9b904dd5de864f5e8aa8" }
 pollster = "1.0.1"
 postcard = { version = "1.1.3", features = ["use-std"] }
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
-quick_cache = "0.6.24"
+quick_cache = "0.7.0"
 quote = "1.0.47"
 rayon = "1.12.0"
 reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
 revision = { version = "0.30.0", features = ["uuid"] }
-rfd = "0.17.2"
+rfd = "0.18.0"
 # rig breaks its API in every release.
 rig-agent = { version = "=0.46.0", default-features = false }
 rig-core = { version = "=0.46.0", default-features = false }
@@ -103,51 +103,51 @@ rig-memory = { version = "=0.46.0", default-features = false }
 rig-reqwest = { version = "=0.46.0", default-features = false }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 safetensors = "0.8.0"
-schemars = { version = "1.2.2", features = ["chrono04", "indexmap2", "uuid1"] }
+schemars = { version = "1.2.3", features = ["chrono04", "indexmap2", "uuid1"] }
 secrecy = "0.10.3"
 semver = "1.0.28"
-sentry = { version = "0.49.3", features = ["tracing"] }
+sentry = { version = "0.49.5", features = ["tracing"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_ignored = "0.1.14"
 # Floats must survive a write and a reopen unchanged, so memory and file agree.
-serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
-serde_json_canonicalizer = "0.3.2"
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
+serde_json_canonicalizer = "0.4.1"
 serde_rusqlite = "0.44.0"
 serde_with = { version = "3.24.0", default-features = false, features = ["json", "macros"] }
 similar = "3.2.1"
 skrifa = "0.49.0"
 slotmap = "1.1.1"
-smallvec = "1.16.2"
-specta = { version = "=2.0.0-rc.26", features = ["derive", "serde_json", "url", "uuid"] }
+smallvec = "1.16.5"
+specta = { version = "=2.0.0-rc.28", features = ["derive", "serde_json", "url", "uuid"] }
 static_assertions = "1.1.0"
 strum = { version = "0.28.0", features = ["derive"] }
-syn = { version = "3.0.6", features = ["full"] }
+syn = { version = "3.0.10", features = ["full"] }
 tar = "0.4.46"
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74", default-features = false, features = [
+tauri = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f", default-features = false, features = [
     "compression",
     "dynamic-acl",
     "specta",
 ] }
-tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
-tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
-tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
-tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "3d836244bcb97cb1620405e8d1887da285a793d4" }
-tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
+tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
+tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
+tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
+tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
+tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23.2", features = ["onig"] }
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.54.1", features = ["full"] }
 tokio-stream = { version = "0.1.19", features = ["sync"] }
 toktrie = "1.9.1"
-toml = "1.1.6"
-toml_edit = "0.25.17"
+toml = "1.2.1"
+toml_edit = "0.25.19"
 tracing = "0.1.44"
 tracing-core = "0.1.36"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "registry"] }
 unicode-bidi = "0.3.18"
 url = { version = "2.5.8", features = ["serde"] }
-uuid = { version = "1.26.1", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.29.2", features = ["v4", "v7", "serde"] }
 vello = "0.11.0"
 webp = { version = "0.3.1" }
 windows = { version = "0.62.2", features = [
@@ -156,12 +156,12 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
 ] }
-zip = { version = "9.0.2", features = ["deflate"] }
+zip = { version = "9.5.0", features = ["deflate"] }
 
 [patch.crates-io]
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
-tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
-tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "78f49ba3993fed5a1b921235c547731006ad2a74" }
+tauri = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
+tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
 
 [profile.release]
 # Keep debug information for Sentry's native stack traces and source context.

@@ -5,7 +5,7 @@
   ],
   "scripts": {
     "tauri": "cargo tauri",
-    "postinstall": "cargo install tauri-cli --git https://github.com/tauri-apps/tauri --rev 78f49ba3993fed5a1b921235c547731006ad2a74 --locked",
+    "postinstall": "cargo install tauri-cli --git https://github.com/tauri-apps/tauri --rev 6620118f0fe85472abfdccea8d99fd0ec9447c3f --locked",
     "predev": "kill-port 3000",
     "dev": "cargo tauri dev",
     "build": "cargo tauri build --no-bundle",
@@ -30,7 +30,7 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "react": "^19.3.0",
+    "react": "^19.3.1",
     "sharp": "^0.35.5"
   }
 }
