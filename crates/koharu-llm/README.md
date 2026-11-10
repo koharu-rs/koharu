@@ -20,7 +20,7 @@ model answers.
 | `AgentConfig`, `Providers` | The `[agent]` and `[providers]` config sections |
 
 `rig` re-exports rig itself, since every model takes and gives its requests and streams.
-`Selection` defaults to the local `gemma4-12b-it` at `Q4_K_XL`.
+`Selection` has no default: a caller names the model.
 
 `prompt_typed` checks an answer against its schema. A caller of plain `prompt` checks the
 answer itself, because rig fails open on structured output.
@@ -54,15 +54,19 @@ after the wait the reply names, or after 1, 2, then 4 seconds. rig itself retrie
 
 The catalog pins each model to a Hugging Face commit and holds its quantizations, its
 projector if it reads images, its markup, its sampling defaults, and the languages it can
-translate into. It offers LFM3, Gemma 4, and Qwen 3.5, 3.6, and 3.8.
+translate into. It offers LFM3, Gemma 4, Qwen 3.5, 3.6, and 3.8, and the translation model
+Index-Translate, which decodes greedily as its card does. A translation model only
+translates, so `models()` says it neither calls tools nor reasons, whatever markup its
+template writes.
 
 - **Loading.** `Size` asks for a number of sequences and the tokens each may hold, and
   `Size::AGENT` is one sequence of 65,536. llama.cpp's fit then measures free memory,
   leaving 1 GiB plus the projector free. It shrinks the context, down to 4,096 tokens a
   sequence, and then moves layers to system memory. The model's spec says what it got.
 - **Prompts.** The GGUF's own chat template renders with minijinja, as llama.cpp renders it
-  with its Jinja engine. A conversation merges two messages in a row with the same role,
-  because most Qwen templates raise an error on a second leading system message.
+  with its Jinja engine, stripping whitespace around blocks as it does. A conversation
+  merges two messages in a row with the same role, because most Qwen templates raise an
+  error on a second leading system message.
 - **Decoding.** One thread owns the model, and its sequences decode together. A sequence
   keeps what it decoded after its request ends, and a new request reuses the longest common
   prefix any sequence holds, if it's at least 64 tokens.
@@ -73,7 +77,7 @@ Markup is how a model's template writes reasoning and tool calls in its reply:
 
 | Markup | Models | Reasoning | Tool call |
 |---|---|---|---|
-| `FUNCTION_TAGS` | LFM3, Qwen | `<think>`, `</think>` | `<tool_call>`, `</tool_call>` |
+| `FUNCTION_TAGS` | LFM3, Qwen, Index-Translate | `<think>`, `</think>` | `<tool_call>`, `</tool_call>` |
 | `GEMMA4` | Gemma 4 | `<\|channel>thought`, `<channel\|>` | `<\|tool_call>`, `<tool_call\|>` |
 | `GEMMA4_NO_TOOLS` | Gemma 4 templates that render a tool result as a `tool` turn | The same | None |
 

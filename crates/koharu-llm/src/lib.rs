@@ -81,16 +81,6 @@ pub struct Selection {
     pub quantization: Option<String>,
 }
 
-impl Default for Selection {
-    fn default() -> Self {
-        Self {
-            provider: Provider::Local,
-            model: local::catalog::DEFAULT_MODEL.to_owned(),
-            quantization: Some(local::catalog::DEFAULT_QUANTIZATION.to_owned()),
-        }
-    }
-}
-
 /// The model `selection` names, as a rig model, its files fetched first if the
 /// store doesn't have them; a local one loads with `size`, which a hosted one
 /// doesn't use.
@@ -183,10 +173,13 @@ pub async fn models() -> Vec<ModelInfo> {
                 })
                 .collect(),
             images: entry.projector.is_some(),
-            tools: entry.markup.is_some_and(|markup| markup.call.is_some()),
-            reasoning: entry
-                .markup
-                .is_some_and(|markup| markup.reasoning.is_some()),
+            // A translation model's template may write a general model's
+            // markup, but the model was trained only to translate.
+            tools: !entry.translator && entry.markup.is_some_and(|markup| markup.call.is_some()),
+            reasoning: !entry.translator
+                && entry
+                    .markup
+                    .is_some_and(|markup| markup.reasoning.is_some()),
             languages: entry.languages,
             context_window: None,
             max_output_tokens: None,
