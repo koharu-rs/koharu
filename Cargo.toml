@@ -66,7 +66,7 @@ tracing-core = "0.1.36"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "registry"] }
 console = "0.16.6"
 open = "5.4.4"
-rfd = "0.17.2"
+rfd = "0.18.0"
 thiserror = "2.0.21"
 blake3 = "1.8.7"
 dunce = "1.0.5"
