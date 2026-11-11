@@ -5519,15 +5519,15 @@ dependencies = [
 
 [[package]]
 name = "minijinja"
-version = "3.0.5"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00f5a04892e86ddb4fc254e9160835370b63a0d44042d3ab4725bc2dbcbab136"
+checksum = "509eeb2603a84eccabb4d75f6ec8ba23b46bbf441aaeb863d6b83a5887fd51e4"
 
 [[package]]
 name = "minijinja-contrib"
-version = "3.0.5"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f804cfd81c146ff898cbf3455071c417e8745907c77f3d5058bd9691b9ace3b8"
+checksum = "64b62a39daf92d02b89f7888ab57f08d15d22dab862e5c95353253f91e9344f0"
 dependencies = [
  "minijinja",
 ]
