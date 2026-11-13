@@ -518,6 +518,11 @@ async fn prepare(input: &StageInput) -> Result<InpaintInput> {
 
 const TILE_SIZE: u32 = 512;
 const TILE_CONTEXT: u32 = 128;
+/// Accelerator backends such as MPS compile and retain one graph per input
+/// shape, so crops of arbitrary size grow memory without bound across pages.
+/// Crops therefore widen to a multiple of this size with real surrounding
+/// pixels, which keeps the set of inference shapes small.
+const TILE_BUCKET: u32 = 256;
 const UNIFORM_BACKGROUND_MIN_PIXELS: usize = 16;
 const FLAT_FILL_EDGE_MARGIN: f32 = 3.0;
 
@@ -724,12 +729,28 @@ fn bounds_area([left, top, right, bottom]: [u32; 4]) -> u64 {
 }
 
 fn expand_bounds([left, top, right, bottom]: [u32; 4], width: u32, height: u32) -> [u32; 4] {
-    [
+    let (left, right) = bucket_span(
         left.saturating_sub(TILE_CONTEXT),
-        top.saturating_sub(TILE_CONTEXT),
         right.saturating_add(TILE_CONTEXT).min(width),
+        width,
+    );
+    let (top, bottom) = bucket_span(
+        top.saturating_sub(TILE_CONTEXT),
         bottom.saturating_add(TILE_CONTEXT).min(height),
-    ]
+        height,
+    );
+    [left, top, right, bottom]
+}
+
+/// Widens `start..end` to a `TILE_BUCKET` multiple, or the whole `limit` when
+/// the image is narrower, and shifts it back inside the image when needed.
+/// The result always contains the original span.
+fn bucket_span(start: u32, end: u32, limit: u32) -> (u32, u32) {
+    let length = (end - start).next_multiple_of(TILE_BUCKET).min(limit);
+    let start = start
+        .saturating_sub((length - (end - start)) / 2)
+        .min(limit - length);
+    (start, start + length)
 }
 
 fn component_bounds_in(
@@ -1149,6 +1170,27 @@ mod tests {
     }
 
     #[test]
+    fn bucketed_spans_contain_the_original_span_inside_the_image() {
+        // Interior, near and far edges, an exact bucket, and an image
+        // narrower than one bucket.
+        for (start, end, limit) in [
+            (300, 500, 2000),
+            (0, 40, 2000),
+            (1100, 1200, 1200),
+            (1950, 2000, 2000),
+            (0, 512, 1000),
+            (100, 150, 150),
+        ] {
+            let (bucket_start, bucket_end) = bucket_span(start, end, limit);
+            let case = format!("{start}..{end} in {limit} -> {bucket_start}..{bucket_end}");
+            assert!(bucket_start <= start && end <= bucket_end, "{case}");
+            assert!(bucket_end <= limit, "{case}");
+            let length = bucket_end - bucket_start;
+            assert!(length % TILE_BUCKET == 0 || length == limit, "{case}");
+        }
+    }
+
+    #[test]
     fn oversized_component_tiles_mask_their_continuation_context() {
         let mut mask = GrayImage::new(1000, 300);
         for y in 100..120 {
@@ -1204,8 +1246,10 @@ mod tests {
             &[],
             |tile, _| {
                 calls += 1;
-                assert!(tile.width() <= TILE_CONTEXT * 2 + 1);
-                assert!(tile.height() <= TILE_CONTEXT * 2 + 1);
+                assert_eq!(tile.width() % TILE_BUCKET, 0);
+                assert_eq!(tile.height() % TILE_BUCKET, 0);
+                assert!(tile.width() <= TILE_SIZE + TILE_CONTEXT * 2);
+                assert!(tile.height() <= TILE_SIZE + TILE_CONTEXT * 2);
                 Ok(DynamicImage::ImageRgb8(RgbImage::from_pixel(
                     tile.width(),
                     tile.height(),
