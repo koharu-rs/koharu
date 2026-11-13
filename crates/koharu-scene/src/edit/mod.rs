@@ -4,6 +4,7 @@
 mod layers;
 mod pages;
 mod pixels;
+mod schema;
 mod text;
 
 use std::collections::HashMap;
@@ -107,7 +108,7 @@ pub enum Op {
     /// block's translation.
     UpdateLayer {
         layer: Ref,
-        #[schemars(schema_with = "crate::tools::layer_patch")]
+        #[schemars(schema_with = "schema::layer_patch")]
         patch: Value,
     },
     /// Replace a text layer's text, or a block's translation, adding one if

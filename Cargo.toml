@@ -28,6 +28,7 @@ koharu-llama = { path = "crates/koharu-llama" }
 koharu-llama-sys = { path = "crates/koharu-llama-sys" }
 koharu-llm = { path = "crates/koharu-llm" }
 koharu-ml = { path = "crates/koharu-ml" }
+koharu-agent = { path = "crates/koharu-agent" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
@@ -41,6 +42,7 @@ ab_glyph = "0.2.32"
 age = "0.12.1"
 anyhow = "1.0.104"
 atomicwrites = "0.4.4"
+axum = "0.8.9"
 backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
 base64 = "0.23.1"
 bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
@@ -106,6 +108,7 @@ rig-agent = { version = "=0.46.0", default-features = false }
 rig-core = { version = "=0.46.0", default-features = false }
 rig-memory = { version = "=0.46.0", default-features = false }
 rig-reqwest = { version = "=0.46.0", default-features = false }
+rmcp = { version = "3.10.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 safetensors = "0.8.0"
 schemars = { version = "1.2.3", features = ["chrono04", "indexmap2", "uuid1"] }

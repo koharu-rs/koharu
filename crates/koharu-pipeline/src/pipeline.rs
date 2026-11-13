@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
 };
 
 use koharu_scene::{ProjectId, Session};
@@ -8,11 +11,10 @@ use parking_lot::{Mutex, RwLock};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
-    Event, PipelineConfig, Request, Result, RunId,
+    Error, Event, PipelineConfig, Request, Result, RunId,
+    event::Events,
     scheduler::{Command, Plan, Run, Scheduler},
 };
-
-const EVENTS: usize = 1024;
 
 /// Runs Koharu's models for the app, its canvas, and the agent alike: a
 /// cheap handle to clone. The scheduler and the thread owning the models end
@@ -22,7 +24,7 @@ pub struct Pipeline(Arc<Shared>);
 
 struct Shared {
     config: Arc<RwLock<PipelineConfig>>,
-    events: broadcast::Sender<Event>,
+    events: Events,
     commands: mpsc::UnboundedSender<Command>,
     next: AtomicU64,
 }
@@ -33,7 +35,7 @@ impl Pipeline {
     #[must_use]
     pub fn new(config: PipelineConfig) -> Self {
         let config = Arc::new(RwLock::new(config));
-        let events = broadcast::channel(EVENTS).0;
+        let events = Events::new();
         let commands = Scheduler::spawn(Arc::clone(&config), events.clone());
         Self(Arc::new(Shared {
             config,
@@ -66,8 +68,20 @@ impl Pipeline {
         let plan = Plan::new(&project, &request.target, &request.stages)?;
         let id = RunId(self.0.next.fetch_add(1, Ordering::Relaxed));
         let run = Run::new(id, session, project.id(), config, plan, &request.stages);
+        self.0.events.issued(id);
         self.send(Command::Run(run));
         Ok(id)
+    }
+
+    /// What `run` told so far, its events in order, once it ended or `wait`
+    /// is over, whichever comes first; its last event says how it ended, as
+    /// ComfyUI's `/history/{prompt_id}` keeps a prompt's.
+    pub async fn history(&self, run: RunId, wait: Duration) -> Result<Vec<Event>> {
+        self.0
+            .events
+            .history(run, wait)
+            .await
+            .ok_or_else(|| Error::invalid(format!("there is no run {}", run.0)))
     }
 
     /// Stops every run, running and queued. What they finished stays, and
@@ -93,5 +107,65 @@ impl Pipeline {
             .commands
             .send(command)
             .unwrap_or_else(|_| panic!("the scheduler runs while the pipeline does"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeSet, time::Instant};
+
+    use koharu_scene::Edit;
+    use serde_json::json;
+
+    use super::*;
+    use crate::{Event, Outcome, Stage, Target};
+
+    /// A project of one blank page, with no scan, so detection loads no
+    /// model, in a folder removed with it.
+    fn project() -> anyhow::Result<(tempfile::TempDir, Arc<Mutex<Session>>)> {
+        let dir = tempfile::tempdir()?;
+        let mut session = Session::create(dir.path().join("test.khr"))?;
+        session.apply(Edit {
+            label: "test".to_owned(),
+            ops: vec![serde_json::from_value(json!({
+                "op": "add_page", "index": 0, "size": {"width": 100, "height": 100},
+            }))?],
+        })?;
+        Ok((dir, Arc::new(Mutex::new(session))))
+    }
+
+    #[tokio::test]
+    async fn a_run_keeps_its_history_after_it_ended() {
+        let (_dir, session) = project().expect("a project");
+        let pipeline = Pipeline::new(PipelineConfig::default());
+        let request = Request {
+            target: Target::Project,
+            stages: BTreeSet::from([Stage::Detect]),
+            config: None,
+        };
+        let run = pipeline.run(session, request).expect("the run starts");
+        let ended = Event::Ended {
+            run,
+            outcome: Outcome::Done,
+        };
+        for _ in 0..2 {
+            let history = pipeline
+                .history(run, Duration::from_secs(5))
+                .await
+                .expect("a history");
+            assert_eq!(history.last(), Some(&ended));
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unknown_run_fails_at_once() {
+        let pipeline = Pipeline::new(PipelineConfig::default());
+        let asked = Instant::now();
+        let error = pipeline
+            .history(RunId(999), Duration::from_secs(30))
+            .await
+            .expect_err("no such run");
+        assert!(error.to_string().contains("999"), "{error}");
+        assert!(asked.elapsed() < Duration::from_secs(1));
     }
 }

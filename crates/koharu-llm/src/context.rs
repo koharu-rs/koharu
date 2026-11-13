@@ -167,7 +167,9 @@ impl Context {
         }
     }
 
-    pub(crate) fn policy(&self, spec: &ModelSpec) -> CompactionPolicy {
+    /// How the conversation keeps inside the window of the model `spec`
+    /// describes, which an agent loop clears its tool output by.
+    pub fn policy(&self, spec: &ModelSpec) -> CompactionPolicy {
         policy(&self.prompts, spec)
     }
 }
