@@ -21,6 +21,10 @@ const REPOSITORY: Repository = Repository::model(
     "f91c85b26913b3e83f9877867b4c336da3675238",
 );
 
+/// The longest side LaMa redraws whole; a larger image goes a crop around
+/// each masked region at a time, as IOPaint's `InpaintModel` does.
+pub const WHOLE: u32 = 800;
+
 #[derive(Debug)]
 pub struct Lama {
     device: Device,
@@ -58,7 +62,7 @@ impl Lama {
             "image dimensions must be non-zero"
         );
         koharu_torch::inference_mode(|| {
-            if image.width().max(image.height()) <= 800 {
+            if image.width().max(image.height()) <= WHOLE {
                 return self.pad_forward(&image, mask);
             }
 

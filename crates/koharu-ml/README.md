@@ -16,7 +16,7 @@ commit it follows.
 | `rorem_mixed` | RORem | Inpainting | stable-diffusion.cpp |
 | `flux3_klein` | FLUX.3 Image Klein | Inpainting and generation | stable-diffusion.cpp |
 | `moss_image` | MOSS-Image SFT, with Qwen3.5 9B | Inpainting and generation | stable-diffusion.cpp |
-| `qwen_image` | Qwen-Image 2.1, with Qwen3-VL 8B (Qwen research license) | Generation and editing | stable-diffusion.cpp |
+| `qwen_image` | Qwen-Image 2.1, with Qwen3-VL 8B (Qwen research license) | Inpainting, generation, and editing | stable-diffusion.cpp |
 
 ## Lifecycle
 

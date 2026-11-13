@@ -2,6 +2,7 @@
 //! source and translation.
 
 use icu_locale_core::LanguageIdentifier;
+use kurbo::{Affine, BezPath, Shape as _};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
@@ -140,6 +141,25 @@ pub struct Text {
     pub language: LanguageIdentifier,
     #[serde(default)]
     pub transform: Transform,
+}
+
+impl Text {
+    /// Where its frame lies on the page, its transform applied; `None` for
+    /// point text.
+    #[must_use]
+    pub fn bounds(&self) -> Option<kurbo::Rect> {
+        let rect = match &self.frame {
+            Frame::Point => return None,
+            Frame::Box { bounds, .. } => kurbo::Rect::new(
+                bounds.x,
+                bounds.y,
+                bounds.x + bounds.width,
+                bounds.y + bounds.height,
+            ),
+            Frame::Path { path, .. } => BezPath::from_svg(path.as_str()).ok()?.bounding_box(),
+        };
+        Some(Affine::from(self.transform).transform_rect_bbox(rect))
+    }
 }
 
 /// Empty point text in an undetermined language.

@@ -3887,6 +3887,7 @@ dependencies = [
  "icu_locale",
  "icu_locale_core",
  "image",
+ "imageproc",
  "indoc",
  "koharu-config",
  "koharu-llm",

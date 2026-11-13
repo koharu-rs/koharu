@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Content, Error, Hash, Layer, LayerId, LayerKind, Offset, PageId, PixelFormat, ProjectId,
+    Block, Content, Error, Hash, Layer, LayerId, LayerKind, Offset, PageId, PixelFormat, ProjectId,
     Result, Size,
 };
 
@@ -198,6 +198,16 @@ impl Project {
             .ok_or_else(|| Error::NotFound(format!("layer {id}")))
     }
 
+    /// The page `id` is on, and the layer holding it there, if one does.
+    pub fn parent(&self, id: LayerId) -> Result<(&Page, Option<&Layer>)> {
+        let (page, path) = self
+            .place(id)
+            .ok_or_else(|| Error::NotFound(format!("layer {id}")))?;
+        let page = &self.pages[&page];
+        let above = &path[..path.len() - 1];
+        Ok((page, (!above.is_empty()).then(|| page.at(above))))
+    }
+
     /// The page holding `id` in its tree, and the path to it there.
     pub(crate) fn place(&self, id: LayerId) -> Option<(PageId, Vec<usize>)> {
         let page = *self.index.get(&id)?;
@@ -240,6 +250,18 @@ impl Project {
     /// order.
     pub fn layers_of(&self, page: PageId) -> Result<Vec<&Layer>> {
         Ok(depth_first(&self.page(page)?.layers))
+    }
+
+    /// The blocks of `page`, in reading order.
+    pub fn blocks(&self, page: PageId) -> Result<Vec<(LayerId, &Block)>> {
+        Ok(self
+            .layers_of(page)?
+            .into_iter()
+            .filter_map(|layer| match &layer.content {
+                Content::Block(block) => Some((layer.id, &**block)),
+                _ => None,
+            })
+            .collect())
     }
 
     pub(crate) fn tiles(&self, layer: LayerId) -> Option<&TileMap> {

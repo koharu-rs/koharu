@@ -38,6 +38,42 @@ impl Tile {
     pub const SIZE: u32 = 64;
 }
 
+impl Tiles {
+    /// What 8-bit tiles cover of a `width` by `height` page: the rectangle
+    /// around their set pixels, and those pixels over it; `None` when they
+    /// cover none of it.
+    #[must_use]
+    pub fn coverage(&self, width: u32, height: u32) -> Option<(Rect, image::GrayImage)> {
+        let (width, height) = (i64::from(width), i64::from(height));
+        let mut on = Vec::new();
+        for tile in &self.tiles {
+            let left = i64::from(tile.x) * SIZE + i64::from(self.offset.x);
+            let top = i64::from(tile.y) * SIZE + i64::from(self.offset.y);
+            for (at, &value) in tile.pixels.iter().enumerate() {
+                let (x, y) = (left + at as i64 % SIZE, top + at as i64 / SIZE);
+                if value != 0 && (0..width).contains(&x) && (0..height).contains(&y) {
+                    on.push((x, y));
+                }
+            }
+        }
+        let x = on.iter().map(|&(x, _)| x).min()?;
+        let y = on.iter().map(|&(_, y)| y).min()?;
+        let right = on.iter().map(|&(x, _)| x).max()? + 1;
+        let bottom = on.iter().map(|&(_, y)| y).max()? + 1;
+        let rect = Rect {
+            x: x as i32,
+            y: y as i32,
+            width: (right.min(width) - x) as u32,
+            height: (bottom.min(height) - y) as u32,
+        };
+        let mut mask = image::GrayImage::new(rect.width, rect.height);
+        for (px, py) in on {
+            mask.put_pixel((px - x) as u32, (py - y) as u32, image::Luma([255]));
+        }
+        Some((rect, mask))
+    }
+}
+
 /// A stored tile: its position and compressed bytes.
 pub(crate) type Stored = (i32, i32, Vec<u8>);
 /// A written tile: its position, and its compressed bytes unless it's now empty.

@@ -1,23 +1,24 @@
-//! Koharu's models run over a project's pages: every step on every page in one
-//! click, or one step by hand on a page, a block, or a painted area. The
+//! Koharu's models run over a project's pages: every stage on every page in
+//! one click, or one stage by hand on a page, a block, or a painted area. The
 //! README is the design.
 
 mod config;
 mod error;
 mod event;
-mod models;
+mod gpu;
 mod pipeline;
-mod placement;
 mod request;
 mod scheduler;
-mod steps;
+mod stages;
 
-pub use config::{
-    DEFAULT_PROMPT, Detector, DetectorConfig, Inpainter, InpainterConfig, PipelineConfig,
-    Recognizer, RecognizerConfig, TARGET, TranslatorConfig,
-};
+pub use config::PipelineConfig;
 pub use error::{Error, Result};
 pub use event::{Event, Outcome, RunId};
 pub use pipeline::Pipeline;
-pub use placement::placement;
-pub use request::{Area, Request, Step, Target};
+pub use request::{Area, Request, Stage, Target};
+pub use stages::{
+    detect::{Detector, DetectorConfig},
+    inpaint::{Inpainter, InpainterConfig},
+    recognize::{Recognizer, RecognizerConfig},
+    translate::{TranslatorConfig, placement},
+};
