@@ -16,6 +16,7 @@
     "core:window:allow-set-progress-bar",
     "opener:default",
     "process:default",
+    "sentry:default",
     "updater:default"
   ]
 }

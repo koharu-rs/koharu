@@ -15,6 +15,7 @@ use strum::{Display, VariantArray};
     Clone, Copy, Debug, Default, Display, Eq, Hash, PartialEq, Serialize, Deserialize, VariantArray,
 )]
 #[serde(rename_all = "kebab-case")]
+#[derive(specta::Type)]
 pub enum Inpainter {
     #[default]
     #[strum(to_string = "LaMa")]

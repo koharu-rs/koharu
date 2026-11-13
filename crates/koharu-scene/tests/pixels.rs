@@ -322,3 +322,28 @@ fn undoing_a_removal_restores_its_pixels() {
     let session = Session::open(&path).expect("it opens");
     assert_eq!(read(&session), painted);
 }
+
+#[test]
+fn pixels_read_back_what_write_pixels_wrote() {
+    let (_dir, mut session, page) = session();
+    let raster = add(&mut session, page, None, json!({"kind": "raster"}));
+    let pixel = |x: i32, y: i32| [x as u8, y as u8, 7, 255];
+    let written: Vec<u8> = (-5..5)
+        .flat_map(|y| (60..160).flat_map(move |x| pixel(x, y)))
+        .collect();
+    paint(&mut session, raster, rect(60, -5, 100, 10), written).expect("paint");
+
+    let read = session
+        .pixels(raster, rect(50, -5, 120, 10))
+        .expect("pixels");
+    assert_eq!(read.len(), 120 * 10 * 4);
+    for (row, y) in read.as_chunks::<{ 120 * 4 }>().0.iter().zip(-5..5) {
+        for (at, x) in row.as_chunks::<4>().0.iter().zip(50..170) {
+            let expected = match (60..160).contains(&x) {
+                true => pixel(x, y),
+                false => [0; 4],
+            };
+            assert_eq!(*at, expected, "at ({x}, {y})");
+        }
+    }
+}

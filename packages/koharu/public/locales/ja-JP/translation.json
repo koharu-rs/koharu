@@ -12,43 +12,26 @@
     "downloadingFiles_one": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_other": "{{count}}件のファイルをダウンロード中",
     "modelDownload": "モデルのダウンロード",
-    "pageLabel": "{{number}}ページ目: {{label}}",
     "processing": "処理中",
     "processingFailed": "処理に失敗しました。",
     "stop": "停止",
     "title": "アクティビティ"
   },
   "agent": {
-    "account": "ChatGPTアカウント",
     "applying": "プロジェクトの変更を適用中…",
-    "automatic": "自動",
     "cancel": "キャンセル",
     "cancelled": "キャンセルしました。",
-    "deviceCode": "デバイスコード",
-    "deviceCodeHint": "ブラウザーが開きました。このコードを入力してKoharuを認証してください。",
     "emptyDescription": "エージェントにこのプロジェクトの確認、翻訳、編集、処理を依頼できます。ページ画像は必要な場合にのみ表示されます。",
     "emptyTitle": "Koharuに何をさせますか？",
     "failed": "エージェントのリクエストに失敗しました。",
-    "loading": "Codexを読み込み中…",
+    "loading": "エージェントを読み込み中…",
+    "mcp": "MCPサーバー",
     "message": "Koharuエージェントにメッセージを送信",
-    "model": "Codexモデル",
+    "model": "モデル",
     "placeholder": "Koharuにこのプロジェクトの作業を依頼…",
     "properties": "プロパティ",
     "reasoning": "推論",
-    "reasoningLevels": {
-      "high": "高",
-      "low": "低",
-      "max": "最大",
-      "medium": "中",
-      "ultra": "ウルトラ",
-      "xhigh": "最高"
-    },
     "send": "送信",
-    "signIn": "Codexでサインイン",
-    "signInDescription": "ChatGPTサブスクリプションでサインインします。Koharuはデバイスコード認証を使用し、APIキーを求めることはありません。",
-    "signInTitle": "Codexに接続",
-    "signOut": "サインアウト",
-    "signingIn": "サインインを待機中…",
     "thinking": "思考中…",
     "title": "エージェント",
     "working": "作業中…"
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "ページを選択して開始します。",
     "fit": "ウィンドウに合わせる",
-    "surface": "Koharu キャンバス",
-    "unavailable": "WebGPU キャンバスを利用できません"
+    "notice": {
+      "eraser_needs_raster": "消去するにはラスターレイヤーを選択してください。"
+    },
+    "typeText": "テキストを入力"
   },
   "colorPicker": {
     "brushColor": "ブラシカラー",
@@ -69,12 +54,35 @@
     "back": "戻る",
     "cancel": "キャンセル",
     "clearSearch": "検索をクリア",
-    "loading": "読み込み中…",
-    "reset": "リセット"
+    "loading": "読み込み中…"
   },
   "errors": {
     "fatalTitle": "Koharuを続行できませんでした",
     "tryAgain": "再試行"
+  },
+  "feedback": {
+    "addScreenshot": "スクリーンショットを追加",
+    "cancel": "キャンセル",
+    "confirm": "確定",
+    "email": "メールアドレス",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "何が起きたかを入力してください。",
+    "failed": "フィードバックを送信できませんでした。もう一度お試しください。",
+    "forbidden": "このビルドからはフィードバックを送信できません。",
+    "hide": "隠す",
+    "highlight": "強調",
+    "message": "内容",
+    "messagePlaceholder": "何が起きましたか？どうなることを期待していましたか？",
+    "name": "名前",
+    "namePlaceholder": "お名前",
+    "noClient": "現在フィードバックは利用できません。",
+    "removeHighlight": "削除",
+    "removeScreenshot": "スクリーンショットを削除",
+    "required": "（必須）",
+    "sent": "フィードバックをありがとうございます！",
+    "submit": "送信",
+    "timeout": "送信がタイムアウトしました。もう一度お試しください。",
+    "title": "フィードバックを送信"
   },
   "fontPicker": {
     "activeFilterCount": "有効なフィルター: {{count}}件",
@@ -165,13 +173,11 @@
     "alignTop": "上揃え",
     "alignment": "文字揃え",
     "auto": "自動",
-    "autoFit": "自動フィット",
     "border": "縁取り",
     "borderColor": "縁取りの色",
     "borderWidth": "縁取り幅",
     "chooseFontSize": "フォントサイズを選択",
     "color": "色",
-    "customFrame": "カスタムフレーム",
     "decreaseBorderWidth": "縁取り幅を縮小",
     "direction": "方向",
     "font": "フォント",
@@ -186,17 +192,15 @@
     "horizontal": "横書き",
     "increaseBorderWidth": "縁取り幅を拡大",
     "opacity": "不透明度",
-    "placement": "配置",
-    "resetAutoFit": "自動調整に戻す",
     "selectPage": "ページを選択してレイヤーを確認します。",
     "size": "サイズ",
     "source": "原文",
     "style": "スタイル",
+    "text": "テキスト",
     "textColor": "文字色",
     "textDirection": "文字方向",
     "translation": "翻訳",
     "type": "タイポグラフィ",
-    "unplaced": "未配置",
     "vertical": "縦書き",
     "weight": "太さ",
     "width": "幅"
@@ -220,28 +224,30 @@
     "edit": "{{name}}を編集",
     "empty": "このページにはレイヤーがありません。",
     "hide": "{{name}}を隠す",
-    "imageName": "画像 {{index}}",
     "kinds": {
-      "cleanup": "クリーンアップ",
-      "dialogue": "台詞",
-      "freeText": "自由テキスト",
+      "balloon": "フキダシ",
+      "block": "テキストブロック",
       "group": "グループ",
       "image": "画像",
-      "paint": "ペイント",
-      "text": "テキスト",
-      "textGroup": "テキストグループ"
+      "mask": "マスク",
+      "panel": "コマ",
+      "raster": "ラスター",
+      "shape": "シェイプ",
+      "text": "テキスト"
     },
+    "lock": "{{name}}をロック",
     "locked": "ロック中",
-    "lockedLabel": "{{name}}はロックされています",
     "moveDown": "{{name}}を下へ移動",
     "moveUp": "{{name}}を上へ移動",
     "opacityLabel": "{{name}}の不透明度",
-    "originalArtwork": "元のアートワーク",
     "show": "{{name}}を表示",
     "sourceLabel": "{{name}}の原文",
+    "textLabel": "{{name}}のテキスト",
     "textName": "テキスト {{index}}",
     "title": "レイヤー",
-    "translationLabel": "{{name}}の翻訳"
+    "translationLabel": "{{name}}の翻訳",
+    "unlock": "{{name}}のロックを解除",
+    "unlocked": "ロックなし"
   },
   "menu": {
     "about": "Koharuについて",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "編集",
     "export": "プロジェクトを書き出す",
+    "feedback": "フィードバックを送信",
     "file": "ファイル",
     "fit": "ウィンドウに合わせる",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "ベース URL",
     "default": "既定",
-    "instructions": "翻訳指示",
     "targetLanguage": "対象言語"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "フォルダー…",
     "importing": "ページを読み込み中…",
     "importingAction": "読み込み中…",
-    "layerCount": "{{count}}レイヤー",
-    "layerCount_one": "{{count}}レイヤー",
-    "layerCount_other": "{{count}}レイヤー",
     "noImage": "画像なし",
     "noResults": "このフィルターに一致するページはありません。",
-    "pageName": "ページ名",
+    "pageNumber": "{{number}}ページ目",
     "pages": "ページ",
-    "rename": "名前を変更",
-    "renameDescription": "このページの新しい名前を入力します。",
-    "renameTitle": "ページ名を変更",
     "selected": "{{count}}件選択中"
   },
   "outputPicker": {
-    "instructions": "翻訳指示",
-    "instructionsPlaceholder": "文体、固有名詞、書式に関する任意の指示。",
     "targetLanguage": "対象言語",
     "title": "翻訳出力"
   },
   "phase": {
-    "detection": "検出",
-    "inpainting": "インペイント",
-    "ocr": "OCR",
-    "translation": "翻訳"
+    "detect": "検出",
+    "inpaint": "インペイント",
+    "recognize": "OCR",
+    "translate": "翻訳"
   },
   "phaseDescription": {
-    "detection": "ページ上のテキストを見つけます。",
-    "inpainting": "文字を消した部分の絵を復元します。",
-    "ocr": "各領域内の原文を読み取ります。",
-    "translation": "原文を対象言語に翻訳します。"
+    "detect": "ページ上のテキストを見つけます。",
+    "inpaint": "文字を消した部分の絵を復元します。",
+    "recognize": "各領域内の原文を読み取ります。",
+    "translate": "原文を対象言語に翻訳します。"
   },
-  "providerDescriptions": {
-    "caiyun": "Caiyun 翻訳 API。",
-    "claude": "Anthropic Claude モデル。",
-    "deepl": "DeepL 翻訳 API。",
-    "deepseek": "DeepSeek 言語モデル。",
-    "gemini": "Google Gemini モデル。",
-    "google-cloud-translation": "Google Cloud Translation API。",
-    "grok": "xAI Grok 言語モデル。",
-    "lm-studio": "LM Studio で提供されるモデル。",
-    "local": "このデバイスで実行するモデル。",
-    "minimax": "MiniMax 言語モデル。",
-    "openai": "OpenAI の言語モデル。",
-    "openai-compatible": "OpenAI 互換 API を公開する任意のサーバー。",
-    "openrouter": "OpenRouter 経由で提供されるモデル。"
+  "psd": {
+    "background": "背景",
+    "cleanup": "クリーンアップ",
+    "outline": "輪郭"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "プロセス使用率",
-    "ram": "RAM",
-    "summary": "RAM {{ram}}%、CPU {{cpu}}%",
-    "title": "システムリソース",
-    "tooltip": "RAM {{ramUsed}} / {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "{{total}}中{{used}}を使用",
-    "vramUnavailable": "利用不可",
-    "vramValue": "VRAM {{value}}"
+  "reasoning": {
+    "high": "高",
+    "low": "低",
+    "max": "最大",
+    "medium": "中",
+    "minimal": "最小限",
+    "xhigh": "最高"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "外観"
     },
     "backToEditor": "エディターに戻る",
-    "generation": {
-      "description": "言語モデルによる翻訳文の生成方法を調整します。",
-      "enableReasoning": "推論を有効化",
-      "frequencyPenalty": "頻度ペナルティ",
-      "maxTokens": "最大トークン数",
-      "minP": "最小P",
-      "presencePenalty": "存在ペナルティ",
-      "repeatPenalty": "繰り返しペナルティ",
-      "sampling": "サンプリング",
-      "samplingDescription": "モデルが生成テキストを選択し、変化させる方法を調整します。",
-      "temperature": "温度",
-      "reasoning": "推論",
-      "reasoningDescription": "翻訳時にモデルの推論を使用します。",
-      "title": "生成",
-      "topK": "上位 K 件",
-      "topP": "Top P",
-      "vision": "ビジョン",
-      "visionDescription": "翻訳時にページ画像をLLMへ入力します。"
-    },
     "loading": "設定を読み込み中…",
     "pipeline": {
       "description": "各ページの処理に使用するモデルとオプションを選択します。",
       "modelLabel": "{{stage}}モデル",
       "options": {
         "bubbleThreshold": "吹き出ししきい値",
-        "negativePrompt": "ネガティブプロンプト",
+        "onomatopoeiaThreshold": "擬音しきい値",
         "panelThreshold": "コマしきい値",
         "prompt": "プロンプト",
         "textThreshold": "テキストしきい値"
       },
       "processing": "処理中",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "テキスト、吹き出し、コマを検出します。",
           "title": "検出"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "削除した文字の下にあるアートワークを再構築します。",
           "title": "インペイント"
         },
-        "ocr": {
+        "recognize": {
           "description": "検出領域内の原文を読み取ります。",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "設定",
     "translation": {
       "description": "設定済みプロバイダーのモデルを選び、共通の翻訳・生成オプションを適用します。",
-      "instructionsDescription": "名前、語調、用語、書式に関する指示です。",
-      "instructionsLabel": "翻訳指示",
-      "instructionsPlaceholder": "プロジェクト全体への任意の指示",
       "model": "モデル",
       "modelDescription": "プロバイダー名はモデルの実行場所を示します。接続は別途設定します。",
-      "modelQuantization": "モデル量子化",
       "output": "出力",
-      "quantization": "量子化",
-      "quantizationDescription": "小さい形式はメモリ使用量を抑えますが、通常は品質とのトレードオフがあります。",
-      "selectQuantization": "量子化方式を選択",
+      "prompt": "システムプロンプト",
+      "promptDescription": "翻訳モデルへの指示です。{target} は翻訳先の言語に置き換えられます。",
+      "promptNeedsTarget": "プロンプトには {target} を含めてください。",
+      "reasoning": "推論",
+      "reasoningDescription": "翻訳時にモデルの推論を使用します。",
       "targetLanguageDescription": "テキストの翻訳先言語を選択します。",
       "title": "翻訳",
       "translationModel": "翻訳モデル",
-      "translationModelDescription": "テキストの翻訳に使用するモデルを選択します。"
+      "translationModelDescription": "テキストの翻訳に使用するモデルを選択します。",
+      "vision": "ビジョン",
+      "visionDescription": "翻訳時にページ画像をLLMへ入力します。"
     },
     "typesetting": {
       "addFamily": "フォントファミリーを追加",

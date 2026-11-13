@@ -678,3 +678,156 @@ fn reopening_matches_memory() {
     drop(session);
     assert_eq!(Session::open(&path).expect("it opens").project(), before);
 }
+
+/// The page bounds of a path a layer's value holds at `key`.
+fn path_origin(value: &Value, key: &str) -> (f64, f64) {
+    use kurbo::Shape as _;
+    let path = value[key].as_str().expect("a path");
+    let bounds = kurbo::BezPath::from_svg(path)
+        .expect("a path")
+        .bounding_box();
+    (bounds.x0, bounds.y0)
+}
+
+fn transform_layer(
+    session: &mut Session,
+    layer: LayerId,
+    transform: Value,
+) -> koharu_scene::Result<()> {
+    apply(
+        session,
+        vec![json!({"op": "transform_layer", "layer": layer, "transform": transform})],
+    )
+    .map(|_| ())
+}
+
+#[test]
+fn a_transform_moves_each_kind_by_its_own_values() {
+    let (_dir, mut session, page) = session();
+    let square = "M5 30 h4 v4 h-4 Z";
+    let text = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "text", "content": "Hi",
+        "transform": [[1.0, 0.0, 40.0], [0.0, 1.0, 5.0]]}),
+    );
+    let translated = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "block",
+        "source": {"content": "やあ"},
+        "translation": {"content": "Hi", "transform": [[1.0, 0.0, 40.0], [0.0, 1.0, 15.0]]}}),
+    );
+    let untranslated = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "block",
+        "source": {"content": "やあ", "transform": [[1.0, 0.0, 10.0], [0.0, 1.0, 10.0]]}}),
+    );
+    let mut png = Vec::new();
+    image::RgbaImage::from_pixel(10, 10, image::Rgba([0, 255, 0, 255]))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("a PNG");
+    let hash = koharu_scene::Hash::of(&png).to_string();
+    apply(&mut session, vec![json!({"op": "add_file", "bytes": png})]).expect("a file");
+    let picture = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "image", "file": hash,
+        "transform": [[1.0, 0.0, 60.0], [0.0, 1.0, 5.0]]}),
+    );
+    let shape = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "shape", "path": square}),
+    );
+    let panel = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "panel", "outline": square}),
+    );
+    let balloon = add(
+        &mut session,
+        page,
+        Some(panel),
+        json!({"kind": "balloon", "outline": square}),
+    );
+    let raster = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "raster", "offset": {"x": 3, "y": 4}}),
+    );
+    let (_, cleanup) = parts(&session, translated);
+    let by = json!([[1.0, 0.0, 25.0], [0.0, 1.0, -10.0]]);
+    let ops = [
+        text,
+        translated,
+        untranslated,
+        picture,
+        shape,
+        panel,
+        balloon,
+        raster,
+        cleanup,
+    ]
+    .into_iter()
+    .map(|layer| json!({"op": "transform_layer", "layer": layer, "transform": by}))
+    .collect();
+    apply(&mut session, ops).expect("the layers move");
+
+    let value = |id| serde_json::to_value(layer(&session, id)).expect("JSON");
+    assert_eq!(
+        value(text)["transform"],
+        json!([[1.0, 0.0, 65.0], [0.0, 1.0, -5.0]])
+    );
+    assert_eq!(
+        value(translated)["translation"]["transform"],
+        json!([[1.0, 0.0, 65.0], [0.0, 1.0, 5.0]])
+    );
+    assert_eq!(
+        value(untranslated)["source"]["transform"],
+        json!([[1.0, 0.0, 35.0], [0.0, 1.0, 0.0]])
+    );
+    assert_eq!(
+        value(picture)["transform"],
+        json!([[1.0, 0.0, 85.0], [0.0, 1.0, -5.0]])
+    );
+    assert_eq!(path_origin(&value(shape), "path"), (30.0, 20.0));
+    assert_eq!(path_origin(&value(panel), "outline"), (30.0, 20.0));
+    assert_eq!(path_origin(&value(balloon), "outline"), (30.0, 20.0));
+    assert_eq!(value(raster)["offset"], json!({"x": 28, "y": -6}));
+    assert_eq!(
+        value(translated)["cleanup"]["offset"],
+        json!({"x": 25, "y": -10})
+    );
+}
+
+#[test]
+fn a_transform_a_layer_cannot_take_changes_nothing() {
+    let (_dir, mut session, page) = session();
+    let raster = add(&mut session, page, None, json!({"kind": "raster"}));
+    let group = add(&mut session, page, None, json!({"kind": "group"}));
+    add(
+        &mut session,
+        page,
+        Some(group),
+        json!({"kind": "shape", "path": "M0 0 h4 v4 h-4 Z"}),
+    );
+    let before = session.revision();
+    let (sin, cos) = 0.1f64.sin_cos();
+    for (layer, transform) in [
+        (raster, json!([[1.0, 0.0, 0.5], [0.0, 1.0, 0.0]])),
+        (raster, json!([[cos, -sin, 0.0], [sin, cos, 0.0]])),
+        (group, json!([[1.0, 0.0, 1.0], [0.0, 1.0, 0.0]])),
+    ] {
+        assert!(transform_layer(&mut session, layer, transform).is_err());
+        assert_eq!(session.revision(), before);
+    }
+}

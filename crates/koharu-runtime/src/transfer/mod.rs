@@ -24,7 +24,7 @@ static TRANSFERS: LazyLock<broadcast::Sender<Transfer>> =
     LazyLock::new(|| broadcast::channel(256).0);
 
 /// One transfer's whole state.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, specta::Type)]
 pub struct Transfer {
     /// The same for every state of one transfer.
     pub id: u64,
@@ -36,7 +36,7 @@ pub struct Transfer {
     pub state: State,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, specta::Type)]
 pub enum State {
     Running,
     Finished,

@@ -17,17 +17,22 @@ use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(specta::Type)]
 pub struct DetectorConfig {
     pub model: Detector,
     /// Each class's lowest confidence a detection keeps, from 0 to 1, or the
     /// model's own.
     #[serde(deserialize_with = "threshold")]
+    #[specta(type = Option<f32>)]
     pub text: Option<f32>,
     #[serde(deserialize_with = "threshold")]
+    #[specta(type = Option<f32>)]
     pub onomatopoeia: Option<f32>,
     #[serde(deserialize_with = "threshold")]
+    #[specta(type = Option<f32>)]
     pub bubble: Option<f32>,
     #[serde(deserialize_with = "threshold")]
+    #[specta(type = Option<f32>)]
     pub panel: Option<f32>,
 }
 

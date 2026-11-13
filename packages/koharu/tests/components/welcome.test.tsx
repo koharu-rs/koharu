@@ -28,10 +28,10 @@ describe('StartView', () => {
       opened
         ? {
             name: 'Volume 1',
-            revision: 0,
-            active_page: null,
-            can_undo: false,
-            can_redo: false,
+            revision: '0',
+            page: null,
+            pages: [],
+            history: { steps: [], current: 0 },
           }
         : null,
     )
@@ -58,10 +58,10 @@ describe('StartView', () => {
       opened
         ? {
             name: 'Blue Archive',
-            revision: 1,
-            active_page: null,
-            can_undo: false,
-            can_redo: false,
+            revision: '1',
+            page: null,
+            pages: [],
+            history: { steps: [], current: 0 },
           }
         : null,
     )

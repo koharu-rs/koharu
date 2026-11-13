@@ -15,7 +15,7 @@ use vello::{
     low_level::vello_encoding::Patch,
     peniko::{Blob, Color, Fill, ImageAlphaType, ImageBrush, ImageData, ImageFormat},
     wgpu::{
-        self, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
+        self, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
         TexelCopyBufferInfo, Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
     },
 };
@@ -34,8 +34,12 @@ static PIXEL: LazyLock<ImageData> = LazyLock::new(|| ImageData {
 });
 
 /// The device, its queue, and the vello renderer, shared by export and the
-/// desktop canvas.
+/// desktop canvas. The instance and adapter stay, because a window's surface
+/// must come from the instance the device came from, on an adapter that
+/// presents to it.
 pub struct Gpu {
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     vello: Mutex<Vello>,
@@ -51,15 +55,13 @@ struct Vello {
 struct Target {
     width: u32,
     height: u32,
-    padded_width: u32,
     texture: Texture,
     view: TextureView,
-    readback: Buffer,
 }
 
 impl Gpu {
     pub(crate) fn new() -> Result<Self> {
-        let (device, queue) = pollster::block_on(request_device())?;
+        let (instance, adapter, device, queue) = pollster::block_on(request_device())?;
         let renderer = vello::Renderer::new(
             &device,
             RendererOptions {
@@ -69,6 +71,8 @@ impl Gpu {
         )
         .map_err(|error| anyhow!("failed to create the vello renderer: {error:?}"))?;
         Ok(Self {
+            instance,
+            adapter,
             device,
             queue,
             vello: Mutex::new(Vello {
@@ -126,7 +130,7 @@ impl Gpu {
 
     /// Renders `scene` onto a transparent `width`×`height` surface and reads
     /// it back as straight-alpha RGBA.
-    pub(crate) fn read(&self, scene: &Scene, width: u32, height: u32) -> Result<RgbaImage> {
+    pub fn read(&self, scene: &Scene, width: u32, height: u32) -> Result<RgbaImage> {
         let limit = self.device.limits().max_texture_dimension_2d;
         if width > limit || height > limit {
             anyhow::bail!(
@@ -135,18 +139,35 @@ impl Gpu {
         }
         let target = self.target(width, height)?;
         self.render(scene, &target.view, width, height)?;
+        let pixels = self.read_texture(&target.texture);
+        self.release(target);
+        pixels
+    }
+
+    /// `texture`, an `Rgba8Unorm` texture made with `COPY_SRC`, as vello
+    /// draws it: straight-alpha RGBA at its own size.
+    pub fn read_texture(&self, texture: &Texture) -> Result<RgbaImage> {
+        let (width, height) = (texture.width(), texture.height());
+        let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let readback = self.device.create_buffer(&BufferDescriptor {
+            label: Some("koharu readback buffer"),
+            size: u64::from(padded_width) * u64::from(height),
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let mut encoder = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("koharu readback"),
             });
         encoder.copy_texture_to_buffer(
-            target.texture.as_image_copy(),
+            texture.as_image_copy(),
             TexelCopyBufferInfo {
-                buffer: &target.readback,
+                buffer: &readback,
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(target.padded_width),
+                    bytes_per_row: Some(padded_width),
                     rows_per_image: None,
                 },
             },
@@ -157,7 +178,7 @@ impl Gpu {
             },
         );
         let submission = self.queue.submit([encoder.finish()]);
-        let slice = target.readback.slice(..);
+        let slice = readback.slice(..);
         let (sender, receiver) = mpsc::sync_channel(1);
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
@@ -178,14 +199,13 @@ impl Gpu {
         let row = (width * 4) as usize;
         let mut pixels = Vec::with_capacity(row * height as usize);
         for line in mapped
-            .chunks_exact(target.padded_width as usize)
+            .chunks_exact(padded_width as usize)
             .take(height as usize)
         {
             pixels.extend_from_slice(&line[..row]);
         }
         drop(mapped);
-        target.readback.unmap();
-        self.release(target);
+        readback.unmap();
         RgbaImage::from_raw(width, height, pixels).context("the readback has the wrong size")
     }
 
@@ -247,21 +267,11 @@ impl Gpu {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
-            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let readback = self.device.create_buffer(&BufferDescriptor {
-            label: Some("koharu readback buffer"),
-            size: u64::from(padded_width) * u64::from(height),
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
         Ok(Target {
             width,
             height,
-            padded_width,
             texture,
             view,
-            readback,
         })
     }
 }
@@ -318,7 +328,7 @@ fn draw_pixel(scene: &mut Scene) {
 /// Creates the device as vello's `RenderContext` does, but with the
 /// adapter's texture and buffer limits: vello asks for `Limits::default()`,
 /// which caps a surface at 8192 pixels whatever the GPU supports.
-async fn request_device() -> Result<(wgpu::Device, wgpu::Queue)> {
+async fn request_device() -> Result<(wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         display: None,
         backends: wgpu::Backends::from_env().unwrap_or_default(),
@@ -336,7 +346,7 @@ async fn request_device() -> Result<(wgpu::Device, wgpu::Queue)> {
         ..wgpu::Limits::default()
     };
     let optional = wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE;
-    adapter
+    let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
             label: Some("koharu renderer"),
             required_features: adapter.features() & optional,
@@ -344,7 +354,8 @@ async fn request_device() -> Result<(wgpu::Device, wgpu::Queue)> {
             ..Default::default()
         })
         .await
-        .context("no GPU adapter supports vello's features")
+        .context("no GPU adapter supports vello's features")?;
+    Ok((instance, adapter, device, queue))
 }
 
 #[cfg(test)]

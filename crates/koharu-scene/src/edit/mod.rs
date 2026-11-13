@@ -16,7 +16,7 @@ use specta::Type;
 
 use crate::{
     Background, Content, Created, Error, Hash, Layer, LayerId, NewLayer, PageId, Project, Rect,
-    Ref, Result, Size, Span, Text, Uuid, store::Tx,
+    Ref, Result, Size, Span, Text, Transform, Uuid, store::Tx,
 };
 
 /// Where an op found a layer: its page and its path there. It holds only
@@ -111,6 +111,12 @@ pub enum Op {
         #[schemars(schema_with = "schema::layer_patch")]
         patch: Value,
     },
+    /// Transform a layer by an affine in page space, by its kind, as
+    /// Photoshop's Free Transform does: a text's or an image's `transform`,
+    /// a block's translation or, without one, its source, a shape's `path`,
+    /// a panel's or a balloon's `outline`. A raster, a mask, and a block's
+    /// `cleanup` or `mask` only move, by whole pixels. A group fails.
+    TransformLayer { layer: Ref, transform: Transform },
     /// Replace a text layer's text, or a block's translation, adding one if
     /// the block has none. Styling on unchanged characters is kept.
     SetText { layer: Ref, text: String },
@@ -338,6 +344,9 @@ impl Run<'_, '_> {
             } => self.move_layer(index, layer, parent.as_ref(), *to),
             Op::RemoveLayer { layer } => self.remove_layer(index, layer),
             Op::UpdateLayer { layer, patch } => self.update_layer(index, layer, patch),
+            Op::TransformLayer { layer, transform } => {
+                self.transform_layer(index, layer, *transform)
+            }
             Op::SetText { layer, text } => self.set_text(index, layer, text),
             Op::SetRichText { layer, spans } => self.set_rich_text(index, layer, spans),
             Op::SetAttribute {

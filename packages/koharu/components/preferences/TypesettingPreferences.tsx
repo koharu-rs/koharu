@@ -7,15 +7,15 @@ import { useTranslation } from 'react-i18next'
 import { FontPicker } from '@/components/controls/FontPicker'
 import { PreferencePage } from '@/components/preferences/PreferenceFields'
 import { useFonts } from '@/lib/queries'
-import type { TypesettingConfig } from '@koharu/bridge/protocol'
+import type { RendererConfig } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 export function TypesettingPreferences({
   value,
   onChange,
 }: {
-  value: TypesettingConfig
-  onChange: (value: TypesettingConfig) => void
+  value: RendererConfig
+  onChange: (value: RendererConfig) => void
 }) {
   const { t } = useTranslation()
   const fonts = useFonts()

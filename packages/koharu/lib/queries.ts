@@ -14,19 +14,13 @@ import { commands, type FontFamily } from '@koharu/bridge/protocol'
 import { call } from './backend'
 
 export const projectKey = ['project'] as const
-export const pagesKey = ['pages'] as const
 export const pageKey = ['page'] as const
-export const preparedPageKey = (page: string) => ['prepared-page', page] as const
+export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
 
 const projectQuery = queryOptions({
   queryKey: projectKey,
   queryFn: () => call(commands.getProject),
-})
-
-const pagesQuery = queryOptions({
-  queryKey: pagesKey,
-  queryFn: () => call(commands.getPages),
 })
 
 const pageQuery = queryOptions({
@@ -50,14 +44,17 @@ export const queryClient = new QueryClient({
   },
 })
 
+/** The open project, which the desktop publishes after every change. */
 export function useProject(enabled = true) {
   return useQuery({ ...projectQuery, enabled })
 }
 
+/** The open project's pages, in order. */
 export function usePages(enabled = true) {
-  return useQuery({ ...pagesQuery, enabled })
+  return { data: useProject(enabled).data?.pages }
 }
 
+/** The page the editor shows, with its layers. */
 export function usePage(enabled = true) {
   return useQuery({ ...pageQuery, enabled })
 }
@@ -98,10 +95,9 @@ export function useCommand<Args extends unknown[], Result>(
   return { run: (...args: Args) => mutation.mutate(args), busy }
 }
 
+/** Imports pages; the project's change arrives on its own channel. */
 export function useImportPages() {
-  const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing', () =>
-    refresh(projectKey, pagesKey, pageKey),
-  )
+  const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing')
   return { importPages: run, importing: busy }
 }
 

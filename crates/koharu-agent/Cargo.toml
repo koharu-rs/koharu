@@ -30,6 +30,7 @@ rig-memory = { workspace = true }
 rmcp = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
+specta = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

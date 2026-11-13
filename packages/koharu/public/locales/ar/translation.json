@@ -12,43 +12,26 @@
     "downloadingFiles_one": "جارٍ تنزيل {{count}} ملف",
     "downloadingFiles_other": "جارٍ تنزيل {{count}} من الملفات",
     "modelDownload": "تنزيل النموذج",
-    "pageLabel": "الصفحة {{number}}: {{label}}",
     "processing": "قيد المعالجة",
     "processingFailed": "فشلت المعالجة.",
     "stop": "إيقاف",
     "title": "النشاط"
   },
   "agent": {
-    "account": "حساب ChatGPT",
     "applying": "جارٍ تطبيق تغييرات المشروع...",
-    "automatic": "تلقائي",
     "cancel": "إلغاء",
     "cancelled": "أُلغي.",
-    "deviceCode": "رمز الجهاز",
-    "deviceCodeHint": "تم فتح متصفحك. أدخل هذا الرمز لتفويض Koharu.",
     "emptyDescription": "اطلب من Agent فحص هذا المشروع أو ترجمته أو تعديله أو معالجته. لن يعرض صور الصفحات إلا عند الحاجة.",
     "emptyTitle": "ماذا ينبغي أن يفعل Koharu؟",
     "failed": "فشل طلب Agent.",
-    "loading": "جارٍ تحميل Codex...",
+    "loading": "جارٍ تحميل الوكيل…",
+    "mcp": "خادم MCP",
     "message": "راسل Koharu Agent",
-    "model": "نموذج Codex",
+    "model": "النموذج",
     "placeholder": "اطلب من Koharu العمل على هذا المشروع...",
     "properties": "الخصائص",
     "reasoning": "التفكير",
-    "reasoningLevels": {
-      "high": "عالٍ",
-      "low": "منخفض",
-      "max": "الأقصى",
-      "medium": "متوسط",
-      "ultra": "فائق",
-      "xhigh": "عالٍ جدًا"
-    },
     "send": "إرسال",
-    "signIn": "تسجيل الدخول عبر Codex",
-    "signInDescription": "سجّل الدخول باستخدام اشتراك ChatGPT. يستخدم Koharu مصادقة رمز الجهاز ولا يطلب API key أبدًا.",
-    "signInTitle": "ربط Codex",
-    "signOut": "تسجيل الخروج",
-    "signingIn": "في انتظار تسجيل الدخول...",
     "thinking": "جارٍ التفكير...",
     "title": "Agent",
     "working": "جارٍ العمل..."
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "اختر صفحة للبدء.",
     "fit": "ملاءمة النافذة",
-    "surface": "لوحة Koharu",
-    "unavailable": "لوحة WebGPU غير متاحة"
+    "notice": {
+      "eraser_needs_raster": "حدد طبقة نقطية للمسح."
+    },
+    "typeText": "اكتب النص"
   },
   "colorPicker": {
     "brushColor": "لون الفرشاة",
@@ -69,12 +54,35 @@
     "back": "رجوع",
     "cancel": "إلغاء",
     "clearSearch": "مسح البحث",
-    "loading": "جارٍ التحميل…",
-    "reset": "إعادة ضبط"
+    "loading": "جارٍ التحميل…"
   },
   "errors": {
     "fatalTitle": "تعذّر على Koharu المتابعة",
     "tryAgain": "أعد المحاولة"
+  },
+  "feedback": {
+    "addScreenshot": "إضافة لقطة شاشة",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "email": "البريد الإلكتروني",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "يُرجى وصف ما حدث.",
+    "failed": "تعذّر إرسال الملاحظات. يُرجى المحاولة مرة أخرى.",
+    "forbidden": "لا يمكن إرسال الملاحظات من هذا الإصدار.",
+    "hide": "إخفاء",
+    "highlight": "تمييز",
+    "message": "الوصف",
+    "messagePlaceholder": "ماذا حدث؟ وماذا كنت تتوقع؟",
+    "name": "الاسم",
+    "namePlaceholder": "اسمك",
+    "noClient": "الملاحظات غير متاحة حاليًا.",
+    "removeHighlight": "إزالة",
+    "removeScreenshot": "إزالة لقطة الشاشة",
+    "required": "(مطلوب)",
+    "sent": "شكرًا على ملاحظاتك!",
+    "submit": "إرسال",
+    "timeout": "انتهت مهلة الإرسال. يُرجى المحاولة مرة أخرى.",
+    "title": "إرسال ملاحظات"
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} مرشّحات نشطة",
@@ -165,13 +173,11 @@
     "alignTop": "محاذاة للأعلى",
     "alignment": "المحاذاة",
     "auto": "تلقائي",
-    "autoFit": "ملاءمة تلقائية",
     "border": "الحدود",
     "borderColor": "لون الحدود",
     "borderWidth": "عرض الحدود",
     "chooseFontSize": "اختر حجم الخط",
     "color": "اللون",
-    "customFrame": "إطار مخصّص",
     "decreaseBorderWidth": "تقليل عرض الحدود",
     "direction": "الاتجاه",
     "font": "الخط",
@@ -186,17 +192,15 @@
     "horizontal": "أفقي",
     "increaseBorderWidth": "زيادة عرض الحدود",
     "opacity": "العتامة",
-    "placement": "الموضع",
-    "resetAutoFit": "إعادة إلى الملاءمة التلقائية",
     "selectPage": "اختر صفحة لعرض طبقاتها.",
     "size": "الحجم",
     "source": "النص المصدر",
     "style": "النمط",
+    "text": "نص",
     "textColor": "لون النص",
     "textDirection": "اتجاه النص",
     "translation": "الترجمة",
     "type": "النوع",
-    "unplaced": "غير موضوع",
     "vertical": "عمودي",
     "weight": "الوزن",
     "width": "العرض"
@@ -220,28 +224,30 @@
     "edit": "تعديل {{name}}",
     "empty": "لا توجد طبقات في هذه الصفحة.",
     "hide": "إخفاء {{name}}",
-    "imageName": "صورة {{index}}",
     "kinds": {
-      "cleanup": "تنظيف",
-      "dialogue": "حوار",
-      "freeText": "نص حر",
+      "balloon": "فقاعة",
+      "block": "كتلة نص",
       "group": "مجموعة",
       "image": "صورة",
-      "paint": "طلاء",
-      "text": "نص",
-      "textGroup": "مجموعة نص"
+      "mask": "قناع",
+      "panel": "إطار",
+      "raster": "نقطية",
+      "shape": "شكل",
+      "text": "نص"
     },
+    "lock": "قفل {{name}}",
     "locked": "مقفل",
-    "lockedLabel": "{{name}} مقفل",
     "moveDown": "نقل {{name}} لأسفل",
     "moveUp": "نقل {{name}} لأعلى",
     "opacityLabel": "عتامة {{name}}",
-    "originalArtwork": "الرسم الأصلي",
     "show": "إظهار {{name}}",
     "sourceLabel": "النص المصدر لـ {{name}}",
+    "textLabel": "نص {{name}}",
     "textName": "نص {{index}}",
     "title": "الطبقات",
-    "translationLabel": "ترجمة {{name}}"
+    "translationLabel": "ترجمة {{name}}",
+    "unlock": "إلغاء قفل {{name}}",
+    "unlocked": "غير مقفل"
   },
   "menu": {
     "about": "عن البرنامج",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "تحرير",
     "export": "تصدير المشروع",
+    "feedback": "إرسال ملاحظات",
     "file": "ملف",
     "fit": "ملاءمة النافذة",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "عنوان URL الأساسي",
     "default": "افتراضي",
-    "instructions": "التعليمات",
     "targetLanguage": "اللغة المستهدفة"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "مجلد…",
     "importing": "جارٍ استيراد الصفحات…",
     "importingAction": "جارٍ الاستيراد…",
-    "layerCount": "{{count}} من الطبقات",
-    "layerCount_one": "{{count}} طبقة",
-    "layerCount_other": "{{count}} من الطبقات",
     "noImage": "لا توجد صورة",
     "noResults": "لا توجد صفحات تطابق هذا المرشّح.",
-    "pageName": "اسم الصفحة",
+    "pageNumber": "الصفحة {{number}}",
     "pages": "الصفحات",
-    "rename": "إعادة تسمية",
-    "renameDescription": "اختر اسمًا جديدًا لهذه الصفحة.",
-    "renameTitle": "إعادة تسمية الصفحة",
     "selected": "{{count}} محدّد"
   },
   "outputPicker": {
-    "instructions": "تعليمات الترجمة",
-    "instructionsPlaceholder": "إرشادات اختيارية للنبرة والأسماء والتنسيق.",
     "targetLanguage": "اللغة المستهدفة",
     "title": "مخرجات الترجمة"
   },
   "phase": {
-    "detection": "الكشف",
-    "inpainting": "الترميم",
-    "ocr": "OCR",
-    "translation": "الترجمة"
+    "detect": "الكشف",
+    "inpaint": "الترميم",
+    "recognize": "OCR",
+    "translate": "الترجمة"
   },
   "phaseDescription": {
-    "detection": "تحديد موقع النص على الصفحة.",
-    "inpainting": "إعادة بناء الرسم خلف النص المُزال.",
-    "ocr": "قراءة النص داخل كل منطقة.",
-    "translation": "تحويل النص المصدر إلى اللغة المستهدفة."
+    "detect": "تحديد موقع النص على الصفحة.",
+    "inpaint": "إعادة بناء الرسم خلف النص المُزال.",
+    "recognize": "قراءة النص داخل كل منطقة.",
+    "translate": "تحويل النص المصدر إلى اللغة المستهدفة."
   },
-  "providerDescriptions": {
-    "caiyun": "واجهة ترجمة Caiyun.",
-    "claude": "نماذج Anthropic Claude.",
-    "deepl": "واجهة ترجمة DeepL.",
-    "deepseek": "نماذج DeepSeek اللغوية.",
-    "gemini": "نماذج Google Gemini.",
-    "google-cloud-translation": "واجهة Google Cloud Translation.",
-    "grok": "نماذج xAI Grok اللغوية.",
-    "lm-studio": "نماذج يقدّمها LM Studio.",
-    "local": "نماذج تعمل على هذا الجهاز.",
-    "minimax": "نماذج MiniMax اللغوية.",
-    "openai": "نماذج OpenAI اللغوية.",
-    "openai-compatible": "أي خادم يوفّر واجهة متوافقة مع OpenAI.",
-    "openrouter": "نماذج تُوجَّه عبر OpenRouter."
+  "psd": {
+    "background": "الخلفية",
+    "cleanup": "تنظيف",
+    "outline": "المخطط"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "استخدام العملية",
-    "ram": "RAM",
-    "summary": "RAM {{ram}}%، CPU {{cpu}}%",
-    "title": "موارد النظام",
-    "tooltip": "RAM {{ramUsed}} من {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "{{used}} من {{total}} مستخدم",
-    "vramUnavailable": "غير متاح",
-    "vramValue": "{{value}} VRAM"
+  "reasoning": {
+    "high": "عالٍ",
+    "low": "منخفض",
+    "max": "الأقصى",
+    "medium": "متوسط",
+    "minimal": "أدنى",
+    "xhigh": "عالٍ جدًا"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "المظهر"
     },
     "backToEditor": "العودة إلى المحرّر",
-    "generation": {
-      "description": "اضبط طريقة توليد النماذج اللغوية للنص المترجم.",
-      "enableReasoning": "تفعيل التفكير",
-      "frequencyPenalty": "Frequency penalty",
-      "maxTokens": "Maximum tokens",
-      "minP": "Min P",
-      "presencePenalty": "Presence penalty",
-      "repeatPenalty": "Repeat penalty",
-      "sampling": "أخذ العينات",
-      "samplingDescription": "تحكّم في كيفية اختيار النموذج للنص المولّد وتنويعه.",
-      "temperature": "Temperature",
-      "reasoning": "التفكير",
-      "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
-      "title": "التوليد",
-      "topK": "Top K",
-      "topP": "Top P",
-      "vision": "الرؤية",
-      "visionDescription": "تزويد النموذج اللغوي بصور الصفحات أثناء الترجمة."
-    },
     "loading": "جارٍ تحميل التفضيلات…",
     "pipeline": {
       "description": "اختر النماذج والخيارات المستخدمة لمعالجة كل صفحة.",
       "modelLabel": "نموذج {{stage}}",
       "options": {
         "bubbleThreshold": "عتبة الفقاعات",
-        "negativePrompt": "الطلب السلبي",
+        "onomatopoeiaThreshold": "عتبة المؤثرات الصوتية",
         "panelThreshold": "عتبة الألواح",
         "prompt": "الطلب",
         "textThreshold": "عتبة النص"
       },
       "processing": "المعالجة",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "إيجاد النصوص وفقاعات الكلام والألواح.",
           "title": "الكشف"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "إعادة بناء الرسم أسفل النص المُزال.",
           "title": "الترميم"
         },
-        "ocr": {
+        "recognize": {
           "description": "قراءة النص المصدر داخل المناطق المكتشفة.",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "الإعدادات",
     "translation": {
       "description": "اختر أي نموذج مزوّد مهيّأ، ثم طبّق مجموعة موحّدة من خيارات الترجمة والتوليد.",
-      "instructionsDescription": "إرشادات الأسماء أو النبرة أو المصطلحات أو التنسيق.",
-      "instructionsLabel": "تعليمات الترجمة",
-      "instructionsPlaceholder": "إرشادات اختيارية على مستوى المشروع",
       "model": "النموذج",
       "modelDescription": "تشير تسميات المزوّد إلى مكان تشغيل كل نموذج؛ وتُهيَّأ الاتصالات بشكل منفصل.",
-      "modelQuantization": "تكميم النموذج",
       "output": "الإخراج",
-      "quantization": "التكميم",
-      "quantizationDescription": "تستخدم الصيغ الأصغر ذاكرة أقل، مع مقايضة في الجودة عادةً.",
-      "selectQuantization": "اختر تكميمًا",
+      "prompt": "موجّه النظام",
+      "promptDescription": "تعليمات لنموذج الترجمة؛ يُستبدل {target} باللغة الهدف.",
+      "promptNeedsTarget": "يجب أن يتضمن الموجّه {target}.",
+      "reasoning": "التفكير",
+      "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
       "targetLanguageDescription": "اختر اللغة التي تُترجم إليها النصوص.",
       "title": "الترجمة",
       "translationModel": "نموذج الترجمة",
-      "translationModelDescription": "اختر النموذج المستخدم لترجمة النصوص."
+      "translationModelDescription": "اختر النموذج المستخدم لترجمة النصوص.",
+      "vision": "الرؤية",
+      "visionDescription": "تزويد النموذج اللغوي بصور الصفحات أثناء الترجمة."
     },
     "typesetting": {
       "addFamily": "إضافة عائلة خطوط",

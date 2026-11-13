@@ -20,7 +20,7 @@ futures = { workspace = true }
 http = { workspace = true }
 indoc = { workspace = true }
 koharu-config = { workspace = true }
-koharu-llama = { workspace = true, features = ["llguidance", "mtmd"] }
+koharu-llama = { workspace = true }
 koharu-llama-sys = { workspace = true }
 koharu-runtime = { workspace = true }
 llguidance = { workspace = true }
@@ -34,6 +34,7 @@ rig-reqwest = { workspace = true }
 schemars = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
+specta = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

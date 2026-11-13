@@ -82,11 +82,19 @@ Each kind is placed the way its PSD record places it [PSD spec]:
 - Rasters and masks sit at an integer `offset`, as a PSD layer record stores
   its bounds and Krita stores each layer's `x` and `y` [Krita file]. Moving
   one changes its offset and never resamples its pixels.
-- A block's mask and clean-up sit on the page's own grid, with no offset,
-  because they line up with the background.
+- A block's mask and clean-up start on the page's own grid, at no offset,
+  because they line up with the background, and move as a raster does.
 - Shapes and the outlines of panels and balloons are drawn in page
   coordinates, as PSD stores path points against the document size.
 - Groups have no placement of their own, as PSD groups have none.
+
+`transform_layer` puts one page-space affine on a layer by its kind, as
+Photoshop's Free Transform transforms an image, a shape, or a path by what it
+is [Photoshop transform]: a text's, an image's, or a block's translation's
+`transform` (its source's without one) is multiplied by it, and a shape's path
+or an outline is mapped through it. A raster, a mask, and a block's clean-up or
+mask take only a whole-pixel translation, since pixels never resample, and a
+group fails, having no placement to change.
 
 ### Text
 
@@ -466,6 +474,9 @@ This section is implementation, not schema.
 - **Pixel hashes.** `Session::tiles_hash` hashes a picture's tile positions and the
   BLAKE3 hashes of their bytes, so the renderer can tell that pixels changed
   without decoding them.
+- **Pixels.** `Session::pixels` reads a rectangle of a picture back in its own
+  coordinates and format, zero where no tile is stored: what `write_pixels`
+  wrote, as the canvas's brush reads under a stroke.
 - **Change** names, by id, the pages and layers an edit, undo, or redo touched,
   and what an edit created, from the difference between the two projects.
 - **Opening** reads every row into its types, so a value of the wrong shape, a
@@ -551,6 +562,7 @@ Read in October and November 2026.
 [Lightroom masking]: https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html
 [InDesign auto-size]: https://web.archive.org/web/20260209035437/https://helpx.adobe.com/indesign/using/text-frame-fitting.html
 [InDesign alignment]: https://helpx.adobe.com/indesign/using/aligning-text.html
+[Photoshop transform]: https://helpx.adobe.com/photoshop/using/free-transformations-images-shapes-paths.html
 [Photoshop leading]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/adjust-line-and-character-spacing.html
 [Photoshop History panel]: https://helpx.adobe.com/photoshop/desktop/get-started/set-up-toolbars-panels/history-panel-overview.html
 [CSP pages]: https://help.clip-studio.com/en-us/manual_en/570_pages/Management_Files_and_Page_Files.htm

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
-import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
+import { pageKey, projectKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type ProjectSummary } from '@koharu/bridge/protocol'
 import {
@@ -52,7 +52,7 @@ export function StartView() {
     setBusy('create')
     try {
       await call(commands.createProject, projectName)
-      await refresh(projectKey, pagesKey, pageKey)
+      await refresh(projectKey, pageKey)
       setName('')
     } finally {
       setBusy(null)
@@ -64,7 +64,7 @@ export function StartView() {
     setBusy(projectName)
     try {
       await call(commands.openProject, projectName)
-      await refresh(projectKey, pagesKey, pageKey)
+      await refresh(projectKey, pageKey)
     } finally {
       setBusy(null)
     }

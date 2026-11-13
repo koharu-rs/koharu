@@ -86,6 +86,7 @@ impl From<kurbo::Affine> for Transform {
 /// SVG path data.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(try_from = "String")]
+#[specta(type = String)]
 pub struct Path(String);
 
 impl TryFrom<String> for Path {
@@ -262,6 +263,7 @@ pub enum Frame {
         /// The air between the text and the path in ems, as CSS's
         /// `shape-padding: 1em`, so it shrinks with the text.
         #[serde(default = "one_em", deserialize_with = "inset")]
+        #[specta(type = f64)]
         inset: f64,
     },
 }

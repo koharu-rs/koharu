@@ -12,43 +12,26 @@
     "downloadingFiles_one": "{{count}} dosya indiriliyor",
     "downloadingFiles_other": "{{count}} dosya indiriliyor",
     "modelDownload": "Model indirme",
-    "pageLabel": "Sayfa {{number}}: {{label}}",
     "processing": "İşleniyor",
     "processingFailed": "İşleme başarısız oldu.",
     "stop": "Durdur",
     "title": "Etkinlik"
   },
   "agent": {
-    "account": "ChatGPT hesabı",
     "applying": "Proje değişiklikleri uygulanıyor…",
-    "automatic": "Otomatik",
     "cancel": "İptal",
     "cancelled": "İptal edildi.",
-    "deviceCode": "Cihaz kodu",
-    "deviceCodeHint": "Tarayıcınız açıldı. Koharu uygulamasını yetkilendirmek için bu kodu girin.",
     "emptyDescription": "Ajandan bu projeyi incelemesini, çevirmesini, düzenlemesini veya işlemesini isteyin. Sayfa görüntülerini yalnızca gerektiğinde görür.",
     "emptyTitle": "Koharu ne yapsın?",
     "failed": "Ajan isteği başarısız oldu.",
-    "loading": "Codex yükleniyor…",
+    "loading": "Ajan yükleniyor…",
+    "mcp": "MCP sunucusu",
     "message": "Koharu Ajanına mesaj gönder",
-    "model": "Codex modeli",
+    "model": "Model",
     "placeholder": "Koharu’dan bu proje üzerinde çalışmasını isteyin…",
     "properties": "Özellikler",
     "reasoning": "Akıl yürütme",
-    "reasoningLevels": {
-      "high": "Yüksek",
-      "low": "Düşük",
-      "max": "Maksimum",
-      "medium": "Orta",
-      "ultra": "Ultra",
-      "xhigh": "Çok yüksek"
-    },
     "send": "Gönder",
-    "signIn": "Codex ile oturum aç",
-    "signInDescription": "ChatGPT aboneliğinizle oturum açın. Koharu cihaz kodu kimlik doğrulamasını kullanır ve hiçbir zaman API anahtarı istemez.",
-    "signInTitle": "Codex’e bağlan",
-    "signOut": "Oturumu kapat",
-    "signingIn": "Oturum açma bekleniyor…",
     "thinking": "Düşünüyor…",
     "title": "Ajan",
     "working": "Çalışıyor…"
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "Başlamak için bir sayfa seçin.",
     "fit": "Pencereye Sığdır",
-    "surface": "Koharu tuvali",
-    "unavailable": "WebGPU tuvali kullanılamıyor"
+    "notice": {
+      "eraser_needs_raster": "Silmek için bir raster katman seçin."
+    },
+    "typeText": "Metin yaz"
   },
   "colorPicker": {
     "brushColor": "Fırça rengi",
@@ -69,12 +54,35 @@
     "back": "Geri",
     "cancel": "İptal",
     "clearSearch": "Aramayı temizle",
-    "loading": "Yükleniyor…",
-    "reset": "Sıfırla"
+    "loading": "Yükleniyor…"
   },
   "errors": {
     "fatalTitle": "Koharu devam edemedi",
     "tryAgain": "Tekrar dene"
+  },
+  "feedback": {
+    "addScreenshot": "Ekran görüntüsü ekle",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "email": "E-posta",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "Lütfen ne olduğunu açıklayın.",
+    "failed": "Geri bildirim gönderilemedi. Lütfen tekrar deneyin.",
+    "forbidden": "Bu sürüm geri bildirim gönderemez.",
+    "hide": "Gizle",
+    "highlight": "Vurgula",
+    "message": "Açıklama",
+    "messagePlaceholder": "Ne oldu? Ne olmasını bekliyordunuz?",
+    "name": "Ad",
+    "namePlaceholder": "Adınız",
+    "noClient": "Geri bildirim şu anda kullanılamıyor.",
+    "removeHighlight": "Kaldır",
+    "removeScreenshot": "Ekran görüntüsünü kaldır",
+    "required": "(zorunlu)",
+    "sent": "Geri bildiriminiz için teşekkürler!",
+    "submit": "Gönder",
+    "timeout": "Gönderim zaman aşımına uğradı. Lütfen tekrar deneyin.",
+    "title": "Geri bildirim gönder"
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} etkin filtre",
@@ -165,13 +173,11 @@
     "alignTop": "Üste hizala",
     "alignment": "Hizalama",
     "auto": "Otomatik",
-    "autoFit": "Otomatik sığdır",
     "border": "Kenarlık",
     "borderColor": "Kenarlık rengi",
     "borderWidth": "Kenarlık genişliği",
     "chooseFontSize": "Yazı tipi boyutunu seç",
     "color": "Renk",
-    "customFrame": "Özel çerçeve",
     "decreaseBorderWidth": "Kenarlık genişliğini azalt",
     "direction": "Yön",
     "font": "Yazı tipi",
@@ -186,17 +192,15 @@
     "horizontal": "Yatay",
     "increaseBorderWidth": "Kenarlık genişliğini artır",
     "opacity": "Opaklık",
-    "placement": "Yerleşim",
-    "resetAutoFit": "Otomatik sığdırmaya sıfırla",
     "selectPage": "Katmanlarını incelemek için bir sayfa seçin.",
     "size": "Boyut",
     "source": "Kaynak metin",
     "style": "Stil",
+    "text": "Metin",
     "textColor": "Metin rengi",
     "textDirection": "Metin yönü",
     "translation": "Çeviri",
     "type": "Tipografi",
-    "unplaced": "Yerleştirilmedi",
     "vertical": "Dikey",
     "weight": "Kalınlık",
     "width": "Genişlik"
@@ -220,28 +224,30 @@
     "edit": "{{name}} öğesini düzenle",
     "empty": "Bu sayfada katman yok.",
     "hide": "{{name}} öğesini gizle",
-    "imageName": "Görüntü {{index}}",
     "kinds": {
-      "cleanup": "Temizleme",
-      "dialogue": "Diyalog",
-      "freeText": "Serbest metin",
+      "balloon": "Balon",
+      "block": "Metin bloğu",
       "group": "Grup",
       "image": "Görüntü",
-      "paint": "Boyama",
-      "text": "Metin",
-      "textGroup": "Metin grubu"
+      "mask": "Maske",
+      "panel": "Panel",
+      "raster": "Raster",
+      "shape": "Şekil",
+      "text": "Metin"
     },
+    "lock": "{{name}} öğesini kilitle",
     "locked": "Kilitli",
-    "lockedLabel": "{{name}} kilitli",
     "moveDown": "{{name}} öğesini aşağı taşı",
     "moveUp": "{{name}} öğesini yukarı taşı",
     "opacityLabel": "{{name}} opaklığı",
-    "originalArtwork": "Orijinal çizim",
     "show": "{{name}} öğesini göster",
     "sourceLabel": "{{name}} kaynak metni",
+    "textLabel": "{{name}} metni",
     "textName": "Metin {{index}}",
     "title": "Katmanlar",
-    "translationLabel": "{{name}} çevirisi"
+    "translationLabel": "{{name}} çevirisi",
+    "unlock": "{{name}} öğesinin kilidini aç",
+    "unlocked": "Kilitsiz"
   },
   "menu": {
     "about": "Hakkında",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "Düzenle",
     "export": "Projeyi Dışa Aktar",
+    "feedback": "Geri bildirim gönder",
     "file": "Dosya",
     "fit": "Pencereye Sığdır",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "Temel URL",
     "default": "Varsayılan",
-    "instructions": "Çeviri talimatları",
     "targetLanguage": "Hedef dil"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "Klasör…",
     "importing": "Sayfalar içe aktarılıyor…",
     "importingAction": "İçe aktarılıyor…",
-    "layerCount": "{{count}} katman",
-    "layerCount_one": "{{count}} katman",
-    "layerCount_other": "{{count}} katman",
     "noImage": "Görüntü yok",
     "noResults": "Bu filtreyle eşleşen sayfa yok.",
-    "pageName": "Sayfa adı",
+    "pageNumber": "Sayfa {{number}}",
     "pages": "Sayfalar",
-    "rename": "Yeniden adlandır",
-    "renameDescription": "Bu sayfa için yeni bir ad seçin.",
-    "renameTitle": "Sayfayı yeniden adlandır",
     "selected": "{{count}} seçili"
   },
   "outputPicker": {
-    "instructions": "Çeviri talimatları",
-    "instructionsPlaceholder": "Üslup, adlar ve biçimlendirme için isteğe bağlı yönlendirme.",
     "targetLanguage": "Hedef dil",
     "title": "Çeviri çıktısı"
   },
   "phase": {
-    "detection": "Algılama",
-    "inpainting": "Doldurma",
-    "ocr": "OCR",
-    "translation": "Çeviri"
+    "detect": "Algılama",
+    "inpaint": "Doldurma",
+    "recognize": "OCR",
+    "translate": "Çeviri"
   },
   "phaseDescription": {
-    "detection": "Sayfadaki metni bulur.",
-    "inpainting": "Metin kaldırıldıktan sonra çizimi yeniden oluşturur.",
-    "ocr": "Her bölgenin içindeki metni okur.",
-    "translation": "Kaynak metni hedef dile çevirir."
+    "detect": "Sayfadaki metni bulur.",
+    "inpaint": "Metin kaldırıldıktan sonra çizimi yeniden oluşturur.",
+    "recognize": "Her bölgenin içindeki metni okur.",
+    "translate": "Kaynak metni hedef dile çevirir."
   },
-  "providerDescriptions": {
-    "caiyun": "Caiyun çeviri API'si.",
-    "claude": "Anthropic Claude modelleri.",
-    "deepl": "DeepL çeviri API'si.",
-    "deepseek": "DeepSeek dil modelleri.",
-    "gemini": "Google Gemini modelleri.",
-    "google-cloud-translation": "Google Cloud Translation API'si.",
-    "grok": "xAI Grok dil modelleri.",
-    "lm-studio": "LM Studio tarafından sunulan modeller.",
-    "local": "Bu cihazda çalışan modeller.",
-    "minimax": "MiniMax dil modelleri.",
-    "openai": "OpenAI dil modelleri.",
-    "openai-compatible": "OpenAI uyumlu API sunan herhangi bir sunucu.",
-    "openrouter": "OpenRouter üzerinden yönlendirilen modeller."
+  "psd": {
+    "background": "Arka plan",
+    "cleanup": "Temizleme",
+    "outline": "Dış hat"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "İşlem kullanımı",
-    "ram": "RAM",
-    "summary": "RAM %{{ram}}, CPU %{{cpu}}",
-    "title": "Sistem kaynakları",
-    "tooltip": "RAM {{ramUsed}} / {{ramTotal}} · CPU %{{cpu}}",
-    "usedOfTotal": "{{total}} içinden {{used}} kullanılıyor",
-    "vramUnavailable": "Kullanılamıyor",
-    "vramValue": "{{value}} VRAM"
+  "reasoning": {
+    "high": "Yüksek",
+    "low": "Düşük",
+    "max": "Maksimum",
+    "medium": "Orta",
+    "minimal": "Minimal",
+    "xhigh": "Çok yüksek"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "Görünüm"
     },
     "backToEditor": "Düzenleyiciye dön",
-    "generation": {
-      "description": "Dil modellerinin çevrilmiş metni nasıl ürettiğini ayarlayın.",
-      "enableReasoning": "Akıl yürütmeyi etkinleştir",
-      "frequencyPenalty": "Sıklık cezası",
-      "maxTokens": "En fazla belirteç",
-      "minP": "Minimum P",
-      "presencePenalty": "Varlık cezası",
-      "repeatPenalty": "Tekrar cezası",
-      "sampling": "Örnekleme",
-      "samplingDescription": "Modelin oluşturulan metni nasıl seçip çeşitlendireceğini kontrol eder.",
-      "temperature": "Sıcaklık",
-      "reasoning": "Akıl yürütme",
-      "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
-      "title": "Üretim",
-      "topK": "İlk K",
-      "topP": "Top P",
-      "vision": "Görsel",
-      "visionDescription": "Çeviri sırasında sayfa görsellerini LLM'ye iletir."
-    },
     "loading": "Tercihler yükleniyor…",
     "pipeline": {
       "description": "Her sayfayı işlemek için kullanılan modelleri ve seçenekleri seçin.",
       "modelLabel": "{{stage}} modeli",
       "options": {
         "bubbleThreshold": "Konuşma balonu eşiği",
-        "negativePrompt": "Negatif istem",
+        "onomatopoeiaThreshold": "Ses efekti eşiği",
         "panelThreshold": "Panel eşiği",
         "prompt": "İstem",
         "textThreshold": "Metin eşiği"
       },
       "processing": "İşleniyor",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "Metinleri, konuşma balonlarını ve panelleri bulur.",
           "title": "Algılama"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "Kaldırılan metnin altındaki çizimi yeniden oluşturur.",
           "title": "Doldurma"
         },
-        "ocr": {
+        "recognize": {
           "description": "Algılanan bölgelerdeki kaynak metni okur.",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "Ayarlar",
     "translation": {
       "description": "Yapılandırılmış bir sağlayıcı modeli seçin ve ortak çeviri ile üretim seçeneklerini uygulayın.",
-      "instructionsDescription": "Adlar, ton, terminoloji veya biçimlendirme yönergeleri.",
-      "instructionsLabel": "Çeviri talimatları",
-      "instructionsPlaceholder": "Proje genelinde isteğe bağlı yönergeler",
       "model": "Model",
       "modelDescription": "Sağlayıcı etiketleri her modelin nerede çalıştığını gösterir; bağlantılar ayrı yapılandırılır.",
-      "modelQuantization": "Model niceleme",
       "output": "Çıktı",
-      "quantization": "Niceleme",
-      "quantizationDescription": "Daha küçük biçimler daha az bellek kullanır, ancak genellikle kalite düşer.",
-      "selectQuantization": "Niceleme seç",
+      "prompt": "Sistem istemi",
+      "promptDescription": "Çeviri modeline verilen talimatlar; {target} hedef dille değiştirilir.",
+      "promptNeedsTarget": "İstem {target} içermelidir.",
+      "reasoning": "Akıl yürütme",
+      "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
       "targetLanguageDescription": "Metnin çevrileceği dili seçin.",
       "title": "Çeviri",
       "translationModel": "Çeviri modeli",
-      "translationModelDescription": "Metni çevirmek için kullanılacak modeli seçin."
+      "translationModelDescription": "Metni çevirmek için kullanılacak modeli seçin.",
+      "vision": "Görsel",
+      "visionDescription": "Çeviri sırasında sayfa görsellerini LLM'ye iletir."
     },
     "typesetting": {
       "addFamily": "Yazı tipi ailesi ekle",

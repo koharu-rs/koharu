@@ -60,25 +60,15 @@ describe('editor localization', () => {
     }
   })
 
-  it('orders language choices by their displayed name without mutating the source', () => {
-    const languages = [
-      { tag: 'ja-JP', name: 'Japanese' },
-      { tag: 'zh-CN', name: 'Simplified Chinese' },
-      { tag: 'en-US', name: 'English' },
-      { tag: 'de-DE', name: 'German' },
-    ]
-
-    expect(orderedLanguageChoices(languages).map((language) => language.name)).toEqual([
-      'English',
-      'German',
-      'Japanese',
-      'Simplified Chinese',
-    ])
-    expect(languages.map((language) => language.name)).toEqual([
-      'Japanese',
-      'Simplified Chinese',
-      'English',
-      'German',
-    ])
+  it('names the target languages in the interface language, in its order', () => {
+    const names = orderedLanguageChoices('en-US').map((language) => language.name)
+    expect(names).toContain('English')
+    expect(names).toContain('Japanese')
+    expect(names).toEqual(
+      [...names].sort((left, right) =>
+        left.localeCompare(right, 'en-US', { numeric: true, sensitivity: 'base' }),
+      ),
+    )
+    expect(orderedLanguageChoices('ja-JP').map((language) => language.name)).toContain('英語')
   })
 })

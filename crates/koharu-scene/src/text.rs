@@ -65,6 +65,7 @@ pub struct TextStyle {
 /// text. Deserializes from a plain string too.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(from = "RichTextInput")]
+#[specta(type = Vec<Span>)]
 pub struct RichText(pub Vec<Span>);
 
 /// A string with its character marks.

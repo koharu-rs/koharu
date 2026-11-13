@@ -23,6 +23,7 @@ pub struct Request {
 /// names, replacing what's there, and never a stage it isn't given.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(specta::Type)]
 pub enum Target {
     /// Every page.
     Project,
@@ -58,6 +59,7 @@ pub enum Target {
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
+#[derive(specta::Type)]
 pub enum Stage {
     Detect,
     Recognize,
@@ -67,7 +69,7 @@ pub enum Stage {
 
 /// A painted area of a page: a byte a pixel over `rect`, in page pixels,
 /// painted where it isn't 0.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, specta::Type)]
 pub struct Area {
     pub rect: Rect,
     pub pixels: Vec<u8>,

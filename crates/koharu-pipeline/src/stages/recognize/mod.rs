@@ -17,6 +17,7 @@ use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(specta::Type)]
 pub struct RecognizerConfig {
     pub model: Recognizer,
 }

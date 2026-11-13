@@ -17,6 +17,16 @@
         "typescript": "^7.0.2",
       },
     },
+    "packages/bridge": {
+      "name": "@koharu/bridge",
+      "version": "0.1.0",
+      "dependencies": {
+        "@tauri-apps/api": "3.0.0-alpha.3",
+      },
+      "devDependencies": {
+        "typescript": "^7.0.2",
+      },
+    },
     "packages/docs": {
       "name": "@koharu/docs",
       "devDependencies": {
@@ -28,6 +38,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@koharu/ui": "workspace:*",
+        "@sentry/core": "^11.11.0",
         "@sentry/nextjs": "^11.11.0",
         "@tanstack/react-query": "^5.107.1",
         "@tanstack/react-virtual": "^3.14.26",
@@ -356,6 +367,8 @@
     "@jsep-plugin/regex": ["@jsep-plugin/regex@1.1.0", "", { "peerDependencies": { "jsep": "^0.4.0||^1.0.0" } }, "sha512-2Vkbda+XRjK6VTI6Lrh0sNBuMT8mZ51EhqMvO+V2rSdmqjs7NAGssxPZfkL23EFzYfSrvxyd1ZjOdqPQMM50og=="],
 
     "@koharu/app": ["@koharu/app@workspace:packages/koharu"],
+
+    "@koharu/bridge": ["@koharu/bridge@workspace:packages/bridge"],
 
     "@koharu/docs": ["@koharu/docs@workspace:packages/docs"],
 

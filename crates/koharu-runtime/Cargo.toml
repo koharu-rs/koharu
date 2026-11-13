@@ -27,6 +27,7 @@ koharu-torch-sys = { workspace = true }
 libloading = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+specta = { workspace = true }
 strum = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }

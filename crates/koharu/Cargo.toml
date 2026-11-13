@@ -14,9 +14,9 @@ license.workspace = true
 
 [dependencies]
 clap = { workspace = true }
-console = { workspace = true }
-koharu-app = { workspace = true }
-log = { workspace = true }
+koharu-config = { workspace = true }
+koharu-desktop = { workspace = true }
+koharu-sentry = { workspace = true }
 rfd = { workspace = true }
 sentry = { workspace = true }
 serde_json = { workspace = true }
@@ -28,9 +28,10 @@ tauri-runtime-cef = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = ["Win32_System_Console"] }
+windows = { workspace = true }
 
 [build-dependencies]
 tauri-build = { workspace = true }

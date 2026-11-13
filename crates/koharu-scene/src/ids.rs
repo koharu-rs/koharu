@@ -29,6 +29,7 @@ pub struct LayerId(pub Uuid);
 /// same edit.
 #[derive(Clone, Debug, Display, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(try_from = "String")]
+#[specta(type = String)]
 pub struct Ref(String);
 
 impl TryFrom<String> for Ref {

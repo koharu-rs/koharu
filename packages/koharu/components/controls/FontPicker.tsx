@@ -87,7 +87,7 @@ export function FontPicker({
     return orderedFamilies.filter((family) => {
       const matchesQuery =
         !normalized ||
-        [family.name, ...family.faces.map((face) => face.postscript_name)].some((name) =>
+        [family.name, ...family.faces.map((face) => face.post_script_name)].some((name) =>
           normalizeFontName(name).includes(normalized),
         )
       const matchesSource = !filters.source || family.sources.includes(filters.source)

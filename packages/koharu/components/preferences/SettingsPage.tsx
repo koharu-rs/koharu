@@ -23,17 +23,15 @@ import {
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
 import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
-import { TranslationPreferences } from '@/components/preferences/TranslationPreferences'
-import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
-import { refreshPreferences, refreshTranslationModels, savePreferences } from '@/lib/backend'
-import { supportedLanguages } from '@/lib/i18n'
-import { receivePreferences, useKoharuStore, type ShortcutAction } from '@/lib/store'
 import {
-  type PipelineConfig,
-  type Preferences,
-  type ProviderPreferences as ProviderSettings,
-  type TypesettingConfig,
-} from '@koharu/bridge/protocol'
+  promptNamesTarget,
+  TranslationPreferences,
+} from '@/components/preferences/TranslationPreferences'
+import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
+import { refreshModels, refreshPreferences, savePreferences } from '@/lib/backend'
+import { supportedLanguages } from '@/lib/i18n'
+import { useKoharuStore, type ShortcutAction } from '@/lib/store'
+import type { Preferences } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
@@ -60,96 +58,47 @@ export function SettingsPage() {
   const open = useKoharuStore((state) => state.settingsOpen)
   const setOpen = useKoharuStore((state) => state.setSettingsOpen)
   const preferences = useKoharuStore((state) => state.preferences)
-  const translationModels = useKoharuStore((state) => state.translationModels)
+  const models = useKoharuStore((state) => state.models)
   const [tab, setTab] = useState<Tab>('appearance')
-  const [pipeline, setPipeline] = useState<PipelineConfig | null>(preferences?.pipeline ?? null)
-  const [providers, setProviders] = useState<ProviderSettings | null>(
-    preferences?.providers ?? null,
-  )
-  const [typesetting, setTypesetting] = useState<TypesettingConfig | null>(
-    preferences?.typesetting ?? null,
-  )
-  const translation = pipeline?.translation ?? null
+  const [draft, setDraft] = useState<Preferences | null>(preferences)
   const lastSaved = useRef<string | null>(null)
-  const lastSavedProviders = useRef<string | null>(null)
-  const saveGeneration = useRef(0)
-  const saveQueue = useRef<Promise<void>>(Promise.resolve())
-  const lastPending = useRef<{ serialized: string; promise: Promise<Preferences> } | null>(null)
-  const currentDraft = useRef<string | null>(null)
-  currentDraft.current =
-    pipeline && providers && typesetting ? JSON.stringify([pipeline, providers, typesetting]) : null
+  const pending = useRef<Promise<unknown>>(Promise.resolve())
 
-  const saveDraft = useCallback(
-    async (
-      pipeline: PipelineConfig,
-      providers: ProviderSettings,
-      typesetting: TypesettingConfig,
-    ) => {
-      const serialized = JSON.stringify([pipeline, providers, typesetting])
-      if (serialized === lastSaved.current) {
-        const pending = lastPending.current
-        if (pending?.serialized === serialized) await pending.promise
-        return
-      }
-      lastSaved.current = serialized
-      const serializedProviders = JSON.stringify(providers)
-      const providersChanged = serializedProviders !== lastSavedProviders.current
-      const generation = ++saveGeneration.current
-      const pending = saveQueue.current
-        .catch(() => undefined)
-        .then(() => savePreferences(pipeline, providers, typesetting))
-      lastPending.current = { serialized, promise: pending }
-      saveQueue.current = pending.then(
-        () => undefined,
-        () => undefined,
-      )
-      let saved: Preferences
-      try {
-        saved = await pending
-      } catch (error) {
-        if (lastSaved.current === serialized) lastSaved.current = null
-        throw error
-      }
-      if (generation !== saveGeneration.current || currentDraft.current !== serialized) return
-      receivePreferences(saved)
-      if (providersChanged) {
-        lastSavedProviders.current = serializedProviders
-        void refreshTranslationModels(true).catch(() => undefined)
-      }
-    },
-    [],
-  )
+  // A draft the backend would refuse waits for its fix instead of failing a save per keystroke.
+  const saveDraft = useCallback((next: Preferences) => {
+    const serialized = JSON.stringify(next)
+    if (serialized === lastSaved.current || !promptNamesTarget(next.pipeline.translator ?? {})) {
+      return pending.current
+    }
+    lastSaved.current = serialized
+    pending.current = savePreferences(next).catch((error: unknown) => {
+      if (lastSaved.current === serialized) lastSaved.current = null
+      throw error
+    })
+    return pending.current
+  }, [])
 
   useEffect(() => {
     if (!open) return
     void refreshPreferences().catch(() => undefined)
-    void refreshTranslationModels().catch(() => undefined)
+    void refreshModels().catch(() => undefined)
   }, [open])
 
   useEffect(() => {
-    if (!open) return
-    setPipeline(preferences?.pipeline ?? null)
-    setProviders(preferences?.providers ?? null)
-    setTypesetting(preferences?.typesetting ?? null)
-    if (preferences) {
-      lastSaved.current = JSON.stringify([
-        preferences.pipeline,
-        preferences.providers,
-        preferences.typesetting,
-      ])
-      lastSavedProviders.current = JSON.stringify(preferences.providers)
-    }
+    if (!open || !preferences) return
+    const serialized = JSON.stringify(preferences)
+    // The file's state replaces the draft only when it isn't this draft's own save coming back.
+    if (serialized === lastSaved.current) return
+    lastSaved.current = serialized
+    setDraft(preferences)
   }, [open, preferences])
 
   useEffect(() => {
-    if (!open || !pipeline || !providers || !typesetting) return
-    const serialized = JSON.stringify([pipeline, providers, typesetting])
-    if (serialized === lastSaved.current) return
-    const timeout = window.setTimeout(() => {
-      void saveDraft(pipeline, providers, typesetting).catch(() => undefined)
-    }, 260)
+    if (!open || !draft) return
+    if (JSON.stringify(draft) === lastSaved.current) return
+    const timeout = window.setTimeout(() => void saveDraft(draft).catch(() => undefined), 260)
     return () => window.clearTimeout(timeout)
-  }, [open, pipeline, providers, saveDraft, typesetting])
+  }, [draft, open, saveDraft])
 
   if (!open) return null
 
@@ -161,11 +110,11 @@ export function SettingsPage() {
           variant='ghost'
           className='mb-5 h-9 justify-start gap-2 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
           onClick={() => {
-            if (!pipeline || !providers || !typesetting) {
+            if (!draft) {
               setOpen(false)
               return
             }
-            void saveDraft(pipeline, providers, typesetting)
+            void saveDraft(draft)
               .then(() => setOpen(false))
               .catch(() => undefined)
           }}
@@ -198,38 +147,34 @@ export function SettingsPage() {
         <ScrollArea className='min-h-0 flex-1'>
           <div className='mx-auto w-full max-w-4xl px-10 py-10'>
             {tab === 'appearance' && <AppearancePreferences />}
-            {tab === 'pipeline' &&
-              (pipeline ? (
-                <PipelinePreferences value={pipeline} onChange={setPipeline} />
-              ) : (
-                <LoadingPreferences />
-              ))}
-            {tab === 'providers' &&
-              (providers ? (
-                <ProviderPreferences value={providers} onChange={setProviders} />
-              ) : (
-                <LoadingPreferences />
-              ))}
-            {tab === 'translation' &&
-              (translation ? (
-                <TranslationPreferences
-                  value={translation}
-                  modelChoices={translationModels}
-                  providers={providers?.entries ?? []}
-                  languages={preferences?.languages ?? []}
-                  onChange={(translation) =>
-                    setPipeline((current) => (current ? { ...current, translation } : current))
-                  }
-                />
-              ) : (
-                <LoadingPreferences />
-              ))}
-            {tab === 'typesetting' &&
-              (typesetting ? (
-                <TypesettingPreferences value={typesetting} onChange={setTypesetting} />
-              ) : (
-                <LoadingPreferences />
-              ))}
+            {tab !== 'appearance' && tab !== 'shortcuts' && !draft && <LoadingPreferences />}
+            {tab === 'pipeline' && draft && (
+              <PipelinePreferences
+                value={draft.pipeline}
+                onChange={(pipeline) => setDraft({ ...draft, pipeline })}
+              />
+            )}
+            {tab === 'providers' && draft && (
+              <ProviderPreferences
+                value={draft.providers}
+                onChange={(providers) => setDraft({ ...draft, providers })}
+              />
+            )}
+            {tab === 'translation' && draft && (
+              <TranslationPreferences
+                value={draft.pipeline.translator ?? {}}
+                models={models}
+                onChange={(translator) =>
+                  setDraft({ ...draft, pipeline: { ...draft.pipeline, translator } })
+                }
+              />
+            )}
+            {tab === 'typesetting' && draft && (
+              <TypesettingPreferences
+                value={draft.renderer}
+                onChange={(renderer) => setDraft({ ...draft, renderer })}
+              />
+            )}
             {tab === 'shortcuts' && <ShortcutPreferences />}
           </div>
         </ScrollArea>

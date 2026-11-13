@@ -1,20 +1,19 @@
 'use client'
 
 import { Channel } from '@tauri-apps/api/core'
-import { Bot, CircleStop, LogOut, Send, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Bot, CircleStop, Send } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
-import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
+import { trace } from '@/lib/sentry'
+import { useKoharuStore } from '@/lib/store'
+import { modelName, REASONING } from '@/lib/translation'
 import {
   commands,
+  type AgentConfig,
+  type AgentEvent,
   type AgentStatus,
-  type Config,
-  type Event,
-  type LoginEvent,
-  type Reasoning,
-  type RunId,
 } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Button } from '@koharu/ui/components/button'
@@ -26,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@koharu/ui/components/select'
+import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
 
 interface ConversationMessage {
@@ -35,27 +35,22 @@ interface ConversationMessage {
   error?: boolean
 }
 
+/** The in-app agent's conversation about the open project, its model, and the MCP server that
+ * serves the same tools to agents in other programs. */
 export function AgentPanel() {
   const { t } = useTranslation()
   const [status, setStatus] = useState<AgentStatus | null>(null)
-  const [loginEvent, setLoginEvent] = useState<LoginEvent | null>(null)
-  const [loggingIn, setLoggingIn] = useState(false)
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [prompt, setPrompt] = useState('')
-  const [running, setRunning] = useState<RunId | null>(null)
+  const [running, setRunning] = useState<number | null>(null)
   const [activity, setActivity] = useState<string | null>(null)
+  const models = useKoharuStore((state) => state.models).filter((model) => model.tools)
 
   useEffect(() => {
     void call(commands.getAgentStatus)
       .then(setStatus)
       .catch(() => undefined)
   }, [])
-
-  const selectedModel = useMemo(
-    () =>
-      status?.models.find((model) => model.id === status.config.model) ?? status?.models[0] ?? null,
-    [status],
-  )
 
   if (!status) {
     return (
@@ -65,103 +60,73 @@ export function AgentPanel() {
     )
   }
 
-  if (!status.account) {
-    const code = loginEvent?.type === 'device_code' ? loginEvent.user_code : null
-    return (
-      <div className='flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center'>
-        <div className='grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary'>
-          <Sparkles className='size-5' />
-        </div>
-        <h3 className='mt-4 text-sm font-semibold'>{t('agent.signInTitle')}</h3>
-        <p className='mt-1 max-w-64 text-[11px] leading-5 text-muted-foreground'>
-          {t('agent.signInDescription')}
-        </p>
-        {code ? (
-          <div className='mt-4 w-full max-w-64 rounded-xl border bg-muted/40 p-3'>
-            <p className='text-[10px] text-muted-foreground'>{t('agent.deviceCode')}</p>
-            <p className='mt-1 font-mono text-lg font-semibold tracking-[0.18em] select-text'>
-              {code}
-            </p>
-            <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
-              {t('agent.deviceCodeHint')}
-            </p>
-          </div>
-        ) : null}
-        <Button className='mt-4 w-full max-w-64' disabled={loggingIn} onClick={() => void login()}>
-          {loggingIn ? t('agent.signingIn') : t('agent.signIn')}
-        </Button>
-      </div>
-    )
-  }
+  const model = status.config.model ?? null
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <div className='grid shrink-0 gap-2 border-b px-3 py-2.5'>
-        <div className='flex min-w-0 items-center gap-2'>
-          <div className='min-w-0 flex-1'>
-            <p className='truncate text-[11px] font-medium'>{status.account.email ?? 'Codex'}</p>
-            <p className='truncate text-[9px] text-muted-foreground'>
-              {status.account.plan ?? t('agent.account')}
-            </p>
-          </div>
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            aria-label={t('agent.signOut')}
-            disabled={running !== null}
-            onClick={() => void logout()}
-          >
-            <LogOut />
-          </Button>
-        </div>
         <div className='grid grid-cols-[minmax(0,1fr)_7rem] gap-1.5'>
           <Select
-            value={status.config.model ?? 'automatic'}
-            onValueChange={(model) => {
-              const selected =
-                status.models.find((candidate) => candidate.id === model) ?? status.models[0]
-              const reasoning =
-                selected &&
-                selected.reasoning.length > 0 &&
-                !selected.reasoning.includes(status.config.reasoning)
-                  ? selected.reasoning[0]
-                  : status.config.reasoning
-              void saveConfig({
-                model: model === 'automatic' ? null : model,
-                reasoning,
-              })
-            }}
+            value={model ?? ''}
+            items={Object.fromEntries(models.map((choice) => [choice.reference, choice.name]))}
+            onValueChange={(next) => next && void saveConfig({ ...status.config, model: next })}
           >
             <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.model')}>
-              <SelectValue />
+              <SelectValue placeholder={t('inference.noModel')} />
             </SelectTrigger>
             <SelectContent align='start'>
-              <SelectItem value='automatic'>{t('agent.automatic')}</SelectItem>
-              {status.models.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
-                  {model.name}
+              {models.map((choice) => (
+                <SelectItem key={choice.reference} value={choice.reference}>
+                  {choice.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select
-            value={status.config.reasoning}
+            value={status.config.reasoning ?? 'default'}
+            items={Object.fromEntries([
+              ['default', t('inference.providerDefault')],
+              ...REASONING.map((level) => [level, t(`reasoning.${level}`)]),
+            ])}
             onValueChange={(reasoning) =>
-              void saveConfig({ ...status.config, reasoning: reasoning as Reasoning })
+              reasoning &&
+              void saveConfig({
+                ...status.config,
+                reasoning: reasoning === 'default' ? null : reasoning,
+              })
             }
           >
             <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.reasoning')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent align='end'>
-              {(selectedModel?.reasoning ?? [status.config.reasoning]).map((reasoning) => (
-                <SelectItem key={reasoning} value={reasoning}>
-                  {t(`agent.reasoningLevels.${reasoning}`)}
+              <SelectItem value='default'>{t('inference.providerDefault')}</SelectItem>
+              {REASONING.map((level) => (
+                <SelectItem key={level} value={level}>
+                  {t(`reasoning.${level}`)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+        <label className='flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground'>
+          <Switch
+            size='sm'
+            checked={status.mcp !== null}
+            aria-label={t('agent.mcp')}
+            onCheckedChange={(enabled) =>
+              void call(commands.setMcp, enabled)
+                .then((mcp) => setStatus((current) => (current ? { ...current, mcp } : current)))
+                .catch(() => undefined)
+            }
+          />
+          <span className='shrink-0'>{t('agent.mcp')}</span>
+          {status.mcp && (
+            <span className='min-w-0 truncate font-mono text-foreground select-text'>
+              {status.mcp}
+            </span>
+          )}
+        </label>
       </div>
 
       <ScrollArea className='min-h-0 flex-1'>
@@ -224,14 +189,14 @@ export function AgentPanel() {
               variant='outline'
               className='h-5 max-w-44 truncate px-1.5 text-[9px] font-normal'
             >
-              {selectedModel?.name ?? t('agent.automatic')}
+              {model ? modelName(models, model) : t('inference.noModel')}
             </Badge>
-            {running ? (
+            {running !== null ? (
               <Button
                 variant='outline'
                 size='icon-sm'
                 aria-label={t('agent.cancel')}
-                onClick={() => void call(commands.cancelAgent, running).catch(() => undefined)}
+                onClick={cancel}
               >
                 <CircleStop />
               </Button>
@@ -239,7 +204,7 @@ export function AgentPanel() {
               <Button
                 size='icon-sm'
                 aria-label={t('agent.send')}
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() || !model}
                 onClick={() => void send()}
               >
                 <Send />
@@ -251,36 +216,31 @@ export function AgentPanel() {
     </div>
   )
 
-  async function login() {
-    setLoggingIn(true)
-    setLoginEvent({ type: 'progress', message: t('agent.signingIn') })
-    const channel = new Channel<LoginEvent>()
-    channel.onmessage = setLoginEvent
-    try {
-      setStatus(await call(commands.loginAgent, channel))
-      setLoginEvent(null)
-    } finally {
-      setLoggingIn(false)
-    }
-  }
-
-  async function logout() {
-    setStatus(await call(commands.logoutAgent))
-    setMessages([])
-    setActivity(null)
-  }
-
-  async function saveConfig(config: Config) {
+  async function saveConfig(config: AgentConfig) {
     const saved = await call(commands.saveAgentConfig, config)
     setStatus((current) => (current ? { ...current, config: saved } : current))
   }
 
+  function cancel() {
+    if (running === null) return
+    void call(commands.cancelAgent, running).catch(() => undefined)
+    // A cancelled run tells nothing more.
+    setRunning(null)
+    setActivity(null)
+    setMessages((current) =>
+      current.map((item, index) =>
+        index === current.length - 1 && item.role === 'assistant'
+          ? { ...item, text: item.text || t('agent.cancelled') }
+          : item,
+      ),
+    )
+  }
+
   async function send() {
     const message = prompt.trim()
-    if (!message || running) return
+    if (!message || running !== null) return
     const id = crypto.randomUUID()
     const assistant = crypto.randomUUID()
-    let settled = false
     setPrompt('')
     setMessages((current) => [
       ...current,
@@ -288,52 +248,45 @@ export function AgentPanel() {
       { id: assistant, role: 'assistant', text: '' },
     ])
     setActivity(t('agent.working'))
+    // A run can end before its id arrives.
+    let settled = false
 
-    const channel = new Channel<Event>()
-    channel.onmessage = (event) => {
+    const channel = new Channel<AgentEvent>()
+    channel.onmessage = (update) => {
+      if (update.type === 'completed') {
+        settled = true
+        updateAssistant(() => update.answer)
+        setRunning(null)
+        setActivity(null)
+        return
+      }
+      if (update.type === 'failed') {
+        settled = true
+        updateAssistant(() => update.error, true)
+        setRunning(null)
+        setActivity(null)
+        return
+      }
+      const { event } = update
       switch (event.type) {
-        case 'started':
-          setRunning(event.run)
-          break
-        case 'text_delta':
+        case 'text':
           updateAssistant((text) => text + event.delta)
           break
-        case 'reasoning_delta':
+        case 'reasoning':
           setActivity(t('agent.thinking'))
           break
         case 'tool_started':
           setActivity(t('agent.applying'))
           break
         case 'tool_finished':
-          if (event.changed) void refresh(projectKey, pagesKey, pageKey)
           setActivity(t('agent.working'))
-          break
-        case 'completed':
-          settled = true
-          updateAssistant(() => event.message)
-          setRunning(null)
-          setActivity(null)
-          void refresh(projectKey, pagesKey, pageKey)
-          break
-        case 'failed':
-          settled = true
-          updateAssistant(() => event.message, true)
-          setRunning(null)
-          setActivity(null)
-          break
-        case 'cancelled':
-          settled = true
-          updateAssistant((text) => text || t('agent.cancelled'))
-          setRunning(null)
-          setActivity(null)
           break
       }
     }
     try {
-      const run = await call(commands.runAgent, message, channel)
+      const run = await call(commands.runAgent, message, channel, trace())
       if (!settled) setRunning(run)
     } catch (error) {
-      settled = true
       updateAssistant(() => (error instanceof Error ? error.message : t('agent.failed')), true)
       setRunning(null)
       setActivity(null)

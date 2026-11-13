@@ -12,43 +12,26 @@
     "downloadingFiles_one": "{{count}}개 파일 다운로드 중",
     "downloadingFiles_other": "{{count}}개 파일 다운로드 중",
     "modelDownload": "모델 다운로드",
-    "pageLabel": "{{number}}페이지: {{label}}",
     "processing": "처리 중",
     "processingFailed": "처리에 실패했습니다.",
     "stop": "중지",
     "title": "활동"
   },
   "agent": {
-    "account": "ChatGPT 계정",
     "applying": "프로젝트 변경 사항 적용 중…",
-    "automatic": "자동",
     "cancel": "취소",
     "cancelled": "취소되었습니다.",
-    "deviceCode": "기기 코드",
-    "deviceCodeHint": "브라우저가 열렸습니다. 이 코드를 입력해 Koharu를 승인하세요.",
     "emptyDescription": "에이전트에게 이 프로젝트의 검사, 번역, 편집 또는 처리를 요청하세요. 페이지 이미지는 필요할 때만 확인합니다.",
     "emptyTitle": "Koharu에게 무엇을 시킬까요?",
     "failed": "에이전트 요청에 실패했습니다.",
-    "loading": "Codex 불러오는 중…",
+    "loading": "에이전트 불러오는 중…",
+    "mcp": "MCP 서버",
     "message": "Koharu 에이전트에게 메시지 보내기",
-    "model": "Codex 모델",
+    "model": "모델",
     "placeholder": "Koharu에게 이 프로젝트 작업 요청…",
     "properties": "속성",
     "reasoning": "추론",
-    "reasoningLevels": {
-      "high": "높음",
-      "low": "낮음",
-      "max": "최대",
-      "medium": "중간",
-      "ultra": "울트라",
-      "xhigh": "매우 높음"
-    },
     "send": "보내기",
-    "signIn": "Codex로 로그인",
-    "signInDescription": "ChatGPT 구독으로 로그인하세요. Koharu는 기기 코드 인증을 사용하며 API 키를 요구하지 않습니다.",
-    "signInTitle": "Codex 연결",
-    "signOut": "로그아웃",
-    "signingIn": "로그인 대기 중…",
     "thinking": "생각 중…",
     "title": "에이전트",
     "working": "작업 중…"
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "시작할 페이지를 선택하세요.",
     "fit": "창에 맞춤",
-    "surface": "Koharu 캔버스",
-    "unavailable": "WebGPU 캔버스를 사용할 수 없습니다"
+    "notice": {
+      "eraser_needs_raster": "지우려면 래스터 레이어를 선택하세요."
+    },
+    "typeText": "텍스트 입력"
   },
   "colorPicker": {
     "brushColor": "브러시 색상",
@@ -69,12 +54,35 @@
     "back": "뒤로",
     "cancel": "취소",
     "clearSearch": "검색 지우기",
-    "loading": "불러오는 중…",
-    "reset": "초기화"
+    "loading": "불러오는 중…"
   },
   "errors": {
     "fatalTitle": "Koharu를 계속 실행할 수 없습니다",
     "tryAgain": "다시 시도"
+  },
+  "feedback": {
+    "addScreenshot": "스크린샷 추가",
+    "cancel": "취소",
+    "confirm": "확인",
+    "email": "이메일",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "무슨 일이 있었는지 설명해 주세요.",
+    "failed": "피드백을 보내지 못했습니다. 다시 시도해 주세요.",
+    "forbidden": "이 빌드에서는 피드백을 보낼 수 없습니다.",
+    "hide": "가리기",
+    "highlight": "강조",
+    "message": "설명",
+    "messagePlaceholder": "무슨 일이 있었나요? 어떻게 되기를 기대했나요?",
+    "name": "이름",
+    "namePlaceholder": "이름을 입력하세요",
+    "noClient": "지금은 피드백을 보낼 수 없습니다.",
+    "removeHighlight": "제거",
+    "removeScreenshot": "스크린샷 제거",
+    "required": "(필수)",
+    "sent": "피드백을 보내 주셔서 감사합니다!",
+    "submit": "보내기",
+    "timeout": "전송 시간이 초과되었습니다. 다시 시도해 주세요.",
+    "title": "피드백 보내기"
   },
   "fontPicker": {
     "activeFilterCount": "활성 필터 {{count}}개",
@@ -165,13 +173,11 @@
     "alignTop": "위 정렬",
     "alignment": "정렬",
     "auto": "자동",
-    "autoFit": "자동 맞춤",
     "border": "테두리",
     "borderColor": "테두리 색상",
     "borderWidth": "테두리 너비",
     "chooseFontSize": "글꼴 크기 선택",
     "color": "색상",
-    "customFrame": "사용자 지정 프레임",
     "decreaseBorderWidth": "테두리 너비 줄이기",
     "direction": "방향",
     "font": "글꼴",
@@ -186,17 +192,15 @@
     "horizontal": "가로쓰기",
     "increaseBorderWidth": "테두리 너비 늘리기",
     "opacity": "불투명도",
-    "placement": "배치",
-    "resetAutoFit": "자동 맞춤으로 초기화",
     "selectPage": "레이어를 확인할 페이지를 선택하세요.",
     "size": "크기",
     "source": "원문",
     "style": "스타일",
+    "text": "텍스트",
     "textColor": "텍스트 색상",
     "textDirection": "텍스트 방향",
     "translation": "번역",
     "type": "타이포그래피",
-    "unplaced": "배치되지 않음",
     "vertical": "세로쓰기",
     "weight": "굵기",
     "width": "너비"
@@ -220,28 +224,30 @@
     "edit": "{{name}} 편집",
     "empty": "이 페이지에는 레이어가 없습니다.",
     "hide": "{{name}} 숨기기",
-    "imageName": "이미지 {{index}}",
     "kinds": {
-      "cleanup": "정리",
-      "dialogue": "대사",
-      "freeText": "자유 텍스트",
+      "balloon": "말풍선",
+      "block": "텍스트 블록",
       "group": "그룹",
       "image": "이미지",
-      "paint": "페인트",
-      "text": "텍스트",
-      "textGroup": "텍스트 그룹"
+      "mask": "마스크",
+      "panel": "칸",
+      "raster": "래스터",
+      "shape": "도형",
+      "text": "텍스트"
     },
+    "lock": "{{name}} 잠그기",
     "locked": "잠김",
-    "lockedLabel": "{{name}}이(가) 잠겨 있습니다",
     "moveDown": "{{name}} 아래로 이동",
     "moveUp": "{{name}} 위로 이동",
     "opacityLabel": "{{name}} 불투명도",
-    "originalArtwork": "원본 아트워크",
     "show": "{{name}} 표시",
     "sourceLabel": "{{name}} 원문",
+    "textLabel": "{{name}} 텍스트",
     "textName": "텍스트 {{index}}",
     "title": "레이어",
-    "translationLabel": "{{name}} 번역"
+    "translationLabel": "{{name}} 번역",
+    "unlock": "{{name}} 잠금 해제",
+    "unlocked": "잠금 해제됨"
   },
   "menu": {
     "about": "정보",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "편집",
     "export": "프로젝트 내보내기",
+    "feedback": "피드백 보내기",
     "file": "파일",
     "fit": "창에 맞춤",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "기본 URL",
     "default": "기본값",
-    "instructions": "번역 지침",
     "targetLanguage": "대상 언어"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "폴더…",
     "importing": "페이지 가져오는 중…",
     "importingAction": "가져오는 중…",
-    "layerCount": "레이어 {{count}}개",
-    "layerCount_one": "레이어 {{count}}개",
-    "layerCount_other": "레이어 {{count}}개",
     "noImage": "이미지 없음",
     "noResults": "필터와 일치하는 페이지가 없습니다.",
-    "pageName": "페이지 이름",
+    "pageNumber": "{{number}}페이지",
     "pages": "페이지",
-    "rename": "이름 바꾸기",
-    "renameDescription": "이 페이지의 새 이름을 정하세요.",
-    "renameTitle": "페이지 이름 바꾸기",
     "selected": "{{count}}개 선택됨"
   },
   "outputPicker": {
-    "instructions": "번역 지침",
-    "instructionsPlaceholder": "말투, 이름, 서식에 관한 선택적 지침입니다.",
     "targetLanguage": "대상 언어",
     "title": "번역 출력"
   },
   "phase": {
-    "detection": "감지",
-    "inpainting": "인페인팅",
-    "ocr": "OCR",
-    "translation": "번역"
+    "detect": "감지",
+    "inpaint": "인페인팅",
+    "recognize": "OCR",
+    "translate": "번역"
   },
   "phaseDescription": {
-    "detection": "페이지의 텍스트를 찾습니다.",
-    "inpainting": "텍스트를 지운 뒤 그림을 복원합니다.",
-    "ocr": "각 영역 안의 텍스트를 읽습니다.",
-    "translation": "원문을 대상 언어로 번역합니다."
+    "detect": "페이지의 텍스트를 찾습니다.",
+    "inpaint": "텍스트를 지운 뒤 그림을 복원합니다.",
+    "recognize": "각 영역 안의 텍스트를 읽습니다.",
+    "translate": "원문을 대상 언어로 번역합니다."
   },
-  "providerDescriptions": {
-    "caiyun": "Caiyun 번역 API입니다.",
-    "claude": "Anthropic Claude 모델입니다.",
-    "deepl": "DeepL 번역 API입니다.",
-    "deepseek": "DeepSeek 언어 모델입니다.",
-    "gemini": "Google Gemini 모델입니다.",
-    "google-cloud-translation": "Google Cloud Translation API입니다.",
-    "grok": "xAI Grok 언어 모델입니다.",
-    "lm-studio": "LM Studio에서 제공되는 모델입니다.",
-    "local": "이 기기에서 실행되는 모델입니다.",
-    "minimax": "MiniMax 언어 모델입니다.",
-    "openai": "OpenAI 언어 모델입니다.",
-    "openai-compatible": "OpenAI 호환 API를 제공하는 모든 서버입니다.",
-    "openrouter": "OpenRouter를 통해 라우팅되는 모델입니다."
+  "psd": {
+    "background": "배경",
+    "cleanup": "정리",
+    "outline": "윤곽선"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "프로세스 사용률",
-    "ram": "RAM",
-    "summary": "RAM {{ram}}%, CPU {{cpu}}%",
-    "title": "시스템 리소스",
-    "tooltip": "RAM {{ramUsed}} / {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "{{total}} 중 {{used}} 사용",
-    "vramUnavailable": "사용할 수 없음",
-    "vramValue": "VRAM {{value}}"
+  "reasoning": {
+    "high": "높음",
+    "low": "낮음",
+    "max": "최대",
+    "medium": "중간",
+    "minimal": "최소",
+    "xhigh": "매우 높음"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "모양"
     },
     "backToEditor": "편집기로 돌아가기",
-    "generation": {
-      "description": "언어 모델이 번역문을 생성하는 방식을 조정합니다.",
-      "enableReasoning": "추론 활성화",
-      "frequencyPenalty": "빈도 페널티",
-      "maxTokens": "최대 토큰",
-      "minP": "최소 P",
-      "presencePenalty": "존재 페널티",
-      "repeatPenalty": "반복 페널티",
-      "sampling": "샘플링",
-      "samplingDescription": "모델이 생성할 텍스트를 선택하고 변화시키는 방식을 조절합니다.",
-      "temperature": "온도",
-      "reasoning": "추론",
-      "reasoningDescription": "번역할 때 모델 추론을 사용합니다.",
-      "title": "생성",
-      "topK": "상위 K개",
-      "topP": "Top P",
-      "vision": "비전",
-      "visionDescription": "번역할 때 LLM에 페이지 이미지를 입력합니다."
-    },
     "loading": "환경 설정 불러오는 중…",
     "pipeline": {
       "description": "각 페이지 처리에 사용할 모델과 옵션을 선택합니다.",
       "modelLabel": "{{stage}} 모델",
       "options": {
         "bubbleThreshold": "말풍선 임곗값",
-        "negativePrompt": "네거티브 프롬프트",
+        "onomatopoeiaThreshold": "효과음 임곗값",
         "panelThreshold": "패널 임곗값",
         "prompt": "프롬프트",
         "textThreshold": "텍스트 임곗값"
       },
       "processing": "처리 중",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "텍스트, 말풍선, 패널을 찾습니다.",
           "title": "감지"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "제거한 텍스트 아래의 아트워크를 복원합니다.",
           "title": "인페인팅"
         },
-        "ocr": {
+        "recognize": {
           "description": "감지된 영역 안의 원문을 읽습니다.",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "설정",
     "translation": {
       "description": "설정된 제공자의 모델을 선택하고 공통 번역 및 생성 옵션을 적용합니다.",
-      "instructionsDescription": "이름, 어조, 용어 또는 서식 지침입니다.",
-      "instructionsLabel": "번역 지침",
-      "instructionsPlaceholder": "프로젝트 전체에 적용할 선택적 지침",
       "model": "모델",
       "modelDescription": "제공자 레이블은 각 모델의 실행 위치를 나타내며 연결은 별도로 설정합니다.",
-      "modelQuantization": "모델 양자화",
       "output": "출력",
-      "quantization": "양자화",
-      "quantizationDescription": "작은 형식은 메모리를 덜 사용하지만 일반적으로 품질이 낮아질 수 있습니다.",
-      "selectQuantization": "양자화 선택",
+      "prompt": "시스템 프롬프트",
+      "promptDescription": "번역 모델에 보내는 지시입니다. {target}은(는) 대상 언어로 바뀝니다.",
+      "promptNeedsTarget": "프롬프트에 {target}을(를) 포함해야 합니다.",
+      "reasoning": "추론",
+      "reasoningDescription": "번역할 때 모델 추론을 사용합니다.",
       "targetLanguageDescription": "텍스트를 번역할 언어를 선택합니다.",
       "title": "번역",
       "translationModel": "번역 모델",
-      "translationModelDescription": "텍스트 번역에 사용할 모델을 선택합니다."
+      "translationModelDescription": "텍스트 번역에 사용할 모델을 선택합니다.",
+      "vision": "비전",
+      "visionDescription": "번역할 때 LLM에 페이지 이미지를 입력합니다."
     },
     "typesetting": {
       "addFamily": "글꼴 패밀리 추가",

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { call } from '@/lib/backend'
 import { usePages } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type Download as DownloadState, type Job } from '@koharu/bridge/protocol'
+import { commands, type Job, type Transfer } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 export function ActivityCenter() {
@@ -27,9 +27,9 @@ export function ActivityCenter() {
     (job) => job.state === 'running' || job.state === 'failed',
   )
   const runningDownloads = Object.values(downloads).filter(
-    (download) => download.state === 'running',
+    (download) => download.state === 'Running',
   )
-  const failedDownloads = Object.values(downloads).filter((download) => download.state === 'failed')
+  const failedDownloads = Object.values(downloads).filter((download) => failure(download) !== null)
   const visibleDownloads = [...runningDownloads, ...failedDownloads]
   if (activities.length === 0 && visibleJobs.length === 0 && visibleDownloads.length === 0)
     return null
@@ -72,7 +72,7 @@ export function ActivityCenter() {
   )
 }
 
-function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
+function DownloadGroup({ downloads }: { downloads: Transfer[] }) {
   const { t } = useTranslation()
   const hasKnownTotal = downloads.every((download) => download.total > 0)
   const percent = hasKnownTotal
@@ -104,21 +104,16 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
 function JobItem({ job }: { job: Job }) {
   const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissJob)
-  // The pipeline reports which page it is on; the rail has already loaded the
-  // labels, so this resolves from cache rather than fetching.
+  // Numbered by position in the rail, so the row says where in the run this is.
   const pages = usePages(job.page !== null).data
-  // Numbered by position in the rail, so the row says where in the run this
-  // is as well as which file: a scan filename alone rarely tells you.
   const pageIndex = job.page ? (pages?.findIndex((page) => page.id === job.page) ?? -1) : -1
-  const page = pageIndex >= 0 ? pages?.[pageIndex] : undefined
-  const pageLabel = page
-    ? t('activity.pageLabel', { number: pageIndex + 1, label: page.label })
-    : undefined
+  const pageLabel =
+    pageIndex >= 0 ? t('navigator.pageNumber', { number: pageIndex + 1 }) : undefined
   if (job.state === 'failed') {
     return (
       <Failure
         message={job.error || t('activity.processingFailed')}
-        onDismiss={() => dismiss(job.id)}
+        onDismiss={() => dismiss(String(job.id))}
       />
     )
   }
@@ -142,18 +137,13 @@ function JobItem({ job }: { job: Job }) {
           variant='ghost'
           className='-mt-1'
           aria-label={t('activity.stop')}
-          onClick={() => void call(commands.stopJob, job.id).catch(() => undefined)}
+          onClick={() => void call(commands.stop).catch(() => undefined)}
         >
           <Square className='size-2.5 fill-current' />
         </Button>
         {pageLabel ? (
           <p className='col-start-2 col-end-4 mt-0.5 truncate text-[10px] text-muted-foreground'>
             {pageLabel}
-          </p>
-        ) : null}
-        {job.model ? (
-          <p className='col-start-2 col-end-4 truncate text-[10px] text-muted-foreground'>
-            {job.model}
           </p>
         ) : null}
         <div className='col-start-2 col-end-4'>
@@ -164,13 +154,14 @@ function JobItem({ job }: { job: Job }) {
   )
 }
 
-function DownloadItem({ download }: { download: DownloadState }) {
+function DownloadItem({ download }: { download: Transfer }) {
   const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissDownload)
-  if (download.state === 'failed') {
+  const error = failure(download)
+  if (error !== null) {
     return (
       <Failure
-        message={download.error || t('activity.downloadFailed')}
+        message={error || t('activity.downloadFailed')}
         onDismiss={() => dismiss(download.id)}
       />
     )
@@ -227,6 +218,11 @@ function Progress({ value }: { value: number | null }) {
       />
     </div>
   )
+}
+
+/** Why a download failed, or `null` while it hasn't. */
+function failure(download: Transfer): string | null {
+  return typeof download.state === 'object' ? download.state.Failed : null
 }
 
 function progress(completed: number, total: number): number | null {

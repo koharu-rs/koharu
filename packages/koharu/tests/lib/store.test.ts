@@ -6,15 +6,14 @@ describe('editor state', () => {
   it('retains failed downloads until they are dismissed', () => {
     useKoharuStore.setState({ downloads: {} })
     receiveDownload({
-      state: 'failed',
+      state: { Failed: 'network unavailable' },
       id: 9,
       name: 'weights.bin',
       completed: 0,
       total: 0,
-      error: 'network unavailable',
     })
     expect(useKoharuStore.getState().downloads[9]).toMatchObject({
-      state: 'failed',
+      state: { Failed: 'network unavailable' },
       name: 'weights.bin',
     })
 

@@ -12,12 +12,15 @@ draw the same frame, so every export matches what the editor shows.
 | `Renderer::render(&session, page)` | A `Frame` of the page at its current revision: its background, then its layers |
 | `Renderer::lay_out(layer, &text)` | A text laid out as a render would, for one nothing draws, such as a block's source |
 | `Renderer::rasterize(&frame)` | The frame's area at one output pixel per page pixel, as a `Raster` of straight-alpha RGBA and its corner |
-| `Renderer::gpu()` | The `Gpu`, which the desktop canvas draws frames with |
+| `Renderer::gpu()` | The `Gpu`, which the desktop canvas draws frames with. It keeps the wgpu instance and adapter its device came from, which a window's surface must share |
+| `Gpu::render(scene, target, width, height)` | A vello scene onto an `Rgba8Unorm` storage texture |
+| `Gpu::read(scene, width, height)`, `Gpu::read_texture(texture)` | A scene rendered and read back, or a texture read back, as straight-alpha RGBA |
 | `Renderer::load_fonts(&frame).await` | Downloads the bundled fonts the frame's text asked for |
 | `Renderer::available_fonts().await` | Every font family, system and bundled |
 | `Renderer::font_preview(family).await` | A WebP of the family's name set in it, 96 pixels tall |
 | `Renderer::set_config(config)` | Follows a changed `[renderer]` preference, and text lays out again |
 | `Frame::draw(view)` | The `Strip`s that draw a `View`: a page rectangle at a scale |
+| `Frame::without(layers)` | The frame with those layers left out, a block's translation alone for a block, as the canvas drags them in a move |
 | `Frame::layers()` | Everything the frame drew, as `Drawn` handles, parents first |
 | `Frame::layer(id)`, `background()`, `translation(block)` | What a layer drew, a block's clean-up among them; the page's background; a block's translation |
 | `Drawn::bounds()`, `visible()`, `text()` | What it covers, whether it and everything above it show, and a text's `ResolvedText` |
@@ -39,6 +42,9 @@ edit reuses every layer the edit didn't touch. Retained content may take 2 GiB. 
 
 The scene's 64×64 tiles assemble into one image, which is drawn as 512×512 tiles at full size
 and at halved levels, so a pass draws only the tiles it meets at the level its scale needs.
+Where two tiles would meet inside an output pixel, as at the canvas's zooms, their shared edge
+moves to the pixel's nearest edge, so what's under never shows through the line between them; a
+turned image keeps its edges.
 
 ## The GPU
 

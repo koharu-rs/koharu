@@ -12,43 +12,26 @@
     "downloadingFiles_one": "正在下載 {{count}} 個檔案",
     "downloadingFiles_other": "正在下載 {{count}} 個檔案",
     "modelDownload": "模型下載",
-    "pageLabel": "第 {{number}} 頁：{{label}}",
     "processing": "正在處理",
     "processingFailed": "處理失敗。",
     "stop": "停止",
     "title": "活動"
   },
   "agent": {
-    "account": "ChatGPT 帳戶",
     "applying": "正在套用專案變更…",
-    "automatic": "自動",
     "cancel": "取消",
     "cancelled": "已取消。",
-    "deviceCode": "裝置代碼",
-    "deviceCodeHint": "瀏覽器已開啟。輸入此代碼以授權 Koharu。",
     "emptyDescription": "讓代理檢查、翻譯、編輯或處理此專案。它只會在需要時查看頁面影像。",
     "emptyTitle": "要讓 Koharu 做什麼？",
     "failed": "代理要求失敗。",
-    "loading": "正在載入 Codex…",
+    "loading": "正在載入代理…",
+    "mcp": "MCP 伺服器",
     "message": "傳送訊息給 Koharu 代理",
-    "model": "Codex 模型",
+    "model": "模型",
     "placeholder": "讓 Koharu 處理此專案…",
     "properties": "屬性",
     "reasoning": "推理",
-    "reasoningLevels": {
-      "high": "高",
-      "low": "低",
-      "max": "最大",
-      "medium": "中",
-      "ultra": "超強",
-      "xhigh": "超高"
-    },
     "send": "傳送",
-    "signIn": "使用 Codex 登入",
-    "signInDescription": "使用你的 ChatGPT 訂閱登入。Koharu 使用裝置代碼驗證，絕不會要求提供 API 金鑰。",
-    "signInTitle": "連線 Codex",
-    "signOut": "登出",
-    "signingIn": "正在等待登入…",
     "thinking": "正在思考…",
     "title": "代理",
     "working": "正在工作…"
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "請選擇頁面以開始。",
     "fit": "適應視窗",
-    "surface": "Koharu 畫布",
-    "unavailable": "WebGPU 畫布無法使用"
+    "notice": {
+      "eraser_needs_raster": "請先選擇點陣圖層再擦除。"
+    },
+    "typeText": "輸入文字"
   },
   "colorPicker": {
     "brushColor": "筆刷顏色",
@@ -69,12 +54,35 @@
     "back": "返回",
     "cancel": "取消",
     "clearSearch": "清除搜尋",
-    "loading": "正在載入…",
-    "reset": "重設"
+    "loading": "正在載入…"
   },
   "errors": {
     "fatalTitle": "Koharu 無法繼續執行",
     "tryAgain": "再試一次"
+  },
+  "feedback": {
+    "addScreenshot": "新增螢幕截圖",
+    "cancel": "取消",
+    "confirm": "確認",
+    "email": "電子郵件",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "請描述發生了什麼事。",
+    "failed": "無法傳送意見回饋，請再試一次。",
+    "forbidden": "此版本無法傳送意見回饋。",
+    "hide": "隱藏",
+    "highlight": "標示",
+    "message": "描述",
+    "messagePlaceholder": "發生了什麼事？你原本預期會怎樣？",
+    "name": "姓名",
+    "namePlaceholder": "你的名字",
+    "noClient": "目前無法使用意見回饋。",
+    "removeHighlight": "移除",
+    "removeScreenshot": "移除螢幕截圖",
+    "required": "（必填）",
+    "sent": "感謝你的意見回饋！",
+    "submit": "傳送",
+    "timeout": "傳送逾時，請再試一次。",
+    "title": "傳送意見回饋"
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} 個啟用的篩選條件",
@@ -165,13 +173,11 @@
     "alignTop": "頂端對齊",
     "alignment": "對齊",
     "auto": "自動",
-    "autoFit": "自動調整",
     "border": "描邊",
     "borderColor": "描邊色彩",
     "borderWidth": "描邊寬度",
     "chooseFontSize": "選擇字型大小",
     "color": "顏色",
-    "customFrame": "自訂框架",
     "decreaseBorderWidth": "減少描邊寬度",
     "direction": "方向",
     "font": "字體",
@@ -186,17 +192,15 @@
     "horizontal": "橫排",
     "increaseBorderWidth": "增加描邊寬度",
     "opacity": "不透明度",
-    "placement": "位置",
-    "resetAutoFit": "重設為自動符合",
     "selectPage": "選擇頁面以檢查其圖層。",
     "size": "字級",
     "source": "原文",
     "style": "樣式",
+    "text": "文字",
     "textColor": "文字色彩",
     "textDirection": "文字方向",
     "translation": "譯文",
     "type": "排版",
-    "unplaced": "未放置",
     "vertical": "直排",
     "weight": "字重",
     "width": "寬度"
@@ -220,28 +224,30 @@
     "edit": "編輯 {{name}}",
     "empty": "此頁面沒有圖層。",
     "hide": "隱藏 {{name}}",
-    "imageName": "影像 {{index}}",
     "kinds": {
-      "cleanup": "清理",
-      "dialogue": "對話",
-      "freeText": "自由文字",
+      "balloon": "對白框",
+      "block": "文字區塊",
       "group": "群組",
       "image": "影像",
-      "paint": "繪製",
-      "text": "文字",
-      "textGroup": "文字群組"
+      "mask": "遮色片",
+      "panel": "分格",
+      "raster": "點陣",
+      "shape": "形狀",
+      "text": "文字"
     },
+    "lock": "鎖定 {{name}}",
     "locked": "已鎖定",
-    "lockedLabel": "{{name}} 已鎖定",
     "moveDown": "下移 {{name}}",
     "moveUp": "上移 {{name}}",
     "opacityLabel": "{{name}} 不透明度",
-    "originalArtwork": "原始圖稿",
     "show": "顯示 {{name}}",
     "sourceLabel": "{{name}} 的原文",
+    "textLabel": "{{name}} 的文字",
     "textName": "文字 {{index}}",
     "title": "圖層",
-    "translationLabel": "{{name}} 的譯文"
+    "translationLabel": "{{name}} 的譯文",
+    "unlock": "解鎖 {{name}}",
+    "unlocked": "未鎖定"
   },
   "menu": {
     "about": "關於",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "編輯",
     "export": "匯出專案",
+    "feedback": "傳送意見回饋",
     "file": "檔案",
     "fit": "適應視窗",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "基礎 URL",
     "default": "預設",
-    "instructions": "翻譯說明",
     "targetLanguage": "目標語言"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "資料夾…",
     "importing": "正在匯入頁面…",
     "importingAction": "正在匯入…",
-    "layerCount": "{{count}} 個圖層",
-    "layerCount_one": "{{count}} 個圖層",
-    "layerCount_other": "{{count}} 個圖層",
     "noImage": "無影像",
     "noResults": "沒有符合此篩選條件的頁面。",
-    "pageName": "頁面名稱",
+    "pageNumber": "第 {{number}} 頁",
     "pages": "頁面",
-    "rename": "重新命名",
-    "renameDescription": "為此頁面選擇新名稱。",
-    "renameTitle": "重新命名頁面",
     "selected": "已選擇 {{count}}"
   },
   "outputPicker": {
-    "instructions": "翻譯指示",
-    "instructionsPlaceholder": "關於語氣、名稱和格式的選填說明。",
     "targetLanguage": "目標語言",
     "title": "翻譯輸出"
   },
   "phase": {
-    "detection": "偵測",
-    "inpainting": "修補",
-    "ocr": "OCR",
-    "translation": "翻譯"
+    "detect": "偵測",
+    "inpaint": "修補",
+    "recognize": "OCR",
+    "translate": "翻譯"
   },
   "phaseDescription": {
-    "detection": "找出頁面上的文字。",
-    "inpainting": "重建移除文字後的畫面。",
-    "ocr": "讀取每個區域中的文字。",
-    "translation": "將原文翻譯為目標語言。"
+    "detect": "找出頁面上的文字。",
+    "inpaint": "重建移除文字後的畫面。",
+    "recognize": "讀取每個區域中的文字。",
+    "translate": "將原文翻譯為目標語言。"
   },
-  "providerDescriptions": {
-    "caiyun": "Caiyun 翻譯 API。",
-    "claude": "Anthropic Claude 模型。",
-    "deepl": "DeepL 翻譯 API。",
-    "deepseek": "DeepSeek 語言模型。",
-    "gemini": "Google Gemini 模型。",
-    "google-cloud-translation": "Google Cloud Translation API。",
-    "grok": "xAI Grok 語言模型。",
-    "lm-studio": "由 LM Studio 提供的模型。",
-    "local": "在此裝置上執行的模型。",
-    "minimax": "MiniMax 語言模型。",
-    "openai": "OpenAI 語言模型。",
-    "openai-compatible": "任何提供 OpenAI 相容 API 的伺服器。",
-    "openrouter": "透過 OpenRouter 路由的模型。"
+  "psd": {
+    "background": "背景",
+    "cleanup": "清理",
+    "outline": "輪廓"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "程序使用率",
-    "ram": "RAM",
-    "summary": "記憶體 {{ram}}%，CPU {{cpu}}%",
-    "title": "系統資源",
-    "tooltip": "記憶體 {{ramUsed}} / {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "已使用 {{used}}，共 {{total}}",
-    "vramUnavailable": "無法使用",
-    "vramValue": "{{value}} 顯示記憶體"
+  "reasoning": {
+    "high": "高",
+    "low": "低",
+    "max": "最大",
+    "medium": "中",
+    "minimal": "最少",
+    "xhigh": "超高"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "外觀"
     },
     "backToEditor": "返回編輯器",
-    "generation": {
-      "description": "微調語言模型產生譯文的方式。",
-      "enableReasoning": "啟用推理",
-      "frequencyPenalty": "頻率懲罰",
-      "maxTokens": "最大權杖數",
-      "minP": "最小 P",
-      "presencePenalty": "存在懲罰",
-      "repeatPenalty": "重複懲罰",
-      "sampling": "取樣",
-      "samplingDescription": "控制模型選擇和調整生成文字的方式。",
-      "temperature": "溫度",
-      "reasoning": "推理",
-      "reasoningDescription": "翻譯時使用模型推理。",
-      "title": "產生",
-      "topK": "前 K 項",
-      "topP": "Top P",
-      "vision": "視覺",
-      "visionDescription": "翻譯時將頁面影像輸入給 LLM。"
-    },
     "loading": "正在載入偏好設定…",
     "pipeline": {
       "description": "選擇用於處理每個頁面的模型和選項。",
       "modelLabel": "{{stage}}模型",
       "options": {
         "bubbleThreshold": "對話框閾值",
-        "negativePrompt": "負面提示詞",
+        "onomatopoeiaThreshold": "擬聲詞閾值",
         "panelThreshold": "分鏡閾值",
         "prompt": "提示詞",
         "textThreshold": "文字閾值"
       },
       "processing": "正在處理",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "尋找文字、對話框和分鏡。",
           "title": "偵測"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "重建已移除文字下方的圖稿。",
           "title": "修補"
         },
-        "ocr": {
+        "recognize": {
           "description": "讀取偵測區域內的原文。",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "設定",
     "translation": {
       "description": "選擇任一已設定提供者的模型，然後套用一組共用的翻譯和產生選項。",
-      "instructionsDescription": "關於名稱、語氣、術語或格式的說明。",
-      "instructionsLabel": "翻譯說明",
-      "instructionsPlaceholder": "選用的專案層級說明",
       "model": "模型",
       "modelDescription": "提供者標籤表示各模型的執行位置；連線需另行設定。",
-      "modelQuantization": "模型量化",
       "output": "輸出",
-      "quantization": "量化",
-      "quantizationDescription": "較小的格式使用較少記憶體，但通常會犧牲一些品質。",
-      "selectQuantization": "選擇量化方式",
+      "prompt": "系統提示詞",
+      "promptDescription": "給翻譯模型的指示；{target} 會替換為目標語言。",
+      "promptNeedsTarget": "提示詞必須包含 {target}。",
+      "reasoning": "推理",
+      "reasoningDescription": "翻譯時使用模型推理。",
       "targetLanguageDescription": "選擇文字要翻譯成的語言。",
       "title": "譯文",
       "translationModel": "翻譯模型",
-      "translationModelDescription": "選擇用於翻譯文字的模型。"
+      "translationModelDescription": "選擇用於翻譯文字的模型。",
+      "vision": "視覺",
+      "visionDescription": "翻譯時將頁面影像輸入給 LLM。"
     },
     "typesetting": {
       "addFamily": "新增字型家族",

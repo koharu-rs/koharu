@@ -37,14 +37,17 @@ use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(specta::Type)]
 pub struct TranslatorConfig {
     /// A `vendor/model` reference, as koharu-llm connects one.
     pub model: String,
     /// A language CLDR names in English.
     #[serde(deserialize_with = "target")]
+    #[specta(type = String)]
     pub target: LanguageIdentifier,
     /// The system prompt, with `{target}` where the target's name goes.
     #[serde(deserialize_with = "prompt")]
+    #[specta(type = String)]
     pub prompt: String,
     /// Whether each page's turn shows the model the page itself beside its
     /// texts, as an image goes with a chat message to OpenAI's and Gemini's
@@ -52,6 +55,7 @@ pub struct TranslatorConfig {
     pub vision: bool,
     /// How much the model reasons before it answers, by rig's portable levels
     /// after OpenAI's `reasoning_effort`; the model's own default when unset.
+    #[specta(type = Option<String>)]
     pub reasoning: Option<Effort>,
 }
 

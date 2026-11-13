@@ -1,0 +1,60 @@
+[package]
+name = "koharu-desktop"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+
+[dependencies]
+alphanumeric-sort = { workspace = true }
+anyhow = { workspace = true }
+dirs = { workspace = true }
+futures = { workspace = true }
+hayro = { workspace = true }
+image = { workspace = true }
+koharu-agent = { workspace = true }
+koharu-canvas = { workspace = true }
+koharu-config = { workspace = true }
+koharu-llm = { workspace = true }
+koharu-pipeline = { workspace = true }
+koharu-psd = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-sentry = { workspace = true }
+parking_lot = { workspace = true }
+rars = { workspace = true }
+rayon = { workspace = true }
+rfd = { workspace = true }
+sentry = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+specta = { workspace = true }
+specta-serde = { workspace = true }
+specta-typescript = { workspace = true }
+tauri = { workspace = true }
+tauri-plugin-log = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+tauri-plugin-process = { workspace = true }
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+tauri-plugin-window-state = { workspace = true }
+# `unstable` brings the CEF methods of a window's child webview builder,
+# behind Tauri's own multiwebview API.
+tauri-runtime-cef = { workspace = true }
+tauri-winit = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+ui-events = { workspace = true }
+vello = { workspace = true }
+webp = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
