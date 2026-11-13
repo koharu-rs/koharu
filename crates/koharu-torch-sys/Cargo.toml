@@ -2,14 +2,13 @@
 name = "koharu-torch-sys"
 version.workspace = true
 edition.workspace = true
-description = "The koharu-rs/torch shim's C API to libtorch, bound to the build Koharu's runtime loads."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
-categories = ["external-ffi-bindings", "science"]
+keywords.workspace = true
 publish.workspace = true
 build = "build.rs"
 # Nothing is linked; the key passes the bindings' path to koharu-torch.

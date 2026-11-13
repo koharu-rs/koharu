@@ -2,14 +2,13 @@
 name = "koharu-bindgen"
 version.workspace = true
 edition.workspace = true
-description = "Bindings for C libraries opened at runtime."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["bindgen", "ffi", "code-generation", "dynamic-loading", "bindings"]
-categories = ["development-tools::ffi", "development-tools::build-utils"]
+keywords.workspace = true
 publish.workspace = true
 
 [dependencies]

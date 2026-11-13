@@ -2,14 +2,13 @@
 name = "koharu-leptonica"
 version.workspace = true
 edition.workspace = true
-description = "Rust ports of Leptonica's image analysis."
+description.workspace = true
 license = "MIT OR Apache-2.0 AND BSD-2-Clause"
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["leptonica", "image-processing"]
-categories = ["multimedia::images"]
+keywords.workspace = true
 publish.workspace = true
 
 [dependencies]

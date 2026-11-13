@@ -2,7 +2,7 @@
 name = "koharu-scene"
 version.workspace = true
 edition.workspace = true
-description = "Koharu's scene graph: layers and manga kinds, stored in SQLite."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true

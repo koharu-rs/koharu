@@ -2,7 +2,7 @@
 name = "koharu-config"
 version.workspace = true
 edition.workspace = true
-description = "Koharu's settings and secrets."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true

@@ -3,14 +3,13 @@ name = "koharu-llama"
 version.workspace = true
 # Upstream's sources compile unchanged under upstream's edition.
 edition = "2021"
-description = "utilityai/llama-cpp-rs's llama-cpp-2 at 0364f5d, on the llama.cpp build Koharu's runtime loads."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["llama", "llm", "inference", "machine-learning", "bindings"]
-categories = ["api-bindings", "science"]
+keywords.workspace = true
 publish.workspace = true
 
 # Upstream's tests and doctests call llama.cpp, which it links and Koharu loads
