@@ -9,10 +9,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(import.meta.dirname, './'),
       '@koharu/ui': path.resolve(import.meta.dirname, '../ui/src'),
-      './wasm/koharu_canvas.js': path.resolve(
-        import.meta.dirname,
-        './tests/mocks/koharu_canvas.ts',
-      ),
     },
   },
   test: {

@@ -41,11 +41,13 @@ use crate::{Tools, tools::refusal};
 /// goes.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
+#[derive(specta::Type)]
 pub struct AgentConfig {
     /// A `vendor/model` reference, as koharu-llm connects one.
     pub model: Option<String>,
     /// How much the model reasons before it answers, by rig's portable levels
     /// after OpenAI's `reasoning_effort`; the model's own default when unset.
+    #[specta(type = Option<String>)]
     pub reasoning: Option<Effort>,
     /// The system prompt.
     pub prompt: String,
@@ -81,6 +83,7 @@ impl koharu_config::Section for AgentConfig {
 /// What the agent panel shows while a run goes on.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(specta::Type)]
 pub enum Event {
     Text { delta: String },
     Reasoning { delta: String },

@@ -1,0 +1,19 @@
+{
+  "name": "@koharu/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "3.0.0-alpha.3"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

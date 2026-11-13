@@ -12,43 +12,26 @@
     "downloadingFiles_one": "Descargando {{count}} archivos",
     "downloadingFiles_other": "Descargando {{count}} archivos",
     "modelDownload": "Descarga del modelo",
-    "pageLabel": "Página {{number}}: {{label}}",
     "processing": "Procesando",
     "processingFailed": "Error de procesamiento.",
     "stop": "Detener",
     "title": "Actividad"
   },
   "agent": {
-    "account": "Cuenta de ChatGPT",
     "applying": "Aplicando cambios al proyecto…",
-    "automatic": "Automático",
     "cancel": "Cancelar",
     "cancelled": "Cancelado.",
-    "deviceCode": "Código de dispositivo",
-    "deviceCodeHint": "Tu navegador se ha abierto. Introduce este código para autorizar a Koharu.",
     "emptyDescription": "Pide al agente que inspeccione, traduzca, edite o procese este proyecto. Solo verá las imágenes de las páginas cuando sea necesario.",
     "emptyTitle": "¿Qué debería hacer Koharu?",
     "failed": "La solicitud del agente falló.",
-    "loading": "Cargando Codex…",
+    "loading": "Cargando el agente…",
+    "mcp": "Servidor MCP",
     "message": "Enviar mensaje al agente de Koharu",
-    "model": "Modelo de Codex",
+    "model": "Modelo",
     "placeholder": "Pide a Koharu que trabaje en este proyecto…",
     "properties": "Propiedades",
     "reasoning": "Razonamiento",
-    "reasoningLevels": {
-      "high": "Alto",
-      "low": "Bajo",
-      "max": "Máximo",
-      "medium": "Medio",
-      "ultra": "Ultra",
-      "xhigh": "Muy alto"
-    },
     "send": "Enviar",
-    "signIn": "Iniciar sesión con Codex",
-    "signInDescription": "Inicia sesión con tu suscripción de ChatGPT. Koharu usa autenticación mediante código de dispositivo y nunca solicita una clave de API.",
-    "signInTitle": "Conectar Codex",
-    "signOut": "Cerrar sesión",
-    "signingIn": "Esperando el inicio de sesión…",
     "thinking": "Pensando…",
     "title": "Agente",
     "working": "Trabajando…"
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "Selecciona una página para empezar.",
     "fit": "Ajustar a la ventana",
-    "surface": "Lienzo de Koharu",
-    "unavailable": "El lienzo WebGPU no está disponible"
+    "notice": {
+      "eraser_needs_raster": "Selecciona una capa ráster para borrar."
+    },
+    "typeText": "Escribir texto"
   },
   "colorPicker": {
     "brushColor": "Color del pincel",
@@ -69,12 +54,35 @@
     "back": "Atrás",
     "cancel": "Cancelar",
     "clearSearch": "Borrar búsqueda",
-    "loading": "Cargando…",
-    "reset": "Restablecer"
+    "loading": "Cargando…"
   },
   "errors": {
     "fatalTitle": "Koharu no pudo continuar",
     "tryAgain": "Intentar de nuevo"
+  },
+  "feedback": {
+    "addScreenshot": "Añadir captura de pantalla",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "email": "Correo electrónico",
+    "emailPlaceholder": "tu.correo@example.org",
+    "emptyMessage": "Describe lo que ha pasado.",
+    "failed": "No se pudieron enviar los comentarios. Inténtalo de nuevo.",
+    "forbidden": "Esta versión no puede enviar comentarios.",
+    "hide": "Ocultar",
+    "highlight": "Resaltar",
+    "message": "Descripción",
+    "messagePlaceholder": "¿Qué ha pasado? ¿Qué esperabas?",
+    "name": "Nombre",
+    "namePlaceholder": "Tu nombre",
+    "noClient": "Los comentarios no están disponibles ahora mismo.",
+    "removeHighlight": "Quitar",
+    "removeScreenshot": "Quitar captura de pantalla",
+    "required": "(obligatorio)",
+    "sent": "¡Gracias por tus comentarios!",
+    "submit": "Enviar",
+    "timeout": "Se agotó el tiempo de envío. Inténtalo de nuevo.",
+    "title": "Enviar comentarios"
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} filtros activos",
@@ -165,13 +173,11 @@
     "alignTop": "Alinear arriba",
     "alignment": "Alineación",
     "auto": "Automático",
-    "autoFit": "Ajuste automático",
     "border": "Contorno",
     "borderColor": "Color del contorno",
     "borderWidth": "Ancho del contorno",
     "chooseFontSize": "Elegir tamaño de fuente",
     "color": "Color",
-    "customFrame": "Marco personalizado",
     "decreaseBorderWidth": "Reducir ancho del contorno",
     "direction": "Dirección",
     "font": "Fuente",
@@ -186,17 +192,15 @@
     "horizontal": "Horizontal",
     "increaseBorderWidth": "Aumentar ancho del contorno",
     "opacity": "Opacidad",
-    "placement": "Colocación",
-    "resetAutoFit": "Restablecer ajuste automático",
     "selectPage": "Selecciona una página para inspeccionar sus capas.",
     "size": "Tamaño",
     "source": "Texto original",
     "style": "Estilo",
+    "text": "Texto",
     "textColor": "Color del texto",
     "textDirection": "Dirección del texto",
     "translation": "Traducción",
     "type": "Tipografía",
-    "unplaced": "Sin colocar",
     "vertical": "Vertical",
     "weight": "Peso",
     "width": "Anchura"
@@ -220,28 +224,30 @@
     "edit": "Editar {{name}}",
     "empty": "No hay capas en esta página.",
     "hide": "Ocultar {{name}}",
-    "imageName": "Imagen {{index}}",
     "kinds": {
-      "cleanup": "Limpieza",
-      "dialogue": "Diálogo",
-      "freeText": "Texto libre",
+      "balloon": "Globo",
+      "block": "Bloque de texto",
       "group": "Grupo",
       "image": "Imagen",
-      "paint": "Pintura",
-      "text": "Texto",
-      "textGroup": "Grupo de texto"
+      "mask": "Máscara",
+      "panel": "Viñeta",
+      "raster": "Ráster",
+      "shape": "Forma",
+      "text": "Texto"
     },
+    "lock": "Bloquear {{name}}",
     "locked": "Bloqueada",
-    "lockedLabel": "{{name}} está bloqueada",
     "moveDown": "Mover {{name}} abajo",
     "moveUp": "Mover {{name}} arriba",
     "opacityLabel": "Opacidad de {{name}}",
-    "originalArtwork": "Ilustración original",
     "show": "Mostrar {{name}}",
     "sourceLabel": "Texto original de {{name}}",
+    "textLabel": "Texto de {{name}}",
     "textName": "Texto {{index}}",
     "title": "Capas",
-    "translationLabel": "Traducción de {{name}}"
+    "translationLabel": "Traducción de {{name}}",
+    "unlock": "Desbloquear {{name}}",
+    "unlocked": "Desbloqueada"
   },
   "menu": {
     "about": "Acerca de",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "Editar",
     "export": "Exportar proyecto",
+    "feedback": "Enviar comentarios",
     "file": "Archivo",
     "fit": "Ajustar a la ventana",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "URL base",
     "default": "Predeterminado",
-    "instructions": "Instrucciones",
     "targetLanguage": "Idioma de destino"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "Carpeta…",
     "importing": "Importando páginas…",
     "importingAction": "Importando…",
-    "layerCount": "{{count}} capas",
-    "layerCount_one": "{{count}} capas",
-    "layerCount_other": "{{count}} capas",
     "noImage": "Sin imagen",
     "noResults": "Ninguna página coincide con este filtro.",
-    "pageName": "Nombre de página",
+    "pageNumber": "Página {{number}}",
     "pages": "Páginas",
-    "rename": "Cambiar nombre",
-    "renameDescription": "Elige un nombre nuevo para esta página.",
-    "renameTitle": "Cambiar nombre de página",
     "selected": "{{count}} seleccionadas"
   },
   "outputPicker": {
-    "instructions": "Instrucciones de traducción",
-    "instructionsPlaceholder": "Indicaciones opcionales sobre el tono, los nombres y el formato.",
     "targetLanguage": "Idioma de destino",
     "title": "Salida de traducción"
   },
   "phase": {
-    "detection": "Detección",
-    "inpainting": "Relleno",
-    "ocr": "OCR",
-    "translation": "Traducción"
+    "detect": "Detección",
+    "inpaint": "Relleno",
+    "recognize": "OCR",
+    "translate": "Traducción"
   },
   "phaseDescription": {
-    "detection": "Localiza el texto en la página.",
-    "inpainting": "Reconstruye el dibujo tras eliminar el texto.",
-    "ocr": "Lee el texto dentro de cada región.",
-    "translation": "Convierte el texto original al idioma de destino."
+    "detect": "Localiza el texto en la página.",
+    "inpaint": "Reconstruye el dibujo tras eliminar el texto.",
+    "recognize": "Lee el texto dentro de cada región.",
+    "translate": "Convierte el texto original al idioma de destino."
   },
-  "providerDescriptions": {
-    "caiyun": "API de traducción de Caiyun.",
-    "claude": "Modelos Claude de Anthropic.",
-    "deepl": "API de traducción de DeepL.",
-    "deepseek": "Modelos de lenguaje de DeepSeek.",
-    "gemini": "Modelos de Google Gemini.",
-    "google-cloud-translation": "API de Google Cloud Translation.",
-    "grok": "Modelos de lenguaje Grok de xAI.",
-    "lm-studio": "Modelos servidos por LM Studio.",
-    "local": "Modelos que se ejecutan en este dispositivo.",
-    "minimax": "Modelos de lenguaje de MiniMax.",
-    "openai": "Modelos de lenguaje de OpenAI.",
-    "openai-compatible": "Cualquier servidor que exponga una API compatible con OpenAI.",
-    "openrouter": "Modelos enrutados a través de OpenRouter."
+  "psd": {
+    "background": "Fondo",
+    "cleanup": "Limpieza",
+    "outline": "Contorno"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "Uso del proceso",
-    "ram": "RAM",
-    "summary": "RAM {{ram}} %, CPU {{cpu}} %",
-    "title": "Recursos del sistema",
-    "tooltip": "RAM {{ramUsed}} de {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "{{used}} de {{total}} usados",
-    "vramUnavailable": "No disponible",
-    "vramValue": "{{value}} de VRAM"
+  "reasoning": {
+    "high": "Alto",
+    "low": "Bajo",
+    "max": "Máximo",
+    "medium": "Medio",
+    "minimal": "Mínimo",
+    "xhigh": "Muy alto"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "Apariencia"
     },
     "backToEditor": "Volver al editor",
-    "generation": {
-      "description": "Ajusta cómo los modelos de lenguaje generan el texto traducido.",
-      "enableReasoning": "Activar razonamiento",
-      "frequencyPenalty": "Penalización por frecuencia",
-      "maxTokens": "Máximo de tokens",
-      "minP": "P mínimo",
-      "presencePenalty": "Penalización por presencia",
-      "repeatPenalty": "Penalización por repetición",
-      "sampling": "Muestreo",
-      "samplingDescription": "Controla cómo el modelo selecciona y varía el texto generado.",
-      "temperature": "Temperatura",
-      "reasoning": "Razonamiento",
-      "reasoningDescription": "Utiliza el razonamiento del modelo durante la traducción.",
-      "title": "Generación",
-      "topK": "Top K",
-      "topP": "P superior",
-      "vision": "Visión",
-      "visionDescription": "Proporciona imágenes de las páginas al LLM durante la traducción."
-    },
     "loading": "Cargando preferencias…",
     "pipeline": {
       "description": "Elige los modelos y opciones usados para procesar cada página.",
       "modelLabel": "Modelo de {{stage}}",
       "options": {
         "bubbleThreshold": "Umbral de bocadillo",
-        "negativePrompt": "Indicación negativa",
+        "onomatopoeiaThreshold": "Umbral de onomatopeyas",
         "panelThreshold": "Umbral de viñeta",
         "prompt": "Indicación",
         "textThreshold": "Umbral de texto"
       },
       "processing": "Procesando",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "Encuentra texto, bocadillos y viñetas.",
           "title": "Detección"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "Reconstruye la ilustración bajo el texto eliminado.",
           "title": "Relleno"
         },
-        "ocr": {
+        "recognize": {
           "description": "Lee el texto original dentro de las regiones detectadas.",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "Ajustes",
     "translation": {
       "description": "Elige un modelo de cualquier proveedor configurado y aplica un conjunto compartido de opciones de traducción y generación.",
-      "instructionsDescription": "Indicaciones sobre nombres, tono, terminología o formato.",
-      "instructionsLabel": "Instrucciones de traducción",
-      "instructionsPlaceholder": "Indicaciones opcionales para todo el proyecto",
       "model": "Modelo",
       "modelDescription": "Las etiquetas de proveedor indican dónde se ejecuta cada modelo; las conexiones se configuran por separado.",
-      "modelQuantization": "Cuantización del modelo",
       "output": "Salida",
-      "quantization": "Cuantización",
-      "quantizationDescription": "Los formatos más pequeños usan menos memoria, normalmente a cambio de calidad.",
-      "selectQuantization": "Seleccionar una cuantización",
+      "prompt": "Prompt del sistema",
+      "promptDescription": "Instrucciones para el modelo de traducción; {target} se sustituye por el idioma de destino.",
+      "promptNeedsTarget": "El prompt debe incluir {target}.",
+      "reasoning": "Razonamiento",
+      "reasoningDescription": "Utiliza el razonamiento del modelo durante la traducción.",
       "targetLanguageDescription": "Elige el idioma al que se traducirá el texto.",
       "title": "Traducción",
       "translationModel": "Modelo de traducción",
-      "translationModelDescription": "Elige el modelo utilizado para traducir texto."
+      "translationModelDescription": "Elige el modelo utilizado para traducir texto.",
+      "vision": "Visión",
+      "visionDescription": "Proporciona imágenes de las páginas al LLM durante la traducción."
     },
     "typesetting": {
       "addFamily": "Añadir familia tipográfica",

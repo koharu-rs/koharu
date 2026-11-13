@@ -12,7 +12,9 @@ const nextConfig: NextConfig = {
 
 export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
-  project: 'nextjs',
+  // The interface's events reach Sentry through the Rust SDK, so its source maps go to
+  // the Rust project, where they resolve.
+  project: 'rust',
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
 })

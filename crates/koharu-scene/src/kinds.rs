@@ -104,9 +104,11 @@ pub struct Block {
     /// Where the source's glyphs are: the clean-up shows only inside it while
     /// it's visible.
     #[serde(default = "part::<Mask>", deserialize_with = "strict")]
+    #[specta(type = Layer<Mask>)]
     pub mask: Layer<Mask>,
     /// The scan redrawn without the source's glyphs, under the translation.
     #[serde(default = "part::<Raster>", deserialize_with = "strict")]
+    #[specta(type = Layer<Raster>)]
     pub cleanup: Layer<Raster>,
 }
 

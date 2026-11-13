@@ -264,6 +264,46 @@ impl Frame {
         compose::strips(&self.0.nodes, view)
     }
 
+    /// The same frame with `layers` left out. A block's id leaves out only
+    /// its translation, the part the canvas drags in a move, since its
+    /// clean-up and mask stay with the scan; a block with none, whose moving
+    /// part is its undrawn source, isn't passed. Ids it doesn't draw are
+    /// ignored.
+    #[must_use]
+    pub fn without(&self, layers: &[LayerId]) -> Frame {
+        fn keep(nodes: &[Node], layers: &[LayerId]) -> Vec<Node> {
+            nodes
+                .iter()
+                .filter_map(|node| {
+                    let listed = node.layer.is_some_and(|layer| layers.contains(&layer));
+                    let translated = node.children.iter().any(|child| child.layer.is_none());
+                    let children = match (listed, translated) {
+                        (true, false) => return None,
+                        (true, true) => node
+                            .children
+                            .iter()
+                            .filter(|child| child.layer.is_some())
+                            .cloned()
+                            .collect(),
+                        (false, _) => keep(&node.children, layers),
+                    };
+                    Some(Node {
+                        children,
+                        ..node.clone()
+                    })
+                })
+                .collect()
+        }
+        Self(Arc::new(FrameData {
+            page: self.0.page,
+            revision: self.0.revision.clone(),
+            area: self.0.area,
+            nodes: keep(&self.0.nodes, layers),
+            background: self.0.background,
+            missing: self.0.missing.clone(),
+        }))
+    }
+
     /// A frame of this page drawing only `node` over `area`.
     fn with(&self, area: Rect, node: Node) -> Self {
         Self(Arc::new(FrameData {
@@ -358,6 +398,119 @@ mod tests {
         assert_eq!(fitted.dimensions(), (256, 256));
         let at = |x, y| fitted.get_pixel(x, y).0;
         assert_eq!((at(32, 32), at(96, 96), at(200, 200)), (WHITE, RED, WHITE));
+    }
+
+    /// Two tiles meeting inside an output pixel would each cover part of it,
+    /// and what's under would show through the line between them, at the
+    /// fractional scales and offsets the canvas draws at.
+    #[test]
+    fn tiles_meet_without_a_seam_at_any_scale() {
+        // A raster wider than one 512-pixel tile, opaque blue.
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let ops = vec![
+            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1100, "height": 64}}),
+            json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
+        ];
+        let mut ops: Vec<Op> = ops
+            .into_iter()
+            .map(|op| serde_json::from_value(op).expect("an op"))
+            .collect();
+        ops.push(Op::WritePixels {
+            layer: Ref::try_from("$paper".to_owned()).expect("a label"),
+            rect: PixelRect {
+                x: 0,
+                y: 0,
+                width: 1100,
+                height: 64,
+            },
+            pixels: [0, 0, 255, 255].repeat(1100 * 64),
+        });
+        let change = session
+            .apply(Edit {
+                label: "test".into(),
+                ops,
+            })
+            .expect("an edit");
+        let renderer = Renderer::new(RendererConfig::default());
+        let Ok(gpu) = renderer.gpu() else {
+            eprintln!("skipped without a GPU");
+            return;
+        };
+        let frame = renderer
+            .render(&session, change.pages.added[0])
+            .expect("a frame");
+        for (x0, scale) in [(0.0, 0.6), (0.37, 0.6), (3.3, 1.7), (0.0, 0.3)] {
+            let strips = frame.draw(View {
+                rect: Rect::new(x0, 0.0, 1100.0, 64.0),
+                scale,
+            });
+            let (width, height) = (
+                strips[0].rect.width() as u32,
+                strips[0].rect.height() as u32,
+            );
+            let pixels = gpu.read(&strips[0].scene, width, height).expect("pixels");
+            // Away from the raster's own edges, every pixel is wholly blue.
+            for x in 2..width - 2 {
+                assert_eq!(
+                    pixels.get_pixel(x, height / 2).0,
+                    [0, 0, 255, 255],
+                    "x {x} at {x0}, {scale}"
+                );
+            }
+        }
+    }
+
+    /// The canvas draws a frame without the layers a move is dragging, so
+    /// only their copy under the pointer shows.
+    #[test]
+    fn a_frame_without_a_layer_draws_what_is_under_it() {
+        // A white raster under a red square from (16, 16) to (48, 48).
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let ops = vec![
+            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 64, "height": 64}}),
+            json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
+            json!({"op": "add_layer", "page": "$page", "index": 1, "layer": {
+                "kind": "shape", "path": "M16 16 H48 V48 H16 Z", "fill": [1.0, 0.0, 0.0, 1.0],
+            }}),
+        ];
+        let mut ops: Vec<Op> = ops
+            .into_iter()
+            .map(|op| serde_json::from_value(op).expect("an op"))
+            .collect();
+        ops.push(Op::WritePixels {
+            layer: Ref::try_from("$paper".to_owned()).expect("a label"),
+            rect: PixelRect {
+                x: 0,
+                y: 0,
+                width: 64,
+                height: 64,
+            },
+            pixels: vec![255; 64 * 64 * 4],
+        });
+        let change = session
+            .apply(Edit {
+                label: "test".into(),
+                ops,
+            })
+            .expect("an edit");
+        let page = change.pages.added[0];
+        let square = session.project().page(page).expect("the page").layers[1].id;
+        let renderer = Renderer::new(RendererConfig::default());
+        if renderer.gpu().is_err() {
+            eprintln!("skipped without a GPU");
+            return;
+        }
+        let frame = renderer.render(&session, page).expect("a frame");
+        let at = |frame: &Frame| {
+            let raster = renderer.rasterize(frame).expect("pixels");
+            raster.image.get_pixel(32, 32).0
+        };
+        assert_eq!(at(&frame), [255, 0, 0, 255]);
+        assert_eq!(at(&frame.without(&[square])), [255; 4]);
+        let unknown = LayerId(koharu_scene::Uuid::now_v7());
+        assert_eq!(at(&frame.without(&[unknown])), [255, 0, 0, 255]);
     }
 
     /// A large page of many small layers that composite apart, as a

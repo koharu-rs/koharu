@@ -41,13 +41,14 @@ pub const VENDORS: &[&str] = &[
 /// `base_url`. Keyed by rig's vendor name.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
+#[derive(specta::Type)]
 pub struct Providers(pub BTreeMap<String, Endpoint>);
 
 impl koharu_config::Section for Providers {
     const NAME: &'static str = "providers";
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, specta::Type)]
 pub struct Endpoint {
     pub base_url: url::Url,
 }

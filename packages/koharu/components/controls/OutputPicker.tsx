@@ -1,11 +1,10 @@
 'use client'
 
 import { ChevronLeft } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { orderedLanguageChoices } from '@/lib/translation'
-import type { LanguageChoice } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   Select,
@@ -14,91 +13,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@koharu/ui/components/select'
-import { Textarea } from '@koharu/ui/components/textarea'
 
-export type OutputDraft = {
-  targetLanguage: string
-  instructions: string
-}
-
+/** The translator's target language, saved as soon as it's picked. */
 export function OutputPicker({
   targetLanguage,
-  instructions,
-  languages,
   disabled = false,
   saving = false,
   onBack,
   onChange,
 }: {
   targetLanguage: string
-  instructions: string | null
-  languages: LanguageChoice[]
   disabled?: boolean
   saving?: boolean
   onBack: () => void
-  onChange: (draft: OutputDraft) => void
+  onChange: (targetLanguage: string) => void
 }) {
-  const { t } = useTranslation()
-  const [draft, setDraft] = useState<OutputDraft>({
-    targetLanguage,
-    instructions: instructions ?? '',
-  })
-  const changed =
-    draft.targetLanguage !== targetLanguage || draft.instructions !== (instructions ?? '')
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const latest = useRef({ changed, disabled, draft, onChange, saving })
-  const submitted = useRef<OutputDraft | null>(null)
-  latest.current = { changed, disabled, draft, onChange, saving }
-  const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
-
-  const submit = useCallback(
-    (next: OutputDraft) => {
-      submitted.current = next
-      onChange(next)
-    },
-    [onChange],
-  )
-
-  useEffect(() => {
-    if (!changed || saving || disabled || !draft.targetLanguage) return
-    saveTimer.current = setTimeout(() => submit(draft), 350)
-    return () => {
-      clearTimeout(saveTimer.current)
-      saveTimer.current = undefined
-    }
-  }, [changed, disabled, draft, saving, submit])
-
-  useEffect(
-    () => () => {
-      clearTimeout(saveTimer.current)
-      const current = latest.current
-      if (
-        current.changed &&
-        !current.saving &&
-        !current.disabled &&
-        current.draft.targetLanguage &&
-        !sameDraft(submitted.current, current.draft)
-      ) {
-        current.onChange(current.draft)
-      }
-    },
-    [],
-  )
-
-  const back = () => {
-    clearTimeout(saveTimer.current)
-    saveTimer.current = undefined
-    if (
-      changed &&
-      !saving &&
-      !disabled &&
-      draft.targetLanguage &&
-      !sameDraft(submitted.current, draft)
-    ) {
-      submit(draft)
-    }
-    onBack()
-  }
+  const { t, i18n } = useTranslation()
+  const languageChoices = useMemo(() => orderedLanguageChoices(i18n.language), [i18n.language])
 
   return (
     <div className='min-w-0 overflow-hidden'>
@@ -110,7 +41,7 @@ export function OutputPicker({
           aria-label={t('common.back')}
           className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
           disabled={saving}
-          onClick={back}
+          onClick={onBack}
         >
           <ChevronLeft className='size-3.5' />
         </Button>
@@ -121,14 +52,12 @@ export function OutputPicker({
         <label className='grid gap-1 text-[9px] text-muted-foreground'>
           {t('model.targetLanguage')}
           <Select
-            value={draft.targetLanguage}
+            value={targetLanguage}
             items={Object.fromEntries(
               languageChoices.map((language) => [language.tag, language.name]),
             )}
-            disabled={disabled}
-            onValueChange={(targetLanguage) =>
-              targetLanguage && setDraft((current) => ({ ...current, targetLanguage }))
-            }
+            disabled={disabled || saving}
+            onValueChange={(next) => next && next !== targetLanguage && onChange(next)}
           >
             <SelectTrigger
               aria-label={t('outputPicker.targetLanguage')}
@@ -145,26 +74,7 @@ export function OutputPicker({
             </SelectContent>
           </Select>
         </label>
-
-        <label className='grid gap-1 text-[9px] text-muted-foreground'>
-          {t('model.instructions')}
-          <Textarea
-            value={draft.instructions}
-            disabled={disabled}
-            aria-label={t('outputPicker.instructions')}
-            placeholder={t('outputPicker.instructionsPlaceholder')}
-            className='max-h-20 min-h-20 resize-none overflow-y-auto text-[11px] leading-4'
-            onChange={(event) => {
-              const instructions = event.currentTarget.value
-              setDraft((current) => ({ ...current, instructions }))
-            }}
-          />
-        </label>
       </div>
     </div>
   )
-}
-
-function sameDraft(left: OutputDraft | null, right: OutputDraft): boolean {
-  return left?.targetLanguage === right.targetLanguage && left.instructions === right.instructions
 }

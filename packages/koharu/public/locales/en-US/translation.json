@@ -12,43 +12,26 @@
     "downloadingFiles_one": "Downloading {{count}} file",
     "downloadingFiles_other": "Downloading {{count}} files",
     "modelDownload": "Model download",
-    "pageLabel": "Page {{number}}: {{label}}",
     "processing": "Processing",
     "processingFailed": "Processing failed.",
     "stop": "Stop",
     "title": "Activity"
   },
   "agent": {
-    "account": "ChatGPT account",
     "applying": "Applying project changes...",
-    "automatic": "Automatic",
     "cancel": "Cancel",
     "cancelled": "Cancelled.",
-    "deviceCode": "Device code",
-    "deviceCodeHint": "Your browser has opened. Enter this code to authorize Koharu.",
     "emptyDescription": "Ask the agent to inspect, translate, edit, or process this project. It will view page images only when needed.",
     "emptyTitle": "What should Koharu do?",
     "failed": "The agent request failed.",
-    "loading": "Loading Codex...",
+    "loading": "Loading agent…",
+    "mcp": "MCP server",
     "message": "Message Koharu Agent",
-    "model": "Codex model",
+    "model": "Model",
     "placeholder": "Ask Koharu to work on this project...",
     "properties": "Properties",
     "reasoning": "Reasoning",
-    "reasoningLevels": {
-      "high": "High",
-      "low": "Low",
-      "max": "Max",
-      "medium": "Medium",
-      "ultra": "Ultra",
-      "xhigh": "Extra high"
-    },
     "send": "Send",
-    "signIn": "Sign in with Codex",
-    "signInDescription": "Sign in with your ChatGPT subscription. Koharu uses device-code authentication and never asks for an API key.",
-    "signInTitle": "Connect Codex",
-    "signOut": "Sign out",
-    "signingIn": "Waiting for sign-in...",
     "thinking": "Thinking...",
     "title": "Agent",
     "working": "Working..."
@@ -56,8 +39,10 @@
   "canvas": {
     "empty": "Select a page to begin.",
     "fit": "Fit Window",
-    "surface": "Koharu canvas",
-    "unavailable": "WebGPU canvas unavailable"
+    "notice": {
+      "eraser_needs_raster": "Select a raster layer to erase."
+    },
+    "typeText": "Type text"
   },
   "colorPicker": {
     "brushColor": "Brush color",
@@ -69,12 +54,35 @@
     "back": "Back",
     "cancel": "Cancel",
     "clearSearch": "Clear search",
-    "loading": "Loading…",
-    "reset": "Reset"
+    "loading": "Loading…"
   },
   "errors": {
     "fatalTitle": "Koharu could not continue",
     "tryAgain": "Try again"
+  },
+  "feedback": {
+    "addScreenshot": "Add a screenshot",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "email": "Email",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "Please describe what happened.",
+    "failed": "The feedback couldn’t be sent. Please try again.",
+    "forbidden": "This build can’t send feedback.",
+    "hide": "Hide",
+    "highlight": "Highlight",
+    "message": "Description",
+    "messagePlaceholder": "What happened? What did you expect?",
+    "name": "Name",
+    "namePlaceholder": "Your name",
+    "noClient": "Feedback isn’t available right now.",
+    "removeHighlight": "Remove",
+    "removeScreenshot": "Remove screenshot",
+    "required": "(required)",
+    "sent": "Thank you for your feedback!",
+    "submit": "Send",
+    "timeout": "Sending timed out. Please try again.",
+    "title": "Send Feedback"
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} active filters",
@@ -165,13 +173,11 @@
     "alignTop": "Align top",
     "alignment": "Alignment",
     "auto": "Auto",
-    "autoFit": "Auto fit",
     "border": "Border",
     "borderColor": "Border color",
     "borderWidth": "Border width",
     "chooseFontSize": "Choose font size",
     "color": "Color",
-    "customFrame": "Custom frame",
     "decreaseBorderWidth": "Decrease border width",
     "direction": "Direction",
     "font": "Font",
@@ -186,17 +192,15 @@
     "horizontal": "Horizontal",
     "increaseBorderWidth": "Increase border width",
     "opacity": "Opacity",
-    "placement": "Placement",
-    "resetAutoFit": "Reset to auto fit",
     "selectPage": "Select a page to inspect its layers.",
     "size": "Size",
     "source": "Source text",
     "style": "Style",
+    "text": "Text",
     "textColor": "Text color",
     "textDirection": "Text direction",
     "translation": "Translation",
     "type": "Type",
-    "unplaced": "Unplaced",
     "vertical": "Vertical",
     "weight": "Weight",
     "width": "Width"
@@ -220,28 +224,30 @@
     "edit": "Edit {{name}}",
     "empty": "No layers on this page.",
     "hide": "Hide {{name}}",
-    "imageName": "Image {{index}}",
     "kinds": {
-      "cleanup": "Cleanup",
-      "dialogue": "Dialogue",
-      "freeText": "Free text",
+      "balloon": "Balloon",
+      "block": "Text block",
       "group": "Group",
       "image": "Image",
-      "paint": "Paint",
-      "text": "Text",
-      "textGroup": "Text group"
+      "mask": "Mask",
+      "panel": "Panel",
+      "raster": "Raster",
+      "shape": "Shape",
+      "text": "Text"
     },
+    "lock": "Lock {{name}}",
     "locked": "Locked",
-    "lockedLabel": "{{name}} is locked",
     "moveDown": "Move {{name}} down",
     "moveUp": "Move {{name}} up",
     "opacityLabel": "{{name}} opacity",
-    "originalArtwork": "Original artwork",
     "show": "Show {{name}}",
     "sourceLabel": "{{name}} source text",
+    "textLabel": "{{name}} text",
     "textName": "Text {{index}}",
     "title": "Layers",
-    "translationLabel": "{{name}} translation"
+    "translationLabel": "{{name}} translation",
+    "unlock": "Unlock {{name}}",
+    "unlocked": "Unlocked"
   },
   "menu": {
     "about": "About",
@@ -250,6 +256,7 @@
     "discord": "Discord",
     "edit": "Edit",
     "export": "Export Project",
+    "feedback": "Send Feedback",
     "file": "File",
     "fit": "Fit Window",
     "github": "GitHub",
@@ -269,7 +276,6 @@
   "model": {
     "baseUrl": "Base URL",
     "default": "Default",
-    "instructions": "Instructions",
     "targetLanguage": "Target language"
   },
   "modelPicker": {
@@ -291,61 +297,40 @@
     "importFolder": "Folder…",
     "importing": "Importing pages…",
     "importingAction": "Importing…",
-    "layerCount": "{{count}} layers",
-    "layerCount_one": "{{count}} layer",
-    "layerCount_other": "{{count}} layers",
     "noImage": "No image",
     "noResults": "No pages match this filter.",
-    "pageName": "Page name",
+    "pageNumber": "Page {{number}}",
     "pages": "Pages",
-    "rename": "Rename",
-    "renameDescription": "Choose a new name for this page.",
-    "renameTitle": "Rename page",
     "selected": "{{count}} selected"
   },
   "outputPicker": {
-    "instructions": "Translation instructions",
-    "instructionsPlaceholder": "Optional guidance for tone, names, and formatting.",
     "targetLanguage": "Target language",
     "title": "Translation output"
   },
   "phase": {
-    "detection": "Detection",
-    "inpainting": "Inpainting",
-    "ocr": "OCR",
-    "translation": "Translation"
+    "detect": "Detection",
+    "inpaint": "Inpainting",
+    "recognize": "OCR",
+    "translate": "Translation"
   },
   "phaseDescription": {
-    "detection": "Locate text on the page.",
-    "inpainting": "Rebuild the artwork behind removed text.",
-    "ocr": "Read the text inside each region.",
-    "translation": "Convert source text to the target language."
+    "detect": "Locate text on the page.",
+    "inpaint": "Rebuild the artwork behind removed text.",
+    "recognize": "Read the text inside each region.",
+    "translate": "Convert source text to the target language."
   },
-  "providerDescriptions": {
-    "caiyun": "Caiyun translation API.",
-    "claude": "Anthropic Claude models.",
-    "deepl": "DeepL translation API.",
-    "deepseek": "DeepSeek language models.",
-    "gemini": "Google Gemini models.",
-    "google-cloud-translation": "Google Cloud Translation API.",
-    "grok": "xAI Grok language models.",
-    "lm-studio": "Models served by LM Studio.",
-    "local": "Models running on this device.",
-    "minimax": "MiniMax language models.",
-    "openai": "OpenAI language models.",
-    "openai-compatible": "Any server exposing an OpenAI-compatible API.",
-    "openrouter": "Models routed through OpenRouter."
+  "psd": {
+    "background": "Background",
+    "cleanup": "Cleanup",
+    "outline": "Outline"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "Process utilization",
-    "ram": "RAM",
-    "summary": "RAM {{ram}}%, CPU {{cpu}}%",
-    "title": "System resources",
-    "tooltip": "RAM {{ramUsed}} of {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "{{used}} of {{total}} used",
-    "vramUnavailable": "Unavailable",
-    "vramValue": "{{value}} VRAM"
+  "reasoning": {
+    "high": "High",
+    "low": "Low",
+    "max": "Max",
+    "medium": "Medium",
+    "minimal": "Minimal",
+    "xhigh": "Extra high"
   },
   "settings": {
     "appearance": {
@@ -362,47 +347,28 @@
       "title": "Appearance"
     },
     "backToEditor": "Back to editor",
-    "generation": {
-      "description": "Fine-tune how language models generate translated text.",
-      "enableReasoning": "Enable reasoning",
-      "frequencyPenalty": "Frequency penalty",
-      "maxTokens": "Maximum tokens",
-      "minP": "Min P",
-      "presencePenalty": "Presence penalty",
-      "repeatPenalty": "Repeat penalty",
-      "sampling": "Sampling",
-      "samplingDescription": "Control how the model selects and varies generated text.",
-      "temperature": "Temperature",
-      "reasoning": "Reasoning",
-      "reasoningDescription": "Use model reasoning during translation.",
-      "title": "Generation",
-      "topK": "Top K",
-      "topP": "Top P",
-      "vision": "Vision",
-      "visionDescription": "Feed page images to the LLM during translation."
-    },
     "loading": "Loading preferences…",
     "pipeline": {
       "description": "Choose the models and options used to process each page.",
       "modelLabel": "{{stage}} model",
       "options": {
         "bubbleThreshold": "Bubble threshold",
-        "negativePrompt": "Negative prompt",
+        "onomatopoeiaThreshold": "SFX threshold",
         "panelThreshold": "Panel threshold",
         "prompt": "Prompt",
         "textThreshold": "Text threshold"
       },
       "processing": "Processing",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "Find text, speech bubbles, and panels.",
           "title": "Detection"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "Rebuild artwork beneath removed text.",
           "title": "Inpainting"
         },
-        "ocr": {
+        "recognize": {
           "description": "Read the source text inside detected regions.",
           "title": "OCR"
         }
@@ -437,20 +403,20 @@
     "title": "Settings",
     "translation": {
       "description": "Choose any configured provider model, then apply one shared set of translation and generation options.",
-      "instructionsDescription": "Names, tone, terminology, or formatting guidance.",
-      "instructionsLabel": "Translation instructions",
-      "instructionsPlaceholder": "Optional project-wide guidance",
       "model": "Model",
       "modelDescription": "Provider labels identify where each model runs; connections are configured separately.",
-      "modelQuantization": "Model quantization",
       "output": "Output",
-      "quantization": "Quantization",
-      "quantizationDescription": "Smaller formats use less memory, usually with a quality tradeoff.",
-      "selectQuantization": "Select a quantization",
+      "prompt": "System prompt",
+      "promptDescription": "Instructions for the translation model; {target} stands for the target language.",
+      "promptNeedsTarget": "The prompt must include {target}.",
+      "reasoning": "Reasoning",
+      "reasoningDescription": "Use model reasoning during translation.",
       "targetLanguageDescription": "Choose the language to translate text into.",
       "title": "Translation",
       "translationModel": "Translation model",
-      "translationModelDescription": "Choose the model used to translate text."
+      "translationModelDescription": "Choose the model used to translate text.",
+      "vision": "Vision",
+      "visionDescription": "Feed page images to the LLM during translation."
     },
     "typesetting": {
       "addFamily": "Add font family",

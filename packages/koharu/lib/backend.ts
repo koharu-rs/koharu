@@ -1,28 +1,28 @@
 'use client'
 
-import { commands } from '@koharu/bridge/protocol'
-import type {
-  PipelineConfig,
-  Preferences,
-  ProviderPreferences,
-  TypesettingConfig,
-} from '@koharu/bridge/protocol'
+import * as Sentry from '@sentry/nextjs'
 
-import { receiveError, receivePreferences, receiveTranslationModels } from './store'
+import { commands } from '@koharu/bridge/protocol'
+import type { Preferences } from '@koharu/bridge/protocol'
+
+import { receiveError, receiveModels, receivePreferences } from './store'
 
 type Command<Args extends unknown[], Result> = (...args: Args) => Promise<Result>
 
-let translationModelsRequest: Promise<void> | null = null
-let translationModelsGeneration = 0
+let modelsRequest: Promise<void> | null = null
+let modelsGeneration = 0
 let preferencesWriteGeneration = 0
 let preferencesWriteQueue: Promise<void> = Promise.resolve()
 
+/** Runs `command` in a span named after it, so each command's round trip is timed. */
 export async function call<Args extends unknown[], Result>(
   command: Command<Args, Result>,
   ...args: Args
 ): Promise<Result> {
   try {
-    return await command(...args)
+    return await Sentry.startSpan({ name: command.name || 'command', op: 'ipc' }, () =>
+      command(...args),
+    )
   } catch (error) {
     throw report(error)
   }
@@ -42,15 +42,16 @@ export async function refreshPreferences(): Promise<void> {
   if (generation === preferencesWriteGeneration) receivePreferences(preferences)
 }
 
-export function savePreferences(
-  pipeline: PipelineConfig,
-  providers: ProviderPreferences,
-  typesetting: TypesettingConfig,
-): Promise<Preferences> {
+/** Saves the preferences after any save before it, and keeps what the file holds. */
+export function savePreferences(preferences: Preferences): Promise<Preferences> {
   preferencesWriteGeneration += 1
   const pending = preferencesWriteQueue
     .catch(() => undefined)
-    .then(() => call(commands.savePreferences, pipeline, providers, typesetting))
+    .then(() => call(commands.savePreferences, preferences))
+    .then((saved) => {
+      receivePreferences(saved)
+      return saved
+    })
   preferencesWriteQueue = pending.then(
     () => undefined,
     () => undefined,
@@ -58,18 +59,19 @@ export function savePreferences(
   return pending
 }
 
-export function refreshTranslationModels(force = false): Promise<void> {
-  if (!force && translationModelsRequest) return translationModelsRequest
+/** The models the translator and the agent can use, listed again when `force`. */
+export function refreshModels(force = false): Promise<void> {
+  if (!force && modelsRequest) return modelsRequest
 
-  const generation = ++translationModelsGeneration
-  const request = call(commands.getTranslationModels)
+  const generation = ++modelsGeneration
+  const request = call(commands.getModels)
     .then((models) => {
-      if (generation === translationModelsGeneration) receiveTranslationModels(models)
+      if (generation === modelsGeneration) receiveModels(models)
     })
     .finally(() => {
-      if (translationModelsRequest === request) translationModelsRequest = null
+      if (modelsRequest === request) modelsRequest = null
     })
-  translationModelsRequest = request
+  modelsRequest = request
   return request
 }
 

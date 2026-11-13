@@ -98,6 +98,11 @@ impl Tiled {
     pub fn draw(&self, scene: &mut Scene, transform: Affine, visible: Rect) {
         let (index, tiles, to_layer) = self.select(transform, visible);
         let level = self.level(index);
+        let to_output = transform * to_layer;
+        let size = (
+            f64::from(level.image.width()),
+            f64::from(level.image.height()),
+        );
         for at in tiles {
             let (rect, image) = &level.tiles()[at];
             let brush = ImageBrush::new(image.clone())
@@ -107,10 +112,10 @@ impl Tiled {
                 Affine::translate((rect.x0 - f64::from(GUTTER), rect.y0 - f64::from(GUTTER)));
             scene.fill(
                 Fill::NonZero,
-                transform * to_layer,
+                to_output,
                 &brush,
                 Some(brush_transform),
-                rect,
+                &snapped(*rect, to_output, size),
             );
         }
     }
@@ -153,6 +158,30 @@ impl Tiled {
             .collect();
         (index, tiles, to_layer)
     }
+}
+
+/// `rect`, a tile in level pixels, with each edge it shares with another
+/// tile moved to the nearest output pixel through an axis-aligned
+/// `to_output`. Two tiles meeting inside a pixel would each cover part of it,
+/// and compositing one over the other lets what's under show through the
+/// line, so they meet on a pixel's edge instead. The move is at most half an
+/// output pixel, under a level pixel, which the gutter covers; the image's
+/// own edges stay where they are. A turned tile keeps its edges.
+fn snapped(rect: Rect, to_output: Affine, (width, height): (f64, f64)) -> Rect {
+    let [a, b, c, d, e, f] = to_output.as_coeffs();
+    if b != 0.0 || c != 0.0 || a == 0.0 || d == 0.0 {
+        return rect;
+    }
+    let snap = |at: f64, scale: f64, shift: f64, end: f64| match at > 0.0 && at < end {
+        true => ((at * scale + shift).round() - shift) / scale,
+        false => at,
+    };
+    Rect::new(
+        snap(rect.x0, a, e, width),
+        snap(rect.y0, d, f, height),
+        snap(rect.x1, a, e, width),
+        snap(rect.y1, d, f, height),
+    )
 }
 
 /// Halves an image, averaging each 2×2 block in premultiplied alpha. An odd

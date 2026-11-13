@@ -8,26 +8,26 @@ import { I18nextProvider } from 'react-i18next'
 import { StartupView } from '@/components/app/StartupView'
 import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
-import { refreshTranslationModels } from '@/lib/backend'
+import { refreshModels, refreshPreferences } from '@/lib/backend'
 import i18n from '@/lib/i18n'
-import { pageKey, pagesKey, projectKey, queryClient, refresh } from '@/lib/queries'
+import { pageKey, projectKey, queryClient, refresh } from '@/lib/queries'
 import {
-  receiveCanvas,
+  receiveCanvasSelection,
   receiveDownload,
-  receiveStartupState,
   receiveJob,
-  receiveResources,
+  receivePickedColor,
+  receiveStartupState,
+  rgbaToHex,
   useKoharuStore,
 } from '@/lib/store'
 import {
   commands,
-  type CanvasState,
-  type Download,
+  type CanvasEvent,
   type Job,
-  type ModelResources,
   type ProjectInfo,
+  type Transfer,
 } from '@koharu/bridge/protocol'
-import { Toaster } from '@koharu/ui/components/toast'
+import { toast, Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -38,45 +38,25 @@ export function Providers({ children }: { children: ReactNode }) {
     lifecycle.active = true
     if (!lifecycle.bound) {
       lifecycle.bound = true
-      const completed = new Map<string, number>()
       const channel = <T,>(receive: (value: T) => void) =>
         new Channel<T>((value) => {
           if (lifecycle.active) receive(value)
         })
 
-      void refreshTranslationModels().catch(() => undefined)
+      void refreshPreferences().catch(() => undefined)
+      void refreshModels().catch(() => undefined)
 
       void commands
         .subscribe(
-          channel<CanvasState>(receiveCanvas),
-          channel<Job>((job) => {
-            const previous = completed.get(job.id) ?? 0
-            completed.set(job.id, job.completed)
-            receiveJob(job)
-            if (job.completed > previous || job.state !== 'running') {
-              void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
-            }
-          }),
-          channel<Download>(receiveDownload),
-          channel<ModelResources>(receiveResources),
-          channel<ProjectInfo | null>((project) => {
-            const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-            queryClient.setQueryData(projectKey, project)
-            if (previous?.name !== project?.name) {
-              const store = useKoharuStore.getState()
-              store.selectPages(project?.active_page ? [project.active_page] : [])
-              store.selectLayers([])
-            }
-            if (project) {
-              void refresh(pagesKey, pageKey).catch(() => undefined)
-            } else {
-              queryClient.setQueryData(pagesKey, [])
-              queryClient.setQueryData(pageKey, null)
-            }
-          }),
+          channel<ProjectInfo | null>(receiveProject),
+          channel<CanvasEvent>(receiveCanvas),
+          channel<Job>(receiveJob),
+          channel<Transfer>(receiveDownload),
         )
         .then((state) => {
-          if (lifecycle.active) receiveStartupState(state)
+          if (!lifecycle.active) return
+          receiveProject(state.project)
+          receiveStartupState(state)
         })
         .catch(() => undefined)
     }
@@ -117,6 +97,40 @@ export function Providers({ children }: { children: ReactNode }) {
       </I18nextProvider>
     </QueryClientProvider>
   )
+}
+
+/** The open project, after any change: another project's selection starts empty. */
+function receiveProject(project: ProjectInfo | null): void {
+  const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+  queryClient.setQueryData(projectKey, project)
+  if (previous?.name !== project?.name) {
+    const store = useKoharuStore.getState()
+    store.selectPages(project?.page ? [project.page] : [])
+    store.selectLayers([])
+  }
+  if (project) void refresh(pageKey).catch(() => undefined)
+  else queryClient.setQueryData(pageKey, null)
+}
+
+function receiveCanvas(event: CanvasEvent): void {
+  const store = useKoharuStore.getState()
+  switch (event.type) {
+    case 'camera':
+      useKoharuStore.setState({ camera: { zoom: event.zoom, x: event.x, y: event.y } })
+      break
+    case 'selection':
+      receiveCanvasSelection(event.layers)
+      break
+    case 'color':
+      receivePickedColor(rgbaToHex(event.color))
+      break
+    case 'brush_diameter':
+      store.setBrush({ ...store.brush, diameter: event.diameter })
+      break
+    case 'notice':
+      toast.add({ type: 'info', title: i18n.t(`canvas.notice.${event.notice}`) })
+      break
+  }
 }
 
 function StartupBoundary({ children }: { children: ReactNode }) {

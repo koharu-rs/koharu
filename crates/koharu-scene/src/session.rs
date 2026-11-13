@@ -181,6 +181,35 @@ impl Session {
         })
     }
 
+    /// A picture's pixels over `rect`, in its own coordinates and format, row
+    /// by row, and zero where it has no tiles: what `write_pixels` wrote.
+    pub fn pixels(&self, layer: LayerId, rect: Rect) -> Result<Vec<u8>> {
+        let Tiles {
+            format,
+            tiles: stored,
+            ..
+        } = self.tiles(layer, Some(rect))?;
+        let bytes = tiles::bytes_per_pixel(format);
+        let width = rect.width as usize;
+        let mut pixels = vec![0; width * rect.height as usize * bytes];
+        let (left, top) = (i64::from(rect.x), i64::from(rect.y));
+        let (right, bottom) = (left + i64::from(rect.width), top + i64::from(rect.height));
+        for tile in stored {
+            let (x, y) = (
+                i64::from(tile.x) * tiles::SIZE,
+                i64::from(tile.y) * tiles::SIZE,
+            );
+            let (x0, x1) = (x.max(left), (x + tiles::SIZE).min(right));
+            let length = (x1 - x0) as usize * bytes;
+            for row in y.max(top)..(y + tiles::SIZE).min(bottom) {
+                let from = ((row - y) * tiles::SIZE + x0 - x) as usize * bytes;
+                let to = ((row - top) as usize * width + (x0 - left) as usize) * bytes;
+                pixels[to..to + length].copy_from_slice(&tile.pixels[from..from + length]);
+            }
+        }
+        Ok(pixels)
+    }
+
     /// A hash of a picture's tiles, which changes whenever its pixels do,
     /// taken without reading them.
     pub fn tiles_hash(&self, layer: LayerId) -> Result<Hash> {

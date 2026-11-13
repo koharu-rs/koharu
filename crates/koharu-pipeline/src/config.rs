@@ -9,6 +9,7 @@ use crate::{DetectorConfig, InpainterConfig, RecognizerConfig, TranslatorConfig}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(specta::Type)]
 pub struct PipelineConfig {
     pub detector: DetectorConfig,
     pub recognizer: RecognizerConfig,

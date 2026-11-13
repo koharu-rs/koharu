@@ -19,7 +19,7 @@ export function KoharuApp() {
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const projectLoaded = project !== undefined
   const settingsOpen = useKoharuStore((state) => state.settingsOpen)
-  const activePage = project?.active_page
+  const activePage = project?.page
   const editorOpen = project !== undefined && project !== null && !settingsOpen
 
   useEffect(() => {

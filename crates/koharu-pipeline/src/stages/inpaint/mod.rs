@@ -29,6 +29,7 @@ use crate::{Area, PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(specta::Type)]
 pub struct InpainterConfig {
     pub model: Inpainter,
     /// What the model is asked when a run brings no prompt of its own, as an

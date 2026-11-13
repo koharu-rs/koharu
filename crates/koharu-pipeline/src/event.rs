@@ -18,6 +18,7 @@ const EVENTS: usize = 1024;
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(transparent)]
+#[derive(specta::Type)]
 pub struct RunId(pub u64);
 
 /// A stage started or finished on a page, or a run ended. A stage starts

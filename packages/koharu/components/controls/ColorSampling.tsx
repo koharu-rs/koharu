@@ -61,6 +61,15 @@ export function ColorSamplingProvider({ children }: { children: ReactNode }) {
     if (tool !== 'color_picker') cancel()
   }, [cancel, tool])
 
+  useEffect(
+    () =>
+      useKoharuStore.subscribe((state, previous) => {
+        if (!state.picked || state.picked === previous.picked) return
+        if (!complete(state.picked.color)) state.setBrush({ ...state.brush, color: state.picked.color })
+      }),
+    [complete],
+  )
+
   const value = useMemo(() => ({ request, complete, cancel }), [cancel, complete, request])
   return <ColorSamplingContext.Provider value={value}>{children}</ColorSamplingContext.Provider>
 }

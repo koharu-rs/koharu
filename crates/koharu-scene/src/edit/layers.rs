@@ -6,9 +6,12 @@ use std::slice;
 use jsonptr::Pointer;
 use serde_json::Value;
 
-use super::Run;
+use kurbo::{Affine, BezPath};
+
+use super::{Place, Run};
 use crate::{
-    Content, Created, Error, Layer, LayerId, LayerKind, NewLayer, Ref, Result, Uuid,
+    Content, Created, Error, Layer, LayerId, LayerKind, NewLayer, Offset, Path, Ref, Result,
+    Transform, Uuid,
     project::{ids, locked_inside, may_hold},
 };
 
@@ -241,6 +244,85 @@ impl Run<'_, '_> {
             (false, _) => self.unlocked(op, old.id)?,
         }
         self.check_names(op, &new)?;
+        self.put(op, &place, new)
+    }
+
+    /// Puts `transform` on a layer's own geometry. Pixels never resample,
+    /// so a picture takes only a whole-pixel translation.
+    pub(super) fn transform_layer(
+        &mut self,
+        op: usize,
+        layer: &Ref,
+        transform: Transform,
+    ) -> Result<()> {
+        let id = LayerId(self.resolve(layer)?);
+        let picture = self.project.picture(id);
+        // A block's clean-up and mask live in its block, not in the tree.
+        let holder = picture.as_ref().map_or(id, |picture| picture.holder);
+        let (page, path) = self
+            .project
+            .place(holder)
+            .ok_or_else(|| Error::NotFound(format!("layer {id}")))?;
+        let place = Place {
+            id: holder,
+            page,
+            path,
+        };
+        if picture.is_some_and(|picture| picture.locked) {
+            return Err(Error::Locked { op, layer: id });
+        }
+        let affine = Affine::from(transform);
+        let turned = |old: &mut Transform| *old = (affine * Affine::from(*old)).into();
+        let reshaped = |old: &mut Path| {
+            let mut path = BezPath::from_svg(old.as_str()).expect("a stored path parses");
+            path.apply_affine(affine);
+            *old = Path::try_from(path.to_svg()).expect("kurbo writes path data it reads");
+        };
+        let moved = |offset: &mut Offset| {
+            let [a, b, c, d, x, y] = affine.as_coeffs();
+            let by = |at: i32, by: f64| {
+                let to = f64::from(at) + by;
+                (to.fract() == 0.0 && (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&to))
+                    .then_some(to as i32)
+            };
+            let unturned = [a, b, c, d] == [1.0, 0.0, 0.0, 1.0];
+            match (by(offset.x, x), by(offset.y, y)) {
+                (Some(x), Some(y)) if unturned => {
+                    *offset = Offset { x, y };
+                    Ok(())
+                }
+                _ => Err(Error::invalid(
+                    op,
+                    format!("layer {id}'s pixels move only by whole pixels"),
+                )),
+            }
+        };
+        let old = self.get(&place).own();
+        let mut new = old.clone();
+        match &mut new.content {
+            Content::Block(block) if block.mask.id == id => moved(&mut block.mask.content.offset)?,
+            Content::Block(block) if block.cleanup.id == id => {
+                moved(&mut block.cleanup.content.offset)?;
+            }
+            Content::Block(block) => {
+                let text = block.translation.as_mut().unwrap_or(&mut block.source);
+                turned(&mut text.transform);
+            }
+            Content::Text(text) => turned(&mut text.transform),
+            Content::Image(image) => turned(&mut image.transform),
+            Content::Shape(shape) => reshaped(&mut shape.path),
+            Content::Panel(panel) => reshaped(&mut panel.outline),
+            Content::Balloon(balloon) => reshaped(&mut balloon.outline),
+            Content::Raster(raster) => moved(&mut raster.offset)?,
+            Content::Mask(mask) => moved(&mut mask.offset)?,
+            Content::Group(_) => {
+                return Err(Error::invalid(op, "a group has no geometry of its own"));
+            }
+        }
+        if new == old {
+            return Ok(());
+        }
+        self.unlocked(op, holder)?;
         self.put(op, &place, new)
     }
 }

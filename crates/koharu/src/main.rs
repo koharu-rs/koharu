@@ -3,19 +3,19 @@
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 mod mallinfo;
 
+use std::io::IsTerminal as _;
+
 use clap::Parser as _;
 use koharu::panic;
 use koharu::sentry;
-use koharu_app as app;
 use tracing_subscriber::layer::SubscriberExt as _;
 
 #[derive(clap::Parser)]
 #[command(version, about)]
 struct Cli {}
 
-#[tokio::main]
 #[tauri_runtime_cef::cef_entry_point]
-async fn main() {
+fn main() {
     #[cfg(target_os = "windows")]
     {
         // SAFETY: This only requests the existing parent console. It does not allocate one.
@@ -26,8 +26,9 @@ async fn main() {
         };
     }
 
-    let _cli = Cli::parse();
+    // First, before the runtime and the arguments: see `sentry::initialize`.
     let _guard = sentry::initialize();
+    let _cli = Cli::parse();
     panic::install();
     tracing::subscriber::set_global_default(
         tracing_subscriber::registry()
@@ -37,9 +38,17 @@ async fn main() {
                     .from_env_lossy(),
             )
             .with(sentry::tracing_layer())
-            .with(koharu::tracing::TimingLayer::new()),
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_ansi(std::io::stderr().is_terminal()),
+            ),
     )
     .expect("failed to set the global tracing subscriber");
-    tokio::task::block_in_place(|| app::run(tauri::generate_context!()))
-        .expect("failed to run the desktop application");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("failed to start the async runtime");
+    let _runtime = runtime.enter();
+    koharu_desktop::run(tauri::generate_context!()).expect("failed to run the desktop application");
 }

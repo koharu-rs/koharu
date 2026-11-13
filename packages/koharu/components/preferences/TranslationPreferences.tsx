@@ -5,19 +5,14 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ModelPicker } from '@/components/controls/ModelPicker'
-import { GenerationPreferences } from '@/components/preferences/GenerationPreferences'
+import { vendorName } from '@/components/preferences/models'
 import {
   PreferencePage,
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
-import type {
-  LanguageChoice,
-  Model,
-  ProviderPreference,
-  TranslationConfig as TranslationSettings,
-} from '@koharu/bridge/protocol'
+import { modelName, orderedLanguageChoices, REASONING, vendorOf } from '@/lib/translation'
+import type { ModelInfo, TranslatorConfig } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {
@@ -27,38 +22,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@koharu/ui/components/select'
+import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
 
+/** Whether the prompt has `{target}`, which the translator refuses one without. */
+export function promptNamesTarget(value: TranslatorConfig): boolean {
+  return (value.prompt ?? '').includes('{target}')
+}
+
+/** The `[pipeline.translator]` section: the model, the target language, the system prompt with
+ * `{target}` where the target's name goes, whether the model sees each page, and how much it
+ * reasons. */
 export function TranslationPreferences({
   value,
-  modelChoices,
-  providers,
-  languages,
+  models,
   onChange,
 }: {
-  value: TranslationSettings
-  modelChoices: Model[]
-  providers: ProviderPreference[]
-  languages: LanguageChoice[]
-  onChange: (value: TranslationSettings) => void
+  value: TranslatorConfig
+  models: ModelInfo[]
+  onChange: (value: TranslatorConfig) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [modelOpen, setModelOpen] = useState(false)
-  const selected =
-    modelChoices.find((candidate) => modelKey(candidate) === modelKey(value.model)) ?? null
-  const current: Model = selected ?? {
-    ...value.model,
-    model: value.model.model ?? null,
-    name: value.model.model ?? providerName(providers, value.model.provider),
-    quantizations: [],
-    vision: value.model.vision ?? false,
-    reasoning: value.model.reasoning ?? false,
-  }
-  const choices = selected ? modelChoices : [current, ...modelChoices]
-  const quantization =
-    current.quantizations.find((quantization) => quantization.id === value.model.quantization) ??
-    current.quantizations[0]
-  const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
+  const languageChoices = useMemo(() => orderedLanguageChoices(i18n.language), [i18n.language])
+  const model = value.model ?? ''
+  const reasoning = value.reasoning ?? 'default'
+
   return (
     <PreferencePage
       title={t('settings.translation.title')}
@@ -78,12 +67,15 @@ export function TranslationPreferences({
               aria-label={t('settings.translation.translationModel')}
               className='flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-[11px] transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
             >
-              <span className='min-w-0 flex-1 text-left'>
-                <ModelLabel
-                  model={current}
-                  providers={providers}
-                  quantization={quantization?.name ?? value.model.quantization}
-                />
+              <span className='flex min-w-0 flex-1 items-center gap-2 text-left'>
+                {model && (
+                  <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[9px] font-medium'>
+                    {vendorName(vendorOf(model))}
+                  </Badge>
+                )}
+                <span className='truncate'>
+                  {modelName(models, model) || t('inference.noModel')}
+                </span>
               </span>
               <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
             </PopoverTrigger>
@@ -93,27 +85,58 @@ export function TranslationPreferences({
               className='w-(--anchor-width) min-w-64 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
             >
               <ModelPicker
-                value={value.model}
-                models={choices}
-                providers={providers}
+                value={model}
+                models={models}
                 onBack={() => setModelOpen(false)}
-                onSelect={(model) => {
-                  onChange({
-                    ...value,
-                    model,
-                  })
+                onSelect={(reference) => {
+                  onChange({ ...value, model: reference })
                   setModelOpen(false)
                 }}
               />
             </PopoverContent>
           </Popover>
         </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.vision')}
+          description={t('settings.translation.visionDescription')}
+        >
+          <Switch
+            aria-label={t('settings.translation.vision')}
+            checked={value.vision ?? false}
+            onCheckedChange={(vision) => onChange({ ...value, vision })}
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.reasoning')}
+          description={t('settings.translation.reasoningDescription')}
+        >
+          <Select
+            value={reasoning}
+            items={Object.fromEntries([
+              ['default', t('inference.providerDefault')],
+              ...REASONING.map((level) => [level, t(`reasoning.${level}`)]),
+            ])}
+            onValueChange={(level) =>
+              level && onChange({ ...value, reasoning: level === 'default' ? null : level })
+            }
+          >
+            <SelectTrigger
+              aria-label={t('settings.translation.reasoning')}
+              className='h-8 w-full text-[11px]'
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='default'>{t('inference.providerDefault')}</SelectItem>
+              {REASONING.map((level) => (
+                <SelectItem key={level} value={level}>
+                  {t(`reasoning.${level}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </PreferenceRow>
       </PreferenceSection>
-
-      <GenerationPreferences
-        value={value.generation}
-        onChange={(generation) => onChange({ ...value, generation })}
-      />
 
       <PreferenceSection title={t('settings.translation.output')}>
         <PreferenceRow
@@ -121,13 +144,11 @@ export function TranslationPreferences({
           description={t('settings.translation.targetLanguageDescription')}
         >
           <Select
-            value={value.target_language}
+            value={value.target ?? 'en'}
             items={Object.fromEntries(
               languageChoices.map((language) => [language.tag, language.name]),
             )}
-            onValueChange={(target_language) =>
-              target_language && onChange({ ...value, target_language })
-            }
+            onValueChange={(target) => target && onChange({ ...value, target })}
           >
             <SelectTrigger
               aria-label={t('model.targetLanguage')}
@@ -145,43 +166,26 @@ export function TranslationPreferences({
           </Select>
         </PreferenceRow>
         <PreferenceRow
-          title={t('model.instructions')}
-          description={t('settings.translation.instructionsDescription')}
+          title={t('settings.translation.prompt')}
+          description={t('settings.translation.promptDescription')}
           align='start'
         >
-          <Textarea
-            aria-label={t('settings.translation.instructionsLabel')}
-            value={value.instructions ?? ''}
-            className='field-sizing-fixed min-h-24 resize-y overflow-y-auto text-[12px] leading-5'
-            placeholder={t('settings.translation.instructionsPlaceholder')}
-            onChange={(event) =>
-              onChange({ ...value, instructions: event.currentTarget.value || null })
-            }
-          />
+          <div className='grid gap-1'>
+            <Textarea
+              aria-label={t('settings.translation.prompt')}
+              aria-invalid={!promptNamesTarget(value)}
+              value={value.prompt ?? ''}
+              className='field-sizing-fixed min-h-32 resize-y overflow-y-auto text-[12px] leading-5'
+              onChange={(event) => onChange({ ...value, prompt: event.currentTarget.value })}
+            />
+            {!promptNamesTarget(value) && (
+              <p className='text-[10px] text-destructive'>
+                {t('settings.translation.promptNeedsTarget')}
+              </p>
+            )}
+          </div>
         </PreferenceRow>
       </PreferenceSection>
     </PreferencePage>
-  )
-}
-
-function ModelLabel({
-  model,
-  providers,
-  quantization,
-}: {
-  model: Model
-  providers: ProviderPreference[]
-  quantization: string | null | undefined
-}) {
-  return (
-    <span className='flex min-w-0 items-center gap-2'>
-      <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[9px] font-medium'>
-        {providerName(providers, model.provider)}
-      </Badge>
-      <span className='truncate'>
-        {model.name}
-        {quantization && <span className='text-muted-foreground'> · {quantization}</span>}
-      </span>
-    </span>
   )
 }

@@ -11,46 +11,18 @@ import {
   Settings,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
-import { call } from '@/lib/backend'
-import {
-  pageKey,
-  pagesKey,
-  preparedPageKey,
-  projectKey,
-  queryClient,
-  refresh,
-  useImportPages,
-  usePage,
-  usePages,
-} from '@/lib/queries'
+import { call, dispatch } from '@/lib/backend'
+import { useImportPages, usePage, useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { prefetchCanvasPages, showCanvasPage } from '@koharu/bridge/canvas'
-import {
-  commands,
-  type CanvasPagePreparation,
-  type Page,
-  type PageImportSource,
-  type PageSummary,
-  type ProjectInfo,
-} from '@koharu/bridge/protocol'
+import { commands, type ImportSource, type PageSummary } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@koharu/ui/components/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@koharu/ui/components/dropdown-menu'
 import { Input } from '@koharu/ui/components/input'
@@ -60,15 +32,23 @@ import { cn } from '@koharu/ui/lib/utils'
 
 const emptyPages: PageSummary[] = []
 
-interface IntentPrefetchState {
-  project: string
-  revision: number
-  pages: Set<string>
+/** How far the pointer moves before a press on a page becomes its drag. */
+const DRAG_DISTANCE = 4
+
+/** A page being reordered by the pointer, which HTML drag and drop can't do under off-screen
+ * rendering: the page, where the press began, and the page it's over. */
+interface Reorder {
+  page: string
+  pointer: number
+  start: { x: number; y: number }
+  moved: boolean
+  target: number | null
 }
 
 export function PageRail() {
   const { t } = useTranslation()
-  const pages = usePages().data ?? emptyPages
+  const project = useProject().data
+  const pages = project?.pages ?? emptyPages
   const active = usePage().data?.id ?? null
   const selected = useKoharuStore((state) => state.selectedPages)
   const selectPages = useKoharuStore((state) => state.selectPages)
@@ -76,18 +56,15 @@ export function PageRail() {
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
   const anchor = useRef<number | null>(null)
-  const selectionRequest = useRef(0)
-  const intentPrefetch = useRef<IntentPrefetchState | null>(null)
-  const [dragged, setDragged] = useState<string | null>(null)
+  const reorder = useRef<Reorder | null>(null)
+  const [dragged, setDragged] = useState<{ page: string; target: number | null } | null>(null)
   const [query, setQuery] = useState('')
-  const [renaming, setRenaming] = useState<PageSummary | null>(null)
-  const [renameValue, setRenameValue] = useState('')
-  const normalized = query.trim().toLocaleLowerCase()
+  const normalized = query.trim()
   const visiblePages = useMemo(
     () =>
       pages
         .map((page, index) => ({ page, index }))
-        .filter(({ page }) => !normalized || page.label.toLocaleLowerCase().includes(normalized)),
+        .filter(({ index }) => !normalized || String(index + 1).includes(normalized)),
     [normalized, pages],
   )
   const pageList = useRef<HTMLDivElement>(null)
@@ -105,12 +82,15 @@ export function PageRail() {
       ),
   })
 
-  useEffect(
-    () => () => {
-      selectionRequest.current += 1
-    },
-    [],
-  )
+  useEffect(() => {
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !reorder.current) return
+      reorder.current = null
+      setDragged(null)
+    }
+    window.addEventListener('keydown', cancel)
+    return () => window.removeEventListener('keydown', cancel)
+  }, [])
 
   const select = (index: number, additive: boolean, range: boolean) => {
     const page = pages[index]
@@ -130,70 +110,11 @@ export function PageRail() {
       next = [page.id]
       anchor.current = index
     }
-    const previousProject = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-    const previousPage = queryClient.getQueryData<Page | null>(pageKey)
-    const prepared = queryClient.getQueryData<CanvasPagePreparation>(preparedPageKey(page.id))
-    const activated = showCanvasPage(page.id, previousProject?.revision ?? null)
-    const request = ++selectionRequest.current
-    const synchronize = () => {
-      if (selectionRequest.current !== request) return
-      if (activated && previousProject && prepared?.revision === previousProject.revision) {
-        queryClient.setQueryData(projectKey, { ...previousProject, active_page: page.id })
-        queryClient.setQueryData(pageKey, prepared.page)
-      }
-      selectPages(next)
+    selectPages(next)
+    if (page.id !== active) {
       selectLayers([])
-      void call(commands.selectPage, page.id)
-        .then((selection) => {
-          if (selectionRequest.current !== request) return
-          queryClient.setQueryData(projectKey, selection.project)
-          queryClient.setQueryData(pageKey, selection.page)
-        })
-        .catch(() => {
-          if (selectionRequest.current !== request) return
-          if (queryClient.getQueryData<ProjectInfo | null>(projectKey)?.active_page === page.id) {
-            queryClient.setQueryData(projectKey, previousProject)
-            queryClient.setQueryData(pageKey, previousPage)
-          }
-        })
+      dispatch(commands.selectPage, page.id)
     }
-    if (activated) {
-      requestAnimationFrame(() => window.setTimeout(synchronize, 0))
-    } else {
-      synchronize()
-    }
-  }
-
-  const prefetchOnIntent = (page: string) => {
-    const project = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-    if (!project || project.active_page === page) return
-    let state = intentPrefetch.current
-    if (!state || state.project !== project.name || state.revision !== project.revision) {
-      state = { project: project.name, revision: project.revision, pages: new Set() }
-      intentPrefetch.current = state
-    }
-    const prepared = queryClient.getQueryData<CanvasPagePreparation>(preparedPageKey(page))
-    if (prepared?.revision === project.revision || state.pages.has(page)) return
-    state.pages.add(page)
-    void prefetchCanvasPages([page])
-      .then((pages) => {
-        const current = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-        const preparedPage = pages.find(
-          (candidate) => candidate.page.id === page && candidate.revision === project.revision,
-        )
-        if (
-          preparedPage &&
-          current?.name === project.name &&
-          current.revision === preparedPage.revision
-        ) {
-          queryClient.setQueryData(preparedPageKey(page), preparedPage)
-          return
-        }
-        if (intentPrefetch.current === state) state.pages.delete(page)
-      })
-      .catch(() => {
-        if (intentPrefetch.current === state) state.pages.delete(page)
-      })
   }
 
   const deletePage = (page: string) =>
@@ -201,31 +122,57 @@ export function PageRail() {
       .then(() => {
         selectPages(selected.filter((selectedPage) => selectedPage !== page))
         if (active === page) selectLayers([])
-        return refresh(projectKey, pagesKey, pageKey)
       })
       .catch(() => undefined)
 
-  const openRename = (page: PageSummary) => {
-    setRenaming(page)
-    setRenameValue(page.label)
-  }
-
-  const closeRename = () => {
-    setRenaming(null)
-    setRenameValue('')
-  }
-
-  const submitRename = () => {
-    const page = renaming
-    const label = renameValue.trim()
-    if (!page || !label || label === page.label) {
-      closeRename()
-      return
-    }
-    void call(commands.renamePage, page.id, label)
-      .then(() => refresh(projectKey, pagesKey, pageKey))
-      .catch(() => undefined)
-      .finally(closeRename)
+  /** The pointer's press, move, and release on the list, as a reorder once it has moved; the page
+   * goes where it's released, and Escape or a cancelled pointer leaves it. */
+  const pointer = {
+    onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
+      const page = (event.target as HTMLElement).closest<HTMLElement>('[data-page]')?.dataset.page
+      if (event.button !== 0 || !page) return
+      if ((event.target as HTMLElement).closest('button,[role="menuitem"]')) return
+      reorder.current = {
+        page,
+        pointer: event.pointerId,
+        start: { x: event.clientX, y: event.clientY },
+        moved: false,
+        target: null,
+      }
+    },
+    onPointerMove: (event: PointerEvent<HTMLDivElement>) => {
+      const current = reorder.current
+      if (!current || current.pointer !== event.pointerId) return
+      if (
+        !current.moved &&
+        Math.hypot(event.clientX - current.start.x, event.clientY - current.start.y) <
+          DRAG_DISTANCE
+      )
+        return
+      if (!current.moved) event.currentTarget.setPointerCapture(event.pointerId)
+      current.moved = true
+      const over = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>('[data-page-index]')?.dataset.pageIndex
+      current.target = over === undefined ? null : Number(over)
+      setDragged({ page: current.page, target: current.target })
+    },
+    onPointerUp: (event: PointerEvent<HTMLDivElement>) => {
+      const current = reorder.current
+      if (!current || current.pointer !== event.pointerId) return
+      reorder.current = null
+      setDragged(null)
+      if (!current.moved || current.target === null) return
+      // The page takes the place of the one it's dropped on; `move_page` counts its index after
+      // the page is taken out, which is that place either way.
+      if (pages[current.target]?.id !== current.page) {
+        dispatch(commands.movePage, current.page, current.target)
+      }
+    },
+    onPointerCancel: () => {
+      reorder.current = null
+      setDragged(null)
+    },
   }
 
   return (
@@ -286,7 +233,11 @@ export function PageRail() {
             viewportClassName='px-1.5 py-1.5'
             viewportRef={pageList}
           >
-            <div className='relative w-full' style={{ height: pageVirtualizer.getTotalSize() }}>
+            <div
+              className='relative w-full touch-none'
+              style={{ height: pageVirtualizer.getTotalSize() }}
+              {...pointer}
+            >
               {pageVirtualizer.getVirtualItems().map((virtualRow) => {
                 const item = visiblePages[virtualRow.index]
                 if (!item) return null
@@ -300,23 +251,14 @@ export function PageRail() {
                   >
                     <PageItem
                       page={page}
+                      index={index}
+                      revision={active === page.id ? project?.revision : undefined}
                       active={active === page.id}
                       selected={selected.includes(page.id)}
-                      dragged={dragged === page.id}
-                      onIntent={active === page.id ? undefined : () => prefetchOnIntent(page.id)}
+                      dragged={dragged?.page === page.id}
+                      target={dragged !== null && dragged.target === index}
                       onSelect={(additive, range) => select(index, additive, range)}
-                      onDragStart={() => setDragged(page.id)}
-                      onDragEnd={() => setDragged(null)}
-                      onRename={() => openRename(page)}
                       onDelete={() => deletePage(page.id)}
-                      onDrop={() => {
-                        if (dragged && dragged !== page.id) {
-                          void call(commands.movePage, dragged, index)
-                            .then(() => refresh(projectKey, pagesKey))
-                            .catch(() => undefined)
-                        }
-                        setDragged(null)
-                      }}
                     />
                   </div>
                 )
@@ -343,45 +285,8 @@ export function PageRail() {
             </TooltipTrigger>
             <TooltipContent side='right'>{t('menu.settings')}</TooltipContent>
           </Tooltip>
-          <ResourceMonitor />
         </div>
       </aside>
-
-      <Dialog
-        open={renaming !== null}
-        onOpenChange={(open) => {
-          if (!open) closeRename()
-        }}
-      >
-        <DialogContent className='sm:max-w-md'>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              submitRename()
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>{t('navigator.renameTitle')}</DialogTitle>
-              <DialogDescription>{t('navigator.renameDescription')}</DialogDescription>
-            </DialogHeader>
-            <Input
-              autoFocus
-              value={renameValue}
-              aria-label={t('navigator.pageName')}
-              className='mt-4'
-              onChange={(event) => setRenameValue(event.currentTarget.value)}
-            />
-            <DialogFooter className='mt-4'>
-              <Button type='button' variant='ghost' onClick={closeRename}>
-                {t('common.cancel')}
-              </Button>
-              <Button type='submit' disabled={!renameValue.trim()}>
-                {t('navigator.rename')}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }
@@ -391,7 +296,7 @@ function PageImportMenu({
   onImport,
 }: {
   importing: boolean
-  onImport: (source: PageImportSource) => void
+  onImport: (source: ImportSource) => void
 }) {
   const { t } = useTranslation()
   const icon = importing ? (
@@ -443,34 +348,33 @@ function PageImportMenu({
 
 function PageItem({
   page,
+  index,
+  revision,
   active,
   selected,
   dragged,
-  onIntent,
+  target,
   onSelect,
-  onDragStart,
-  onDragEnd,
-  onRename,
   onDelete,
-  onDrop,
 }: {
   page: PageSummary
+  index: number
+  /** The project's revision while this page is the one edited, so its thumbnail follows. */
+  revision: string | undefined
   active: boolean
   selected: boolean
   dragged: boolean
-  onIntent?: () => void
+  target: boolean
   onSelect: (additive: boolean, range: boolean) => void
-  onDragStart: () => void
-  onDragEnd: () => void
-  onRename: () => void
   onDelete: () => void
-  onDrop: () => void
 }) {
   const { t } = useTranslation()
+  const name = t('navigator.pageNumber', { number: index + 1 })
 
   return (
     <article
-      draggable
+      data-page={page.id}
+      data-page-index={index}
       data-active={active}
       data-selected={selected}
       className={cn(
@@ -481,39 +385,30 @@ function PageItem({
             ? 'bg-foreground/[0.06] hover:bg-foreground/[0.08]'
             : 'hover:bg-foreground/[0.045]',
         dragged && 'opacity-50',
+        target && !dragged && 'ring-2 ring-primary/60',
       )}
-      onPointerEnter={onIntent}
-      onFocus={onIntent}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest('button,[role="menuitem"]')) return
         onSelect(event.ctrlKey || event.metaKey, event.shiftKey)
       }}
-      onDoubleClick={onRename}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault()
-        onDrop()
-      }}
     >
       <div className='grid h-16 w-12 place-items-center overflow-hidden rounded-lg bg-[var(--surface-well)]'>
-        {page.source_asset ? (
-          <PageThumbnail page={page.id} asset={page.source_asset} label={page.label} />
+        {page.background ? (
+          <PageThumbnail page={page.id} version={revision ?? page.background.file} label={name} />
         ) : (
           <span className='text-[9px] text-muted-foreground'>{t('navigator.noImage')}</span>
         )}
       </div>
       <div className='min-w-0 py-0.5'>
         <div className='flex items-start gap-1'>
-          <span className='min-w-0 flex-1 truncate text-[10px] font-medium'>{page.label}</span>
+          <span className='min-w-0 flex-1 truncate text-[10px] font-medium'>{name}</span>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
                   variant='ghost'
                   size='icon-xs'
-                  aria-label={t('navigator.actionsFor', { page: page.label })}
+                  aria-label={t('navigator.actionsFor', { page: name })}
                   className='-mt-1 shrink-0 opacity-0 shadow-none group-hover:opacity-100 aria-expanded:opacity-100'
                 />
               }
@@ -521,17 +416,12 @@ function PageItem({
               <MoreHorizontal />
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
-              <DropdownMenuItem onClick={onRename}>{t('navigator.rename')}</DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem variant='destructive' onClick={onDelete}>
                 <Trash2 /> {t('navigator.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <p className='mt-1 text-[9px] leading-3.5 text-muted-foreground'>
-          {t('navigator.layerCount', { count: page.layer_count })}
-        </p>
         <p className='mt-1 text-[9px] text-muted-foreground tabular-nums'>
           {page.size.width} × {page.size.height}
         </p>
@@ -540,7 +430,8 @@ function PageItem({
   )
 }
 
-function PageThumbnail({ page, asset, label }: { page: string; asset: string; label: string }) {
+/** The page as it renders, fetched again when `version` changes. */
+function PageThumbnail({ page, version, label }: { page: string; version: string; label: string }) {
   const { t } = useTranslation()
   const [source, setSource] = useState<string | null>(null)
   const [settled, setSettled] = useState(false)
@@ -549,10 +440,10 @@ function PageThumbnail({ page, asset, label }: { page: string; asset: string; la
     setSettled(false)
     const timeout = window.setTimeout(() => setSettled(true), 100)
     return () => window.clearTimeout(timeout)
-  }, [asset])
+  }, [version])
 
   const thumbnail = useQuery({
-    queryKey: ['thumbnail', asset],
+    queryKey: ['thumbnail', page, version],
     queryFn: async () => new Uint8Array(await call(commands.getThumbnail, page)),
     enabled: settled,
     staleTime: Number.POSITIVE_INFINITY,
