@@ -1,4 +1,4 @@
-//! Qwen-Image 2.1 generation and editing.
+//! Qwen-Image 2.1 generation, editing, and inpainting.
 //!
 //! Follows diffusers' `QwenImage21Pipeline` at its defaults: 40 flow-matching
 //! Euler steps on the resolution-dependent shift, no guidance, and a
@@ -9,6 +9,10 @@
 //! order given. A mask or a painted annotation is one more condition image
 //! the prompt names, as the model card describes local edits.
 //! https://huggingface.co/Qwen/Qwen-Image-2.1/blob/d26bb61231c349cf6b7896fa83353113880e1ba3/README.md
+//! Qwen-Image 2.1 has no inpainting pipeline, so inpainting follows diffusers'
+//! Qwen-Image-Edit one, flow-matching img2img with a mask and the image as the
+//! edit's condition, on 2.1's own steps and sizes.
+//! https://github.com/huggingface/diffusers/blob/74fb49b5506a6960d55de0f7e6f4e0631213dc63/src/diffusers/pipelines/qwenimage/pipeline_qwenimage_edit_inpaint.py
 
 mod model;
 
@@ -41,6 +45,8 @@ const TEXT_ENCODER: Repository = Repository::model(
 /// The VAE's 16× downscale by the transformer's 2×2 patches: sizes are
 /// multiples of it.
 const MULTIPLE: u32 = 32;
+/// The area `QwenImageEditInpaintPipeline` sizes an image to inpaint to.
+const AREA: u32 = 1024 * 1024;
 
 /// `QwenImage21Pipeline.__call__`'s parameters and defaults.
 #[derive(Debug, Clone, PartialEq)]
@@ -72,6 +78,30 @@ impl Default for Options {
             num_images_per_prompt: 1,
             seed: -1,
             output_resolution: 1024,
+        }
+    }
+}
+
+/// `QwenImageEditInpaintPipeline.__call__`'s parameters that apply here,
+/// with 2.1's own number of steps in place of Qwen-Image-Edit's 50.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InpaintOptions {
+    /// The margin around the mask an inpainting is cropped to, or the whole
+    /// image.
+    pub padding_mask_crop: Option<u32>,
+    pub strength: f64,
+    pub num_inference_steps: usize,
+    /// sd.cpp's seed; -1 picks one at random.
+    pub seed: i64,
+}
+
+impl Default for InpaintOptions {
+    fn default() -> Self {
+        Self {
+            padding_mask_crop: None,
+            strength: 0.6,
+            num_inference_steps: 40,
+            seed: -1,
         }
     }
 }
@@ -177,6 +207,84 @@ impl QwenImage {
             count: Some(options.num_images_per_prompt),
             ..ImageParams::default()
         })
+    }
+
+    /// `image` repainted where `mask` is white, sized to a megapixel at its
+    /// aspect ratio, with what's inpainted as the edit's condition. The prompt
+    /// may be empty.
+    pub fn inpaint(
+        &self,
+        prompt: &str,
+        image: &DynamicImage,
+        mask: &DynamicImage,
+        options: &InpaintOptions,
+    ) -> Result<RgbImage> {
+        ensure!(
+            image.width() == mask.width() && image.height() == mask.height(),
+            "image/mask dimensions differ: image={}x{}, mask={}x{}",
+            image.width(),
+            image.height(),
+            mask.width(),
+            mask.height()
+        );
+        ensure!(
+            !prompt.contains('\0'),
+            "prompt contains an interior NUL byte"
+        );
+        ensure!(
+            options.strength > 0.0 && options.strength <= 1.0,
+            "Qwen-Image 2.1 inpaint strength must be greater than zero and at most one"
+        );
+        ensure!(
+            options.num_inference_steps > 0,
+            "num_inference_steps must be greater than zero"
+        );
+        let (width, height) = dimensions(AREA, image.width(), image.height());
+        ensure!(
+            width > 0 && height > 0,
+            "the image is too narrow to inpaint at {MULTIPLE} pixels a side"
+        );
+
+        let image = crate::image::resize(&image.to_rgb8(), width, height, diffusers::LANCZOS)?;
+        let mask = crate::image::resize(&mask.to_luma8(), width, height, diffusers::LANCZOS)?;
+        let region = options
+            .padding_mask_crop
+            .and_then(|padding| diffusers::crop_region(&mask, width, height, padding));
+        let (init_image, mut native_mask) = diffusers::crop_to_region(&image, &mask, region)?;
+        diffusers::binarize(&mut native_mask);
+
+        // Upstream conditions the text encoder on the image before its crop
+        // and the transformer on the crop; sd.cpp takes one reference for
+        // both, the crop, which is the whole image unless one is asked for.
+        let generated = self
+            .model
+            .forward(&ImageParams {
+                prompt,
+                width: Some(width),
+                height: Some(height),
+                init: Some(&init_image),
+                references: std::slice::from_ref(&init_image),
+                mask: Some(&native_mask),
+                cfg: Some(1.0),
+                sample_method: Some(SampleMethod::Euler),
+                steps: Some(u32::try_from(options.num_inference_steps)?),
+                seed: Some(options.seed),
+                count: Some(1),
+                strength: Some(diffusers::strength(
+                    options.strength,
+                    options.num_inference_steps,
+                )),
+                ..ImageParams::default()
+            })?
+            .into_iter()
+            .next()
+            .context("Qwen-Image 2.1 returned no inpainted image")?;
+        let generated = DynamicImage::ImageRgba8(generated).into_rgb8();
+        // Upstream lays the result over the image only for a crop.
+        match region {
+            Some(_) => diffusers::apply_overlay(&mask, &image, generated, region),
+            None => Ok(generated),
+        }
     }
 }
 

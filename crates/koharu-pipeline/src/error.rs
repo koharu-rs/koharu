@@ -1,7 +1,7 @@
 use bytesize::ByteSize;
 use thiserror::Error;
 
-use crate::Step;
+use crate::Stage;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -27,9 +27,9 @@ pub enum Error {
         source: anyhow::Error,
     },
 
-    #[error("{step} failed")]
-    Step {
-        step: Step,
+    #[error("{stage} failed")]
+    Stage {
+        stage: Stage,
         #[source]
         source: anyhow::Error,
     },

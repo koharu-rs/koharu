@@ -24,10 +24,12 @@ const SDXL_INPAINTING: Repository = Repository::model(
     "115134f363124c53c7d878647567d04daf26e41e",
 );
 
+/// The converted model card's prompt.
+pub const PROMPT: &str = "clean manga illustration, crisp black line art, flat colors, seamless original background, clean white speech bubble, no text";
+
 /// The converted model card's settings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Options {
-    pub prompt: String,
     pub negative_prompt: String,
     /// Square inference resolution. RORem mixed was trained at 512 and 1024.
     pub resolution: u32,
@@ -43,7 +45,6 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            prompt: "clean manga illustration, crisp black line art, flat colors, seamless original background, clean white speech bubble, no text".to_owned(),
             negative_prompt: "text, letters, words, symbols, watermark, signature, blurry, smudged, dirty, gray artifacts, extra objects, photorealistic".to_owned(),
             resolution: 512,
             mask_dilation: 0,
@@ -92,9 +93,10 @@ impl RoremMixed {
         Ok(Self { model })
     }
 
-    /// `image` repainted where `mask` is white.
+    /// `image` repainted where `mask` is white, after `prompt`.
     pub fn inference(
         &self,
+        prompt: &str,
         image: &DynamicImage,
         mask: &GrayImage,
         options: &Options,
@@ -126,7 +128,7 @@ impl RoremMixed {
             "RORem mixed strength must be finite, greater than zero, and less than one"
         );
         ensure!(
-            !options.prompt.contains('\0'),
+            !prompt.contains('\0'),
             "prompt contains an interior NUL byte"
         );
         ensure!(
@@ -144,7 +146,7 @@ impl RoremMixed {
         let generated = self
             .model
             .forward(&ImageParams {
-                prompt: &options.prompt,
+                prompt,
                 negative_prompt: &options.negative_prompt,
                 init: Some(&init_image),
                 mask: Some(&native_mask),

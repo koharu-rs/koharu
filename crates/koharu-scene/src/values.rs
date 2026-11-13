@@ -30,6 +30,24 @@ pub struct Rect {
     pub height: u32,
 }
 
+impl Rect {
+    /// The pixels `rect` touches on a `width` by `height` page; `None` when
+    /// it touches none.
+    #[must_use]
+    pub fn covering(rect: kurbo::Rect, width: u32, height: u32) -> Option<Self> {
+        let x0 = rect.x0.floor().max(0.0) as u32;
+        let y0 = rect.y0.floor().max(0.0) as u32;
+        let x1 = (rect.x1.ceil().max(0.0) as u32).min(width);
+        let y1 = (rect.y1.ceil().max(0.0) as u32).min(height);
+        (x1 > x0 && y1 > y0).then(|| Self {
+            x: x0 as i32,
+            y: y0 as i32,
+            width: x1 - x0,
+            height: y1 - y0,
+        })
+    }
+}
+
 /// A rectangle in page pixels, for text frames.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +73,13 @@ impl Default for Transform {
 impl From<Transform> for kurbo::Affine {
     fn from(Transform([[a, b, c], [d, e, f]]): Transform) -> Self {
         Self::new([a, d, b, e, c, f])
+    }
+}
+
+impl From<kurbo::Affine> for Transform {
+    fn from(affine: kurbo::Affine) -> Self {
+        let [a, b, c, d, e, f] = affine.as_coeffs();
+        Self([[a, c, e], [b, d, f]])
     }
 }
 

@@ -1,15 +1,16 @@
 //! Where a block's translation goes. Translation writes it, and the editor asks
 //! again when a balloon or a source frame changes, so the text reflows.
 
+mod room;
+
 use icu_locale_core::{LanguageIdentifier, subtags::language};
-use koharu_ml::koharu_layout_highres::rooms;
 use koharu_scene::{
     Align, Content, Direction, Frame, Layer, LayerId, Op, Project, Role, Transform,
 };
-use kurbo::{Affine, BezPath, Shape as _};
+use kurbo::{Affine, Shape as _};
 use serde_json::{Value, json};
 
-use crate::{Error, Result, steps::bounds};
+use crate::{Error, Result};
 
 /// The op placing `block`'s translation into `target`: in its room
 /// in its balloon, the share of the outline its source's box gets beside the
@@ -24,11 +25,8 @@ use crate::{Error, Result, steps::bounds};
 /// Japanese or Chinese, which are written so; any other language runs
 /// horizontally, turned by the source's tilt as the source is.
 pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier) -> Result<Op> {
-    let (page, (layer, holder)) = project
-        .pages()
-        .find_map(|page| Some((page, find(&page.layers, None, block)?)))
-        .ok_or_else(|| Error::invalid(format!("layer {block} isn't in the project")))?;
-    let Content::Block(this) = &layer.content else {
+    let (page, holder) = project.parent(block)?;
+    let Content::Block(this) = &project.layer(block)?.content else {
         return Err(Error::invalid(format!("layer {block} isn't a block")));
     };
     let room = match holder {
@@ -36,7 +34,9 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
             content: Content::Balloon(balloon),
             children,
             ..
-        }) if this.role == Role::Text => room(&balloon.outline, children, &page.layers, block)?,
+        }) if this.role == Role::Text => {
+            room::room(&balloon.outline, children, &page.layers, block)?
+        }
         _ => None,
     };
     let (frame, transform) = match room {
@@ -46,10 +46,9 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
             // takes onto the page again.
             let [[a, _, _], [d, _, _]] = this.source.transform.0;
             let turn = Affine::rotate_about(d.atan2(a), room.bounding_box().center());
-            let [a, b, c, d, e, f] = turn.as_coeffs();
             (
                 json!({"path": {"path": (turn.inverse() * room).to_svg(), "fit": "best", "anchor": "center"}, "box": null}),
-                json!(Transform([[a, c, e], [b, d, f]])),
+                json!(Transform::from(turn)),
             )
         }
         None => (filled(&this.source.frame), json!(this.source.transform)),
@@ -110,54 +109,6 @@ fn lettering(layers: &[Layer]) -> Option<f64> {
     found.get(found.len().checked_sub(1)? / 2).copied()
 }
 
-/// `block`'s room in a balloon with this `outline` holding `children` on a
-/// page of `layers`: the layout model's split of the outline among the source
-/// boxes of the texts standing in it. Those are its own and any other whose
-/// box reaches in, such as a remark written over its edge, which a later
-/// layer's clean-up would otherwise cover the balloon's lines with.
-fn room(
-    outline: &koharu_scene::Path,
-    children: &[Layer],
-    layers: &[Layer],
-    block: LayerId,
-) -> Result<Option<BezPath>> {
-    let outline = BezPath::from_svg(outline.as_str())
-        .map_err(|_| Error::invalid("a balloon's outline isn't a path"))?;
-    let mut texts = Vec::new();
-    collect_texts(children, false, &mut texts);
-    let at = texts.iter().position(|(id, _)| *id == block);
-    let own = texts.len();
-    let reach = outline.bounding_box();
-    collect_texts(layers, true, &mut texts);
-    let groups: Vec<Vec<kurbo::Rect>> = texts
-        .iter()
-        .enumerate()
-        .filter(|(index, (id, rect))| {
-            *index < own
-                || (!texts[..own].iter().any(|(mine, _)| mine == id)
-                    && rect.intersect(reach).area() > 0.0)
-        })
-        .map(|(_, (_, rect))| vec![*rect])
-        .collect();
-    Ok(at.and_then(|at| rooms(&outline, &groups).into_iter().nth(at)))
-}
-
-/// The text blocks among `layers`, and among their children when `deep`,
-/// with where their sources lie.
-fn collect_texts(layers: &[Layer], deep: bool, found: &mut Vec<(LayerId, kurbo::Rect)>) {
-    for layer in layers {
-        if let Content::Block(text) = &layer.content
-            && text.role == Role::Text
-            && let Some(rect) = bounds(&text.source)
-        {
-            found.push((layer.id, rect));
-        }
-        if deep {
-            collect_texts(&layer.children, deep, found);
-        }
-    }
-}
-
 /// `frame` filled at every render, centred.
 fn filled(frame: &Frame) -> Value {
     match frame {
@@ -172,26 +123,12 @@ fn filled(frame: &Frame) -> Value {
     }
 }
 
-/// The layer `id` among `layers` and what holds it, if a layer does.
-fn find<'l>(
-    layers: &'l [Layer],
-    holder: Option<&'l Layer>,
-    id: LayerId,
-) -> Option<(&'l Layer, Option<&'l Layer>)> {
-    layers.iter().find_map(|layer| {
-        if layer.id == id {
-            Some((layer, holder))
-        } else {
-            find(&layer.children, Some(layer), id)
-        }
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use anyhow::{Context as _, Result, bail};
     use icu_locale_core::langid;
     use koharu_scene::{Created, Edit, Frame, Session, Text};
+    use kurbo::BezPath;
 
     use super::*;
 

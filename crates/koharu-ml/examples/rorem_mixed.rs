@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::rorem_mixed::{Options, RoremMixed};
+use koharu_ml::rorem_mixed::{Options, PROMPT, RoremMixed};
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -15,8 +15,8 @@ struct Cli {
     #[arg(short, long, value_name = "FILE")]
     output: PathBuf,
 
-    #[arg(short, long)]
-    prompt: Option<String>,
+    #[arg(short, long, default_value = PROMPT)]
+    prompt: String,
 
     #[arg(long)]
     negative_prompt: Option<String>,
@@ -51,10 +51,10 @@ async fn main() -> Result<()> {
     let model = RoremMixed::load(device).await?;
     let defaults = Options::default();
     let output = model.inference(
+        &cli.prompt,
         &image,
         &mask,
         &Options {
-            prompt: cli.prompt.unwrap_or(defaults.prompt),
             negative_prompt: cli.negative_prompt.unwrap_or(defaults.negative_prompt),
             resolution: cli.resolution,
             mask_dilation: cli.mask_dilation,

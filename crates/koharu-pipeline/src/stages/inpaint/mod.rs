@@ -4,6 +4,7 @@
 //! windows, and only the masked pixels come back.
 
 mod flat;
+mod model;
 mod telea;
 mod windows;
 
@@ -11,41 +12,57 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use image::{GrayImage, Luma, RgbImage, imageops};
+use imageproc::{distance_transform::Norm, morphology::dilate};
+use indoc::indoc;
 use koharu_scene::{Content, Layer, LayerId, Op, PageId, Project, Rect, Ref, Tile, Tiles};
 use kurbo::{BezPath, Shape as _};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+pub use self::model::Inpainter;
 use self::{
     flat::{Fill, Place, Verdict},
     windows::Region,
 };
-use super::{Member, Stages, action, blocks, clamp, dilate, on_page, op, scan};
-use crate::{Area, Inpainter, Step, models::Models};
+use super::{Member, Task, action, blocking, key};
+use crate::{Area, PipelineConfig, Stage};
 
-/// A painted area to inpaint, and the prompt for an inpainter that takes one.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InpainterConfig {
+    pub model: Inpainter,
+    /// What the model is asked when a run brings no prompt of its own, as an
+    /// area's can; LaMa, which takes none, ignores it.
+    pub prompt: String,
+}
+
+impl Default for InpainterConfig {
+    fn default() -> Self {
+        Self {
+            model: Inpainter::default(),
+            // The general removal FLUX.3 Klein's masked inpainting was measured
+            // with on six Blue Archive pages, where it scored as one naming a
+            // panel's own lettering did.
+            prompt: indoc! {"
+                Remove all the text, including dialogue, sound effects, and handwritten notes.
+                Leave speech bubbles empty and keep everything else exactly the same."}
+            .to_owned(),
+        }
+    }
+}
+
+/// A painted area to inpaint, and its own prompt.
 pub(crate) struct AreaWork {
     pub(crate) area: Area,
     pub(crate) prompt: Option<String>,
 }
 
-pub(crate) struct Inpaint {
-    model: Inpainter,
-    area: Option<Arc<AreaWork>>,
-}
-
-impl Inpaint {
-    pub(crate) fn new(model: Inpainter, area: Option<Arc<AreaWork>>) -> Self {
-        Self { model, area }
-    }
-}
-
 /// A page's scan as it's being filled, and what the model redraws in it.
-pub(crate) struct Work {
-    page: PageId,
+struct Work {
     image: RgbImage,
     /// What the model redraws, over the page.
     mask: GrayImage,
-    windows: Vec<Rect>,
+    regions: Vec<Region>,
     target: Target,
 }
 
@@ -70,32 +87,40 @@ struct Cleanup {
     fill: Option<Fill>,
 }
 
-impl Stages for Inpaint {
-    type Input = Work;
-    type Output = Work;
-    type Ready = Work;
-
-    const STEP: Step = Step::Inpaint;
-
-    fn read(&self, member: &Member) -> Result<Option<Work>> {
-        match &self.area {
-            Some(area) => read_area(member, &area.area, self.model.side()),
-            None => read_blocks(member, self.model.side()),
+pub(crate) async fn inpaint(
+    task: &Task,
+    config: &PipelineConfig,
+    area: Option<Arc<AreaWork>>,
+) -> Result<()> {
+    let member = &task.members[0];
+    let (read, reading) = (member.clone(), area.clone());
+    let work = blocking(move || {
+        let _span =
+            tracing::info_span!("read", stage = %Stage::Inpaint, page = read.index + 1).entered();
+        match &reading {
+            Some(area) => read_area(&read, &area.area),
+            None => read_blocks(&read),
         }
-    }
-
-    fn infer(&mut self, models: &mut Models, mut inputs: Vec<Work>) -> Result<Vec<Work>> {
-        let prompt = self
-            .area
-            .as_ref()
-            .and_then(|area| area.prompt.clone())
-            .unwrap_or_default();
-        for work in &mut inputs {
-            if work.windows.is_empty() {
-                continue;
+    })
+    .await?;
+    let Some(mut work) = work else {
+        return Ok(());
+    };
+    let key = key(Stage::Inpaint, config).expect("an inpainter is Koharu's");
+    let model = config.inpainter.model;
+    let prompt = area
+        .and_then(|area| area.prompt.clone())
+        .unwrap_or_else(|| config.inpainter.prompt.clone());
+    let asked = prompt.clone();
+    let work = task
+        .inference(&[member], move |models| {
+            // What the fill tiers rebuilt all of needs no model.
+            if work.regions.is_empty() {
+                return Ok(work);
             }
-            let inpainter = models.inpainter(self.model)?;
-            for window in &work.windows {
+            let inpainter = models.get(&key, |device| model::load(model, device))?;
+            let (width, height) = work.image.dimensions();
+            for window in windows::plan(&work.regions, width, height, inpainter.pass()) {
                 let (x, y) = (window.x as u32, window.y as u32);
                 let cut =
                     imageops::crop_imm(&work.mask, x, y, window.width, window.height).to_image();
@@ -107,7 +132,7 @@ impl Stages for Inpaint {
                 let _span =
                     tracing::info_span!("redraw", width = window.width, height = window.height)
                         .entered();
-                let redrawn = inpainter.inpaint(&crop, &cut, &prompt)?;
+                let redrawn = inpainter.inference(&crop, &cut, &asked)?;
                 for (cx, cy, pixel) in cut.enumerate_pixels() {
                     if pixel.0[0] != 0 {
                         work.image
@@ -115,17 +140,13 @@ impl Stages for Inpaint {
                     }
                 }
             }
-        }
-        Ok(inputs)
-    }
-
-    fn finish(&mut self, work: Work) -> Result<Work> {
-        Ok(work)
-    }
-
-    fn write(&self, project: &Project, work: Work) -> Result<Vec<Op>> {
-        let model = self.model.to_string();
-        match work.target {
+            Ok(work)
+        })
+        .await?;
+    let page = member.page;
+    let model = model.to_string();
+    member
+        .apply(Stage::Inpaint, move |project| match work.target {
             Target::Blocks(cleanups) => Ok(cleanups
                 .iter()
                 .filter(|cleanup| {
@@ -133,28 +154,28 @@ impl Stages for Inpaint {
                         matches!(&layer.content, Content::Block(block) if block.cleanup.id == cleanup.cleanup)
                     })
                 })
-                .flat_map(|cleanup| cleaned(cleanup, &work.image, &model))
+                .flat_map(|cleanup| cleaned(cleanup, &work.image, &model, &prompt))
                 .collect()),
             Target::Area { rect, mask } => {
-                let Ok(page) = project.page(work.page) else {
+                let Ok(at) = project.page(page) else {
                     return Ok(Vec::new());
                 };
-                let prompt = self.area.as_ref().and_then(|area| area.prompt.as_ref());
-                let parameters = prompt.map(|prompt| json!({"prompt": prompt}));
+                let parameters = (!prompt.trim().is_empty()).then(|| json!({"prompt": prompt}));
+                let label = |label: &str| Ref::try_from(label.to_owned()).map_err(anyhow::Error::msg);
                 Ok(vec![
-                    op(json!({
+                    serde_json::from_value(json!({
                         "op": "add_layer",
                         "id": "$inpainted",
-                        "page": work.page,
-                        "index": page.layers.len(),
+                        "page": page,
+                        "index": at.layers.len(),
                         "layer": {"kind": "raster", "attributes": {
                             "c2pa": {"inpainting": action("c2pa.created", &model, parameters)},
                         }},
                     }))?,
-                    op(json!({
+                    serde_json::from_value(json!({
                         "op": "add_layer",
                         "id": "$limit",
-                        "page": work.page,
+                        "page": page,
                         "parent": "$inpainted",
                         "index": 0,
                         "layer": {"kind": "mask"},
@@ -171,17 +192,12 @@ impl Stages for Inpaint {
                     },
                 ])
             }
-        }
-    }
-}
-
-/// A layer an earlier op of the same edit labels.
-fn label(label: &str) -> Result<Ref> {
-    Ref::try_from(label.to_owned()).map_err(anyhow::Error::msg)
+        })
+        .await
 }
 
 /// The ops replacing a block's clean-up with the fill under its grown mask.
-fn cleaned(cleanup: &Cleanup, image: &RgbImage, model: &str) -> Vec<Op> {
+fn cleaned(cleanup: &Cleanup, image: &RgbImage, model: &str, prompt: &str) -> Vec<Op> {
     let size = Tile::SIZE;
     let mut ops: Vec<Op> = cleanup
         .old
@@ -211,7 +227,10 @@ fn cleaned(cleanup: &Cleanup, image: &RgbImage, model: &str) -> Vec<Op> {
     });
     let (made_by, parameters) = match cleanup.fill {
         Some(fill) => ("Koharu", Some(json!({"fill": fill.to_string()}))),
-        None => (model, None),
+        None => (
+            model,
+            (!prompt.trim().is_empty()).then(|| json!({"prompt": prompt})),
+        ),
     };
     ops.push(Op::SetAttribute {
         layer: cleanup.block.into(),
@@ -222,10 +241,10 @@ fn cleaned(cleanup: &Cleanup, image: &RgbImage, model: &str) -> Vec<Op> {
     ops
 }
 
-/// Every block's mask, the fill tiers run, and the model's windows for what
-/// they left.
-fn read_blocks(member: &Member, side: u32) -> Result<Option<Work>> {
-    let Some((project, scan)) = scan(member)? else {
+/// Every block's mask, the fill tiers run, and the regions they left for the
+/// model.
+fn read_blocks(member: &Member) -> Result<Option<Work>> {
+    let Some((project, scan)) = member.scan()? else {
         return Ok(None);
     };
     let mut image = scan.to_rgb8();
@@ -233,9 +252,9 @@ fn read_blocks(member: &Member, side: u32) -> Result<Option<Work>> {
     let mut cleanups = Vec::new();
     {
         let session = member.session.lock();
-        for (id, block) in blocks(&project, member.page, member.blocks.as_deref()) {
+        for (id, block) in member.blocks(&project) {
             let tiles = session.tiles(block.mask.id, None)?;
-            if let Some((rect, mask)) = on_page(&tiles, width, height) {
+            if let Some((rect, mask)) = tiles.coverage(width, height) {
                 cleanups.push(Cleanup {
                     block: id,
                     cleanup: block.cleanup.id,
@@ -270,7 +289,7 @@ fn read_blocks(member: &Member, side: u32) -> Result<Option<Work>> {
         };
         // A line under the mask goes with a pixel around it.
         let redrawn = if line {
-            dilate(&cleanup.mask, 1)
+            dilate(&cleanup.mask, Norm::LInf, 1)
         } else {
             cleanup.mask.clone()
         };
@@ -280,19 +299,17 @@ fn read_blocks(member: &Member, side: u32) -> Result<Option<Work>> {
             panel: place.panel,
         });
     }
-    let windows = windows::plan(&regions, width, height, side);
     Ok(Some(Work {
-        page: member.page,
         image,
         mask,
-        windows,
+        regions,
         target: Target::Blocks(cleanups),
     }))
 }
 
 /// The painted area, all of it for the model.
-fn read_area(member: &Member, area: &Area, side: u32) -> Result<Option<Work>> {
-    let Some((_, scan)) = scan(member)? else {
+fn read_area(member: &Member, area: &Area) -> Result<Option<Work>> {
+    let Some((_, scan)) = member.scan()? else {
         return Ok(None);
     };
     let image = scan.to_rgb8();
@@ -310,17 +327,15 @@ fn read_area(member: &Member, area: &Area, side: u32) -> Result<Option<Work>> {
             covered = Some(covered.map_or(pixel, |covered| covered.union(pixel)));
         }
     }
-    let Some(rect) = covered.and_then(|covered| clamp(covered, width, height)) else {
+    let Some(rect) = covered.and_then(|covered| Rect::covering(covered, width, height)) else {
         return Ok(None);
     };
-    let windows = windows::plan(&[Region { rect, panel: None }], width, height, side);
     let limit =
         imageops::crop_imm(&mask, rect.x as u32, rect.y as u32, rect.width, rect.height).to_image();
     Ok(Some(Work {
-        page: member.page,
         image,
         mask,
-        windows,
+        regions: vec![Region { rect, panel: None }],
         target: Target::Area { rect, mask: limit },
     }))
 }
@@ -334,7 +349,7 @@ fn places(project: &Project, page: PageId, width: u32, height: u32) -> HashMap<L
                 Content::Panel(panel) => {
                     inner.panel = BezPath::from_svg(panel.outline.as_str())
                         .ok()
-                        .and_then(|outline| clamp(outline.bounding_box(), size.0, size.1));
+                        .and_then(|outline| Rect::covering(outline.bounding_box(), size.0, size.1));
                 }
                 Content::Balloon(balloon) => {
                     inner.balloon = BezPath::from_svg(balloon.outline.as_str()).ok();

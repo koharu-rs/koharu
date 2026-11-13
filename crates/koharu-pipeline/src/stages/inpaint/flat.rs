@@ -9,10 +9,11 @@
 //! over Blue Archive's colour pages.
 
 use image::{GrayImage, Rgb, RgbImage, imageops};
+use imageproc::{distance_transform::Norm, morphology::dilate};
 use koharu_scene::Rect;
 use kurbo::{BezPath, Point, Shape as _};
 
-use super::{dilate, masked, telea};
+use super::{masked, telea};
 
 /// How far past the grown mask its surroundings are read.
 const RING: u32 = 4;
@@ -117,7 +118,7 @@ impl<'a> Page<'a> {
             i64::from(rect.x - outer.x),
             i64::from(rect.y - outer.y),
         );
-        let near = dilate(&near, RING);
+        let near = dilate(&near, Norm::LInf, RING as u8);
         masked(outer, &near)
             .filter(|&(x, y)| self.covered.get_pixel(x, y).0[0] == 0)
             .filter(|&(x, y)| match (&place.balloon, place.panel) {

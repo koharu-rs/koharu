@@ -1,6 +1,6 @@
 //! Runs the pipeline with its default settings over image files as a
-//! project's pages, every step unless `--steps` names some, tracing each
-//! stage's time as its span closes. Then it saves each page rendered as the
+//! project's pages, every stage unless `--stages` names some, tracing each
+//! span's time as it closes. Then it saves each page rendered as the
 //! app draws it, the page with only its clean-ups laid over the scan, and a
 //! copy tinting each block's clean-up by what made it: green for one colour,
 //! blue for a smooth fill, and red for the inpainting model.
@@ -13,7 +13,9 @@ use anyhow::{Context as _, Result, bail};
 use clap::Parser;
 use image::{Rgba, RgbaImage};
 use koharu_llm::rig::completion::Effort;
-use koharu_pipeline::{Event, Inpainter, Outcome, Pipeline, PipelineConfig, Request, Step, Target};
+use koharu_pipeline::{
+    Event, Inpainter, Outcome, Pipeline, PipelineConfig, Request, Stage, Target,
+};
 use koharu_renderer::{Renderer, RendererConfig};
 use koharu_scene::{Content, Edit, Hash, Op, Session, Tile};
 use parking_lot::Mutex;
@@ -28,15 +30,15 @@ struct Cli {
     #[arg(required = true, value_name = "PAGE")]
     pages: Vec<PathBuf>,
 
-    /// The steps to run: detect, recognize, inpaint, translate.
+    /// The stages to run: detect, recognize, inpaint, translate.
     #[arg(
         short,
         long,
         value_delimiter = ',',
-        value_parser = parse::<Step>,
+        value_parser = parse::<Stage>,
         default_value = "detect,recognize,inpaint,translate"
     )]
-    steps: Vec<Step>,
+    stages: Vec<Stage>,
 
     /// The inpainting model, by its id in `[pipeline]`.
     #[arg(long, value_parser = parse::<Inpainter>)]
@@ -113,7 +115,7 @@ async fn main() -> Result<()> {
     let mut events = pipeline.events();
     let request = Request {
         target: Target::Project,
-        steps: cli.steps.into_iter().collect(),
+        stages: cli.stages.into_iter().collect(),
         config: None,
     };
     let run = pipeline.run(Arc::clone(&session), request)?;
@@ -133,11 +135,11 @@ async fn main() -> Result<()> {
     loop {
         let elapsed = started.elapsed().as_secs_f32();
         match events.recv().await? {
-            Event::Started { page, step, .. } => {
-                println!("{elapsed:7.1}s page {} {step} started", number(page))
+            Event::Started { page, stage, .. } => {
+                println!("{elapsed:7.1}s page {} {stage} started", number(page))
             }
-            Event::Finished { page, step, .. } => {
-                println!("{elapsed:7.1}s page {} {step} finished", number(page))
+            Event::Finished { page, stage, .. } => {
+                println!("{elapsed:7.1}s page {} {stage} finished", number(page))
             }
             Event::Ended {
                 run: ended,
