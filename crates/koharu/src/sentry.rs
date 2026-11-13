@@ -1,23 +1,6 @@
 use std::sync::Arc;
 
-use sentry::{
-    ClientOptions, IntoDsn, User,
-    integrations::{
-        minidump::MinidumpIntegration,
-        tracing::{BreadcrumbLayer, ErrorLayer, LogLayer, SpanLayer},
-    },
-};
-use tracing::Level;
-use tracing_subscriber::{
-    Layer as _,
-    filter::{LevelFilter, filter_fn},
-    registry::LookupSpan,
-};
-
-/// Where the panic hook logs from. Sentry's panic integration already
-/// reports each panic with its stack, so the hook's error isn't a second
-/// issue.
-const PANIC_TARGET: &str = "koharu::panic";
+use sentry::{ClientOptions, IntoDsn, User, integrations::minidump::MinidumpIntegration};
 
 /// Starts Sentry with everything on: every error and trace, logs, native
 /// crash dumps, release health, and the interface's events through
@@ -55,22 +38,4 @@ pub fn initialize() -> sentry::ClientInitGuard {
     sentry::configure_scope(|scope| scope.set_user(Some(user.clone())));
     minidump.set_user(Some(user));
     guard
-}
-
-pub fn tracing_layer<S>() -> impl tracing_subscriber::Layer<S>
-where
-    S: tracing::Subscriber + for<'span> LookupSpan<'span>,
-{
-    // INFO and up as spans and logs; warnings and info as breadcrumbs too,
-    // since a crash report carries breadcrumbs and not logs; errors as
-    // issues.
-    SpanLayer::new()
-        .with_filter(LevelFilter::INFO)
-        .and_then(LogLayer::new().with_filter(LevelFilter::INFO))
-        .and_then(BreadcrumbLayer::new().with_filter(filter_fn(|metadata| {
-            matches!(*metadata.level(), Level::WARN | Level::INFO)
-        })))
-        .and_then(ErrorLayer::new().with_filter(filter_fn(|metadata| {
-            *metadata.level() == Level::ERROR && metadata.target() != PANIC_TARGET
-        })))
 }

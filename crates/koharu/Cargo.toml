@@ -14,6 +14,7 @@ license.workspace = true
 
 [dependencies]
 clap = { workspace = true }
+indoc = { workspace = true }
 koharu-desktop = { workspace = true }
 koharu-sentry = { workspace = true }
 machine-uid = { workspace = true }
