@@ -91,6 +91,7 @@ kurbo = "0.13.1"
 libloading = "0.9.0"
 llguidance = "1.9.1"
 log = "0.4.35"
+machine-uid = "0.6.0"
 memmap2 = "0.9.12"
 minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
 minijinja-contrib = { version = "3.1.0", features = ["pycompat"] }
