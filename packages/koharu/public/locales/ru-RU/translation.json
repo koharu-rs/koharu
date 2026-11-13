@@ -62,6 +62,8 @@
   "colorPicker": {
     "brushColor": "Цвет кисти",
     "hexCode": "Шестнадцатеричный код цвета",
+    "recent": "Недавние цвета",
+    "recentColor": "Недавний цвет {{color}}",
     "sampleCanvas": "Выбрать цвет с холста",
     "transparent": "Прозрачный"
   },
