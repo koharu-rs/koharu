@@ -8,7 +8,7 @@
 use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{Context as _, Result, anyhow};
-use image::RgbImage;
+use image::{DynamicImage, RgbImage};
 use koharu_diffusion::{Context, ContextParams, ImageParams};
 use koharu_runtime::Backend;
 
@@ -27,8 +27,8 @@ pub(super) struct Model {
 }
 
 impl Model {
-    /// The model on `device`, its weights placed to fit `max_vram` bytes.
-    pub(super) fn new(device: &crate::Device, max_vram: u64, paths: &ModelPaths) -> Result<Self> {
+    /// The model on `device`.
+    pub(super) fn new(device: &crate::Device, paths: &ModelPaths) -> Result<Self> {
         let cuda = matches!(device.backend, Backend::Cuda { .. });
         let context = Context::new(&ContextParams {
             model: Some(&paths.version_marker),
@@ -37,7 +37,6 @@ impl Model {
             clip_l: Some(&paths.clip_l),
             clip_g: Some(&paths.clip_g),
             device: Some(&device.name),
-            max_vram: Some(max_vram),
             mmap: true,
             flash_attention: cuda,
             conv_direct: cuda,
@@ -54,8 +53,9 @@ impl Model {
             .context
             .lock()
             .map_err(|_| anyhow!("RORem mixed context lock was poisoned"))?;
-        context
+        let images = context
             .generate_image(params)
-            .context("RORem mixed inference failed")
+            .context("RORem mixed inference failed")?;
+        Ok(images.into_iter().map(DynamicImage::into_rgb8).collect())
     }
 }

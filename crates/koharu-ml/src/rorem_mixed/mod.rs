@@ -61,9 +61,9 @@ pub struct RoremMixed {
 }
 
 impl RoremMixed {
-    /// Loads the model, its weights placed to fit `max_vram` bytes of the
-    /// device.
-    pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
+    /// Loads the model, its weights placed by stable-diffusion.cpp's own fit to
+    /// the device's free memory.
+    pub async fn load(device: &crate::Device) -> Result<Self> {
         let paths = async {
             let [diffusion_model, version_marker] = ROREM
                 .resolve([
@@ -88,7 +88,7 @@ impl RoremMixed {
         }
         .await
         .context("failed to resolve RORem mixed's files")?;
-        let model = Model::new(device, max_vram, &paths)?;
+        let model = Model::new(device, &paths)?;
         Ok(Self { model })
     }
 

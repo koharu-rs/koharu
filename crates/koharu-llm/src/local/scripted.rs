@@ -4,17 +4,21 @@
 use std::sync::{Arc, Mutex, PoisonError, mpsc};
 
 use indoc::indoc;
-use rig_core::{catalog::ModelFacts, driver::Model as RigModel, error::ProviderError};
+use rig_core::{
+    catalog::ModelFacts,
+    driver::{DynModel, Model as RigModel},
+    error::ProviderError,
+    operation::Completion,
+};
 use serde_json::Map;
 
 use super::{
-    Engine, Local,
+    Engine, Gguf,
     engine::{Job, Step},
     markup::Markup,
     spec,
     template::Template,
 };
-use crate::{Model, Provider};
 
 /// Renders every role, so tests can read what a request sent.
 const TEMPLATE: &str = indoc! {"
@@ -24,14 +28,24 @@ const TEMPLATE: &str = indoc! {"
 };
 
 pub(crate) struct Scripted {
-    pub(crate) model: Model,
+    pub(crate) model: DynModel<Completion>,
     /// The prompt of each request so far.
     pub(crate) prompts: Arc<Mutex<Vec<String>>>,
 }
 
-/// A model that answers its requests with `replies` in order.
+/// A general model that answers its requests with `replies` in order.
 pub(crate) fn scripted(
     markup: Option<&'static Markup>,
+    window: u32,
+    replies: Vec<Result<&'static str, ProviderError>>,
+) -> Scripted {
+    scripted_kind(markup, None, window, replies)
+}
+
+/// The same, of a specialized `kind`.
+pub(crate) fn scripted_kind(
+    markup: Option<&'static Markup>,
+    kind: Option<&str>,
     window: u32,
     replies: Vec<Result<&'static str, ProviderError>>,
 ) -> Scripted {
@@ -61,22 +75,17 @@ pub(crate) fn scripted(
             }
         }
     });
-    let wire = Local {
+    let wire = Gguf {
         id: "scripted".to_owned(),
         template: Arc::new(Template::from_source(TEMPLATE)),
         marker: "<image>".to_owned(),
         vision: false,
         defaults: Map::new(),
         markup,
-        facts: ModelFacts::new(
-            spec("scripted", markup, false, window).expect("the scripted model's name is valid"),
-        ),
+        facts: ModelFacts::new(spec("scripted", markup, kind).with_context_window(window)),
     };
     Scripted {
-        model: Model {
-            completion: RigModel::new(wire, Engine(jobs)).erase(),
-            provider: Provider::Local,
-        },
+        model: RigModel::new(wire, Engine(jobs)).erase(),
         prompts,
     }
 }

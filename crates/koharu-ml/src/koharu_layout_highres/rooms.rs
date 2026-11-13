@@ -17,9 +17,15 @@ use imageproc::{
     drawing::draw_polygon_mut,
     geometry::{approximate_polygon_dp, arc_length, contour_area, convex_hull},
 };
-use kurbo::{BezPath, PathEl, Point, Rect, Shape};
+use kurbo::{BezPath, Line, PathEl, PathSeg, Point, Rect, Shape};
 
 use super::Mask;
+
+/// A text with less than this share of its box inside its balloon's outline
+/// is written across the balloon's edge. On Blue Archive's comics 100–115,
+/// the six such texts of 180 lay 0.59 to 0.72 inside, each a remark over the
+/// edge, and the next 0.79.
+const STRADDLE: f64 = 0.75;
 
 /// A notch at least this deep, as a share of the balloon's square root of
 /// area, is where two balloons' outlines cross. Among 40 hand-labelled
@@ -84,13 +90,49 @@ fn closed(points: &[Point]) -> BezPath {
 /// One room in the balloon `outline` for each group of boxes, in page
 /// pixels. Each group's boxes seed the balloon's pixels under them, so a
 /// translation covering several texts gets one room, and stay whole in it.
-/// A group whose room comes out empty gets the whole outline.
+/// Where two groups' boxes overlap, the smaller group's seeds win: a larger
+/// box reaching over a narrow text beside it holds slack there, not its
+/// glyphs. A group whose boxes lie less than `STRADDLE` inside the outline is
+/// written across its edge, as a remark beside a balloon is: its boxes seed
+/// past the edge too, so the others' rooms keep off its lettering, and its
+/// room is its boxes' bounds, as a free text's frame is its box, since the
+/// outline's edge through it would cut its lines short. A group whose room
+/// comes out empty gets the whole outline.
 pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
     let whole = || vec![outline.clone(); groups.len()];
     if groups.len() < 2 {
         return whole();
     }
-    let bounds = outline.bounding_box();
+    // A grid of points over each group's boxes, and the share inside.
+    let straddles: Vec<bool> = groups
+        .iter()
+        .map(|boxes| {
+            let points: Vec<Point> = boxes
+                .iter()
+                .flat_map(|rect| {
+                    (0..12).flat_map(move |gx| {
+                        (0..12).map(move |gy| {
+                            Point::new(
+                                rect.x0 + rect.width() * (f64::from(gx) + 0.5) / 12.0,
+                                rect.y0 + rect.height() * (f64::from(gy) + 0.5) / 12.0,
+                            )
+                        })
+                    })
+                })
+                .collect();
+            let inside = points
+                .iter()
+                .filter(|&&point| outline.contains(point))
+                .count();
+            !points.is_empty() && (inside as f64) < STRADDLE * points.len() as f64
+        })
+        .collect();
+    let bounds = groups
+        .iter()
+        .zip(&straddles)
+        .filter(|(_, straddles)| **straddles)
+        .flat_map(|(boxes, _)| boxes)
+        .fold(outline.bounding_box(), |bounds, rect| bounds.union(*rect));
     let (x, y) = (
         bounds.x0.floor().max(0.0) as u32,
         bounds.y0.floor().max(0.0) as u32,
@@ -102,17 +144,16 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
     // Local pixel (lx, ly) is page pixel (x + lx - 1, y + ly - 1), so a
     // one-pixel margin outside the balloon rings it.
     let page = |lx: u32, ly: u32| Point::new(f64::from(x + lx) - 0.5, f64::from(y + ly) - 0.5);
-    let outside = GrayImage::from_fn(width, height, |lx, ly| {
-        Luma([u8::from(!outline.contains(page(lx, ly))) * u8::MAX])
-    });
+    let outside = outside(outline, width, height, page);
     let distance = euclidean_squared_distance_transform(&outside);
     let seeds: Vec<Vec<(u32, u32)>> = groups
         .iter()
-        .map(|boxes| {
+        .zip(&straddles)
+        .map(|(boxes, &straddles)| {
             (0..height)
                 .flat_map(|ly| (0..width).map(move |lx| (lx, ly)))
                 .filter(|&(lx, ly)| {
-                    outside.get_pixel(lx, ly)[0] == 0
+                    (straddles || outside.get_pixel(lx, ly)[0] == 0)
                         && boxes.iter().any(|seed| seed.contains(page(lx, ly)))
                 })
                 .collect()
@@ -173,12 +214,20 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
         ));
         count += 1;
     }
+    // The groups smallest first, by the area of their boxes.
+    let mut smallest: Vec<usize> = (0..groups.len()).collect();
+    let area = |group: usize| groups[group].iter().map(Rect::area).sum::<f64>();
+    smallest.sort_by(|&a, &b| area(a).total_cmp(&area(b)));
     let mut labels = ImageBuffer::<Luma<u32>, Vec<u32>>::new(width, height);
     let mut queue = BinaryHeap::new();
     let mut order = 0u64;
-    for (group, pixels) in seeds.iter().enumerate() {
+    for &group in &smallest {
+        let pixels = &seeds[group];
         for &(lx, ly) in pixels {
-            if parts.get_pixel(lx, ly)[0] == home[group] && labels.get_pixel(lx, ly)[0] == 0 {
+            // A pixel past the outline belongs to no part.
+            let home =
+                parts.get_pixel(lx, ly)[0] == home[group] || outside.get_pixel(lx, ly)[0] != 0;
+            if home && labels.get_pixel(lx, ly)[0] == 0 {
                 labels.put_pixel(lx, ly, Luma([group as u32 + 1]));
                 queue.push((distance.get_pixel(lx, ly)[0] as u64, Reverse(order), lx, ly));
                 order += 1;
@@ -206,14 +255,21 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
             }
         }
     }
-    // A box crossing its waist keeps the corner across it.
-    for (group, pixels) in seeds.iter().enumerate() {
-        for &(lx, ly) in pixels {
+    // A box crossing its waist keeps the corner across it, and a smaller one
+    // its overlap.
+    for &group in smallest.iter().rev() {
+        for &(lx, ly) in &seeds[group] {
             labels.put_pixel(lx, ly, Luma([group as u32 + 1]));
         }
     }
     (1..=groups.len() as u32)
         .map(|label| {
+            let group = label as usize - 1;
+            if straddles[group]
+                && let Some(bounds) = groups[group].iter().copied().reduce(|a, b| a.union(b))
+            {
+                return bounds.to_path(0.1);
+            }
             let room = GrayImage::from_fn(width, height, |lx, ly| {
                 Luma([u8::from(labels.get_pixel(lx, ly)[0] == label) * u8::MAX])
             });
@@ -221,6 +277,82 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
                 .unwrap_or_else(|| outline.clone())
         })
         .collect()
+}
+
+/// Each local pixel set where `page` puts it outside `outline`, as
+/// `outline.contains` answers. On a closed outline of straight segments, a
+/// row's crossings give each pixel's winding at once; a row through a
+/// vertex, a pixel on a crossing, and any curved or open outline ask
+/// `contains` itself.
+fn outside(
+    outline: &BezPath,
+    width: u32,
+    height: u32,
+    page: impl Fn(u32, u32) -> Point,
+) -> GrayImage {
+    let set = |inside: bool| Luma([u8::from(!inside) * u8::MAX]);
+    let mut open = false;
+    let polygon = outline.elements().iter().all(|element| match element {
+        PathEl::MoveTo(_) => !std::mem::replace(&mut open, true),
+        PathEl::LineTo(_) => open,
+        PathEl::ClosePath => std::mem::replace(&mut open, false),
+        PathEl::QuadTo(..) | PathEl::CurveTo(..) => false,
+    }) && !open;
+    if !polygon {
+        return GrayImage::from_fn(width, height, |lx, ly| set(outline.contains(page(lx, ly))));
+    }
+    let lines: Vec<Line> = outline
+        .segments()
+        .filter_map(|segment| match segment {
+            PathSeg::Line(line) => Some(line),
+            _ => None,
+        })
+        .collect();
+    let mut image = GrayImage::new(width, height);
+    let mut crossings: Vec<(f64, i32)> = Vec::new();
+    for ly in 0..height {
+        let y = page(0, ly).y;
+        if lines.iter().any(|line| line.p0.y == y || line.p1.y == y) {
+            for lx in 0..width {
+                image.put_pixel(lx, ly, set(outline.contains(page(lx, ly))));
+            }
+            continue;
+        }
+        crossings.clear();
+        crossings.extend(
+            lines
+                .iter()
+                .filter(|line| (line.p0.y < y) != (line.p1.y < y))
+                .map(|line| {
+                    let x = line.p0.x
+                        + (y - line.p0.y) * (line.p1.x - line.p0.x) / (line.p1.y - line.p0.y);
+                    (x, if line.p1.y > line.p0.y { 1 } else { -1 })
+                }),
+        );
+        crossings.sort_by(|left, right| left.0.total_cmp(&right.0));
+        // The winding of a point is the crossings' directions summed on
+        // either side of it, which a closed outline's crossings cancel.
+        let (mut passed, mut winding) = (0, 0);
+        for lx in 0..width {
+            let point = page(lx, ly);
+            while passed < crossings.len() && crossings[passed].0 < point.x {
+                winding += crossings[passed].1;
+                passed += 1;
+            }
+            let on = [passed.checked_sub(1), Some(passed)]
+                .into_iter()
+                .flatten()
+                .filter_map(|at| crossings.get(at))
+                .any(|crossing| (crossing.0 - point.x).abs() < 1e-6);
+            let inside = if on {
+                outline.contains(point)
+            } else {
+                winding != 0
+            };
+            image.put_pixel(lx, ly, set(inside));
+        }
+    }
+    image
 }
 
 /// The chord inside `polygon`, in local pixels, between two of its notches
@@ -405,5 +537,53 @@ mod tests {
 
         let lower = Point::new(134.0, 99.0);
         assert!(found[1].contains(lower) && !found[0].contains(lower));
+    }
+
+    #[test]
+    fn a_text_overlapped_by_a_larger_text_box_keeps_its_column() {
+        // A balloon with a wide text and, by its right edge, a narrow column
+        // whose box the wide text's box reaches over, in either order.
+        let outline = Rect::new(0.0, 0.0, 200.0, 200.0).to_path(0.1);
+        let wide = vec![Rect::new(20.0, 20.0, 186.0, 180.0)];
+        let column = vec![Rect::new(150.0, 10.0, 190.0, 190.0)];
+        for groups in [
+            [wide.clone(), column.clone()],
+            [column.clone(), wide.clone()],
+        ] {
+            let found = rooms(&outline, &groups);
+            let at = usize::from(groups[0] == wide);
+            // Most of the column's 40 by 180 box.
+            let area = found[at].area().abs();
+            assert!(area >= 5_500.0, "{area}");
+        }
+    }
+
+    #[test]
+    fn a_text_across_the_outline_keeps_its_box_past_it() {
+        // A remark written over a balloon's right edge, a third of its box
+        // outside, beside the balloon's own text; and a text that only
+        // grazes the edge, which stays inside.
+        let outline = Rect::new(0.0, 0.0, 200.0, 200.0).to_path(0.1);
+        let found = rooms(
+            &outline,
+            &[
+                vec![Rect::new(40.0, 20.0, 140.0, 180.0)],
+                vec![Rect::new(170.0, 20.0, 230.0, 180.0)],
+            ],
+        );
+        let remark = found[1].bounding_box();
+        assert!(remark.x1 >= 228.0 && remark.height() >= 155.0, "{remark:?}");
+        let found = rooms(
+            &outline,
+            &[
+                vec![Rect::new(40.0, 20.0, 140.0, 180.0)],
+                vec![Rect::new(150.0, 20.0, 204.0, 180.0)],
+            ],
+        );
+        assert!(
+            found[1].bounding_box().x1 <= 201.0,
+            "{:?}",
+            found[1].bounding_box()
+        );
     }
 }

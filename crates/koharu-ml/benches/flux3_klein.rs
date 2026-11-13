@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     let options = InpaintOptions::default();
 
     let device = koharu_runtime::device().await?;
-    let model = Flux3Klein::load(device, device.memory().free).await?;
+    let model = Flux3Klein::load(device).await?;
 
     let output = model.inpaint("Remove the masked content.", &image, None, &mask, &options)?;
     let scale = (1_048_576.0 / (f64::from(image.width()) * f64::from(image.height()))).sqrt();

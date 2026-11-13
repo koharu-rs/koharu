@@ -35,8 +35,9 @@ fn penalty(segment: &Segment) -> f32 {
         Break::Normal if segment.punctuation => 0.0,
         // A break inside a phrase rather than after punctuation.
         Break::Normal => 2.0,
-        Break::Hyphen => 30.0,
-        Break::Anywhere => 300.0,
+        // Above any line's slack, so a word hyphenates only where its line
+        // can't hold it whole: Comicraft avoids a hyphen whenever it can.
+        Break::Hyphen => 1_000.0,
     }
 }
 

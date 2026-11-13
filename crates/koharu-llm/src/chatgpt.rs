@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result, bail};
 use rig_core::{
-    catalog::Catalog,
+    catalog::{Catalog, ModelSpec, ReasoningSupport},
     error::BoxError,
     providers::chatgpt::{
         self,
@@ -12,12 +12,13 @@ use rig_core::{
             SignInPrompt, TokenStore,
         },
     },
+    providers::registry::ProviderId,
     wasm_compat::WasmBoxedFuture,
 };
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
-use crate::{ModelInfo, Provider, hosted::Http};
+use crate::hosted::Http;
 
 /// rig's sign-in record, kept as a secret under the key rig names,
 /// `chatgpt`.
@@ -81,8 +82,10 @@ pub(crate) fn http() -> Result<Http> {
     Ok(Http::signed_in(authenticator(DeviceCodeHandler::default())))
 }
 
-/// Codex's model list for the signed-in plan, or none when nobody signed in.
-pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
+/// Codex's model list for the signed-in plan, or none when nobody signed in,
+/// each as rig's catalog describes it, and as Codex's list does when the
+/// catalog doesn't.
+pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelSpec>> {
     if koharu_config::secrets::get(chatgpt::PROVIDER_NAME)?.is_none() {
         return Ok(Vec::new());
     }
@@ -105,7 +108,8 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
         .get("models")
         .and_then(Value::as_array)
         .context("Codex's model list has no `models` array")?;
-    let vendor = Provider::ChatGpt.vendor();
+    let vendor =
+        ProviderId::catalog(chatgpt::PROVIDER_NAME).context("rig knows no ChatGPT vendor")?;
     let catalog = Catalog::builtin();
     Ok(models
         .iter()
@@ -117,25 +121,23 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelInfo>> {
             listed && model.get("show_in_picker").and_then(Value::as_bool) != Some(false)
         })
         .filter_map(|model| {
-            let id = model.get("slug")?.as_str()?.to_owned();
-            let name = model
-                .get("display_name")
-                .and_then(Value::as_str)
-                .unwrap_or(&id)
-                .to_owned();
-            let reasoning = model
+            let id = model.get("slug")?.as_str()?;
+            if let Some(found) = catalog.get(vendor, id) {
+                return Some(found.spec.clone());
+            }
+            let mut spec = ModelSpec::new(vendor, id).with_tools(true);
+            if let Some(name) = model.get("display_name").and_then(Value::as_str) {
+                spec = spec.with_display_name(name);
+            }
+            let reasons = model
                 .get("supported_reasoning_levels")
                 .and_then(Value::as_array)
                 .is_some_and(|levels| !levels.is_empty());
-            let spec = vendor
-                .and_then(|vendor| catalog.get(vendor, &id))
-                .map(|found| found.spec);
-            Some(ModelInfo {
-                images: true,
-                tools: true,
-                reasoning,
-                ..ModelInfo::hosted(Provider::ChatGpt, id, name, spec)
-            })
+            if reasons {
+                spec = spec.with_reasoning(ReasoningSupport::Unknown { default: None });
+            }
+            spec.input.image = true;
+            Some(spec)
         })
         .collect())
 }

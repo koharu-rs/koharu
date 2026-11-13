@@ -1,8 +1,8 @@
 //! The translation workflow writing a page as the README's section 4 lays it
 //! out: detection adds panels, balloons, and blocks in reading order, OCR fills
-//! the sources, inpainting the clean-ups, translation the translations, and
-//! typesetting their frames and size. Each step writes its own fields, and a
-//! rerun replaces what it wrote, a user's change included.
+//! the sources, inpainting the clean-ups, and translation the translations
+//! with their frames. Each step writes its own fields, and a rerun replaces
+//! what it wrote, a user's change included.
 //!
 //! `cargo run -p koharu-scene --example pipeline`
 
@@ -116,28 +116,26 @@ fn main() -> Result<()> {
         ops,
     })?;
 
-    // Translation reads the page's sources in reading order, and gives each
-    // translation its source's frame as a first frame.
+    // Translation reads the page's sources in reading order, and places each
+    // translation in its source's frame, filling it at every render.
     let translate = |found: &[(LayerId, Block)], suffix: &str| -> Vec<Value> {
         found
             .iter()
             .flat_map(|(id, block)| {
+                let mut frame = json!(block.source.frame);
+                if let Some(placed) = frame.get_mut("box") {
+                    placed["fit"] = json!("best");
+                    placed["anchor"] = json!("center");
+                }
                 [
                     json!({"op": "set_text", "layer": id, "text": format!("{}{suffix}", block.source.content.text())}),
-                    json!({"op": "update_layer", "layer": id, "patch": {"translation": {"language": "en", "frame": block.source.frame}}}),
+                    json!({"op": "update_layer", "layer": id, "patch": {"translation": {"language": "en", "frame": frame}}}),
                 ]
             })
             .collect()
     };
     let found = blocks(&session)?;
     apply(&mut session, "Translate", translate(&found, " (en)"))?;
-
-    // Typesetting writes decisions: each frame and the page's dialogue size.
-    let ops = found
-        .iter()
-        .map(|(id, _)| json!({"op": "update_layer", "layer": id, "patch": {"translation": {"style": {"chars": {"size": 16.0}}, "frame": {"box": {"anchor": "center"}}}}}))
-        .collect();
-    apply(&mut session, "Typeset", ops)?;
 
     // The user fixes one translation; a rerun replaces it.
     let (first, _) = &found[0];

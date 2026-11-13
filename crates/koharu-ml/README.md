@@ -15,6 +15,8 @@ commit it follows.
 | `lama` | LaMa | Inpainting | libtorch |
 | `rorem_mixed` | RORem | Inpainting | stable-diffusion.cpp |
 | `flux3_klein` | FLUX.3 Image Klein | Inpainting and generation | stable-diffusion.cpp |
+| `moss_image` | MOSS-Image SFT, with Qwen3.5 9B | Inpainting and generation | stable-diffusion.cpp |
+| `qwen_image` | Qwen-Image 2.1, with Qwen3-VL 8B (Qwen research license) | Generation and editing | stable-diffusion.cpp |
 
 ## Lifecycle
 
@@ -23,15 +25,28 @@ differ in what `load` needs and how they run:
 
 | Models | `load` takes | Runs with | Returns |
 |---|---|---|---|
-| Layout | `&Device` | `inference(&image, &Options)` | `Layout` |
+| Layout | `&Device` | `inference(&image, &Options)`, then `layout(&page)` | `Detected`, then `Layout` |
 | manga-ocr-ar, Baberu, Hayai | `&Device` | `inference(&[image])` | `Vec<String>` |
 | LaMa | `&Device` | `inference(&image, &mask)` | `RgbImage` |
-| RORem | `&Device, max_vram` | `inference(&image, &mask, &Options)` | `RgbImage` |
-| FLUX.3 | `&Device, max_vram` | `generate(&references, prompt, &GenerateOptions)` | `Vec<RgbImage>` |
+| RORem | `&Device` | `inference(&image, &mask, &Options)` | `RgbImage` |
+| FLUX.3 | `&Device` | `generate(&references, prompt, &GenerateOptions)` | `Vec<RgbImage>` |
 | | | `inpaint(prompt, &image, reference, &mask, &InpaintOptions)` | `RgbImage` |
+| MOSS-Image | `&Device` | `generate(prompt, &GenerateOptions)` | `Vec<RgbImage>` |
+| | | `inpaint(prompt, &image, &mask, &InpaintOptions)` | `RgbImage` |
+| Qwen-Image 2.1 | `&Device` | `generate(prompt, &images, &Options)` | `Vec<RgbaImage>` |
 
-`Device` is the runtime's, re-exported here. `max_vram` is in bytes, and
-stable-diffusion.cpp places the weights to fit it.
+`Device` is the runtime's, re-exported here. stable-diffusion.cpp places its models'
+weights in the device's free memory itself, then in system memory.
+
+Neither FLUX.3 nor MOSS-Image ships an inpainting pipeline, so both inpaint as diffusers'
+flow-matching img2img does with a mask, in `diffusers.rs`: the image fitted under a
+megapixel, optionally cropped around the mask, and the result blended back by the mask at
+that size. MOSS-Image takes its own VAE, whose encoder and latent statistics differ from
+FLUX.2's, and shares its Qwen3.5 9B GGUF with koharu-llm's catalog.
+
+Qwen-Image 2.1 edits by generating from condition images, which its Qwen3-VL text encoder
+reads through its vision projector; a mask is one more condition image the prompt names. It
+decodes four channels, so its images carry alpha.
 
 A model's folder keeps its parts apart: `mod.rs` holds the public API, `model.rs` the
 network and weight loading, `processor.rs` the preprocessing and postprocessing, and
@@ -48,7 +63,9 @@ network and weight loading, `processor.rs` the preprocessing and postprocessing,
 
 ## Layout
 
-`KoharuLayoutHighres::inference` returns a `Layout`:
+`KoharuLayoutHighres::inference` returns the network's `Detected`, and its `layout(&page)`,
+the CPU work on the page's pixels that a caller can run off the device's thread, returns a
+`Layout`:
 
 | Field | Holds |
 |---|---|

@@ -98,7 +98,7 @@ translation.
 | `content` | rich text: spans in order, each a string with its character marks; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
 | `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
 | `frame` | none (point text), a box (paragraph text), or a closed path that the text fills; a box or path frame also has a `fit` and an `anchor` | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
-| `fit` | `shrink` (the default): text that would overflow shrinks just enough to fit, down to half its set size, and past that it overflows; `none`: the set size always; `grow`, for a box only: the box keeps its inline size, and its block size follows the text, growing away from its `anchor` | PowerPoint shrinks placeholder text "as you type" by default, and with fitting stopped the text "will overfill the box" [PowerPoint placeholders] [PowerPoint autofit]; Google Slides "Shrink text on overflow" and "Resize shape to fit text" [Google Slides fitting]; Keynote fits text to most text boxes by default [Keynote autosize]; Figma `HEIGHT` [Figma text resize]; InDesign Auto-Size [InDesign auto-size]; a SwiftUI minimum scale factor of 0.5 draws text "as small as half" [SwiftUI minimum scale] |
+| `fit` | `shrink` (the default): text that would overflow shrinks just enough to fit, down to half its set size, and past that it overflows; `none`: the set size always; `grow`, for a box only: the box keeps its inline size, and its block size follows the text, growing away from its `anchor`; `best`: the text grows or shrinks to the largest size the frame holds, down to half its set size | PowerPoint shrinks placeholder text "as you type" by default, and with fitting stopped the text "will overfill the box" [PowerPoint placeholders] [PowerPoint autofit]; Google Slides "Shrink text on overflow" and "Resize shape to fit text" [Google Slides fitting]; Keynote fits text to most text boxes by default [Keynote autosize]; Figma `HEIGHT` [Figma text resize]; InDesign Auto-Size [InDesign auto-size]; a SwiftUI minimum scale factor of 0.5 draws text "as small as half" [SwiftUI minimum scale]; Publisher's Best Fit shrinks or grows text to fill its box [Publisher copyfitting] |
 | `anchor` | where the lines sit in a box or path frame along the block axis: `start` (the default), `center`, or `end` | OOXML `anchor`, top when omitted [OOXML anchor]; Figma vertical alignment [Figma text properties]; InDesign vertical justification, Top by default [InDesign alignment]; Clip Studio Paint Position in frame [CSP text frame]; CSS `align-content` on block containers [CSS align] |
 | `direction` | horizontal or vertical | Clip Studio Paint Text Direction [CSP vertical text] |
 | `language` | one BCP 47 tag; `und` when undetermined | SVG `systemLanguage` [SVG structure]; C2PA `sourceLanguage` and `targetLanguage` [C2PA actions] |
@@ -138,8 +138,12 @@ size across a page and shrinks only where a translation runs long:
 - A translation fills a region its source laid out, the way content fills a
   slide placeholder, so `shrink` is the default.
 
-So a balloon's size comes from its source text, not from the balloon, and the
-balloon only bounds it. Start and end on the block axis follow the writing
+So a set size comes from the source text, not from the balloon, and the
+balloon only bounds it. A translation is the exception: it can't know the
+page's dialogue size, and its length differs from its source's, so it's
+written `best` and takes the size its room holds, as Publisher's Best Fit
+fills a box [Publisher copyfitting]. Setting a size and `shrink` gives it one
+again. Start and end on the block axis follow the writing
 direction, as `align` does: top and bottom for horizontal text, right and left
 for vertical text.
 
@@ -252,8 +256,7 @@ each is cleaned, translated, fixed, and removed on its own:
 - Painting its mask hides its clean-up there at once, so an over-reaching
   clean-up is fixed where it happened, without a rerun.
 - Each text gets its own translation, framed by its own room in its balloon, or
-  by its source's frame when it's free, and set at the same size as its
-  neighbours. Texts never flow from one frame into
+  by its source's frame when it's free, and filling it. Texts never flow from one frame into
   another, as Clip Studio Paint adds several texts to one balloon [CSP text
   tool], and Publisher fits text only in a box "not connected to other text
   boxes" [Publisher copyfitting].
@@ -352,8 +355,7 @@ fields of them.
 | Detection | the background | a `panel` for each panel it finds; a `balloon` for each balloon, inside its panel, or on the page when it crosses panels; a `block` for each text or sound effect, inside its balloon if it has one, else free in its panel or on the page, with its `role`, its source's frame, tilt, and direction, and its mask; all in reading order |
 | OCR | the background inside each block's source frame | the source's `content` and `language` |
 | Inpainting | the background, each block's mask, and its balloon's outline when it has one | the block's clean-up, only in the tiles it changes |
-| Translation | the page's sources in reading order, for context | each given block's translation: `content` and `language`, and its source's frame as a first frame when it had none |
-| Typesetting | each translation, and in a balloon, the balloon's outline and its other texts | the translation's `frame`, its room in its balloon, or its source's frame when it's free; `style` `size`, the page's dialogue size; `anchor` and `direction` |
+| Translation | the page's sources in reading order, for context, and in a balloon, the balloon's outline and its other texts | each given block's translation: `content` and `language`; its `frame`, its room in its balloon, or its source's frame when it's free, with `best` fit; `anchor` and `direction` |
 
 Each model also writes its `c2pa` action on the layers it wrote.
 
@@ -389,17 +391,16 @@ Each model also writes its `c2pa` action on the layers it wrote.
   blocks in reading order, so a balloon or text on the page sits between the
   panels it's read between, and since they rarely overlap, the order doesn't
   change what's drawn. Moving a layer moves it in reading order too.
-- **Typesetting places a balloon's texts from its outline, and a free text from
-  its source's frame, and keeps their set size**, as resizing a Clip Studio Paint balloon moves its text but keeps its
-  font size [CSP balloons].
-- **Typesetting stores its decisions, not their result:** the frame, the set
-  size, and the anchor. The size a `shrink` frame draws at is worked out at each
-  render, and PSD export writes the size it drew. PowerPoint caches its shrink as
-  `fontScale` [OOXML autofit], but Koharu has one renderer, and a cached scale
-  would go stale when a font loads.
-- **Reruns find their fields by kind.** A translation rerun rewrites the wording
-  of each given block's translation and leaves its frame, and typesetting
-  rewrites frames and sizes. Whether a rerun leaves alone what you changed is
+- **Translation places a balloon's texts from its outline, and a free text from
+  its source's frame**, and resizing the frame reflows the text, as resizing a
+  Clip Studio Paint balloon moves its text [CSP balloons].
+- **Translation stores its decisions, not their result:** the frame, the
+  anchor, the direction, and `best` fit. The size a `best` or `shrink` frame
+  draws at is worked out at each render, and PSD export writes the size it
+  drew. PowerPoint caches its shrink as `fontScale` [OOXML autofit], but Koharu
+  has one renderer, and a cached scale would go stale when a font loads.
+- **Reruns find their fields by kind.** A translation rerun rewrites each given
+  block's translation, its wording and its placement. Whether a rerun leaves alone what you changed is
   the workflow's choice ([Writes](#writes)).
 - **Names** are written in the app's language, as the copy suffix is.
 
@@ -497,7 +498,7 @@ Each example uses only this crate and runs with
   redo, and the errors an edit can fail with.
 - `models`: a model's run recording its C2PA action, a rerun replacing the
   user's change, and the user's change replacing a model's.
-- `pipeline`: detection, OCR, inpainting, translation, and typesetting writing
+- `pipeline`: detection, OCR, inpainting, and translation writing
   a page's panels, balloons, and blocks as [section
   4](#4-how-the-translation-workflow-uses-it) lays it out, and a rerun
   replacing what a model made.

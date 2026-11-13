@@ -56,17 +56,15 @@ pub(super) fn arrange(
     let scale = placed.scale;
     let mut buffer = Buffer::new();
     let mut glyphs = Vec::new();
-    let (mut hyphens, mut broken) = (Vec::new(), Vec::new());
+    let mut hyphens = Vec::new();
     let mut bounds: Option<Rect> = None;
     let mut baseline = None;
     for line in &placed.lines {
         let Some(last) = line.segments.end.checked_sub(1).map(|at| &segments[at]) else {
             continue;
         };
-        match last.after {
-            Break::Hyphen if !line.last => hyphens.push(last.range.end),
-            Break::Anywhere => broken.push(last.range.end),
-            _ => {}
+        if last.after == Break::Hyphen && !line.last {
+            hyphens.push(last.range.end);
         }
         let used = lines::length(segments, line.segments.clone(), scale);
         let text = segments[line.segments.start].range.start..last.range.end;
@@ -99,7 +97,6 @@ pub(super) fn arrange(
             frame: placed.frame,
             scale,
             hyphens: hyphens.iter().map(utf16).collect(),
-            broken: broken.iter().map(utf16).collect(),
             overflowed: placed.overflowed,
             baseline: baseline.unwrap_or_default(),
             align: styled.align,

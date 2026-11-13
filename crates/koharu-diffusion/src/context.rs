@@ -6,7 +6,7 @@ use std::{
     slice,
 };
 
-use image::RgbImage;
+use image::{DynamicImage, RgbImage, RgbaImage};
 use koharu_diffusion_sys as sys;
 
 use crate::{
@@ -23,8 +23,6 @@ pub struct Context {
 
 // A context may move between threads; every call takes `&mut self`.
 unsafe impl Send for Context {}
-
-const GIB: f64 = (1u64 << 30) as f64;
 
 impl Context {
     pub fn new(params: &ContextParams) -> Result<Self> {
@@ -52,21 +50,14 @@ impl Context {
         raw.clip_l_path = path(params.clip_l, "the CLIP-L path")?;
         raw.clip_g_path = path(params.clip_g, "the CLIP-G path")?;
         raw.llm_path = path(params.llm, "the text encoder path")?;
+        raw.llm_vision_path = path(params.llm_vision, "the vision projector path")?;
+        raw.tokenizer = path(params.tokenizer, "the tokenizer path")?;
         let device = params
             .device
             .map(|device| CString::new(device).map_err(|_| Error::Nul("the device")))
             .transpose()?;
         if let Some(device) = &device {
             raw.backend = device.as_ptr();
-        }
-        // sd.cpp reads the budget as GiB.
-        let max_vram = params
-            .max_vram
-            .map(|bytes| CString::new(format!("{:.3}", bytes as f64 / GIB)))
-            .transpose()
-            .map_err(|_| Error::Nul("the memory budget"))?;
-        if let Some(max_vram) = &max_vram {
-            raw.max_vram = max_vram.as_ptr();
         }
         if params.vae_format == Some(VaeFormat::Flux2) {
             raw.vae_format = sys::SD_VAE_FORMAT_FLUX2;
@@ -88,7 +79,8 @@ impl Context {
         Ok(context)
     }
 
-    pub fn generate_image(&mut self, params: &ImageParams) -> Result<Vec<RgbImage>> {
+    /// The images generated, RGB or RGBA as the model makes them.
+    pub fn generate_image(&mut self, params: &ImageParams) -> Result<Vec<DynamicImage>> {
         let mut raw = unsafe {
             let mut raw = MaybeUninit::<sys::sd_img_gen_params_t>::zeroed();
             sys::sd_img_gen_params_init(raw.as_mut_ptr());
@@ -189,7 +181,7 @@ fn image(width: u32, height: u32, channel: u32, pixels: &[u8]) -> sys::sd_image_
 struct Images(*mut sys::sd_image_generation_result_t);
 
 impl Images {
-    fn copy(&self) -> Result<Vec<RgbImage>> {
+    fn copy(&self) -> Result<Vec<DynamicImage>> {
         // sd.cpp sets the result when it succeeds.
         let result = unsafe { self.0.as_ref() }.ok_or(Error::Output)?;
         let count = usize::try_from(result.count).map_err(|_| Error::Output)?;
@@ -200,15 +192,20 @@ impl Images {
             .iter()
             .map(|item| {
                 let image = &item.image;
-                if image.channel != 3 || image.data.is_null() {
+                if !matches!(image.channel, 3 | 4) || image.data.is_null() {
                     return Err(Error::Output);
                 }
                 let length = (image.width as usize)
                     .checked_mul(image.height as usize)
-                    .and_then(|pixels| pixels.checked_mul(3))
+                    .and_then(|pixels| pixels.checked_mul(image.channel as usize))
                     .ok_or(Error::Output)?;
                 let pixels = unsafe { slice::from_raw_parts(image.data, length) }.to_vec();
-                RgbImage::from_raw(image.width, image.height, pixels).ok_or(Error::Output)
+                let (width, height) = (image.width, image.height);
+                match image.channel {
+                    3 => RgbImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgb8),
+                    _ => RgbaImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgba8),
+                }
+                .ok_or(Error::Output)
             })
             .collect()
     }

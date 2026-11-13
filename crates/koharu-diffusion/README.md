@@ -17,7 +17,6 @@ only the variants in use: `Discrete`, `Euler`, and `Flux2`.
 |---|---|
 | `model`, `diffusion_model`, `vae`, `clip_l`, `clip_g`, `llm` | `model_path`, `diffusion_model_path`, `vae_path`, `clip_l_path`, `clip_g_path`, `llm_path` |
 | `device` | `backend`, by ggml's device name, such as `CUDA0` |
-| `max_vram` | `max_vram`, converted from bytes to a GiB string |
 | `vae_format` | `vae_format` |
 | `mmap` | `enable_mmap` |
 | `flash_attention` | `flash_attn`, `diffusion_flash_attn` |

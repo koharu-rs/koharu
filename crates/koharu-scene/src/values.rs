@@ -185,6 +185,9 @@ pub enum Fit {
     /// The box keeps its inline size, and its block size follows the text,
     /// growing away from its anchor.
     Grow,
+    /// Text grows or shrinks to the largest size the box holds, down to half
+    /// its size, as Publisher's Best Fit fills its text box.
+    Best,
 }
 
 /// How a path's text meets the path: as a box's, but a path never grows.
@@ -194,6 +197,7 @@ pub enum PathFit {
     #[default]
     Shrink,
     None,
+    Best,
 }
 
 /// Where the lines sit along a frame's block axis, which follows the writing

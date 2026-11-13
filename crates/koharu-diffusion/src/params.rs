@@ -28,12 +28,15 @@ pub struct ContextParams<'a> {
     pub clip_l: Option<&'a Path>,
     pub clip_g: Option<&'a Path>,
     pub llm: Option<&'a Path>,
+    /// The text encoder's vision projector, for a model whose text encoder
+    /// reads its condition images, such as Qwen-Image 2.1's Qwen3-VL.
+    pub llm_vision: Option<&'a Path>,
+    /// A `tokenizer.json` for a text encoder whose vocabulary sd.cpp doesn't
+    /// hold, such as MOSS-Image's Qwen3.5.
+    pub tokenizer: Option<&'a Path>,
     pub vae_format: Option<VaeFormat>,
     /// The device to run on, by its ggml name, such as `CUDA0`.
     pub device: Option<&'a str>,
-    /// The memory the model may use on its device, in bytes; sd.cpp places
-    /// its weights to fit it.
-    pub max_vram: Option<u64>,
     /// Memory-maps the weight files instead of reading them in.
     pub mmap: bool,
     /// Flash attention, in the text encoder and the denoiser.

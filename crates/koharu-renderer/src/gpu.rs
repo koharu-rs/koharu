@@ -196,13 +196,38 @@ impl Gpu {
         }
     }
 
+    /// A `width`×`height` target, transparent. vello draws nothing for a
+    /// scene that overflows its fixed buffers and says nothing, so a reused
+    /// target is cleared first: such a render then reads back transparent,
+    /// not as the last image read through it.
     fn target(&self, width: u32, height: u32) -> Result<Target> {
         let mut targets = self.targets.lock();
         if let Some(at) = targets
             .iter()
             .position(|target| target.width == width && target.height == height)
         {
-            return Ok(targets.swap_remove(at));
+            let target = targets.swap_remove(at);
+            drop(targets);
+            let mut encoder = self
+                .device
+                .create_command_encoder(&CommandEncoderDescriptor {
+                    label: Some("koharu clear"),
+                });
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("koharu clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            self.queue.submit([encoder.finish()]);
+            return Ok(target);
         }
         drop(targets);
         let texture = self.device.create_texture(&TextureDescriptor {
@@ -216,7 +241,9 @@ impl Gpu {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_SRC,
+            usage: TextureUsages::STORAGE_BINDING
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -318,4 +345,56 @@ async fn request_device() -> Result<(wgpu::Device, wgpu::Queue)> {
         })
         .await
         .context("no GPU adapter supports vello's features")
+}
+
+#[cfg(test)]
+mod tests {
+    use vello::peniko::{BlendMode, Compose, Mix};
+
+    use super::*;
+
+    /// A render vello drops, as it drops one that overflows its fixed
+    /// buffers, reads back transparent, not as the last image read at its
+    /// size.
+    #[test]
+    fn a_dropped_render_reads_back_transparent() {
+        let Ok(gpu) = Gpu::new() else {
+            eprintln!("skipped without a GPU");
+            return;
+        };
+        let (width, height) = (2400, 3200);
+        let page = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
+        let mut red = Scene::new();
+        red.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            Color::from_rgb8(255, 0, 0),
+            None,
+            &page,
+        );
+        let read = gpu.read(&red, width, height).expect("pixels");
+        assert_eq!(read.get_pixel(10, 10).0, [255, 0, 0, 255]);
+
+        // Layers clipped to the whole page, each taking every tile.
+        let mut overflowing = Scene::new();
+        for _ in 0..200 {
+            overflowing.push_layer(
+                Fill::NonZero,
+                BlendMode::new(Mix::Normal, Compose::SrcOver),
+                0.5,
+                Affine::IDENTITY,
+                &page,
+            );
+            overflowing.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                Color::WHITE,
+                None,
+                &Rect::new(0.0, 0.0, 1.0, 1.0),
+            );
+            overflowing.pop_layer();
+        }
+        let read = gpu.read(&overflowing, width, height).expect("pixels");
+        assert_ne!(read.get_pixel(10, 10).0, [255, 0, 0, 255]);
+    }
 }

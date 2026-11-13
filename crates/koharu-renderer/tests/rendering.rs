@@ -109,38 +109,29 @@ fn word_in_box(width: f64, language: &str) -> ResolvedText {
 }
 
 #[test]
-fn a_long_word_hyphenates_before_it_shrinks_and_breaks_last() {
+fn a_long_word_shrinks_before_it_hyphenates_and_never_breaks_between_letters() {
     // With room, the word sets at its size.
     assert_eq!(word_in_box(4000.0, "en").scale, 1.0);
 
-    // A box a little narrower than the word: it hyphenates by its language
-    // and keeps its size.
-    let hyphenated = word_in_box(300.0, "en");
+    // A box a little narrower than the word: it shrinks and stays whole,
+    // whether its language hyphenates or not.
+    for language in ["en", "und"] {
+        let shrunk = word_in_box(300.0, language);
+        assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.5, "{shrunk:?}");
+        assert!(shrunk.hyphens.is_empty() && !shrunk.overflowed);
+    }
+
+    // Too narrow to set whole even at half size: it hyphenates there.
+    let hyphenated = word_in_box(120.0, "en");
     assert!(
-        hyphenated.scale == 1.0 && !hyphenated.hyphens.is_empty(),
+        hyphenated.scale == 0.5 && !hyphenated.hyphens.is_empty(),
         "{hyphenated:?}"
     );
-    assert!(hyphenated.broken.is_empty() && !hyphenated.overflowed);
+    assert!(!hyphenated.overflowed);
 
-    // Without a language there are no hyphenation points, so it shrinks and
-    // stays whole.
-    let shrunk = word_in_box(300.0, "und");
-    assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.5, "{shrunk:?}");
-    assert!(shrunk.hyphens.is_empty() && shrunk.broken.is_empty() && !shrunk.overflowed);
-
-    // Too narrow to set its parts whole: it still hyphenates, shrinking.
-    let hyphenated = word_in_box(120.0, "en");
-    assert!(!hyphenated.hyphens.is_empty(), "{hyphenated:?}");
-    assert!(hyphenated.broken.is_empty() && !hyphenated.overflowed);
-
-    // And without a language, too narrow even at half size: it breaks
-    // between letters.
-    let broken = word_in_box(120.0, "und");
-    assert!(
-        broken.hyphens.is_empty() && !broken.broken.is_empty(),
-        "{broken:?}"
-    );
-    assert!(!broken.overflowed);
+    // And without hyphenation points it runs past the box whole.
+    let whole = word_in_box(120.0, "und");
+    assert!(whole.hyphens.is_empty() && whole.overflowed, "{whole:?}");
 }
 
 #[test]

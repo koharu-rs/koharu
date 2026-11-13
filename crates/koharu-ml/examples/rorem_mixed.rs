@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
     let mask = image::open(cli.mask)?.to_luma8();
 
     let device = koharu_runtime::device().await?;
-    let model = RoremMixed::load(device, device.memory().free).await?;
+    let model = RoremMixed::load(device).await?;
     let defaults = Options::default();
     let output = model.inference(
         &image,

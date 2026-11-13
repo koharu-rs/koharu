@@ -13,7 +13,7 @@ use icu_properties::{
     props::{GeneralCategory, GeneralCategoryGroup, LineBreak, Script as IcuScript},
 };
 use icu_segmenter::{
-    GraphemeClusterSegmenter, LineSegmenter,
+    LineSegmenter,
     options::{LineBreakOptions, LineBreakWordOption},
 };
 use jieba_rs::Jieba;
@@ -43,13 +43,13 @@ const HYPHENATION_KEEPS: usize = 2;
 /// What a mandatory break ends with, which belongs to no line.
 pub(super) const LINE_ENDS: [char; 5] = ['\n', '\r', '\u{0085}', '\u{2028}', '\u{2029}'];
 
-/// Where lines may break: between words, then also at hyphenation points,
-/// then anywhere in a word.
+/// Where lines may break: between words, then also at hyphenation points.
+/// Never elsewhere in a word, as a letterer never splits one without a
+/// hyphen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Breaking {
     Words,
     Hyphens,
-    Anywhere,
 }
 
 /// What may end a line after a segment.
@@ -61,8 +61,6 @@ pub(super) enum Break {
     Normal,
     /// Inside a word at a hyphenation point; a hyphen shows if a line ends here.
     Hyphen,
-    /// Inside a word with no hyphenation point.
-    Anywhere,
     /// The end of the text.
     End,
 }
@@ -242,42 +240,14 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
     let styled = shaped.styled;
     let hyphenate = match breaking {
         Breaking::Words => None,
-        Breaking::Hyphens | Breaking::Anywhere => styled.hyphenation,
+        Breaking::Hyphens => styled.hyphenation,
     };
-    let mut cuts = opportunities(&styled.text, hyphenate);
-    if breaking == Breaking::Anywhere {
-        cuts = anywhere(&styled.text, cuts);
-    }
+    let cuts = opportunities(&styled.text, hyphenate);
     let advances = advances(shaped);
     joined(cuts, &breakable(shaped))
         .into_iter()
         .map(|(range, after)| measure(shaped, &advances, range, after))
         .collect()
-}
-
-/// `cuts` with each word also cut between its graphemes, unless it ends at a
-/// hyphenation point.
-fn anywhere(text: &str, cuts: Vec<Cut>) -> Vec<Cut> {
-    let mut out = Vec::with_capacity(cuts.len());
-    for (range, next, after) in cuts {
-        if after == Break::Hyphen {
-            out.push((range, next, after));
-            continue;
-        }
-        let word = &text[range.clone()];
-        let visible = word.trim_end().len();
-        let mut start = range.start;
-        for at in GraphemeClusterSegmenter::new()
-            .segment_str(word)
-            .filter(|at| *at > 0 && *at < visible)
-        {
-            let end = range.start + at;
-            out.push((start..end, end, Break::Anywhere));
-            start = end;
-        }
-        out.push((start..range.end, next, after));
-    }
-    out
 }
 
 /// `cuts` where a break may fall. A cut inside a cluster, such as a
@@ -371,7 +341,10 @@ mod tests {
     use super::*;
     use crate::{
         fonts::FontSystem,
-        text::testing::{primary, styled},
+        text::{
+            Styled,
+            testing::{primary, styled},
+        },
     };
 
     /// The text of each piece.
@@ -570,19 +543,27 @@ mod tests {
     }
 
     #[test]
-    fn breaking_anywhere_measures_the_word_as_shaped_once() -> anyhow::Result<()> {
-        // A kerning pair, A and V, crosses every break.
-        let styled = styled("AVAVAV", vec![primary(&mut FontSystem::new())]);
+    fn a_hyphenated_word_is_measured_as_shaped_once() -> anyhow::Result<()> {
+        // A kerning pair, A and V, crosses its hyphenation point: car-a-van.
+        let styled = Styled {
+            hyphenation: Some(Lang::English),
+            ..styled("CARAVAN", vec![primary(&mut FontSystem::new())])
+        };
         let shaped = ShapedText::new(&styled)?;
         let total = |segments: Vec<Segment>| segments.iter().map(|s| s.advance).sum::<f32>();
         let word = total(segments(&shaped, Breaking::Words));
-        let anywhere = total(segments(&shaped, Breaking::Anywhere));
-        assert!((word - anywhere).abs() < 1e-3, "{word} against {anywhere}");
+        let pieces = segments(&shaped, Breaking::Hyphens);
+        assert!(pieces.len() > 1, "{pieces:?}");
+        let hyphenated = total(pieces);
+        assert!(
+            (word - hyphenated).abs() < 1e-3,
+            "{word} against {hyphenated}"
+        );
         // Letter by letter, the pairs would lose their kerning.
         let mut buffer = harfrust::Buffer::new();
         let run = &shaped.runs[0];
         let mut alone = 0.0;
-        for at in 0..6 {
+        for at in 0..7 {
             alone += shaped
                 .reshape(&mut buffer, run, at..at + 1)?
                 .iter()

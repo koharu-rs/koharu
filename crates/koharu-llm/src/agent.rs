@@ -14,15 +14,17 @@ use futures::StreamExt;
 use indoc::indoc;
 use rig_agent::{
     agent::{
-        AgentHook, CompletionCallAction, CompletionCallEvent, HookContext, ModelTurnAction,
-        ModelTurnFinished, MultiTurnStreamItem, RequestPatch,
+        AgentBuilder, AgentHook, CompletionCallAction, CompletionCallEvent, HookContext,
+        ModelTurnAction, ModelTurnFinished, MultiTurnStreamItem, RequestPatch,
     },
     completion::PromptError,
 };
 use rig_core::{
     catalog::ModelSpec,
     completion::{Document, Effort, GenerationOptions, Message, Usage},
+    driver::DynModel,
     message::ToolName,
+    operation::Completion,
     streaming::{Item, StreamEvent},
     tool::{DynamicTool, ToolErrorKind, ToolExecutionError, ToolOutput, validate::validate},
 };
@@ -30,7 +32,7 @@ use rig_memory::{CompactReason, CompactionPolicy, estimate_tokens};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{Context, Model, Provider, Selection, context::spec};
+use crate::{Context, KOHARU, context::spec};
 
 const INSTRUCTIONS: &str = indoc! {"
     You are Koharu Agent, operating a manga translation project inside Koharu.
@@ -45,11 +47,12 @@ const MAX_TURNS: usize = 20;
 /// How many times a run lets the model correct a call it wrote wrong.
 const CORRECTIONS: usize = 2;
 
-/// `[agent]`: the agent's model and how much it reasons.
+/// `[agent]`: the agent's model, as a `vendor/model` reference, and how much
+/// it reasons.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct AgentConfig {
-    pub model: Option<Selection>,
+    pub model: Option<String>,
     pub reasoning: Option<Effort>,
 }
 
@@ -95,7 +98,7 @@ type Events = Arc<dyn Fn(Event) + Send + Sync>;
 /// The agent's conversation about one open project, on one model.
 pub struct Agent<H> {
     host: Arc<H>,
-    model: Model,
+    model: DynModel<Completion>,
     context: Context,
     reasoning: Option<Effort>,
 }
@@ -109,7 +112,7 @@ enum Failure {
 }
 
 impl<H: Host> Agent<H> {
-    pub fn new(host: Arc<H>, model: Model, context: Context) -> Self {
+    pub fn new(host: Arc<H>, model: DynModel<Completion>, context: Context) -> Self {
         Self {
             host,
             model,
@@ -163,23 +166,17 @@ impl<H: Host> Agent<H> {
             .map(|tool| self.dynamic(tool, events, &acted))
             .collect::<Result<Vec<_>>>()
             .map_err(Failure::Other)?;
-        let mut agent = self
-            .model
-            .agent()
+        let mut agent = AgentBuilder::new(self.model.clone())
             .preamble(INSTRUCTIONS)
             .dynamic_tools(tools)
             .add_hook(Window::new(self.context.policy(&spec), spec.clone()));
         if let Some(effort) = self.reasoning {
             agent = agent.options(GenerationOptions::default().reasoning(effort));
         }
-        if self.model.provider == Provider::Local {
+        if spec.provider.vendor() == KOHARU {
             // The catalog's settings are for translation: a repeat penalty
-            // would penalize repeated call markers, and its answer limit is
-            // too short for a turn that reasons and calls tools.
+            // would penalize repeated call markers.
             agent = agent.additional_params(json!({"repeat_penalty": 1.0}));
-            if let Some(window) = spec.context_window {
-                agent = agent.max_tokens(u64::from(window) / 4);
-            }
         }
         let history = self
             .context

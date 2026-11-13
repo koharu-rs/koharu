@@ -43,21 +43,29 @@ use engine::{Files, Job, Step};
 use markup::{Item, Markup, Parser};
 use template::{Rendering, Template};
 
-/// How many requests a loaded model decodes together, and the most tokens
-/// each may hold, prompt and answer together. The KV cache for all of them is
-/// allocated when the model loads, which may give each request less if the
-/// device has too little free memory; the model's spec says what it got.
+use crate::KOHARU;
+
+/// How many requests a loaded model decodes together, the most tokens each
+/// may hold, prompt and answer together, and whether it reads images. The KV
+/// cache for all of them is allocated when the model loads, which may give
+/// each request less if the device has too little free memory; the model's
+/// spec says what it got.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Size {
     pub sequences: u32,
     pub context: u32,
+    /// Whether the model's projector is fetched and loaded, so it reads
+    /// images; without it, its memory goes to the model.
+    pub images: bool,
 }
 
 impl Size {
-    /// What the agent asks of a local model: one conversation at a time.
+    /// What the agent asks of a local model: one conversation at a time, of
+    /// text.
     pub const AGENT: Self = Self {
         sequences: 1,
         context: 65_536,
+        images: false,
     };
 }
 
@@ -137,9 +145,108 @@ impl Sampling {
     }
 }
 
-/// What to load, as the catalog or a caller names it.
+/// What Koharu's catalog says of one of its models beyond its spec.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Local {
+    /// The default first.
+    pub quantizations: Vec<Quantization>,
+    /// The languages it translates into, as BCP 47 tags; `None` for any.
+    pub languages: Option<&'static [&'static str]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct Quantization {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub downloaded: bool,
+}
+
+/// Koharu's catalog's facts on `spec`, when it's one of Koharu's models.
+#[must_use]
+pub fn local(spec: &ModelSpec) -> Option<Local> {
+    if spec.provider.vendor() != KOHARU {
+        return None;
+    }
+    let entry = catalog::entry(&spec.id).ok()?;
+    Some(Local {
+        quantizations: entry
+            .quantizations
+            .iter()
+            .map(|quantization| Quantization {
+                id: quantization.id,
+                name: quantization.name,
+                downloaded: std::iter::once(quantization.file)
+                    .chain(entry.projector)
+                    .all(|file| entry.repository.exists(file)),
+            })
+            .collect(),
+        languages: entry.languages,
+    })
+}
+
+/// Every model of Koharu's catalog, as rig describes a model; how much
+/// context one gets is known once it loads.
+pub(crate) fn specs() -> Vec<ModelSpec> {
+    catalog::MODELS.iter().map(catalog::Entry::spec).collect()
+}
+
+/// What rig and a conversation's context know of one of Koharu's models. A
+/// model of a specialized `kind`, such as translation, calls no tools,
+/// whatever markup its template writes; it reasons when its template does, as
+/// Index-Translate's opens a think block unless told not to.
+pub(crate) fn spec(id: &str, markup: Option<&Markup>, kind: Option<&str>) -> ModelSpec {
+    let general = kind.is_none();
+    let mut spec = ModelSpec::new(vendor(), id)
+        .with_tools(general && markup.is_some_and(|markup| markup.call.is_some()));
+    if markup.is_some_and(|markup| markup.reasoning.is_some()) {
+        spec = spec.with_reasoning(ReasoningSupport::Unknown { default: None });
+    }
+    spec.structured_output = true;
+    spec.details.kind = kind.map(str::to_owned);
+    spec
+}
+
+/// The vendor Koharu's own models are filed under.
+fn vendor() -> ProviderId {
+    ProviderId::declare(KOHARU).expect("`koharu` spells a vendor")
+}
+
+/// The catalog model `id` names, at the quantization after a colon or its
+/// first, its files fetched first if the store doesn't have them; its
+/// projector only when `size` asks for images.
+pub(crate) async fn connect(id: &str, size: Size) -> Result<DynModel<Completion>> {
+    let (id, quantization) = match id.split_once(':') {
+        Some((id, quantization)) => (id, Some(quantization)),
+        None => (id, None),
+    };
+    let entry = catalog::entry(id)?;
+    let quantization = entry.quantization(quantization)?;
+    let (model, projector) = match entry.projector.filter(|_| size.images) {
+        Some(projector) => {
+            let [model, projector] = entry
+                .repository
+                .resolve([quantization.file, projector])
+                .await?;
+            (model, Some(projector))
+        }
+        None => {
+            let [model] = entry.repository.resolve([quantization.file]).await?;
+            (model, None)
+        }
+    };
+    let loading = Loading {
+        spec: entry.spec(),
+        model,
+        projector,
+        defaults: entry.sampling.clone(),
+        markup: entry.markup,
+    };
+    load(loading, size).await
+}
+
+/// What to load: the model's spec, which loading completes, and its files.
 pub(crate) struct Loading {
-    pub(crate) id: String,
+    pub(crate) spec: ModelSpec,
     pub(crate) model: PathBuf,
     pub(crate) projector: Option<PathBuf>,
     /// The sampling settings a request starts from.
@@ -157,10 +264,10 @@ pub(crate) async fn load(loading: Loading, size: Size) -> Result<DynModel<Comple
     let device = koharu_runtime::device().await?.index;
     tokio::task::spawn_blocking(move || {
         let Loading {
-            id,
+            spec,
             model,
             projector,
-            defaults,
+            mut defaults,
             markup,
         } = loading;
         let (jobs, queue) = mpsc::channel();
@@ -171,48 +278,36 @@ pub(crate) async fn load(loading: Loading, size: Size) -> Result<DynModel<Comple
             device,
         };
         std::thread::Builder::new()
-            .name(format!("llm {id}"))
+            .name(format!("llm {}", spec.id))
             .spawn(move || engine::serve(files, size, ready, queue))?;
         let loaded = loaded.recv().context("the model's thread stopped")??;
+        // An answer, reasoning included, may take the quarter of the context
+        // a conversation's `Context` keeps free for it.
+        defaults
+            .max_tokens
+            .get_or_insert(u64::from(loaded.context) / 4);
         let Value::Object(defaults) = serde_json::to_value(defaults)? else {
             unreachable!("sampling settings serialize to an object")
         };
-        let facts = ModelFacts::new(spec(&id, markup, loaded.vision, loaded.context)?);
-        let wire = Local {
-            id,
+        let mut spec = spec.with_context_window(loaded.context);
+        spec.input.image = loaded.vision;
+        let wire = Gguf {
+            id: spec.id.clone(),
             template: Arc::new(loaded.template),
             marker: koharu_llama::mtmd::mtmd_default_marker().to_owned(),
             vision: loaded.vision,
             defaults,
             markup,
-            facts,
+            facts: ModelFacts::new(spec),
         };
         Ok(Model::new(wire, Engine(jobs)).erase())
     })
     .await?
 }
 
-/// What rig and a conversation's context know of a loaded model.
-fn spec(
-    id: &str,
-    markup: Option<&'static Markup>,
-    vision: bool,
-    context: u32,
-) -> Result<ModelSpec> {
-    let mut spec = ModelSpec::new(ProviderId::declare("local")?, id)
-        .with_context_window(context)
-        .with_tools(markup.is_some_and(|markup| markup.call.is_some()));
-    if markup.is_some_and(|markup| markup.reasoning.is_some()) {
-        spec = spec.with_reasoning(ReasoningSupport::Unknown { default: None });
-    }
-    spec.input.image = vision;
-    spec.structured_output = true;
-    Ok(spec)
-}
-
 /// The wire: the model's chat template, and what it reads and writes.
 #[derive(Clone, Debug)]
-pub(crate) struct Local {
+pub(crate) struct Gguf {
     id: String,
     template: Arc<Template>,
     /// Where an image goes in a prompt.
@@ -230,10 +325,13 @@ pub(crate) struct Prompt {
     images: Vec<Vec<u8>>,
     sampling: Sampling,
     schema: Option<String>,
+    /// The marker after which the schema holds the reply, which reasons
+    /// freely before it.
+    answer_after: Option<&'static str>,
     parser: Parser,
 }
 
-impl Wire for Local {
+impl Wire for Gguf {
     type Op = Completion;
     type Payload = Prompt;
     type Frame = Part;
@@ -242,7 +340,7 @@ impl Wire for Local {
     type Reassembler = Document;
 
     fn describe(&self) -> Descriptor<'_> {
-        Descriptor::new("local")
+        Descriptor::new(KOHARU)
             .model(self.id.as_str())
             .replay(self)
             .facts(&self.facts)
@@ -265,12 +363,22 @@ impl Wire for Local {
         sampling.check().map_err(EncodeError::request)?;
 
         let thinking = sampling.enable_thinking.unwrap_or(false);
-        if request.output_schema.is_some() && (thinking || !tools.is_empty()) {
-            // The grammar holds the reply from its first token.
+        if request.output_schema.is_some() && !tools.is_empty() {
             return Err(EncodeError::request(
-                "a local model can't keep to a schema while it reasons or calls tools",
+                "a local model can't keep to a schema while it calls tools",
             ));
         }
+        // A reply that reasons first keeps to the schema once its reasoning
+        // closes.
+        let answer_after = match (&request.output_schema, thinking) {
+            (Some(_), true) => Some(
+                self.markup
+                    .and_then(|markup| markup.reasoning)
+                    .map(|(_, close)| close)
+                    .ok_or_else(|| EncodeError::request("this local model doesn't reason"))?,
+            ),
+            _ => None,
+        };
         let conversation = conversation::conversation(&request.chat_history, &self.marker)
             .map_err(EncodeError::request)?;
         let text = self
@@ -285,9 +393,10 @@ impl Wire for Local {
                 effort: sampling.reasoning_effort.map(effort_name),
             })
             .map_err(|error| EncodeError::request(format!("{error:#}")))?;
-        let parser = match self.markup.filter(|_| request.output_schema.is_none()) {
-            Some(markup) => Parser::new(markup, tools, &text),
-            None => Parser::plain(),
+        let parser = match (self.markup, request.output_schema.is_some()) {
+            (Some(markup), false) => Parser::new(markup, tools, &text),
+            (Some(markup), true) if answer_after.is_some() => Parser::answer(markup, &text),
+            _ => Parser::plain(),
         };
         let schema = request
             .output_schema
@@ -312,6 +421,7 @@ impl Wire for Local {
             images: conversation.images,
             sampling,
             schema,
+            answer_after,
             parser,
         })
     }
@@ -324,14 +434,14 @@ impl Wire for Local {
     }
 }
 
-impl Local {
+impl Gguf {
     /// The tools the request offers, which only a model with call markup
     /// takes, and which it can't be forced to call without a grammar.
     fn tools(&self, request: &CompletionRequest) -> Result<Vec<Arc<ToolDefinition>>, String> {
         if request.tools.is_empty() {
             return Ok(Vec::new());
         }
-        if !self.markup.is_some_and(|markup| markup.call.is_some()) {
+        if !self.spec().tools {
             return Err("this local model takes no tools".to_owned());
         }
         match &request.tool_choice {
@@ -339,6 +449,13 @@ impl Local {
             Some(ToolChoice::None) => Ok(Vec::new()),
             Some(_) => Err("a local model can't be made to call a tool".to_owned()),
         }
+    }
+
+    /// What the model can do, which its spec says.
+    fn spec(&self) -> &ModelSpec {
+        self.facts
+            .spec()
+            .expect("a local model's facts hold its spec")
     }
 }
 
@@ -354,13 +471,13 @@ fn declaration(tool: &ToolDefinition) -> Value {
     })
 }
 
-impl ReplayTarget for Local {
+impl ReplayTarget for Gguf {
     fn api(&self) -> Api {
         Api::from_static("koharu.local")
     }
 
     fn provider(&self) -> &str {
-        "local"
+        KOHARU
     }
 
     fn model(&self) -> &str {
@@ -372,7 +489,7 @@ impl ReplayTarget for Local {
             user_images: self.vision,
             assistant_images: false,
             tool_result_images: false,
-            tools: self.markup.is_some_and(|markup| markup.call.is_some()),
+            tools: self.spec().tools,
             foreign_reasoning: false,
         }
     }
@@ -390,7 +507,7 @@ impl ReplayTarget for Local {
             stop,
             cache_key,
         } = fields;
-        let reasons = self.markup.is_some_and(|markup| markup.reasoning.is_some());
+        let reasons = self.spec().reasoning.supported();
         OptionMap {
             reasoning: Mapping::of(reasoning, |reasoning| match reasoning {
                 Reasoning::Off => Mapping::Send(json!({"enable_thinking": false})),
@@ -573,7 +690,7 @@ impl Reassemble<Part> for Document {
 #[derive(Clone)]
 pub(crate) struct Engine(mpsc::Sender<Job>);
 
-impl Transport<Local> for Engine {
+impl Transport<Gguf> for Engine {
     fn send(&self, prompt: Prompt, _exchange: Exchange) -> Opening<Part> {
         let jobs = self.0.clone();
         Opening::new(async move {
@@ -583,6 +700,7 @@ impl Transport<Local> for Engine {
                 images: prompt.images,
                 sampling: prompt.sampling,
                 schema: prompt.schema,
+                answer_after: prompt.answer_after,
                 frames,
             })
             .map_err(|_| ProviderError::Provider("the local model stopped".to_owned()))?;
@@ -689,7 +807,7 @@ mod tests {
                 </tool_call>"
             })],
         );
-        let reply = script.model.completion.call(with_tools()).await.unwrap();
+        let reply = script.model.call(with_tools()).await.unwrap();
         let blocks = reply.choice.iter().collect::<Vec<_>>();
         assert!(
             matches!(blocks[0], AssistantContent::Reasoning(block) if block.text == "Reading.")
@@ -717,7 +835,7 @@ mod tests {
                 "<tool_call><function=get_page><parameter=page>3</tool_call>",
             )],
         );
-        let reply = script.model.completion.call(with_tools()).await.unwrap();
+        let reply = script.model.call(with_tools()).await.unwrap();
         let call = reply.choice.iter().find_map(|block| match block {
             AssistantContent::ToolCall(call) => Some(call),
             _ => None,
@@ -728,7 +846,7 @@ mod tests {
     #[tokio::test]
     async fn a_model_without_call_markup_refuses_tools() {
         let script = scripted(None, 4096, Vec::new());
-        assert!(script.model.completion.call(with_tools()).await.is_err());
+        assert!(script.model.call(with_tools()).await.is_err());
     }
 
     #[tokio::test]
@@ -736,7 +854,7 @@ mod tests {
         let script = scripted(Some(&FUNCTION_TAGS), 4096, Vec::new());
         let schema = schemars::Schema::try_from(json!({"type": "object"})).unwrap();
         let request = with_tools().output_schema(schema);
-        assert!(script.model.completion.call(request).await.is_err());
+        assert!(script.model.call(request).await.is_err());
     }
 
     /// The grammar holds such a reply to JSON, where `<think>` is only text.
@@ -746,20 +864,22 @@ mod tests {
         let script = scripted(Some(&FUNCTION_TAGS), 4096, vec![Ok(answer)]);
         let schema = schemars::Schema::try_from(json!({"type": "object"})).unwrap();
         let request = CompletionRequest::new(Message::user("Hi")).output_schema(schema);
-        let reply = script.model.completion.call(request).await.unwrap();
+        let reply = script.model.call(request).await.unwrap();
         assert_eq!(reply.text(), answer);
     }
 
     #[test]
     fn the_spec_says_what_the_model_can_do() {
-        let spec = spec("m", Some(&FUNCTION_TAGS), true, 8192).unwrap();
-        assert_eq!(spec.context_window, Some(8192));
-        assert!(spec.tools && spec.input.image && spec.reasoning.supported());
-        let spec = spec_without_markup();
-        assert!(!spec.tools && !spec.reasoning.supported());
-    }
-
-    fn spec_without_markup() -> ModelSpec {
-        spec("m", None, false, 8192).unwrap()
+        let general = spec("m", Some(&FUNCTION_TAGS), None);
+        assert!(general.tools && general.reasoning.supported());
+        assert!(!spec("m", None, None).tools);
+        // A translation model's template may write a general model's markup,
+        // whose reasoning it keeps and whose tool calls it doesn't.
+        let translation = spec("m", Some(&FUNCTION_TAGS), Some(crate::TRANSLATION));
+        assert!(!translation.tools && translation.reasoning.supported());
+        assert_eq!(
+            translation.details.kind.as_deref(),
+            Some(crate::TRANSLATION)
+        );
     }
 }

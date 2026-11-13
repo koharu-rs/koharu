@@ -24,6 +24,7 @@ koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
 kurbo = { workspace = true }
 memmap2 = { workspace = true }
+rayon = { workspace = true }
 safetensors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
