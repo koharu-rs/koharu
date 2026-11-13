@@ -5,10 +5,11 @@ mod mallinfo;
 
 use std::io::IsTerminal as _;
 
+use ::sentry::integrations::tracing::{BreadcrumbLayer, ErrorLayer, LogLayer, SpanLayer};
 use clap::Parser as _;
 use koharu::panic;
 use koharu::sentry;
-use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::{Layer as _, filter::LevelFilter, layer::SubscriberExt as _};
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -37,7 +38,12 @@ fn main() {
                     .with_default_directive(tracing::Level::INFO.into())
                     .from_env_lossy(),
             )
-            .with(sentry::tracing_layer())
+            // INFO and up as spans, logs, and breadcrumbs, since a crash report
+            // carries breadcrumbs and not logs; errors as issues.
+            .with(SpanLayer::new().with_filter(LevelFilter::INFO))
+            .with(LogLayer::new().with_filter(LevelFilter::INFO))
+            .with(BreadcrumbLayer::new().with_filter(LevelFilter::INFO))
+            .with(ErrorLayer::new().with_filter(LevelFilter::ERROR))
             .with(
                 tracing_subscriber::fmt::layer()
                     .with_writer(std::io::stderr)
