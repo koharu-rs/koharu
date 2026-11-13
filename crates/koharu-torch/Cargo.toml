@@ -2,14 +2,13 @@
 name = "koharu-torch"
 version.workspace = true
 edition.workspace = true
-description = "Rust bindings for LibTorch with a dynamically loaded C++ shim."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["pytorch", "libtorch", "tensor", "deep-learning", "machine-learning"]
-categories = ["api-bindings", "science"]
+keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
