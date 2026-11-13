@@ -700,6 +700,32 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('applies a typed font size when Enter is pressed', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+    render(
+      <TooltipProvider>
+        <ToolBar />
+        <Inspector />
+      </TooltipProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Text' }))
+    await user.type(screen.getByTestId('type-size'), '8{Enter}')
+    await waitFor(() =>
+      expect(setTypography).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            layer: 'element',
+            typography: expect.objectContaining({ size: 8, auto_fit: false }),
+          }),
+        ]),
+      ),
+    )
+    expect(setTypography).toHaveBeenCalledTimes(1)
+  })
+
   it('defaults vertical text alignment to top and maps end to bottom', async () => {
     const user = userEvent.setup()
     installProject()
