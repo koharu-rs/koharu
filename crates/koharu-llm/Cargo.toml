@@ -18,7 +18,6 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-indoc = { workspace = true }
 koharu-config = { workspace = true }
 koharu-llama = { workspace = true }
 koharu-llama-sys = { workspace = true }
@@ -39,3 +38,6 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }

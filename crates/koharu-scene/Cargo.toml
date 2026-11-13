@@ -29,7 +29,6 @@ schemars = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_json_canonicalizer = { workspace = true }
 serde_rusqlite = { workspace = true }
 serde_with = { workspace = true }
 similar = { workspace = true }
