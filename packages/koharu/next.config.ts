@@ -2,6 +2,9 @@ import { withSentryConfig } from '@sentry/nextjs/config'
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  // `next dev` otherwise writes an AGENTS.md here whenever a coding agent runs it; the
+  // repository keeps its own agent rules.
+  agentRules: false,
   devIndicators: false,
   transpilePackages: ['@koharu/bridge', '@koharu/ui'],
   output: 'export',
