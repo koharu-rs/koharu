@@ -16,13 +16,14 @@ use parking_lot::RwLock;
 use petgraph::{Direction::Incoming, stable_graph::NodeIndex};
 use tokio::{
     runtime::Handle,
-    sync::{OwnedSemaphorePermit, Semaphore, broadcast, mpsc},
+    sync::{OwnedSemaphorePermit, Semaphore, mpsc},
     task::{self, JoinError, JoinSet},
 };
 
 pub(crate) use self::run::{Plan, Run};
 use crate::{
     Event, Outcome, PipelineConfig, RunId, Stage,
+    event::Events,
     gpu::{Gpu, Key, Turn},
     stages::{self, Inputs, Member, Task, translate::Conversations},
 };
@@ -78,7 +79,7 @@ struct Running {
 
 pub(crate) struct Scheduler {
     commands: mpsc::UnboundedReceiver<Command>,
-    events: broadcast::Sender<Event>,
+    events: Events,
     gpu: Gpu,
     config: Arc<RwLock<PipelineConfig>>,
     /// In the order they were asked for.
@@ -95,7 +96,7 @@ impl Scheduler {
     /// the pipeline holds drops.
     pub(crate) fn spawn(
         config: Arc<RwLock<PipelineConfig>>,
-        events: broadcast::Sender<Event>,
+        events: Events,
     ) -> mpsc::UnboundedSender<Command> {
         let (sender, commands) = mpsc::unbounded_channel();
         let scheduler = Self {
@@ -132,8 +133,7 @@ impl Scheduler {
     }
 
     fn emit(&self, event: Event) {
-        // No one listening isn't a failure.
-        let _ = self.events.send(event);
+        self.events.send(event);
     }
 
     fn handle(&mut self, command: Command) {

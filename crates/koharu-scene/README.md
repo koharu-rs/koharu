@@ -504,8 +504,6 @@ Each example uses only this crate and runs with
   replacing what a model made.
 - `sharing`: one session shared by the editor and a background model, with an
   edit that changes nothing.
-- `tools`: what an agent or MCP client does: list and call the tools, and read
-  their answers, which are the project's own values.
 
 ## Sources
 

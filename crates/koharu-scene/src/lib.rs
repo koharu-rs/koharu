@@ -14,7 +14,6 @@ mod session;
 mod store;
 mod text;
 mod tiles;
-mod tools;
 mod values;
 
 pub use change::{Change, Created, History, PageChanges};
@@ -30,5 +29,4 @@ pub use query::{Answer, PageSummary, ProjectAnswer, Query};
 pub use session::{EXTENSION, Session};
 pub use text::{CharStyle, RichText, Span, Text, TextStyle};
 pub use tiles::{Tile, Tiles};
-pub use tools::{ToolCall, ToolSpec, tool_call, tools};
 pub use values::*;

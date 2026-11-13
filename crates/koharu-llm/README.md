@@ -1,9 +1,8 @@
 # koharu-llm
 
-Koharu's language models, local on llama.cpp or at a hosted provider the user chose, and
-the in-process agent that edits a project through tools. Everything is built on rig: the
-local engine is one more rig model, so translation and the agent work the same whichever
-model answers.
+Koharu's language models, local on llama.cpp or at a hosted provider the user chose.
+Everything is built on rig: the local engine is one more rig model, so translation and
+koharu-agent's agent work the same whichever model answers.
 
 ## API
 
@@ -16,14 +15,12 @@ as rig's `ModelSpec::reference` writes it, the model's `ModelSpec`, and a `DynMo
 | `models().await` | Every model the user can pick, as a `ModelSpec` |
 | `local(&spec)` | Koharu's catalog's facts on one of its models: its quantizations, which are downloaded, and the languages it translates into |
 | `answers(&model, schema)` | rig's agent builder asking for answers `schema` describes in the way the model's vendor keeps to one |
-| `Agent::new(host, model, context)` | The agent's conversation about one open project |
-| `Agent::run(prompt, events).await` | One request, until the model answers without tools |
 | `Context` | A conversation kept inside a model's context window, in memory |
+| `Context::policy(&spec)` | How a conversation keeps inside a model's window, which an agent loop clears tool output by |
 | `sign_in`, `sign_out` | ChatGPT's sign-in, in the system browser or with a device code |
-| `AgentConfig`, `Providers` | The `[agent]` and `[providers]` config sections |
+| `Providers` | The `[providers]` config section |
 
 `rig` re-exports rig itself, since every model takes and gives its requests and streams.
-`AgentConfig` holds a reference and has no default model: a caller names it.
 
 `prompt_typed` checks an answer against its schema. A caller of plain `prompt` checks the
 answer itself, because rig fails open on structured output.
@@ -112,29 +109,15 @@ schema while the model reasons reasons freely, and the grammar holds it from the
 close marker on, as llama.cpp's lazy grammar starts at a trigger. A schema and tools in one
 request fail.
 
-## The agent
-
-The app implements `Host`: the project's state, its tools, and how to run one. Each request
-sends that state as a document ahead of the history, so the model sees only the latest and
-the history doesn't keep old copies.
-
-- **Limits.** A run stops after 20 model calls, and lets the model correct a bad call twice.
-- **Tools.** Arguments are checked against the tool's schema first, and a mismatch goes back
-  to the model. A tool runs detached, so dropping the run's future cancels the run but lets
-  a running tool finish, as each edit is whole or not at all.
-- **Local models.** The catalog's settings are for translation, so a run turns the repeat
-  penalty off.
-- **Events.** `events` hears `Text`, `Reasoning`, `ToolStarted`, and `ToolFinished`.
-
 ## Context
 
 `Context::fit` makes room before a request: it clears old tool outputs, then summarizes
 older messages if that isn't enough. `Context::compact` summarizes now, because the user
 asked or the model refused the request. A model whose spec says it only translates can't
 summarize, so its oldest turns are dropped at the cut rig-memory picks, each reply kept with
-its turn. `Agent::run` fits first, and if the model refuses a
-request as too long before any tool has run, it compacts and tries once more. During a run,
-a turn over the threshold is sent with older tool outputs cleared on a copy of its history.
+its turn. An agent run, as koharu-agent's, fits first, and if the model refuses a request
+as too long before any tool has run, it compacts and tries once more. During a run, a turn
+over the threshold is sent with older tool outputs cleared on a copy of its history.
 
 rig's compaction defaults assume a large window, so the reserve and the tool output kept are
 capped at a quarter of the model's input limit. A count starts from the tokens a provider

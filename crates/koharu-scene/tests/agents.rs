@@ -1,85 +1,31 @@
-//! The tools generated for agents and MCP clients, and the answers they get.
+//! What agents send and read: the patch `update_layer` takes, and a page as
+//! `get_page` answers it.
 
 mod common;
 use common::*;
-use koharu_scene::{Answer, LayerId, PageId, Query, ToolCall, Uuid, tool_call, tools};
+use koharu_scene::{Answer, LayerId, Op, Query};
+use schemars::generate::SchemaSettings;
 use serde_json::json;
 
-#[test]
-fn schemas_stand_alone() {
-    for tool in tools() {
-        let schema = tool.input_schema.to_string();
-        assert!(
-            !schema.contains("$ref") && !schema.contains("$defs"),
-            "{}",
-            tool.name
-        );
-    }
-}
-
-#[test]
-fn tools_cover_what_agents_send() {
-    let names: Vec<&str> = tools().iter().map(|tool| tool.name.as_str()).collect();
-    for name in [
-        "update_layer",
-        "apply_edit",
-        "get_page",
-        "set_text",
-        "set_attribute",
-    ] {
-        assert!(names.contains(&name), "{name}");
-    }
-    for name in ["add_file", "write_pixels", "set_rich_text", "add_page"] {
-        assert!(!names.contains(&name), "{name}");
-    }
-    let update = tools()
-        .iter()
-        .find(|tool| tool.name == "update_layer")
-        .expect("update_layer");
-    assert!(update.input_schema["properties"].get("op").is_none());
-    let patch = &update.input_schema["properties"]["patch"];
-    assert!(patch.to_string().contains("translation"), "{patch}");
-    assert!(patch["properties"].get("attributes").is_none(), "{patch}");
-    assert!(!update.description.is_empty());
-
-    let call = tool_call(
-        "set_text",
-        json!({"layer": LayerId(Uuid::now_v7()), "text": "hi"}),
-    )
-    .expect("a call");
-    assert!(matches!(call, ToolCall::Edit { label: None, ref ops } if ops.len() == 1));
-    assert!(
-        tool_call(
-            "set_text",
-            json!({"op": "remove_layer", "layer": LayerId(Uuid::now_v7())})
-        )
-        .is_err()
-    );
-    assert!(tool_call("add_file", json!({"bytes": []})).is_err());
-    let call = tool_call("get_page", json!({"page": PageId(Uuid::now_v7())})).expect("a call");
-    assert!(matches!(call, ToolCall::Query(Query::GetPage { .. })));
-    let call = tool_call(
-        "apply_edit",
-        json!({"label": "x", "ops": [{"op": "remove_layer", "layer": "$a"}]}),
-    )
-    .expect("a call");
-    assert!(matches!(call, ToolCall::Edit { label: Some(ref label), .. } if label == "x"));
-    assert!(
-        tool_call(
-            "apply_edit",
-            json!({"label": "x", "ops": [{"op": "add_file", "bytes": []}]})
-        )
-        .is_err()
-    );
+/// `update_layer`'s patch schema, inlined as agents get it.
+fn patch_schema() -> serde_json::Value {
+    let schema = SchemaSettings::draft2020_12()
+        .with(|settings| settings.inline_subschemas = true)
+        .into_generator()
+        .into_root_schema_for::<Op>();
+    let variants = schema.get("oneOf").and_then(|variants| variants.as_array());
+    variants
+        .into_iter()
+        .flatten()
+        .find(|variant| variant["properties"]["op"]["const"] == "update_layer")
+        .expect("update_layer")["properties"]["patch"]
+        .clone()
 }
 
 #[test]
 fn every_null_the_patch_schema_allows_is_a_patch_that_applies() {
-    let update = tools()
-        .iter()
-        .find(|tool| tool.name == "update_layer")
-        .expect("update_layer");
-    let patch = &update.input_schema["properties"]["patch"];
+    let patch = &patch_schema();
+    assert!(patch["properties"].get("attributes").is_none(), "{patch}");
     let variants = patch["anyOf"].as_array().expect("the kinds' variants");
     let blocks = variants
         .iter()
@@ -130,14 +76,15 @@ fn agents_patch_a_block_and_read_it_in_its_page() {
     add(&mut session, page, Some(balloon), block(0.0));
     let second = add(&mut session, page, Some(balloon), block(10.0));
 
-    let ToolCall::Edit { ops, .. } = tool_call(
-        "update_layer",
-        json!({"layer": second, "patch": {"translation": {"direction": "vertical"}}}),
+    apply(
+        &mut session,
+        vec![json!({
+            "op": "update_layer",
+            "layer": second,
+            "patch": {"translation": {"direction": "vertical"}},
+        })],
     )
-    .expect("a call") else {
-        panic!("not an edit")
-    };
-    session.apply(edit(ops)).expect("an edit");
+    .expect("an edit");
 
     let Answer::Page(answer) = session.query(Query::GetPage { page }).expect("an answer") else {
         panic!("not a page")

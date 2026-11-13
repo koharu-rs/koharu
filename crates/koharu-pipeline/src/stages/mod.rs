@@ -18,12 +18,13 @@ use parking_lot::Mutex;
 use petgraph::stable_graph::NodeIndex;
 use serde_json::{Value, json};
 use strum::VariantArray;
-use tokio::sync::{OwnedMutexGuard, broadcast, oneshot};
+use tokio::sync::{OwnedMutexGuard, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::info_span;
 
 use crate::{
     Error, Event, PipelineConfig, RunId, Stage,
+    event::Events,
     gpu::{Gpu, Key, Models, Turn},
     scheduler::Priority,
 };
@@ -108,7 +109,7 @@ pub(crate) struct Task {
     pub(crate) members: Vec<Member>,
     pub(crate) priority: Priority,
     pub(crate) gpu: Gpu,
-    pub(crate) events: broadcast::Sender<Event>,
+    pub(crate) events: Events,
 }
 
 /// A stage's end once its run stopped, which isn't a failure.
@@ -139,8 +140,7 @@ impl Task {
             let _span =
                 info_span!("inference", %stage, ?pages, waited = ?queued.elapsed()).entered();
             for event in started {
-                // No one listening isn't a failure.
-                let _ = events.send(event);
+                events.send(event);
             }
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(models)))
                 .unwrap_or_else(|panic| {
@@ -160,7 +160,7 @@ impl Task {
     /// GPU.
     pub(crate) fn started(&self, members: &[&Member]) {
         for event in self.started_events(members) {
-            let _ = self.events.send(event);
+            self.events.send(event);
         }
     }
 

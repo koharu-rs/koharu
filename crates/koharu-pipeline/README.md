@@ -13,6 +13,7 @@ because something it read changed, and a run never decides that a page needs no 
 | `Pipeline::set_config(config)` | Follows a changed `[pipeline]`. A model switched away from leaves memory once the work queued with it ends |
 | `Pipeline::run(session, request)` | Queues a run on the project a session holds and returns its `RunId` |
 | `Pipeline::events()` | Every run's `Event`s: a stage started or finished on a page, and a run ended done, failed, or stopped |
+| `Pipeline::history(run, wait)` | What a run told so far, its `Event`s in order, after waiting up to `wait` for it to end; the last says how it ended, as ComfyUI's `/history/{prompt_id}` keeps a prompt's |
 | `Pipeline::stop()` | Stops every run, running and queued |
 | `Pipeline::unload()` | Unloads every model once the GPU's current work ends |
 | `Pipeline::close(project)` | Forgets a closed project's translation conversation |
@@ -20,8 +21,9 @@ because something it read changed, and a run never decides that a page needs no 
 | `PipelineConfig` | The `[pipeline]` section |
 
 `Pipeline` is a cheap handle to clone; the scheduler and the model thread end when the last
-one drops. The canvas needs no event to preview a run: each stage's result is an edit, and the
-scene's change notification redraws it.
+one drops. Every event is kept in its run's history as it's sent, so a history never misses one,
+however slow a listener. The canvas needs no event to preview a run: each stage's result is an
+edit, and the scene's change notification redraws it.
 
 ## Requests
 

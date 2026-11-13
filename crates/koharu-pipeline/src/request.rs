@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use koharu_scene::{LayerId, PageId, Rect};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strum::{Display, VariantArray};
 
@@ -20,7 +21,7 @@ pub struct Request {
 
 /// What a run works on. It runs every stage it's given on everything it
 /// names, replacing what's there, and never a stage it isn't given.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Target {
     /// Every page.
@@ -52,6 +53,7 @@ pub enum Target {
     PartialOrd,
     Serialize,
     Deserialize,
+    JsonSchema,
     VariantArray,
 )]
 #[serde(rename_all = "snake_case")]
@@ -65,7 +67,7 @@ pub enum Stage {
 
 /// A painted area of a page: a byte a pixel over `rect`, in page pixels,
 /// painted where it isn't 0.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Area {
     pub rect: Rect,
     pub pixels: Vec<u8>,
