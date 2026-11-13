@@ -1,0 +1,9 @@
+{
+  "name": "com.koharu.native_host",
+  "description": "Koharu Chrome Extension Native Messaging Host",
+  "path": "..\\..\\target\\debug\\koharu-native-messaging.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://fonodfpfngfkfcdhddapkcgficghpoog/"
+  ]
+}
