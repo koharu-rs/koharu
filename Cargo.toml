@@ -69,14 +69,12 @@ futures = "0.3.34"
 half = "2.7.1"
 harfrust = "0.15.0"
 hayro = "0.8.0"
-hashbrown = "0.17.1"
 hf-hub = "1.0.0"
 http = "1.5.0"
 hypher = "0.1.8"
 icu_experimental = { version = "0.7.0", default-features = false, features = ["compiled_data"] }
 icu_locale = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc", "serde"] }
-icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.4.0", features = ["compiled_data"] }
 icu_segmenter = { version = "2.4.0", features = ["compiled_data"] }
 image = "0.25.10"
@@ -90,7 +88,6 @@ keyring = "4.2.0"
 kurbo = "0.13.1"
 libloading = "0.9.0"
 llguidance = "1.9.1"
-log = "0.4.35"
 machine-uid = "0.6.0"
 memmap2 = "0.9.12"
 minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
@@ -99,7 +96,6 @@ parking_lot = "0.13.0"
 petgraph = "0.8.3"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97e5b4b1d9a03c3ef9b904dd5de864f5e8aa8" }
 pollster = "1.0.1"
-postcard = { version = "1.1.3", features = ["use-std"] }
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 quick_cache = "0.7.0"
@@ -107,7 +103,6 @@ quote = "1.0.47"
 rars = "0.12.2"
 rayon = "1.12.0"
 reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
-revision = { version = "0.30.0", features = ["uuid"] }
 rfd = "0.18.0"
 # rig breaks its API in every release.
 rig-agent = { version = "=0.46.0", default-features = false }
@@ -130,7 +125,6 @@ serde_rusqlite = "0.44.0"
 serde_with = { version = "3.24.0", default-features = false, features = ["json", "macros"] }
 similar = "3.2.1"
 skrifa = "0.49.0"
-slotmap = "1.1.1"
 smallvec = "1.16.5"
 specta = { version = "=2.0.0-rc.28", features = ["derive", "serde_json", "url", "uuid"] }
 specta-serde = "=0.0.15"

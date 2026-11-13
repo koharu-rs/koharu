@@ -29,13 +29,13 @@ safetensors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokenizers = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 ab_glyph = { workspace = true }
 clap = { workspace = true }
 criterion = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [[bench]]
