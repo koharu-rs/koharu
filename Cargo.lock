@@ -5462,9 +5462,9 @@ name = "koharu"
 version = "0.83.5"
 dependencies = [
  "clap",
- "koharu-config",
  "koharu-desktop",
  "koharu-sentry",
+ "machine-uid",
  "rfd",
  "sentry",
  "serde_json",
@@ -5477,7 +5477,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "windows",
 ]
 
@@ -6209,6 +6208,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "machine-uid"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe0d6336d341b10ae80e099b8f3c59f34bf8aef66ef25e83aa98bf2955c0ae7"
+dependencies = [
+ "libc",
+ "windows-registry",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

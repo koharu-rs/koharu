@@ -43,8 +43,7 @@ pub fn update<T: Section>(edit: impl FnOnce(&mut T)) -> Result<()> {
     write(&home()?.join("config.toml"), edit)
 }
 
-/// Koharu's folder in the user's home, which holds `config.toml`.
-pub fn home() -> Result<PathBuf> {
+fn home() -> Result<PathBuf> {
     dirs::home_dir()
         .map(|home| home.join(".koharu"))
         .ok_or(Error::NoHome)

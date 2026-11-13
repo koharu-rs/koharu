@@ -1,4 +1,4 @@
-use std::{fs, sync::mpsc, thread};
+use std::{sync::mpsc, thread};
 
 use sentry::{
     ClientOptions, Hub, IntoDsn, User,
@@ -50,7 +50,7 @@ pub fn initialize() -> sentry::ClientInitGuard {
     let guard = sentry::init(options);
 
     let user = User {
-        id: install_id(),
+        id: machine_uid::get().ok(),
         ..Default::default()
     };
     sentry::configure_scope(|scope| scope.set_user(Some(user.clone())));
@@ -68,30 +68,6 @@ pub fn initialize() -> sentry::ClientInitGuard {
         tracing::warn!("native crashes will come without breadcrumbs: {error}");
     }
     guard
-}
-
-/// This install's random ID, kept beside `config.toml`, so one person's
-/// sessions, replays, and errors connect without naming them. A new one each
-/// run when the file can't be kept.
-fn install_id() -> Option<String> {
-    let path = koharu_config::home().ok()?.join("install-id");
-    if let Ok(id) = fs::read_to_string(&path)
-        && let Ok(id) = id.trim().parse::<uuid::Uuid>()
-    {
-        return Some(id.to_string());
-    }
-    let id = uuid::Uuid::new_v4().to_string();
-    if let Err(error) = path
-        .parent()
-        .map_or(Ok(()), fs::create_dir_all)
-        .and_then(|()| fs::write(&path, &id))
-    {
-        tracing::warn!(
-            "couldn't keep the install ID in {}: {error}",
-            path.display()
-        );
-    }
-    Some(id)
 }
 
 pub fn tracing_layer<S>() -> impl tracing_subscriber::Layer<S>
