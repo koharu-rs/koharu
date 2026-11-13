@@ -1,7 +1,7 @@
 //! What the pipeline does once a page is translated: one block per text, in
-//! its balloon, its translation set in the balloon's outline at the page's
-//! dialogue size. The renderer fits each line; when typesetting sets every
-//! translation larger, each one fits again on the next render.
+//! its balloon, its translation placed in the balloon's outline with no size,
+//! to fill it. The renderer fits each one at every render, so when a balloon
+//! grows, its text grows with it on the next render.
 //!
 //! The scan and the clean-ups would sit under these texts; they don't change
 //! how the text fits, so the example leaves them out.
@@ -53,23 +53,24 @@ fn main() -> Result<()> {
         ops.push(
             json!({"op": "update_layer", "layer": block, "patch": {"translation": {
                 "language": "en",
-                "style": {"chars": {"size": 22.0}, "align": "center"},
-                "frame": {"path": {"path": outline, "anchor": "center"}},
+                "style": {"align": "center"},
+                "frame": {"path": {"path": outline, "fit": "best", "anchor": "center"}},
             }}}),
         );
     }
     apply(&mut session, ops)?;
 
     let renderer = Renderer::new(RendererConfig::default());
-    println!("the dialogue at 22 px:");
+    println!("each translation filling its balloon:");
     report(&renderer.render(&session, page)?, &blocks);
 
-    let ops = blocks
-        .iter()
-        .map(|block| json!({"op": "update_layer", "layer": block, "patch": {"translation": {"style": {"chars": {"size": 30.0}}}}}))
-        .collect();
+    // The first balloon grows by half about its centre.
+    let grown = "M10 200 A210 165 0 1 0 430 200 A210 165 0 1 0 10 200 Z";
+    let ops = vec![
+        json!({"op": "update_layer", "layer": blocks[0], "patch": {"translation": {"frame": {"path": {"path": grown}}}}}),
+    ];
     apply(&mut session, ops)?;
-    println!("the dialogue at 30 px:");
+    println!("after the first balloon grew by half:");
     report(&renderer.render(&session, page)?, &blocks);
     Ok(())
 }
@@ -98,10 +99,10 @@ fn report(frame: &Frame, blocks: &[LayerId]) {
         else {
             continue;
         };
+        let size = text.runs.first().map_or(0.0, |run| run.size);
         println!(
-            "  balloon {}: drawn at {:.0}% of its size, {} hyphen(s){}",
+            "  balloon {}: drawn at {size:.1} px, {} hyphen(s){}",
             index + 1,
-            text.scale * 100.0,
             text.hyphens.len(),
             if text.overflowed { ", overflowing" } else { "" },
         );

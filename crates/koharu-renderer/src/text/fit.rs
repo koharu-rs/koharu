@@ -1,6 +1,8 @@
-//! Lines fitted to a text's room: at its size when they fit; else, as the
-//! frame allows, at the largest scale down to half that fits, breaking
-//! between words, then at hyphenation points, then anywhere in a word.
+//! Lines fitted to a text's room: at its size when they fit, or in a best-fit
+//! frame at the largest scale above it that fits; else, as the frame allows,
+//! at the largest scale down to half that fits with whole words, then at half
+//! with a path's inset halved, then hyphenated. A word is never split without
+//! a hyphen: what still doesn't fit runs past its room whole.
 
 use std::ops::{Range, RangeInclusive};
 
@@ -10,9 +12,13 @@ use vello::kurbo::Rect;
 use super::{
     breaks::{Break, Breaking, Segment},
     lines::{self, Balance},
-    room::{Outline, Room, physical, shrinks},
+    room::{self, Outline, Room, Spans, fills, physical, shrinks},
     style::Styled,
 };
+
+/// The largest scale a best-fit text grows to, a bound that only text no
+/// room limits, such as one with no line height, reaches.
+const CEILING: f32 = 256.0;
 
 /// Lines placed at one scale.
 #[derive(Clone, Debug)]
@@ -47,53 +53,84 @@ pub(super) fn fit(
     let words = segments(Breaking::Words);
     let set = place(styled, room, &words, 1.0);
     if !set.overflowed {
-        return (words, set);
-    }
-    // Shrinking stops at half the set size.
-    let floor = if shrinks(&styled.frame) { 0.5 } else { 1.0 };
-    let mut modes = vec![words];
-    // Vertical text is CJK, which breaks between characters and has no
-    // hyphenation.
-    if !styled.vertical && styled.hyphenation.is_some() {
-        modes.push(segments(Breaking::Hyphens));
-    }
-    let overflows = |segments: &[Segment], scale| overflows(styled, room, segments, scale);
-    let all = |scale| modes.iter().all(|segments| overflows(segments, scale));
-    let (mut mode, mut placed) = largest_fit(floor, all, |scale| {
-        // The text at its size is placed already.
-        let words = match scale == 1.0 {
-            true => set.clone(),
-            false => place(styled, room, &modes[0], scale),
+        let placed = match fills(&styled.frame) {
+            true => grow(styled, room, &words, set),
+            false => set,
         };
-        // A word wider than its line, alone on it, is hyphenated before the
-        // text shrinks, since shrinking until it fits takes a balloon's
-        // narrow lines toward the floor. Lines that are merely full shrink,
-        // as Comicraft avoids a hyphen whenever it can.
-        let long = words.lines.iter().any(|line| {
-            line.segments.len() == 1
-                && lines::length(&modes[0], line.segments.clone(), scale) > line.room + 0.01
-        });
-        match modes.get(1) {
-            Some(hyphens) if words.overflowed && (long || scale <= floor) => {
-                (1, place(styled, room, hyphens, scale))
-            }
-            _ => (0, words),
-        }
-    });
-    // Breaking anywhere in a word is the last resort, once nothing else fits
-    // at the floor.
-    if placed.overflowed {
-        modes.push(segments(Breaking::Anywhere));
-        mode = modes.len() - 1;
-        let segments = &modes[mode];
-        placed = largest_fit(
-            floor,
-            |scale| overflows(segments, scale),
-            |scale| ((), place(styled, room, segments, scale)),
-        )
-        .1;
+        return (words, placed);
     }
-    (modes.swap_remove(mode), placed)
+    // Shrinking stops at half the set size. Whole words shrink first, as
+    // Comicraft avoids a hyphen whenever it can.
+    let floor = if shrinks(&styled.frame) { 0.5 } else { 1.0 };
+    let placed = largest_fit(
+        floor,
+        |scale| overflows(styled, room, &words, scale),
+        |scale| match scale == 1.0 {
+            // The text at its size is placed already.
+            true => ((), set.clone()),
+            false => ((), place(styled, room, &words, scale)),
+        },
+    )
+    .1;
+    if !placed.overflowed {
+        return (words, placed);
+    }
+    // At the floor, a balloon's margin narrows to half, before a hyphen and
+    // short of letters on its border, which read as cut off; then words
+    // hyphenate, where the fewest need it, as text whose language hyphenates
+    // does, vertical too; CJK breaks between characters already.
+    let (placed, inset) = match room {
+        Room::Path {
+            outline,
+            anchor,
+            inset,
+        } => {
+            let inset = inset / 2.0;
+            let narrowed = in_path(styled, &words, floor, outline, *anchor, inset).place();
+            if !narrowed.overflowed {
+                return (words, narrowed);
+            }
+            (narrowed, Some((outline, *anchor, inset)))
+        }
+        Room::Point | Room::Box { .. } => (placed, None),
+    };
+    if styled.hyphenation.is_some() {
+        let hyphens = segments(Breaking::Hyphens);
+        let hyphenated = match inset {
+            Some((outline, anchor, inset)) => {
+                in_path(styled, &hyphens, floor, outline, anchor, inset).place()
+            }
+            None => place(styled, room, &hyphens, floor),
+        };
+        if !hyphenated.overflowed {
+            return (hyphens, hyphenated);
+        }
+    }
+    // Nothing fits: the words run past their room whole, centred, into its
+    // margin first.
+    (words, placed)
+}
+
+/// The largest scale above 1 at which `segments`, which fit at 1 as `set`,
+/// still fit, breaking between words only: the scale doubles until they
+/// don't, then the gap is halved as shrinking halves it. A word that outgrows
+/// its line ends the growth rather than being hyphenated.
+fn grow(styled: &Styled, room: &Room, segments: &[Segment], set: Placed) -> Placed {
+    let overflows = |scale| overflows(styled, room, segments, scale);
+    let at = |scale| ((), place(styled, room, segments, scale));
+    let (mut low, mut best) = (1.0, set);
+    while low < CEILING {
+        let high = low * 2.0;
+        let candidate = match overflows(high) {
+            true => None,
+            false => Some(at(high).1).filter(|placed| !placed.overflowed),
+        };
+        match candidate {
+            Some(placed) => (low, best) = (high, placed),
+            None => return halve(&overflows, &at, low, high, ((), best)).1,
+        }
+    }
+    best
 }
 
 /// The largest scale from 1 down to `floor` at which `at` fits the text, else
@@ -420,9 +457,10 @@ impl InPath<'_> {
         best
     }
 
-    /// The text in `count` lines, each taking the widest span inside the
-    /// outline all along its band widened by the air, less the air at both
-    /// ends; and what they cost. `None` when `count` lines can't hold it.
+    /// The text in `count` lines, all centred on one axis, each as long as
+    /// the outline reaches on both sides of it all along its band widened by
+    /// the air, less the air at both ends; and what they cost. `None` when
+    /// `count` lines can't hold it.
     fn lines(&self, count: usize) -> Option<(f32, Placed)> {
         let (bounds, pitch, air) = (self.outline.bounds, self.pitch, self.air);
         let total = pitch * count as f32;
@@ -431,15 +469,26 @@ impl InPath<'_> {
             Anchor::Center => (bounds.y0 + bounds.y1) as f32 * 0.5 - total * 0.5,
             Anchor::End => bounds.y1 as f32 - air - total,
         };
-        let spans: Vec<(f32, f32)> = (0..count)
+        let bands: Vec<Spans> = (0..count)
             .map(|line| {
                 let v0 = top + pitch * line as f32;
                 self.outline
-                    .widest(f64::from(v0 - air), f64::from(v0 + pitch + air))
-                    .map_or((0.0, 0.0), |(start, end)| {
-                        let (start, end) = (start as f32 + air, end as f32 - air);
-                        (start, (end - start).max(0.0))
-                    })
+                    .band(f64::from(v0 - air), f64::from(v0 + pitch + air))
+            })
+            .collect();
+        let axis = room::axis(&bands).unwrap_or(bounds.center().x);
+        // A band with no room on the axis holds a line of none there, so a
+        // word forced into it overflows evenly about the axis.
+        let spans: Vec<(f32, f32)> = bands
+            .iter()
+            .map(|spans| {
+                room::reach(spans, axis).map_or((axis as f32, 0.0), |(start, end)| {
+                    let (start, end) = (start as f32 + air, end as f32 - air);
+                    match end > start {
+                        true => (start, end - start),
+                        false => (axis as f32, 0.0),
+                    }
+                })
             })
             .collect();
         let lines = lines::break_lines(
@@ -478,17 +527,18 @@ impl InPath<'_> {
             },
         ))
     }
-    /// The text when no line count holds it: in the middle line's span,
-    /// running past the outline as overflowing box text does.
+    /// The text when no line count holds it: in the middle line's widest
+    /// span, or the bounds, running past the outline as overflowing box text
+    /// does.
     fn overflowing(&self) -> Placed {
         let (bounds, pitch, air) = (self.outline.bounds, self.pitch, self.air);
         let middle = (bounds.y0 + bounds.y1) * 0.5;
-        let (start, end) = self
-            .outline
-            .widest(
-                middle - f64::from(pitch) * 0.5,
-                middle + f64::from(pitch) * 0.5,
-            )
+        let band = self.outline.band(
+            middle - f64::from(pitch) * 0.5,
+            middle + f64::from(pitch) * 0.5,
+        );
+        let (start, end) = room::axis(std::slice::from_ref(&band))
+            .and_then(|axis| room::reach(&band, axis))
             .unwrap_or((bounds.x0, bounds.x1));
         let room = (end - start) as f32;
         let lines = lines::break_lines(self.segments, self.scale, Balance::Even, None, |_| room)
@@ -570,10 +620,10 @@ mod tests {
         }
     }
 
-    /// Text in a shrinking box `width` by `height`.
-    fn in_box(width: f64, height: f64) -> Result<(Styled, Room)> {
+    /// Text in a box `width` by `height` that fits it as `fit` says.
+    fn in_box(width: f64, height: f64, fit: &str) -> Result<(Styled, Room)> {
         let frame: Frame = serde_json::from_value(serde_json::json!({
-            "box": {"bounds": {"x": 0.0, "y": 0.0, "width": width, "height": height}, "fit": "shrink"}
+            "box": {"bounds": {"x": 0.0, "y": 0.0, "width": width, "height": height}, "fit": fit}
         }))?;
         let room = Room::new(&frame, false)?;
         Ok((
@@ -589,7 +639,7 @@ mod tests {
     #[test]
     fn a_text_too_big_for_its_box_shrinks_to_the_largest_size_that_fits() -> Result<()> {
         // Two words 121 long together, in a box 100 wide and one line tall.
-        let (styled, room) = in_box(100.0, 12.0)?;
+        let (styled, room) = in_box(100.0, 12.0, "shrink")?;
         let (_, placed) = fit(&styled, &room, |_| {
             vec![word(60.0, Break::Normal), word(60.0, Break::End)]
         });
@@ -600,17 +650,70 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn a_word_wider_than_its_line_hyphenates_before_the_text_shrinks() -> Result<()> {
-        let (styled, room) = in_box(100.0, 100.0)?;
-        let (segments, placed) = fit(&styled, &room, |breaking| match breaking {
+    /// A word 150 long, in two hyphenated halves when it may break.
+    fn long(breaking: Breaking) -> Vec<Segment> {
+        match breaking {
             Breaking::Words => vec![word(150.0, Break::End)],
-            Breaking::Hyphens | Breaking::Anywhere => {
-                vec![word(75.0, Break::Hyphen), word(75.0, Break::End)]
-            }
-        });
-        assert_eq!((segments.len(), placed.scale), (2, 1.0));
+            Breaking::Hyphens => vec![word(75.0, Break::Hyphen), word(75.0, Break::End)],
+        }
+    }
+
+    #[test]
+    fn a_word_wider_than_its_line_shrinks_before_it_hyphenates() -> Result<()> {
+        let (styled, room) = in_box(100.0, 100.0, "shrink")?;
+        let (segments, placed) = fit(&styled, &room, long);
+        // Whole, at 100 / 151 at most.
+        assert_eq!(segments.len(), 1);
+        assert!((0.64..0.67).contains(&placed.scale), "{}", placed.scale);
         assert!(!placed.overflowed);
+        Ok(())
+    }
+
+    #[test]
+    fn a_word_too_wide_even_at_half_size_hyphenates_there() -> Result<()> {
+        // At half size the word is 75 long, in a box 60 wide.
+        let (styled, room) = in_box(60.0, 100.0, "shrink")?;
+        let (segments, placed) = fit(&styled, &room, long);
+        assert_eq!((segments.len(), placed.scale), (2, 0.5));
+        assert!(!placed.overflowed);
+        Ok(())
+    }
+
+    #[test]
+    fn a_word_that_cannot_hyphenate_runs_past_its_room_whole() -> Result<()> {
+        let (styled, room) = in_box(60.0, 100.0, "best")?;
+        let styled = Styled {
+            hyphenation: None,
+            ..styled
+        };
+        let (segments, placed) = fit(&styled, &room, long);
+        assert_eq!((segments.len(), placed.lines.len()), (1, 1));
+        assert!(placed.overflowed && placed.scale == 0.5, "{placed:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_best_fit_text_grows_to_the_largest_size_its_box_holds() -> Result<()> {
+        // A word 40 long in a box 100 wide and 60 tall: its line holds it up
+        // to 2.5 times, and the box's height up to 5.
+        let (styled, room) = in_box(100.0, 60.0, "best")?;
+        let (_, placed) = fit(&styled, &room, |_| vec![word(40.0, Break::End)]);
+        assert!(!placed.overflowed);
+        assert!((2.45..=2.5).contains(&placed.scale), "{}", placed.scale);
+        Ok(())
+    }
+
+    #[test]
+    fn a_vertical_latin_word_too_long_for_its_column_at_half_size_hyphenates() -> Result<()> {
+        // Sideways Latin down a column 60 long, whose one word is 75 long at
+        // half size.
+        let (styled, room) = in_box(60.0, 100.0, "shrink")?;
+        let styled = Styled {
+            vertical: true,
+            ..styled
+        };
+        let (segments, placed) = fit(&styled, &room, long);
+        assert_eq!((segments.len(), placed.scale), (2, 0.5));
         Ok(())
     }
 }

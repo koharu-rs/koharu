@@ -16,6 +16,7 @@ use koharu_diffusion::{ImageParams, SampleMethod};
 use koharu_runtime::Repository;
 
 use self::model::{Model, ModelPaths};
+use crate::diffusers;
 
 const TRANSFORMER: Repository = Repository::model(
     "unsloth/flux-3-image-klein-GGUF",
@@ -91,8 +92,8 @@ pub struct Flux3Klein {
 
 impl Flux3Klein {
     /// Loads the model once for generation and inpainting, its weights
-    /// placed to fit `max_vram` bytes of the device.
-    pub async fn load(device: &crate::Device, max_vram: u64) -> Result<Self> {
+    /// placed by stable-diffusion.cpp's own fit to the device's free memory.
+    pub async fn load(device: &crate::Device) -> Result<Self> {
         let paths = async {
             // The model card's recommended file.
             let [transformer] = TRANSFORMER
@@ -112,7 +113,7 @@ impl Flux3Klein {
         }
         .await
         .context("failed to resolve FLUX.3 Image Klein's files")?;
-        let model = Model::new(device, max_vram, &paths)?;
+        let model = Model::new(device, &paths)?;
         Ok(Self { model })
     }
 
@@ -214,26 +215,18 @@ impl Flux3Klein {
             "num_inference_steps must be greater than zero"
         );
 
-        let (image, mask) = processor::fit_inpaint(image, mask)?;
+        let (image, mask) = diffusers::fit_inpaint(image, mask)?;
         let (width, height) = image.dimensions();
         let region = options
             .padding_mask_crop
-            .and_then(|padding| processor::crop_region(&mask, width, height, padding));
-        let (init_image, mut native_mask) = processor::crop_to_region(&image, &mask, region)?;
-        processor::binarize(&mut native_mask);
+            .and_then(|padding| diffusers::crop_region(&mask, width, height, padding));
+        let (init_image, mut native_mask) = diffusers::crop_to_region(&image, &mask, region)?;
+        diffusers::binarize(&mut native_mask);
         let mut references = vec![init_image.clone()];
         if let Some(reference) = reference {
             references.push(processor::fit_reference(reference)?);
         }
-
-        let strength = if options.strength >= 1.0 {
-            1.0
-        } else {
-            let effective_steps = options.num_inference_steps
-                - (options.num_inference_steps as f64 * (1.0 - options.strength)).floor() as usize;
-            let boundary = effective_steps as f32 / options.num_inference_steps as f32;
-            f32::from_bits(boundary.to_bits() - 1)
-        };
+        let strength = diffusers::strength(options.strength, options.num_inference_steps);
 
         let generated = self
             .model
@@ -257,6 +250,6 @@ impl Flux3Klein {
             .into_iter()
             .next()
             .context("FLUX.3 Image Klein returned no inpainted image")?;
-        processor::apply_overlay(&mask, &image, generated, region)
+        diffusers::apply_overlay(&mask, &image, generated, region)
     }
 }

@@ -87,6 +87,8 @@ pub(crate) struct Parser {
     held: String,
     /// Whitespace right after a marker belongs to no item.
     skip_space: bool,
+    /// Only the reply's first reasoning counts; what follows is answer.
+    once: bool,
 }
 
 impl Parser {
@@ -99,6 +101,7 @@ impl Parser {
             state: State::Text,
             held: String::new(),
             skip_space: false,
+            once: false,
         }
     }
 
@@ -119,7 +122,20 @@ impl Parser {
             state: if open { State::Reasoning } else { State::Text },
             held: String::new(),
             skip_space: open,
+            once: false,
         }
+    }
+
+    /// A parser for a reply to `prompt` that a schema holds once its
+    /// reasoning closes: reasoning while the template left it open, then
+    /// answer text with no markers, which a JSON string may hold.
+    pub(crate) fn answer(markup: &'static Markup, prompt: &str) -> Self {
+        let mut parser = Self::new(markup, Vec::new(), prompt);
+        parser.once = true;
+        if parser.state == State::Text {
+            parser.reasoning = None;
+        }
+        parser
     }
 
     pub(crate) fn feed(&mut self, text: &str) -> Vec<Result<Item, String>> {
@@ -190,6 +206,9 @@ impl Parser {
                 self.emit(at, close.len(), Item::Reasoning, items);
                 self.state = State::Text;
                 self.skip_space = true;
+                if self.once {
+                    self.reasoning = None;
+                }
                 false
             }
             None => {
@@ -494,5 +513,37 @@ mod tests {
         let mut parser = Parser::new(&FUNCTION_TAGS, tools(), "");
         let results = parser.feed("<tool_call>nothing</tool_call>");
         assert!(results[0].is_err());
+    }
+
+    #[test]
+    fn an_answer_after_reasoning_holds_no_markers() {
+        // Reasoning the template left open, then a JSON answer whose string
+        // holds what would otherwise open reasoning again.
+        let reply = "Reading it.\n</think>\n\n{\"01\": \"<think>a</think>\"}";
+        let expected = [
+            Item::Reasoning("Reading it.\n".to_owned()),
+            Item::Text("{\"01\": \"<think>a</think>\"}".to_owned()),
+        ];
+        let prompt = "<|im_start|>assistant\n<think>\n";
+        assert_eq!(
+            all(&mut Parser::answer(&FUNCTION_TAGS, prompt), &[reply]),
+            expected
+        );
+        for (at, _) in reply.char_indices().skip(1) {
+            let cut = all(
+                &mut Parser::answer(&FUNCTION_TAGS, prompt),
+                &[&reply[..at], &reply[at..]],
+            );
+            assert_eq!(cut, expected, "cut at byte {at}");
+        }
+        // With reasoning off the reply is all answer.
+        let closed = "<|im_start|>assistant\n<think>\n\n</think>\n\n";
+        assert_eq!(
+            all(
+                &mut Parser::answer(&FUNCTION_TAGS, closed),
+                &["{\"01\": \"<think>\"}"]
+            ),
+            [Item::Text("{\"01\": \"<think>\"}".to_owned())]
+        );
     }
 }

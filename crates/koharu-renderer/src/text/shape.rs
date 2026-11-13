@@ -122,9 +122,15 @@ fn shape_run(
     let source = &styled.text[range.clone()];
     // Vertical text sets `!` and `?` in their full-width forms, which stand
     // upright in a column, and a group of them in their proportional forms,
-    // side by side in one cell.
+    // side by side in one cell. A font without the full-width forms, such as
+    // a Latin comic font, stands its own up: the run's font was chosen for
+    // the characters the text has.
+    let font = &styled.spans[run.span].fonts[run.font];
     let (text, clusters) = match styled.vertical {
-        true => exclamations(source, run.orientation == Orientation::TateChuYoko),
+        true => exclamations(
+            source,
+            run.orientation == Orientation::TateChuYoko || !font.covers("！"),
+        ),
         false => (source.to_owned(), (0..source.len()).collect()),
     };
     shape_text(styled, buffer, &text, run, |cluster| {
@@ -226,13 +232,12 @@ fn hyphen(
 }
 
 /// `text` with `!` and `?` in their full-width forms, or in their
-/// proportional ones for an upright group, and the source byte of each byte
-/// of the result.
-fn exclamations(text: &str, upright: bool) -> (String, Vec<usize>) {
+/// `proportional` ones, and the source byte of each byte of the result.
+fn exclamations(text: &str, proportional: bool) -> (String, Vec<usize>) {
     let mut out = String::with_capacity(text.len());
     let mut clusters = Vec::with_capacity(text.len());
     for (offset, ch) in text.char_indices() {
-        out.push(match (ch, upright) {
+        out.push(match (ch, proportional) {
             ('!', false) => '！',
             ('?', false) => '？',
             ('！', true) => '!',
@@ -275,6 +280,22 @@ mod tests {
         let shaped = ShapedText::new(&styled)?;
         assert!(shaped.runs.len() >= 2);
         assert!(shaped.runs[0].range.start < shaped.runs[shaped.runs.len() - 1].range.start);
+        Ok(())
+    }
+
+    #[test]
+    fn a_vertical_exclamation_stands_in_its_font_without_a_full_width_form() -> Result<()> {
+        let font = primary(&mut FontSystem::new());
+        assert!(font.has_glyph('!') && !font.has_glyph('！'));
+        let mut styled = styled("Dogo!", vec![font]);
+        styled.vertical = true;
+        let shaped = ShapedText::new(&styled)?;
+        let mark = shaped
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.cluster == 4)
+            .context("the mark is shaped")?;
+        assert_ne!(mark.id, 0);
         Ok(())
     }
 }

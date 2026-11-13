@@ -3,7 +3,10 @@
 //! (https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/examples/parallel/parallel.cpp#L264-L476).
 //! A sequence keeps what it decoded after its request ends, and a new request
 //! reuses the longest common prefix any sequence holds, as llama-server picks a
-//! slot (`get_available_slot`, tools/server/server-context.cpp at b12143).
+//! slot (`get_available_slot`, tools/server/server-context.cpp at b12143). A
+//! recurrent or hybrid model's state can't be cut back to that prefix, so its
+//! sequences keep a checkpoint of their recurrent state just short of each
+//! prompt's end, and go back to it, as llama-server's context checkpoints do.
 
 use std::{
     collections::VecDeque,
@@ -20,6 +23,7 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use koharu_llama::{
+    LlamaStateSeqFlags, SeqState,
     context::{LlamaContext, params::LlamaContextParams},
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
@@ -42,6 +46,11 @@ use super::{Sampling, Size, template::Template};
 /// the chat template's header.
 const MIN_SHARED: usize = 64;
 
+/// How far short of a prompt's end a recurrent model's checkpoint is taken
+/// at least: past the chat template's generation prompt, which the next turn
+/// renders otherwise, as Qwen3.5's empty think block that history leaves out.
+const CHECKPOINT_BACK: usize = 16;
+
 /// The free device memory a load leaves, and the least context a sequence is
 /// fitted down to: llama.cpp's defaults for `--fit`.
 const MARGIN: usize = 1 << 30;
@@ -61,6 +70,9 @@ pub(super) struct Job {
     pub(super) images: Vec<Vec<u8>>,
     pub(super) sampling: Sampling,
     pub(super) schema: Option<String>,
+    /// The marker after which `schema` holds the reply, which reasons
+    /// freely up to it.
+    pub(super) answer_after: Option<&'static str>,
     pub(super) frames: UnboundedSender<Result<Step, ProviderError>>,
 }
 
@@ -97,6 +109,17 @@ impl fmt::Display for TooLong {
 }
 
 impl std::error::Error for TooLong {}
+
+/// llama.cpp's greedy sampler: the index of the first of the highest logits.
+fn first_highest(logits: impl Iterator<Item = f32>) -> usize {
+    let (mut best, mut high) = (0, f32::NEG_INFINITY);
+    for (at, logit) in logits.enumerate() {
+        if at == 0 || logit > high {
+            (best, high) = (at, logit);
+        }
+    }
+    best
+}
 
 /// Loads the model and serves `queue` until every sender is gone; `ready`
 /// gets the load's result first.
@@ -221,12 +244,21 @@ struct Engine<'m> {
     /// What each sequence holds from position 0: its tokens up to its first
     /// image, which they stop being a record of.
     held: Vec<Vec<LlamaToken>>,
+    /// Whether the model's state is recurrent, in whole or in part.
+    recurrent: bool,
+    /// Each sequence's recurrent state after its first `at` held tokens.
+    checkpoints: Vec<Option<Checkpoint>>,
+}
+
+struct Checkpoint {
+    at: usize,
+    state: SeqState,
 }
 
 struct Sequence {
     id: i32,
     frames: UnboundedSender<Result<Step, ProviderError>>,
-    sampler: LlamaSampler,
+    picker: Picker,
     /// The token sampled last, decoded at `position` in the next step.
     next: LlamaToken,
     position: i32,
@@ -237,6 +269,27 @@ struct Sequence {
     pending: Vec<u8>,
     /// Whether `held` records this sequence's tokens: not past an image.
     tracked: bool,
+}
+
+/// How a sequence picks its tokens.
+enum Picker {
+    /// llama.cpp's sampler chain.
+    Chain(LlamaSampler),
+    /// Greedy decoding held to a grammar. The top token goes when the grammar
+    /// allows it, and the full mask is built only when it doesn't, as
+    /// llama.cpp's common sampler tries its sampled token before masking the
+    /// vocabulary. Greedy, that picks what masking first would: the first
+    /// token with the highest logit the grammar allows.
+    Guided(Box<Matcher>),
+    /// Reasoning by `first`'s picks until the reply writes `close`, then the
+    /// answer by `then`'s, as llama.cpp's lazy grammar starts at a trigger.
+    Reasoning {
+        first: Box<Picker>,
+        close: &'static str,
+        /// The reply's last bytes, to find `close` across tokens.
+        tail: Vec<u8>,
+        then: Box<Picker>,
+    },
 }
 
 impl Sequence {
@@ -299,6 +352,8 @@ impl<'m> Engine<'m> {
             n_batch,
             grammars: None,
             held: vec![Vec::new(); size.sequences as usize],
+            recurrent: model.is_recurrent() || model.is_hybrid(),
+            checkpoints: (0..size.sequences).map(|_| None).collect(),
         })
     }
 
@@ -427,16 +482,39 @@ impl<'m> Engine<'m> {
             // moves at the next decode, and what follows is taken off now.
             self.context.copy_kv_cache_seq(best, id, None, None)?;
             self.held[id as usize] = self.held[best as usize].clone();
+            self.checkpoints[id as usize] = None;
         }
-        if !self
-            .context
-            .clear_kv_cache_seq(Some(id as u32), Some(common as u32), None)?
-        {
+        let kept =
+            match self
+                .context
+                .clear_kv_cache_seq(Some(id as u32), Some(common as u32), None)?
+            {
+                true => Some(common),
+                false => self.rewind(id, common),
+            };
+        let Some(kept) = kept else {
             self.forget(id);
             return Ok((id, 0));
-        }
-        self.held[id as usize].truncate(common);
-        Ok((id, common))
+        };
+        self.held[id as usize].truncate(kept);
+        Ok((id, kept))
+    }
+
+    /// Takes sequence `id` back to its checkpoint, if one lies within the
+    /// `common` tokens a new prompt shares: its recurrent state is restored,
+    /// and its attention cache cut back to match. Answers the tokens it
+    /// then holds.
+    fn rewind(&mut self, id: i32, common: usize) -> Option<usize> {
+        let checkpoint = self.checkpoints[id as usize]
+            .as_ref()
+            .filter(|checkpoint| (MIN_SHARED..=common).contains(&checkpoint.at))?;
+        let at = checkpoint.at;
+        self.context.state_seq_set(&checkpoint.state, id).ok()?;
+        self.context
+            .clear_kv_cache_seq(Some(id as u32), Some(at as u32), None)
+            .ok()
+            .filter(|&cut| cut)
+            .map(|_| at)
     }
 
     /// The free sequence that holds the least.
@@ -460,19 +538,27 @@ impl<'m> Engine<'m> {
         start: usize,
         prompt_tokens: usize,
     ) -> Result<Option<Sequence>> {
-        for (at, chunk) in head[start..].chunks(self.n_batch).enumerate() {
-            if job.frames.is_closed() {
+        // On a micro-batch boundary from position 0, so every token decodes
+        // in the micro-batch it would with the whole prompt decoded at once,
+        // and the logits, the answer included, come out the same.
+        let ubatch = self.context.n_ubatch() as usize;
+        let mark = head.len().saturating_sub(CHECKPOINT_BACK) / ubatch * ubatch;
+        let mut from = start;
+        // Before any image too: a page's turn shows it after the history,
+        // which the next turn shares.
+        if self.recurrent && mark > start && mark >= MIN_SHARED {
+            if !self.feed(job, id, head, from..mark, false)? {
                 return Ok(None);
             }
-            let first = start + at * self.n_batch;
-            self.batch.clear();
-            for (offset, &token) in chunk.iter().enumerate() {
-                let position = first + offset;
-                let last = chunks.is_none() && position + 1 == head.len();
-                self.batch.add(token, position as i32, &[id], last)?;
-            }
-            self.context.decode(&mut self.batch)?;
-            self.held[id as usize].extend_from_slice(chunk);
+            let state = self
+                .context
+                .state_seq_get(id, LlamaStateSeqFlags::PARTIAL_ONLY)
+                .map_err(|error| anyhow::anyhow!("couldn't save a checkpoint: {error:?}"))?;
+            self.checkpoints[id as usize] = Some(Checkpoint { at: mark, state });
+            from = mark;
+        }
+        if !self.feed(job, id, head, from..head.len(), chunks.is_none())? {
+            return Ok(None);
         }
         let mut position = head.len() as i32;
         if let Some(chunks) = chunks {
@@ -490,14 +576,29 @@ impl<'m> Engine<'m> {
             )?;
         }
 
-        let history = head
+        let history: Vec<LlamaToken> = head
             .iter()
             .copied()
-            .chain(chunks.map(text_tokens).unwrap_or_default());
+            .chain(chunks.map(text_tokens).unwrap_or_default())
+            .collect();
+        let answer = self.picker(
+            &job.sampling,
+            job.schema.as_deref(),
+            history.iter().copied(),
+        )?;
+        let picker = match job.answer_after {
+            Some(close) => Picker::Reasoning {
+                first: Box::new(self.picker(&job.sampling, None, history.iter().copied())?),
+                close,
+                tail: Vec::new(),
+                then: Box::new(answer),
+            },
+            None => answer,
+        };
         let mut sequence = Sequence {
             id,
             frames: job.frames.clone(),
-            sampler: self.sampler(&job.sampling, job.schema.as_deref(), history)?,
+            picker,
             next: LlamaToken(0),
             position,
             max_tokens: job.sampling.max_tokens,
@@ -506,7 +607,7 @@ impl<'m> Engine<'m> {
             pending: Vec::new(),
             tracked: chunks.is_none(),
         };
-        let token = sequence.sampler.sample(&self.context, -1);
+        let token = self.pick(&mut sequence.picker, -1);
         Ok(self.take(&mut sequence, token)?.then_some(sequence))
     }
 
@@ -543,7 +644,7 @@ impl<'m> Engine<'m> {
                 self.held[sequence.id as usize].push(sequence.next);
             }
             sequence.position += 1;
-            let token = sequence.sampler.sample(&self.context, index);
+            let token = self.pick(&mut sequence.picker, index);
             index += 1;
             let going = match self.take(sequence, token) {
                 Ok(going) => going,
@@ -598,13 +699,72 @@ impl<'m> Engine<'m> {
         Ok(true)
     }
 
-    fn sampler(
+    /// The token `picker` picks from the logits of output `index`.
+    fn pick(&self, picker: &mut Picker, index: i32) -> LlamaToken {
+        if let Picker::Reasoning {
+            first, close, tail, ..
+        } = picker
+        {
+            let token = self.pick(first, index);
+            tail.extend(self.model.vocab().token_to_piece(token, true, None));
+            let done = tail.ends_with(close.as_bytes());
+            if tail.len() > 2 * close.len() {
+                tail.drain(..tail.len() - close.len());
+            }
+            if done
+                && let Picker::Reasoning { then, .. } =
+                    std::mem::replace(picker, Picker::Chain(LlamaSampler::greedy()))
+            {
+                *picker = *then;
+            }
+            return token;
+        }
+        let matcher = match picker {
+            Picker::Chain(sampler) => return sampler.sample(&self.context, index),
+            Picker::Guided(matcher) => matcher,
+            Picker::Reasoning { .. } => unreachable!("reasoning picks above"),
+        };
+        let logits = self.context.get_logits_ith(index);
+        let token = LlamaToken(first_highest(logits.iter().copied()) as i32);
+        let allowed = !matcher.is_stopped()
+            && !self.model.vocab().is_eog(token)
+            && matcher
+                .validate_tokens(&[token.0.cast_unsigned()])
+                .is_ok_and(|valid| valid == 1);
+        let token = if allowed {
+            token
+        } else {
+            // The grammar sampler leaves the logits unmasked when it can't
+            // build the mask.
+            match matcher.compute_mask_or_eos() {
+                Ok(mask) => {
+                    let masked = logits.iter().enumerate().map(|(at, &logit)| {
+                        match mask.is_allowed(at as u32) {
+                            true => logit,
+                            false => f32::NEG_INFINITY,
+                        }
+                    });
+                    LlamaToken(first_highest(masked) as i32)
+                }
+                Err(_) => token,
+            }
+        };
+        // As the grammar sampler accepts a token: never into a stopped
+        // parser, which consuming would poison.
+        if !matcher.is_stopped() {
+            let _ = matcher.consume_token(token.0.cast_unsigned());
+        }
+        token
+    }
+
+    fn picker(
         &mut self,
         sampling: &Sampling,
         schema: Option<&str>,
         history: impl IntoIterator<Item = LlamaToken>,
-    ) -> Result<LlamaSampler> {
+    ) -> Result<Picker> {
         let mut samplers = Vec::new();
+        let mut matcher = None;
         if let Some(schema) = schema {
             if self.grammars.is_none() {
                 let tokens = LlamaSampler::llguidance_tok_env(self.model);
@@ -619,12 +779,20 @@ impl<'m> Engine<'m> {
             let parser = factory
                 .create_parser(grammar)
                 .context("couldn't compile the JSON schema")?;
-            samplers.push(LlamaSampler::from(Matcher::new(Ok(parser))));
+            matcher = Some(Matcher::new(Ok(parser)));
         }
         let repeat = sampling.repeat_penalty.unwrap_or(1.0);
         let frequency = sampling.frequency_penalty.unwrap_or(0.0);
         let presence = sampling.presence_penalty.unwrap_or(0.0);
-        if repeat != 1.0 || frequency != 0.0 || presence != 0.0 {
+        let penalized = repeat != 1.0 || frequency != 0.0 || presence != 0.0;
+        let temperature = sampling.temperature.unwrap_or(1.0);
+        if let Some(matcher) = matcher {
+            if temperature == 0.0 && !penalized {
+                return Ok(Picker::Guided(Box::new(matcher)));
+            }
+            samplers.push(LlamaSampler::from(matcher));
+        }
+        if penalized {
             let mut penalties = LlamaSampler::penalties(
                 self.model.n_vocab(),
                 // llama.cpp's default window.
@@ -636,7 +804,6 @@ impl<'m> Engine<'m> {
             penalties.accept_many(history);
             samplers.push(penalties);
         }
-        let temperature = sampling.temperature.unwrap_or(1.0);
         if temperature == 0.0 {
             samplers.push(LlamaSampler::greedy());
         } else {
@@ -654,14 +821,44 @@ impl<'m> Engine<'m> {
             let seed = sampling.seed.map_or(Ok(u32::MAX), u32::try_from)?;
             samplers.push(LlamaSampler::dist(seed));
         }
-        Ok(LlamaSampler::chain_simple(samplers))
+        Ok(Picker::Chain(LlamaSampler::chain_simple(samplers)))
     }
 
     /// Empties sequence `id`.
+    /// Decodes `range` of `head` in sequence `id`, in batches, with logits
+    /// for the head's last token when `logits` is set. Answers whether the
+    /// request is still open.
+    fn feed(
+        &mut self,
+        job: &Job,
+        id: i32,
+        head: &[LlamaToken],
+        range: std::ops::Range<usize>,
+        logits: bool,
+    ) -> Result<bool> {
+        let start = range.start;
+        for (at, chunk) in head[range].chunks(self.n_batch).enumerate() {
+            if job.frames.is_closed() {
+                return Ok(false);
+            }
+            let first = start + at * self.n_batch;
+            self.batch.clear();
+            for (offset, &token) in chunk.iter().enumerate() {
+                let position = first + offset;
+                let last = logits && position + 1 == head.len();
+                self.batch.add(token, position as i32, &[id], last)?;
+            }
+            self.context.decode(&mut self.batch)?;
+            self.held[id as usize].extend_from_slice(chunk);
+        }
+        Ok(true)
+    }
+
     fn forget(&mut self, id: i32) {
         // A whole sequence's removal always succeeds.
         let _ = self.context.clear_kv_cache_seq(Some(id as u32), None, None);
         self.held[id as usize].clear();
+        self.checkpoints[id as usize] = None;
     }
 }
 

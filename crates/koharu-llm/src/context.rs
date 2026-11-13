@@ -13,10 +13,10 @@ use rig_core::{
 };
 use rig_memory::{
     CompactReason, CompactionPolicy, NearWindow, Summarizer, SummaryPrompts, apply_summary,
-    estimate_tokens, summary_author, summary_state,
+    estimate_tokens, summarized_prefix, summary_author, summary_state,
 };
 
-use crate::Model;
+use crate::TRANSLATION;
 
 /// A conversation that fits the model it's sent to.
 ///
@@ -63,24 +63,13 @@ impl Context {
     }
 
     /// Makes room if the next request wouldn't leave the model's reserve free:
-    /// clears old tool outputs, then summarizes older messages if that isn't
+    /// clears old tool outputs, then compacts older messages if that isn't
     /// enough. A model with no known limit is never over; `compact` with
     /// [`CompactReason::Overflow`] answers its refusal.
-    pub async fn fit(&mut self, model: &Model) -> Result<()> {
+    pub async fn fit(&mut self, model: &DynModel<Completion>) -> Result<()> {
         let spec = spec(model)?.clone();
-        self.fit_to(&model.completion, &spec).await
-    }
-
-    /// Summarizes now, because the user asked or the model refused the
-    /// request.
-    pub async fn compact(&mut self, model: &Model, reason: CompactReason) -> Result<()> {
-        let spec = spec(model)?.clone();
-        self.summarize(&model.completion, &spec, &reason).await
-    }
-
-    async fn fit_to(&mut self, model: &DynModel<Completion>, spec: &ModelSpec) -> Result<()> {
-        let policy = policy(&self.prompts, spec);
-        if !policy.over_threshold(self.tokens(), spec) {
+        let policy = policy(&self.prompts, &spec);
+        if !policy.over_threshold(self.tokens(), &spec) {
             return Ok(());
         }
         let cleared = policy
@@ -89,10 +78,55 @@ impl Context {
         if cleared.results > 0 {
             self.count = None;
         }
-        if !policy.over_threshold(self.tokens(), spec) {
+        if !policy.over_threshold(self.tokens(), &spec) {
             return Ok(());
         }
-        self.summarize(model, spec, &CompactReason::Threshold).await
+        self.compact_with(model, &spec, &CompactReason::Threshold)
+            .await
+    }
+
+    /// Compacts now, because the user asked or the model refused the
+    /// request.
+    pub async fn compact(
+        &mut self,
+        model: &DynModel<Completion>,
+        reason: CompactReason,
+    ) -> Result<()> {
+        let spec = spec(model)?.clone();
+        self.compact_with(model, &spec, &reason).await
+    }
+
+    /// Summarizes older messages, or, for a model whose spec says it only
+    /// translates, which can't summarize, drops them at the same cut, keeping
+    /// the newest.
+    async fn compact_with(
+        &mut self,
+        model: &DynModel<Completion>,
+        spec: &ModelSpec,
+        reason: &CompactReason,
+    ) -> Result<()> {
+        if spec.details.kind.as_deref() != Some(TRANSLATION) {
+            return self.summarize(model, spec, reason).await;
+        }
+        let policy = policy(&self.prompts, spec);
+        let from = summarized_prefix(&self.conversation);
+        let messages = self.conversation.messages();
+        // rig-memory may cut at a reply, but a reply stays with the turn it
+        // answers.
+        let upto = policy
+            .cut(messages, from, reason, Some(spec))
+            .and_then(|upto| {
+                messages[..=upto]
+                    .iter()
+                    .rposition(|message| matches!(**message, Message::User { .. }))
+            })
+            .filter(|&upto| upto > from);
+        if let Some(upto) = upto {
+            self.conversation
+                .splice(..upto, std::iter::empty(), summary_author());
+            self.count = None;
+        }
+        Ok(())
     }
 
     async fn summarize(
@@ -138,12 +172,9 @@ impl Context {
     }
 }
 
-/// What every [`Model`] carries.
-pub(crate) fn spec(model: &Model) -> Result<&ModelSpec> {
-    model
-        .completion
-        .spec()
-        .context("the model says nothing of its limits")
+/// What every model here carries.
+pub(crate) fn spec(model: &DynModel<Completion>) -> Result<&ModelSpec> {
+    model.spec().context("the model says nothing of its limits")
 }
 
 /// rig's defaults, which assume a large window (16,384 tokens reserved and
@@ -168,7 +199,10 @@ mod tests {
     use rig_core::message::{CallId, LocalCallId, ToolName};
 
     use super::*;
-    use crate::local::{markup::FUNCTION_TAGS, scripted::scripted};
+    use crate::local::{
+        markup::FUNCTION_TAGS,
+        scripted::{scripted, scripted_kind},
+    };
 
     fn usage(tokens: u64) -> Usage {
         let mut usage = Usage::default();
@@ -243,6 +277,23 @@ mod tests {
             panic!("a summary");
         };
         assert!(format!("{content:?}").contains("The story so far."));
+        assert!(context.tokens() < 3000);
+    }
+
+    #[tokio::test]
+    async fn a_translation_model_drops_its_oldest_turns_unsummarized() {
+        // An empty script: asking the model for a summary panics its thread.
+        let script = scripted_kind(Some(&FUNCTION_TAGS), Some(TRANSLATION), 4000, Vec::new());
+        let mut context = Context::default();
+        let messages = (0..40)
+            .flat_map(|_| [Message::user(long(1000)), Message::assistant(long(1000))])
+            .collect();
+        context.record([(messages, Usage::default())]);
+        context.fit(&script.model).await.unwrap();
+        // The newest pages stay whole, each turn with its reply.
+        let kept = context.messages();
+        assert!(kept.len() < 80 && kept.len() % 2 == 0, "{}", kept.len());
+        assert!(matches!(*kept[0], Message::User { .. }));
         assert!(context.tokens() < 3000);
     }
 

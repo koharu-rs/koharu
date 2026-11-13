@@ -18,6 +18,7 @@ pub struct Layout {
     /// Text and onomatopoeia in reading order.
     pub lettering: Vec<Lettering>,
     pub bubbles: Vec<Bubble>,
+    /// In reading order.
     pub panels: Vec<Panel>,
 }
 
@@ -34,7 +35,7 @@ pub struct Lettering {
     pub bbox: [f32; 4],
     /// The pixels of its glyphs.
     pub mask: Mask,
-    /// Index into `Layout::bubbles` of the bubble holding most of its box.
+    /// Index into `Layout::bubbles` of the bubble holding most of its glyphs.
     pub bubble: Option<usize>,
     /// Index into `Layout::panels` of the panel it is read in.
     pub panel: Option<usize>,
@@ -107,7 +108,7 @@ pub(super) fn build(detections: Vec<Detection>, width: u32, height: u32) -> Layo
     }
 
     for (index, item) in lettering.iter_mut().enumerate() {
-        item.bubble = holder(item.bbox, &bubbles);
+        item.bubble = holder(&item.mask, &bubbles);
         if let Some(bubble) = item.bubble {
             bubbles[bubble].lettering.push(index);
         }
@@ -150,11 +151,22 @@ pub(super) fn build(detections: Vec<Detection>, width: u32, height: u32) -> Layo
     }
 }
 
-/// The bubble whose mask holds most of `bbox`, at least `IN_BUBBLE` of it;
-/// the smaller of two holding as much.
-fn holder(bbox: [f32; 4], bubbles: &[Bubble]) -> Option<usize> {
-    let [x0, y0, x1, y1] = bbox.map(|value| value.round().max(0.0) as u32);
-    let area = u64::from(x1.saturating_sub(x0)) * u64::from(y1.saturating_sub(y0));
+/// The bubble whose mask holds most of `glyphs`, at least `IN_BUBBLE` of
+/// them; the smaller of two holding as much. The glyphs, not the box: a
+/// lettering beside a bubble, as a side remark written over its edge, has a
+/// box that can reach well into it.
+fn holder(glyphs: &Mask, bubbles: &[Bubble]) -> Option<usize> {
+    let ink: Vec<(u32, u32)> = glyphs
+        .pixels
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| **value != 0)
+        .map(|(at, _)| {
+            let at = at as u32;
+            (glyphs.x + at % glyphs.width, glyphs.y + at / glyphs.width)
+        })
+        .collect();
+    let area = ink.len();
     if area == 0 {
         return None;
     }
@@ -162,12 +174,9 @@ fn holder(bbox: [f32; 4], bubbles: &[Bubble]) -> Option<usize> {
         .iter()
         .enumerate()
         .map(|(index, bubble)| {
-            let mask = &bubble.mask;
-            let (left, top) = (x0.max(mask.x), y0.max(mask.y));
-            let (right, bottom) = (x1.min(mask.x + mask.width), y1.min(mask.y + mask.height));
-            let inside = (top..bottom)
-                .flat_map(|y| (left..right).map(move |x| (x, y)))
-                .filter(|&(x, y)| mask.contains(x, y))
+            let inside = ink
+                .iter()
+                .filter(|&&(x, y)| bubble.mask.contains(x, y))
                 .count();
             (index, inside as f32 / area as f32)
         })

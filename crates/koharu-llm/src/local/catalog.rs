@@ -2,11 +2,13 @@
 //! Ported from `koharu-translator`'s catalog.
 
 use koharu_runtime::Repository;
+use rig_core::catalog::ModelSpec;
 
 use super::{
     Sampling,
     markup::{self, Markup},
 };
+use crate::TRANSLATION;
 
 pub(crate) struct Entry {
     pub(crate) id: &'static str,
@@ -18,9 +20,9 @@ pub(crate) struct Entry {
     /// The tool-call and reasoning markup its chat template writes; a model
     /// without any reads its whole reply as its answer.
     pub(crate) markup: Option<&'static Markup>,
-    /// Trained only to translate: it calls no tools and doesn't reason,
-    /// whatever markup its template writes.
-    pub(crate) translator: bool,
+    /// A specialized kind, which its spec's `details.kind` holds, such as
+    /// translation; `None` for a general model.
+    pub(crate) kind: Option<&'static str>,
     pub(crate) sampling: Sampling,
     /// The languages it translates into, as BCP 47 tags; `None` for all.
     pub(crate) languages: Option<&'static [&'static str]>,
@@ -38,12 +40,11 @@ impl Quantization {
     }
 }
 
-/// The settings every entry shares: min-p 0.05, a 1,000-token answer, and a
-/// repeat penalty of 1.2.
+/// The settings every entry shares: min-p 0.05 and a repeat penalty of 1.2.
 const fn sampling(temperature: f64, top_k: u32, top_p: f64) -> Sampling {
     Sampling {
         temperature: Some(temperature),
-        max_tokens: Some(1000),
+        max_tokens: None,
         top_p: Some(top_p),
         seed: None,
         top_k: Some(top_k),
@@ -57,11 +58,11 @@ const fn sampling(temperature: f64, top_k: u32, top_p: f64) -> Sampling {
     }
 }
 
-/// Greedy decoding with no penalties and a 1,000-token answer, as the
-/// translation models' cards decode.
+/// Greedy decoding with no penalties, as the translation models' cards
+/// decode.
 const GREEDY: Sampling = Sampling {
     temperature: Some(0.0),
-    max_tokens: Some(1000),
+    max_tokens: None,
     top_p: None,
     seed: None,
     top_k: None,
@@ -75,6 +76,14 @@ const GREEDY: Sampling = Sampling {
 };
 
 impl Entry {
+    /// The model as rig describes it, but for the context it gets, which
+    /// loading it says.
+    pub(crate) fn spec(&self) -> ModelSpec {
+        let mut spec = super::spec(self.id, self.markup, self.kind).with_display_name(self.name);
+        spec.input.image = self.projector.is_some();
+        spec
+    }
+
     pub(crate) fn quantization(&self, id: Option<&str>) -> anyhow::Result<&'static Quantization> {
         let Some(id) = id else {
             return Ok(&self.quantizations[0]);
@@ -113,7 +122,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: None,
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         // The model card's settings, which name no top-p.
         sampling: Sampling {
             top_p: None,
@@ -138,7 +147,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -155,7 +164,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -173,7 +182,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -191,7 +200,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -209,7 +218,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -259,7 +268,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::GEMMA4_NO_TOOLS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -314,7 +323,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::GEMMA4_NO_TOOLS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -332,7 +341,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -350,7 +359,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -368,7 +377,7 @@ pub(crate) static MODELS: &[Entry] = &[
         )],
         projector: Some("mmproj-Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         markup: Some(&markup::GEMMA4),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 64, 0.9),
         languages: None,
     },
@@ -392,7 +401,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -416,7 +425,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -440,7 +449,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -464,7 +473,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -488,7 +497,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -512,7 +521,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -536,7 +545,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -571,7 +580,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -595,7 +604,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-F16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -630,7 +639,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -665,7 +674,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -700,7 +709,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.9),
         languages: None,
     },
@@ -765,7 +774,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.6-27B-Uncensored-HauhauCS-Balanced-f16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -825,7 +834,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -890,7 +899,7 @@ pub(crate) static MODELS: &[Entry] = &[
         ],
         projector: Some("mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: false,
+        kind: None,
         sampling: sampling(0.2, 20, 0.8),
         languages: None,
     },
@@ -918,7 +927,7 @@ pub(crate) static MODELS: &[Entry] = &[
         // The Q8_0 projector, which the card recommends for local use.
         projector: Some("Index-Translate-2B.mmproj-Q8_0.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: true,
+        kind: Some(TRANSLATION),
         sampling: GREEDY,
         languages: None,
     },
@@ -946,7 +955,7 @@ pub(crate) static MODELS: &[Entry] = &[
         // The Q8_0 projector, which the card recommends for local use.
         projector: Some("Index-Translate-9B.mmproj-Q8_0.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: true,
+        kind: Some(TRANSLATION),
         sampling: GREEDY,
         languages: None,
     },
@@ -1005,7 +1014,7 @@ pub(crate) static MODELS: &[Entry] = &[
         // The Q8_0 projector, which the card recommends for local use.
         projector: Some("Index-Translate-35B-A3B-preview.mmproj-Q8_0.gguf"),
         markup: Some(&markup::FUNCTION_TAGS),
-        translator: true,
+        kind: Some(TRANSLATION),
         sampling: GREEDY,
         languages: None,
     },

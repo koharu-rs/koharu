@@ -51,7 +51,9 @@ which works around two faults of vello 0.11's 8192×8192 image atlas:
   of the pixel alone come first when a render's images wouldn't fit beside theirs.
 
 vello skips an image that doesn't fit the atlas, so one pass draws at most seven eighths of it.
-A view whose images need more becomes several strips across it.
+A view whose images need more becomes several strips across it. A layer that composites apart
+is clipped to what it draws: vello's buffers are fixed and give a layer every tile its clip
+covers, so a page of layers each clipped to the whole page drew nothing.
 
 [vello#1948]: https://github.com/linebender/vello/issues/1948
 [vello#2011]: https://github.com/linebender/vello/issues/2011
@@ -67,13 +69,16 @@ shaped again on its own. `ResolvedText` keeps what that resolved for the inspect
 |---|---|
 | Point | Break only where the text does |
 | Box | Wrap inside the box. Centred text is balanced, and a paragraph's last line may otherwise stop short |
-| Path | Fill a closed path: every line count its height holds is tried and the cheapest that fits wins, each line taking the widest span inside the outline along its band |
+| Path | Fill a closed path: every line count its height holds is tried and the cheapest that fits wins, every line centred on one axis, the one the lines reach furthest on both sides of, each as far as the outline reaches on both sides of it along its band, where Photoshop centres each line in its own span |
 
 - **Breaking.** Line breaks come from ICU4X, with jieba for Chinese. Lines are chosen over the
   whole text rather than one at a time.
-- **Fitting.** `Shrink` lowers the size just enough to fit, down to half. A word wider than its
-  line is hyphenated before the text shrinks, and breaking anywhere in a word is the last
-  resort. Lines that are merely full shrink instead of hyphenating.
+- **Fitting.** `Shrink` lowers the size just enough to fit, down to half. `Best` also raises it to
+  the largest size that fits, breaking only between words, so a word that outgrows its line
+  stops the growth. Whole words shrink first, since Comicraft avoids a hyphen whenever it can.
+  At half size a path's inset then halves, short of letters on a balloon's border, which read
+  as cut off, and last a word hyphenates where its line can't hold it whole. A word never
+  breaks without a hyphen: what still doesn't fit runs past its frame whole.
 - **Hyphenation.** In a language with patterns, words of more than five letters break, keeping two
   letters on each side, and at most two lines in a row end with a hyphen. These are Photoshop's
   defaults.
@@ -81,8 +86,10 @@ shaped again on its own. `ResolvedText` keeps what that resolved for the inspect
 - **Paragraphs.** An empty one keeps its span's leading, as Photoshop's does.
 - **Vertical text.** Columns run right to left. What Unicode's Vertical_Orientation rotates, such
   as Latin letters and digits, is set sideways, a quarter turn clockwise, as Photoshop and CSS's
-  `text-orientation: mixed` set it. `!` and `?` set in full-width forms, and a run of two or
-  three sits upright side by side in one cell. It doesn't hyphenate.
+  `text-orientation: mixed` set it. `!` and `?` set in full-width forms, or the font's own
+  upright when it has none, and a run of two or three sits upright side by side in one cell.
+  Text in a language with hyphenation patterns, such as Latin set sideways, hyphenates as
+  horizontal text does; CJK has none.
 - **Right-to-left text.** A line's runs show in the order the Unicode Bidirectional Algorithm gives
   their levels, and the lines of a paragraph that runs right to left start on the right.
 - **Strokes.** They draw under every fill, as Photoshop draws an outside stroke under its type.

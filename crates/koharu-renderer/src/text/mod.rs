@@ -44,12 +44,10 @@ pub struct ResolvedText {
     /// The box the text was laid out in, in its own coordinates: the frame's
     /// box, a grown box, a path's bounds, or a point text's lines.
     pub frame: Rect,
-    /// The scale `shrink` drew it at; 1 at its set size.
+    /// The scale fitting drew it at; 1 at its set size.
     pub scale: f32,
     /// UTF-16 offsets where a line ends with an added hyphen.
     pub hyphens: Vec<usize>,
-    /// UTF-16 offsets where a line breaks inside a word without one.
-    pub broken: Vec<usize>,
     pub overflowed: bool,
     /// Where the first line's glyphs stand, in the text's own coordinates:
     /// the y of its baseline in horizontal text, and in vertical text the x

@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
             .decode()
             .with_context(|| format!("failed to open {}", path.display()))?;
         let started = Instant::now();
-        let layout = model.inference(&image, &options)?;
+        let layout = model.inference(&image, &options)?.layout(&image.to_rgb8());
         let inferred = started.elapsed();
         let page = measure(&image, &layout);
         let measured = started.elapsed() - inferred;

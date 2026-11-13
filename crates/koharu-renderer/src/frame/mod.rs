@@ -135,6 +135,7 @@ impl<'a> Drawn<'a> {
             area,
             Node {
                 masks: node.masks.clone(),
+                bounds: Some(area),
                 ..Node::plain(
                     node.layer,
                     true,
@@ -357,5 +358,49 @@ mod tests {
         assert_eq!(fitted.dimensions(), (256, 256));
         let at = |x, y| fitted.get_pixel(x, y).0;
         assert_eq!((at(32, 32), at(96, 96), at(200, 200)), (WHITE, RED, WHITE));
+    }
+
+    /// A large page of many small layers that composite apart, as a
+    /// translated page's blocks and panels do, still draws: vello 0.11's
+    /// buffers hold only so many tiles, and a layer clipped to the whole page
+    /// took them all.
+    #[test]
+    fn many_small_layers_on_a_large_page_draw() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut ops = vec![
+            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 2400, "height": 3200}}),
+        ];
+        for index in 0..150 {
+            let (x, y) = (100 + (index % 10) * 200, 100 + (index / 10) * 200);
+            ops.push(
+                json!({"op": "add_layer", "page": "$page", "index": index, "layer": {
+                    "kind": "shape", "opacity": 0.5,
+                    "path": format!("M{x} {y} h20 v20 h-20 Z"), "fill": [1.0, 0.0, 0.0, 1.0],
+                }}),
+            );
+        }
+        let change = session
+            .apply(Edit {
+                label: "test".into(),
+                ops: ops
+                    .into_iter()
+                    .map(|op| serde_json::from_value(op).expect("an op"))
+                    .collect(),
+            })
+            .expect("an edit");
+        let renderer = Renderer::new(RendererConfig::default());
+        if renderer.gpu().is_err() {
+            eprintln!("skipped without a GPU");
+            return;
+        }
+        let frame = renderer
+            .render(&session, change.pages.added[0])
+            .expect("a frame");
+        let raster = renderer.rasterize(&frame).expect("pixels");
+        // The last square, red at half opacity.
+        let [red, green, blue, alpha] = raster.image.get_pixel(1910, 2910).0;
+        assert_eq!([red, green, blue], [255, 0, 0]);
+        assert!((127..=128).contains(&alpha), "{alpha}");
     }
 }

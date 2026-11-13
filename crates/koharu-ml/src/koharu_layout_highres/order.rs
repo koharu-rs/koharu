@@ -22,8 +22,9 @@ const BESIDE: f32 = 0.5;
 /// their edges still separate. At a half, a box is its centre.
 const EROSIONS: [f32; 6] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5];
 
-/// Puts `detections`' text and onomatopoeia first, in reading order, and
-/// the rest after them in their order.
+/// Puts `detections`' panels, text, and onomatopoeia first, in reading
+/// order, each panel just before what's read in it, and the rest after them
+/// in their order.
 pub(super) fn sort(detections: &mut Vec<Detection>) {
     let panels: Vec<usize> = (0..detections.len())
         .filter(|&index| detections[index].label == "panel")
@@ -123,7 +124,7 @@ fn distance(left: [f32; 4], right: [f32; 4]) -> f32 {
     x.hypot(y)
 }
 
-/// Appends `items`' lettering to `order`, a panel's as its content.
+/// Appends `items` to `order`, a panel followed by its content.
 fn read(
     detections: &[Detection],
     items: Vec<usize>,
@@ -132,6 +133,7 @@ fn read(
 ) {
     for item in cut(detections, items) {
         if detections[item].label == "panel" {
+            order.push(item);
             read(detections, content[item].clone(), content, order);
         } else {
             order.push(item);
@@ -292,7 +294,7 @@ mod tests {
             detection("text", [600.0, 80.0, 700.0, 280.0]),
             detection("text", [500.0, 10.0, 700.0, 50.0]),
         ];
-        let expected: Vec<[f32; 4]> = [13, 12, 11, 10, 7, 5, 4, 2, 0, 1, 3, 6, 8, 9]
+        let expected: Vec<[f32; 4]> = [13, 9, 12, 11, 10, 6, 7, 3, 5, 4, 1, 2, 0, 8]
             .into_iter()
             .map(|index| page[index].bbox)
             .collect();

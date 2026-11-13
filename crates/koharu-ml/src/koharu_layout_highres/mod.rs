@@ -16,13 +16,14 @@ mod rooms;
 mod suppress;
 
 use anyhow::{Context, Result};
-use image::DynamicImage;
+use image::{DynamicImage, RgbImage};
 use koharu_runtime::Repository;
 use koharu_torch::Device;
+use rayon::prelude::*;
 
 pub use self::{
     layout::{Bubble, Kind, Layout, Lettering, Panel},
-    measure::Typography,
+    measure::{Outline, Typography},
     processor::Mask,
     rooms::rooms,
 };
@@ -94,10 +95,9 @@ impl KoharuLayoutHighres {
         })
     }
 
-    /// The page's layout: its text and onomatopoeia in reading order, its
-    /// bubbles with the room each of their texts has, and its panels, one
-    /// detection to an object.
-    pub fn inference(&self, image: &DynamicImage, options: &Options) -> Result<Layout> {
+    /// What the network finds on the page, one detection to an object, for
+    /// `Detected::layout` to lay out off the device's thread.
+    pub fn inference(&self, image: &DynamicImage, options: &Options) -> Result<Detected> {
         let thresholds = Thresholds {
             text: options.text.unwrap_or(self.thresholds.text),
             onomatopoeia: options.onomatopoeia.unwrap_or(self.thresholds.onomatopoeia),
@@ -111,17 +111,35 @@ impl KoharuLayoutHighres {
                 .postprocess(&output, image.width(), image.height(), thresholds)
         })?;
         suppress::suppress(&mut detections);
+        Ok(Detected(detections))
+    }
+}
+
+/// The network's detections on a page, before the work on the page's pixels
+/// that turns them into its layout.
+#[derive(Debug)]
+pub struct Detected(Vec<Detection>);
+
+impl Detected {
+    /// The layout on `page`, the image `inference` ran on: its text and
+    /// onomatopoeia in reading order, its bubbles with the room each of
+    /// their texts has, and its panels.
+    #[must_use]
+    pub fn layout(self, page: &RgbImage) -> Layout {
+        let Self(mut detections) = self;
         // RF-DETR's lettering masks hug each stroke but miss counters and
-        // parts of strokes.
-        let page = image.to_rgb8();
-        for detection in &mut detections {
-            if matches!(detection.label.as_str(), "text" | "onomatopoeia") {
-                detection.mask = measure::glyph_mask(&detection.mask, detection.bbox, &page);
-            }
-        }
+        // parts of strokes. Each lettering's is its own, so they're made in
+        // parallel.
+        detections
+            .par_iter_mut()
+            .filter(|detection| matches!(detection.label.as_str(), "text" | "onomatopoeia"))
+            .for_each(|detection| {
+                detection.mask = measure::glyph_mask(&detection.mask, detection.bbox, page);
+            });
         suppress::merge(&mut detections);
+        suppress::disjoint(&mut detections);
         order::sort(&mut detections);
-        Ok(layout::build(detections, image.width(), image.height()))
+        layout::build(detections, page.width(), page.height())
     }
 }
 
@@ -142,7 +160,9 @@ mod tests {
                 .join("benches/fixtures/object_detection/1.jpg"),
         )?;
         let model = KoharuLayoutHighres::load(device).await?;
-        let result = model.inference(&image, &Options::default())?;
+        let result = model
+            .inference(&image, &Options::default())?
+            .layout(&image.to_rgb8());
 
         // rfdetr 1.7.0 in F32 on CUDA, the page letterboxed as in training.
         // CUDA kernels vary across LibTorch releases, so compare structured

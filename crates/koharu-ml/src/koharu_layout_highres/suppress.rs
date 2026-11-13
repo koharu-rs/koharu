@@ -65,6 +65,35 @@ pub(super) fn merge(detections: &mut Vec<Detection>) {
     *detections = kept;
 }
 
+/// Gives each glyph pixel two lettering masks share to the lettering with
+/// the smaller box. A box reaching over a smaller lettering beside it, as a
+/// balloon's text over a remark in its balloon, takes that lettering's glyphs
+/// in as its own on plain paper; its clean-up, drawn after, would cover the
+/// smaller lettering's translation.
+pub(super) fn disjoint(detections: &mut [Detection]) {
+    let mut lettering: Vec<usize> = (0..detections.len())
+        .filter(|&at| matches!(detections[at].label.as_str(), "text" | "onomatopoeia"))
+        .collect();
+    lettering.sort_by(|&left, &right| {
+        area(detections[left].bbox).total_cmp(&area(detections[right].bbox))
+    });
+    for (rank, &small) in lettering.iter().enumerate() {
+        let glyphs = detections[small].mask.clone();
+        for &large in &lettering[rank + 1..] {
+            let mask = &mut detections[large].mask;
+            for (at, value) in mask.pixels.iter_mut().enumerate() {
+                let (x, y) = (
+                    mask.x + at as u32 % mask.width,
+                    mask.y + at as u32 / mask.width,
+                );
+                if *value != 0 && glyphs.contains(x, y) {
+                    *value = 0;
+                }
+            }
+        }
+    }
+}
+
 /// Merges each onomatopoeia into the first more confident one it
 /// duplicates.
 fn merge_pass(mut onomatopoeia: Vec<Detection>) -> Vec<Detection> {
@@ -157,7 +186,7 @@ fn area(bbox: [f32; 4]) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{super::Mask, Detection, merge, suppress};
+    use super::{super::Mask, Detection, disjoint, merge, suppress};
 
     fn detection(label: &str, score: f32, bbox: [f32; 4]) -> Detection {
         Detection {
@@ -259,5 +288,34 @@ mod tests {
                 [38.0, 10.0, 70.0, 40.0]
             ]
         );
+    }
+
+    #[test]
+    fn a_larger_box_gives_a_smaller_lettering_its_glyphs() {
+        // A balloon's text whose box and mask took in the column of a remark
+        // beside it, and the remark.
+        let glyphs = |[x0, y0, x1, y1]: [u32; 4]| Mask {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            pixels: (0..100)
+                .flat_map(|y| (0..100).map(move |x| (x, y)))
+                .map(|(x, y)| u8::from((x0..x1).contains(&x) && (y0..y1).contains(&y)) * u8::MAX)
+                .collect(),
+        };
+        let mut page = vec![
+            Detection {
+                mask: glyphs([10, 10, 90, 90]),
+                ..detection("text", 0.9, [10.0, 10.0, 90.0, 90.0])
+            },
+            Detection {
+                mask: glyphs([70, 5, 90, 95]),
+                ..detection("text", 0.5, [70.0, 5.0, 90.0, 95.0])
+            },
+        ];
+        disjoint(&mut page);
+        assert!(!page[0].mask.contains(80, 50) && page[0].mask.contains(50, 50));
+        assert!(page[1].mask.contains(80, 50));
     }
 }

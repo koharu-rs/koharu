@@ -121,6 +121,16 @@ impl Pass {
                 }
                 return;
             }
+            // Children that all blend normally give the same result isolated,
+            // as SrcOver is associative, so their backdrop needn't be drawn
+            // again under them. Drawing it again under each of a page's
+            // masked panels doubled the scene's images with every panel,
+            // until they overflowed vello's atlas and the page drew nothing.
+            if node.children.iter().all(blends_normally) {
+                let content = self.compose(&node.children);
+                self.wrap(node, Mix::Normal, content, scene);
+                return;
+            }
             // The group's layer draws the backdrop again under its children,
             // as a non-isolated group includes its backdrop, so its opacity
             // and masks fade between the backdrop and the result.
@@ -176,14 +186,31 @@ impl Pass {
     }
 
     /// Composites `content` onto `scene` with the node's blend mode, opacity,
-    /// and masks.
+    /// and masks, over the output pixels the node can draw: vello gives a
+    /// layer every tile its clip covers, so layers clipped to the whole pass
+    /// on a large page overflowed vello 0.11's fixed buffers, and the page
+    /// drew nothing. Past its bounds, and the two pixels its antialiased and
+    /// filtered edges reach, a node draws nothing, which every blend and mask
+    /// leaves as it was.
     fn wrap(&self, node: &Node, mix: Mix, content: Scene, scene: &mut Scene) {
+        let Some(bounds) = node.bounds else {
+            return;
+        };
+        let clip = self
+            .to_output
+            .transform_rect_bbox(bounds)
+            .inflate(2.0, 2.0)
+            .expand()
+            .intersect(self.clip);
+        if clip.area() <= 0.0 {
+            return;
+        }
         scene.push_layer(
             Fill::NonZero,
             BlendMode::new(mix, Compose::SrcOver),
             node.opacity,
             Affine::IDENTITY,
-            &self.clip,
+            &clip,
         );
         scene.append(&content, None);
         let masks: Vec<&MaskNode> = node.masks.iter().filter(|mask| mask.visible).collect();
@@ -195,16 +222,10 @@ impl Pass {
                 BlendMode::new(Mix::Normal, Compose::DestIn),
                 1.0,
                 Affine::IDENTITY,
-                &self.clip,
+                &clip,
             );
             if masks[0].mode != MaskMode::Add {
-                scene.fill(
-                    Fill::NonZero,
-                    Affine::IDENTITY,
-                    Color::WHITE,
-                    None,
-                    &self.clip,
-                );
+                scene.fill(Fill::NonZero, Affine::IDENTITY, Color::WHITE, None, &clip);
             }
             for mask in masks {
                 let compose = match mask.mode {
@@ -217,7 +238,7 @@ impl Pass {
                     BlendMode::new(Mix::Normal, compose),
                     1.0,
                     Affine::IDENTITY,
-                    &self.clip,
+                    &clip,
                 );
                 self.content(&mask.content, scene);
                 scene.pop_layer();
@@ -226,6 +247,14 @@ impl Pass {
         }
         scene.pop_layer();
     }
+}
+
+/// Whether `node` draws onto its backdrop with normal blending alone, its
+/// children included, so isolating it changes nothing.
+fn blends_normally(node: &Node) -> bool {
+    !node.visible
+        || (matches!(node.blend, Blend::Normal | Blend::PassThrough)
+            && node.children.iter().all(blends_normally))
 }
 
 fn mix(blend: Blend) -> Mix {

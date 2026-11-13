@@ -13,7 +13,8 @@ async fn main() -> Result<()> {
     let image = image::open(input)?;
     let model = KoharuLayoutHighres::load(device).await?;
 
-    let warmup = model.inference(&image, &Options::default())?;
+    let page = image.to_rgb8();
+    let warmup = model.inference(&image, &Options::default())?.layout(&page);
     black_box(warmup);
 
     let mut criterion = Criterion::default()
@@ -23,10 +24,11 @@ async fn main() -> Result<()> {
         .configure_from_args();
     criterion.bench_function("koharu_layout_highres/inference", |bencher| {
         bencher.iter(|| {
-            let detections = model
+            let layout = model
                 .inference(black_box(&image), black_box(&Options::default()))
-                .expect("Koharu Layout HighRes inference failed");
-            black_box(detections);
+                .expect("Koharu Layout HighRes inference failed")
+                .layout(black_box(&page));
+            black_box(layout);
         });
     });
     criterion.final_summary();

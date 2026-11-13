@@ -28,6 +28,7 @@ koharu-llama = { path = "crates/koharu-llama" }
 koharu-llama-sys = { path = "crates/koharu-llama-sys" }
 koharu-llm = { path = "crates/koharu-llm" }
 koharu-ml = { path = "crates/koharu-ml" }
+koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
 koharu-runtime = { path = "crates/koharu-runtime" }
@@ -45,6 +46,7 @@ base64 = "0.23.1"
 bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 blake3 = "1.8.7"
 bytes = "1.12.1"
+bytesize = "2.7.0"
 clap = { version = "4.6.7", features = ["derive"] }
 color = "0.3.3"
 console = "0.16.6"
@@ -65,6 +67,8 @@ hashbrown = "0.17.1"
 hf-hub = "1.0.0"
 http = "1.5.0"
 hypher = "0.1.8"
+icu_experimental = { version = "0.7.0", default-features = false, features = ["compiled_data"] }
+icu_locale = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc", "serde"] }
 icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.4.0", features = ["compiled_data"] }
@@ -85,6 +89,7 @@ memmap2 = "0.9.12"
 minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
 minijinja-contrib = { version = "3.1.0", features = ["pycompat"] }
 parking_lot = "0.13.0"
+petgraph = "0.8.3"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97e5b4b1d9a03c3ef9b904dd5de864f5e8aa8" }
 pollster = "1.0.1"
 postcard = { version = "1.1.3", features = ["use-std"] }
@@ -139,6 +144,7 @@ thiserror = "2.0.21"
 tokenizers = { version = "0.23.2", features = ["onig"] }
 tokio = { version = "1.54.1", features = ["full"] }
 tokio-stream = { version = "0.1.19", features = ["sync"] }
+tokio-util = "0.7.20"
 toktrie = "1.9.1"
 toml = "1.2.1"
 toml_edit = "0.25.19"
@@ -162,6 +168,14 @@ zip = { version = "9.5.0", features = ["deflate"] }
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
 tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
 tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "6620118f0fe85472abfdccea8d99fd0ec9447c3f" }
+
+[profile.dev]
+# Image decoding and the models' pre- and post-processing ran 10 to 40 times
+# slower unoptimized, so debug builds optimize lightly, and dependencies fully.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
 # Keep debug information for Sentry's native stack traces and source context.
