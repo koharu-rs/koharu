@@ -60,12 +60,12 @@ derive_more = { version = "2.1.1", features = ["display", "from", "from_str"] }
 dirs = "7.0.0"
 encoding_rs = "0.8.44"
 enumflags2 = "0.7.12"
-fast-glob = "1.1.2"
 fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
 flate2 = { version = "1.1.11", features = ["zlib-rs"] }
 fontique = "0.12.0"
 fs-err = { version = "3.3.2", features = ["tokio"] }
 futures = "0.3.34"
+globset = "0.4.21"
 half = "2.7.1"
 harfrust = "0.15.0"
 hayro = "0.8.0"

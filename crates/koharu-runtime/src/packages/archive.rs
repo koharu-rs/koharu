@@ -4,9 +4,9 @@
 use std::{io::copy, path::Path};
 
 use anyhow::{Context, Result};
-use fast_glob::glob_match;
 use flate2::read::GzDecoder;
 use fs_err::{File, create_dir_all};
+use globset::{GlobBuilder, GlobSetBuilder};
 
 use crate::transfer;
 
@@ -36,11 +36,13 @@ pub(super) async fn extract(
 }
 
 fn unpack(archive: &Path, destination: &Path, patterns: &[&str]) -> Result<()> {
-    let selected = |path: &Path| {
-        patterns
-            .iter()
-            .any(|pattern| glob_match(pattern, path.to_string_lossy().as_bytes()))
-    };
+    let mut set = GlobSetBuilder::new();
+    for pattern in patterns {
+        // `*` stays within one name, as a shell's does.
+        set.add(GlobBuilder::new(pattern).literal_separator(true).build()?);
+    }
+    let set = set.build()?;
+    let selected = |path: &Path| set.is_match(path);
     match archive.extension().and_then(|extension| extension.to_str()) {
         Some("whl") => extract_wheel(archive, destination, selected),
         Some("gz") => extract_tarball(archive, destination, selected),
