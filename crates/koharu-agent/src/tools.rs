@@ -256,7 +256,9 @@ impl Tool for Edit {
         };
         // On a blocking thread, an edit already applying finishes even when
         // the call is dropped, and it applies whole or not at all.
-        blocking(move || tools.session.lock().apply(edit).map_err(failed)).await
+        tokio::task::spawn_blocking(move || tools.session.lock().apply(edit).map_err(failed))
+            .await
+            .map_err(failed)?
     }
 }
 
@@ -383,7 +385,9 @@ impl Tool for ViewPage {
             .await
             .map_err(failed)?;
         let renderer = tools.renderer.clone();
-        let jpeg = blocking(move || seen(&renderer, &frame)).await?;
+        let jpeg = tokio::task::spawn_blocking(move || seen(&renderer, &frame))
+            .await
+            .map_err(failed)??;
         Ok(ToolResultContent::image_base64(
             jpeg,
             Some(ImageMediaType::JPEG),
@@ -402,7 +406,9 @@ fn project(context: &ToolContext) -> Result<Arc<Tools>, ToolExecutionError> {
 /// `query`'s answer, the project's own values.
 async fn query(context: &ToolContext, query: Query) -> Result<Answer, ToolExecutionError> {
     let tools = project(context)?;
-    blocking(move || tools.session.lock().query(query).map_err(failed)).await
+    tokio::task::spawn_blocking(move || tools.session.lock().query(query).map_err(failed))
+        .await
+        .map_err(failed)?
 }
 
 /// `error` as the model sees it, word for word: rig shows a model only the
@@ -432,13 +438,6 @@ fn schema<T: JsonSchema>() -> Value {
         .into_generator()
         .into_root_schema_for::<T>();
     serde_json::to_value(schema).unwrap_or_default()
-}
-
-/// `work` off the async threads.
-async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> Result<T, ToolExecutionError> + Send + 'static,
-) -> Result<T, ToolExecutionError> {
-    tokio::task::spawn_blocking(work).await.map_err(failed)?
 }
 
 /// `frame` as the model sees it: over white, fit to `SIGHT`, as a JPEG in
