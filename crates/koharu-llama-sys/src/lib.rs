@@ -12,6 +12,6 @@
 )]
 
 /// The llama.cpp release the headers come from.
-pub const RELEASE: &str = "b12143";
+pub const RELEASE: &str = "v1.0.0";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
