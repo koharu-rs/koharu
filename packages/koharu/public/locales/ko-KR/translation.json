@@ -449,7 +449,7 @@
     "projectList": "프로젝트",
     "projectName": "프로젝트 이름",
     "projectNamePlaceholder": "새 프로젝트",
-    "storageHint": "프로젝트는 문서 폴더에 로컬로 저장됩니다.",
+    "storageHint": "프로젝트는 이 컴퓨터에 로컬로 저장됩니다.",
     "title": "프로젝트",
     "yourProjects": "내 프로젝트"
   },

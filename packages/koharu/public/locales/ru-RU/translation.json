@@ -449,7 +449,7 @@
     "projectList": "Проекты",
     "projectName": "Имя проекта",
     "projectNamePlaceholder": "Мой новый проект",
-    "storageHint": "Проекты хранятся локально в папке «Документы».",
+    "storageHint": "Проекты хранятся локально на этом компьютере.",
     "title": "Проекты",
     "yourProjects": "Ваши проекты"
   },

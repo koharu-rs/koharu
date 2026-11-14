@@ -14,7 +14,7 @@ use anyhow::{Context as _, Result};
 use koharu_pipeline::{Pipeline, PipelineConfig};
 use koharu_renderer::{Renderer, RendererConfig};
 use sentry::protocol::GpuContext;
-use tauri::Manager as _;
+use tauri::{Env, Manager as _, utils::platform};
 use tauri_plugin_log::{Target, TargetKind, log::LevelFilter};
 use tauri_plugin_window_state::StateFlags;
 use tauri_runtime_cef::{Cef, CefRuntime};
@@ -27,11 +27,19 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     // scheduler runs on.
     tauri::async_runtime::set(tokio::runtime::Handle::current());
 
-    let library = Library::new(
-        dirs::document_dir()
-            .context("the user's Documents folder is unknown")?
-            .join("Koharu"),
-    )?;
+    // The install folder in Windows release builds, where setup puts Koharu
+    // and its store; it's read-only on macOS and Linux, so the app's local
+    // data folder otherwise. That is Tauri's `app_local_data_dir`, which
+    // needs the app this builds.
+    let folder = if cfg!(all(windows, not(debug_assertions))) {
+        platform::resource_dir(context.package_info(), &Env::default())
+            .context("Koharu's install folder is unknown")?
+    } else {
+        dirs::data_local_dir()
+            .context("the user's local data folder is unknown")?
+            .join(&context.config().identifier)
+    };
+    let library = Library::new(folder.join("projects"))?;
 
     let renderer = Renderer::new(koharu_config::get::<RendererConfig>()?);
     // The window composites with it from its first frame.

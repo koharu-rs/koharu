@@ -449,7 +449,7 @@
     "projectList": "Projects",
     "projectName": "Project name",
     "projectNamePlaceholder": "My new project",
-    "storageHint": "Projects are stored locally in your Documents folder.",
+    "storageHint": "Projects are stored locally on this computer.",
     "title": "Projects",
     "yourProjects": "Your projects"
   },

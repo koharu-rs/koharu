@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use koharu_scene::{EXTENSION, Session};
 use sanitize_filename::OptionsForCheck;
 
-/// The projects folder, `Documents/Koharu`.
+/// The projects folder.
 pub struct Library {
     root: PathBuf,
 }
