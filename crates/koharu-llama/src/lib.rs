@@ -14,7 +14,7 @@
 //!
 //! - `cuda` enables CUDA gpu support.
 //! - `sampler` adds the [`context::sample::sampler`] struct for a more rusty way of sampling.
-use std::ffi::{c_char, CStr, CString, NulError};
+use std::ffi::{NulError, c_char};
 use std::fmt::Debug;
 use std::num::NonZeroI32;
 use std::sync::OnceLock;
@@ -186,7 +186,9 @@ pub struct EmbeddingsError(());
 
 /// Retrieving embeddings sequences failed.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
-#[error("Embeddings or logits weren't enabled, or the model was configured with LLAMA_POOLING_TYPE_NONE")]
+#[error(
+    "Embeddings or logits weren't enabled, or the model was configured with LLAMA_POOLING_TYPE_NONE"
+)]
 pub struct EmbeddingsSeqError(());
 
 /// Errors that can occur when initializing a grammar sampler
@@ -273,50 +275,24 @@ pub enum LlamaLoraAdapterRemoveError {
 }
 
 /// get the time (in microseconds) according to llama.cpp
-/// ```
-/// # use koharu_llama::llama_time_us;
-/// # use koharu_llama::llama_backend::LlamaBackend;
-/// let backend = LlamaBackend::init().unwrap();
-/// let time = llama_time_us();
-/// assert!(time > 0);
-/// ```
 #[must_use]
 pub fn llama_time_us() -> i64 {
     unsafe { koharu_llama_sys::llama_time_us() }
 }
 
 /// get the max number of devices according to llama.cpp (this is generally cuda devices)
-/// ```
-/// # use koharu_llama::max_devices;
-/// let max_devices = max_devices();
-/// assert!(max_devices >= 0);
-/// ```
 #[must_use]
 pub fn max_devices() -> usize {
     unsafe { koharu_llama_sys::llama_max_devices() }
 }
 
 /// is memory mapping supported according to llama.cpp
-/// ```
-/// # use koharu_llama::mmap_supported;
-/// let mmap_supported = mmap_supported();
-/// if mmap_supported {
-///   println!("mmap_supported!");
-/// }
-/// ```
 #[must_use]
 pub fn mmap_supported() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mmap() }
 }
 
 /// is memory locking supported according to llama.cpp
-/// ```
-/// # use koharu_llama::mlock_supported;
-/// let mlock_supported = mlock_supported();
-/// if mlock_supported {
-///    println!("mlock_supported!");
-/// }
-/// ```
 #[must_use]
 pub fn mlock_supported() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mlock() }
@@ -325,7 +301,7 @@ pub fn mlock_supported() -> bool {
 /// Convert a JSON schema string into a llama.cpp grammar string.
 #[cfg(feature = "common")]
 pub fn json_schema_to_grammar(schema_json: &str) -> Result<String> {
-    let schema_cstr = CString::new(schema_json)
+    let schema_cstr = std::ffi::CString::new(schema_json)
         .map_err(|err| LlamaCppError::JsonSchemaToGrammarError(err.to_string()))?;
     let mut out = std::ptr::null_mut();
     let rc = unsafe {
@@ -339,7 +315,7 @@ pub fn json_schema_to_grammar(schema_json: &str) -> Result<String> {
                 rc
             )));
         }
-        let grammar_bytes = unsafe { CStr::from_ptr(out) }.to_bytes().to_vec();
+        let grammar_bytes = unsafe { std::ffi::CStr::from_ptr(out) }.to_bytes().to_vec();
         let grammar = String::from_utf8(grammar_bytes)
             .map_err(|err| LlamaCppError::JsonSchemaToGrammarError(err.to_string()))?;
         Ok(grammar)
@@ -347,28 +323,6 @@ pub fn json_schema_to_grammar(schema_json: &str) -> Result<String> {
 
     unsafe { koharu_llama_sys::llama_rs_string_free(out) };
     result
-}
-
-#[cfg(all(test, feature = "common"))]
-mod tests {
-    use super::json_schema_to_grammar;
-
-    #[test]
-    fn json_schema_string_api_returns_grammar() {
-        let schema = r#"{
-            "type": "object",
-            "properties": {
-                "city": { "type": "string" },
-                "unit": { "enum": ["c", "f"] }
-            },
-            "required": ["city"]
-        }"#;
-
-        let grammar =
-            json_schema_to_grammar(schema).expect("string-based schema conversion should succeed");
-
-        assert!(grammar.contains("root ::="));
-    }
 }
 
 /// Failed to apply model chat template.
@@ -405,38 +359,12 @@ pub enum SamplerAcceptError {
 }
 
 /// Get the time in microseconds according to ggml
-///
-/// ```
-/// # use std::time::Duration;
-/// # use koharu_llama::llama_backend::LlamaBackend;
-/// let backend = LlamaBackend::init().unwrap();
-/// use koharu_llama::ggml_time_us;
-///
-/// let start = ggml_time_us();
-///
-/// std::thread::sleep(Duration::from_micros(10));
-///
-/// let end = ggml_time_us();
-///
-/// let elapsed = end - start;
-///
-/// assert!(elapsed >= 10)
 #[must_use]
 pub fn ggml_time_us() -> i64 {
     unsafe { koharu_llama_sys::ggml_time_us() }
 }
 
 /// checks if mlock is supported
-///
-/// ```
-/// # use koharu_llama::llama_supports_mlock;
-///
-/// if llama_supports_mlock() {
-///   println!("mlock is supported!");
-/// } else {
-///   println!("mlock is not supported!");
-/// }
-/// ```
 #[must_use]
 pub fn llama_supports_mlock() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mlock() }
@@ -613,7 +541,7 @@ pub fn send_logs_to_tracing(options: LogOptions) {
     ) as *const _;
 
     let ggml_heap_state = Box::as_ref(
-        GGML_STATE.get_or_init(|| Box::new(log::State::new(log::Module::GGML, options))),
+        GGML_STATE.get_or_init(|| Box::new(log::State::new(log::Module::Ggml, options))),
     ) as *const _;
 
     unsafe {

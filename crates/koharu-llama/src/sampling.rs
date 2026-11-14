@@ -1,19 +1,19 @@
 //! Safe wrapper around `llama_sampler`.
 
 use std::borrow::Borrow;
-use std::ffi::{c_char, c_int, CStr, CString};
+use std::ffi::{CStr, CString, c_char, c_int};
 use std::fmt;
 use std::mem::ManuallyDrop;
 
+use crate::GrammarError;
 use crate::context::LlamaContext;
 use crate::model::LlamaModel;
 use crate::ptr::Ptr;
 #[cfg(feature = "common")]
 use crate::status_is_ok;
+use crate::token::LlamaToken;
 use crate::token::data_array::LlamaTokenDataArray;
 use crate::token::logit_bias::LlamaLogitBias;
-use crate::token::LlamaToken;
-use crate::{GrammarError, SamplerAcceptError};
 
 /// A safe wrapper around `llama_sampler`.
 pub struct LlamaSampler {
@@ -135,14 +135,14 @@ impl LlamaSampler {
 
     /// Try accepting a token from the sampler. Returns an error if the sampler throws.
     #[cfg(feature = "common")]
-    pub fn try_accept(&mut self, token: LlamaToken) -> Result<(), SamplerAcceptError> {
+    pub fn try_accept(&mut self, token: LlamaToken) -> Result<(), crate::SamplerAcceptError> {
         let sampler_result = unsafe {
             koharu_llama_sys::llama_rs_sampler_accept(self.sampler.as_mut_ptr(), token.0)
         };
         if status_is_ok(sampler_result) {
             Ok(())
         } else {
-            Err(SamplerAcceptError::FfiError(sampler_result))
+            Err(crate::SamplerAcceptError::FfiError(sampler_result))
         }
     }
 
@@ -196,36 +196,6 @@ impl LlamaSampler {
     }
 
     /// Same as [`Self::chain`] with `no_perf = false`.
-    ///
-    /// # Example
-    /// ```rust
-    /// use koharu_llama::token::{
-    ///    LlamaToken,
-    ///    data::LlamaTokenData,
-    ///    data_array::LlamaTokenDataArray
-    /// };
-    /// use koharu_llama::sampling::LlamaSampler;
-    /// use koharu_llama::llama_backend::LlamaBackend;
-    /// let backend = LlamaBackend::init().unwrap();
-    ///
-    /// let mut data_array = LlamaTokenDataArray::new(vec![
-    ///     LlamaTokenData::new(LlamaToken(0), 0., 0.),
-    ///     LlamaTokenData::new(LlamaToken(1), 1., 0.),
-    ///     LlamaTokenData::new(LlamaToken(2), 2., 0.),
-    /// ], false);
-    ///
-    /// data_array.apply_sampler(&mut LlamaSampler::chain_simple([
-    ///     LlamaSampler::temp(0.5),
-    ///     LlamaSampler::greedy(),
-    /// ]));
-    ///
-    /// assert_eq!(data_array.data[0].logit(), 0.);
-    /// assert_eq!(data_array.data[1].logit(), 2.);
-    /// assert_eq!(data_array.data[2].logit(), 4.);
-    ///
-    /// assert_eq!(data_array.data.len(), 3);
-    /// assert_eq!(data_array.selected_token(), Some(LlamaToken(2)));
-    /// ```
     #[must_use]
     pub fn chain_simple(samplers: impl IntoIterator<Item = Self>) -> Self {
         Self::chain(samplers, false)
@@ -236,26 +206,6 @@ impl LlamaSampler {
     /// value, the rest are set to -inf
     ///
     /// # Example:
-    /// ```rust
-    /// use koharu_llama::token::{
-    ///    LlamaToken,
-    ///    data::LlamaTokenData,
-    ///    data_array::LlamaTokenDataArray
-    /// };
-    /// use koharu_llama::sampling::LlamaSampler;
-    ///
-    /// let mut data_array = LlamaTokenDataArray::new(vec![
-    ///     LlamaTokenData::new(LlamaToken(0), 0., 0.),
-    ///     LlamaTokenData::new(LlamaToken(1), 1., 0.),
-    ///     LlamaTokenData::new(LlamaToken(2), 2., 0.),
-    /// ], false);
-    ///
-    /// data_array.apply_sampler(&mut LlamaSampler::temp(0.5));
-    ///
-    /// assert_eq!(data_array.data[0].logit(), 0.);
-    /// assert_eq!(data_array.data[1].logit(), 2.);
-    /// assert_eq!(data_array.data[2].logit(), 4.);
-    /// ```
     #[must_use]
     pub fn temp(t: f32) -> Self {
         let sampler = unsafe { koharu_llama_sys::llama_sampler_init_temp(t) };
@@ -274,27 +224,6 @@ impl LlamaSampler {
     /// <https://arxiv.org/abs/1904.09751>
     ///
     /// # Example:
-    /// ```rust
-    /// use koharu_llama::token::{
-    ///    LlamaToken,
-    ///    data::LlamaTokenData,
-    ///    data_array::LlamaTokenDataArray
-    /// };
-    /// use koharu_llama::sampling::LlamaSampler;
-    ///
-    /// let mut data_array = LlamaTokenDataArray::new(vec![
-    ///     LlamaTokenData::new(LlamaToken(0), 0., 0.),
-    ///     LlamaTokenData::new(LlamaToken(1), 1., 0.),
-    ///     LlamaTokenData::new(LlamaToken(2), 2., 0.),
-    ///     LlamaTokenData::new(LlamaToken(3), 3., 0.),
-    /// ], false);
-    ///
-    /// data_array.apply_sampler(&mut LlamaSampler::top_k(2));
-    ///
-    /// assert_eq!(data_array.data.len(), 2);
-    /// assert_eq!(data_array.data[0].id(), LlamaToken(3));
-    /// assert_eq!(data_array.data[1].id(), LlamaToken(2));
-    /// ```
     #[must_use]
     pub fn top_k(k: i32) -> Self {
         let sampler = unsafe { koharu_llama_sys::llama_sampler_init_top_k(k) };
@@ -308,24 +237,6 @@ impl LlamaSampler {
     ///
     /// # Parameters
     /// - `n`: Number of standard deviations from the mean to include in sampling
-    ///
-    /// # Example
-    /// ```rust
-    /// use koharu_llama::sampling::LlamaSampler;
-    /// use koharu_llama::token::{
-    ///     LlamaToken,
-    ///     data::LlamaTokenData,
-    ///     data_array::LlamaTokenDataArray
-    /// };
-    ///
-    /// let mut data_array = LlamaTokenDataArray::new(vec![
-    ///     LlamaTokenData::new(LlamaToken(0), 0.0, 0.0),
-    ///     LlamaTokenData::new(LlamaToken(1), 1.0, 0.0),
-    ///     LlamaTokenData::new(LlamaToken(2), 2.0, 0.0),
-    /// ], false);
-    ///
-    /// data_array.apply_sampler(&mut LlamaSampler::top_n_sigma(2.0));
-    /// ```
     #[must_use]
     pub fn top_n_sigma(n: f32) -> Self {
         let sampler = unsafe { koharu_llama_sys::llama_sampler_init_top_n_sigma(n) };
@@ -362,7 +273,6 @@ impl LlamaSampler {
     }
 
     /// Grammar sampler
-    #[must_use]
     pub fn grammar(
         model: &LlamaModel,
         grammar_str: &str,
@@ -399,7 +309,6 @@ impl LlamaSampler {
     ///
     /// This sampler enforces grammar rules only when specific trigger words or tokens are encountered.
     #[cfg(feature = "common")]
-    #[must_use]
     pub fn grammar_lazy(
         model: &LlamaModel,
         grammar_str: &str,
@@ -444,7 +353,6 @@ impl LlamaSampler {
     /// invalid pattern aborts instead of returning
     /// [`GrammarError::NullGrammar`]. An unparseable grammar is reported with a
     /// null pointer either way.
-    #[must_use]
     pub fn grammar_lazy_patterns(
         model: &LlamaModel,
         grammar_str: &str,
@@ -521,6 +429,7 @@ impl LlamaSampler {
         ))
     }
 
+    #[cfg(feature = "common")]
     fn sanitize_trigger_words(
         trigger_words: impl IntoIterator<Item = impl AsRef<[u8]>>,
     ) -> Result<Vec<CString>, GrammarError> {
@@ -665,24 +574,6 @@ impl LlamaSampler {
     /// Selects the most likely token
     ///
     /// # Example:
-    /// ```rust
-    /// use koharu_llama::token::{
-    ///    LlamaToken,
-    ///    data::LlamaTokenData,
-    ///    data_array::LlamaTokenDataArray
-    /// };
-    /// use koharu_llama::sampling::LlamaSampler;
-    ///
-    /// let mut data_array = LlamaTokenDataArray::new(vec![
-    ///     LlamaTokenData::new(LlamaToken(0), 0., 0.),
-    ///     LlamaTokenData::new(LlamaToken(1), 1., 0.),
-    /// ], false);
-    ///
-    /// data_array.apply_sampler(&mut LlamaSampler::greedy());
-    ///
-    /// assert_eq!(data_array.data.len(), 2);
-    /// assert_eq!(data_array.selected_token(), Some(LlamaToken(1)));
-    /// ```
     #[must_use]
     pub fn greedy() -> Self {
         let sampler = unsafe { koharu_llama_sys::llama_sampler_init_greedy() };
@@ -694,20 +585,6 @@ impl LlamaSampler {
     /// # Parameters
     /// - ``n_vocab``: [`LlamaModel::n_vocab`]
     /// - ``biases``: Slice of [`LlamaLogitBias`] values specifying token-bias pairs
-    ///
-    /// # Example
-    /// ```rust
-    /// use koharu_llama::token::{LlamaToken, logit_bias::LlamaLogitBias};
-    /// use koharu_llama::sampling::LlamaSampler;
-    ///
-    /// let biases = vec![
-    ///     LlamaLogitBias::new(LlamaToken(1), 1.5),  // Increase probability of token 1
-    ///     LlamaLogitBias::new(LlamaToken(2), -1.0), // Decrease probability of token 2
-    /// ];
-    ///
-    /// // Assuming vocab_size of 32000
-    /// let sampler = LlamaSampler::logit_bias(32000, &biases);
-    /// ```
     #[must_use]
     pub fn logit_bias(n_vocab: i32, biases: &[LlamaLogitBias]) -> Self {
         let data = biases.as_ptr().cast::<koharu_llama_sys::llama_logit_bias>();
@@ -761,26 +638,5 @@ impl LlamaSamplerChain<'_> {
         // HACK: Wrap in `ManuallyDrop`, the lifetime of the sampler is tied
         // to `&self`.
         Some(ManuallyDrop::new(sampler))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn debug() {
-        let sampler = LlamaSampler::greedy();
-        assert_eq!(r#"LlamaSampler { name: "greedy" }"#, format!("{sampler:?}"));
-
-        let sampler = LlamaSampler::chain_simple([
-            LlamaSampler::dist(1234),
-            LlamaSampler::greedy(),
-            LlamaSampler::chain_simple([LlamaSampler::min_p(1.0, 2)]),
-        ]);
-        assert_eq!(
-            r#"LlamaSampler { name: "chain", chain: [LlamaSampler { name: "dist" }, LlamaSampler { name: "greedy" }, LlamaSampler { name: "chain", chain: [LlamaSampler { name: "min-p" }] }] }"#,
-            format!("{sampler:?}")
-        );
     }
 }

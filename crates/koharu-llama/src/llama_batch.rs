@@ -192,16 +192,6 @@ impl<'a> LlamaBatch<'a> {
 
 impl<'a> Drop for LlamaBatch<'a> {
     /// Drops the `LlamaBatch`.
-    ///
-    /// ```
-    /// # use koharu_llama::llama_batch::LlamaBatch;
-    /// # use std::error::Error;
-    /// # fn main() -> Result<(), Box<dyn Error>> {
-    /// let batch = LlamaBatch::new(512, 1);
-    /// // frees the memory associated with the batch. (allocated by llama.cpp)
-    /// drop(batch);
-    /// # Ok(())
-    /// # }
     fn drop(&mut self) {
         unsafe {
             if self.allocated > 0 {

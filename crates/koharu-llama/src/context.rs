@@ -11,9 +11,9 @@ use crate::model::{LlamaLoraAdapter, LlamaModel};
 use crate::ptr::Ptr;
 use crate::sampling::LlamaSampler;
 use crate::timing::LlamaTimings;
+use crate::token::LlamaToken;
 use crate::token::data::LlamaTokenData;
 use crate::token::data_array::LlamaTokenDataArray;
-use crate::token::LlamaToken;
 use crate::{
     DecodeError, EmbeddingsError, EmbeddingsSeqError, EncodeError, LlamaLoraAdapterRemoveError,
     LlamaLoraAdapterSetError,

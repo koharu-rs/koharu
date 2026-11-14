@@ -1,5 +1,5 @@
 //! Utilities for working with `llama_token_type` values.
-use enumflags2::{bitflags, BitFlags};
+use enumflags2::{BitFlags, bitflags};
 use std::ops::{Deref, DerefMut};
 
 /// A rust flavored equivalent of `llama_token_type`.

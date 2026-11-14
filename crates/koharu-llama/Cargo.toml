@@ -1,8 +1,7 @@
 [package]
 name = "koharu-llama"
 version.workspace = true
-# Upstream's sources compile unchanged under upstream's edition.
-edition = "2021"
+edition.workspace = true
 description.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -11,12 +10,6 @@ homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
-
-# Upstream's tests and doctests call llama.cpp, which it links and Koharu loads
-# only in the runtime; upstream's CI runs them.
-[lib]
-test = false
-doctest = false
 
 [dependencies]
 enumflags2 = { workspace = true }
@@ -30,7 +23,7 @@ tracing-core = { workspace = true }
 [features]
 default = ["common"]
 common = []
-llguidance =["dep:llguidance", "dep:toktrie"]
+llguidance = ["dep:llguidance", "dep:toktrie"]
 mtmd = []
 sampler = []
 
@@ -38,17 +31,3 @@ sampler = []
 encoding_rs = { workspace = true }
 static_assertions = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-# Upstream's sources stay as upstream wrote them. Its `dynamic-backends` feature
-# needs a backend directory, which the runtime's build doesn't have, so its code
-# is compiled out; its logger has a variant only its `mtmd` feature constructs;
-# and these bindings already give some constants the type upstream casts them
-# to.
-[lints.rust]
-dead_code = "allow"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("dynamic-backends"))'] }
-
-[lints.clippy]
-double_must_use = "allow"
-unnecessary_cast = "allow"
-upper_case_acronyms = "allow"

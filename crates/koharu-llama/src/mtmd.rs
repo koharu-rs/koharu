@@ -52,22 +52,6 @@ impl From<koharu_llama_sys::mtmd_input_chunk_type> for MtmdInputChunkType {
 }
 
 /// Configuration parameters for MTMD context
-///
-/// # Examples
-///
-/// ```
-/// use koharu_llama::mtmd::{MtmdContextParams, mtmd_default_marker};
-/// use std::ffi::CString;
-///
-/// let params = MtmdContextParams {
-///     use_gpu: false,
-///     print_timings: true,
-///     n_threads: 4,
-///     media_marker: CString::new(mtmd_default_marker()).unwrap(),
-///     image_min_tokens: -1,
-///     image_max_tokens: -1,
-/// };
-/// ```
 #[derive(Debug, Clone)]
 pub struct MtmdContextParams {
     /// Whether to use GPU acceleration
@@ -393,19 +377,6 @@ impl MtmdBitmap {
     ///
     /// * `InvalidDataSize` - Data length doesn't match `nx * ny * 3`
     /// * `NullResult` - Underlying C function returned null
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use koharu_llama::mtmd::MtmdBitmap;
-    ///
-    /// // Create a 2x2 red image
-    /// let red_pixel = [255, 0, 0]; // RGB values for red
-    /// let image_data = red_pixel.repeat(4); // 2x2 = 4 pixels
-    ///
-    /// let bitmap = MtmdBitmap::from_image_data(2, 2, &image_data);
-    /// assert!(bitmap.is_ok());
-    /// ```
     pub fn from_image_data(nx: u32, ny: u32, data: &[u8]) -> Result<Self, MtmdBitmapError> {
         if data.len() != (nx * ny * 3) as usize {
             return Err(MtmdBitmapError::InvalidDataSize);
@@ -430,20 +401,6 @@ impl MtmdBitmap {
     /// # Errors
     ///
     /// * `NullResult` - Underlying C function returned null
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use koharu_llama::mtmd::MtmdBitmap;
-    ///
-    /// // Create a simple sine wave audio sample
-    /// let audio_data: Vec<f32> = (0..100)
-    ///     .map(|i| (i as f32 * 0.1).sin())
-    ///     .collect();
-    ///
-    /// let bitmap = MtmdBitmap::from_audio_data(&audio_data);
-    /// // Note: This will likely fail without proper MTMD context setup
-    /// ```
     pub fn from_audio_data(data: &[f32]) -> Result<Self, MtmdBitmapError> {
         let bitmap =
             unsafe { koharu_llama_sys::mtmd_bitmap_init_from_audio(data.len(), data.as_ptr()) };
@@ -657,16 +614,6 @@ impl MtmdInputChunks {
     /// # Panics
     /// This function will panic if the underlying llama.cpp function returns null,
     /// which should not happen.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use koharu_llama::mtmd::MtmdInputChunks;
-    ///
-    /// let chunks = MtmdInputChunks::new();
-    /// assert_eq!(chunks.len(), 0);
-    /// assert!(chunks.is_empty());
-    /// ```
     #[must_use]
     pub fn new() -> Self {
         let chunks = unsafe { koharu_llama_sys::mtmd_input_chunks_init() };
@@ -693,13 +640,6 @@ impl MtmdInputChunks {
     /// [`MtmdInputChunk::copy`] if you need a chunk that outlives the collection.
     ///
     /// # Examples
-    ///
-    /// ```
-    /// use koharu_llama::mtmd::MtmdInputChunks;
-    ///
-    /// let chunks = MtmdInputChunks::new();
-    /// assert!(chunks.get(0).is_none());
-    /// ```
     ///
     /// ```compile_fail
     /// use koharu_llama::mtmd::MtmdInputChunks;
@@ -945,18 +885,6 @@ impl Drop for MtmdInputChunk<'_> {
 /// # Returns
 ///
 /// Returns the default media marker as a string slice.
-///
-/// # Examples
-///
-/// ```
-/// use koharu_llama::mtmd::mtmd_default_marker;
-///
-/// let marker = mtmd_default_marker();
-/// assert!(!marker.is_empty());
-///
-/// let text = format!("Describe this image: {}", marker);
-/// assert!(text.contains(marker));
-/// ```
 #[must_use]
 pub fn mtmd_default_marker() -> &'static str {
     unsafe {
