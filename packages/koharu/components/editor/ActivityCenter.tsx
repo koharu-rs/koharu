@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
 import { usePages } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
-import { commands, type Job, type Transfer } from '@koharu/bridge/protocol'
+import { useKoharuStore, type Job } from '@/lib/store'
+import { commands, type Transfer } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 export function ActivityCenter() {

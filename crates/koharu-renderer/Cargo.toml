@@ -36,6 +36,7 @@ smallvec = { workspace = true }
 specta = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 unicode-bidi = { workspace = true }
 vello = { workspace = true }
 webp = { workspace = true }

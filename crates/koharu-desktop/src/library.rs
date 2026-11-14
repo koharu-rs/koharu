@@ -2,15 +2,9 @@
 
 use std::path::PathBuf;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 use koharu_scene::{EXTENSION, Session};
-use serde::Serialize;
-use specta::Type;
-
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct ProjectSummary {
-    pub name: String,
-}
+use sanitize_filename::OptionsForCheck;
 
 /// The projects folder, `Documents/Koharu`.
 pub struct Library {
@@ -24,8 +18,8 @@ impl Library {
         Ok(Self { root })
     }
 
-    /// The projects in name order, numbers by value.
-    pub fn list(&self) -> Result<Vec<ProjectSummary>> {
+    /// The projects' names in name order, numbers by value.
+    pub fn list(&self) -> Result<Vec<String>> {
         let mut names: Vec<String> = std::fs::read_dir(&self.root)
             .with_context(|| format!("failed to read {}", self.root.display()))?
             .filter_map(|entry| entry.ok())
@@ -39,10 +33,7 @@ impl Library {
             })
             .collect();
         names.sort_by(|a, b| alphanumeric_sort::compare_str(a, b));
-        Ok(names
-            .into_iter()
-            .map(|name| ProjectSummary { name })
-            .collect())
+        Ok(names)
     }
 
     pub fn create(&self, name: &str) -> Result<Session> {
@@ -58,48 +49,22 @@ impl Library {
         Session::open(&path).with_context(|| format!("failed to open {}", path.display()))
     }
 
-    /// Deletes a project's file, and SQLite's write-ahead log beside it if
-    /// one was left.
     pub fn delete(&self, name: &str) -> Result<()> {
         let path = self.path(name)?;
-        std::fs::remove_file(&path)
-            .with_context(|| format!("failed to delete {}", path.display()))?;
-        for suffix in ["-wal", "-shm"] {
-            let mut sidecar = path.clone().into_os_string();
-            sidecar.push(suffix);
-            match std::fs::remove_file(&sidecar) {
-                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(error).with_context(|| format!("failed to delete {sidecar:?}"));
-                }
-                _ => {}
-            }
-        }
-        Ok(())
+        Session::remove(&path).with_context(|| format!("failed to delete {}", path.display()))
     }
 
     /// A project's file, for a name that is a file name on every platform.
     fn path(&self, name: &str) -> Result<PathBuf> {
-        if name.trim() != name || name.is_empty() {
-            bail!("a project name can't be empty or start or end with a space");
-        }
-        if name.ends_with('.')
-            || name
-                .chars()
-                .any(|character| character.is_control() || r#"<>:"/\|?*"#.contains(character))
-        {
-            bail!("a project name can't hold characters a file name can't");
-        }
-        let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
-        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-            || stem
-                .strip_prefix("COM")
-                .or_else(|| stem.strip_prefix("LPT"))
-                .is_some_and(|number| {
-                    matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
-                });
-        if reserved {
-            bail!("{name:?} is a name Windows reserves");
-        }
+        ensure!(!name.trim().is_empty(), "a project name can't be empty");
+        let options = OptionsForCheck {
+            windows: true,
+            truncate: true,
+        };
+        ensure!(
+            sanitize_filename::is_sanitized_with_options(name, options),
+            "{name:?} can't be a file name"
+        );
         Ok(self.root.join(format!("{name}.{EXTENSION}")))
     }
 }
@@ -116,28 +81,19 @@ mod tests {
 
         drop(library.create("chapter 10")?);
         drop(library.create("chapter 9")?);
-        let names: Vec<String> = library
-            .list()?
-            .into_iter()
-            .map(|project| project.name)
-            .collect();
-        assert_eq!(names, ["chapter 9", "chapter 10"]);
+        assert_eq!(library.list()?, ["chapter 9", "chapter 10"]);
 
         assert!(library.create("chapter 9").is_err());
         assert!(library.create("a/b").is_err());
         assert!(library.create("CON").is_err());
+        assert!(library.create("trailing.").is_err());
 
         let session = library.open("chapter 9")?;
         assert_eq!(session.project().pages().count(), 0);
         drop(session);
 
         library.delete("chapter 9")?;
-        let names: Vec<String> = library
-            .list()?
-            .into_iter()
-            .map(|project| project.name)
-            .collect();
-        assert_eq!(names, ["chapter 10"]);
+        assert_eq!(library.list()?, ["chapter 10"]);
         assert!(library.open("chapter 9").is_err());
         Ok(())
     }

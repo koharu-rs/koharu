@@ -151,7 +151,7 @@ async fn main() -> Result<()> {
                 }
                 break;
             }
-            Event::Ended { .. } => {}
+            Event::Queued { .. } | Event::Ended { .. } => {}
         }
     }
 

@@ -1,6 +1,5 @@
-//! Pages from files: images, archives of them, and PDFs, in name order, as
-//! `koharu-app` read them. Each becomes a file of the project and a page
-//! made from it.
+//! Pages from files: images, archives of them, and PDFs, in name order.
+//! Each becomes a file of the project and a page made from it.
 
 mod pdf;
 mod rar;
@@ -142,7 +141,8 @@ async fn add(app: &State<'_, Arc<App>>, paths: Vec<PathBuf>) -> Result<()> {
         app.edit(Edit {
             label: "import".to_owned(),
             ops,
-        })
+        })?;
+        Ok(())
     })
     .await
 }

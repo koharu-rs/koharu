@@ -44,7 +44,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// The names of the layers a PSD needs where the scene has none, in the app's
 /// language. A type layer takes its text as its name, as Photoshop names it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Deserialize, specta::Type)]
 pub struct Labels {
     /// The page's background, the bottom pixel layer.
     pub background: String,

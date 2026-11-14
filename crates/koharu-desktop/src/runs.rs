@@ -1,52 +1,30 @@
-//! What runs on the open project besides the editor: the pipeline's runs as
-//! the interface lists them, the agent's run with its conversation, and the
-//! MCP server serving the agent's tools to outside agents.
+//! What runs on the open project besides the editor: the pipeline's runs,
+//! told to the interface and measured, and the agent's run in the project's
+//! conversation.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
     future::Future,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Instant,
 };
 
 use anyhow::{Context as _, Result};
-use koharu_agent::{Agent, AgentConfig, McpServer, Tools};
+use koharu_agent::{Agent, AgentConfig};
 use koharu_llm::{Context, Size, SummaryPrompts};
 use koharu_pipeline::{Event, Outcome, Request, RunId, Stage, Target};
-use koharu_scene::{PageId, Project};
+use koharu_scene::PageId;
 use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
-use tokio::{sync::broadcast::error::RecvError, task::AbortHandle};
+use tokio::sync::broadcast::error::RecvError;
+use tokio_util::task::AbortOnDropHandle;
 use tracing::{Instrument as _, Span};
 
-use crate::app::App;
-
-/// The port the MCP server listens on, the `serve` example's, so a client's
-/// configuration stays valid from one launch to the next.
-const MCP_PORT: u16 = 7878;
-
-#[derive(Default)]
-pub struct Runs {
-    jobs: Mutex<BTreeMap<RunId, Job>>,
-    /// Each pipeline run's span, open until it ends; it continues the trace
-    /// of what asked for the run.
-    spans: Mutex<BTreeMap<RunId, Span>>,
-    /// When each page's stage started, for its time.
-    started: Mutex<BTreeMap<(RunId, PageId, Stage), Instant>>,
-    agent: Mutex<AgentRun>,
-    mcp: Mutex<Option<McpServer>>,
-}
-
-#[derive(Default)]
-struct AgentRun {
-    /// The open project's conversation, on the model it was made with.
-    conversation: Option<(String, Arc<tokio::sync::Mutex<Agent>>)>,
-    /// The run going on, cancelled by aborting its task, which drops the
-    /// agent's future as koharu-agent cancels a run.
-    run: Option<(u64, AbortHandle)>,
-    next: u64,
-}
+use crate::{app::App, events};
 
 /// What an agent run tells the panel: the agent's events as they come, then
 /// how it ended. A cancelled run tells nothing more.
@@ -58,79 +36,21 @@ pub enum AgentEvent {
     Failed { error: String },
 }
 
-/// A pipeline run as the interface shows it.
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct Job {
-    pub id: RunId,
-    pub state: JobState,
-    /// The page stages done, of `total`.
-    pub completed: usize,
-    pub total: usize,
-    /// The stage started last, and its page.
-    pub stage: Option<Stage>,
-    pub page: Option<PageId>,
-    pub error: Option<String>,
+/// The pipeline's runs as Sentry sees them: a span each, continuing the trace
+/// of what asked for it, and each page stage's time.
+#[derive(Default)]
+pub struct Telemetry {
+    spans: Mutex<BTreeMap<RunId, Span>>,
+    started: Mutex<BTreeMap<(RunId, PageId, Stage), Instant>>,
+    /// The agent's runs, numbered in the order they started.
+    agent_runs: AtomicU64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum JobState {
-    Running,
-    Done,
-    Failed,
-    Stopped,
-}
-
-impl Job {
-    fn new(id: RunId) -> Self {
-        Self {
-            id,
-            state: JobState::Running,
-            completed: 0,
-            total: 0,
-            stage: None,
-            page: None,
-            error: None,
-        }
-    }
-}
-
-impl Runs {
-    pub fn jobs(&self) -> Vec<Job> {
-        self.jobs.lock().values().cloned().collect()
-    }
-
-    /// The job `event` changes, and whether its run wrote to the project.
-    fn record(&self, event: &Event) -> (Job, bool) {
-        let mut jobs = self.jobs.lock();
-        let (run, wrote) = match event {
-            Event::Started { run, .. } => (*run, false),
-            Event::Finished { run, .. } | Event::Ended { run, .. } => (*run, true),
-        };
-        let job = jobs.entry(run).or_insert_with(|| Job::new(run));
-        match event {
-            Event::Started { page, stage, .. } => {
-                job.stage = Some(*stage);
-                job.page = Some(*page);
-            }
-            Event::Finished { .. } => job.completed += 1,
-            Event::Ended { outcome, .. } => {
-                job.state = match outcome {
-                    Outcome::Done => JobState::Done,
-                    Outcome::Stopped => JobState::Stopped,
-                    Outcome::Failed { reason, .. } => {
-                        job.error = Some(reason.clone());
-                        JobState::Failed
-                    }
-                };
-            }
-        }
-        (job.clone(), wrote)
-    }
-
+impl Telemetry {
     /// Counts and times `event` as metrics, and ends a run's span with it.
     fn measure(&self, event: &Event) {
         match event {
+            Event::Queued { .. } => {}
             Event::Started { run, page, stage } => {
                 self.started
                     .lock()
@@ -172,21 +92,6 @@ impl Runs {
     }
 }
 
-/// How many page stages a run of `stages` on `target` does.
-fn total(project: &Project, target: &Target, stages: usize) -> Result<usize> {
-    let pages = match target {
-        Target::Project => project.pages().count(),
-        Target::Pages(pages) => pages.len(),
-        Target::Blocks(blocks) => blocks
-            .iter()
-            .map(|&block| Ok(project.parent(block)?.0.id))
-            .collect::<Result<BTreeSet<_>>>()?
-            .len(),
-        Target::Area { .. } => 1,
-    };
-    Ok(pages * stages)
-}
-
 impl App {
     /// Runs `stages` on `target` in the open project. `trace`, a
     /// `sentry-trace` value, is the trace of what asked for the run, which
@@ -197,39 +102,28 @@ impl App {
         stages: BTreeSet<Stage>,
         trace: Option<String>,
     ) -> Result<RunId> {
-        let session = self.session()?;
-        let total = total(&session.lock().project(), &target, stages.len())?;
         let span = tracing::info_span!(
             "pipeline run",
             sentry.op = "pipeline.run",
             sentry.trace = trace.as_deref().unwrap_or_default(),
             stages = ?stages,
-            pages = total / stages.len().max(1),
             outcome = tracing::field::Empty,
         );
         let id = self.pipeline.run(
-            session,
+            self.session()?,
             Request {
                 target,
                 stages,
                 config: None,
             },
         )?;
-        let job = {
-            let mut jobs = self.runs.jobs.lock();
-            let job = jobs.entry(id).or_insert_with(|| Job::new(id));
-            job.total = total;
-            job.clone()
-        };
-        self.runs.spans.lock().insert(id, span);
-        self.channels.job(job);
+        self.telemetry.spans.lock().insert(id, span);
         Ok(id)
     }
 
-    /// Follows the pipeline's events and the runtime's downloads for as
-    /// long as the app runs: each job to the interface, and each write to
-    /// the project through `changed`.
-    pub fn follow(self: &Arc<Self>) {
+    /// Tells the interface the pipeline's events and the runtime's
+    /// downloads for as long as the app runs.
+    pub fn follow_pipeline(self: &Arc<Self>) {
         let app = Arc::clone(self);
         let mut events = self.pipeline.events();
         tauri::async_runtime::spawn(async move {
@@ -239,17 +133,8 @@ impl App {
                     Err(RecvError::Lagged(_)) => continue,
                     Err(RecvError::Closed) => return,
                 };
-                let (job, wrote) = app.runs.record(&event);
-                app.runs.measure(&event);
-                app.channels.job(job);
-                if wrote {
-                    let app = Arc::clone(&app);
-                    tauri::async_runtime::spawn_blocking(move || {
-                        if let Err(error) = app.changed() {
-                            tracing::error!("failed to show a run's write: {error:#}");
-                        }
-                    });
-                }
+                app.telemetry.measure(&event);
+                app.emit(events::PIPELINE, event);
             }
         });
         let app = Arc::clone(self);
@@ -257,7 +142,7 @@ impl App {
             use futures::StreamExt as _;
             let mut transfers = koharu_runtime::transfers();
             while let Some(transfer) = transfers.next().await {
-                app.channels.download(transfer);
+                app.emit(events::DOWNLOAD, transfer);
             }
         });
     }
@@ -274,7 +159,7 @@ impl App {
         prompt: String,
         send: impl Fn(AgentEvent) + Send + Sync + 'static,
         trace: Option<String>,
-    ) -> u64 {
+    ) -> Result<u64> {
         let span = tracing::info_span!(
             "agent run",
             sentry.op = "agent.run",
@@ -291,23 +176,9 @@ impl App {
                     let conversation = app.conversation(&model).await?;
                     let mut agent = conversation.lock().await;
                     agent.set_config(config);
-                    let writes = Arc::clone(&app);
                     anyhow::Ok(
                         agent
-                            .run(&prompt, move |event| {
-                                // A tool may have written to the project.
-                                if matches!(event, koharu_agent::Event::ToolFinished { .. }) {
-                                    let app = Arc::clone(&writes);
-                                    tauri::async_runtime::spawn_blocking(move || {
-                                        if let Err(error) = app.changed() {
-                                            tracing::error!(
-                                                "failed to show the agent's write: {error:#}"
-                                            );
-                                        }
-                                    });
-                                }
-                                events(AgentEvent::Event { event });
-                            })
+                            .run(&prompt, move |event| events(AgentEvent::Event { event }))
                             .await?,
                     )
                 }
@@ -323,133 +194,64 @@ impl App {
         )
     }
 
-    /// Starts an agent run in place of the one going, and answers its id.
-    pub fn start_agent(self: &Arc<Self>, run: impl Future<Output = ()> + Send + 'static) -> u64 {
-        let mut agent = self.runs.agent.lock();
-        if let Some((_, task)) = agent.run.take() {
-            task.abort();
-        }
-        agent.next += 1;
-        let id = agent.next;
+    /// Starts an agent run on the open project in place of the one going,
+    /// and answers its id.
+    pub fn start_agent(
+        self: &Arc<Self>,
+        run: impl Future<Output = ()> + Send + 'static,
+    ) -> Result<u64> {
+        let id = self.telemetry.agent_runs.fetch_add(1, Ordering::Relaxed) + 1;
+        let mut project = self.project.lock();
+        let project = project.as_mut().context("no project is open")?;
         let app = Arc::clone(self);
         let task = tokio::spawn(async move {
             run.await;
-            let mut agent = app.runs.agent.lock();
-            if agent.run.as_ref().is_some_and(|(run, _)| *run == id) {
-                agent.run = None;
+            if let Some(project) = app.project.lock().as_mut()
+                && project.run.as_ref().is_some_and(|(going, _)| *going == id)
+            {
+                // The task is past its last await, so its own abort is moot.
+                project.run = None;
             }
         });
-        agent.run = Some((id, task.abort_handle()));
-        id
-    }
-
-    /// The agent's run going on.
-    pub fn agent_run(&self) -> Option<u64> {
-        self.runs.agent.lock().run.as_ref().map(|(run, _)| *run)
+        // The run it replaces is aborted as its handle drops.
+        project.run = Some((id, AbortOnDropHandle::new(task)));
+        Ok(id)
     }
 
     pub fn cancel_agent(&self, run: u64) {
-        let mut agent = self.runs.agent.lock();
-        if agent.run.as_ref().is_some_and(|(going, _)| *going == run)
-            && let Some((_, task)) = agent.run.take()
+        if let Some(project) = self.project.lock().as_mut()
+            && project.run.as_ref().is_some_and(|(going, _)| *going == run)
         {
-            task.abort();
+            project.run = None;
         }
     }
 
     /// The open project's conversation with the agent on `model`, made on
     /// its first run.
-    pub async fn conversation(&self, model: &str) -> Result<Arc<tokio::sync::Mutex<Agent>>> {
-        if let Some((made, conversation)) = &self.runs.agent.lock().conversation
-            && made == model
-        {
-            return Ok(Arc::clone(conversation));
-        }
-        let session = self.session()?;
+    async fn conversation(&self, model: &str) -> Result<Arc<tokio::sync::Mutex<Agent>>> {
+        let (session, tools) = {
+            let project = self.project.lock();
+            let project = project.as_ref().context("no project is open")?;
+            if let Some((made, conversation)) = &project.conversation
+                && made == model
+            {
+                return Ok(Arc::clone(conversation));
+            }
+            (Arc::clone(&project.session), self.tools(project))
+        };
         let connected = koharu_llm::connect(model, Size::AGENT).await?;
-        let tools = Tools::new(
-            Arc::clone(&session),
-            self.pipeline.clone(),
-            self.renderer.clone(),
-        );
         let conversation = Arc::new(tokio::sync::Mutex::new(Agent::new(
             tools,
             connected,
             Context::new(SummaryPrompts::DEFAULT),
         )));
-        // Kept only while its project is still the open one, under the
-        // project's lock: `close` takes the project before it drops the
-        // conversation, so one made during a close never outlives it.
-        let project = self.project.lock();
-        if project
-            .as_ref()
-            .is_some_and(|open| Arc::ptr_eq(&open.session, &session))
+        // Kept only while its project is still the open one: one made during
+        // a close goes with the run that made it.
+        if let Some(project) = self.project.lock().as_mut()
+            && Arc::ptr_eq(&project.session, &session)
         {
-            self.runs.agent.lock().conversation =
-                Some((model.to_owned(), Arc::clone(&conversation)));
+            project.conversation = Some((model.to_owned(), Arc::clone(&conversation)));
         }
-        drop(project);
         Ok(conversation)
-    }
-
-    /// Stops what runs on the open project, before it closes: the
-    /// pipeline's runs, the agent's run and conversation, and MCP's calls.
-    pub fn stop_runs(&self) {
-        self.pipeline.stop();
-        let mut agent = self.runs.agent.lock();
-        if let Some((_, task)) = agent.run.take() {
-            task.abort();
-        }
-        agent.conversation = None;
-        drop(agent);
-        if let Some(server) = self.runs.mcp.lock().as_ref() {
-            server.open(None);
-        }
-    }
-
-    /// Points MCP's calls at the open project.
-    pub fn serve(&self) {
-        if let Some(server) = self.runs.mcp.lock().as_ref() {
-            server.open(self.tools());
-        }
-    }
-
-    fn tools(&self) -> Option<Tools> {
-        let session = self.session().ok()?;
-        Some(Tools::new(
-            session,
-            self.pipeline.clone(),
-            self.renderer.clone(),
-        ))
-    }
-
-    /// Starts or stops the MCP server, and answers its URL while it runs.
-    pub async fn set_mcp(&self, enabled: bool) -> Result<Option<String>> {
-        if !enabled {
-            drop(self.runs.mcp.lock().take());
-            return Ok(None);
-        }
-        let running = self.runs.mcp.lock().as_ref().map(McpServer::address);
-        let address = match running {
-            Some(address) => address,
-            None => {
-                let server = McpServer::start(MCP_PORT)
-                    .await
-                    .with_context(|| format!("couldn't serve MCP on port {MCP_PORT}"))?;
-                server.open(self.tools());
-                let address = server.address();
-                *self.runs.mcp.lock() = Some(server);
-                address
-            }
-        };
-        Ok(Some(format!("http://{address}/mcp")))
-    }
-
-    pub fn mcp(&self) -> Option<String> {
-        self.runs
-            .mcp
-            .lock()
-            .as_ref()
-            .map(|server| format!("http://{}/mcp", server.address()))
     }
 }

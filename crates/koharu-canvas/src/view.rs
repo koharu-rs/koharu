@@ -3,6 +3,8 @@
 //! the editor's pan and zoom. Pointer events become page points here, and
 //! nowhere else.
 
+use serde::Serialize;
+use specta::Type;
 use ui_events::{keyboard::Modifiers, pointer::PointerState};
 use vello::kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2};
 
@@ -21,6 +23,16 @@ pub(crate) struct Sample {
     /// screen rather than the page: a pan, and the brush ring.
     pub screen: Point,
     pub modifiers: Modifiers,
+}
+
+/// Where the page shows, for the interface over the canvas: a page point `p`
+/// sits at `p * zoom + (x, y)` in device-independent pixels from the
+/// viewport's corner.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Type)]
+pub struct Camera {
+    pub zoom: f64,
+    pub x: f64,
+    pub y: f64,
 }
 
 pub(crate) struct View {
@@ -71,6 +83,23 @@ impl View {
 
     pub fn camera(&self) -> TranslateScale {
         self.camera
+    }
+
+    /// The camera in device-independent pixels.
+    pub fn placement(&self) -> Camera {
+        Camera {
+            zoom: self.camera.scale / self.scale,
+            x: self.camera.translation.x / self.scale,
+            y: self.camera.translation.y / self.scale,
+        }
+    }
+
+    /// Zooms about the viewport's centre to `zoom` device-independent pixels
+    /// a page pixel, as a zoom slider does.
+    pub fn zoom_to(&mut self, zoom: f64) {
+        let centre = (self.viewport.size().to_vec2() * 0.5).to_point();
+        let factor = zoom * self.scale / self.camera.scale;
+        self.set_camera(self.zoomed(centre, factor));
     }
 
     /// Moves the camera, kept so some of the page stays in view.

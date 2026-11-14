@@ -11,6 +11,17 @@ function ProjectFlow() {
   return project ? <p>Opened {project.name}</p> : <StartView />
 }
 
+/** The desktop with `open` as its open project, empty. */
+function desktop(open: () => string | null) {
+  vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
+  vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
+  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
+    query.query === 'get_project'
+      ? { id: 'project', version: '1', pages: [] }
+      : { steps: [], current: 0 },
+  )
+}
+
 function renderProjectFlow() {
   return render(
     <QueryClientProvider client={queryClient}>
@@ -24,17 +35,7 @@ describe('StartView', () => {
 
   it('creates a managed project by name', async () => {
     let opened = false
-    vi.spyOn(commands, 'getProject').mockImplementation(async () =>
-      opened
-        ? {
-            name: 'Volume 1',
-            revision: '0',
-            page: null,
-            pages: [],
-            history: { steps: [], current: 0 },
-          }
-        : null,
-    )
+    desktop(() => (opened ? 'Volume 1' : null))
     vi.spyOn(commands, 'listProjects').mockResolvedValue([])
     const create = vi.spyOn(commands, 'createProject').mockImplementation(async () => {
       opened = true
@@ -54,18 +55,8 @@ describe('StartView', () => {
 
   it('opens a managed project without reloading the application', async () => {
     let opened = false
-    vi.spyOn(commands, 'getProject').mockImplementation(async () =>
-      opened
-        ? {
-            name: 'Blue Archive',
-            revision: '1',
-            page: null,
-            pages: [],
-            history: { steps: [], current: 0 },
-          }
-        : null,
-    )
-    vi.spyOn(commands, 'listProjects').mockResolvedValue([{ name: 'Blue Archive' }])
+    desktop(() => (opened ? 'Blue Archive' : null))
+    vi.spyOn(commands, 'listProjects').mockResolvedValue(['Blue Archive'])
     const open = vi.spyOn(commands, 'openProject').mockImplementation(async () => {
       opened = true
       return null
@@ -83,7 +74,7 @@ describe('StartView', () => {
 
   it('confirms before deleting a managed project', async () => {
     vi.spyOn(commands, 'listProjects')
-      .mockResolvedValueOnce([{ name: 'Blue Archive' }])
+      .mockResolvedValueOnce(['Blue Archive'])
       .mockResolvedValueOnce([])
     const remove = vi.spyOn(commands, 'deleteProject').mockResolvedValue(null)
     render(<StartView />)

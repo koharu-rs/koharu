@@ -29,7 +29,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use sentry::{
     ClientOptions, Hub,
-    protocol::{ClientSdkInfo, ClientSdkPackage, Event},
+    protocol::{ClientSdkInfo, ClientSdkPackage, Context, Event},
 };
 use tauri::{
     Manager as _, Runtime, generate_handler,
@@ -64,12 +64,12 @@ impl Sentry {
             ..Default::default()
         }
     }
+}
 
-    /// Adds `context` under `key` to every event that lacks one, from any
-    /// thread.
-    pub fn set_context(&self, key: &str, context: sentry::protocol::Context) {
-        self.context.add(key, context);
-    }
+/// Adds `context` under `key` to every event that lacks one, from any
+/// thread, through the main hub's [`Sentry`] integration.
+pub fn set_context(key: &str, context: impl Into<Context>) {
+    Hub::main().with_integration(|sentry: &Sentry| sentry.context.add(key, context.into()));
 }
 
 impl sentry::Integration for Sentry {

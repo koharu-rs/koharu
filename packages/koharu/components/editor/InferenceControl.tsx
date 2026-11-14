@@ -19,7 +19,7 @@ import { OutputPicker } from '@/components/controls/OutputPicker'
 import { call, refreshModels, savePreferences } from '@/lib/backend'
 import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { modelName, vendorOf } from '@/lib/translation'
-import { commands, type ModelInfo, type Stage, type TranslatorConfig } from '@koharu/bridge/protocol'
+import { commands, type Model, type Stage, type TranslatorConfig } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
@@ -391,10 +391,16 @@ function SelectorOption<Value extends string>({
 }
 
 /** The models to pick from, with the one the preferences hold first when the list lacks it. */
-function availableModels(selected: string | null, models: ModelInfo[]): ModelInfo[] {
+function availableModels(selected: string | null, models: Model[]): Model[] {
   if (!selected || models.some((model) => model.reference === selected)) return models
   return [
-    { reference: selected, name: selected, vendor: vendorOf(selected), images: false, tools: false },
+    {
+      reference: selected,
+      name: selected,
+      vendor: vendorOf(selected),
+      images: false,
+      tools: false,
+    },
     ...models,
   ]
 }

@@ -46,6 +46,11 @@ pub(crate) struct Plan {
 }
 
 impl Plan {
+    /// How many pages it works on.
+    pub(crate) fn pages(&self) -> usize {
+        self.pages.len()
+    }
+
     /// What a run of `stages` on `target` works on, or why it can't run.
     pub(crate) fn new(
         project: &Project,

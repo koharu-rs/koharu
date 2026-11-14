@@ -1,50 +1,16 @@
-//! The projects folder and the open project.
+//! The projects folder, the open project, and the page the canvas shows.
 
 use std::sync::Arc;
 
-use koharu_runtime::Transfer;
-use koharu_scene::{Page, PageId};
-use serde::Serialize;
-use specta::Type;
-use tauri::{State, ipc::Channel};
+use koharu_scene::PageId;
+use tauri::State;
 
 use super::{Result, blocking};
-use crate::{
-    app::{App, ProjectInfo},
-    events::CanvasEvent,
-    library::ProjectSummary,
-    runs::Job,
-};
-
-/// What the interface needs on load, before any event arrives.
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct StartupState {
-    pub project: Option<ProjectInfo>,
-    /// The pipeline's runs so far.
-    pub jobs: Vec<Job>,
-}
-
-/// Hands over the channels the desktop's own events go through.
-#[tauri::command]
-#[specta::specta]
-pub fn subscribe(
-    app: State<'_, Arc<App>>,
-    on_project: Channel<Option<ProjectInfo>>,
-    on_canvas: Channel<CanvasEvent>,
-    on_job: Channel<Job>,
-    on_download: Channel<Transfer>,
-) -> StartupState {
-    app.channels
-        .subscribe(on_project, on_canvas, on_job, on_download);
-    StartupState {
-        project: app.info(),
-        jobs: app.runs.jobs(),
-    }
-}
+use crate::app::App;
 
 #[tauri::command]
 #[specta::specta]
-pub fn list_projects(app: State<'_, Arc<App>>) -> Result<Vec<ProjectSummary>> {
+pub fn list_projects(app: State<'_, Arc<App>>) -> Result<Vec<String>> {
     Ok(app.library.list()?)
 }
 
@@ -92,29 +58,26 @@ pub fn close_project(app: State<'_, Arc<App>>) {
     app.close();
 }
 
+/// The open project's name, for an interface that loaded after it opened.
 #[tauri::command]
 #[specta::specta]
-pub fn get_project(app: State<'_, Arc<App>>) -> Option<ProjectInfo> {
-    app.info()
+pub fn get_open_project(app: State<'_, Arc<App>>) -> Option<String> {
+    app.project
+        .lock()
+        .as_ref()
+        .map(|project| project.name.clone())
 }
 
-/// The page the editor shows, with its layers.
+/// The page the canvas shows.
 #[tauri::command]
 #[specta::specta]
-pub fn get_page(app: State<'_, Arc<App>>) -> Result<Option<Page>> {
-    let project = app.project.lock();
-    let Some(project) = project.as_ref() else {
-        return Ok(None);
-    };
-    let Some(page) = project.page else {
-        return Ok(None);
-    };
-    Ok(Some(project.session.lock().project().page(page)?.clone()))
+pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
+    app.project.lock().as_ref().and_then(|project| project.page)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn select_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
+pub async fn show_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
     let app = Arc::clone(&app);
-    blocking(move || app.select_page(page)).await
+    blocking(move || app.show_page(page)).await
 }

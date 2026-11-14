@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 
 import { call, dispatch } from '@/lib/backend'
 import { useImportPages, usePage, useProject } from '@/lib/queries'
+import { deletePages, movePage } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type ImportSource, type PageSummary } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
@@ -113,12 +114,12 @@ export function PageRail() {
     selectPages(next)
     if (page.id !== active) {
       selectLayers([])
-      dispatch(commands.selectPage, page.id)
+      dispatch(commands.showPage, page.id)
     }
   }
 
   const deletePage = (page: string) =>
-    void call(commands.deletePages, [page])
+    void call(deletePages, [page])
       .then(() => {
         selectPages(selected.filter((selectedPage) => selectedPage !== page))
         if (active === page) selectLayers([])
@@ -145,8 +146,7 @@ export function PageRail() {
       if (!current || current.pointer !== event.pointerId) return
       if (
         !current.moved &&
-        Math.hypot(event.clientX - current.start.x, event.clientY - current.start.y) <
-          DRAG_DISTANCE
+        Math.hypot(event.clientX - current.start.x, event.clientY - current.start.y) < DRAG_DISTANCE
       )
         return
       if (!current.moved) event.currentTarget.setPointerCapture(event.pointerId)
@@ -166,7 +166,7 @@ export function PageRail() {
       // The page takes the place of the one it's dropped on; `move_page` counts its index after
       // the page is taken out, which is that place either way.
       if (pages[current.target]?.id !== current.page) {
-        dispatch(commands.movePage, current.page, current.target)
+        dispatch(movePage, current.page, current.target)
       }
     },
     onPointerCancel: () => {
@@ -252,7 +252,7 @@ export function PageRail() {
                     <PageItem
                       page={page}
                       index={index}
-                      revision={active === page.id ? project?.revision : undefined}
+                      revision={active === page.id ? (project?.revision ?? undefined) : undefined}
                       active={active === page.id}
                       selected={selected.includes(page.id)}
                       dragged={dragged?.page === page.id}

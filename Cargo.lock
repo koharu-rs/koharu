@@ -5579,6 +5579,7 @@ dependencies = [
  "dirs 7.0.0",
  "futures",
  "hayro",
+ "heck",
  "image",
  "koharu-agent",
  "koharu-canvas",
@@ -5594,6 +5595,7 @@ dependencies = [
  "rars",
  "rayon",
  "rfd",
+ "sanitize-filename",
  "sentry",
  "serde",
  "serde_json",
@@ -5611,6 +5613,7 @@ dependencies = [
  "tauri-winit",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "ui-events",
  "vello",
@@ -5777,7 +5780,9 @@ dependencies = [
  "koharu-scene",
  "kurbo",
  "photocraft-psd",
+ "serde",
  "serde_json",
+ "specta",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -5811,6 +5816,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
  "unicode-bidi",
  "vello",
  "webp",
@@ -5873,6 +5879,7 @@ dependencies = [
  "strum",
  "tempfile",
  "thiserror 2.0.21",
+ "tokio",
  "uuid",
 ]
 
@@ -9407,6 +9414,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sanitize-filename"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc984f4f9ceb736a7bb755c3e3bd17dc56370af2600c9780dcc48c66453da34d"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11368,6 +11384,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

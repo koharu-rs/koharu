@@ -18,3 +18,4 @@ pub use canvas::Canvas;
 pub use effect::{Effect, Notice};
 pub use settings::{Brush, Colors, Tool};
 pub use vello::kurbo::{Point, Rect, Size, TranslateScale, Vec2};
+pub use view::Camera;

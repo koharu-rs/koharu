@@ -6,29 +6,20 @@ mod canvas;
 mod debug;
 mod export;
 mod fonts;
-mod history;
 mod import;
-mod layers;
 mod pages;
 mod preferences;
 mod processing;
 mod project;
+mod scene;
 
-use std::sync::Arc;
-
-use koharu_scene::{Edit, Op};
 use serde::Serialize;
 use specta::{
     Type, Types,
     datatype::{DataType, Function},
 };
-use tauri::{
-    State,
-    ipc::{Invoke, InvokeResponseBody, IpcResponse},
-};
+use tauri::ipc::{Invoke, InvokeResponseBody, IpcResponse};
 use tauri_runtime_cef::CefRuntime;
-
-use crate::app::App;
 
 /// A command's failure, as its message with its causes.
 #[derive(Debug, Serialize, Type)]
@@ -60,36 +51,25 @@ impl IpcResponse for Bytes {
 
 pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
-        project::subscribe,
         project::list_projects,
         project::create_project,
         project::open_project,
         project::delete_project,
         project::close_project,
-        project::get_project,
-        project::get_page,
-        project::select_page,
-        pages::delete_pages,
-        pages::move_page,
+        project::get_open_project,
+        project::get_shown_page,
+        project::show_page,
+        scene::query,
+        scene::edit,
+        scene::undo,
+        scene::redo,
+        scene::go_to_step,
         pages::get_thumbnail,
-        layers::set_visibility,
-        layers::delete_layers,
-        layers::move_layer,
-        layers::set_locked,
-        layers::set_text,
-        layers::set_source_text,
-        layers::set_style,
-        layers::update_layer,
-        history::undo,
-        history::redo,
-        history::go_to_step,
         processing::process,
         processing::stop,
-        agent::get_agent_status,
-        agent::save_agent_config,
+        processing::get_runs,
         agent::run_agent,
         agent::cancel_agent,
-        agent::set_mcp,
         preferences::get_preferences,
         preferences::save_preferences,
         preferences::get_models,
@@ -118,36 +98,25 @@ pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static 
 /// `handler`'s, but the debug build's own.
 pub fn bindings(types: &mut Types) -> Vec<Function> {
     specta::function::collect_functions![
-        project::subscribe,
         project::list_projects,
         project::create_project,
         project::open_project,
         project::delete_project,
         project::close_project,
-        project::get_project,
-        project::get_page,
-        project::select_page,
-        pages::delete_pages,
-        pages::move_page,
+        project::get_open_project,
+        project::get_shown_page,
+        project::show_page,
+        scene::query,
+        scene::edit,
+        scene::undo,
+        scene::redo,
+        scene::go_to_step,
         pages::get_thumbnail,
-        layers::set_visibility,
-        layers::delete_layers,
-        layers::move_layer,
-        layers::set_locked,
-        layers::set_text,
-        layers::set_source_text,
-        layers::set_style,
-        layers::update_layer,
-        history::undo,
-        history::redo,
-        history::go_to_step,
         processing::process,
         processing::stop,
-        agent::get_agent_status,
-        agent::save_agent_config,
+        processing::get_runs,
         agent::run_agent,
         agent::cancel_agent,
-        agent::set_mcp,
         preferences::get_preferences,
         preferences::save_preferences,
         preferences::get_models,
@@ -173,14 +142,4 @@ async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
 ) -> Result<T> {
     Ok(tokio::task::spawn_blocking(work).await??)
-}
-
-/// Runs `ops` on the open project as one undo step, under `label`.
-async fn edit(app: &State<'_, Arc<App>>, label: &str, ops: Vec<Op>) -> Result<()> {
-    let app = Arc::clone(app);
-    let edit = Edit {
-        label: label.to_owned(),
-        ops,
-    };
-    blocking(move || app.edit(edit)).await
 }
