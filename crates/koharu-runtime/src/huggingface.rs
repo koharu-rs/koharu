@@ -70,8 +70,10 @@ impl Repository {
         self.path(name).is_file()
     }
 
-    /// Fetches `name` into `folder` through the Hub's client, which takes Xet
-    /// storage's chunks in parallel, and returns where it put it.
+    /// Fetches `name` into `folder` through the Hub's client and returns where
+    /// it put it. The client's local-folder download follows the Hub's
+    /// redirect before it reads the Xet hash on it, so it never takes Xet's
+    /// chunks: the file comes as one plain stream.
     async fn fetch(&self, name: &str, folder: PathBuf) -> Result<PathBuf> {
         let (owner, repository) = hf_hub::split_id(self.id);
         let activity = Arc::new(Activity::start(name.rsplit('/').next().unwrap_or(name)));
