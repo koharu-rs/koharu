@@ -1,11 +1,11 @@
 //! A safe wrapper around `llama_model`.
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::os::raw::c_int;
 use std::path::Path;
 use std::str::Utf8Error;
 
-use crate::context::params::LlamaContextParams;
 use crate::context::LlamaContext;
+use crate::context::params::LlamaContextParams;
 use crate::llama_backend::LlamaBackend;
 use crate::model::params::LlamaModelParams;
 use crate::ptr::Ptr;

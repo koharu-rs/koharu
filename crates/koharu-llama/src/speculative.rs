@@ -214,7 +214,7 @@ fn status_to_result(status: koharu_llama_sys::llama_rs_status) -> Result<(), Mtp
     if status_is_ok(status) {
         Ok(())
     } else {
-        Err(MtpSpeculativeError::Status(status as i32))
+        Err(MtpSpeculativeError::Status(status))
     }
 }
 

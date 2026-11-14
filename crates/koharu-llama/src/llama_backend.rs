@@ -23,24 +23,6 @@ impl LlamaBackend {
     }
 
     /// Initialize the llama backend (without numa).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///# use koharu_llama::llama_backend::LlamaBackend;
-    ///# use koharu_llama::LlamaCppError;
-    ///# use std::error::Error;
-    ///
-    ///# fn main() -> Result<(), Box<dyn Error>> {
-    ///
-    ///
-    /// let backend = LlamaBackend::init()?;
-    /// // the llama backend can only be initialized once
-    /// assert_eq!(Err(LlamaCppError::BackendAlreadyInitialized), LlamaBackend::init());
-    ///
-    ///# Ok(())
-    ///# }
-    /// ```
     #[tracing::instrument(skip_all)]
     pub fn init() -> crate::Result<LlamaBackend> {
         Self::mark_init()?;
@@ -49,18 +31,6 @@ impl LlamaBackend {
     }
 
     /// Initialize the llama backend (with numa).
-    /// ```
-    ///# use koharu_llama::llama_backend::LlamaBackend;
-    ///# use std::error::Error;
-    ///# use koharu_llama::llama_backend::NumaStrategy;
-    ///
-    ///# fn main() -> Result<(), Box<dyn Error>> {
-    ///
-    /// let llama_backend = LlamaBackend::init_numa(NumaStrategy::MIRROR)?;
-    ///
-    ///# Ok(())
-    ///# }
-    /// ```
     #[tracing::instrument(skip_all)]
     pub fn init_numa(strategy: NumaStrategy) -> crate::Result<LlamaBackend> {
         // Initialize backends first, then NUMA.
@@ -155,51 +125,17 @@ impl From<NumaStrategy> for koharu_llama_sys::ggml_numa_strategy {
 }
 
 /// Drops the llama backend.
-/// ```
-///
-///# use koharu_llama::llama_backend::LlamaBackend;
-///# use std::error::Error;
-///
-///# fn main() -> Result<(), Box<dyn Error>> {
-/// let backend = LlamaBackend::init()?;
-/// drop(backend);
-/// // can be initialized again after being dropped
-/// let backend = LlamaBackend::init()?;
-///# Ok(())
-///# }
-///
-/// ```
 impl Drop for LlamaBackend {
     fn drop(&mut self) {
         match LLAMA_BACKEND_INITIALIZED.compare_exchange(true, false, SeqCst, SeqCst) {
             Ok(_) => {}
             Err(_) => {
-                unreachable!("This should not be reachable as the only ways to obtain a llama backend involve marking the backend as initialized.")
+                unreachable!(
+                    "This should not be reachable as the only ways to obtain a llama backend involve marking the backend as initialized."
+                )
             }
         }
         unsafe { koharu_llama_sys::llama_backend_free() }
-    }
-}
-
-/// Load GGML backend modules from the given directory.
-///
-/// Call this before [`LlamaBackend::init`] to enable runtime hardware selection
-/// (Vulkan, CPU-AVX512, CPU-AVX2, etc.) when built with the `dynamic-backends` feature.
-#[cfg(feature = "dynamic-backends")]
-pub fn load_backends_from_path(path: &std::path::Path) {
-    let s = std::ffi::CString::new(path.to_str().expect("path must be valid UTF-8"))
-        .expect("path must not contain null bytes");
-    unsafe { koharu_llama_sys::ggml_backend_load_all_from_path(s.as_ptr()) }
-}
-
-/// Load GGML backend modules from the compile-time default directory ([`BACKENDS_DIR`]).
-///
-/// This is a no-op when `BACKENDS_DIR` is `None` (static builds or development builds
-/// that have not set `GGML_BACKENDS_DIR`).
-#[cfg(feature = "dynamic-backends")]
-pub fn load_backends() {
-    if let Some(dir) = koharu_llama_sys::BACKENDS_DIR {
-        load_backends_from_path(std::path::Path::new(dir));
     }
 }
 

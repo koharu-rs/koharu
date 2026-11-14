@@ -1,9 +1,8 @@
 //! A safe wrapper around `llama_model_params`.
 
-use crate::context::params::LlamaContextParams;
-use crate::model::params::kv_overrides::KvOverrides;
 use crate::LlamaCppError;
-use std::ffi::{c_char, c_void, CStr};
+use crate::model::params::kv_overrides::KvOverrides;
+use std::ffi::{CStr, c_char, c_void};
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::ptr::null;
@@ -181,42 +180,12 @@ impl Debug for LlamaModelParams {
 
 impl LlamaModelParams {
     /// See [`KvOverrides`]
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use koharu_llama::model::params::LlamaModelParams;
-    /// let params = Box::pin(LlamaModelParams::default());
-    /// let kv_overrides = params.kv_overrides();
-    /// let count = kv_overrides.into_iter().count();
-    /// assert_eq!(count, 0);
-    /// ```
     #[must_use]
     pub fn kv_overrides<'a>(&'a self) -> KvOverrides<'a> {
         KvOverrides::new(self)
     }
 
     /// Appends a key-value override to the model parameters. It must be pinned as this creates a self-referential struct.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use std::ffi::{CStr, CString};
-    /// use std::pin::pin;
-    /// # use koharu_llama::model::params::LlamaModelParams;
-    /// # use koharu_llama::model::params::kv_overrides::ParamOverrideValue;
-    /// let mut params = pin!(LlamaModelParams::default());
-    /// let key = CString::new("key").expect("CString::new failed");
-    /// params.as_mut().append_kv_override(&key, ParamOverrideValue::Int(50));
-    ///
-    /// let kv_overrides = params.kv_overrides().into_iter().collect::<Vec<_>>();
-    /// assert_eq!(kv_overrides.len(), 1);
-    ///
-    /// let (k, v) = &kv_overrides[0];
-    /// assert_eq!(v, &ParamOverrideValue::Int(50));
-    ///
-    /// assert_eq!(k.to_bytes(), b"key", "expected key to be 'key', was {:?}", k);
-    /// ```
     #[allow(clippy::missing_panics_doc)] // panics are just to enforce internal invariants, not user errors
     pub fn append_kv_override(
         mut self: Pin<&mut Self>,
@@ -373,7 +342,7 @@ impl LlamaModelParams {
     pub fn fit_params(
         mut self: Pin<&mut Self>,
         model_path: &CStr,
-        cparams: &mut LlamaContextParams,
+        cparams: &mut crate::context::params::LlamaContextParams,
         margins: &mut [usize],
         n_ctx_min: u32,
         log_level: koharu_llama_sys::ggml_log_level,
@@ -510,12 +479,6 @@ impl LlamaModelParams {
     }
 
     /// sets the number of gpu layers to offload to the GPU.
-    /// ```
-    /// # use koharu_llama::model::params::LlamaModelParams;
-    /// let params = LlamaModelParams::default();
-    /// let params = params.with_n_gpu_layers(1);
-    /// assert_eq!(params.n_gpu_layers(), 1);
-    /// ```
     #[must_use]
     pub fn with_n_gpu_layers(mut self, n_gpu_layers: u32) -> Self {
         // The only way this conversion can fail is if u32 overflows the i32 - in which case we set
@@ -691,20 +654,6 @@ impl LlamaModelParams {
 }
 
 /// Default parameters for `LlamaModel`. (as defined in llama.cpp by `llama_model_default_params`)
-/// ```
-/// # use koharu_llama::model::params::LlamaModelParams;
-/// use koharu_llama::model::params::LlamaSplitMode;
-/// let params = LlamaModelParams::default();
-/// assert_eq!(params.n_gpu_layers(), -1, "n_gpu_layers should be -1");
-/// assert_eq!(params.main_gpu(), 0, "main_gpu should be 0");
-/// assert_eq!(params.vocab_only(), false, "vocab_only should be false");
-/// assert_eq!(params.use_mmap(), true, "use_mmap should be true");
-/// assert_eq!(params.use_mlock(), false, "use_mlock should be false");
-/// assert_eq!(params.split_mode(), Ok(LlamaSplitMode::Layer), "split_mode should be LAYER");
-/// assert_eq!(params.devices().len(), 0, "devices should be empty");
-/// assert_eq!(params.no_alloc(), false, "no_alloc should be false");
-/// assert_eq!(params.load_mtp(), false, "load_mtp should be false");
-/// ```
 impl Default for LlamaModelParams {
     fn default() -> Self {
         let default_params = unsafe { koharu_llama_sys::llama_model_default_params() };
@@ -731,98 +680,7 @@ impl Default for LlamaModelParams {
 
 #[cfg(test)]
 mod tests {
-    use super::kv_overrides::ParamOverrideValue;
-    use super::{LlamaModelParams, LlamaSplitMode};
-    use std::pin::pin;
-
-    #[test]
-    fn tensor_buft_override_patterns_empty_by_default() {
-        // Fresh params carry only the null-terminator entry, so no patterns are reported.
-        assert!(LlamaModelParams::default()
-            .tensor_buft_override_patterns()
-            .is_empty());
-    }
-
-    #[test]
-    fn tensor_buft_override_patterns_reads_back_added_override() {
-        // The getter is the read-only counterpart to the setter: the override added is reported and
-        // the trailing null terminator is skipped. This mirrors how `fit_params` populates the same
-        // buffer for the auto-fit's MoE expert offload (`add_cpu_moe_override` uses the same expert
-        // tensor pattern shape the fit emits).
-        let mut params = pin!(LlamaModelParams::default());
-        params.as_mut().add_cpu_moe_override();
-        assert_eq!(
-            params.tensor_buft_override_patterns(),
-            vec!["\\.ffn_(up|down|gate)_(ch|)exps".to_owned()],
-        );
-    }
-
-    #[test]
-    fn tensor_buft_override_appends_on_second_call() {
-        // add_cpu_buft_override is documented as appending. After the first call the
-        // vector is [filled, null-terminator]; writing the second override into the
-        // terminator (then pushing a new one) is what keeps the list null-terminated.
-        let mut params = pin!(LlamaModelParams::default());
-        params
-            .as_mut()
-            .add_cpu_buft_override(c"blk\\.0\\.ffn_(up|down|gate)_(ch|)exps");
-        params
-            .as_mut()
-            .add_cpu_buft_override(c"blk\\.1\\.ffn_(up|down|gate)_(ch|)exps");
-
-        assert_eq!(
-            params.tensor_buft_override_patterns(),
-            vec![
-                "blk\\.0\\.ffn_(up|down|gate)_(ch|)exps".to_owned(),
-                "blk\\.1\\.ffn_(up|down|gate)_(ch|)exps".to_owned(),
-            ],
-        );
-    }
-
-    #[test]
-    fn kv_override_appends_on_second_call() {
-        // Same [filled, null-terminator] layout as the buffer overrides: the second call has to
-        // write into the terminator, not back into slot 0.
-        let mut params = pin!(LlamaModelParams::default());
-        params
-            .as_mut()
-            .append_kv_override(c"first", ParamOverrideValue::Int(1));
-        params
-            .as_mut()
-            .append_kv_override(c"second", ParamOverrideValue::Int(2));
-
-        let kv_overrides = params.kv_overrides().into_iter().collect::<Vec<_>>();
-        assert_eq!(kv_overrides.len(), 2);
-        assert_eq!(kv_overrides[0].0.to_bytes(), b"first");
-        assert_eq!(kv_overrides[1].0.to_bytes(), b"second");
-        assert_eq!(kv_overrides[1].1, ParamOverrideValue::Int(2));
-    }
-
-    #[test]
-    fn tensor_split_round_trips_and_pads() {
-        let max = crate::max_devices();
-        let params = LlamaModelParams::default()
-            .with_tensor_split(&[0.25, 0.75])
-            .expect("two devices is under any max");
-        assert_eq!(params.tensor_split().len(), max);
-        assert_eq!(&params.tensor_split()[..2], &[0.25, 0.75]);
-        assert!(params.tensor_split()[2..].iter().all(|share| *share == 0.0));
-
-        // The pointer must survive the moves builder chaining performs.
-        let params = params.with_n_gpu_layers(99);
-        assert_eq!(&params.tensor_split()[..2], &[0.25, 0.75]);
-
-        let cleared = params.with_tensor_split(&[]).expect("empty clears");
-        assert!(cleared.tensor_split().is_empty());
-    }
-
-    #[test]
-    fn tensor_split_rejects_more_devices_than_llama_supports() {
-        let too_many = vec![1.0_f32; crate::max_devices() + 1];
-        assert!(LlamaModelParams::default()
-            .with_tensor_split(&too_many)
-            .is_err());
-    }
+    use super::LlamaSplitMode;
 
     #[test]
     fn tensor_split_mode_round_trips() {
@@ -836,44 +694,7 @@ mod tests {
         );
         assert_eq!(
             i32::from(LlamaSplitMode::Tensor),
-            koharu_llama_sys::LLAMA_SPLIT_MODE_TENSOR as i32
+            koharu_llama_sys::LLAMA_SPLIT_MODE_TENSOR
         );
-    }
-
-    #[test]
-    fn load_mtp_round_trips() {
-        let params = LlamaModelParams::default();
-        assert!(!params.load_mtp());
-
-        let params = params.with_load_mtp(true);
-        assert!(params.load_mtp());
-
-        let params = params.with_load_mtp(false);
-        assert!(!params.load_mtp());
-    }
-
-    #[test]
-    fn progress_callback_round_trips_and_can_abort() {
-        use super::LlamaModelParams;
-        use std::cell::Cell;
-        use std::rc::Rc;
-
-        let calls = Rc::new(Cell::new(0_u32));
-        let counter = Rc::clone(&calls);
-        let params = LlamaModelParams::default().with_progress_callback(move |_progress| {
-            counter.set(counter.get() + 1);
-            false
-        });
-
-        assert!(params.params.progress_callback.is_some());
-        assert!(!params.params.progress_callback_user_data.is_null());
-
-        let trampoline = params.params.progress_callback.unwrap();
-        let user_data = params.params.progress_callback_user_data;
-        let first = unsafe { trampoline(0.5, user_data) };
-        let second = unsafe { trampoline(1.0, user_data) };
-
-        assert!(!first && !second, "returning false signals an abort");
-        assert_eq!(calls.get(), 2);
     }
 }

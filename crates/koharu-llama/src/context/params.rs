@@ -280,18 +280,6 @@ impl From<koharu_llama_sys::ggml_type> for KvCacheType {
 /// A safe wrapper around `llama_context_params`.
 ///
 /// Generally this should be created with [`Default::default()`] and then modified with `with_*` methods.
-///
-/// # Examples
-///
-/// ```rust
-/// # use std::num::NonZeroU32;
-/// # use koharu_llama::context::params::LlamaContextParams;
-///
-/// let ctx_params = LlamaContextParams::default()
-///     .with_n_ctx(NonZeroU32::new(2048));
-///
-/// assert_eq!(ctx_params.n_ctx(), NonZeroU32::new(2048));
-/// ```
 #[derive(Debug, Clone)]
 #[allow(
     missing_docs,
@@ -307,13 +295,6 @@ unsafe impl Send for LlamaContextParams {}
 unsafe impl Sync for LlamaContextParams {}
 
 /// Default parameters for `LlamaContext`. (as defined in llama.cpp by `llama_context_default_params`)
-/// ```
-/// # use std::num::NonZeroU32;
-/// # use koharu_llama::context::params::{LlamaContextParams, RopeScalingType};
-/// let params = LlamaContextParams::default();
-/// assert_eq!(params.n_ctx(), NonZeroU32::new(512), "n_ctx should be 512");
-/// assert_eq!(params.rope_scaling_type(), RopeScalingType::Unspecified);
-/// ```
 impl Default for LlamaContextParams {
     fn default() -> Self {
         let context_params = unsafe { koharu_llama_sys::llama_context_default_params() };

@@ -1,5 +1,5 @@
 use super::LogOptions;
-use tracing_core::{callsite, field, identify_callsite, Interest, Kind, Metadata};
+use tracing_core::{Interest, Kind, Metadata, callsite, field, identify_callsite};
 
 static FIELD_NAMES: &[&str] = &["message", "module"];
 
@@ -69,17 +69,19 @@ log_cs!(
 
 #[derive(Clone, Copy)]
 pub(super) enum Module {
-    GGML,
+    Ggml,
     LlamaCpp,
     /// Multimodal
+    #[cfg(feature = "mtmd")]
     Mtmd,
 }
 
 impl Module {
     const fn name(&self) -> &'static str {
         match self {
-            Module::GGML => "ggml",
+            Module::Ggml => "ggml",
             Module::LlamaCpp => "llama.cpp",
+            #[cfg(feature = "mtmd")]
             Module::Mtmd => "mtmd",
         }
     }
@@ -208,7 +210,7 @@ impl State {
         self.is_buffering
             .store(true, std::sync::atomic::Ordering::Release);
         self.previous_level
-            .store(level as i32, std::sync::atomic::Ordering::Release);
+            .store(level, std::sync::atomic::Ordering::Release);
     }
 
     // Emit a normal unbuffered log message (not the CONT log level and the text ends with a newline).
@@ -219,16 +221,20 @@ impl State {
         if self
             .is_buffering
             .swap(false, std::sync::atomic::Ordering::Acquire)
+            && let Some((buf_level, buf_text)) = self.buffered.lock().unwrap().take()
         {
-            if let Some((buf_level, buf_text)) = self.buffered.lock().unwrap().take() {
-                // This warning indicates a bug within llama.cpp
-                tracing::warn!(level = buf_level, text = buf_text, origin = "crate", "llama.cpp message buffered spuriously due to missing \\n and being followed by a non-CONT message!");
-                Self::generate_log(self.module, buf_level, buf_text.as_str());
-            }
+            // This warning indicates a bug within llama.cpp
+            tracing::warn!(
+                level = buf_level,
+                text = buf_text,
+                origin = "crate",
+                "llama.cpp message buffered spuriously due to missing \\n and being followed by a non-CONT message!"
+            );
+            Self::generate_log(self.module, buf_level, buf_text.as_str());
         }
 
         self.previous_level
-            .store(level as i32, std::sync::atomic::Ordering::Release);
+            .store(level, std::sync::atomic::Ordering::Release);
 
         let (text, newline) = text.split_at(text.len() - 1);
         debug_assert_eq!(newline, "\n");
@@ -262,7 +268,7 @@ impl State {
     ) {
         if level != koharu_llama_sys::GGML_LOG_LEVEL_CONT {
             self.previous_level
-                .store(level as i32, std::sync::atomic::Ordering::Release);
+                .store(level, std::sync::atomic::Ordering::Release);
         }
     }
 

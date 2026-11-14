@@ -1,6 +1,6 @@
 //! A safe wrapper around `llama_vocab`.
 
-use std::ffi::{c_char, CStr};
+use std::ffi::{CStr, c_char};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::num::NonZeroU16;
@@ -537,7 +537,7 @@ impl<'model> LlamaVocab<'model> {
     }
 
     /// Get all tokens in the vocabulary.
-    pub fn tokens(&self) -> impl Iterator<Item = LlamaToken> {
+    pub fn tokens(&self) -> impl Iterator<Item = LlamaToken> + use<> {
         (0..self.n_tokens()).map(LlamaToken::new)
     }
 }
