@@ -31,7 +31,7 @@ fix writes.
 
 ### Project and pages
 
-| Element | Model | Evidence |
+| Element | Model | Cite |
 |---|---|---|
 | project | ordered pages, imported files, and a `version` | a Clip Studio Paint EX work is one management file over its pages [CSP pages]; a Figma file keeps each image once, fetched by hash with `getImageByHash` [Figma image paint]; an OpenRaster image must carry a `version` [OpenRaster] |
 | page | a stored id, a `size`, a `background`, its layers, and their pixels | each Clip Studio Paint page has its own canvas size [CSP page size]; a PSD document has a width and height [PSD spec]; each Photoshop artboard has its own size [Photoshop artboards]; a Figma page is a node with an `id` [Figma nodes] |
@@ -39,7 +39,7 @@ fix writes.
 
 ### Every layer
 
-| Property | Model | Evidence |
+| Property | Model | Cite |
 |---|---|---|
 | identity | a stored id that never changes, through undo and redo | PSD `lyid` [PSD spec]; Figma node `id` [Figma nodes]; Krita layer `uuid` [Krita file] |
 | `name` | string | PSD layer name [PSD spec]; Figma `name` [Figma nodes]; OpenRaster `name` [OpenRaster] |
@@ -56,7 +56,7 @@ own order.
 
 ### Layer kinds
 
-| Kind | Holds | Evidence |
+| Kind | Holds | Cite |
 |---|---|---|
 | `group` | child layers | PSD layer groups (`lsct`) [PSD spec]; SVG `g` [SVG structure]; OpenRaster nested `stack` [OpenRaster]; Krita group layers [Krita layers] |
 | `image` | the content hash of an imported file, which the project keeps byte for byte | Photoshop exports an embedded smart object "in its original format" [Photoshop smart objects], and a PSD placed layer names its embedded file by unique ID [PSD spec]; a Figma image paint names its image by "the hash (id) of the image" [Figma image paint]; SVG `image` [SVG image] |
@@ -101,7 +101,7 @@ group fails, having no placement to change.
 A text layer holds one text value, and so do a block's source and its
 translation.
 
-| Property | Model | Evidence |
+| Property | Model | Cite |
 |---|---|---|
 | `content` | rich text: spans in order, each a string with its character marks; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
 | `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
@@ -161,7 +161,7 @@ Clip Studio Paint.
 
 ### Masks
 
-| Property | Model | Evidence |
+| Property | Model | Cite |
 |---|---|---|
 | place | among the children of the layer it limits; a layer can have several | Krita masks are child nodes of a layer [Krita layers]; a Lightroom mask is made of several components [Lightroom masking] |
 | `mode` | add, subtract, or intersect, applied in order | Lightroom's Add, Subtract, and Intersect [Lightroom masking]; CSS `mask-composite` [CSS masking] |
@@ -175,7 +175,7 @@ its own field, not a mask layer ([Blocks](#blocks)).
 
 ### Stored values
 
-| Value | Model | Evidence |
+| Value | Model | Cite |
 |---|---|---|
 | raster pixels | 8-bit RGBA in 64×64 tiles keyed by tile position, each compressed with zlib on its own; only tiles holding pixels are stored | GIMP stores 64-pixel tiles, each compressed on its own, zlib being one option [GIMP XCF]; Krita stores 64×64 tiles, each recorded with its x and y [Krita tiles] |
 | where pixels live | in the page, under the id of the layer that owns them, apart from its own properties: a raster, a mask, or a block's mask or clean-up, each with one picture | a PSD layer record lists its channels by ID, its user mask being channel -2 [PSD spec]; an OpenRaster layer names its pixel file in `src` [OpenRaster]; a Krita layer names its pixel data file [Krita file] |
@@ -224,7 +224,7 @@ variations].
 
 ### Panels
 
-| Property | Model | Evidence |
+| Property | Model | Cite |
 |---|---|---|
 | `outline` | a closed path in page coordinates | a Clip Studio Paint frame is an outline edited with the Object tool, and transforming it leaves the layers in its folder as they are [CSP frames] |
 | clipping | its children show only inside the outline, so a layer that crosses panels sits on the page, outside them | inside a frame border folder "only the areas within the frame will show", and a layer above the folder draws across frames [CSP frames] |
@@ -232,7 +232,7 @@ variations].
 
 ### Balloons
 
-| Property | Model | Evidence |
+| Property | Model | Cite |
 |---|---|---|
 | `outline` | a closed path in page coordinates | a Clip Studio Paint balloon's outline has control points, edited as on vector layers [CSP balloons] |
 | children | blocks and text layers, several to a balloon | Clip Studio Paint adds several texts to one balloon layer [CSP text tool] |
@@ -240,7 +240,7 @@ variations].
 
 ### Blocks
 
-| Property | Model | Evidence |
+| Property | Model | Cite |
 |---|---|---|
 | place | in its balloon, or free: in its panel, or on the page outside every panel | Clip Studio Paint's Text tool adds text wherever you click on the canvas, and a balloon drawn over it later turns its text layer into a balloon layer [CSP text] [CSP balloons] |
 | `role` | `text` (the default), or `sfx` for a sound effect | a PAGE-XML text region's `type` gives "the nature of the text" [PAGE-XML]; manga lettering treats sound effects as a craft of their own, apart from typesetting [Search and Destroy letters] |
@@ -379,7 +379,7 @@ Each model also writes its `c2pa` action on the layers it wrote.
 | Reletter a text | Delete its translation | the block keeps its clean-up, and its area stays clean |
 | Drop a text entirely | Delete its block | its clean-up goes with it, so the original shows again |
 
-### Why it's shaped this way
+### Rationale
 
 - **A block is one text**, with its own mask and clean-up ([Blocks](#blocks)).
   A run on part of a page writes only the tiles it changes, so a block's
@@ -424,97 +424,46 @@ Each model also writes its `c2pa` action on the layers it wrote.
 - **Agent tools** read a page as `get_page` answers it, its layers nested in
   reading order, and edit one block at a time by its id.
 
-## Implementation
+## 5. Editing
 
-This section is implementation, not schema.
+Every writer edits a project the same way: the editor, a model's run, and an
+agent.
 
-- **The project file** is one SQLite database named `*.khr`, page images
-  included, as Clip Studio Paint's `.clip` wraps one [CSP file format]. It has
-  its own application ID, and a second window opening it gets `ProjectLocked` at
-  once.
-  - Writes go through a write-ahead log beside the project, which goes away on a
-    clean close. With `synchronous=NORMAL`, a crash of the app loses nothing
-    committed, and a power loss can lose the latest commits without damaging
-    the file.
-  - Each page is a row holding its layer tree, as an OpenRaster stack holds its
-    layers [OpenRaster], and tile positions by the layer that owns them are
-    rows. Tiles'
-    and files' bytes are blobs by content hash, out of undo, so a step holds
-    hashes rather than pixels. Blobs nothing names are swept on the next open,
-    when no step can need them.
-  - Tiles are compressed with `zlib-rs` at level 3, in parallel.
-- **In memory** the project is an immutable value built from `imbl` maps, each
-  page holding its tree as plain values. An edit copies a page the first time it
-  changes it, and the pages it leaves alone stay shared. An index of which page
-  holds each layer, a block's mask and clean-up included, is derived from the
-  pages and never stored. Reading takes no
-  lock and composes nothing, because every layer holds only its values.
-- **Edits.** `Session::apply` runs one `Edit`, its undo label and its ops, from
-  whoever made it: the editor, the pipeline, or an agent.
-  - It copies the project in O(1), runs the ops on the copy, and writes what
-    differs from the current project in one transaction. If anything fails,
-    nothing is written and the project is as it was.
-  - A patch is a JSON Merge Patch [RFC 7396] over the layer's values, parsed
-    back into the layer's types, so a misspelt property or a value of the
-    wrong shape fails and the layer stays as it was. A patch can't name the
-    layer's id, children, kind, or attributes. A text's `content`, a block's
-    translation included, changes only through the text ops; a block's
-    source takes its wording from a patch, as OCR writes it.
-  - An edit that changes nothing adds no undo step.
-- **Undo** keeps the project as it was before each edit. Undo and redo write
-  the difference back and make that project current, so they can't conflict.
-  `History` lists every step's label, oldest first, and how many the project
-  holds, and `Session::go_to` reaches any of them in one write, as selecting a
-  state in Photoshop's History panel does. History keeps the 20 most recent
-  steps, Photoshop's default, and lasts as long as the session, as closing a
-  Photoshop document clears its states [Photoshop History panel]. Every edit is
-  committed before `apply` returns, so there's no save.
-- **Identity** is a stored id on each page and layer, kept through undo, so
-  selection, caches, and jobs outside the document key on it.
-- **Pixel hashes.** `Session::tiles_hash` hashes a picture's tile positions and the
-  BLAKE3 hashes of their bytes, so the renderer can tell that pixels changed
-  without decoding them.
-- **Pixels.** `Session::pixels` reads a rectangle of a picture back in its own
-  coordinates and format, zero where no tile is stored: what `write_pixels`
-  wrote, as the canvas's brush reads under a stroke.
-- **Change** names, by id, the pages and layers an edit, undo, or redo touched,
-  and what an edit created, from the difference between the two projects.
-- **Opening** reads every row into its types, so a value of the wrong shape, a
-  misspelt property, or an unknown kind fails to open, as do a tile out of
-  range, a missing blob, and a file that isn't a project, which is left
-  unchanged. The tree isn't checked again: the ops keep its rules, which kind
-  holds which among them, and nothing else writes the file. A nested tree can't
-  hold a cycle or a layer in two places.
+- **An edit is one step.** It carries its undo label and its changes, and it
+  applies whole or not at all, so a failure leaves the project as it was. An
+  edit that changes nothing adds no step.
+- **A patch** is a JSON Merge Patch [RFC 7396] over a layer's values, read back
+  into the layer's types, so a misspelt property or a value of the wrong shape
+  fails and the layer stays as it was. A patch can't name a layer's id,
+  children, kind, or attributes. A text's wording changes only through the text
+  edits, a block's translation included; a block's source takes its wording
+  from a patch, as OCR writes it.
+- **History** lists every step's label, oldest first, and goes back or forward
+  to any of them in one step, as selecting a state in Photoshop's History
+  panel does. It keeps the 20 most recent steps, Photoshop's default, and lasts
+  as long as the project is open, as closing a Photoshop document clears its
+  states [Photoshop History panel].
+- **No save.** Every edit is kept as it applies, so a project never has unsaved
+  changes.
+- **Changes.** Each edit, undo, and redo names the pages and layers it touched
+  and the ones it made, so a view redraws only those and a new layer can be
+  selected at once.
+- **One file.** A project is one file, page images included, as Clip Studio
+  Paint's `.clip` wraps its work in one [CSP file format], and one window has
+  it open at a time.
+- **Opening fails closed.** A value of the wrong shape, a misspelt property, an
+  unknown kind, missing pixels, or a file that isn't a project fails to open,
+  and the file is left as it was. The tree's rules, which kind holds which, are
+  kept by the edits and not checked again.
 - **Versioning.** The project `version` is a SemVer version [SemVer] and
   changes only when the core does. A new layer kind or core property raises the
   minor version, and a reader opens any version up to its own with the same
-  major version, since an addition needs no decoder. A build that writes to an
-  older file raises its version to its own, so an older build refuses what it
-  can't read as too new. A change that removes or
-  redefines core data raises the major version, and once a release has written
-  a version, the change ships an upgrade to it. The patch stays 0, since stored
-  data has no bug fixes. A newer version, a pre-release, or unknown core data
-  fails to open; unknown attributes never do.
-
-## Examples
-
-Each example uses only this crate and runs with
-`cargo run -p koharu-scene --example <name>`:
-
-- `project`: create a project, import a page, add one layer of every kind,
-  panels, balloons, and blocks included, write pixels, read everything back,
-  and reopen (one session at a time).
-- `editing`: what the editor does: patch, lock, edit text, paint a raster and a
-  block's mask, duplicate, move, and remove, refresh from a change, undo and
-  redo, and the errors an edit can fail with.
-- `models`: a model's run recording its C2PA action, a rerun replacing the
-  user's change, and the user's change replacing a model's.
-- `pipeline`: detection, OCR, inpainting, and translation writing
-  a page's panels, balloons, and blocks as [section
-  4](#4-how-the-translation-workflow-uses-it) lays it out, and a rerun
-  replacing what a model made.
-- `sharing`: one session shared by the editor and a background model, with an
-  edit that changes nothing.
+  major version, since an addition needs no decoder. Writing to an older file
+  raises its version, so an older build refuses what it can't read as too new.
+  A change that removes or redefines core data raises the major version, and
+  once a release has written a version, the change ships an upgrade to it. The
+  patch stays 0, since stored data has no bug fixes. A newer version, a
+  pre-release, or unknown core data fails to open; unknown attributes never do.
 
 ## Sources
 
@@ -525,7 +474,7 @@ Read in October and November 2026.
   [Photoshop Smart Object copies], [Photoshop artboards], [Photoshop Generative
   Fill], [Photoshop Content-Aware Fill], [Photoshop Content Credentials],
   [Photoshop leading], [Photoshop History panel], [Photoshop combine
-  variations], [Lightroom masking],
+  variations], [Photoshop transform], [Lightroom masking],
   [InDesign auto-size], [InDesign alignment], [Acrobat OCR]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP layer
   masks], [CSP file objects], [CSP text], [CSP text editing], [CSP vertical

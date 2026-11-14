@@ -1,199 +1,182 @@
 # koharu-pipeline
 
-Runs Koharu's models over a project's pages. One click runs every stage on every page, and
-every stage also runs by hand on a page, a block, or a painted area. The app's canvas, its
-buttons, and the agent all use it the same way. The work graph is internal: nothing reruns
-because something it read changed, and a run never decides that a page needs no work.
+Koharu's models, run over a project's pages.
 
-## API
+One click runs every stage on every page, and every stage also runs by hand on
+a page, a block, or a painted area. The app's buttons, its canvas, and the
+agent all start runs the same way. Where it follows an established product, it
+cites it; the links are under [Sources](#sources).
 
-| Item | What it does |
-|---|---|
-| `Pipeline::new(config)` | Starts the scheduler and the thread owning the models. It needs a Tokio runtime; models load on first use |
-| `Pipeline::set_config(config)` | Follows a changed `[pipeline]`. A model switched away from leaves memory once the work queued with it ends |
-| `Pipeline::run(session, request)` | Queues a run on the project a session holds and returns its `RunId` |
-| `Pipeline::events()` | Every run's `Event`s: a stage started or finished on a page, and a run ended done, failed, or stopped |
-| `Pipeline::history(run, wait)` | What a run told so far, its `Event`s in order, after waiting up to `wait` for it to end; the last says how it ended, as ComfyUI's `/history/{prompt_id}` keeps a prompt's |
-| `Pipeline::stop()` | Stops every run, running and queued |
-| `Pipeline::unload()` | Unloads every model once the GPU's current work ends |
-| `Pipeline::close(project)` | Forgets a closed project's translation conversation |
-| `placement(project, block, target)` | The op placing a block's translation. Translation writes it, and the editor asks again when a balloon or a frame changes |
-| `PipelineConfig` | The `[pipeline]` section |
+## Goal
 
-`Pipeline` is a cheap handle to clone; the scheduler and the model thread end when the last
-one drops. Every event is kept in its run's history as it's sent, so a history never misses one,
-however slow a listener. The canvas needs no event to preview a run: each stage's result is an
-edit, and the scene's change notification redraws it.
+A run does what it was asked, on what it was given, and writes the scene's
+own fields, so a new model for a stage writes what the old one did. Nothing
+reruns because something it read changed, and a run never decides that a page
+needs no work.
 
-## Requests
+## 1. Requests
 
-A `Request` is a `Target`, a set of stages, and optionally a `PipelineConfig` for this run
+A request is a target, a set of stages, and optionally settings for that run
 only.
 
-| `Target` | Stages | Examples |
+| Target | Stages | For |
 |---|---|---|
-| `Project`, `Pages` | Any of detect, recognize, inpaint, translate | One click. Detection again with new thresholds, given as the request's config |
-| `Blocks` | Recognize, inpaint, translate | Recognition on a block you drew. Translation after fixing a line |
-| `Area` | Inpaint, with an optional prompt | The magic eraser, Content-Aware Fill, Generative Fill |
+| the project, or some pages | any of detect, recognize, inpaint, and translate | one click; detection again with new thresholds |
+| some blocks | recognize, inpaint, and translate | reading a block you drew; translating again after fixing a line |
+| a painted area | inpaint, with an optional prompt | the remove brush, as Photoshop's Content-Aware Fill [Photoshop Content-Aware Fill] and Generative Fill [Photoshop Generative Fill] fill a selection |
 
-- **A run starts fresh.** It runs every stage it's given on everything it names, replacing
-  what's there. To go on with an unfinished chapter, run the remaining pages.
-- **A stage never runs another.** A stage with nothing to do, such as recognition on a page of
-  artwork, does nothing, and that isn't a failure.
-- **A model can overwrite anything,** the user's own edits included; undo is the way back. A
-  locked panel, balloon, or block is the exception: detection leaves it.
-- **A request that can't run fails at once:** an empty set of stages, detection on blocks, a
-  stage other than inpainting on an area, or a page or block the project doesn't hold.
+- **A run starts fresh.** It runs every stage it's given on everything it
+  names, replacing what's there. To go on with an unfinished chapter, run the
+  remaining pages.
+- **A stage never runs another.** A stage with nothing to do, such as
+  recognition on a page of artwork, does nothing, and that isn't a failure.
+- **A model can overwrite anything,** the user's own edits included, and undo
+  is the way back. A locked panel, balloon, or block is the exception:
+  detection leaves it.
+- **A request that can't run fails at once**: no stages, detection on blocks, a
+  stage other than inpainting on an area, or a page or block the project
+  doesn't hold.
+- **What a run told** is kept in order as it's told, the last event saying how
+  it ended, so a caller that looks late still sees everything, as ComfyUI keeps
+  a prompt's history [ComfyUI routes].
 
-## Stages
+## 2. Stages
 
-Each stage is an async function that reads top to bottom: it reads the page on a blocking
-thread, runs its model on the model thread through `inference`, does the rest of the work on
-a blocking thread, as detection lays out the page from the network's detections, and turns
-that and the project as it is then into ops, applied as one undo step per page labelled with
-the stage's name. A stopped run writes nothing. Only a stage knows its models; the scheduler
-and the model thread know a model only by the stage and the name the settings give it.
+Each stage reads a page, runs its model, and writes its results as one undo
+step per page, labelled with the stage's name. A stopped run writes nothing
+more. Only a stage knows its models.
 
 | Stage | Default model | Reads | Writes |
 |---|---|---|---|
-| Detect | Koharu Layout HighRes | The scan | Panels, balloons with outlines, and blocks in reading order, in place of the ones there. A block gets its source's box turned back by its tilt, its direction, and its mask |
-| Recognize | Manga OCR AR | The scan inside each block's source frame | The source's wording and the language the model reads |
-| Inpaint | LaMa | The scan, each block's mask, its balloon and panel | The block's clean-up under its mask. On an area, a new raster layer limited to it by a layer mask |
-| Translate | Index-Translate 9B | The page's sources in reading order, and with vision the scan | Each block's translation: wording, language, and its placement |
+| detect | Koharu Layout HighRes | the scan | panels, balloons with outlines, and blocks in reading order, in place of the ones there; each block's source frame, tilt, direction, and mask |
+| recognize | Manga OCR AR | the scan inside each block's source frame, with other blocks' glyphs blanked | the source's wording and its language |
+| inpaint | LaMa | the scan, each block's mask, its balloon, and its panel | the block's clean-up under its mask; for an area, a new raster limited to it by a layer mask |
+| translate | Index-Translate 9B | the page's sources in reading order, and with vision the scan | each block's translation: wording, language, and placement |
 
-Each stage also records its C2PA action on the layers it wrote, and detection its scores in
-the `koharu` namespace. Detection records each source's size, how broad its lines are, and
-its outline, a band of one colour around lettering over art, as its stroke.
-There's no typesetting stage. Placement puts a translation in its room in its balloon, the
-layout model's share of the outline among the source boxes standing in it, a remark over its
-edge included, or in its source's frame when it's free or a sound effect, and fits it `best`:
-it fills the frame at every render, so resizing a balloon reflows the text. A new translation
-starts at the page's lettering size, the median of its sources', as a letterer keeps one
-size for a page's dialogue, with its lines centred and its source's stroke, the width scaled
-to its size; what its style already sets is kept. It's vertical only when its source is and
-the target is Japanese or Chinese; any other language runs horizontally, turned by its
-source's tilt, in a balloon as outside one. The renderer centres every line on one axis, so
-the lines of a lopsided room don't wander along its outline.
+Every stage also records its C2PA action on the layers it wrote, and detection
+its scores in its own namespace. Detection records each source's size, line
+width, and outline as its stroke.
 
-## Inpainting
+There's no typesetting stage. Placement puts a translation in its room in its
+balloon, or in its source's frame when it's free or a sound effect, and fits it
+`best`, so resizing a balloon reflows the text.
 
-Detection writes a block's mask 3 pixels past its glyphs, or slivers of letter outlines stay
-outside it, cut first to the lettering's box and a glyph past its lines' ends, where a
-box can stop short of a trailing ellipsis, but not past its sides nor into another
-lettering's box: there the model's mask has spilled onto a neighbour, and its clean-up would
-cover the neighbour's translation, and inpainting fills the mask as it is, the region the clean-up shows through.
-Each lettering's surroundings are read on a ring of unmasked pixels 4 pixels past the mask,
-inside its balloon and 3 pixels from the outline, or inside its panel. The first
-tier that can rebuild the ring fills the mask:
+- **Size.** A new translation starts at the page's lettering size, the median
+  of its sources', as a letterer keeps one size for a page's dialogue [Manga
+  balloon basics], with its lines centred and its source's stroke.
+- **Direction.** It's vertical only when its source is and the target is
+  Japanese or Chinese; any other language runs horizontally, turned by its
+  source's tilt.
+
+## 3. Inpainting
+
+A block's mask reaches 3 pixels past its glyphs, or slivers of letter outlines
+stay outside it, but never into another lettering's box, where its clean-up
+would cover the neighbour's translation.
+
+Most lettering sits on plain paper or a gradient, which a fill rebuilds
+exactly without a model call, so the model comes last. Each lettering's
+surroundings are read on a ring of unmasked pixels just past its mask, inside
+its balloon or panel, and the first tier that can rebuild the ring fills the
+mask:
 
 | Tier | When | Fill |
 |---|---|---|
-| One colour | Within 10 levels of its median on average, and no pixel 64 away | The median |
-| Smooth background | The same, from a plane fitted to the ring | Telea's fast marching with a radius of 5, ported from OpenCV 4.13.0 |
-| The model | Anything else: a lettering crossing its balloon's outline, a line or art against it, screentone, or a ring under 16 pixels | The inpainting model, a line's lettering with a pixel more around it |
+| one colour | the ring is within 10 levels of its median on average, with no pixel 64 away | the median |
+| a smooth background | the same, after a plane fitted to the ring | Telea's fast marching, ported from OpenCV [OpenCV inpaint] |
+| the model | anything else: lettering crossing its balloon's outline, a line or art against it, screentone, or a ring too small to read | the inpainting model |
 
-The model redraws in windows at the page's own scale: each lettering with 256 pixels of
-context, clipped to its panel, merged with the windows it overlaps in the same panel while the
-merge stays within a megapixel. A window never spans two panels, every lettering in it is
-already filled or masked, and only the masked pixels come back.
+The model redraws in windows at the page's own scale, each lettering with 256
+pixels of context around it, merged with the windows it overlaps while the
+merge stays within a megapixel. A window never spans two panels, and only the
+masked pixels come back.
 
 | Inpainter | Takes a prompt |
 |---|---|
-| LaMa | No, and it ignores one |
-| RORem | Yes |
-| FLUX.3 Klein | Yes |
-| MOSS-Image | Yes |
-| Qwen-Image 2.1 | Yes |
+| LaMa | no |
+| RORem, FLUX.3 Klein, MOSS-Image, Qwen-Image 2.1 | yes: an area's own, or else the settings' |
 
-The model is asked an area's own prompt, or else the section's, and its C2PA action records
-one that isn't blank.
+## 4. Translation
 
-## Running
+Translation is one conversation per open project, a turn per page in page
+order, and translating blocks is a turn of the same conversation. Changing the
+model, the target, or the prompt starts a new one.
 
-- **Models.** A model loads the first time a stage needs it, on the one thread that owns the
-  models, so each load sees the memory actually free. Before every load libtorch's cache is
-  emptied, so its freed memory counts as free, which stable-diffusion.cpp and llama.cpp need,
-  as they fit their weights to the device's free memory themselves. Nothing is unloaded to make room: a
-  model that doesn't fit fails, naming the device's free memory and what libtorch holds. A
-  model leaves memory when the settings switch away from it, when `unload` is called, or when
-  the pipeline ends.
-- **The model thread runs one call at a time.** Peak memory is every loaded model plus the
-  largest working set, so running out of memory never depends on timing. A local language
-  model decodes on its own engine thread with memory it set aside when it loaded, so its
-  turn runs beside the model thread's calls: on 16 pages with Index-Translate 2B that took
-  peak memory up 134 MiB and the run from 19.3 to 16.5 seconds. Up to three pages are in
-  flight, a permit each: one reading its input, one on the model thread, and one writing its
-  result.
-- **Order.** Each run is a graph of its pages' stages, with detection before a page's other
-  stages, recognition before its translation, and each page's translation before the next
-  page's. Interactive runs, on blocks or an area, go first, then batch runs on pages in the
-  order they came; within a run, the oldest page goes first, in stage order. Calls wait for
-  the model thread in that order, behind unloading, so an interactive run goes ahead at its
-  next call.
-  Recognition takes every page waiting for the same model with it, up to eight. A local
-  translation waits for the model thread only to load its model, and a hosted one not at all.
-- **Failure.** The first failure ends its run with the page, the stage, and the reason, a
-  panic included. What
-  it finished stays, and nothing more is written. Stop is the same without the error, for
-  every run. A model call on the model thread finishes, but a local translation stops at its
-  next token.
-
-## Translation
-
-Translation is one conversation per open project, kept in memory, a turn per page in page
-order; translating blocks is a turn of the same conversation. A project's next translation
-waits while its conversation is in use. Changing the model, the target, or the prompt starts
-a new one; turning vision or reasoning on or off doesn't, as the history holds neither.
-
-- **A page** is its texts as a JSON object, keyed by zero-padded numbers in reading order. The
-  answer must keep the keys, held to a schema the way the model's provider keeps one. A
-  broken answer, a missing key, or a blank translation fails the page, which never enters the
-  history. An answer repeating the page before's for different texts is asked again without
-  the history it copied, and a text given back unchanged, such as a copyright line, keeps its
+- **A page** is its texts as a JSON object keyed by reading order, and the
+  answer must keep the keys. A broken answer, a missing key, or a blank
+  translation fails the page, which never enters the history.
+- **An answer copying the page before's** for different texts is asked again
+  without the history it copied.
+- **A text given back unchanged**, such as a copyright line, keeps its own
   lettering: its clean-up is hidden and it gets no translation.
-- **Vision** shows the model the scan ahead of the page's texts: a JPEG 1,280 pixels on its
-  longer side, each pixel the average of the scan's under it, about 1,120 tokens to
-  Index-Translate and over the 1,024 llama.cpp asks of a Qwen-VL model. A model that reads no
-  images fails the page. A local model fetches and loads its projector only while vision is
-  on: for Index-Translate 9B a 620 MB download, 840 MiB of GPU memory, and 0.7 seconds of
-  loading. Turning vision on or off reloads the model and keeps the conversation.
-- **Reasoning** at the set effort lets the model think before it answers, and the answer is
-  held to the schema once the thinking ends.
-- **The history** keeps each page's texts and its answer. The page's image and the model's
-  reasoning serve its own turn only, as Index-Translate's template drops earlier reasoning, so
-  the history grows as it does without them and a local model reuses it from turn to turn.
-  The conversation counts from the last request's usage, which held its image and reasoning,
-  as the next request holds its own.
-- **What they cost.** On 16 Blue Archive pages with Index-Translate 9B, the run took 27.7
-  seconds, 35.4 with vision, 73.5 with reasoning, and 78.7 with both. Neither read better:
-  with the page in view it wrote アロナ as Aroana, and reasoning dropped stutters and left
-  ケチンボ untranslated, so both are off unless set.
-- **The system prompt** is the user's to rewrite. `{target}` becomes the target's plain English
-  name from CLDR: Chinese by its script, and other languages without a region their language
-  implies. The default is Index-Translate's instTrans template in English.
-- **A full conversation** is recycled by koharu-llm's `Context`: a general model summarizes
-  older pages, and a translation model, which can't, drops them.
-- **A local model** runs with one sequence of 32,768 tokens.
+- **Vision** shows the model the scan, 1,280 pixels on its longer side, ahead
+  of the texts. **Reasoning** lets it think first, and the answer is held to the
+  schema once the thinking ends. On 16 pages with Index-Translate 9B, neither
+  read better and both cost time, so both are off unless set.
+- **The history** keeps each page's texts and answer, not its image or the
+  model's reasoning, so it grows as it does without them, and a local model
+  reuses it from turn to turn.
+- **The system prompt** is the user's to rewrite. `{target}` becomes the
+  target's plain English name from CLDR [CLDR]. The default is
+  Index-Translate's instTrans template [Index-Translate].
+- **A full conversation** is recycled: a general model summarizes older pages,
+  and a translation model, which can't, drops them.
 
-## Settings
+## 5. Running
 
-The section fails to parse when a threshold isn't between 0 and 1, the target is a language
-CLDR doesn't name in English, or the prompt has no `{target}`.
+- **Models** load the first time a stage needs one, on the one thread that owns
+  them, so each load sees the memory actually free. Nothing is unloaded to make
+  room: a model that doesn't fit fails, naming the free memory. A model leaves
+  when the settings switch away from it, when asked, or when the pipeline ends.
+- **One call at a time** on that thread, so peak memory is every loaded model
+  plus the largest working set, and running out never depends on timing. A
+  local language model decodes on its own thread beside it.
+- **Pages in flight.** Up to three: one reading its input, one on the model,
+  and one writing its result.
+- **Order.** A run is a graph of its pages' stages: detection before a page's
+  other stages, recognition before its translation, and each page's translation
+  before the next page's. Runs on blocks or an area go first, then runs on
+  pages in the order they came, so an interactive run goes ahead at its next
+  model call. Recognition takes up to eight pages waiting for the same model at
+  once.
+- **Failure.** The first failure ends its run, naming the page, the stage, and
+  the reason, a panic included. What it finished stays. Stopping is the same
+  without the error, for every run.
+
+## 6. Settings
+
+The section fails to parse when a threshold isn't between 0 and 1, the target
+is a language CLDR doesn't name in English, or the prompt has no `{target}`.
 
 | Key | Default |
 |---|---|
 | `detector.model` | `koharu-layout-highres` |
-| `detector.text`, `onomatopoeia`, `bubble`, `panel` | The model's own thresholds |
+| `detector.text`, `onomatopoeia`, `bubble`, `panel` | the model's own thresholds |
 | `recognizer.model` | `manga-ocr-ar`, or `baberu-ocr` or `hayai-ocr` |
 | `inpainter.model` | `lama`, or `rorem-mixed`, `flux3-klein`, `moss-image`, or `qwen-image` |
-| `inpainter.prompt` | "Remove all the text, including dialogue, sound effects, and handwritten notes. Leave speech bubbles empty and keep everything else exactly the same." What the model is asked when a run brings no prompt, as an area's can |
-| `translator.model` | `koharu/index-translate-9b`, its first quantization |
+| `inpainter.prompt` | asks the model to remove all text and keep everything else, for a run that brings none |
+| `translator.model` | `koharu/index-translate-9b` |
 | `translator.target` | `en` |
 | `translator.prompt` | Index-Translate's instTrans template in English |
 | `translator.vision` | `false` |
-| `translator.reasoning` | Unset, the model's own: a local model doesn't reason. Or `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `translator.reasoning` | the model's own |
 
-Manga OCR AR is CC BY-NC-SA 4.0, so a user keeping the default is held to non-commercial use.
-Qwen-Image 2.1 is under the Qwen Research License, for research and evaluation only.
-Telea's port keeps the BSD-style license of OpenCV's `inpaint.cpp`, Intel's, so this crate's
-license is `MIT OR Apache-2.0 AND BSD-3-Clause`.
+Manga OCR AR is CC BY-NC-SA 4.0, so a user keeping the default is held to
+non-commercial use. Telea's port keeps OpenCV's BSD-style license, so this
+crate's license is `MIT OR Apache-2.0 AND BSD-3-Clause`.
+
+## Sources
+
+Read in November 2026.
+
+- Adobe: [Photoshop Content-Aware Fill], [Photoshop Generative Fill]
+- [ComfyUI routes], [OpenCV inpaint], [CLDR], [Index-Translate]
+- Lettering: [Manga balloon basics]
+
+[Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
+[Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
+[ComfyUI routes]: https://docs.comfy.org/development/comfyui-server/comms_routes
+[OpenCV inpaint]: https://github.com/opencv/opencv/blob/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/photo/src/inpaint.cpp
+[CLDR]: https://cldr.unicode.org/
+[Index-Translate]: https://huggingface.co/IndexTeam/Index-Translate-9B
+[Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie

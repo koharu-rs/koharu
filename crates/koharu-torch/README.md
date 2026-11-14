@@ -1,51 +1,45 @@
 # koharu-torch
 
-Rust bindings to libtorch, forked from tch-rs. Every call goes through functions
-`koharu-torch-sys` resolves from libraries opened at runtime, so its `load` must
-have succeeded first. Unlike tch-rs, operators always return `Result`, and they are
-generated at build time instead of being checked in.
+libtorch for Koharu's vision models.
 
-## Generated operators
+Rust bindings to libtorch, forked from tch-rs [tch-rs], over the C functions of
+`koharu-torch-sys`. The links are under [Sources](#sources).
 
-`build.rs` reads the bindings and `koharu_torch_aten.h`, and writes a `Tensor` method
-for each operator in that header, or an associated function if it takes no `self`:
+## Goal
 
-```rust
-pub fn argmax(&self, dim: impl Into<Option<i64>>, keepdim: bool) -> Result<Tensor>
-```
+A model port runs the operators its upstream runs in PyTorch, with the same
+arguments, and a failure inside libtorch is an error the caller handles, never
+a crash: a model meets input it hasn't seen, and a panic would end the
+pipeline's run that met it rather than report it.
 
-A method's name is the C name in lower case without `aten_`, with `internal_` for
-leading underscores. An operator that takes a fixed-length bool list is skipped: the
-shim reads the schema's length, so a shorter slice would be read past its end. A
-parameter of a type `build.rs` doesn't know stops the build. These are the main
-mappings:
+## 1. Operators
 
-| C parameter | Rust parameter |
-|---|---|
-| `AtenTensorHandle` named `self` | `&self` |
-| `AtenTensorHandle` | `&Tensor` |
-| `*mut AtenTensorHandle` | `Option<&Tensor>` |
-| `*const AtenTensorHandle` and its length | `&[impl Borrow<Tensor>]` |
-| `*const i64` and its length | `impl IntList` |
-| `*mut *const i64` and its length | `impl IntListOption` |
-| `AtenBool`, `AtenDtype`, `AtenLayout`, `AtenMemoryFormat` | `bool`, `Kind`, `Layout`, `MemoryFormat` |
-| `*mut i64`, `*mut f64`, `*mut AtenBool`, `*mut AtenDtype` | `impl Into<Option<_>>` of `i64`, `f64`, `bool`, `Kind` |
-| `AtenDeviceType` and its index | `Device` |
-| `dtype`, `layout`, `device`, `device_index_`, `pin_memory` | `options: impl Into<Option<(Kind, Device)>>` |
-| `ret0`, `ret1`, … | The return value: one, or a tuple of several |
+| Part | Model | Cite |
+|---|---|---|
+| where they come from | generated when the crate builds, from the shim's header of ATen operators, so they always match the libtorch the runtime loads; none are checked in | tch-rs generates its operators from PyTorch's operator declarations, but checks the result in [tch-rs operators] |
+| shape | a tensor method for each operator, or a free function when it takes no tensor, named as in PyTorch | |
+| errors | every operator returns a `Result`, holding libtorch's exception message | tch-rs offers `f_` methods that return one, beside methods that panic [tch-rs operators] |
+| arguments | tensors, lists, optional values, kinds, devices, and tensor options, as Rust types | |
+| left out | an operator that takes a fixed-length list of bools, since the shim reads the length its schema says and a shorter list would be read past its end; a parameter of a type the generator doesn't know stops the build | |
 
-## Hand-written API
+## 2. The rest
 
-| Item | What it does |
-|---|---|
-| `Tensor` | Owns a handle, deleted on drop. It is `Send` but not `Sync` |
-| `IndexOp` | NumPy-style indexing through `i` |
-| `TryFrom` | Converts a tensor to and from a flat `Vec<T>`, and a one-element tensor to a number |
-| `inference_mode`, `InferenceMode` | `c10::InferenceMode` on the calling thread. A tensor made in it can't be changed in place outside it |
-| `Cuda` | `memory`, `empty_cache`, `synchronize`, and the cuDNN settings |
+- **Tensors** own their handle and free it when dropped. A tensor can move
+  between threads, but not be shared between them.
+- **Indexing** reads as NumPy's does [NumPy indexing].
+- **Conversion** to and from flat vectors, and from a one-element tensor to a
+  number.
+- **Inference mode** is libtorch's, on the calling thread: a tensor made in it
+  can't be changed in place outside it.
+- **CUDA**: memory in use, emptying the cache, synchronizing, and cuDNN's
+  settings.
 
-## Errors
+## Sources
 
-A libtorch failure becomes `Error::Torch`, holding the message of the exception it
-caught on the calling thread. The other `Error` variants come from this crate's own
-checks of shapes, kinds, and conversions.
+Read in November 2026.
+
+- [tch-rs], [tch-rs operators], [NumPy indexing]
+
+[tch-rs]: https://github.com/LaurentMazare/tch-rs
+[tch-rs operators]: https://github.com/LaurentMazare/tch-rs/blob/main/src/wrappers/tensor_fallible_generated.rs
+[NumPy indexing]: https://numpy.org/doc/stable/user/basics.indexing.html

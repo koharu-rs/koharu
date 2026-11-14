@@ -1,36 +1,47 @@
 # koharu-bindgen
 
-A build step that generates Rust bindings to C libraries opened at runtime. The
-generated functions keep the names and signatures of linked bindings, so callers
-don't change.
+Bindings to C libraries the app opens at runtime.
 
-## Generated code
+A build step for Koharu's `-sys` crates: it turns a C header into Rust
+functions with the same names and signatures a linked binding has, which call
+through a table filled when the libraries are opened. Where it follows an
+established convention, it cites it; the links are under [Sources](#sources).
 
-`generate` runs bindgen over a crate's `wrapper.h` and writes `bindings.rs` to
-`OUT_DIR`; the crate needs `libloading` as a dependency. Each function in an `extern`
-block becomes a free function that calls through a table:
+## Goal
 
-```rust
-pub unsafe fn foo_add(a: c_int, b: c_int) -> c_int {
-    unsafe {
-        let function: unsafe extern "C" fn(c_int, c_int) -> c_int =
-            ::std::mem::transmute(__function(0usize));
-        function(a, b)
-    }
-}
-```
+The native libraries Koharu runs on are downloaded after the app starts, one
+build for each kind of GPU, so nothing can link against them when Koharu
+builds. A `-sys` crate still looks like one that links, so the safe crates
+over it are written as they would be against any `-sys` crate [Cargo sys].
 
-Variadic functions and foreign statics aren't bound, and a wrapper has the Rust ABI,
-so it can't be passed to C as a callback.
+## 1. Bindings
 
-## Loading
+| Part | Model | Cite |
+|---|---|---|
+| functions | every function the header declares becomes a free function with its own name and signature, which calls through the table | a `-sys` crate declares a native library's functions for others to wrap [Cargo sys] |
+| left out | variadic functions and foreign statics, and any function a crate names because some builds don't export it, or opening would always fail | |
+| callbacks | a generated function has Rust's calling convention, so C can't call it back; a callback is written in Rust | |
+| before opening | a call panics, since there's nothing to call | |
 
-`load(paths: &[&Path]) -> io::Result<()>` opens each absolute path in order, then
-resolves a static list of symbols in a loop, so its stack frame doesn't depend on the
-number of functions. The first library that exports a symbol wins. An error names the
-library or the first missing symbol, and a wrapper called before `load` panics.
+## 2. Opening
 
-| OS | libloading call | Flags | Effect |
-|---|---|---|---|
-| Windows | `os::windows::Library::load_with_flags` | `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR \| LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` | Dependencies come from the library's folder, the application's folder, `System32`, or `AddDllDirectory` paths, never `PATH`. One already loaded is reused |
-| Unix | `os::unix::Library::open` | `RTLD_NOW \| RTLD_LOCAL` | Undefined symbols resolve at open. Exports stay out of the global scope, so libraries with the same symbols don't resolve into each other |
+| Part | Model | Cite |
+|---|---|---|
+| order | the libraries open in the order given, and the first one exporting a symbol wins | |
+| failure | names the library that didn't open, or the first symbol none exports, and binds nothing, so a missing function fails at once rather than when it's first called | |
+| Windows | a library's dependencies come from its own folder, the app's folder, System32, or a folder the app added, never from `PATH`, where another program's copy of a library is a different build | `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` and `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` [LoadLibraryEx] |
+| Unix | every symbol resolves when the library opens, and its exports stay out of the global scope, so two libraries with the same symbols don't resolve into each other | `RTLD_NOW` and `RTLD_LOCAL` [dlopen] |
+
+Symbols resolve in a loop over a list, so the cost of opening doesn't grow the
+stack with the number of functions, which in libtorch's case is thousands.
+
+## Sources
+
+Read in November 2026.
+
+- Cargo: [Cargo sys]
+- Operating systems: [LoadLibraryEx], [dlopen]
+
+[Cargo sys]: https://doc.rust-lang.org/cargo/reference/build-scripts.html#-sys-packages
+[LoadLibraryEx]: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw
+[dlopen]: https://man7.org/linux/man-pages/man3/dlopen.3.html
