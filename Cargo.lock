@@ -2898,15 +2898,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
-name = "fast-glob"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a044ed96eb57253e806d08b74260638af189687e583f04947a5e11e75e0b0d1"
-dependencies = [
- "arrayvec",
-]
-
-[[package]]
 name = "fast_image_resize"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5839,10 +5830,10 @@ dependencies = [
  "anyhow",
  "backon",
  "dirs 7.0.0",
- "fast-glob",
  "flate2",
  "fs-err",
  "futures",
+ "globset",
  "hf-hub",
  "koharu-diffusion-sys",
  "koharu-llama-sys",
