@@ -6,7 +6,7 @@ use anyhow::ensure;
 use koharu_scene::PageId;
 use tauri::State;
 
-use super::{Bytes, Result, blocking};
+use super::{Bytes, Result};
 use crate::app::App;
 
 /// How tall a thumbnail is, in pixels.
@@ -17,7 +17,7 @@ const HEIGHT: u32 = 256;
 #[specta::specta]
 pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Bytes> {
     let app = Arc::clone(&app);
-    blocking(move || {
+    Ok(tokio::task::spawn_blocking(move || {
         let session = app.session()?;
         let frame = app.renderer.render(&session.lock(), page)?;
         let raster = app.renderer.rasterize(&frame)?;
@@ -28,5 +28,5 @@ pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Byt
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
         Ok(Bytes(encoder.encode(80.0).to_vec()))
     })
-    .await
+    .await??)
 }

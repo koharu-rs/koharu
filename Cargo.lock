@@ -5575,6 +5575,7 @@ dependencies = [
  "dirs 7.0.0",
  "fs-err",
  "futures",
+ "globset",
  "hayro",
  "heck",
  "image",

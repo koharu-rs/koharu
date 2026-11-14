@@ -17,6 +17,7 @@ anyhow = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+globset = { workspace = true }
 hayro = { workspace = true }
 heck = { workspace = true }
 image = { workspace = true }

@@ -78,7 +78,6 @@ pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static 
         fonts::get_fonts,
         fonts::get_font_preview,
         import::import,
-        import::import_paths,
         export::export,
         canvas::set_canvas_viewport,
         canvas::set_tool,
@@ -125,7 +124,6 @@ pub fn bindings(types: &mut Types) -> Vec<Function> {
         fonts::get_fonts,
         fonts::get_font_preview,
         import::import,
-        import::import_paths,
         export::export,
         canvas::set_canvas_viewport,
         canvas::set_tool,
@@ -135,11 +133,4 @@ pub fn bindings(types: &mut Types) -> Vec<Function> {
         canvas::set_zoom,
         canvas::select_layers,
     ](types)
-}
-
-/// Runs blocking work, a render or a file, off the async runtime's workers.
-async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
-) -> Result<T> {
-    Ok(tokio::task::spawn_blocking(work).await??)
 }

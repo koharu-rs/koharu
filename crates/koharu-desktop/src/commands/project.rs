@@ -5,7 +5,7 @@ use std::sync::Arc;
 use koharu_scene::PageId;
 use tauri::State;
 
-use super::{Result, blocking};
+use super::Result;
 use crate::app::App;
 
 #[tauri::command]
@@ -19,22 +19,22 @@ pub fn list_projects(app: State<'_, Arc<App>>) -> Result<Vec<String>> {
 #[specta::specta]
 pub async fn create_project(app: State<'_, Arc<App>>, name: String) -> Result<()> {
     let app = Arc::clone(&app);
-    blocking(move || {
+    Ok(tokio::task::spawn_blocking(move || {
         let session = app.library.create(&name)?;
         app.open(name, session)
     })
-    .await
+    .await??)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn open_project(app: State<'_, Arc<App>>, name: String) -> Result<()> {
     let app = Arc::clone(&app);
-    blocking(move || {
+    Ok(tokio::task::spawn_blocking(move || {
         let session = app.library.open(&name)?;
         app.open(name, session)
     })
-    .await
+    .await??)
 }
 
 /// Deletes a project, closing it first if it's the open one.
@@ -79,5 +79,5 @@ pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
 #[specta::specta]
 pub async fn show_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
     let app = Arc::clone(&app);
-    blocking(move || app.show_page(page)).await
+    Ok(tokio::task::spawn_blocking(move || app.show_page(page)).await??)
 }

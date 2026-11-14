@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
-use super::{Result, blocking};
+use super::Result;
 use crate::app::App;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -47,7 +47,7 @@ pub async fn save_preferences(
     preferences: Preferences,
 ) -> Result<Preferences> {
     let app = Arc::clone(&app);
-    blocking(move || {
+    Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let Preferences {
             pipeline,
             renderer,
@@ -63,7 +63,7 @@ pub async fn save_preferences(
         app.renderer.set_config(saved.renderer.clone());
         Ok(saved)
     })
-    .await
+    .await??)
 }
 
 /// Koharu's own models, and each vendor's that has a key or a sign-in.
@@ -79,7 +79,7 @@ pub async fn get_models() -> Vec<Model> {
 #[tauri::command]
 #[specta::specta]
 pub async fn get_vendors() -> Result<BTreeMap<String, bool>> {
-    blocking(|| {
+    Ok(tokio::task::spawn_blocking(|| -> anyhow::Result<_> {
         keyed()
             .map(|name| {
                 Ok((
@@ -89,7 +89,7 @@ pub async fn get_vendors() -> Result<BTreeMap<String, bool>> {
             })
             .collect()
     })
-    .await
+    .await??)
 }
 
 /// Stores `vendor`'s API key, encrypted with the key the OS credential
@@ -97,7 +97,7 @@ pub async fn get_vendors() -> Result<BTreeMap<String, bool>> {
 #[tauri::command]
 #[specta::specta]
 pub async fn set_api_key(vendor: String, key: Option<String>) -> Result<()> {
-    blocking(move || {
+    Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         anyhow::ensure!(
             keyed().any(|name| name == vendor),
             "{vendor} isn't a vendor that takes an API key"
@@ -108,7 +108,7 @@ pub async fn set_api_key(vendor: String, key: Option<String>) -> Result<()> {
         }
         Ok(())
     })
-    .await
+    .await??)
 }
 
 fn keyed() -> impl Iterator<Item = &'static str> {
