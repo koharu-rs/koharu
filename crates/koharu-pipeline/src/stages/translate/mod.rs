@@ -32,7 +32,7 @@ use tracing::{Instrument as _, info_span};
 pub(crate) use self::conversation::{Conversation, Conversations};
 pub use self::placement::placement;
 use self::turn::Turn;
-use super::{Member, Stopped, Task, action, blocking, key};
+use super::{Member, Stopped, Task, action, key};
 use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -115,11 +115,11 @@ pub(crate) async fn translate(
     let member = &task.members[0];
     let translator = config.translator.clone();
     let (read, vision) = (member.clone(), translator.vision);
-    let page = blocking(move || {
+    let page = tokio::task::spawn_blocking(move || {
         let _span = info_span!("read", stage = %Stage::Translate, page = read.index + 1).entered();
         page(&read, vision)
     })
-    .await?;
+    .await??;
     let Some(page) = page else {
         return Ok(());
     };

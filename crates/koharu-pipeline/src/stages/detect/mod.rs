@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 pub use self::model::Detector;
-use super::{Task, blocking, key};
+use super::{Task, key};
 use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -49,12 +49,12 @@ fn threshold<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<f32>, 
 pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Result<()> {
     let member = &task.members[0];
     let read = member.clone();
-    let scan = blocking(move || {
+    let scan = tokio::task::spawn_blocking(move || {
         let _span =
             tracing::info_span!("read", stage = %Stage::Detect, page = read.index + 1).entered();
         read.scan()
     })
-    .await?;
+    .await??;
     let Some((_, scan)) = scan else {
         return Ok(());
     };
@@ -75,7 +75,7 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
         .await?;
     let page = member.page;
     let name = config.model.to_string();
-    let additions = blocking(move || {
+    let additions = tokio::task::spawn_blocking(move || {
         let pixels = scan.to_rgb8();
         let layout = {
             let _span = tracing::info_span!("layout").entered();
@@ -89,7 +89,7 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
             .collect();
         layers::additions(&layout, &typography, page, &name)
     })
-    .await?;
+    .await??;
     member
         .apply(Stage::Detect, move |project| {
             let Ok(page) = project.page(page) else {

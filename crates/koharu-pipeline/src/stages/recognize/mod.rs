@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub use self::model::Recognizer;
-use super::{Member, Task, action, blocking, key};
+use super::{Member, Task, action, key};
 use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -24,7 +24,7 @@ pub struct RecognizerConfig {
 
 pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::Result<()> {
     let members = task.members.clone();
-    let read = blocking(move || {
+    let read = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let mut read = Vec::new();
         for member in members {
             let _span =
@@ -36,7 +36,7 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
         }
         Ok(read)
     })
-    .await?;
+    .await??;
     if read.is_empty() {
         return Ok(());
     }

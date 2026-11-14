@@ -83,7 +83,7 @@ impl Member {
         write: impl FnOnce(&Project) -> anyhow::Result<Vec<Op>> + Send + 'static,
     ) -> anyhow::Result<()> {
         let member = self.clone();
-        blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let _span = info_span!("write", %stage, page = member.index + 1).entered();
             let mut session = member.session.lock();
             if member.cancel.is_cancelled() {
@@ -98,7 +98,7 @@ impl Member {
             }
             Ok(())
         })
-        .await
+        .await?
     }
 }
 
@@ -242,13 +242,6 @@ pub(crate) fn chosen(config: &PipelineConfig) -> impl Iterator<Item = Key> + '_ 
     Stage::VARIANTS
         .iter()
         .filter_map(|&stage| key(stage, config))
-}
-
-/// `work` on a blocking thread, off the async ones.
-pub(crate) async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
-) -> anyhow::Result<T> {
-    tokio::task::spawn_blocking(work).await?
 }
 
 /// A model's record of what it did, in C2PA's vocabulary.

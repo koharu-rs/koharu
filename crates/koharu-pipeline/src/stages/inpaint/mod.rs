@@ -24,7 +24,7 @@ use self::{
     flat::{Fill, Place, Verdict},
     windows::Region,
 };
-use super::{Member, Task, action, blocking, key};
+use super::{Member, Task, action, key};
 use crate::{Area, PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -95,7 +95,7 @@ pub(crate) async fn inpaint(
 ) -> Result<()> {
     let member = &task.members[0];
     let (read, reading) = (member.clone(), area.clone());
-    let work = blocking(move || {
+    let work = tokio::task::spawn_blocking(move || {
         let _span =
             tracing::info_span!("read", stage = %Stage::Inpaint, page = read.index + 1).entered();
         match &reading {
@@ -103,7 +103,7 @@ pub(crate) async fn inpaint(
             None => read_blocks(&read),
         }
     })
-    .await?;
+    .await??;
     let Some(mut work) = work else {
         return Ok(());
     };
