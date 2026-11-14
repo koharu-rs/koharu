@@ -20,6 +20,17 @@ use koharu_desktop::Desktop;
 
 const THUMBNAIL_EDGE: u32 = 128;
 
+/// Longest edge of the page image the agent is shown. Raising it would raise the
+/// provider's image tiling, and therefore the cost of every later request of the
+/// turn, without making balloon text more legible at this scale.
+const AGENT_PREVIEW_EDGE: u32 = 1024;
+
+/// Longest edge of the page as imported, for the bulk reviewer's comparison against
+/// the text. Smaller than the proofreading preview on purpose: it is sent at the
+/// provider's cheap detail level, where extra pixels are paid for in upload bytes and
+/// never read back as legibility.
+const AGENT_SOURCE_EDGE: u32 = 768;
+
 #[derive(Type)]
 #[specta(transparent)]
 pub(crate) struct ThumbnailBytes(#[specta(type = Vec<u8>)] Vec<u8>);
@@ -201,12 +212,45 @@ pub(crate) async fn rendered_preview(
         .image;
     tokio_rayon::spawn(move || {
         let image = image::DynamicImage::ImageRgba8(image)
-            .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
+            .resize(
+                AGENT_PREVIEW_EDGE,
+                AGENT_PREVIEW_EDGE,
+                image::imageops::FilterType::Lanczos3,
+            )
             .to_rgba8();
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
-        Ok::<_, anyhow::Error>(encoder.encode(85.0).to_vec())
+        Ok::<_, anyhow::Error>(encoder.encode(80.0).to_vec())
     })
     .await
+}
+
+/// The page as it was imported, for a reviewer that needs to compare the text list
+/// against the artwork. Decoding the stored asset is all this does — no scene is
+/// rendered — so it stays available while the pipeline is busy. `None` when the page
+/// has no source image.
+pub(crate) async fn source_preview(snapshot: &Snapshot, page: EntityId) -> Result<Option<Vec<u8>>> {
+    snapshot.page(page)?;
+    let Some(asset) = snapshot.asset(page, &AssetRole::new("source")?)? else {
+        return Ok(None);
+    };
+    let bytes = snapshot.read_blob(asset.blob).await?;
+    let encoded = tokio_rayon::spawn(move || -> Result<Vec<u8>> {
+        let image = image::load_from_memory(&bytes).context("failed to decode source image")?;
+        if image.width() == 0 || image.height() == 0 {
+            return Err(anyhow::anyhow!("source image is empty"));
+        }
+        let image = image
+            .resize(
+                AGENT_SOURCE_EDGE,
+                AGENT_SOURCE_EDGE,
+                image::imageops::FilterType::Lanczos3,
+            )
+            .to_rgba8();
+        let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
+        Ok(encoder.encode(80.0).to_vec())
+    })
+    .await?;
+    Ok(Some(encoded))
 }
 
 async fn rasterize(

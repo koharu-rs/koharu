@@ -1,23 +1,54 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use eventsource_stream::Eventsource as _;
 use futures::StreamExt as _;
 use serde_json::Value;
 
+use super::{StreamInterrupted, provider_failure};
 use crate::{Control, ToolCall};
 
 const MAX_STREAM_BYTES: usize = 16 * 1024 * 1024;
+
+/// Reasoning and text arrive continuously, so a connection that produces nothing
+/// for this long is dead rather than thinking. Without a deadline the run waits
+/// forever: the shared HTTP client sets no request timeout on purpose, because a
+/// long generation is legitimate.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub(crate) enum Delta {
     Text(String),
     Reasoning(String),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Usage {
+    pub(crate) input_tokens: usize,
+    pub(crate) cached_input_tokens: usize,
+    pub(crate) output_tokens: usize,
+    pub(crate) reasoning_tokens: usize,
+}
+
 pub(crate) struct Turn {
     pub(crate) output: Vec<Value>,
     pub(crate) calls: Vec<ToolCall>,
     pub(crate) text: String,
+    pub(crate) usage: Option<Usage>,
+    /// Bytes actually put on the wire by the request that produced this turn.
+    pub(crate) payload_bytes: usize,
+    /// Milliseconds from sending until the first streamed delta reached the user.
+    pub(crate) first_delta_ms: u32,
+}
+
+impl Turn {
+    /// Output items worth keeping for later turns. A reasoning item exists so the
+    /// next request of *this* turn can continue the same chain of thought;
+    /// persisting it re-sends an encrypted blob in every future request.
+    pub(crate) fn history_items(&self) -> impl Iterator<Item = &Value> {
+        self.output
+            .iter()
+            .filter(|item| item.get("type").and_then(Value::as_str) != Some("reasoning"))
+    }
 }
 
 pub(super) async fn read<F>(
@@ -32,11 +63,17 @@ where
     let mut bytes = 0_usize;
     let mut output = Vec::new();
     let mut text = String::new();
+    let mut usage = None;
     let mut completed = false;
 
     loop {
         let event = tokio::select! {
             event = stream.next() => event,
+            () = tokio::time::sleep(STREAM_IDLE_TIMEOUT) => {
+                return Err(anyhow::Error::new(StreamInterrupted(
+                    "stalled without a new event",
+                )));
+            }
             () = control.cancelled() => {
                 control.ensure_running()?;
                 unreachable!("cancelled control must fail ensure_running")
@@ -77,29 +114,45 @@ where
                 }
             }
             "response.completed" | "response.done" => {
-                if output.is_empty()
-                    && let Some(items) = value
-                        .get("response")
-                        .and_then(|response| response.get("output"))
-                        .and_then(Value::as_array)
-                {
-                    output.extend(items.iter().cloned());
+                if let Some(response) = value.get("response") {
+                    let parsed = parse_usage(response.get("usage"));
+                    if parsed.is_some() {
+                        usage = parsed;
+                    }
+                    if output.is_empty()
+                        && let Some(items) = response.get("output").and_then(Value::as_array)
+                    {
+                        output.extend(items.iter().cloned());
+                    }
                 }
                 completed = true;
                 break;
             }
             "response.incomplete" => {
-                bail!("Codex response was incomplete: {}", provider_error(&value));
+                return Err(provider_failure(
+                    "Codex response was incomplete",
+                    provider_error(&value),
+                ));
             }
             "response.failed" => {
-                bail!("Codex response failed: {}", provider_error(&value));
+                return Err(provider_failure(
+                    "Codex response failed",
+                    provider_error(&value),
+                ));
             }
-            "error" => bail!("Codex returned an error: {}", provider_error(&value)),
+            "error" => {
+                return Err(provider_failure(
+                    "Codex returned an error",
+                    provider_error(&value),
+                ));
+            }
             _ => {}
         }
     }
     if !completed {
-        bail!("Codex response stream ended before completion");
+        return Err(anyhow::Error::new(StreamInterrupted(
+            "ended before completion",
+        )));
     }
 
     if text.is_empty() {
@@ -128,6 +181,35 @@ where
         output,
         calls,
         text,
+        usage,
+        payload_bytes: 0,
+        first_delta_ms: 0,
+    })
+}
+
+fn parse_usage(value: Option<&Value>) -> Option<Usage> {
+    let usage = value?;
+    let as_usize = |key: &str, value: &Value| {
+        value
+            .get(key)
+            .and_then(Value::as_u64)
+            .and_then(|value| usize::try_from(value).ok())
+    };
+    let input_tokens = as_usize("input_tokens", usage)?;
+    let output_tokens = as_usize("output_tokens", usage).unwrap_or(0);
+    let cached_input_tokens = usage
+        .get("input_tokens_details")
+        .and_then(|details| as_usize("cached_tokens", details))
+        .unwrap_or(0);
+    let reasoning_tokens = usage
+        .get("reasoning")
+        .and_then(|reasoning| as_usize("total_tokens", reasoning))
+        .unwrap_or(0);
+    Some(Usage {
+        input_tokens,
+        cached_input_tokens,
+        output_tokens,
+        reasoning_tokens,
     })
 }
 
@@ -149,4 +231,32 @@ fn provider_error(value: &Value) -> String {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn reasoning_items_stay_out_of_history() {
+        let turn = Turn {
+            output: vec![
+                json!({"type": "reasoning", "encrypted_content": "blob"}),
+                json!({"type": "message", "content": []}),
+            ],
+            calls: Vec::new(),
+            text: String::new(),
+            usage: None,
+            payload_bytes: 0,
+            first_delta_ms: 0,
+        };
+        assert_eq!(
+            turn.history_items().cloned().collect::<Vec<_>>(),
+            vec![json!({"type": "message", "content": []})]
+        );
+        // The live turn keeps everything it needs to continue.
+        assert_eq!(turn.output.len(), 2);
+    }
 }

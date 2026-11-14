@@ -4656,6 +4656,7 @@ dependencies = [
  "base64 0.23.1",
  "eventsource-stream",
  "futures",
+ "icu_properties",
  "koharu-config",
  "koharu-runtime",
  "koharu-secrets",

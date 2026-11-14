@@ -445,7 +445,7 @@ pub(crate) async fn select_page(
         let selected_page = Project::page(&snapshot, page)?;
         (snapshot, project_info, selected_page)
     };
-    if desktop.show_page(&snapshot, Some(page)).await? {
+    if desktop.show_page(&snapshot, Some(page)).await?.presented() {
         let canvas = desktop.canvas_state();
         canvas_channel.channel.publish(canvas);
     }

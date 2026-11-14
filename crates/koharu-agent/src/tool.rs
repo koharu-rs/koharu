@@ -9,6 +9,10 @@ use crate::Control;
 pub struct ToolImage {
     pub label: String,
     pub data_url: String,
+    /// How the provider should read this image: `"high"` tiles it and bills per
+    /// tile, `"low"` is one cheap fixed view, `"auto"` lets the provider decide
+    /// from the encoded size.
+    pub detail: &'static str,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -44,32 +48,53 @@ pub struct ToolCall {
 #[derive(Clone, Debug)]
 pub struct Invocation {
     pub value: Value,
+    /// What survives in conversation history after this turn. Defaults to
+    /// `value`; a tool whose live result is too large to keep in every later
+    /// request sets its own summary, because only the current turn needs the
+    /// detail.
+    pub history: Value,
     pub changed: bool,
     pub images: Vec<ToolImage>,
 }
 
 impl Invocation {
     pub fn read(value: impl Serialize) -> Result<Self> {
+        let value = serde_json::to_value(value)?;
         Ok(Self {
-            value: serde_json::to_value(value)?,
+            history: value.clone(),
+            value,
             changed: false,
             images: Vec::new(),
         })
     }
 
     pub fn changed(value: impl Serialize) -> Result<Self> {
+        let value = serde_json::to_value(value)?;
         Ok(Self {
-            value: serde_json::to_value(value)?,
+            history: value.clone(),
+            value,
             changed: true,
             images: Vec::new(),
         })
     }
 
     #[must_use]
-    pub fn with_image(mut self, label: impl Into<String>, data_url: impl Into<String>) -> Self {
+    pub fn with_history(mut self, history: Value) -> Self {
+        self.history = history;
+        self
+    }
+
+    #[must_use]
+    pub fn with_image(
+        mut self,
+        label: impl Into<String>,
+        data_url: impl Into<String>,
+        detail: &'static str,
+    ) -> Self {
         self.images.push(ToolImage {
             label: label.into(),
             data_url: data_url.into(),
+            detail,
         });
         self
     }
@@ -82,4 +107,18 @@ pub trait Host: Send + Sync + 'static {
     fn tools(&self) -> Vec<Tool>;
 
     async fn invoke(&self, call: ToolCall, control: &Control) -> Result<Invocation>;
+
+    /// Page text for the bulk reviewer, as `{ "pages": [...] }` with the
+    /// element set and order the page view reports.
+    async fn bulk_review_pages(&self, pages: &[String]) -> Result<Value>;
+
+    /// Display name of the language translations are being revised into. The
+    /// agent crate does not own a language model, and source language is never
+    /// a job-wide fact — it stays per element in the reviewed payload.
+    fn review_target_language(&self) -> Result<String>;
+
+    /// The page as imported, already encoded, as a `data:` URL — `None` when the
+    /// page has no source image. Only the bulk reviewer asks for it, to compare
+    /// lettering against the artwork, and it decides how the provider reads it.
+    async fn review_page_image(&self, page: &str) -> Result<Option<String>>;
 }

@@ -1,6 +1,7 @@
 //! Koharu's in-process, OAuth-backed Codex agent.
 
 mod agent;
+mod bulk_review;
 mod codex;
 mod config;
 mod control;

@@ -5,29 +5,44 @@ use crate::{Reasoning, Tool};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Request {
-    pub(super) model: String,
-    pub(super) instructions: String,
-    pub(super) input: Vec<Value>,
-    pub(super) tools: Vec<Tool>,
-    pub(super) tool_choice: &'static str,
-    pub(super) parallel_tool_calls: bool,
-    pub(super) reasoning: ReasoningOptions,
-    pub(super) text: TextOptions,
-    pub(super) include: [&'static str; 1],
-    pub(super) stream: bool,
-    pub(super) store: bool,
-    pub(super) prompt_cache_key: String,
+    pub(crate) model: String,
+    pub(crate) instructions: String,
+    pub(crate) input: Vec<Value>,
+    pub(crate) tools: Vec<Tool>,
+    pub(crate) tool_choice: &'static str,
+    pub(crate) parallel_tool_calls: bool,
+    pub(crate) reasoning: ReasoningOptions,
+    pub(crate) text: TextOptions,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) include: Vec<&'static str>,
+    pub(crate) stream: bool,
+    pub(crate) store: bool,
+    pub(crate) prompt_cache_key: String,
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct ReasoningOptions {
-    effort: &'static str,
-    summary: &'static str,
+pub(crate) struct ReasoningOptions {
+    pub(crate) effort: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) summary: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct TextOptions {
-    verbosity: &'static str,
+pub(crate) struct TextOptions {
+    pub(crate) verbosity: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) format: Option<TextFormat>,
+}
+
+/// Structured output for the Responses API lives under `text.format`, not a
+/// top-level `response_format` parameter.
+#[derive(Debug, Serialize)]
+pub(crate) struct TextFormat {
+    #[serde(rename = "type")]
+    pub(crate) kind: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) strict: bool,
+    pub(crate) schema: Value,
 }
 
 impl Request {
@@ -37,7 +52,7 @@ impl Request {
         input: Vec<Value>,
         tools: Vec<Tool>,
         reasoning: Reasoning,
-        session: String,
+        cache_key: String,
     ) -> Self {
         Self {
             model,
@@ -48,26 +63,78 @@ impl Request {
             parallel_tool_calls: false,
             reasoning: ReasoningOptions {
                 effort: reasoning.as_str(),
-                summary: "auto",
+                summary: None,
             },
-            text: TextOptions { verbosity: "low" },
-            include: ["reasoning.encrypted_content"],
+            text: TextOptions {
+                verbosity: "low",
+                format: None,
+            },
+            include: Vec::new(),
             stream: true,
             store: false,
-            prompt_cache_key: session,
+            prompt_cache_key: cache_key,
         }
+    }
+
+    /// Ask for the reasoning that lets the *next* request of this turn continue
+    /// the same chain of thought, plus a summary to stream to the user.
+    ///
+    /// Only the interactive tool loop needs this: with `store: false` the
+    /// encrypted reasoning items are how function-call continuity survives
+    /// between requests of one turn. A single-shot request must not pay for them.
+    pub(crate) fn with_reasoning_continuity(mut self) -> Self {
+        self.include = vec!["reasoning.encrypted_content"];
+        self.reasoning.summary = Some("auto");
+        self
+    }
+
+    /// Attach an OpenAI-compatible JSON schema as structured output under
+    /// `text.format`. Requests without it answer in plain text.
+    pub(crate) fn with_json_schema(mut self, schema: Value, name: &'static str) -> Self {
+        self.text.format = Some(TextFormat {
+            kind: "json_schema",
+            name,
+            strict: true,
+            schema,
+        });
+        self
     }
 }
 
 pub(crate) fn message(role: &str, text: impl Into<String>) -> Value {
+    message_with_images(role, text.into(), &[])
+}
+
+/// A message whose text is followed by each image, labelled, so the model can tell
+/// which page or element it is looking at.
+pub(crate) fn message_with_images(role: &str, text: String, images: &[crate::ToolImage]) -> Value {
     json!({
         "type": "message",
         "role": role,
-        "content": [{
-            "type": "input_text",
-            "text": text.into(),
-        }],
+        "content": input_parts(text, images),
     })
+}
+
+/// Text first, then one labelled part per image. The producer of an image chooses how
+/// the provider reads it: a page the model must proofread is tiled differently than
+/// one sent only for visual context.
+fn input_parts(text: String, images: &[crate::ToolImage]) -> Vec<Value> {
+    let mut parts = vec![json!({
+        "type": "input_text",
+        "text": text,
+    })];
+    for image in images {
+        parts.push(json!({
+            "type": "input_text",
+            "text": image.label,
+        }));
+        parts.push(json!({
+            "type": "input_image",
+            "image_url": image.data_url,
+            "detail": image.detail,
+        }));
+    }
+    parts
 }
 
 pub(crate) fn project_context(data: &Value) -> Result<Value, serde_json::Error> {
@@ -90,29 +157,147 @@ pub(crate) fn function_output(
     output: &Value,
     images: &[crate::ToolImage],
 ) -> Result<Value, serde_json::Error> {
+    let text = serde_json::to_string(output)?;
     let output = if images.is_empty() {
-        Value::String(serde_json::to_string(output)?)
+        Value::String(text)
     } else {
-        let mut content = vec![json!({
-            "type": "input_text",
-            "text": serde_json::to_string(output)?,
-        })];
-        for image in images {
-            content.push(json!({
-                "type": "input_text",
-                "text": image.label,
-            }));
-            content.push(json!({
-                "type": "input_image",
-                "image_url": image.data_url,
-                "detail": "high",
-            }));
-        }
-        Value::Array(content)
+        Value::Array(input_parts(text, images))
     };
     Ok(json!({
         "type": "function_call_output",
         "call_id": call_id,
         "output": output,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn images_follow_the_text_and_carry_their_own_detail() {
+        let images = [crate::ToolImage {
+            label: "Original artwork of page 3".to_owned(),
+            data_url: "data:image/webp;base64,AAA".to_owned(),
+            detail: "low",
+        }];
+        let with_image = message_with_images("user", "review this".to_owned(), &images);
+        let content = with_image["content"].as_array().unwrap();
+        assert_eq!(content[0]["text"], json!("review this"));
+        assert_eq!(content[1]["text"], json!("Original artwork of page 3"));
+        assert_eq!(content[2]["detail"], json!("low"));
+        // Without images the message is exactly what `message` has always built.
+        assert_eq!(
+            message("user", "review this"),
+            message_with_images("user", "review this".to_owned(), &[]),
+        );
+    }
+
+    fn review_schema() -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "changes": { "type": "array", "items": {
+                    "type": "object",
+                    "properties": {
+                        "element": { "type": "string" },
+                        "translation": { "type": "string" },
+                    },
+                    "required": ["element", "translation"],
+                    "additionalProperties": false,
+                } },
+                "memory_updates": { "type": "array", "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string" },
+                    },
+                    "required": ["key", "value"],
+                    "additionalProperties": false,
+                } },
+            },
+            "required": ["changes", "memory_updates"],
+            "additionalProperties": false,
+        })
+    }
+
+    #[test]
+    fn structured_output_lives_in_text_format() {
+        let request = Request::new(
+            "codex".into(),
+            "instructions".into(),
+            Vec::new(),
+            Vec::new(),
+            Reasoning::Low,
+            "session".into(),
+        )
+        .with_json_schema(review_schema(), "review_response");
+        let value = serde_json::to_value(&request).unwrap();
+        let body = value.to_string();
+        // Structured output must be under text.format.
+        assert_eq!(value["text"]["verbosity"], "low");
+        assert_eq!(value["text"]["format"]["type"], "json_schema");
+        assert_eq!(value["text"]["format"]["name"], "review_response");
+        assert_eq!(value["text"]["format"]["strict"], true);
+        assert_eq!(value["text"]["format"]["schema"]["type"], "object");
+        // There must be no top-level response_format parameter.
+        assert!(value.get("response_format").is_none());
+        assert!(!body.contains("response_format"));
+        // Instructions, tools and reasoning remain wired.
+        assert_eq!(value["instructions"], "instructions");
+        assert_eq!(value["reasoning"]["effort"], "low");
+        assert_eq!(value["tools"], json!([]));
+        // A single-shot review request carries no reasoning continuity: it never
+        // makes a follow-up call, so encrypted blobs would be pure overhead.
+        assert!(value.get("include").is_none());
+        assert!(value["reasoning"].get("summary").is_none());
+    }
+
+    #[test]
+    fn only_the_tool_loop_asks_for_reasoning_continuity() {
+        let plain = serde_json::to_value(Request::new(
+            "m".into(),
+            "i".into(),
+            Vec::new(),
+            Vec::new(),
+            Reasoning::Low,
+            "c".into(),
+        ))
+        .unwrap();
+        assert!(plain.get("include").is_none());
+        assert!(plain["reasoning"].get("summary").is_none());
+
+        let chat = serde_json::to_value(
+            Request::new(
+                "m".into(),
+                "i".into(),
+                Vec::new(),
+                Vec::new(),
+                Reasoning::Low,
+                "c".into(),
+            )
+            .with_reasoning_continuity(),
+        )
+        .unwrap();
+        assert_eq!(chat["include"], json!(["reasoning.encrypted_content"]));
+        assert_eq!(chat["reasoning"]["summary"], "auto");
+    }
+
+    #[test]
+    fn plain_request_has_no_text_format() {
+        let request = Request::new(
+            "codex".into(),
+            "i".into(),
+            Vec::new(),
+            Vec::new(),
+            Reasoning::High,
+            "s".into(),
+        );
+        let value = serde_json::to_value(&request).unwrap();
+        assert!(value["text"].get("format").is_none());
+        assert!(value.get("response_format").is_none());
+        assert_eq!(value["text"]["verbosity"], "low");
+    }
 }

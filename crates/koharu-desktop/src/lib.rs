@@ -53,6 +53,32 @@ struct PresentationState {
     requested_preparation: u64,
 }
 
+/// Outcome of a command that asked for the committed page to be shown. Presentation
+/// is a single lane, so the answer is not "true or false": knowing *why* nothing was
+/// painted is the difference between a document that did not change and a repaint
+/// that was lost.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Presentation {
+    /// The presented frame is already at least as new as this commit.
+    Current,
+    /// The screen now shows the committed snapshot.
+    Replaced,
+    /// The presentation now shows no page.
+    Cleared,
+    /// A newer presenting command took the lane while this one worked, and that
+    /// command is the one whose frame the screen shows.
+    Superseded,
+}
+
+impl Presentation {
+    /// Whether the caller's commit can be seen on screen.
+    #[must_use]
+    pub fn presented(self) -> bool {
+        !matches!(self, Self::Superseded)
+    }
+}
+
 const MAX_CACHED_PAGE_FRAMES: usize = 8;
 
 #[derive(Default)]
@@ -117,27 +143,20 @@ impl Desktop {
             .map_err(Into::into)
     }
 
+    /// Warms the page-frame cache for a page the user may be about to look at.
+    ///
+    /// This never takes a preparation token, and that is deliberate. The token is how
+    /// one presenting command retires another; a cache warm cannot replace the
+    /// presented frame, so participating would let it cancel a commit's repaint and
+    /// then decline to paint anything itself — a committed edit that never reaches the
+    /// screen, with no error and no retry.
     pub async fn prepare_page(&self, snapshot: &Snapshot, page: EntityId) -> Result<bool> {
-        let request = self.request_preparation();
         let _preparation = self.preparation.lock().await;
-        if !self.is_current_preparation(request) {
-            return Ok(false);
-        }
         let revision = snapshot.revision();
-        let cached = self.page_frames.lock().get(page, revision);
-        if cached.is_some() {
+        if self.page_frames.lock().get(page, revision).is_some() {
             return Ok(true);
         }
-        let Some(frame) = self
-            .await_preparation(request, self.renderer.render(snapshot, page))
-            .await
-        else {
-            return Ok(false);
-        };
-        let frame = frame?;
-        if !self.is_current_preparation(request) {
-            return Ok(false);
-        }
+        let frame = self.renderer.render(snapshot, page).await?;
         self.page_frames.lock().insert(frame);
         Ok(true)
     }
@@ -305,11 +324,11 @@ impl Desktop {
         snapshot: &Snapshot,
         page: Option<EntityId>,
         commit: &Commit,
-    ) -> Result<bool> {
+    ) -> Result<Presentation> {
         let request = self.request_preparation();
         let _preparation = self.preparation.lock().await;
         if !self.is_current_preparation(request) {
-            return Ok(false);
+            return Ok(self.superseded(page));
         }
         let (current_page, revision, previous) = {
             let presentation = self.presentation.read();
@@ -324,13 +343,14 @@ impl Desktop {
             return self.show_page_locked(snapshot, page, request).await;
         }
         if revision.is_some_and(|revision| revision >= snapshot.revision()) {
-            return Ok(false);
+            return Ok(Presentation::Current);
         }
         let Some(page) = page else {
             if self.replace_frame_if_current(request, None) {
                 self.renderer.discard_retained_nodes();
+                return Ok(Presentation::Cleared);
             }
-            return Ok(false);
+            return Ok(self.superseded(None));
         };
         let rendered = if commit.revision == snapshot.revision()
             && revision == Some(commit.changes.from)
@@ -346,34 +366,52 @@ impl Desktop {
                 .await
         };
         let Some(rendered) = rendered else {
-            return Ok(false);
+            return Ok(self.superseded(Some(page)));
         };
         let rendered = rendered?;
-        if !self.replace_frame_if_current(request, Some(rendered)) {
-            return Ok(false);
+        if self.replace_frame_if_current(request, Some(rendered)) {
+            return Ok(Presentation::Replaced);
         }
-        Ok(true)
+        Ok(self.superseded(Some(page)))
+    }
+
+    /// Records a presentation that a newer presenting command took over, so a lost
+    /// repaint is at least visible in the log the failure is read from.
+    fn superseded(&self, page: Option<EntityId>) -> Presentation {
+        let generation = self.presentation.read().generation;
+        tracing::warn!(
+            ?page,
+            generation,
+            "presentation was taken over by a newer command; the screen keeps that frame"
+        );
+        Presentation::Superseded
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn show_page(&self, snapshot: &Snapshot, page: Option<EntityId>) -> Result<bool> {
+    pub async fn show_page(
+        &self,
+        snapshot: &Snapshot,
+        page: Option<EntityId>,
+    ) -> Result<Presentation> {
         let request = self.request_preparation();
         let _preparation = self.preparation.lock().await;
         if !self.is_current_preparation(request) {
-            return Ok(false);
+            return Ok(self.superseded(page));
         }
         self.show_page_locked(snapshot, page, request).await
     }
 
-    pub async fn clear(&self) {
+    pub async fn clear(&self) -> Presentation {
         let request = self.request_preparation();
         let _preparation = self.preparation.lock().await;
         if !self.is_current_preparation(request) {
-            return;
+            return self.superseded(None);
         }
         if self.replace_frame_if_current(request, None) {
             self.renderer.discard_retained_nodes();
+            return Presentation::Cleared;
         }
+        self.superseded(None)
     }
 
     async fn show_page_locked(
@@ -381,32 +419,41 @@ impl Desktop {
         snapshot: &Snapshot,
         page: Option<EntityId>,
         request: u64,
-    ) -> Result<bool> {
+    ) -> Result<Presentation> {
         if !self.is_current_preparation(request) {
-            return Ok(false);
+            return Ok(self.superseded(page));
         }
         let Some(page) = page else {
-            let replaced = self.replace_frame_if_current(request, None);
-            if replaced {
+            if self.replace_frame_if_current(request, None) {
                 self.renderer.discard_retained_nodes();
+                return Ok(Presentation::Cleared);
             }
-            return Ok(replaced);
+            return Ok(self.superseded(page));
         };
         let cached = self.page_frames.lock().get(page, snapshot.revision());
         if let Some(frame) = cached {
-            return Ok(self.replace_frame_if_current(request, Some(frame)));
+            return Ok(self.replace_outcome(request, Some(frame), page));
         }
         let Some(frame) = self
             .await_preparation(request, self.renderer.render(snapshot, page))
             .await
         else {
-            return Ok(false);
+            return Ok(self.superseded(Some(page)));
         };
         let frame = frame?;
-        if !self.replace_frame_if_current(request, Some(frame)) {
-            return Ok(false);
+        Ok(self.replace_outcome(request, Some(frame), page))
+    }
+
+    fn replace_outcome(
+        &self,
+        request: u64,
+        frame: Option<RenderedFrame>,
+        page: EntityId,
+    ) -> Presentation {
+        if self.replace_frame_if_current(request, frame) {
+            return Presentation::Replaced;
         }
-        Ok(true)
+        self.superseded(Some(page))
     }
 
     fn request_preparation(&self) -> u64 {
@@ -546,7 +593,35 @@ mod tests {
 
     use tokio::{sync::Notify, time::timeout};
 
-    use super::Desktop;
+    use super::{Desktop, Presentation};
+
+    #[tokio::test]
+    async fn warming_the_page_cache_leaves_an_in_flight_presentation_current() {
+        let desktop = Arc::new(Desktop::new().unwrap());
+        let presentation = desktop.request_preparation();
+        // A cache warm contends for the render lane and nothing else. Taking a
+        // preparation token here is what used to retire a commit's repaint and then
+        // decline to paint anything itself.
+        let _preparation = desktop.preparation.lock().await;
+        assert!(
+            desktop.is_current_preparation(presentation),
+            "a warm must not take ownership of a lane it cannot present"
+        );
+        drop(_preparation);
+        desktop.request_preparation();
+        assert!(!desktop.is_current_preparation(presentation));
+    }
+
+    #[test]
+    fn only_a_taken_over_lane_leaves_the_screen_untouched() {
+        assert!(Presentation::Replaced.presented());
+        assert!(Presentation::Cleared.presented());
+        assert!(
+            Presentation::Current.presented(),
+            "the screen already shows this revision"
+        );
+        assert!(!Presentation::Superseded.presented());
+    }
 
     #[tokio::test]
     async fn newer_request_preempts_current_preparation_and_acquires_ownership() {

@@ -17,6 +17,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 eventsource-stream = { workspace = true }
 futures = { workspace = true }
+icu_properties = { workspace = true, features = ["compiled_data"] }
 koharu-config = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-secrets = { workspace = true }

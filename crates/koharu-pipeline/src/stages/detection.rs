@@ -398,7 +398,7 @@ fn write_region<'a>(
             angle_degrees: None,
         },
     )?;
-    write_text_role(edit, content, "dev.koharu.text.free-text", generation)
+    write_text_role(edit, content, TextRole::FREE_TEXT, generation)
         .context("failed to set the detected text role")?;
     edit.set(
         layer,
@@ -442,7 +442,7 @@ fn link_dialogue_regions(
         if let Some(bubble) = bubble {
             edit.relate::<Inside>(text.entity, bubble.entity)?;
             edit.relate::<FlowsIn>(text.layer, bubble.entity)?;
-            write_text_role(edit, text.content, "dev.koharu.text.dialogue", generation)?;
+            write_text_role(edit, text.content, TextRole::DIALOGUE, generation)?;
         } else {
             edit.relate::<FitsTo>(text.layer, text.entity)?;
         }

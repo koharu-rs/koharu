@@ -4,11 +4,12 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
-    Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
-    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion,
-    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText,
-    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
+    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, ComponentOwner, EntityChange,
+    EntityId, EntityOrigin, Geometry as SceneGeometry, Group as SceneGroup, Origin,
+    Page as ScenePage, PageDraft, Point as ScenePoint, Presents, RasterLayer as SceneRasterLayer,
+    RasterLayerKind, Region as SceneRegion, RegionSpec, RemovePolicy, Revision, Session, Snapshot,
+    SourceText as SceneSourceText, TextContentRef, TextGroup as SceneTextGroup,
+    TextLayout as SceneTextLayout, TextLayoutKind, TextRegion, TextRole,
     Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use serde::Serialize;
@@ -63,6 +64,46 @@ pub struct Page {
     pub size: PageSize,
     pub layers: Vec<Layer>,
     pub regions: Vec<AnalysisRegion>,
+}
+
+/// Below this, the detector's own score for a text region is worth telling the
+/// reviewer: the region may be lettering the model mistook for story text.
+const REVIEW_REGION_CERTAINTY: f32 = 0.90;
+
+/// One reviewable text layer, reduced to the fields a translation reviewer reads.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ReviewText {
+    pub(crate) id: EntityId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lang")]
+    pub(crate) source_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) translation: Option<String>,
+    #[serde(flatten)]
+    pub(crate) evidence: ReviewEvidence,
+}
+
+/// Scene facts about how a text layer got here. The reviewer needs them to tell
+/// story text from lettering, and they cost bytes per element, so each key is
+/// recorded only when it actually says something.
+#[derive(Clone, Debug, Default, Serialize)]
+pub(crate) struct ReviewEvidence {
+    /// Who wrote the translation now in the project: `user` or `gen`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) origin: Option<&'static str>,
+    /// `dialogue` when a bubble holds the text, `free` when nothing does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) role: Option<&'static str>,
+    /// The region label the source was recognized in, recorded only when that
+    /// region is not an ordinary text region (an `onomatopoeia` region, say).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) region: Option<String>,
+    /// How sure the detector was about that region. With `region` it is the score
+    /// for the non-text class; alone it means the detector doubted the region was
+    /// even text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) score: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -523,6 +564,41 @@ impl Project {
         self.commit(patch).await
     }
 
+    pub(crate) async fn set_translations(
+        &mut self,
+        updates: Vec<(EntityId, Option<String>)>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let updates = updates
+            .into_iter()
+            .map(|(layer, text)| {
+                let content = Self::text_content(&snapshot, layer)?;
+                let language = snapshot
+                    .component::<SceneTranslation>(content)?
+                    .and_then(|translation| translation.language);
+                Ok((layer, content, language, text))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let patch = snapshot.patch(|edit| {
+            for (layer, content, language, text) in updates {
+                edit.promote_entity_to_user(layer)?;
+                edit.promote_entity_to_user(content)?;
+                match text {
+                    Some(text) => edit.set(
+                        content,
+                        &SceneTranslation {
+                            text: Authored::user(text),
+                            language,
+                        },
+                    ),
+                    None => edit.remove::<SceneTranslation>(content),
+                }?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch).await
+    }
+
     pub(crate) async fn set_typography(
         &mut self,
         updates: Vec<TypographyUpdate>,
@@ -926,6 +1002,47 @@ impl Project {
         Ok(self.session.commit(patch).await?)
     }
 
+    /// The pages a commit actually touched. The document can move without the screen
+    /// moving — only the active page is ever presented — so a write that lands on
+    /// another page has to come back with its page or the agent cannot tell the user
+    /// where to look.
+    pub(crate) fn touched_pages(commit: &Commit) -> Result<Vec<EntityId>> {
+        let snapshot = &commit.snapshot;
+        let changed = commit
+            .changes
+            .entities
+            .iter()
+            .map(|change| match change {
+                EntityChange::Inserted(entity) | EntityChange::Removed(entity) => *entity,
+            })
+            .chain(commit.changes.hierarchy.iter().copied())
+            .chain(
+                commit
+                    .changes
+                    .components
+                    .iter()
+                    .filter_map(|change| match change.owner {
+                        ComponentOwner::Entity(entity) => Some(entity),
+                        ComponentOwner::Project | ComponentOwner::Relation(_) => None,
+                    }),
+            );
+        let mut pages = Vec::new();
+        for entity in changed {
+            let mut current = Some(entity);
+            while let Some(id) = current {
+                if snapshot.component::<ScenePage>(id)?.is_some() {
+                    if !pages.contains(&id) {
+                        pages.push(id);
+                    }
+                    break;
+                }
+                current = snapshot.parent(id)?;
+            }
+        }
+        pages.sort_unstable();
+        Ok(pages)
+    }
+
     pub(crate) fn page(snapshot: &Snapshot, page: EntityId) -> Result<Page> {
         let value = snapshot.page(page)?.page()?;
         let source = Self::asset_id(snapshot, page, "source")?;
@@ -985,6 +1102,96 @@ impl Project {
             layers,
             regions,
         })
+    }
+
+    /// The text a bulk translation reviewer may revise: the page's text layers in
+    /// the order [`Project::page`] reports them, excluding what the page does not
+    /// render. Source language stays per element — one page can mix scripts.
+    pub(crate) fn review_texts(snapshot: &Snapshot, page: EntityId) -> Result<Vec<ReviewText>> {
+        let mut texts = Vec::new();
+        Self::collect_review_texts(snapshot, page, true, &mut texts)?;
+        Ok(texts)
+    }
+
+    fn collect_review_texts(
+        snapshot: &Snapshot,
+        parent: EntityId,
+        visible: bool,
+        texts: &mut Vec<ReviewText>,
+    ) -> Result<()> {
+        for child in snapshot.children(parent)? {
+            let visible = visible && Self::layer_visibility(snapshot, child)?.visible;
+            if snapshot.component::<SceneGroup>(child)?.is_some() {
+                Self::collect_review_texts(snapshot, child, visible, texts)?;
+                continue;
+            }
+            if !visible || snapshot.component::<SceneTextLayout>(child)?.is_none() {
+                continue;
+            }
+            let content = snapshot.text_layer(child)?.content()?;
+            let source = content.source()?;
+            let translation = content.translation()?;
+            if source.is_none() && translation.is_none() {
+                continue;
+            }
+            let evidence = Self::review_evidence(&content, translation.as_ref())?;
+            texts.push(ReviewText {
+                id: child,
+                source_language: source
+                    .as_ref()
+                    .and_then(|source| source.language.as_ref())
+                    .map(|language| language.to_string()),
+                source: source.map(|source| source.text.value),
+                translation: translation.map(|translation| translation.text.value),
+                evidence,
+            });
+        }
+        Ok(())
+    }
+
+    /// Where this text came from, as far as the scene records it: who wrote the
+    /// current translation, whether a bubble holds it, and what the detector
+    /// thought of the region its source was recognized in.
+    fn review_evidence(
+        content: &TextContentRef<'_>,
+        translation: Option<&SceneTranslation>,
+    ) -> Result<ReviewEvidence> {
+        let mut evidence = ReviewEvidence {
+            origin: translation.map(|translation| match translation.text.origin {
+                Origin::User => "user",
+                Origin::Generated(_) => "gen",
+            }),
+            role: content.role()?.map(|role| {
+                if role.role == TextRole::DIALOGUE {
+                    "dialogue"
+                } else {
+                    "free"
+                }
+            }),
+            ..ReviewEvidence::default()
+        };
+        let Some(region) = content.source_region()? else {
+            return Ok(evidence);
+        };
+        let region_value = region.region()?;
+        let score = region
+            .detection()?
+            .and_then(|analysis| {
+                analysis
+                    .labels
+                    .into_iter()
+                    .find(|label| label.kind.as_str() == region_value.kind.as_str())
+            })
+            .map(|label| (label.confidence * 100.0).round() / 100.0);
+        if region_value.kind.as_str() == TextRegion::KIND {
+            // Doubt about the text classification is worth reporting; certainty is
+            // the common case and says nothing.
+            evidence.score = score.filter(|score| *score < REVIEW_REGION_CERTAINTY);
+        } else {
+            evidence.region = region_value.label.filter(|label| !label.is_empty());
+            evidence.score = score;
+        }
+        Ok(evidence)
     }
 
     fn layer_view(snapshot: &Snapshot, layer: EntityId) -> Result<Layer> {
@@ -1332,7 +1539,10 @@ fn rasterize_stroke(
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{Generation, ProducerId, WritingMode};
+    use koharu_scene::{
+        DetectionAnalysis, DetectionLabel, Generation, LanguageTag, ProducerId, RecognizedFrom,
+        RegionKind, WritingMode,
+    };
 
     use super::*;
 
@@ -1441,6 +1651,294 @@ mod tests {
                 .unwrap()
                 .label,
             "latest manual"
+        );
+    }
+
+    #[tokio::test]
+    async fn bulk_set_translations_applies_every_update_in_one_commit() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("bulk", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let (_, first) = project
+            .add_text_box(
+                page,
+                Frame {
+                    x: 5.0,
+                    y: 5.0,
+                    width: 100.0,
+                    height: 32.0,
+                    angle_degrees: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+        let (_, second) = project
+            .add_text_box(
+                page,
+                Frame {
+                    x: 5.0,
+                    y: 40.0,
+                    width: 100.0,
+                    height: 32.0,
+                    angle_degrees: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        let base = project.revision();
+        let commit = project
+            .set_translations(vec![
+                (first, Some("Olá".to_owned())),
+                (second, Some("Mundo".to_owned())),
+            ])
+            .await
+            .unwrap();
+
+        let snapshot = project.snapshot();
+        assert_eq!(snapshot.revision(), commit.revision);
+        assert_eq!(commit.revision, base.next().unwrap());
+
+        let read = |layer: EntityId| -> String {
+            let content = Project::text_content(&snapshot, layer).unwrap();
+            snapshot
+                .component::<SceneTranslation>(content)
+                .unwrap()
+                .unwrap()
+                .text
+                .value
+        };
+        assert_eq!(read(first), "Olá");
+        assert_eq!(read(second), "Mundo");
+    }
+
+    #[tokio::test]
+    async fn review_texts_follows_the_page_view_and_keeps_source_language_per_element() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("bulk", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let frame = |x: f32| Frame {
+            x,
+            y: 5.0,
+            width: 90.0,
+            height: 30.0,
+            angle_degrees: 0.0,
+        };
+        let (_, japanese) = project.add_text_box(page, frame(5.0)).await.unwrap();
+        let (_, english) = project.add_text_box(page, frame(40.0)).await.unwrap();
+        let (_, hidden) = project.add_text_box(page, frame(70.0)).await.unwrap();
+
+        let snapshot = project.snapshot();
+        let mut edit = snapshot.edit();
+        for (layer, (text, tag)) in [
+            (japanese, ("こんにちは", "ja-JP")),
+            (english, ("Hello there", "en-US")),
+            (hidden, ("消えた", "ja-JP")),
+        ] {
+            let content = Project::text_content(&snapshot, layer).unwrap();
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::user(text.to_owned()),
+                    language: Some(LanguageTag::new(tag).unwrap()),
+                },
+            )
+            .unwrap();
+        }
+        project.commit(edit.finish().unwrap()).await.unwrap();
+        project
+            .set_visibility(vec![hidden], Some(false), None)
+            .await
+            .unwrap();
+
+        let snapshot = project.snapshot();
+        let texts = Project::review_texts(&snapshot, page).unwrap();
+
+        // A hidden text layer is not on the page, so the reviewer must not rewrite it.
+        assert_eq!(
+            texts.iter().map(|text| text.id).collect::<Vec<_>>(),
+            vec![japanese, english]
+        );
+        // Source language is an element fact, never a batch fact.
+        assert_eq!(texts[0].source_language.as_deref(), Some("ja-JP"));
+        assert_eq!(texts[1].source_language.as_deref(), Some("en-US"));
+        assert_eq!(texts[0].source.as_deref(), Some("こんにちは"));
+        // The reviewer sees exactly the text `inspect_pages` reports, in order.
+        let reported = Project::page(&snapshot, page)
+            .unwrap()
+            .layers
+            .iter()
+            .filter_map(|layer| match layer {
+                Layer::Text { id, visibility, .. } => visibility.visible.then_some(*id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            texts.iter().map(|text| text.id).collect::<Vec<_>>(),
+            reported
+        );
+        // Nothing in the scene marks these as lettering, so the payload stays bare.
+        let body = serde_json::to_string(&texts).unwrap();
+        for absent in ["origin", "role", "region", "score"] {
+            assert!(!body.contains(absent), "payload must not carry {absent}");
+        }
+    }
+
+    #[tokio::test]
+    async fn review_texts_reports_the_evidence_the_scene_records() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("sfx", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        // What the layout model called the region a source was read out of, and the
+        // evidence keys the reviewer should be left with.
+        let cases = [
+            (
+                "dev.koharu.region.unknown",
+                "onomatopoeia",
+                0.9123,
+                Some("onomatopoeia"),
+                Some(0.91),
+            ),
+            (TextRegion::KIND, "text", 0.97, None, None),
+            (TextRegion::KIND, "text", 0.618, None, Some(0.62)),
+        ];
+        let generation = Generation::new(
+            ProducerId::new("dev.koharu.pipeline.detection").expect("valid producer"),
+        );
+        // Machine authorship only comes from the pipeline's own edit path: a manual
+        // edit would promote every component written here to a person's work.
+        let mut edit = project.snapshot().edit_as(generation.clone());
+        for (kind, label, confidence, _, _) in &cases {
+            let content = edit.add_text_content(page, At::End).unwrap();
+            edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &SceneTextLayout {
+                    origin: Origin::Generated(generation.clone()),
+                    kind: TextLayoutKind::Paragraph,
+                    angle_degrees: None,
+                },
+            )
+            .unwrap();
+            let class = RegionKind::new(*kind).unwrap();
+            let region = edit.add_entity(page, At::End).unwrap();
+            edit.set(region, &SceneGeometry::rectangle(5.0, 5.0, 15.0, 10.0))
+                .unwrap();
+            edit.set(
+                region,
+                &SceneRegion {
+                    origin: Origin::Generated(generation.clone()),
+                    kind: class.clone(),
+                    label: Some((*label).to_owned()),
+                },
+            )
+            .unwrap();
+            edit.set(
+                region,
+                &DetectionAnalysis {
+                    origin: Origin::Generated(generation.clone()),
+                    labels: vec![DetectionLabel {
+                        kind: class,
+                        confidence: *confidence,
+                    }],
+                },
+            )
+            .unwrap();
+            edit.relate::<RecognizedFrom>(content, region).unwrap();
+            edit.set(
+                content,
+                &TextRole {
+                    origin: Origin::Generated(generation.clone()),
+                    role: TextRole::FREE_TEXT.to_owned(),
+                },
+            )
+            .unwrap();
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::generated("ドン".to_owned(), generation.clone()),
+                    language: Some(LanguageTag::new("ja-JP").unwrap()),
+                },
+            )
+            .unwrap();
+            edit.set(
+                content,
+                &SceneTranslation {
+                    text: Authored::generated("ドドドン".to_owned(), generation.clone()),
+                    language: Some(LanguageTag::new("pt-BR").unwrap()),
+                },
+            )
+            .unwrap();
+        }
+        project.commit(edit.finish().unwrap()).await.unwrap();
+
+        let texts = Project::review_texts(&project.snapshot(), page).unwrap();
+        assert_eq!(texts.len(), cases.len());
+        for (text, (_, _, _, region, score)) in texts.iter().zip(&cases) {
+            assert_eq!(text.evidence.origin, Some("gen"), "the pipeline wrote this");
+            assert_eq!(text.evidence.role, Some("free"), "no balloon holds this");
+            assert_eq!(text.evidence.region.as_deref(), *region);
+            // The score reaches the reviewer at two decimals, not as raw model noise.
+            assert_eq!(text.evidence.score, *score);
+        }
+    }
+
+    #[tokio::test]
+    async fn touched_pages_names_the_page_a_commit_changed() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let first = setup
+            .add_page(PageDraft::new("first", 100.0, 100.0), At::End)
+            .unwrap();
+        let second = setup
+            .add_page(PageDraft::new("second", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+        let frame = Frame {
+            x: 5.0,
+            y: 5.0,
+            width: 40.0,
+            height: 20.0,
+            angle_degrees: 0.0,
+        };
+        let (_, on_first) = project.add_text_box(first, frame).await.unwrap();
+        let (_, on_second) = project.add_text_box(second, frame).await.unwrap();
+
+        // A layer is not what the user navigates to: the report has to name its page.
+        let commit = project
+            .set_translations(vec![(on_second, Some("Olá".to_owned()))])
+            .await
+            .unwrap();
+        assert_eq!(Project::touched_pages(&commit).unwrap(), vec![second]);
+
+        let commit = project
+            .set_translations(vec![
+                (on_second, Some("Tchau".to_owned())),
+                (on_first, Some("Oi".to_owned())),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(
+            Project::touched_pages(&commit).unwrap(),
+            vec![first, second],
+            "every page the commit moved is reported, in a stable order"
         );
     }
 

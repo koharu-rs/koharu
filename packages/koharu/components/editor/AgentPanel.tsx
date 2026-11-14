@@ -35,6 +35,22 @@ interface ConversationMessage {
   error?: boolean
 }
 
+/** The most recent model request's cost, so a slow or expensive run is visible
+ *  in the panel instead of only in the log. */
+interface RequestUsage {
+  request: number
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  payloadBytes: number
+  firstDeltaMs: number
+}
+
+function compact(value: number) {
+  if (value < 1000) return String(value)
+  return `${(value / 1024).toFixed(1)}k`
+}
+
 export function AgentPanel() {
   const { t } = useTranslation()
   const [status, setStatus] = useState<AgentStatus | null>(null)
@@ -44,6 +60,7 @@ export function AgentPanel() {
   const [prompt, setPrompt] = useState('')
   const [running, setRunning] = useState<RunId | null>(null)
   const [activity, setActivity] = useState<string | null>(null)
+  const [usage, setUsage] = useState<RequestUsage | null>(null)
 
   useEffect(() => {
     void call(commands.getAgentStatus)
@@ -182,10 +199,21 @@ export function AgentPanel() {
                 </div>
               </div>
             ))}
-            {activity ? (
-              <div className='flex items-center gap-1.5 text-[10px] text-muted-foreground'>
-                <span className='size-1.5 rounded-full bg-primary' />
-                {activity}
+            {activity || usage ? (
+              <div className='flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground'>
+                {activity ? (
+                  <>
+                    <span className='size-1.5 rounded-full bg-primary' />
+                    {activity}
+                  </>
+                ) : null}
+                {usage ? (
+                  <span data-role='usage' className='tabular-nums'>
+                    #{usage.request} {compact(usage.inputTokens)} in ·{' '}
+                    {compact(usage.cachedInputTokens)} cached · {compact(usage.outputTokens)} out ·{' '}
+                    {compact(usage.payloadBytes)}B · {usage.firstDeltaMs}ms
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -288,6 +316,7 @@ export function AgentPanel() {
       { id: assistant, role: 'assistant', text: '' },
     ])
     setActivity(t('agent.working'))
+    setUsage(null)
 
     const channel = new Channel<Event>()
     channel.onmessage = (event) => {
@@ -307,6 +336,16 @@ export function AgentPanel() {
         case 'tool_finished':
           if (event.changed) void refresh(projectKey, pagesKey, pageKey)
           setActivity(t('agent.working'))
+          break
+        case 'usage':
+          setUsage({
+            request: event.request,
+            inputTokens: event.input_tokens,
+            cachedInputTokens: event.cached_input_tokens,
+            outputTokens: event.output_tokens,
+            payloadBytes: event.payload_bytes,
+            firstDeltaMs: event.first_delta_ms,
+          })
           break
         case 'completed':
           settled = true

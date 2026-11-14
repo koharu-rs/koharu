@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use koharu_agent::{Control, Host, Invocation, Tool, ToolCall};
-use koharu_desktop::{Desktop, Frame};
+use koharu_desktop::{Desktop, Frame, Presentation};
 use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput, StopToken};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
@@ -13,12 +13,12 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager as _};
 use tauri_runtime_cef::CefRuntime;
 
+use super::context;
 use crate::commands::{
     ChannelExt as _,
     canvas::{CanvasChannel, Point},
     editing::{GeometryUpdate, TypographyUpdate},
     output,
-    preferences::Preferences,
     processing::{JobId, Processing},
     project::{CurrentProject, Project, Typography},
 };
@@ -34,49 +34,14 @@ impl KoharuHost {
     }
 
     async fn project_context(&self) -> Result<Value> {
-        let (project, pages) = {
+        let (info, snapshot) = {
             let current = self.handle.state::<CurrentProject>();
             let current = current.project.lock().await;
             let project = current.as_ref().context("no project is open")?;
-            let snapshot = project.snapshot();
-            let pages = Project::pages(&snapshot)?
-                .into_iter()
-                .map(|page| Project::page(&snapshot, page.id))
-                .collect::<Result<Vec<_>>>()?;
-            (project.info(), pages)
+            (project.info(), project.snapshot())
         };
-        let preferences = Preferences::load()?;
-        let fonts = self
-            .handle
-            .state::<Desktop>()
-            .renderer()
-            .available_fonts()
-            .await?;
-        let providers = preferences
-            .providers
-            .entries
-            .iter()
-            .map(|provider| {
-                json!({
-                    "name": provider.name,
-                    "config": provider.config,
-                    "credential_configured": provider
-                        .credential
-                        .as_ref()
-                        .is_some_and(|credential| credential.configured),
-                })
-            })
-            .collect::<Vec<_>>();
-        Ok(json!({
-            "project": project,
-            "pages": pages,
-            "configuration": {
-                "pipeline": preferences.pipeline,
-                "providers": providers,
-                "typesetting": preferences.typesetting,
-                "available_fonts": fonts.into_iter().map(|font| font.name).collect::<Vec<_>>(),
-            },
-        }))
+        let pipeline = context::pipeline_config()?;
+        context::build(&info, &snapshot, &pipeline)
     }
 
     async fn mutate<T>(
@@ -100,20 +65,26 @@ impl KoharuHost {
             (commit, value, project.active_page(), project.info())
         };
         let revision = commit.revision;
-        self.synchronize(commit, page).await?;
+        // The document moving and the screen moving are different facts: only the
+        // active page is ever presented, so a write elsewhere has to name its page and
+        // say whether the screen took the change at all.
+        let pages = Project::touched_pages(&commit)?;
+        let presentation = self.synchronize(commit, page).await?;
         Invocation::changed(json!({
             "revision": revision,
             "project": project,
+            "pages": pages,
+            "presented": presentation,
             "result": value,
         }))
     }
 
-    async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<()> {
+    async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<Presentation> {
         let desktop = self.handle.state::<Desktop>();
-        desktop.synchronize(&commit.snapshot, page, &commit).await?;
+        let presentation = desktop.synchronize(&commit.snapshot, page, &commit).await?;
         let canvas = desktop.canvas_state();
         self.handle.state::<CanvasChannel>().channel.publish(canvas);
-        Ok(())
+        Ok(presentation)
     }
 
     async fn run_pipeline(&self, arguments: RunPipeline, control: &Control) -> Result<Invocation> {
@@ -182,6 +153,56 @@ impl Host for KoharuHost {
         self.project_context().await
     }
 
+    async fn bulk_review_pages(&self, pages: &[String]) -> Result<Value> {
+        let snapshot = {
+            let current = self.handle.state::<CurrentProject>();
+            let current = current.project.lock().await;
+            let project = current.as_ref().context("no project is open")?;
+            project.snapshot()
+        };
+        let mut result = Vec::new();
+        for page_id in pages {
+            let id = entity(page_id).with_context(|| format!("cannot read page {page_id}"))?;
+            let page = snapshot
+                .page(id)
+                .with_context(|| format!("page {page_id} not found for bulk review"))?;
+            let elements = Project::review_texts(&snapshot, id)?
+                .into_iter()
+                .map(|text| {
+                    serde_json::to_value(text)
+                        .with_context(|| format!("cannot encode the review text of page {page_id}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            result.push(json!({
+                "id": page_id,
+                "label": page.page()?.label,
+                "elements": elements,
+            }));
+        }
+        Ok(json!({ "pages": result }))
+    }
+
+    fn review_target_language(&self) -> Result<String> {
+        context::target_language()
+    }
+
+    async fn review_page_image(&self, page: &str) -> Result<Option<String>> {
+        let id = entity(page).with_context(|| format!("cannot read page {page}"))?;
+        let snapshot = {
+            let current = self.handle.state::<CurrentProject>();
+            let current = current.project.lock().await;
+            let project = current.as_ref().context("no project is open")?;
+            project.snapshot()
+        };
+        let Some(bytes) = output::source_preview(&snapshot, id).await? else {
+            return Ok(None);
+        };
+        Ok(Some(format!(
+            "data:image/webp;base64,{}",
+            STANDARD.encode(bytes)
+        )))
+    }
+
     fn tools(&self) -> Vec<Tool> {
         static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
         TOOLS
@@ -189,7 +210,11 @@ impl Host for KoharuHost {
                 vec![
                     definition::<InspectProject>(
                         "inspect_project",
-                        "Read the latest complete semantic project state after edits. This does not include page images.",
+                        "Read the latest project summary and page index. This does not include page contents or images.",
+                    ),
+                    definition::<InspectPages>(
+                        "inspect_pages",
+                        "Read the latest layout and presentation state of up to four pages: layers, geometry, typography, visibility. No rendered images. A translation review does not need it — review_translations_job reads the text of the pages itself.",
                     ),
                     definition::<ViewPage>(
                         "view_page",
@@ -197,16 +222,20 @@ impl Host for KoharuHost {
                     ),
                     definition::<RenamePage>("rename_page", "Rename a project page."),
                     definition::<MovePage>("move_page", "Move a page to a zero-based project index."),
+                    definition::<SelectPage>(
+                        "select_page",
+                        "Show one page in the editor. Moves the user's view without changing the document: use it to bring a page you just changed on screen, or to look at one page at a time.",
+                    ),
                     definition::<DeletePages>("delete_pages", "Delete pages and their contents."),
                     definition::<AddTextBox>("add_text_box", "Add a paragraph text box to a page."),
                     definition::<SetText>("set_source_text", "Replace an element's source text."),
-                    definition::<SetTranslation>(
-                        "set_translation",
-                        "Set an element's translation, or pass null to remove it.",
+                    definition::<SetTranslations>(
+                        "set_translations",
+                        "Set an element's translation, or pass null to remove it. Accepts multiple elements and applies them in one revision.",
                     ),
                     definition::<SetTypography>(
                         "set_typography",
-                        "Replace an element's typography settings. Font is a family name from available_fonts.",
+                        "Replace an element's typography settings. Font is a family name from list_fonts.",
                     ),
                     definition::<SetGeometry>(
                         "set_geometry",
@@ -225,6 +254,10 @@ impl Host for KoharuHost {
                         "run_pipeline",
                         "Run Koharu's configured processing pipeline for the whole project, selected pages, or selected text elements.",
                     ),
+                    definition::<ListFonts>(
+                        "list_fonts",
+                        "List the font family names set_typography accepts. Only needed when choosing a font.",
+                    ),
                 ]
             })
             .clone()
@@ -235,6 +268,35 @@ impl Host for KoharuHost {
             "inspect_project" => {
                 let _: InspectProject = arguments(&call)?;
                 Invocation::read(self.project_context().await?)
+            }
+            "inspect_pages" => {
+                let arguments: InspectPages = arguments(&call)?;
+                if arguments.pages.is_empty() {
+                    bail!("inspect_pages requires at least one page ID");
+                }
+                anyhow::ensure!(
+                    arguments.pages.len() <= context::MAX_INSPECT_PAGES,
+                    "inspect_pages reads at most {} pages at a time",
+                    context::MAX_INSPECT_PAGES
+                );
+                let pages = entities(&arguments.pages)?;
+                let values = {
+                    let current = self.handle.state::<CurrentProject>();
+                    let current = current.project.lock().await;
+                    let project = current.as_ref().context("no project is open")?;
+                    let snapshot = project.snapshot();
+                    pages
+                        .into_iter()
+                        .map(|page| Project::page(&snapshot, page))
+                        .collect::<Result<Vec<_>>>()?
+                };
+                Invocation::read(context::inspect_pages(
+                    values
+                        .into_iter()
+                        .map(serde_json::to_value)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+                .map(|invocation| invocation.with_history(inspect_pages_history(&arguments.pages)))
             }
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;
@@ -256,8 +318,38 @@ impl Host for KoharuHost {
                     Invocation::read(json!({ "page": page, "label": label }))?.with_image(
                         format!("Rendered page {label} ({page})"),
                         format!("data:image/webp;base64,{}", STANDARD.encode(bytes)),
+                        // Deliberately the expensive level: this tool exists for
+                        // proofreading rendered text, and the instructions tell the
+                        // model to call it only when that matters.
+                        "high",
                     ),
                 )
+            }
+            "select_page" => {
+                let arguments: SelectPage = arguments(&call)?;
+                let page = entity(&arguments.page)?;
+                let (label, snapshot) = {
+                    let current = self.handle.state::<CurrentProject>();
+                    let mut current = current.project.lock().await;
+                    let project = current.as_mut().context("no project is open")?;
+                    project.select_page(page)?;
+                    let snapshot = project.snapshot();
+                    (snapshot.page(page)?.page()?.label, snapshot)
+                };
+                // A view move, not a document change: no commit, no undo step, and the
+                // revision the canvas gestures are checked against stays the frame's
+                // own. `presented` says whether the screen actually took it.
+                let desktop = self.handle.state::<Desktop>();
+                let presentation = desktop.show_page(&snapshot, Some(page)).await?;
+                if presentation.presented() {
+                    let canvas = desktop.canvas_state();
+                    self.handle.state::<CanvasChannel>().channel.publish(canvas);
+                }
+                Invocation::read(json!({
+                    "page": page,
+                    "label": label,
+                    "presented": presentation,
+                }))
             }
             "rename_page" => {
                 let arguments: RenamePage = arguments(&call)?;
@@ -329,14 +421,23 @@ impl Host for KoharuHost {
                 })
                 .await
             }
-            "set_translation" => {
-                let arguments: SetTranslation = arguments(&call)?;
-                let element = entity(&arguments.element)?;
+            "set_translations" => {
+                let arguments: SetTranslations = arguments(&call)?;
+                if arguments.updates.is_empty() {
+                    bail!("set_translations requires at least one update");
+                }
+                let mut elements = Vec::with_capacity(arguments.updates.len());
+                let mut updates = Vec::with_capacity(arguments.updates.len());
+                for update in arguments.updates {
+                    let element = entity(&update.element)?;
+                    elements.push(element);
+                    updates.push((element, update.text));
+                }
                 self.mutate(|project| {
                     Box::pin(async move {
                         Ok((
-                            project.set_translation(element, arguments.text).await?,
-                            json!({ "element": element }),
+                            project.set_translations(updates).await?,
+                            json!({ "elements": elements }),
                         ))
                     })
                 })
@@ -445,6 +546,18 @@ impl Host for KoharuHost {
                 .await
             }
             "run_pipeline" => self.run_pipeline(arguments(&call)?, control).await,
+            "list_fonts" => {
+                let _: ListFonts = arguments(&call)?;
+                let fonts = self
+                    .handle
+                    .state::<Desktop>()
+                    .renderer()
+                    .available_fonts()
+                    .await?;
+                Invocation::read(json!({
+                    "fonts": fonts.into_iter().map(|font| font.name).collect::<Vec<_>>(),
+                }))
+            }
             name => bail!("unknown Koharu tool {name}"),
         }
     }
@@ -487,16 +600,45 @@ fn arguments<T: for<'de> Deserialize<'de>>(call: &ToolCall) -> Result<T> {
 }
 
 fn entity(value: &str) -> Result<EntityId> {
-    serde_json::from_value(Value::String(value.to_owned()))
-        .with_context(|| format!("invalid entity ID {value}"))
+    // A model can emit an ID that still carries its JSON quotes.
+    let parsed = if value.starts_with('"') {
+        serde_json::from_str::<EntityId>(value)
+    } else {
+        serde_json::from_value(Value::String(value.to_owned()))
+    };
+    parsed.with_context(|| format!("invalid entity ID {value}"))
 }
 
 fn entities(values: &[String]) -> Result<Vec<EntityId>> {
     values.iter().map(|value| entity(value)).collect()
 }
 
+/// Page contents matter only in the turn that asked for them. Keeping every
+/// inspected page in history is what overflowed the context window on long
+/// projects, so the tool reports what it showed and drops what it showed.
+fn inspect_pages_history(pages: &[String]) -> Value {
+    json!({
+        "omitted_from_history": true,
+        "pages": pages,
+        "message": "Page contents were available in the turn that called inspect_pages; call inspect_pages again if they are needed."
+    })
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct InspectProject {}
+
+#[derive(Deserialize, JsonSchema)]
+struct ListFonts {}
+
+#[derive(Deserialize, JsonSchema)]
+struct InspectPages {
+    pages: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct SelectPage {
+    page: String,
+}
 
 #[derive(Deserialize, JsonSchema)]
 struct ViewPage {
@@ -538,9 +680,14 @@ struct SetText {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct SetTranslation {
+struct TranslationUpdate {
     element: String,
     text: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct SetTranslations {
+    updates: Vec<TranslationUpdate>,
 }
 
 #[derive(Clone, Copy, Deserialize, JsonSchema)]
@@ -688,5 +835,36 @@ impl RunPipeline {
             (true, false) => Ok(Scope::Entities(entities(&self.elements)?)),
             (false, false) => bail!("pipeline scope cannot contain both pages and elements"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{entity, inspect_pages_history};
+
+    #[test]
+    fn page_contents_are_summarized_for_history() {
+        let history = inspect_pages_history(&["p1".to_owned(), "p2".to_owned()]);
+        assert_eq!(history["omitted_from_history"], true);
+        assert_eq!(history["pages"], json!(["p1", "p2"]));
+        assert!(history.get("contents").is_none());
+    }
+
+    #[test]
+    fn accepts_bare_and_quoted_entity_ids() {
+        let bare = "0189f0c8-0b1c-7ac0-95cd-d238b71ce20f";
+        let bare_id = entity(bare).expect("bare UUID must parse");
+        let quoted = format!("\"{bare}\"");
+        let quoted_id = entity(&quoted).expect("JSON-quoted UUID must parse");
+        assert_eq!(bare_id.to_string(), quoted_id.to_string());
+    }
+
+    #[test]
+    fn reports_numeric_page_ids_clearly() {
+        let error = entity("041").expect_err("041 must fail");
+        let message = format!("{error:#}");
+        assert!(message.contains("041"), "{message}");
     }
 }
