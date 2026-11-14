@@ -1,55 +1,63 @@
 # koharu-psd
 
-Writes a page of a `koharu-scene` project as a layered PSD. `koharu-renderer` draws the
-pixels and lays out the text, and photocraft-psd writes the file. Every layer in the scene is
-written, hidden ones hidden. PSD has no panels, balloons, or blocks, so each becomes a folder of
-ordinary layers.
+A page as a layered Photoshop document.
 
-## API
+It writes one page of a project as a PSD that opens in Photoshop with every
+layer editable. The renderer draws the pixels and lays out the text, so the
+file shows what the editor shows. Where it follows an established format or
+product, it cites it; the links are under [Sources](#sources).
 
-`export(&session, &renderer, page, &labels)` returns the file's bytes. `Labels` names, in the
-app's language, the layers the scene has no name for: the background, a block's clean-up, and a
-balloon's outline. A type layer takes its text as its name, as Photoshop names it. It renders
-the page once, so call it off the UI thread. A page over 30,000 pixels on a side fails with
-`Error::TooLarge`, since a larger document would need PSB.
+## Goal
 
-The merged image is the renderer's composite, at 72 pixels an inch. The `export` example writes
-a page and prints its layers, bottom to top.
+A letterer can take a page into Photoshop and keep working on it: every layer
+the project has, hidden ones hidden, and every text still text.
 
-## Layers
+## 1. Layers
+
+PSD has no panels, balloons, or blocks, so each becomes a folder of ordinary
+layers [PSD spec], and nothing a block holds is lost: its clean-up, its mask,
+its source, and its translation each stay a layer.
 
 | Scene layer | PSD layer |
 |---|---|
-| Page background | The bottom pixel layer, hidden when the background is |
-| Group | A folder, with its children, its blend mode, and its masks |
-| Panel | A folder whose vector mask is its outline |
-| Balloon | A folder holding a hidden white shape layer of its outline, then its texts |
-| Block | A folder holding its clean-up as a pixel layer with the clean-up's own name, visibility, opacity, and blend, whose user mask is the block's mask while it's visible, its source as a hidden type layer, and its translation as a type layer |
-| Image, raster | A pixel layer, cropped to what it draws |
-| Shape | A pixel layer marked as derived from its path, with a `vmsk` vector mask, and `SoCo` for its fill, or `vscg` and `vstk` when it has a stroke |
-| Text | A pixel layer with a `TySh` type layer, and `lfx2` for a stroke effect. A text that draws nothing stays an empty pixel layer |
-| Mask | No layer of its own: it becomes its parent's mask |
+| background | the bottom pixel layer, hidden when the background is |
+| group | a folder, with its children, its blend mode, and its masks |
+| panel | a folder whose vector mask is its outline |
+| balloon | a folder holding a hidden white shape layer of its outline, then its texts |
+| block | a folder holding its clean-up as a pixel layer, whose layer mask is the block's mask while that's shown, its source as a hidden type layer, and its translation as a type layer |
+| image, raster | a pixel layer, cropped to what it draws |
+| shape | a shape layer: its path as a vector mask, its fill, and its stroke |
+| text | a type layer, with its stroke as a layer effect |
+| mask | no layer of its own: it's its parent's mask |
 
-Every layer also keeps its name, visibility, opacity, and blend mode. A locked layer gets
-`lspf`'s lock-all flag. Pass-through only means something for a group, so any other layer
-writes it as normal.
+- **Every layer** keeps its name, visibility, opacity, and blend mode, and a
+  locked layer is locked. Pass-through means something only for a folder, so
+  any other layer writes it as normal.
+- **Pixels are a layer's own**, without its opacity, blend mode, or masks,
+  which the file records as properties. Under a stroke effect they're the
+  glyphs alone, as Photoshop draws the effect around them.
+- **Masks.** A PSD layer has one layer mask [PSD spec], so a layer's shown masks
+  merge into one, cropped to what it covers.
+- **Names.** A type layer is named by its text, as Photoshop names one. The
+  layers the scene has no name for, such as the background and a block's
+  clean-up, are named in the app's language.
 
-A layer's pixels are its own content without its opacity, blend mode, or masks, which the PSD
-records as properties. Under a stroke effect they are the glyphs alone, as Photoshop draws the
-effect around them.
+## 2. The file
 
-## Masks
+| Part | Model | Cite |
+|---|---|---|
+| size | at most 30,000 pixels on a side; a larger page fails, since it would need PSB | a PSD's width and height range from 1 to 30,000 [PSD spec] |
+| merged image | the renderer's composite of the page, at 72 pixels an inch | |
+| type layers | the text engine's data, in the keys, order, and resource sets ag-psd writes; Photoshop fills in what isn't written from its own defaults | ag-psd writes text layers [ag-psd] |
+| blocks | laid out as the specification says, and as ag-psd does where it's silent; a block's length counts its padding, because readers such as psd-tools skip exactly that many bytes | [PSD spec], [ag-psd], [psd-tools] |
 
-A layer's shown masks merge into one user mask the renderer draws, cropped to what it covers,
-since a PSD layer has one layer mask.
+## Sources
 
-## Type layers
+Read in November 2026.
 
-A type layer's EngineData is the PDF-like dictionary Photoshop's text engine reads. Its keys,
-their order, and its resource sets follow ag-psd's encoder, and Photoshop fills in what isn't
-written from its own defaults. Strings are UTF-16 big-endian with a byte-order mark, and runs
-count UTF-16 units.
+- Adobe: [PSD spec]
+- Readers and writers: [ag-psd], [psd-tools]
 
-Block layouts follow Adobe's Photoshop File Formats Specification, and ag-psd where it is
-silent. A block's length counts its padding, because readers such as psd-tools skip exactly
-that many bytes.
+[PSD spec]: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
+[ag-psd]: https://github.com/Agamnentzar/ag-psd
+[psd-tools]: https://github.com/psd-tools/psd-tools

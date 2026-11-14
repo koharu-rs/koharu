@@ -1,51 +1,64 @@
 # koharu-leptonica
 
-Rust ports of the Leptonica algorithms no Rust crate covers, from Leptonica 1.87.0
-(commit `13275a2`). Each keeps Leptonica's integer and float arithmetic, so it gives
-Leptonica's result on the same image.
+Leptonica's document-image algorithms, in Rust.
 
-## API
+Ports of the Leptonica algorithms no Rust crate covers [Leptonica], from
+Leptonica 1.87.0. Each keeps Leptonica's integer and float arithmetic, so it
+gives Leptonica's result on the same image. The links are under
+[Sources](#sources).
 
-| Function | Ports | What it does |
+## Goal
+
+Measurements on a page's lettering, such as its skew and the width of its
+strokes, match what Leptonica measures, without linking a C library.
+
+## 1. What it ports
+
+| Algorithm | Leptonica | Does |
 |---|---|---|
-| `find_skew` | `pixFindSkew` | Sweeps ±7° in 1° steps at 4× reduction, then binary searches to 0.01° at 2× |
-| `find_skew_sweep_and_search` | `pixFindSkewSweepAndSearch` | The same, with the range, steps, and reductions as arguments. A reduction is 1, 2, 4, or 8 |
-| `find_stroke_width` | `pixFindStrokeWidth` | Averages the area over half the boundary with a width read from the 8-connected distance histogram |
-| `otsu_adaptive_threshold` | `pixOtsuAdaptiveThreshold` | Binarizes each tile at its own Otsu threshold, optionally smoothed over neighboring tiles |
-| `sauvola_binarize` | `pixSauvolaBinarize` | Thresholds at `mean × (1 − factor × (1 − deviation / 128))`, with a mirrored border |
-| `color_segment` | `pixColorSegment` | Reduces an `RgbImage` to at most `final_colors` colors |
+| skew | `pixFindSkew`, `pixFindSkewSweepAndSearch` | finds the angle that deskews an image: a coarse sweep of angles on a reduced image, then a binary search to a hundredth of a degree |
+| stroke width | `pixFindStrokeWidth` | the average width of an image's strokes |
+| Otsu thresholding | `pixOtsuAdaptiveThreshold` | binarizes each tile at its own Otsu threshold, optionally smoothed over its neighbours |
+| Sauvola thresholding | `pixSauvolaBinarize` | binarizes each pixel by its neighbourhood's mean and deviation |
+| colour segmentation | `pixColorSegment` | reduces an image to a few colours, and says which colour each pixel took |
 
-Inputs and results use `image` buffers:
+- **Binary images.** A binary input's nonzero pixels are foreground, and a
+  binary result marks foreground 255. Both binarizers make pixels below the
+  threshold foreground.
+- **Skew** is the rotation that deskews the image, clockwise positive, with a
+  confidence: the best score over the worst, and zero when the measurement
+  isn't valid.
 
-- **Binary images.** A binary input is a `GrayImage` whose nonzero pixels are
-  foreground, and a binary result marks foreground 255. Both binarizers make pixels
-  below the threshold foreground.
-- **`Skew`.** `angle` is the rotation that deskews the image, in degrees, clockwise
-  positive. `confidence` is the best score over the worst, and zero when the
-  measurement isn't valid.
-- **`Segments`.** `indices` holds each pixel's index into `colors`.
+## 2. Where it differs from Leptonica
 
-## Where it differs from Leptonica
-
-Results match. These only change what happens on input Leptonica doesn't handle, or
-how a result is computed:
+Results match. These change only what happens on input Leptonica doesn't
+handle, or how a result is computed:
 
 | Case | Leptonica | This crate |
 |---|---|---|
-| A skew sweep of 45° or more, or a step that isn't positive | Never finishes | `Error::Invalid` |
-| Stroke width with no foreground | Reads an unset ratio | `None` |
-| Skew's vertical shear | Makes the sheared image | Sums each sheared row straight from the source |
+| a skew sweep of 45° or more, or a step that isn't positive | never finishes | an error |
+| stroke width with no foreground | reads an unset ratio | none |
+| skew's vertical shear | makes the sheared image | sums each sheared row straight from the source |
 
-`find_skew` also returns `None` when no foreground survives the reduction, and
-`color_segment` returns `None` when 20 growing distances don't fit the colors. It
-rejects a `sel_size` of 32 or more, since this crate's closing only matches
-Leptonica's below that.
+Skew also finds none when no foreground survives the reduction, and colour
+segmentation finds none when 20 growing distances don't fit the colours. It
+refuses a closing of 32 pixels or more, since only smaller closings match
+Leptonica's.
 
-## Tests
+## 3. Fidelity
 
-`tests/leptonica.rs` compares each port with exact values recorded from the C library.
-The test images use only integer arithmetic, so they're the same on every platform,
-and any drift from Leptonica fails. Each source file links the C files it ports.
+Each port's source links the C file it follows, and the tests compare every
+port with exact values recorded from the C library. The test images use only
+integer arithmetic, so they're the same on every platform, and any drift from
+Leptonica fails.
 
 Leptonica's code is BSD-2-Clause, so this crate's license is
 `MIT OR Apache-2.0 AND BSD-2-Clause`.
+
+## Sources
+
+Read in November 2026.
+
+- [Leptonica]
+
+[Leptonica]: https://github.com/DanBloomberg/leptonica/tree/13275a2
