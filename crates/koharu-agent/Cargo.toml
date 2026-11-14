@@ -38,6 +38,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true }
+fs-err = { workspace = true }
 reqwest = { workspace = true }
 rig-core = { workspace = true, features = ["test-utils"] }
 tempfile = { workspace = true }

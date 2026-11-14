@@ -3228,6 +3228,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5c95b673b8f6f7235229ae11c5642d81b04c2e64c1e2fb417bc0cf73ca45f29"
 dependencies = [
  "autocfg",
+ "tokio",
 ]
 
 [[package]]
@@ -5489,6 +5490,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "clap",
+ "fs-err",
  "futures",
  "image",
  "indoc",
@@ -5519,6 +5521,7 @@ name = "koharu-bindgen"
 version = "0.83.5"
 dependencies = [
  "bindgen",
+ "fs-err",
  "prettyplease",
  "proc-macro2",
  "quote",
@@ -5532,6 +5535,7 @@ dependencies = [
  "anyhow",
  "clap",
  "cursor-icon",
+ "fs-err",
  "image",
  "koharu-config",
  "koharu-renderer",
@@ -5557,6 +5561,7 @@ dependencies = [
  "age",
  "atomicwrites",
  "dirs 7.0.0",
+ "fs-err",
  "indoc",
  "keyring",
  "secrecy",
@@ -5577,6 +5582,7 @@ dependencies = [
  "alphanumeric-sort",
  "anyhow",
  "dirs 7.0.0",
+ "fs-err",
  "futures",
  "hayro",
  "heck",
@@ -5679,6 +5685,7 @@ dependencies = [
  "backon",
  "base64 0.23.1",
  "bytes",
+ "fs-err",
  "futures",
  "http 1.5.0",
  "indoc",
@@ -5741,6 +5748,7 @@ dependencies = [
  "base64 0.23.1",
  "bytesize",
  "clap",
+ "fs-err",
  "icu_experimental",
  "icu_locale",
  "icu_locale_core",
@@ -5775,6 +5783,7 @@ dependencies = [
 name = "koharu-psd"
 version = "0.83.5"
 dependencies = [
+ "fs-err",
  "image",
  "koharu-renderer",
  "koharu-scene",
@@ -5793,6 +5802,7 @@ version = "0.83.5"
 dependencies = [
  "anyhow",
  "fontique",
+ "fs-err",
  "harfrust",
  "hypher",
  "icu_properties",
@@ -5859,6 +5869,7 @@ dependencies = [
  "criterion",
  "derive_more 2.1.1",
  "flate2",
+ "fs-err",
  "icu_locale_core",
  "image",
  "imbl",
@@ -5898,6 +5909,7 @@ dependencies = [
 name = "koharu-torch"
 version = "0.83.5"
 dependencies = [
+ "fs-err",
  "half",
  "koharu-torch-sys",
  "prettyplease",

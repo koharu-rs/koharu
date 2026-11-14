@@ -60,7 +60,7 @@ pub(crate) async fn fetch(url: &str, destination: &Path) -> Result<()> {
     let result =
         async { download::download(&activity, client().await?, url, destination).await }.await;
     if result.is_err() {
-        let _ = tokio::fs::remove_file(destination).await;
+        let _ = fs_err::tokio::remove_file(destination).await;
     }
     activity.finish(result)
 }

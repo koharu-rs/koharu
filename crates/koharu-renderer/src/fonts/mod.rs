@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use fontique::{Attributes, FontStyle, Language};
 use koharu_scene::{CharStyle, LanguageIdentifier};
 use parking_lot::Mutex;
@@ -233,10 +233,7 @@ impl Fonts {
         let catalog = self.catalog().await?;
         if let Some(face) = catalog.select(family_name, Attributes::default()) {
             let [path] = FONTS.resolve([face.preview_file.as_str()]).await?;
-            return tokio::fs::read(&path)
-                .await
-                .with_context(|| format!("failed to read {}", path.display()))
-                .map(FontPreview::Webp);
+            return Ok(FontPreview::Webp(fs_err::tokio::read(&path).await?));
         }
         tokio::task::spawn_blocking({
             let family_name = family_name.to_owned();

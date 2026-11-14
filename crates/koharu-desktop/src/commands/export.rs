@@ -1,13 +1,13 @@
 //! Export: every page as PNG or PSD files in a folder, or as a CBZ of PNGs.
 
 use std::{
-    fs::File,
     io::{Cursor, Write as _},
     path::Path,
     sync::Arc,
 };
 
 use anyhow::Context as _;
+use fs_err::File;
 use image::ImageFormat;
 use koharu_psd::Labels;
 use koharu_renderer::{Frame, Renderer};
@@ -77,10 +77,7 @@ fn write(
         .collect();
     let digits = pages.len().to_string().len().max(3);
     let mut archive = match format {
-        ExportFormat::Cbz => Some(::zip::ZipWriter::new(
-            File::create(destination)
-                .with_context(|| format!("failed to create {}", destination.display()))?,
-        )),
+        ExportFormat::Cbz => Some(::zip::ZipWriter::new(File::create(destination)?)),
         ExportFormat::Png | ExportFormat::Psd => None,
     };
     for (index, &page) in pages.iter().enumerate() {
@@ -91,7 +88,7 @@ fn write(
         match (format, &mut archive) {
             (ExportFormat::Psd, _) => {
                 let psd = koharu_psd::export(&session.lock(), &app.renderer, page, labels)?;
-                std::fs::write(destination.join(format!("{number}.psd")), psd)?;
+                fs_err::write(destination.join(format!("{number}.psd")), psd)?;
             }
             (_, Some(archive)) => {
                 // Already-compressed PNGs gain nothing from deflate.
@@ -101,7 +98,7 @@ fn write(
                 archive.write_all(&png(&app.renderer, &frame)?)?;
             }
             (_, None) => {
-                std::fs::write(
+                fs_err::write(
                     destination.join(format!("{number}.png")),
                     png(&app.renderer, &frame)?,
                 )?;

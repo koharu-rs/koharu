@@ -78,7 +78,7 @@ fn main() -> Result<()> {
         println!("  {:16} {:?} {:?}", layer.name(), layer.rect, keys);
     }
     if let Some(path) = std::env::args().nth(1) {
-        std::fs::write(&path, &bytes)?;
+        fs_err::write(&path, &bytes)?;
         println!("wrote {path}");
     }
     Ok(())

@@ -65,7 +65,7 @@ mod tests {
             move |stage| async move {
                 started.send(()).unwrap();
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                tokio::fs::write(stage.join("ready"), b"ok").await?;
+                fs_err::tokio::write(stage.join("ready"), b"ok").await?;
                 Ok(stage)
             },
         );

@@ -26,25 +26,25 @@ fn png(width: u32, height: u32) -> Vec<u8> {
 #[test]
 fn a_file_that_is_not_a_project_fails_and_stays_unchanged() {
     let (_dir, path) = path();
-    std::fs::write(&path, vec![7; 8192]).expect("a file");
-    let junk = std::fs::read(&path).expect("its bytes");
+    fs_err::write(&path, vec![7; 8192]).expect("a file");
+    let junk = fs_err::read(&path).expect("its bytes");
     assert!(matches!(
         Session::open(&path).err().expect("refused"),
         Error::Corrupt(_)
     ));
-    assert_eq!(std::fs::read(&path).expect("its bytes"), junk);
+    assert_eq!(fs_err::read(&path).expect("its bytes"), junk);
 
-    std::fs::remove_file(&path).expect("removed");
+    fs_err::remove_file(&path).expect("removed");
     let conn = rusqlite::Connection::open(&path).expect("a database");
     conn.execute_batch("PRAGMA application_id=7; CREATE TABLE other(a);")
         .expect("a table");
     drop(conn);
-    let other = std::fs::read(&path).expect("its bytes");
+    let other = fs_err::read(&path).expect("its bytes");
     assert!(matches!(
         Session::open(&path).err().expect("refused"),
         Error::Corrupt(_)
     ));
-    assert_eq!(std::fs::read(&path).expect("its bytes"), other);
+    assert_eq!(fs_err::read(&path).expect("its bytes"), other);
 
     assert!(Session::open(path.with_extension("missing")).is_err());
     assert!(!path.with_extension("missing").exists());
@@ -60,7 +60,7 @@ fn a_create_that_fails_leaves_no_file() {
         std::path::PathBuf::from(journal)
     });
     for journal in &journals {
-        std::fs::create_dir(journal).expect("a directory");
+        fs_err::create_dir(journal).expect("a directory");
     }
     assert!(Session::create(&path).is_err());
     assert!(
@@ -68,7 +68,7 @@ fn a_create_that_fails_leaves_no_file() {
         "a half-made project would refuse both a create and an open"
     );
     for journal in &journals {
-        std::fs::remove_dir(journal).expect("removed");
+        fs_err::remove_dir(journal).expect("removed");
     }
     Session::create(&path).expect("a project");
 }
@@ -77,27 +77,23 @@ fn a_create_that_fails_leaves_no_file() {
 fn only_compatible_versions_open() {
     let (_dir, path) = path();
     drop(Session::create(&path).expect("a project"));
-    let bytes = std::fs::read(&path).expect("its bytes");
+    let bytes = fs_err::read(&path).expect("its bytes");
     for version in ["1.1.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
         let copy = path.with_extension(format!("v{version}"));
-        std::fs::copy(&path, &copy).expect("a copy");
+        fs_err::copy(&path, &copy).expect("a copy");
         let conn = rusqlite::Connection::open(&copy).expect("the file opens");
         conn.execute("UPDATE project SET version = ?1", [version])
             .expect("a version");
         drop(conn);
-        let before = std::fs::read(&copy).expect("its bytes");
+        let before = fs_err::read(&copy).expect("its bytes");
         let error = Session::open(&copy).err().expect("refused");
         assert!(
             matches!(error, Error::Version(ref got) if got == version),
             "{version}: {error:?}"
         );
-        assert_eq!(
-            std::fs::read(&copy).expect("its bytes"),
-            before,
-            "{version}"
-        );
+        assert_eq!(fs_err::read(&copy).expect("its bytes"), before, "{version}");
     }
-    assert_eq!(std::fs::read(&path).expect("its bytes"), bytes);
+    assert_eq!(fs_err::read(&path).expect("its bytes"), bytes);
     Session::open(&path).expect("1.0.0 opens");
 }
 
@@ -218,10 +214,10 @@ fn a_project_whose_values_dont_read_fails_to_open() {
         set("$.layers[2].file", &format!("'{missing}'")),
     ] {
         let copy = dir.path().join("broken.khr");
-        std::fs::copy(&path, &copy).expect("a copy");
+        fs_err::copy(&path, &copy).expect("a copy");
         let error = reopen_after(&copy, &change).err().expect("refused");
         assert!(matches!(error, Error::Corrupt(_)), "{change}: {error:?}");
-        std::fs::remove_file(&copy).expect("removed");
+        fs_err::remove_file(&copy).expect("removed");
     }
 }
 

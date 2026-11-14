@@ -83,8 +83,7 @@ fn create(path: &Path, images: &[PathBuf]) -> Result<Session> {
     let mut session = Session::create(path)?;
     let mut ops = Vec::new();
     for (index, file) in images.iter().enumerate() {
-        let bytes =
-            std::fs::read(file).with_context(|| format!("couldn't read {}", file.display()))?;
+        let bytes = fs_err::read(file)?;
         let background = Some(Hash::of(&bytes));
         ops.push(Op::AddFile { bytes });
         ops.push(Op::AddPage {

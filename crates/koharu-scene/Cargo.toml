@@ -16,6 +16,7 @@ blake3 = { workspace = true }
 color = { workspace = true }
 derive_more = { workspace = true }
 flate2 = { workspace = true }
+fs-err = { workspace = true }
 icu_locale_core = { workspace = true }
 image = { workspace = true }
 imbl = { workspace = true }

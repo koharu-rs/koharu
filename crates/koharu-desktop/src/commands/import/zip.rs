@@ -1,13 +1,14 @@
 //! A ZIP or CBZ archive's images.
 
-use std::{fs::File, io::Read as _, path::Path};
+use std::{io::Read as _, path::Path};
 
 use anyhow::{Context as _, Result, bail};
+use fs_err::File;
 
 use super::{EncodedPage, metadata, raster};
 
 pub(super) fn extract(path: &Path) -> Result<Vec<EncodedPage>> {
-    let file = File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+    let file = File::open(path)?;
     let mut archive = ::zip::ZipArchive::new(file)
         .with_context(|| format!("failed to read the archive {}", path.display()))?;
     let mut images = Vec::new();

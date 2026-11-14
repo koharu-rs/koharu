@@ -5,7 +5,7 @@
 //! These calls take a file lock and ask the OS credential store, either of which
 //! can block, so async code should run them on a blocking thread.
 
-use std::{collections::BTreeMap, fs, path::Path, str::FromStr};
+use std::{collections::BTreeMap, path::Path, str::FromStr};
 
 use age::x25519::Identity;
 
@@ -82,10 +82,7 @@ fn entry() -> Result<keyring::Entry> {
 
 fn read(path: &Path, keys: &impl Keys, name: &str) -> Result<Option<SecretString>> {
     // With no file, there's no key to ask for, and no store needed.
-    if !path.try_exists().map_err(|source| Error::Read {
-        path: path.into(),
-        source,
-    })? {
+    if !fs_err::exists(path)? {
         return Ok(None);
     }
     let _held = lock(path)?;
@@ -152,10 +149,7 @@ fn open(path: &Path, keys: &impl Keys) -> Result<Option<(Identity, Secrets)>> {
             "{}'s key is gone, so its secrets are forgotten",
             path.display()
         );
-        fs::remove_file(path).map_err(|source| Error::Write {
-            path: path.into(),
-            source,
-        })?;
+        fs_err::remove_file(path)?;
         return Ok(None);
     };
     let secrets = serde_json::from_slice(&plaintext).map_err(|error| unreadable(path, error))?;
@@ -227,7 +221,12 @@ mod tests {
 
         store(&path, &keys, "openai", &value("sk-1")).unwrap();
 
-        assert!(!fs::read(&path).unwrap().windows(4).any(|w| w == b"sk-1"));
+        assert!(
+            !fs_err::read(&path)
+                .unwrap()
+                .windows(4)
+                .any(|w| w == b"sk-1")
+        );
         assert_eq!(stored(&path, &keys, "openai").as_deref(), Some("sk-1"));
         edit(&path, &keys, |secrets| {
             secrets.remove("openai");
@@ -267,7 +266,7 @@ mod tests {
     fn a_store_that_cant_answer_keeps_the_file() {
         let (_directory, path) = file();
         store(&path, &Fake::default(), "openai", &value("sk-1")).unwrap();
-        let bytes = fs::read(&path).unwrap();
+        let bytes = fs_err::read(&path).unwrap();
 
         assert!(matches!(
             read(&path, &Locked, "openai"),
@@ -278,7 +277,7 @@ mod tests {
             Err(Error::CredentialStore(_))
         ));
 
-        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert_eq!(fs_err::read(&path).unwrap(), bytes);
     }
 
     #[test]
@@ -286,7 +285,7 @@ mod tests {
         let (_directory, path) = file();
         let keys = Fake::default();
         store(&path, &keys, "openai", &value("sk-1")).unwrap();
-        fs::write(&path, b"not an age file").unwrap();
+        fs_err::write(&path, b"not an age file").unwrap();
 
         assert!(matches!(
             read(&path, &keys, "openai"),
@@ -297,7 +296,7 @@ mod tests {
             Err(Error::SecretsUnreadable { .. })
         ));
 
-        assert_eq!(fs::read(&path).unwrap(), b"not an age file");
+        assert_eq!(fs_err::read(&path).unwrap(), b"not an age file");
     }
 
     #[test]

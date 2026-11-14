@@ -15,6 +15,7 @@ publish.workspace = true
 age = { workspace = true }
 atomicwrites = { workspace = true }
 dirs = { workspace = true }
+fs-err = { workspace = true }
 keyring = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
