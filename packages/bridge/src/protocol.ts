@@ -854,10 +854,10 @@ export const commands = {
 	getFonts: () => invoke<FontFamily[]>("get_fonts"),
 	/** `family`'s name set in it, as WebP. */
 	getFontPreview: (family: string) => invoke<ArrayBuffer>("get_font_preview", { family }),
-	/** Picks files or a folder and adds their pages after the project's last. */
+	/** Picks files or a folder and adds their pages after the project's last: the
+	 *  files in name order, numbers by value, an archive's or a PDF's own pages in
+	 *  theirs. */
 	import: (source: ImportSource) => invoke<null>("import", { source }),
-	/** Adds the pages of files dropped on the window. */
-	importPaths: (paths: string[]) => invoke<null>("import_paths", { paths }),
 	/** Picks where the open project's pages go, and writes them there. `labels`
 	 *  names a PSD's layers the scene names nothing, in the interface's language. */
 	export: (format: ExportFormat, labels: Labels) => invoke<null>("export", { format, labels }),

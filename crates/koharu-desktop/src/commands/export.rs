@@ -17,7 +17,7 @@ use specta::Type;
 use tauri::{State, Window};
 use tauri_runtime_cef::CefRuntime;
 
-use super::{Result, blocking};
+use super::Result;
 use crate::app::App;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Type)]
@@ -59,7 +59,7 @@ pub async fn export(
         return Ok(());
     };
     let app = Arc::clone(&app);
-    blocking(move || write(&app, format, &labels, &destination)).await
+    Ok(tokio::task::spawn_blocking(move || write(&app, format, &labels, &destination)).await??)
 }
 
 fn write(
