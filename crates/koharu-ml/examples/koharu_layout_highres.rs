@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let folder = cli.input.is_dir();
     let pages = if folder {
-        let mut pages: Vec<PathBuf> = std::fs::read_dir(&cli.input)?
+        let mut pages: Vec<PathBuf> = fs_err::read_dir(&cli.input)?
             .map(|entry| entry.map(|entry| entry.path()))
             .collect::<Result<_, _>>()?;
         pages.retain(|path| {
@@ -86,7 +86,7 @@ async fn main() -> Result<()> {
     };
     for path in [&cli.output, &cli.annotated_output].into_iter().flatten() {
         if folder {
-            std::fs::create_dir_all(path)?;
+            fs_err::create_dir_all(path)?;
         }
     }
 
@@ -142,7 +142,7 @@ async fn main() -> Result<()> {
         }
         let json = serde_json::to_string_pretty(&page.json())?;
         match cli.output.as_deref() {
-            Some(output) => std::fs::write(target(output, "json"), json)?,
+            Some(output) => fs_err::write(target(output, "json"), json)?,
             None if !folder => println!("{json}"),
             None => {}
         }
@@ -199,8 +199,7 @@ impl Page<'_> {
 }
 
 fn load_font(path: &Path) -> Result<FontArc> {
-    let data =
-        std::fs::read(path).with_context(|| format!("failed to read font {}", path.display()))?;
+    let data = fs_err::read(path)?;
     FontArc::try_from_vec(data).with_context(|| format!("failed to parse font {}", path.display()))
 }
 

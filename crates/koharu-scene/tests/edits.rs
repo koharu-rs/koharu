@@ -422,8 +422,8 @@ fn committed_edits_survive_a_process_that_never_closed() {
     // does, and a copy of both is what a crash leaves behind.
     let copy = dir.path().join("copy.khr");
     let original = dir.path().join("test.khr");
-    std::fs::copy(&original, &copy).expect("a copy");
-    std::fs::copy(
+    fs_err::copy(&original, &copy).expect("a copy");
+    fs_err::copy(
         original.with_extension("khr-wal"),
         copy.with_extension("khr-wal"),
     )

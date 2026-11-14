@@ -12,12 +12,10 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 use backon::{ExponentialBuilder, Retryable};
+use fs_err::tokio::{File, OpenOptions};
 use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::{Client, Response, StatusCode, header};
-use tokio::{
-    fs::File,
-    io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
-};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 use super::Activity;
 
@@ -159,10 +157,7 @@ async fn fetch_range(
         .to_str()?;
     ensure!(actual == expected, "asked for {expected}, got {actual}");
 
-    let mut file = tokio::fs::OpenOptions::new()
-        .write(true)
-        .open(destination)
-        .await?;
+    let mut file = OpenOptions::new().write(true).open(destination).await?;
     file.seek(std::io::SeekFrom::Start(start)).await?;
     let mut file = BufWriter::with_capacity(WRITE_BUFFER_SIZE, file);
     let received = write(response, &mut file, |_| {}).await?;

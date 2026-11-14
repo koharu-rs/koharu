@@ -80,13 +80,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::OpenOptions,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
     };
+
+    use fs_err::OpenOptions;
 
     use super::*;
 
@@ -106,7 +105,7 @@ mod tests {
                     move |stage| async move {
                         attempts.fetch_add(1, Ordering::Relaxed);
                         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                        tokio::fs::write(stage.join("ready"), b"ok").await?;
+                        fs_err::tokio::write(stage.join("ready"), b"ok").await?;
                         Ok(stage)
                     },
                 )
@@ -141,7 +140,7 @@ mod tests {
                             .create_new(true)
                             .open(attempt)?;
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                        tokio::fs::write(stage.join("ready"), b"ok").await?;
+                        fs_err::tokio::write(stage.join("ready"), b"ok").await?;
                         Ok(stage)
                     },
                 ))

@@ -4,7 +4,7 @@
 //! length, device index, and result parameter, so an operator's C signature
 //! gives its Rust one. A parameter of any other type stops the build.
 
-use std::{collections::BTreeSet, env, fs, path::PathBuf};
+use std::{collections::BTreeSet, env, path::PathBuf};
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
@@ -23,13 +23,13 @@ const OPTIONS: [(&str, &str); 5] = [
 fn main() {
     let bindings = env::var("DEP_KOHARU_TORCH_BINDINGS").expect("koharu-torch-sys passes it");
     println!("cargo::rerun-if-changed={bindings}");
-    let bindings = fs::read_to_string(bindings).expect("couldn't read the bindings");
+    let bindings = fs_err::read_to_string(bindings).expect("couldn't read the bindings");
     let file = syn::parse_file(&bindings).expect("bindgen writes Rust");
     // The shim's hand-written functions share the operators' prefix, so only
     // this header tells them apart.
     let header = env::var("DEP_KOHARU_TORCH_OPERATORS").expect("koharu-torch-sys passes it");
     println!("cargo::rerun-if-changed={header}");
-    let header = fs::read_to_string(header).expect("couldn't read the operators' header");
+    let header = fs_err::read_to_string(header).expect("couldn't read the operators' header");
     let operators: BTreeSet<&str> = header
         .split(|c: char| !c.is_alphanumeric() && c != '_')
         .collect();
@@ -49,7 +49,7 @@ fn main() {
         .expect("the generated methods are valid Rust");
     let path =
         PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets it")).join("tensor_generated.rs");
-    fs::write(path, prettyplease::unparse(&file)).expect("couldn't write the methods");
+    fs_err::write(path, prettyplease::unparse(&file)).expect("couldn't write the methods");
 }
 
 /// The operator's Rust name: its C name in lower case without `aten_`, with

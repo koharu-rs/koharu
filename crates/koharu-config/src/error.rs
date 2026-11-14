@@ -6,8 +6,9 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     #[error("there's no home folder to keep Koharu's settings in")]
     NoHome,
-    #[error("couldn't read {}", path.display())]
-    Read { path: PathBuf, source: io::Error },
+    /// A file or folder of the settings or secrets, named in the message.
+    #[error(transparent)]
+    Io(#[from] io::Error),
     #[error("couldn't save {}", path.display())]
     Write { path: PathBuf, source: io::Error },
     #[error("{} is invalid: {message}", path.display())]

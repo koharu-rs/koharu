@@ -15,6 +15,7 @@ publish.workspace = true
 alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }
+fs-err = { workspace = true }
 futures = { workspace = true }
 hayro = { workspace = true }
 heck = { workspace = true }

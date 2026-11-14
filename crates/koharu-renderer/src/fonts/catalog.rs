@@ -47,9 +47,7 @@ impl Fonts {
         self.catalog
             .get_or_try_init(|| async {
                 let [path] = FONTS.resolve(["index.json"]).await?;
-                let bytes = tokio::fs::read(&path)
-                    .await
-                    .with_context(|| format!("failed to read {}", path.display()))?;
+                let bytes = fs_err::tokio::read(&path).await?;
                 tokio::task::spawn_blocking(move || {
                     let index: Value =
                         serde_json::from_slice(&bytes).context("invalid bundled font index")?;
@@ -65,9 +63,7 @@ impl Fonts {
         self.bundled
             .get_or_insert_async(face.post_script_name.as_str(), async {
                 let [path] = FONTS.resolve([face.file_name.as_str()]).await?;
-                let data = tokio::fs::read(&path)
-                    .await
-                    .with_context(|| format!("failed to read {}", path.display()))?;
+                let data = fs_err::tokio::read(&path).await?;
                 let face = face.clone();
                 tokio::task::spawn_blocking(move || font_from_blob(Blob::from(data), &face)).await?
             })

@@ -6,13 +6,13 @@ pub mod secrets;
 use std::{
     collections::BTreeSet,
     ffi::OsString,
-    fs::{self, File, OpenOptions},
     io::{self, Write as _},
     path::{Path, PathBuf},
     sync::{Mutex, PoisonError},
 };
 
 use atomicwrites::{AtomicFile, OverwriteBehavior};
+use fs_err::{File, OpenOptions};
 use serde::{
     Serialize,
     de::{DeserializeOwned, IntoDeserializer as _},
@@ -95,13 +95,10 @@ fn invalid(path: &Path, message: impl ToString) -> Error {
 /// The file's bytes, or nothing when it doesn't exist; any other error fails,
 /// so a file that can't be read is never taken for a missing one.
 fn read_file(path: &Path) -> Result<Option<Vec<u8>>> {
-    match fs::read(path) {
+    match fs_err::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(source) => Err(Error::Read {
-            path: path.into(),
-            source,
-        }),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -243,12 +240,8 @@ fn implicit_table() -> Item {
 /// until the returned file is dropped. The lock is on a file beside it, as a
 /// save replaces the file itself.
 fn lock(path: &Path) -> Result<File> {
-    let error = |source| Error::Write {
-        path: path.into(),
-        source,
-    };
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(error)?;
+        fs_err::create_dir_all(parent)?;
     }
     let mut name = OsString::from(".");
     name.push(path.file_name().unwrap_or_default());
@@ -257,9 +250,8 @@ fn lock(path: &Path) -> Result<File> {
         .create(true)
         .truncate(false)
         .write(true)
-        .open(path.with_file_name(name))
-        .map_err(error)?;
-    file.lock().map_err(error)?;
+        .open(path.with_file_name(name))?;
+    file.lock()?;
     Ok(file)
 }
 
@@ -304,7 +296,7 @@ mod tests {
     fn update_writes_only_what_changed() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.toml");
-        fs::write(
+        fs_err::write(
             &path,
             indoc! {r#"
                 # hand-written
@@ -330,7 +322,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            fs::read_to_string(&path).unwrap(),
+            fs_err::read_to_string(&path).unwrap(),
             indoc! {r#"
                 # hand-written
                 [pipeline]
@@ -354,7 +346,7 @@ mod tests {
     fn a_value_of_the_wrong_type_fails_naming_its_key() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.toml");
-        fs::write(
+        fs_err::write(
             &path,
             indoc! {r#"
                 [pipeline]
@@ -372,7 +364,7 @@ mod tests {
             Err(Error::Invalid { .. })
         ));
         assert_eq!(
-            fs::read_to_string(&path).unwrap(),
+            fs_err::read_to_string(&path).unwrap(),
             indoc! {r#"
                 [pipeline]
                 retries = "three"
@@ -399,7 +391,7 @@ mod tests {
             read::<NoDefaults>(&path),
             Err(Error::Invalid { .. })
         ));
-        fs::write(
+        fs_err::write(
             &path,
             indoc! {"
                 [no-defaults]
@@ -483,7 +475,7 @@ mod tests {
     fn a_value_set_back_to_its_default_leaves_the_file() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.toml");
-        fs::write(
+        fs_err::write(
             &path,
             indoc! {"
                 [tuned]
@@ -496,7 +488,7 @@ mod tests {
         write(&path, |tuned: &mut Tuned| tuned.retries = 5).unwrap();
 
         assert_eq!(
-            fs::read_to_string(&path).unwrap(),
+            fs_err::read_to_string(&path).unwrap(),
             indoc! {"
                 [tuned]
                 later = 1
@@ -512,7 +504,7 @@ mod tests {
             [tuned]
             retries = 9
         "};
-        fs::write(&path, text).unwrap();
+        fs_err::write(&path, text).unwrap();
 
         // TOML has no null, and a missing key reads as the default.
         assert!(matches!(
@@ -520,6 +512,6 @@ mod tests {
             Err(Error::Invalid { .. })
         ));
 
-        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+        assert_eq!(fs_err::read_to_string(&path).unwrap(), text);
     }
 }

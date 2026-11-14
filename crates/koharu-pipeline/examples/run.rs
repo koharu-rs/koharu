@@ -77,16 +77,15 @@ async fn main() -> Result<()> {
         .init();
     let cli = Cli::parse();
     let files = pages(&cli.pages)?;
-    std::fs::create_dir_all(&cli.out)?;
+    fs_err::create_dir_all(&cli.out)?;
     let path = cli.out.join("pages.khr");
     if path.exists() {
-        std::fs::remove_file(&path)?;
+        fs_err::remove_file(&path)?;
     }
     let mut session = Session::create(&path)?;
     let mut ops = Vec::new();
     for (index, file) in files.iter().enumerate() {
-        let bytes =
-            std::fs::read(file).with_context(|| format!("couldn't read {}", file.display()))?;
+        let bytes = fs_err::read(file)?;
         let background = Some(Hash::of(&bytes));
         ops.push(Op::AddFile { bytes });
         ops.push(Op::AddPage {
@@ -238,7 +237,7 @@ fn pages(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for path in paths {
         if path.is_dir() {
-            let mut found: Vec<PathBuf> = std::fs::read_dir(path)?
+            let mut found: Vec<PathBuf> = fs_err::read_dir(path)?
                 .map(|entry| entry.map(|entry| entry.path()))
                 .collect::<std::io::Result<_>>()?;
             found.retain(|file| image::ImageFormat::from_path(file).is_ok());

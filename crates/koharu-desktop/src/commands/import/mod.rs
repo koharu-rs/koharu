@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context as _, bail};
+use anyhow::bail;
 use koharu_scene::{Edit, Hash, Op};
 use rayon::prelude::*;
 use serde::Deserialize;
@@ -104,8 +104,7 @@ pub async fn import_paths(app: State<'_, Arc<App>>, paths: Vec<PathBuf>) -> Resu
 
 /// The page files directly in `folder`.
 fn pages_in(folder: &Path) -> anyhow::Result<Vec<PathBuf>> {
-    Ok(std::fs::read_dir(folder)
-        .with_context(|| format!("failed to read {}", folder.display()))?
+    Ok(fs_err::read_dir(folder)?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
         .map(|entry| entry.path())
@@ -166,8 +165,7 @@ fn read(mut paths: Vec<PathBuf>) -> anyhow::Result<Vec<EncodedPage>> {
                 Some("pdf") => pdf::render(&path),
                 _ if raster(&path) => Ok(vec![EncodedPage {
                     name: path.to_string_lossy().into_owned(),
-                    bytes: std::fs::read(&path)
-                        .with_context(|| format!("failed to read {}", path.display()))?,
+                    bytes: fs_err::read(&path)?,
                 }]),
                 _ => bail!("{} isn't an image, an archive, or a PDF", path.display()),
             }

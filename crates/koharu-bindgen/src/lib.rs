@@ -6,7 +6,7 @@
 //! `load` resolves the symbols in a loop over a static list, so its stack
 //! frame doesn't grow with the number of bound functions.
 
-use std::{env, fs, path::PathBuf};
+use std::{env, path::PathBuf};
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -32,7 +32,7 @@ pub fn generate(configure: impl FnOnce(bindgen::Builder) -> bindgen::Builder) {
         .expect("bindgen failed");
     let file = syn::parse_file(&bindings.to_string()).expect("bindgen writes Rust");
     let path = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets it")).join("bindings.rs");
-    fs::write(path, rewrite(file)).expect("couldn't write bindings.rs");
+    fs_err::write(path, rewrite(file)).expect("couldn't write bindings.rs");
 }
 
 /// bindgen's output with each `extern` block replaced by its wrappers.

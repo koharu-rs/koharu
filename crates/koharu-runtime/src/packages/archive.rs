@@ -1,15 +1,12 @@
 //! The archives packages come in: Koharu's own `.tar.gz` releases and
 //! Python's `.whl` wheels.
 
-use std::{
-    fs::{File, create_dir_all},
-    io::copy,
-    path::Path,
-};
+use std::{io::copy, path::Path};
 
 use anyhow::{Context, Result};
 use fast_glob::glob_match;
 use flate2::read::GzDecoder;
+use fs_err::{File, create_dir_all};
 
 use crate::transfer;
 
@@ -32,7 +29,7 @@ pub(super) async fn extract(
     let stage = stage.to_owned();
     tokio::task::spawn_blocking(move || {
         unpack(&archive, &stage, patterns)?;
-        std::fs::remove_file(&archive)?;
+        fs_err::remove_file(&archive)?;
         Ok(())
     })
     .await?

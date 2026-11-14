@@ -6,7 +6,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Result, bail};
 use clap::Parser;
 use koharu_agent::{McpServer, Tools};
 use koharu_pipeline::{Pipeline, PipelineConfig};
@@ -54,8 +54,7 @@ fn create(path: &PathBuf, pages: &[PathBuf]) -> Result<Session> {
     let mut session = Session::create(path)?;
     let mut ops = Vec::new();
     for (index, file) in pages.iter().enumerate() {
-        let bytes =
-            std::fs::read(file).with_context(|| format!("couldn't read {}", file.display()))?;
+        let bytes = fs_err::read(file)?;
         let background = Some(Hash::of(&bytes));
         ops.push(Op::AddFile { bytes });
         ops.push(Op::AddPage {

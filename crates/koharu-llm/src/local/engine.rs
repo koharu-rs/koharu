@@ -178,9 +178,7 @@ fn fit(files: &Files, size: Size) -> Result<(Pin<Box<LlamaModelParams>>, u32)> {
     let mut context = context_params(size, None, None);
     // Fit doesn't count the projector.
     let projector = match &files.projector {
-        Some(projector) => std::fs::metadata(projector)
-            .with_context(|| format!("couldn't read {}", projector.display()))?
-            .len() as usize,
+        Some(projector) => fs_err::metadata(projector)?.len() as usize,
         None => 0,
     };
     let mut margins = vec![MARGIN + projector; koharu_llama::max_devices()];

@@ -1,6 +1,6 @@
 //! AMD discovery through the Linux KFD topology.
 
-use std::{fs, io, path::PathBuf};
+use std::{io, path::PathBuf};
 
 use strum::{EnumProperty, IntoEnumIterator};
 
@@ -34,7 +34,7 @@ pub(in crate::hardware) fn probe() -> Vec<Device> {
 fn targets() -> io::Result<Vec<Target>> {
     let mut targets = Vec::new();
     for node in nodes()? {
-        match fs::read_to_string(node.join("properties")) {
+        match fs_err::read_to_string(node.join("properties")) {
             Ok(properties) => targets.extend(target(&properties)),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
@@ -46,7 +46,7 @@ fn targets() -> io::Result<Vec<Target>> {
 /// The topology's node folders in the order `rocm-bootstrap` lists them, or
 /// none without the KFD driver.
 fn nodes() -> io::Result<Vec<PathBuf>> {
-    let entries = match fs::read_dir(KFD_TOPOLOGY) {
+    let entries = match fs_err::read_dir(KFD_TOPOLOGY) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error),

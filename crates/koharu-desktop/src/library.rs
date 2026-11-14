@@ -13,15 +13,13 @@ pub struct Library {
 
 impl Library {
     pub fn new(root: PathBuf) -> Result<Self> {
-        std::fs::create_dir_all(&root)
-            .with_context(|| format!("failed to create {}", root.display()))?;
+        fs_err::create_dir_all(&root)?;
         Ok(Self { root })
     }
 
     /// The projects' names in name order, numbers by value.
     pub fn list(&self) -> Result<Vec<String>> {
-        let mut names: Vec<String> = std::fs::read_dir(&self.root)
-            .with_context(|| format!("failed to read {}", self.root.display()))?
+        let mut names: Vec<String> = fs_err::read_dir(&self.root)?
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
             .filter_map(|entry| {

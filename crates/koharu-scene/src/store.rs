@@ -5,7 +5,6 @@
 
 use std::{
     collections::HashSet,
-    fs::File,
     path::Path,
     sync::{Mutex, MutexGuard, PoisonError},
     time::Duration,
@@ -112,7 +111,7 @@ impl Store {
     /// open, and its journals, which SQLite would replay into the next
     /// project made there.
     pub(crate) fn create(path: &Path) -> Result<(Self, Project)> {
-        File::create_new(path)?;
+        fs_err::File::create_new(path)?;
         let created = Self::initialize(path);
         if created.is_err() {
             // What can't be removed doesn't change what failed.
@@ -124,11 +123,11 @@ impl Store {
     /// Deletes a project file and the journals beside it, which SQLite would
     /// replay into the next project made there.
     pub(crate) fn remove(path: &Path) -> Result<()> {
-        std::fs::remove_file(path)?;
+        fs_err::remove_file(path)?;
         for suffix in JOURNALS {
             let mut journal = path.as_os_str().to_owned();
             journal.push(suffix);
-            match std::fs::remove_file(journal) {
+            match fs_err::remove_file(journal) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     return Err(error.into());
                 }

@@ -1,6 +1,6 @@
 //! A PDF's pages, rendered with hayro.
 
-use std::{fs, path::Path};
+use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
 use hayro::{
@@ -16,7 +16,7 @@ use super::EncodedPage;
 const SCALE: f32 = 300.0 / 72.0;
 
 pub(super) fn render(path: &Path) -> Result<Vec<EncodedPage>> {
-    let data = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let data = fs_err::read(path)?;
     let pdf = Pdf::new(data)
         .map_err(|error| anyhow::anyhow!("failed to parse {}: {error:?}", path.display()))?;
     let pages = pdf.pages();
