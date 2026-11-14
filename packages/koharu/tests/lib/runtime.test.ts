@@ -6,23 +6,20 @@ import Providers from '@/app/providers'
 import { call } from '@/lib/backend'
 import { useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import {
-  commands,
-  type Preferences,
-  type ProjectInfo,
-  type StartupState,
-} from '@koharu/bridge/protocol'
+import { commands, events, type Preferences } from '@koharu/bridge/protocol'
 
 vi.mock('@tauri-apps/api/core', () => ({
-  Channel: class<T> {
-    onmessage: (payload: T) => void
-
-    constructor(handler: (payload: T) => void) {
-      this.onmessage = handler
-    }
-  },
+  Channel: class {},
   invoke: vi.fn(),
 }))
+
+/** Each event's handlers, as the interface listened. */
+const handlers = new Map<string, ((payload: unknown) => void)[]>()
+
+/** Tells `payload` as the desktop would. */
+function tell(name: keyof typeof events, payload: unknown): void {
+  for (const handler of handlers.get(name) ?? []) handler(payload)
+}
 
 const preferences: Preferences = {
   pipeline: {},
@@ -31,22 +28,28 @@ const preferences: Preferences = {
   providers: {},
 }
 
-const project: ProjectInfo = {
-  name: 'Book',
-  revision: '3',
-  page: null,
-  pages: [],
-  history: { steps: [], current: 0 },
+/** The desktop with `open` as its open project, empty. */
+function desktop(open: () => string | null) {
+  vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
+  vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
+  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
+    query.query === 'get_project'
+      ? { id: 'project', version: '1', pages: [] }
+      : { steps: [], current: 0 },
+  )
 }
 
 beforeEach(() => {
+  handlers.clear()
+  for (const name of Object.keys(events) as (keyof typeof events)[]) {
+    vi.spyOn(events, name).mockImplementation(async (handler: (payload: never) => void) => {
+      handlers.set(name, [...(handlers.get(name) ?? []), handler as (payload: unknown) => void])
+      return () => undefined
+    })
+  }
   vi.spyOn(commands, 'getModels').mockResolvedValue([])
   vi.spyOn(commands, 'getPreferences').mockResolvedValue(preferences)
-})
-
-const startupState = (open: ProjectInfo | null = null): StartupState => ({
-  project: open,
-  jobs: [],
+  vi.spyOn(commands, 'getRuns').mockResolvedValue([])
 })
 
 function ProjectProbe() {
@@ -59,40 +62,32 @@ function ProjectProbe() {
 }
 
 describe('Tauri runtime', () => {
-  it('takes the open project from the startup state', async () => {
-    const pending = deferred<StartupState>()
-    vi.spyOn(commands, 'getProject').mockReturnValue(new Promise(() => undefined))
-    vi.spyOn(commands, 'getPage').mockResolvedValue(null)
-    vi.spyOn(commands, 'subscribe').mockReturnValue(pending.promise)
+  it('reads the project that was open before the interface loaded', async () => {
+    desktop(() => 'Book')
     const view = render(createElement(Providers, null, createElement(ProjectProbe)))
 
-    expect(screen.queryByText('Loading')).toBeNull()
-    pending.resolve(startupState(project))
     expect(await screen.findByText('Book')).toBeInTheDocument()
     view.unmount()
   })
 
-  it('keeps one live job channel through Strict Mode effect replay', async () => {
-    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
+  it('listens once through Strict Mode effect replay', async () => {
+    const runs = vi.spyOn(commands, 'getRuns').mockResolvedValue([])
     const view = render(
       createElement(StrictMode, null, createElement(Providers, null, createElement('div'))),
     )
 
-    await waitFor(() => expect(binding).toHaveBeenCalledTimes(1))
-    const [, , jobChannel] = binding.mock.calls[0]!
+    await waitFor(() => expect(runs).toHaveBeenCalledTimes(1))
+    expect(handlers.get('pipeline')).toHaveLength(1)
     act(() => {
-      jobChannel.onmessage({
-        id: 1,
-        state: 'running',
-        completed: 0,
-        total: 4,
-        page: 'page',
-        stage: 'detect',
-        error: null,
-      })
+      tell('pipeline', { kind: 'queued', run: 1, steps: 4 })
+      tell('pipeline', { kind: 'started', run: 1, page: 'page', stage: 'detect' })
     })
 
-    expect(useKoharuStore.getState().jobs[1]).toMatchObject({ state: 'running', total: 4 })
+    expect(useKoharuStore.getState().jobs[1]).toMatchObject({
+      state: 'running',
+      total: 4,
+      stage: 'detect',
+    })
     view.unmount()
   })
 
@@ -102,23 +97,15 @@ describe('Tauri runtime', () => {
     expect(open).toHaveBeenCalledWith('Volume 1')
   })
 
-  it('applies the canvas and download channels directly to the store', async () => {
+  it('applies the canvas and download events directly to the store', async () => {
     useKoharuStore.setState({ downloads: {} })
-    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
     const view = render(createElement(Providers, null, createElement('div')))
-    await waitFor(() => expect(binding).toHaveBeenCalledTimes(1))
-    const [, canvasChannel, , downloadChannel] = binding.mock.calls[0]!
+    await waitFor(() => expect(commands.getRuns).toHaveBeenCalledTimes(1))
 
     act(() => {
-      downloadChannel.onmessage({
-        id: 7,
-        state: 'Running',
-        name: 'model.bin',
-        completed: 25,
-        total: 100,
-      })
-      canvasChannel.onmessage({ type: 'camera', zoom: 0.5, x: 12, y: 34 })
-      canvasChannel.onmessage({ type: 'selection', layers: ['layer'] })
+      tell('download', { id: 7, state: 'Running', name: 'model.bin', completed: 25, total: 100 })
+      tell('camera', { zoom: 0.5, x: 12, y: 34 })
+      tell('selection', ['layer'])
     })
     expect(useKoharuStore.getState().downloads[7]).toMatchObject({ completed: 25, total: 100 })
     expect(useKoharuStore.getState().camera).toEqual({ zoom: 0.5, x: 12, y: 34 })
@@ -126,26 +113,16 @@ describe('Tauri runtime', () => {
     view.unmount()
   })
 
-  it('shows a project the desktop publishes after a change', async () => {
-    vi.spyOn(commands, 'getPage').mockResolvedValue(null)
-    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
+  it('shows a project the desktop tells it opened', async () => {
+    let open: string | null = null
+    desktop(() => open)
     const view = render(createElement(Providers, null, createElement(ProjectProbe)))
     expect(await screen.findByText('Closed')).toBeInTheDocument()
 
-    const [projectChannel] = binding.mock.calls[0]!
-    act(() => projectChannel.onmessage(project))
+    open = 'Book'
+    act(() => tell('project', 'Book'))
 
     expect(await screen.findByText('Book')).toBeInTheDocument()
     view.unmount()
   })
 })
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}

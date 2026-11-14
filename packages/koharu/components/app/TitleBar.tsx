@@ -10,8 +10,9 @@ import { useTranslation } from 'react-i18next'
 import { AboutDialog } from '@/components/app/AboutDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call, dispatch } from '@/lib/backend'
-import { trace } from '@/lib/sentry'
 import { useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
+import { deleteLayers } from '@/lib/scene'
+import { trace } from '@/lib/sentry'
 import { pipelineStages, useKoharuStore } from '@/lib/store'
 import { commands, type Stage, type Target } from '@koharu/bridge/protocol'
 import {
@@ -198,7 +199,7 @@ export function TitleBar() {
               <MenubarItem
                 disabled={selectedLayers.length === 0}
                 variant='destructive'
-                onClick={() => dispatch(commands.deleteLayers, selectedLayers)}
+                onClick={() => dispatch(deleteLayers, selectedLayers)}
               >
                 {t('menu.delete')}
                 <MenubarShortcut>Del</MenubarShortcut>
@@ -209,10 +210,7 @@ export function TitleBar() {
           <MenubarMenu>
             <MenubarTrigger>{t('menu.process')}</MenubarTrigger>
             <MenubarContent>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() => run('project')}
-              >
+              <MenubarItem disabled={!project || pages.length === 0} onClick={() => run('project')}>
                 {t('menu.processProject')}
               </MenubarItem>
               <MenubarItem

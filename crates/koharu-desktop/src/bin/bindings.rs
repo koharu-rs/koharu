@@ -1,11 +1,12 @@
 //! Writes `packages/bridge/src/protocol.ts`: every command as a function over
-//! Tauri's `invoke`, and every type the commands carry, from specta's
-//! metadata. tauri-specta has no release for Tauri 3 with this specta, and
-//! the bindings need only this much of it.
+//! Tauri's `invoke`, every event as a listener over its `listen`, and every
+//! type they carry, from specta's metadata. tauri-specta has no release for
+//! Tauri 3 with this specta, and the bindings need only this much of it.
 
 use std::{borrow::Cow, fmt::Write as _, path::Path};
 
 use anyhow::{Context as _, Result};
+use heck::ToLowerCamelCase as _;
 use specta::{
     Format, FormatError, Type, Types,
     datatype::{DataType, Fields, Function, Generic, NamedReferenceType, Primitive, Reference},
@@ -15,6 +16,7 @@ use specta_typescript::{Exporter, FrameworkExporter, Number, Typescript};
 fn main() -> Result<()> {
     let mut types = Types::default();
     let functions = koharu_desktop::bindings(&mut types);
+    let events = koharu_desktop::event_bindings(&mut types);
     let output = Path::new(env!("CARGO_WORKSPACE_DIR")).join("packages/bridge/src/protocol.ts");
     Exporter::from(Typescript::default())
         .framework_prelude(
@@ -22,10 +24,11 @@ fn main() -> Result<()> {
         )
         .framework_runtime(move |mut exporter| {
             let mut out = String::from(
-                "import { Channel, invoke } from \"@tauri-apps/api/core\";\n\nexport { Channel };\n\n",
+                "import { Channel, invoke } from \"@tauri-apps/api/core\";\nimport { listen, type UnlistenFn } from \"@tauri-apps/api/event\";\n\nexport { Channel };\n\n",
             );
             out.push_str(&exporter.render_types()?);
             out.push_str(&commands(&exporter, &functions)?);
+            out.push_str(&listeners(&exporter, &events)?);
             Ok(Cow::Owned(out))
         })
         .export_to(&output, &types, Bridge)
@@ -125,7 +128,7 @@ fn commands(
         let mut params = Vec::new();
         let mut keys = Vec::new();
         for (name, dt) in function.args() {
-            let key = camel(name);
+            let key = name.to_lower_camel_case();
             params.push(format!("{key}: {}", argument(exporter, dt)?));
             keys.push(key);
         }
@@ -145,9 +148,28 @@ fn commands(
         let _ = writeln!(
             out,
             "\t{}: ({}) => invoke<{result}>(\"{}\"{payload}),",
-            camel(function.name()),
+            function.name().to_lower_camel_case(),
             params.join(", "),
             function.name(),
+        );
+    }
+    out.push_str("};\n");
+    Ok(out)
+}
+
+/// `export const events`: each event as a function of its handler, which
+/// hears the event's payload, resolving to the function that stops it.
+fn listeners(
+    exporter: &FrameworkExporter,
+    events: &[(&str, DataType)],
+) -> Result<String, specta_typescript::Error> {
+    let mut out = String::from("\nexport const events = {\n");
+    for (name, dt) in events {
+        let payload = exporter.reference(dt)?;
+        let _ = writeln!(
+            out,
+            "\t{}: (handler: (payload: {payload}) => void): Promise<UnlistenFn> => listen<{payload}>(\"{name}\", (event) => handler(event.payload)),",
+            name.to_lower_camel_case(),
         );
     }
     out.push_str("};\n");
@@ -186,21 +208,4 @@ fn named<'a>(
     };
     let name = exporter.types.get(reference)?.name.as_ref();
     Some((name, generics))
-}
-
-/// `snake_case` as `camelCase`, as Tauri names a command's arguments.
-fn camel(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut upper = false;
-    for character in name.chars() {
-        if character == '_' {
-            upper = true;
-        } else if upper {
-            out.extend(character.to_uppercase());
-            upper = false;
-        } else {
-            out.push(character);
-        }
-    }
-    out
 }

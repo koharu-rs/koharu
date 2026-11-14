@@ -16,6 +16,8 @@ koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
 kurbo = { workspace = true }
 photocraft-psd = { workspace = true }
+serde = { workspace = true }
+specta = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

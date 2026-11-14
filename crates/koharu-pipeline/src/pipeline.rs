@@ -67,8 +67,12 @@ impl Pipeline {
         let project = session.lock().project();
         let plan = Plan::new(&project, &request.target, &request.stages)?;
         let id = RunId(self.0.next.fetch_add(1, Ordering::Relaxed));
+        // Told before the scheduler can tell anything of the run.
+        self.0.events.send(Event::Queued {
+            run: id,
+            steps: plan.pages() * request.stages.len(),
+        });
         let run = Run::new(id, session, project.id(), config, plan, &request.stages);
-        self.0.events.issued(id);
         self.send(Command::Run(run));
         Ok(id)
     }
@@ -82,6 +86,13 @@ impl Pipeline {
             .history(run, wait)
             .await
             .ok_or_else(|| Error::invalid(format!("there is no run {}", run.0)))
+    }
+
+    /// What every run told so far, run by run, for a listener that came
+    /// late, such as an interface that reloaded.
+    #[must_use]
+    pub fn told(&self) -> Vec<Event> {
+        self.0.events.told()
     }
 
     /// Stops every run, running and queued. What they finished stays, and

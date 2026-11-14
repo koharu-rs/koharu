@@ -44,10 +44,35 @@ pub async fn connect(reference: &str, size: Size) -> Result<DynModel<Completion>
     }
 }
 
+/// A model the translator or the agent can use, as rig's catalog describes it.
+#[derive(Clone, Debug, serde::Serialize, specta::Type)]
+pub struct Model {
+    /// A `vendor/model` reference, as the preferences hold one.
+    pub reference: String,
+    pub name: String,
+    pub vendor: String,
+    /// Whether it reads images, as the translator's vision needs.
+    pub images: bool,
+    /// Whether it calls tools, as the agent needs.
+    pub tools: bool,
+}
+
+impl From<&ModelSpec> for Model {
+    fn from(spec: &ModelSpec) -> Self {
+        Self {
+            reference: spec.reference(),
+            name: spec.display_name.clone(),
+            vendor: spec.provider.vendor().to_string(),
+            images: spec.input.image,
+            tools: spec.tools,
+        }
+    }
+}
+
 /// Every model the user can pick: Koharu's own, and each vendor's that has a
-/// key or a sign-in, with what rig's catalog says each can do. A vendor whose
-/// list fails is left out, with the failure logged.
-pub async fn models() -> Vec<ModelSpec> {
+/// key or a sign-in. A vendor whose list fails is left out, with the failure
+/// logged.
+pub async fn models() -> Vec<Model> {
     let mut models = local::specs();
     let listed = futures::future::join_all(
         VENDORS
@@ -61,7 +86,7 @@ pub async fn models() -> Vec<ModelSpec> {
             Err(error) => tracing::warn!("couldn't list {vendor}'s models: {error:#}"),
         }
     }
-    models
+    models.iter().map(Model::from).collect()
 }
 
 #[cfg(test)]

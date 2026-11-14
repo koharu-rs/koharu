@@ -21,11 +21,20 @@ const EVENTS: usize = 1024;
 #[derive(specta::Type)]
 pub struct RunId(pub u64);
 
-/// A stage started or finished on a page, or a run ended. A stage starts
-/// when the GPU takes it, or for a hosted translation when it's sent.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+/// A run was queued, a stage started or finished on a page, or a run ended.
+/// A stage starts when the GPU takes it, or for a hosted translation when
+/// it's sent.
+#[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
+// Named apart from the agent's own `Event`, which crosses to the interface
+// too; JSON carries no container name.
+#[serde(rename = "PipelineEvent", tag = "kind", rename_all = "snake_case")]
 pub enum Event {
+    /// The run's first event: the page stages it does, each of which starts
+    /// and finishes once unless the run ends first.
+    Queued {
+        run: RunId,
+        steps: usize,
+    },
     Started {
         run: RunId,
         page: PageId,
@@ -42,7 +51,7 @@ pub enum Event {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Outcome {
     Done,
@@ -81,14 +90,11 @@ impl Events {
         self.sender.subscribe()
     }
 
-    /// Starts `run`'s record, before it can tell anything.
-    pub(crate) fn issued(&self, run: RunId) {
-        self.runs.lock().entry(run).or_insert_with(Record::new);
-    }
-
     pub(crate) fn send(&self, event: Event) {
-        let (Event::Started { run, .. } | Event::Finished { run, .. } | Event::Ended { run, .. }) =
-            &event;
+        let (Event::Queued { run, .. }
+        | Event::Started { run, .. }
+        | Event::Finished { run, .. }
+        | Event::Ended { run, .. }) = &event;
         {
             let mut runs = self.runs.lock();
             let record = runs.entry(*run).or_insert_with(Record::new);
@@ -99,6 +105,16 @@ impl Events {
         }
         // No one listening isn't a failure.
         let _ = self.sender.send(event);
+    }
+
+    /// What every run told so far, run by run.
+    pub(crate) fn told(&self) -> Vec<Event> {
+        let runs = self.runs.lock();
+        let mut ids: Vec<RunId> = runs.keys().copied().collect();
+        ids.sort();
+        ids.into_iter()
+            .flat_map(|run| runs[&run].events.clone())
+            .collect()
     }
 
     /// What `run` told so far, once it ended or `wait` is over; `None` for a

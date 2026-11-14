@@ -4,7 +4,7 @@ import { Check, ChevronLeft, LoaderCircle, Search, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { ModelInfo } from '@koharu/bridge/protocol'
+import type { Model } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   InputGroup,
@@ -26,7 +26,7 @@ export function ModelPicker({
   onSelect,
 }: {
   value: string | null
-  models: ModelInfo[]
+  models: Model[]
   loading?: boolean
   disabled?: boolean
   busyModel?: string | null

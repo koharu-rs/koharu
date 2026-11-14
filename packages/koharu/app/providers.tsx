@@ -1,7 +1,6 @@
 'use client'
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Channel } from '@tauri-apps/api/core'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 
@@ -10,23 +9,17 @@ import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
 import { refreshModels, refreshPreferences } from '@/lib/backend'
 import i18n from '@/lib/i18n'
-import { pageKey, projectKey, queryClient, refresh } from '@/lib/queries'
+import { pageKey, projectKey, queryClient, refresh, type ProjectView } from '@/lib/queries'
 import {
   receiveCanvasSelection,
   receiveDownload,
-  receiveJob,
   receivePickedColor,
-  receiveStartupState,
+  receivePipeline,
+  receiveRuns,
   rgbaToHex,
   useKoharuStore,
 } from '@/lib/store'
-import {
-  commands,
-  type CanvasEvent,
-  type Job,
-  type ProjectInfo,
-  type Transfer,
-} from '@koharu/bridge/protocol'
+import { commands, events, type Change, type PageId } from '@koharu/bridge/protocol'
 import { toast, Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
@@ -38,25 +31,38 @@ export function Providers({ children }: { children: ReactNode }) {
     lifecycle.active = true
     if (!lifecycle.bound) {
       lifecycle.bound = true
-      const channel = <T,>(receive: (value: T) => void) =>
-        new Channel<T>((value) => {
-          if (lifecycle.active) receive(value)
+      const listen = <T,>(
+        event: (handler: (payload: T) => void) => Promise<unknown>,
+        receive: (payload: T) => void,
+      ) =>
+        event((payload) => {
+          if (lifecycle.active) receive(payload)
         })
 
       void refreshPreferences().catch(() => undefined)
       void refreshModels().catch(() => undefined)
 
-      void commands
-        .subscribe(
-          channel<ProjectInfo | null>(receiveProject),
-          channel<CanvasEvent>(receiveCanvas),
-          channel<Job>(receiveJob),
-          channel<Transfer>(receiveDownload),
-        )
-        .then((state) => {
-          if (!lifecycle.active) return
-          receiveProject(state.project)
-          receiveStartupState(state)
+      // Listening first, so nothing told while the runs load is missed.
+      void Promise.all([
+        listen(events.change, receiveChange),
+        listen(events.project, receiveProject),
+        listen(events.page, receivePage),
+        listen(events.selection, receiveCanvasSelection),
+        listen(events.camera, (camera) => useKoharuStore.setState({ camera })),
+        listen(events.color, (color) => receivePickedColor(rgbaToHex(color))),
+        listen(events.brushDiameter, (diameter) => {
+          const store = useKoharuStore.getState()
+          store.setBrush({ ...store.brush, diameter })
+        }),
+        listen(events.notice, (notice) =>
+          toast.add({ type: 'info', title: i18n.t(`canvas.notice.${notice}`) }),
+        ),
+        listen(events.pipeline, receivePipeline),
+        listen(events.download, receiveDownload),
+      ])
+        .then(() => commands.getRuns())
+        .then((runs) => {
+          if (lifecycle.active) receiveRuns(runs)
         })
         .catch(() => undefined)
     }
@@ -99,38 +105,40 @@ export function Providers({ children }: { children: ReactNode }) {
   )
 }
 
-/** The open project, after any change: another project's selection starts empty. */
-function receiveProject(project: ProjectInfo | null): void {
-  const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-  queryClient.setQueryData(projectKey, project)
-  if (previous?.name !== project?.name) {
+/** Another project opened, or the open one closed: its selection starts empty. A project told
+ * again, after changes the interface missed, is read again. */
+function receiveProject(name: string | null): void {
+  const previous = queryClient.getQueryData<ProjectView | null>(projectKey)
+  if (previous?.name !== name) {
     const store = useKoharuStore.getState()
-    store.selectPages(project?.page ? [project.page] : [])
+    store.selectPages([])
     store.selectLayers([])
   }
-  if (project) void refresh(pageKey).catch(() => undefined)
-  else queryClient.setQueryData(pageKey, null)
+  if (name === null) {
+    queryClient.setQueryData(projectKey, null)
+    queryClient.setQueryData(pageKey, null)
+  } else {
+    void refresh(projectKey, pageKey).catch(() => undefined)
+  }
 }
 
-function receiveCanvas(event: CanvasEvent): void {
-  const store = useKoharuStore.getState()
-  switch (event.type) {
-    case 'camera':
-      useKoharuStore.setState({ camera: { zoom: event.zoom, x: event.x, y: event.y } })
-      break
-    case 'selection':
-      receiveCanvasSelection(event.layers)
-      break
-    case 'color':
-      receivePickedColor(rgbaToHex(event.color))
-      break
-    case 'brush_diameter':
-      store.setBrush({ ...store.brush, diameter: event.diameter })
-      break
-    case 'notice':
-      toast.add({ type: 'info', title: i18n.t(`canvas.notice.${event.notice}`) })
-      break
+/** The page the canvas shows. */
+function receivePage(page: PageId | null): void {
+  queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
+    project ? { ...project, page } : project,
+  )
+  if (page !== null && useKoharuStore.getState().selectedPages.length === 0) {
+    useKoharuStore.getState().selectPages([page])
   }
+  void refresh(pageKey).catch(() => undefined)
+}
+
+/** An edit, undo, or redo, from whichever writer: the project and its shown page are read again. */
+function receiveChange(change: Change): void {
+  queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
+    project ? { ...project, history: change.history, revision: change.revision } : project,
+  )
+  void refresh(projectKey, pageKey).catch(() => undefined)
 }
 
 function StartupBoundary({ children }: { children: ReactNode }) {

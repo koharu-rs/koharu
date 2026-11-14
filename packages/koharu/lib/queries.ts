@@ -9,7 +9,15 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 
-import { commands, type FontFamily } from '@koharu/bridge/protocol'
+import {
+  commands,
+  type FontFamily,
+  type History,
+  type Page,
+  type PageId,
+  type PageSummary,
+  type ProjectAnswer,
+} from '@koharu/bridge/protocol'
 
 import { call } from './backend'
 
@@ -18,14 +26,45 @@ export const pageKey = ['page'] as const
 export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
 
+/** The open project as the editor lists it: its name, the page the canvas shows, its pages, and
+ * its history, read through the scene's own queries. */
+export interface ProjectView {
+  name: string
+  page: PageId | null
+  pages: PageSummary[]
+  history: History
+  /** The last change's revision, which the shown page's thumbnail follows. */
+  revision: string | null
+}
+
 const projectQuery = queryOptions({
   queryKey: projectKey,
-  queryFn: () => call(commands.getProject),
+  queryFn: async (): Promise<ProjectView | null> => {
+    const name = await call(commands.getOpenProject)
+    if (name === null) return null
+    const [page, project, history] = await Promise.all([
+      call(commands.getShownPage),
+      call(commands.query, { query: 'get_project' }),
+      call(commands.query, { query: 'get_history' }),
+    ])
+    const known = queryClient.getQueryData<ProjectView | null>(projectKey)
+    return {
+      name,
+      page,
+      pages: (project as ProjectAnswer).pages,
+      history: history as History,
+      revision: known?.name === name ? known.revision : null,
+    }
+  },
 })
 
 const pageQuery = queryOptions({
   queryKey: pageKey,
-  queryFn: () => call(commands.getPage),
+  queryFn: async (): Promise<Page | null> => {
+    const page = await call(commands.getShownPage)
+    if (page === null) return null
+    return (await call(commands.query, { query: 'get_page', page })) as Page
+  },
 })
 
 const fontsQuery = queryOptions({
@@ -44,7 +83,7 @@ export const queryClient = new QueryClient({
   },
 })
 
-/** The open project, which the desktop publishes after every change. */
+/** The open project, read again after every change the desktop tells. */
 export function useProject(enabled = true) {
   return useQuery({ ...projectQuery, enabled })
 }
@@ -95,7 +134,7 @@ export function useCommand<Args extends unknown[], Result>(
   return { run: (...args: Args) => mutation.mutate(args), busy }
 }
 
-/** Imports pages; the project's change arrives on its own channel. */
+/** Imports pages; the project's change arrives as an event. */
 export function useImportPages() {
   const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing')
   return { importPages: run, importing: busy }

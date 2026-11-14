@@ -3,15 +3,15 @@
 import { create } from 'zustand'
 
 import type {
-  Job,
   LayerId,
-  ModelInfo,
+  Model,
   PageId,
+  PipelineEvent,
   Preferences,
   Rgba,
+  RunId,
   Size,
   Stage,
-  StartupState,
   Tool,
   Transfer,
 } from '@koharu/bridge/protocol'
@@ -48,10 +48,23 @@ export type Shortcuts = Record<ShortcutAction, string>
 export type PipelineScope = 'page' | 'selected-pages' | 'project'
 export const pipelineStages: readonly Stage[] = ['detect', 'recognize', 'inpaint', 'translate']
 
+/** A pipeline run as the activity center shows it, from the pipeline's events. */
+export interface Job {
+  id: RunId
+  state: 'running' | 'done' | 'failed' | 'stopped'
+  /** The page stages done, of `total`. */
+  completed: number
+  total: number
+  /** The stage started last, and its page. */
+  stage: Stage | null
+  page: PageId | null
+  error: string | null
+}
+
 interface KoharuStore {
   initialized: boolean
   preferences: Preferences | null
-  models: ModelInfo[]
+  models: Model[]
   jobs: Record<string, Job>
   downloads: Record<string, Transfer>
   camera: Camera
@@ -136,12 +149,43 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
     }),
 }))
 
-export function receiveStartupState(state: StartupState): void {
-  useKoharuStore.setState({ initialized: true, jobs: byId(state.jobs) })
+/** Every run's events so far, as the editor loads. */
+export function receiveRuns(events: PipelineEvent[]): void {
+  const jobs: Record<string, Job> = {}
+  for (const event of events) jobs[String(event.run)] = fold(jobs[String(event.run)], event)
+  useKoharuStore.setState({ initialized: true, jobs })
 }
 
-export function receiveJob(job: Job): void {
-  useKoharuStore.setState((state) => ({ jobs: { ...state.jobs, [job.id]: job } }))
+export function receivePipeline(event: PipelineEvent): void {
+  useKoharuStore.setState((state) => ({
+    jobs: { ...state.jobs, [String(event.run)]: fold(state.jobs[String(event.run)], event) },
+  }))
+}
+
+function fold(job: Job | undefined, event: PipelineEvent): Job {
+  const current: Job = job ?? {
+    id: event.run,
+    state: 'running',
+    completed: 0,
+    total: 0,
+    stage: null,
+    page: null,
+    error: null,
+  }
+  switch (event.kind) {
+    case 'queued':
+      return { ...current, total: event.steps }
+    case 'started':
+      return { ...current, stage: event.stage, page: event.page }
+    case 'finished':
+      return { ...current, completed: current.completed + 1 }
+    case 'ended':
+      return {
+        ...current,
+        state: event.outcome.kind,
+        error: event.outcome.kind === 'failed' ? event.outcome.reason : null,
+      }
+  }
 }
 
 export function receiveDownload(download: Transfer): void {
@@ -168,7 +212,7 @@ export function receivePreferences(preferences: Preferences): void {
   useKoharuStore.setState({ preferences })
 }
 
-export function receiveModels(models: ModelInfo[]): void {
+export function receiveModels(models: Model[]): void {
   useKoharuStore.setState({ models })
 }
 
@@ -193,8 +237,4 @@ export function rgbaToHex(color: Rgba): string {
         .padStart(2, '0'),
     )
     .join('')}`.toUpperCase()
-}
-
-function byId<T extends { id: string | number }>(items: T[]): Record<string, T> {
-  return Object.fromEntries(items.map((item) => [String(item.id), item]))
 }

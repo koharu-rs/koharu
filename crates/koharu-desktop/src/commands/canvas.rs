@@ -4,30 +4,16 @@ use std::sync::Arc;
 
 use koharu_canvas::{Brush, Colors, Rect, Tool};
 use koharu_scene::LayerId;
-use serde::Deserialize;
-use specta::Type;
 use tauri::State;
 
 use crate::app::App;
 
 /// The canvas element's rectangle, in CSS pixels from the window's corner.
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct ViewportRect {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
 #[tauri::command]
 #[specta::specta]
-pub fn set_canvas_viewport(app: State<'_, Arc<App>>, rect: ViewportRect) {
-    app.screen.set_viewport(Rect::new(
-        rect.x,
-        rect.y,
-        rect.x + rect.width.max(0.0),
-        rect.y + rect.height.max(0.0),
-    ));
+pub fn set_canvas_viewport(app: State<'_, Arc<App>>, x: f64, y: f64, width: f64, height: f64) {
+    app.screen
+        .set_viewport(Rect::new(x, y, x + width.max(0.0), y + height.max(0.0)));
     app.camera();
 }
 
@@ -64,8 +50,9 @@ pub fn fit_canvas(app: State<'_, Arc<App>>) {
 #[tauri::command]
 #[specta::specta]
 pub fn set_zoom(app: State<'_, Arc<App>>, zoom: f64) {
-    app.screen.zoom(zoom);
+    app.screen.with_canvas(|canvas| canvas.zoom_to(zoom));
     app.camera();
+    app.screen.request_redraw();
 }
 
 /// The selection the Layers panel made.

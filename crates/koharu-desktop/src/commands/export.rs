@@ -9,9 +9,9 @@ use std::{
 
 use anyhow::Context as _;
 use image::ImageFormat;
+use koharu_psd::Labels;
 use koharu_renderer::{Frame, Renderer};
 use koharu_scene::PageId;
-use parking_lot::Mutex;
 use serde::Deserialize;
 use specta::Type;
 use tauri::{State, Window};
@@ -28,23 +28,15 @@ pub enum ExportFormat {
     Cbz,
 }
 
-/// A PSD's names for the layers the scene names nothing, in the
-/// interface's language.
-#[derive(Clone, Debug, Deserialize, Type)]
-pub struct PsdLabels {
-    pub background: String,
-    pub cleanup: String,
-    pub outline: String,
-}
-
-/// Picks where the open project's pages go, and writes them there.
+/// Picks where the open project's pages go, and writes them there. `labels`
+/// names a PSD's layers the scene names nothing, in the interface's language.
 #[tauri::command]
 #[specta::specta]
 pub async fn export(
     app: State<'_, Arc<App>>,
     window: Window<CefRuntime>,
     format: ExportFormat,
-    labels: PsdLabels,
+    labels: Labels,
 ) -> Result<()> {
     let name = app
         .project
@@ -73,7 +65,7 @@ pub async fn export(
 fn write(
     app: &App,
     format: ExportFormat,
-    labels: &PsdLabels,
+    labels: &Labels,
     destination: &Path,
 ) -> anyhow::Result<()> {
     let session = app.session()?;
@@ -84,11 +76,6 @@ fn write(
         .map(|page| page.id)
         .collect();
     let digits = pages.len().to_string().len().max(3);
-    let labels = koharu_psd::Labels {
-        background: labels.background.clone(),
-        cleanup: labels.cleanup.clone(),
-        outline: labels.outline.clone(),
-    };
     let mut archive = match format {
         ExportFormat::Cbz => Some(::zip::ZipWriter::new(
             File::create(destination)
@@ -98,10 +85,12 @@ fn write(
     };
     for (index, &page) in pages.iter().enumerate() {
         let number = format!("{:0digits$}", index + 1);
-        let frame = rendered(&app.renderer, &session, page)?;
+        // The page as it finally looks, its bundled fonts in.
+        let frame =
+            tauri::async_runtime::block_on(app.renderer.render_loaded(Arc::clone(&session), page))?;
         match (format, &mut archive) {
             (ExportFormat::Psd, _) => {
-                let psd = koharu_psd::export(&session.lock(), &app.renderer, page, &labels)?;
+                let psd = koharu_psd::export(&session.lock(), &app.renderer, page, labels)?;
                 std::fs::write(destination.join(format!("{number}.psd")), psd)?;
             }
             (_, Some(archive)) => {
@@ -123,20 +112,6 @@ fn write(
         archive.finish()?;
     }
     Ok(())
-}
-
-/// `page`'s frame, with the bundled fonts its text asks for loaded first.
-fn rendered(
-    renderer: &Renderer,
-    session: &Mutex<koharu_scene::Session>,
-    page: PageId,
-) -> anyhow::Result<Frame> {
-    let frame = renderer.render(&session.lock(), page)?;
-    if !frame.needs_fonts() {
-        return Ok(frame);
-    }
-    tauri::async_runtime::block_on(renderer.load_fonts(&frame))?;
-    Ok(renderer.render(&session.lock(), page)?)
 }
 
 fn png(renderer: &Renderer, frame: &Frame) -> anyhow::Result<Vec<u8>> {

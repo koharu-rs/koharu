@@ -1,20 +1,24 @@
 //! The renderer: fonts, retained layer content, and the GPU, shared by every
 //! frame it renders.
 
-use std::sync::{
-    Arc, OnceLock,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use image::RgbaImage;
 use koharu_scene::{LayerId, Offset, PageId, Session, Text};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
+use tokio::sync::watch;
 use vello::kurbo::Rect;
 
 use crate::{
     Error, RendererConfig, Result,
-    fonts::Fonts,
+    fonts::{FontRequest, Fonts},
     frame::{Frame, FrameData, Retained, Tree, View},
     gpu::Gpu,
     images,
@@ -35,6 +39,11 @@ struct Inner {
     /// Bumped when the `[renderer]` preference or the loaded fonts change, so
     /// text lays out again.
     generation: AtomicU64,
+    /// Tells `subscribe`'s listeners each new generation.
+    changes: watch::Sender<u64>,
+    /// The fonts a background download is fetching, so a render while it runs
+    /// doesn't start another.
+    fetching: Mutex<HashSet<FontRequest>>,
     cache: retained::Cache,
     gpu: OnceLock<std::result::Result<Arc<Gpu>, String>>,
 }
@@ -56,6 +65,8 @@ impl Renderer {
             fonts: Fonts::new(),
             config: RwLock::new(config),
             generation: AtomicU64::new(0),
+            changes: watch::channel(0).0,
+            fetching: Mutex::default(),
             cache: retained::cache(),
             gpu: OnceLock::new(),
         }))
@@ -64,7 +75,21 @@ impl Renderer {
     /// Follows a changed `[renderer]` preference; text lays out again.
     pub fn set_config(&self, config: RendererConfig) {
         *self.0.config.write() = config;
-        self.0.generation.fetch_add(1, Ordering::Relaxed);
+        self.bump();
+    }
+
+    /// Each time text lays out differently from now on: a changed
+    /// `[renderer]`, or fonts a render found missing coming in. A page shown
+    /// with fallbacks renders again then, as Photoshop swaps in a font Adobe
+    /// Fonts activated.
+    #[must_use]
+    pub fn subscribe(&self) -> watch::Receiver<u64> {
+        self.0.changes.subscribe()
+    }
+
+    fn bump(&self) {
+        let generation = self.0.generation.fetch_add(1, Ordering::Relaxed) + 1;
+        self.0.changes.send_replace(generation);
     }
 
     /// The GPU device and vello renderer, which the desktop canvas draws
@@ -82,7 +107,9 @@ impl Renderer {
     }
 
     /// Renders `page` as `session` holds it: its background, then its layers.
-    /// Content that is unchanged reuses what an earlier render built.
+    /// Content that is unchanged reuses what an earlier render built. Text
+    /// whose bundled font isn't in yet draws with a fallback while the font
+    /// downloads; `subscribe` tells when it's in.
     pub fn render(&self, session: &Session, page: PageId) -> Result<Frame> {
         let project = session.project();
         let view = project.page(page)?;
@@ -105,6 +132,7 @@ impl Renderer {
         let mut missing = tree.missing;
         missing.sort();
         missing.dedup();
+        self.fetch(&missing);
         Ok(Frame(Arc::new(FrameData {
             page,
             revision: session.revision(),
@@ -170,16 +198,62 @@ impl Renderer {
         Ok(Raster { image, offset })
     }
 
-    /// Downloads the bundled fonts `frame`'s text asked for, so the next
-    /// render draws with them.
-    pub async fn load_fonts(&self, frame: &Frame) -> Result<()> {
+    /// Renders `page` once the bundled fonts its text asks for are in, for
+    /// what needs the page as it finally looks: an export, or the agent's
+    /// view of it.
+    pub async fn render_loaded(&self, session: Arc<Mutex<Session>>, page: PageId) -> Result<Frame> {
+        let frame = self.render_blocking(Arc::clone(&session), page).await?;
+        if frame.0.missing.is_empty() {
+            return Ok(frame);
+        }
         self.0
             .fonts
             .load(&frame.0.missing)
             .await
             .map_err(Error::Fonts)?;
-        self.0.generation.fetch_add(1, Ordering::Relaxed);
-        Ok(())
+        self.bump();
+        self.render_blocking(session, page).await
+    }
+
+    async fn render_blocking(&self, session: Arc<Mutex<Session>>, page: PageId) -> Result<Frame> {
+        let renderer = self.clone();
+        tokio::task::spawn_blocking(move || renderer.render(&session.lock(), page))
+            .await
+            .map_err(|error| Error::Backend(error.into()))?
+    }
+
+    /// Downloads in the background the bundled fonts a render found missing,
+    /// then tells `subscribe`'s listeners. A render outside a Tokio runtime
+    /// leaves them to `render_loaded`.
+    fn fetch(&self, missing: &[FontRequest]) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let requests: Vec<FontRequest> = {
+            let mut fetching = self.0.fetching.lock();
+            missing
+                .iter()
+                .filter(|request| fetching.insert((*request).clone()))
+                .cloned()
+                .collect()
+        };
+        if requests.is_empty() {
+            return;
+        }
+        let renderer = self.clone();
+        runtime.spawn(async move {
+            let loaded = renderer.0.fonts.load(&requests).await;
+            {
+                let mut fetching = renderer.0.fetching.lock();
+                for request in &requests {
+                    fetching.remove(request);
+                }
+            }
+            match loaded {
+                Ok(()) => renderer.bump(),
+                Err(error) => tracing::warn!("failed to download fonts: {error:#}"),
+            }
+        });
     }
 
     pub async fn available_fonts(&self) -> Result<Vec<FontFamily>> {

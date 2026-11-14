@@ -1,35 +1,18 @@
-//! The pages rail.
+//! The pages rail's thumbnails.
 
 use std::sync::Arc;
 
-use koharu_scene::{Op, PageId};
+use anyhow::ensure;
+use koharu_scene::PageId;
 use tauri::State;
 
-use super::{Bytes, Result, blocking, edit};
-use crate::{app::App, thumbnail};
+use super::{Bytes, Result, blocking};
+use crate::app::App;
 
-#[tauri::command]
-#[specta::specta]
-pub async fn delete_pages(app: State<'_, Arc<App>>, pages: Vec<PageId>) -> Result<()> {
-    let ops = pages
-        .into_iter()
-        .map(|page| Op::RemovePage { page: page.into() })
-        .collect();
-    edit(&app, "delete_pages", ops).await
-}
+/// How tall a thumbnail is, in pixels.
+const HEIGHT: u32 = 256;
 
-/// Moves a page to `index`, counted after it's taken out.
-#[tauri::command]
-#[specta::specta]
-pub async fn move_page(app: State<'_, Arc<App>>, page: PageId, index: usize) -> Result<()> {
-    let op = Op::MovePage {
-        page: page.into(),
-        index,
-    };
-    edit(&app, "move_page", vec![op]).await
-}
-
-/// The page as it renders, 256 pixels tall, as WebP.
+/// The page as it renders, `HEIGHT` pixels tall, as WebP.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Bytes> {
@@ -37,7 +20,13 @@ pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Byt
     blocking(move || {
         let session = app.session()?;
         let frame = app.renderer.render(&session.lock(), page)?;
-        Ok(Bytes(thumbnail::webp(&app.renderer, &frame)?))
+        let raster = app.renderer.rasterize(&frame)?;
+        let (width, height) = raster.image.dimensions();
+        ensure!(width > 0 && height > 0, "the page is empty");
+        let scaled = (u64::from(width) * u64::from(HEIGHT) / u64::from(height)).max(1);
+        let image = image::imageops::thumbnail(&raster.image, u32::try_from(scaled)?, HEIGHT);
+        let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
+        Ok(Bytes(encoder.encode(80.0).to_vec()))
     })
     .await
 }

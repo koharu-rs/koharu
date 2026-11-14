@@ -3,6 +3,8 @@
 
 use std::path::{Path, PathBuf};
 
+use tokio::sync::broadcast;
+
 use crate::{
     Change, Edit, Error, Hash, History, LayerId, Project, ProjectId, Rect, Result, Revision, Tiles,
     change, edit, project::Picture, store::Store, tiles,
@@ -15,6 +17,9 @@ pub const EXTENSION: &str = "khr";
 /// History panel default.
 const STEPS: usize = 20;
 
+/// How many changes a slow listener can fall behind by.
+const CHANGES: usize = 256;
+
 /// One open project, holding the file's lock until it's dropped.
 pub struct Session {
     store: Store,
@@ -23,6 +28,7 @@ pub struct Session {
     revision: Revision,
     undo: Vec<Step>,
     redo: Vec<Step>,
+    changes: broadcast::Sender<Change>,
 }
 
 /// A project to go back to: the one before an edit, on the undo stack, or the
@@ -46,6 +52,12 @@ impl Session {
         Ok(Self::assemble(store, path, project))
     }
 
+    /// Deletes the project file at `path`, which no session may hold, with
+    /// the journals SQLite left beside it.
+    pub fn remove(path: impl AsRef<Path>) -> Result<()> {
+        Store::remove(path.as_ref())
+    }
+
     fn assemble(store: Store, path: &Path, project: Project) -> Self {
         Self {
             store,
@@ -54,7 +66,16 @@ impl Session {
             revision: Revision::new(),
             undo: Vec::new(),
             redo: Vec::new(),
+            changes: broadcast::channel(CHANGES).0,
         }
+    }
+
+    /// Every change from now on, whichever writer made it: each edit that
+    /// changed the project, undo, and redo, as Figma's `documentchange`
+    /// tells a plugin.
+    #[must_use]
+    pub fn subscribe(&self) -> broadcast::Receiver<Change> {
+        self.changes.subscribe()
     }
 
     #[must_use]
@@ -107,7 +128,8 @@ impl Session {
         // kept, but it adds no undo step.
         tx.commit()?;
         let (pages, layers) = change::changed(&self.project, &next);
-        if next != self.project {
+        let changed = next != self.project;
+        if changed {
             let before = std::mem::replace(&mut self.project, next);
             self.undo.push(Step {
                 label: edit.label,
@@ -119,13 +141,18 @@ impl Session {
             }
             self.redo.clear();
         }
-        Ok(Change {
+        let change = Change {
             revision: self.revision(),
             created,
             pages,
             layers,
             history: self.history(),
-        })
+        };
+        if changed {
+            // No one listening isn't a failure.
+            let _ = self.changes.send(change.clone());
+        }
+        Ok(change)
     }
 
     /// The picture `layer` owns: a raster's or a mask's, or a block's mask's
@@ -283,13 +310,15 @@ impl Session {
             );
         }
         let (pages, layers) = change::changed(&before, &self.project);
-        Ok(Some(Change {
+        let change = Change {
             revision: self.revision(),
             created: Vec::new(),
             pages,
             layers,
             history: self.history(),
-        }))
+        };
+        let _ = self.changes.send(change.clone());
+        Ok(Some(change))
     }
 }
 

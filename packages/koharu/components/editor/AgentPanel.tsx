@@ -2,19 +2,14 @@
 
 import { Channel } from '@tauri-apps/api/core'
 import { Bot, CircleStop, Send } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { call } from '@/lib/backend'
+import { call, savePreferences } from '@/lib/backend'
 import { trace } from '@/lib/sentry'
 import { useKoharuStore } from '@/lib/store'
 import { modelName, REASONING } from '@/lib/translation'
-import {
-  commands,
-  type AgentConfig,
-  type AgentEvent,
-  type AgentStatus,
-} from '@koharu/bridge/protocol'
+import { commands, type AgentConfig, type AgentEvent } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
@@ -25,8 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@koharu/ui/components/select'
-import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
+
+/** The desktop's MCP server, which serves the open project from launch. */
+const MCP_URL = 'http://127.0.0.1:7878/mcp'
 
 interface ConversationMessage {
   id: string
@@ -39,20 +36,14 @@ interface ConversationMessage {
  * serves the same tools to agents in other programs. */
 export function AgentPanel() {
   const { t } = useTranslation()
-  const [status, setStatus] = useState<AgentStatus | null>(null)
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [prompt, setPrompt] = useState('')
   const [running, setRunning] = useState<number | null>(null)
   const [activity, setActivity] = useState<string | null>(null)
   const models = useKoharuStore((state) => state.models).filter((model) => model.tools)
+  const preferences = useKoharuStore((state) => state.preferences)
 
-  useEffect(() => {
-    void call(commands.getAgentStatus)
-      .then(setStatus)
-      .catch(() => undefined)
-  }, [])
-
-  if (!status) {
+  if (!preferences) {
     return (
       <div className='grid min-h-0 flex-1 place-items-center p-6 text-[11px] text-muted-foreground'>
         {t('agent.loading')}
@@ -60,7 +51,8 @@ export function AgentPanel() {
     )
   }
 
-  const model = status.config.model ?? null
+  const config = preferences.agent
+  const model = config.model ?? null
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
@@ -69,7 +61,7 @@ export function AgentPanel() {
           <Select
             value={model ?? ''}
             items={Object.fromEntries(models.map((choice) => [choice.reference, choice.name]))}
-            onValueChange={(next) => next && void saveConfig({ ...status.config, model: next })}
+            onValueChange={(next) => next && void saveConfig({ ...config, model: next })}
           >
             <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.model')}>
               <SelectValue placeholder={t('inference.noModel')} />
@@ -83,7 +75,7 @@ export function AgentPanel() {
             </SelectContent>
           </Select>
           <Select
-            value={status.config.reasoning ?? 'default'}
+            value={config.reasoning ?? 'default'}
             items={Object.fromEntries([
               ['default', t('inference.providerDefault')],
               ...REASONING.map((level) => [level, t(`reasoning.${level}`)]),
@@ -91,7 +83,7 @@ export function AgentPanel() {
             onValueChange={(reasoning) =>
               reasoning &&
               void saveConfig({
-                ...status.config,
+                ...config,
                 reasoning: reasoning === 'default' ? null : reasoning,
               })
             }
@@ -109,24 +101,10 @@ export function AgentPanel() {
             </SelectContent>
           </Select>
         </div>
-        <label className='flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground'>
-          <Switch
-            size='sm'
-            checked={status.mcp !== null}
-            aria-label={t('agent.mcp')}
-            onCheckedChange={(enabled) =>
-              void call(commands.setMcp, enabled)
-                .then((mcp) => setStatus((current) => (current ? { ...current, mcp } : current)))
-                .catch(() => undefined)
-            }
-          />
+        <div className='flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground'>
           <span className='shrink-0'>{t('agent.mcp')}</span>
-          {status.mcp && (
-            <span className='min-w-0 truncate font-mono text-foreground select-text'>
-              {status.mcp}
-            </span>
-          )}
-        </label>
+          <span className='min-w-0 truncate font-mono text-foreground select-text'>{MCP_URL}</span>
+        </div>
       </div>
 
       <ScrollArea className='min-h-0 flex-1'>
@@ -216,9 +194,8 @@ export function AgentPanel() {
     </div>
   )
 
-  async function saveConfig(config: AgentConfig) {
-    const saved = await call(commands.saveAgentConfig, config)
-    setStatus((current) => (current ? { ...current, config: saved } : current))
+  async function saveConfig(agent: AgentConfig) {
+    if (preferences) await savePreferences({ ...preferences, agent })
   }
 
   function cancel() {

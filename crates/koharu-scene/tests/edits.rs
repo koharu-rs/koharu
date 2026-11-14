@@ -831,3 +831,30 @@ fn a_transform_a_layer_cannot_take_changes_nothing() {
         assert_eq!(session.revision(), before);
     }
 }
+
+/// The desktop shows every writer's change, the pipeline's and the agent's
+/// included, by following the session alone.
+#[test]
+fn every_change_reaches_a_subscriber() {
+    let (_dir, mut session, page) = session();
+    let mut changes = session.subscribe();
+
+    let layer = add(
+        &mut session,
+        page,
+        None,
+        json!({"kind": "text", "content": "Hi"}),
+    );
+    let change = changes.try_recv().expect("the edit's change");
+    assert!(change.layers.contains(&layer), "{change:?}");
+
+    // An edit that changes nothing tells nothing.
+    session.apply(edit(Vec::new())).expect("an empty edit");
+    assert!(changes.try_recv().is_err());
+
+    session.undo().expect("undo").expect("a step");
+    let change = changes.try_recv().expect("the undo's change");
+    assert!(change.layers.contains(&layer), "{change:?}");
+    session.redo().expect("redo").expect("a step");
+    assert!(changes.try_recv().is_ok());
+}

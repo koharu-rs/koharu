@@ -11,6 +11,7 @@ import { call, dispatch } from '@/lib/backend'
 import { findLayer, isBlockLayer, isTextLayer, plainText } from '@/lib/document'
 import { cssBox, textBounds } from '@/lib/geometry'
 import { usePage } from '@/lib/queries'
+import { deleteLayers, setText } from '@/lib/scene'
 import { hexToRgba, useKoharuStore, type CanvasTool } from '@/lib/store'
 import { commands, type Layer, type Rgba, type Text } from '@koharu/bridge/protocol'
 
@@ -33,7 +34,7 @@ export function CanvasWorkspace() {
     if (!element) return
     const report = () => {
       const { x, y, width, height } = element.getBoundingClientRect()
-      dispatch(commands.setCanvasViewport, { x, y, width, height })
+      dispatch(commands.setCanvasViewport, x, y, width, height)
     }
     report()
     const resize = new ResizeObserver(report)
@@ -45,7 +46,7 @@ export function CanvasWorkspace() {
       window.removeEventListener('resize', report)
       window.visualViewport?.removeEventListener('resize', report)
       // Nothing to draw while the editor is away, as under the preferences.
-      dispatch(commands.setCanvasViewport, { x: 0, y: 0, width: 0, height: 0 })
+      dispatch(commands.setCanvasViewport, 0, 0, 0, 0)
     }
   }, [])
 
@@ -116,7 +117,7 @@ export function CanvasWorkspace() {
       }
       if ((event.key === 'Delete' || event.key === 'Backspace') && state.selectedLayers.length) {
         event.preventDefault()
-        dispatch(commands.deleteLayers, state.selectedLayers)
+        dispatch(deleteLayers, state.selectedLayers)
         return
       }
       if (event.key.toLowerCase() === state.shortcuts.fit) {
@@ -155,9 +156,10 @@ export function CanvasWorkspace() {
     }
   }, [colorSampling, page])
 
-  const typed = tool === 'text' && selected.length === 1 && page
-    ? findLayer(page.layers, selected[0]!)?.layer
-    : undefined
+  const typed =
+    tool === 'text' && selected.length === 1 && page
+      ? findLayer(page.layers, selected[0]!)?.layer
+      : undefined
 
   return (
     <main className='relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tl-2xl'>
@@ -205,7 +207,7 @@ function TextBox({ layer }: { layer: Layer }) {
 
   const commit = () => {
     if (cancelled.current || value === original) return
-    void call(commands.setText, layer.id, value).catch(() => undefined)
+    void call(setText, layer.id, value).catch(() => undefined)
   }
 
   return (

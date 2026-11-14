@@ -12,7 +12,7 @@ import {
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
 import { modelName, orderedLanguageChoices, REASONING, vendorOf } from '@/lib/translation'
-import type { ModelInfo, TranslatorConfig } from '@koharu/bridge/protocol'
+import type { Model, TranslatorConfig } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {
@@ -39,7 +39,7 @@ export function TranslationPreferences({
   onChange,
 }: {
   value: TranslatorConfig
-  models: ModelInfo[]
+  models: Model[]
   onChange: (value: TranslatorConfig) => void
 }) {
   const { t, i18n } = useTranslation()

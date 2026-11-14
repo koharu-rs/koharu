@@ -250,13 +250,6 @@ impl Frame {
         })
     }
 
-    /// Whether some text waits for a font `Renderer::load_fonts` would
-    /// download; until then it draws with a fallback.
-    #[must_use]
-    pub fn needs_fonts(&self) -> bool {
-        !self.0.missing.is_empty()
-    }
-
     /// The passes that draw `view`: one, unless its images need more of
     /// vello's atlas than one pass has, when they are strips across it.
     #[must_use]

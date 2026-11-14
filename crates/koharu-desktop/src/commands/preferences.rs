@@ -1,11 +1,11 @@
 //! The preferences: `config.toml`'s sections, each handed to its owner when
 //! saved.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use koharu_agent::AgentConfig;
 use koharu_config::secrets::SecretString;
-use koharu_llm::Providers;
+use koharu_llm::{Model, Providers};
 use koharu_pipeline::PipelineConfig;
 use koharu_renderer::RendererConfig;
 use serde::{Deserialize, Serialize};
@@ -61,48 +61,16 @@ pub async fn save_preferences(
         let saved = self::preferences()?;
         app.pipeline.set_config(saved.pipeline.clone());
         app.renderer.set_config(saved.renderer.clone());
-        // The renderer's fonts lay the page out again.
-        app.changed()?;
         Ok(saved)
     })
     .await
 }
 
-/// A model the translator or the agent can use.
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct ModelInfo {
-    /// A `vendor/model` reference, as the preferences hold one.
-    pub reference: String,
-    pub name: String,
-    pub vendor: String,
-    /// Whether it reads images, as the translator's vision needs.
-    pub images: bool,
-    /// Whether it calls tools, as the agent needs.
-    pub tools: bool,
-}
-
 /// Koharu's own models, and each vendor's that has a key or a sign-in.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_models() -> Vec<ModelInfo> {
-    koharu_llm::models()
-        .await
-        .into_iter()
-        .map(|spec| ModelInfo {
-            reference: spec.reference(),
-            name: spec.display_name.clone(),
-            vendor: spec.provider.vendor().to_string(),
-            images: spec.input.image,
-            tools: spec.tools,
-        })
-        .collect()
-}
-
-/// A vendor Koharu lists models from, and whether its API key is stored.
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct Vendor {
-    pub name: String,
-    pub key: bool,
+pub async fn get_models() -> Vec<Model> {
+    koharu_llm::models().await
 }
 
 /// The vendors that take an API key, by rig's names, each with whether one
@@ -110,14 +78,14 @@ pub struct Vendor {
 /// would take.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_vendors() -> Result<Vec<Vendor>> {
+pub async fn get_vendors() -> Result<BTreeMap<String, bool>> {
     blocking(|| {
         keyed()
             .map(|name| {
-                Ok(Vendor {
-                    name: name.to_owned(),
-                    key: koharu_config::secrets::get(name)?.is_some(),
-                })
+                Ok((
+                    name.to_owned(),
+                    koharu_config::secrets::get(name)?.is_some(),
+                ))
             })
             .collect()
     })

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { call } from '@/lib/backend'
 import { pageKey, projectKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type ProjectSummary } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/bridge/protocol'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/t
 export function StartView() {
   const { t } = useTranslation()
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
-  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [projects, setProjects] = useState<string[]>([])
   const [name, setName] = useState('')
   const [busy, setBusy] = useState<string | null>('list')
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
@@ -207,13 +207,13 @@ export function StartView() {
                     <ul className='grid gap-0.5' aria-label={t('start.projectList')}>
                       {projects.map((project) => (
                         <li
-                          key={project.name}
+                          key={project}
                           className='group flex min-w-0 items-center rounded-lg hover:bg-foreground/[0.045]'
                         >
                           <button
                             type='button'
                             className='flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
-                            onClick={() => void openProject(project.name).catch(() => undefined)}
+                            onClick={() => void openProject(project).catch(() => undefined)}
                             disabled={busy !== null}
                           >
                             <span className='grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground'>
@@ -221,7 +221,7 @@ export function StartView() {
                             </span>
                             <span className='min-w-0'>
                               <span className='block truncate text-[11px] font-medium'>
-                                {project.name}
+                                {project}
                               </span>
                               <span className='mt-0.5 block text-[9px] text-muted-foreground'>
                                 {t('start.projectKind')}
@@ -233,8 +233,8 @@ export function StartView() {
                             size='icon-sm'
                             variant='ghost'
                             className='mr-2 size-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100'
-                            aria-label={t('start.deleteLabel', { name: project.name })}
-                            onClick={() => setProjectToDelete(project.name)}
+                            aria-label={t('start.deleteLabel', { name: project })}
+                            onClick={() => setProjectToDelete(project)}
                             disabled={busy !== null}
                           >
                             <Trash2 className='size-3.5' />

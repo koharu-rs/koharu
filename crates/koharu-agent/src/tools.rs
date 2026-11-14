@@ -77,11 +77,6 @@ impl Tools {
         let answer = self.session.lock().query(Query::GetProject)?;
         Ok(serde_json::to_value(answer)?)
     }
-
-    async fn render(&self, page: PageId) -> Result<Frame, ToolExecutionError> {
-        let (session, renderer) = (Arc::clone(&self.session), self.renderer.clone());
-        blocking(move || renderer.render(&session.lock(), page).map_err(failed)).await
-    }
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -330,9 +325,9 @@ impl Tool for History {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "What a run told so far, in order: each page's stages as they started and finished, and \
-         last, once it ended, how: done, failed with its reason, or stopped. Waits up to 30 \
-         seconds for the run to end first."
+        "What a run told so far, in order: how many page stages it does, each page's stages as \
+         they started and finished, and last, once it ended, how: done, failed with its reason, \
+         or stopped. Waits up to 30 seconds for the run to end first."
             .to_owned()
     }
 
@@ -382,11 +377,11 @@ impl Tool for ViewPage {
         args: PageArgs,
     ) -> Result<ToolResultContent, Self::Error> {
         let tools = project(context)?;
-        let mut frame = tools.render(args.page).await?;
-        if frame.needs_fonts() {
-            tools.renderer.load_fonts(&frame).await.map_err(failed)?;
-            frame = tools.render(args.page).await?;
-        }
+        let frame = tools
+            .renderer
+            .render_loaded(Arc::clone(&tools.session), args.page)
+            .await
+            .map_err(failed)?;
         let renderer = tools.renderer.clone();
         let jpeg = blocking(move || seen(&renderer, &frame)).await?;
         Ok(ToolResultContent::image_base64(

@@ -13,7 +13,7 @@ import {
 } from '@/components/preferences/PreferenceFields'
 import { call, refreshModels } from '@/lib/backend'
 import { queryClient } from '@/lib/queries'
-import { commands, type Providers, type Vendor } from '@koharu/bridge/protocol'
+import { commands, type Providers } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 
@@ -29,7 +29,11 @@ export function ProviderPreferences({
   onChange: (value: Providers) => void
 }) {
   const { t } = useTranslation()
-  const vendors = useQuery({ queryKey: vendorsKey, queryFn: () => call(commands.getVendors) })
+  const vendors = useQuery({
+    queryKey: vendorsKey,
+    queryFn: async () =>
+      Object.entries(await call(commands.getVendors)).map(([name, key]) => ({ name, key })),
+  })
   return (
     <PreferencePage
       title={t('settings.providers.title')}
@@ -61,7 +65,7 @@ export function ProviderPreferences({
 }
 
 /** A vendor's key, written to the credential store when the field loses the focus. */
-function KeyField({ vendor }: { vendor: Vendor }) {
+function KeyField({ vendor }: { vendor: { name: string; key: boolean } }) {
   const { t } = useTranslation()
   const inputId = useId()
   const [draft, setDraft] = useState('')

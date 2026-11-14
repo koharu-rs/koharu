@@ -107,9 +107,6 @@ fn report(frame: &Frame, blocks: &[LayerId]) {
             if text.overflowed { ", overflowing" } else { "" },
         );
     }
-    if frame.needs_fonts() {
-        println!("  (a fallback drew some text; Renderer::load_fonts downloads its font)");
-    }
 }
 
 fn apply(session: &mut Session, ops: Vec<Value>) -> Result<Change> {

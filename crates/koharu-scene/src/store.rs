@@ -87,6 +87,10 @@ pub(crate) struct Store {
     conn: Mutex<Connection>,
 }
 
+/// The journals SQLite may leave beside a project file. Exclusive locking
+/// keeps WAL's index in memory, so there's no `-shm`.
+const JOURNALS: [&str; 2] = ["-wal", "-journal"];
+
 /// One writer holds a project for as long as it's open, and a second finds it
 /// locked at once rather than after a wait.
 fn configure(conn: &Connection) -> rusqlite::Result<()> {
@@ -111,14 +115,27 @@ impl Store {
         File::create_new(path)?;
         let created = Self::initialize(path);
         if created.is_err() {
-            for suffix in ["", "-wal", "-journal"] {
-                let mut leftover = path.as_os_str().to_owned();
-                leftover.push(suffix);
-                // What can't be removed doesn't change what failed.
-                let _ = std::fs::remove_file(leftover);
-            }
+            // What can't be removed doesn't change what failed.
+            let _ = Self::remove(path);
         }
         created
+    }
+
+    /// Deletes a project file and the journals beside it, which SQLite would
+    /// replay into the next project made there.
+    pub(crate) fn remove(path: &Path) -> Result<()> {
+        std::fs::remove_file(path)?;
+        for suffix in JOURNALS {
+            let mut journal = path.as_os_str().to_owned();
+            journal.push(suffix);
+            match std::fs::remove_file(journal) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(error.into());
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     fn initialize(path: &Path) -> Result<(Self, Project)> {

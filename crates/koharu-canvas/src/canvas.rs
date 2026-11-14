@@ -23,7 +23,7 @@ use vello::{
 };
 
 use crate::{
-    Brush, Colors, Effect, Tool,
+    Brush, Camera, Colors, Effect, Tool,
     control::Control,
     draw::{Target, color, overlay::Overlay, strip_origin},
     gesture::{Context, Gesture, GestureLook, Press},
@@ -144,6 +144,17 @@ impl Canvas {
     /// Moves the camera, kept so some of the page stays in view.
     pub fn set_camera(&mut self, camera: TranslateScale) {
         self.view.set_camera(camera);
+    }
+
+    /// Where the page shows, in device-independent pixels.
+    pub fn placement(&self) -> Camera {
+        self.view.placement()
+    }
+
+    /// Zooms about the viewport's centre to `zoom` device-independent pixels
+    /// a page pixel.
+    pub fn zoom_to(&mut self, zoom: f64) {
+        self.view.zoom_to(zoom);
     }
 
     /// Fits the page in the viewport, and keeps it fitted as the viewport

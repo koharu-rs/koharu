@@ -43,9 +43,18 @@ import {
   type Placed,
 } from '@/lib/document'
 import { useFonts, usePage } from '@/lib/queries'
+import {
+  deleteLayers,
+  moveLayer,
+  setLocked,
+  setSourceText,
+  setStyle,
+  setText,
+  setVisibility,
+  updateLayer,
+} from '@/lib/scene'
 import { hexToRgba, rgbaToHex, useKoharuStore } from '@/lib/store'
 import {
-  commands,
   type Align,
   type Direction,
   type FontFamily,
@@ -146,11 +155,7 @@ function TypeInspector() {
       style: { ...style, ...patch, chars: { ...chars, ...patch.chars } },
     })
     const request = ++sequence.current
-    void call(
-      commands.setStyle,
-      targets.map((layer) => layer.id),
-      patch,
-    )
+    void call(setStyle, targets, patch)
       .catch(() => undefined)
       .finally(() => {
         if (sequence.current === request) setDraft(null)
@@ -160,7 +165,7 @@ function TypeInspector() {
   /** Merges `patch` into each target's lettering: a text's own values, a block's translation's. */
   const update = (patch: { [key in string]: Value }) => {
     for (const layer of targets) {
-      dispatch(commands.updateLayer, layer.id, isBlockLayer(layer) ? { translation: patch } : patch)
+      dispatch(updateLayer, layer.id, isBlockLayer(layer) ? { translation: patch } : patch)
     }
   }
 
@@ -263,7 +268,10 @@ function TypeInspector() {
                 apply({
                   chars: {
                     italic: nextItalic,
-                    weight: nearestFontWeight(usableFontWeights(selectedFamily, nextItalic), weight),
+                    weight: nearestFontWeight(
+                      usableFontWeights(selectedFamily, nextItalic),
+                      weight,
+                    ),
                   },
                 })
               }}
@@ -273,11 +281,15 @@ function TypeInspector() {
                 aria-label={t('inspector.fontStyle')}
                 className='w-full min-w-0'
               >
-                <SelectValue>{t(`inspector.fontStyles.${italic ? 'italic' : 'normal'}`)}</SelectValue>
+                <SelectValue>
+                  {t(`inspector.fontStyles.${italic ? 'italic' : 'normal'}`)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent align='end'>
                 <SelectItem value='normal'>{t('inspector.fontStyles.normal')}</SelectItem>
-                {italics && <SelectItem value='italic'>{t('inspector.fontStyles.italic')}</SelectItem>}
+                {italics && (
+                  <SelectItem value='italic'>{t('inspector.fontStyles.italic')}</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </InspectorField>
@@ -441,7 +453,8 @@ function usableFontWeights(family: FontFamily | undefined, italic: boolean): num
 
 function nearestFontWeight(weights: number[], target: number): number {
   return weights.reduce(
-    (nearest, weight) => (Math.abs(weight - target) < Math.abs(nearest - target) ? weight : nearest),
+    (nearest, weight) =>
+      Math.abs(weight - target) < Math.abs(nearest - target) ? weight : nearest,
     weights[0] ?? target,
   )
 }
@@ -498,11 +511,11 @@ function LayersInspector() {
     const target = index + toward
     if (index < 0 || target < 0 || target >= siblings.length) return
     // `move_layer` counts the index after the layer is taken out, which is `target` either way.
-    dispatch(commands.moveLayer, layer.id, parent?.id ?? null, target)
+    dispatch(moveLayer, layer.id, parent?.id ?? null, target)
   }
 
   const deleteLayer = (layer: LayerId) =>
-    void call(commands.deleteLayers, [layer])
+    void call(deleteLayers, [layer])
       .then(() => {
         if (selected.includes(layer)) {
           selectLayers(selected.filter((selectedLayer) => selectedLayer !== layer))
@@ -567,8 +580,8 @@ function LayersInspector() {
                 onSelect={(event) =>
                   selectLayer(layer.id, event.ctrlKey || event.metaKey, event.shiftKey)
                 }
-                onToggle={() => dispatch(commands.setVisibility, [layer.id], !layer.visible, null)}
-                onLock={() => dispatch(commands.setLocked, [layer.id], !layer.locked)}
+                onToggle={() => dispatch(setVisibility, [layer.id], !layer.visible, null)}
+                onLock={() => dispatch(setLocked, [layer.id], !layer.locked)}
                 onMove={(toward) => move(layer, toward)}
                 canMoveUp={!layer.locked && position < siblings.length - 1}
                 canMoveDown={!layer.locked && position > 0}
@@ -678,7 +691,11 @@ function LayerRow({
                 />
               }
             >
-              {layer.locked ? <Lock className='size-3.5' /> : <LockOpen className='size-3.5 opacity-40' />}
+              {layer.locked ? (
+                <Lock className='size-3.5' />
+              ) : (
+                <LockOpen className='size-3.5 opacity-40' />
+              )}
             </TooltipTrigger>
             <TooltipContent side='left'>
               {layer.locked ? t('layers.locked') : t('layers.unlocked')}
@@ -713,7 +730,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
   }, [layer.id, layer.opacity])
 
   const commitOpacity = (next: number) =>
-    void call(commands.setVisibility, [layer.id], null, next / 100).catch(() =>
+    void call(setVisibility, [layer.id], null, next / 100).catch(() =>
       setOpacity(layer.opacity * 100),
     )
 
@@ -769,7 +786,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
               disabled={layer.locked}
               className='max-h-14 min-h-8 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
               value={plainText(layer.source)}
-              onCommit={(text) => dispatch(commands.setSourceText, layer.id, text)}
+              onCommit={(text) => dispatch(setSourceText, layer.id, text)}
             />
           </InspectorField>
           <InspectorField label={t('inspector.translation')}>
@@ -780,7 +797,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
               disabled={layer.locked}
               className='max-h-16 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md border-primary/25 bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
               value={plainText(layer.translation)}
-              onCommit={(text) => dispatch(commands.setText, layer.id, text)}
+              onCommit={(text) => dispatch(setText, layer.id, text)}
             />
           </InspectorField>
         </>
@@ -794,7 +811,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
             disabled={layer.locked}
             className='max-h-16 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
             value={plainText(layer)}
-            onCommit={(text) => dispatch(commands.setText, layer.id, text)}
+            onCommit={(text) => dispatch(setText, layer.id, text)}
           />
         </InspectorField>
       )}
@@ -946,7 +963,8 @@ function layerIcon(layer: Layer): typeof Type {
 
 function localizedLayerName(layer: Layer, index: number, t: TFunction): string {
   if (layer.name) return layer.name
-  if (isTextLayer(layer)) return plainText(layer).trim() || t('layers.textName', { index: index + 1 })
+  if (isTextLayer(layer))
+    return plainText(layer).trim() || t('layers.textName', { index: index + 1 })
   if (isBlockLayer(layer)) {
     return (
       plainText(layer.translation).trim() ||

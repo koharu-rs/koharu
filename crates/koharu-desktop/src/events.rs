@@ -1,93 +1,64 @@
-//! What the desktop tells the React interface on its own, through the
-//! channels `subscribe` hands over.
+//! What the desktop tells the React interface on its own, as Tauri events,
+//! each carrying its owner's type.
 
-use koharu_canvas::Notice;
-use koharu_scene::{LayerId, Rgba};
-use parking_lot::Mutex;
-use serde::Serialize;
-use specta::Type;
-use tauri::ipc::Channel;
+use std::marker::PhantomData;
 
+use koharu_canvas::{Camera, Notice};
+use koharu_pipeline::Event as PipelineEvent;
 use koharu_runtime::Transfer;
+use koharu_scene::{Change, LayerId, PageId, Rgba};
+use specta::{Type, Types, datatype::DataType};
 
-use crate::{app::ProjectInfo, runs::Job};
-
-/// What the canvas did that the interface shows.
-#[derive(Clone, Debug, Serialize, Type)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum CanvasEvent {
-    /// Where the page shows: a page point `p` sits at `p * zoom + (x, y)`
-    /// in CSS pixels from the canvas element's corner.
-    Camera {
-        zoom: f64,
-        x: f64,
-        y: f64,
-    },
-    Selection {
-        layers: Vec<LayerId>,
-    },
-    Notice {
-        notice: Notice,
-    },
-    /// The colour the picker picked, for the brush.
-    Color {
-        color: Rgba,
-    },
-    /// The brush diameter Alt and the wheel asked for, in page pixels.
-    BrushDiameter {
-        diameter: f64,
-    },
+/// An event's name, typed by what it carries, so a send and the bindings
+/// agree.
+pub struct Event<T> {
+    pub name: &'static str,
+    payload: PhantomData<fn(T)>,
 }
 
-/// The interface's channels, from its latest `subscribe`; a reloaded page
-/// subscribes again.
-#[derive(Default)]
-pub struct Channels {
-    project: Mutex<Option<Channel<Option<ProjectInfo>>>>,
-    canvas: Mutex<Option<Channel<CanvasEvent>>>,
-    job: Mutex<Option<Channel<Job>>>,
-    download: Mutex<Option<Channel<Transfer>>>,
-}
-
-impl Channels {
-    pub fn subscribe(
-        &self,
-        project: Channel<Option<ProjectInfo>>,
-        canvas: Channel<CanvasEvent>,
-        job: Channel<Job>,
-        download: Channel<Transfer>,
-    ) {
-        *self.project.lock() = Some(project);
-        *self.canvas.lock() = Some(canvas);
-        *self.job.lock() = Some(job);
-        *self.download.lock() = Some(download);
+impl<T: Type> Event<T> {
+    const fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            payload: PhantomData,
+        }
     }
 
-    pub fn project(&self, info: Option<ProjectInfo>) {
-        send(&self.project, info);
-    }
-
-    pub fn canvas(&self, event: CanvasEvent) {
-        send(&self.canvas, event);
-    }
-
-    pub fn job(&self, job: Job) {
-        send(&self.job, job);
-    }
-
-    /// A model or font file's download, as it goes.
-    pub fn download(&self, transfer: Transfer) {
-        send(&self.download, transfer);
+    fn binding(&self, types: &mut Types) -> (&'static str, DataType) {
+        (self.name, T::definition(types))
     }
 }
 
-/// Sends on a channel, and forgets one whose page went away.
-fn send<T: tauri::ipc::IpcResponse + Clone>(channel: &Mutex<Option<Channel<T>>>, message: T) {
-    let mut channel = channel.lock();
-    if channel
-        .as_ref()
-        .is_some_and(|current| current.send(message).is_err())
-    {
-        *channel = None;
-    }
+/// An edit, undo, or redo of the open project, from whichever writer.
+pub const CHANGE: Event<Change> = Event::new("change");
+/// The open project's name, or none once it closes.
+pub const PROJECT: Event<Option<String>> = Event::new("project");
+/// The page the canvas shows.
+pub const PAGE: Event<Option<PageId>> = Event::new("page");
+/// The selection a canvas gesture made.
+pub const SELECTION: Event<Vec<LayerId>> = Event::new("selection");
+pub const CAMERA: Event<Camera> = Event::new("camera");
+/// The colour the picker picked, for the brush.
+pub const COLOR: Event<Rgba> = Event::new("color");
+/// The brush diameter Alt and the wheel asked for, in page pixels.
+pub const BRUSH_DIAMETER: Event<f64> = Event::new("brush_diameter");
+pub const NOTICE: Event<Notice> = Event::new("notice");
+pub const PIPELINE: Event<PipelineEvent> = Event::new("pipeline");
+/// A model or font file's download, as it goes.
+pub const DOWNLOAD: Event<Transfer> = Event::new("download");
+
+/// Every event's name and payload, for the bindings.
+pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
+    vec![
+        CHANGE.binding(types),
+        PROJECT.binding(types),
+        PAGE.binding(types),
+        SELECTION.binding(types),
+        CAMERA.binding(types),
+        COLOR.binding(types),
+        BRUSH_DIAMETER.binding(types),
+        NOTICE.binding(types),
+        PIPELINE.binding(types),
+        DOWNLOAD.binding(types),
+    ]
 }

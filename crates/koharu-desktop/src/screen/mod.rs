@@ -25,8 +25,8 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use koharu_canvas::{Brush, Canvas, Colors, Rect, Tool, TranslateScale, Vec2};
-use koharu_renderer::{Frame, Renderer};
+use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Tool};
+use koharu_renderer::{Frame, Gpu};
 use parking_lot::Mutex;
 use tauri::{AppHandle, LogicalPosition, Manager as _, webview::WebviewBuilder};
 use tauri_runtime_cef::{
@@ -60,7 +60,7 @@ pub const MAIN: &str = "main";
 /// What the main window shows, shared between the main thread, where CEF
 /// paints and winit delivers events, and the commands.
 pub struct Screen {
-    renderer: Renderer,
+    gpu: Arc<Gpu>,
     /// The webview's layout, which the runtime keeps current; set when CEF
     /// creates the browser.
     pub view: OnceLock<OffscreenView>,
@@ -74,7 +74,7 @@ pub struct Screen {
     /// What the interface set, for a canvas made later.
     settings: Mutex<Settings>,
     /// The camera as the interface last heard it.
-    camera: Mutex<Option<(f64, f64, f64)>>,
+    camera: Mutex<Option<Camera>>,
     /// The browser CEF first paints for, which input reaches through its
     /// host.
     browser: Mutex<Option<Browser>>,
@@ -94,9 +94,9 @@ struct Settings {
 }
 
 impl Screen {
-    pub fn new(renderer: Renderer) -> Self {
+    pub fn new(gpu: Arc<Gpu>) -> Self {
         Self {
-            renderer,
+            gpu,
             view: OnceLock::new(),
             painted: Mutex::new(Painted::default()),
             capture: Mutex::new(None),
@@ -195,31 +195,11 @@ impl Screen {
         self.request_redraw();
     }
 
-    /// Zooms to `zoom` CSS pixels a page pixel about the viewport's centre.
-    pub fn zoom(&self, zoom: f64) {
-        let (scale, size) = (self.scale(), self.physical_viewport().size());
-        self.with_canvas(|canvas| {
-            let camera = canvas.camera();
-            let centre = Vec2::new(size.width * 0.5, size.height * 0.5);
-            let page = (centre - camera.translation) / camera.scale;
-            let zoomed = zoom * scale;
-            canvas.set_camera(TranslateScale::new(centre - page * zoomed, zoomed));
-        });
-        self.request_redraw();
-    }
-
-    /// The camera in CSS pixels, `(zoom, x, y)`, if it moved since the
-    /// interface last heard it.
-    pub fn camera(&self) -> Option<(f64, f64, f64)> {
-        let scale = self.scale();
-        let camera = self.with_canvas(|canvas| canvas.camera())?;
-        let css = (
-            camera.scale / scale,
-            camera.translation.x / scale,
-            camera.translation.y / scale,
-        );
+    /// The camera, if it moved since the interface last heard it.
+    pub fn camera(&self) -> Option<Camera> {
+        let camera = self.with_canvas(|canvas| canvas.placement())?;
         let mut last = self.camera.lock();
-        (*last != Some(css)).then(|| *last.insert(css))
+        (*last != Some(camera)).then(|| *last.insert(camera))
     }
 
     fn host(&self) -> Option<BrowserHost> {
@@ -359,16 +339,10 @@ impl Screen {
         if size.width == 0 || size.height == 0 {
             return;
         }
-        let gpu = match self.renderer.gpu() {
-            Ok(gpu) => gpu,
-            Err(error) => {
-                tracing::error!("no GPU to present the window with: {error:#}");
-                return;
-            }
-        };
+        let gpu = &self.gpu;
         let mut compositor = self.compositor.lock();
         if compositor.is_none() {
-            match Compositor::new(&gpu, Arc::clone(window)) {
+            match Compositor::new(gpu, Arc::clone(window)) {
                 Ok(created) => *compositor = Some(created),
                 Err(error) => {
                     tracing::error!("failed to create the window's surface: {error:#}");
@@ -392,7 +366,7 @@ impl Screen {
         });
         let capture = self.capture.lock().take();
         if let Err(error) = compositor.present(
-            &gpu,
+            gpu,
             (size.width, size.height),
             &mut self.painted.lock(),
             canvas,
