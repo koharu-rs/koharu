@@ -133,7 +133,7 @@ impl App {
         }
         self.emit(events::PROJECT, Some(name));
         self.emit(events::PAGE, page);
-        self.show()
+        self.refresh()
     }
 
     /// Closes the open project, if one is, and stops what runs on it, so
@@ -175,7 +175,7 @@ impl App {
     }
 
     /// Shows `page` on the canvas.
-    pub fn show_page(self: &Arc<Self>, page: PageId) -> Result<()> {
+    pub fn show(self: &Arc<Self>, page: PageId) -> Result<()> {
         {
             let mut project = self.project.lock();
             let project = project.as_mut().context("no project is open")?;
@@ -183,7 +183,7 @@ impl App {
             project.page = Some(page);
         }
         self.emit(events::PAGE, Some(page));
-        self.show()
+        self.refresh()
     }
 
     /// Runs `edit` on the open project as one undo step.
@@ -192,8 +192,9 @@ impl App {
         Ok(self.session()?.lock().apply(edit)?)
     }
 
-    /// Tells the interface `session`'s changes, and shows each on the
-    /// canvas. A burst shows once.
+    /// Tells the interface `session`'s changes, and shows them on the canvas
+    /// one redraw at a time: a burst, and what comes during a redraw, shows
+    /// once.
     fn follow(self: &Arc<Self>, mut changes: Receiver<Change>) -> AbortOnDropHandle<()> {
         let app = Arc::clone(self);
         AbortOnDropHandle::new(tokio::spawn(async move {
@@ -210,24 +211,18 @@ impl App {
                 while let Ok(change) = changes.try_recv() {
                     app.emit(events::CHANGE, change);
                 }
-                app.show_later();
+                let showing = Arc::clone(&app);
+                let shown = tokio::task::spawn_blocking(move || showing.refresh()).await;
+                if let Err(error) = shown.map_err(anyhow::Error::from).and_then(|result| result) {
+                    tracing::error!("failed to show the project: {error:#}");
+                }
             }
         }))
     }
 
-    /// Shows the open project off the async runtime's workers.
-    pub(crate) fn show_later(self: &Arc<Self>) {
-        let app = Arc::clone(self);
-        tauri::async_runtime::spawn_blocking(move || {
-            if let Err(error) = app.show() {
-                tracing::error!("failed to show the project: {error:#}");
-            }
-        });
-    }
-
     /// Shows the open project's page as it is now. A page that went away
     /// gives its place to the first.
-    pub fn show(self: &Arc<Self>) -> Result<()> {
+    pub fn refresh(self: &Arc<Self>) -> Result<()> {
         let (session, page, moved) = {
             let mut project = self.project.lock();
             let Some(project) = project.as_mut() else {

@@ -79,5 +79,5 @@ pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
 #[specta::specta]
 pub async fn show_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
     let app = Arc::clone(&app);
-    Ok(tokio::task::spawn_blocking(move || app.show_page(page)).await??)
+    Ok(tokio::task::spawn_blocking(move || app.show(page)).await??)
 }

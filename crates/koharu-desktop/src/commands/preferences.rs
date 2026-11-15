@@ -61,7 +61,11 @@ pub async fn save_preferences(
         let saved = self::preferences()?;
         app.pipeline.set_config(saved.pipeline.clone());
         app.renderer.set_config(saved.renderer.clone());
-        app.show_later();
+        // The preferences are saved by now, so a page that fails to redraw
+        // with them doesn't fail the save.
+        if let Err(error) = app.refresh() {
+            tracing::error!("failed to show the project: {error:#}");
+        }
         Ok(saved)
     })
     .await??)
