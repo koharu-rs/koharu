@@ -42,11 +42,11 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 - [GPU-based canvas](https://koharu.rs/guides/canvas) for manual cleanup, text placement, and page composition
 - [Multilingual text shaping and layout](https://koharu.rs/guides/typesetting) with automatic fitting, font fallback, vertical CJK, and right-to-left text
 - [PNG, CBZ, and layered PSD export](https://koharu.rs/guides/export) for flattened delivery and layered editing
-- [Agent-based workflow](https://koharu.rs/agent/projects) for project inspection, editing, and pipeline control, with an [MCP server](https://koharu.rs/agent/setup) for agents in other programs
+- [Agent-driven workflow](https://koharu.rs/agent/projects) with an [MCP server](https://koharu.rs/agent/setup) for AI agents
 
 ## Hardware Acceleration
 
-Koharu supports CUDA on Windows and Linux, ROCm / HIP on x86-64 Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux. It runs every model on the best GPU it finds and has no CPU-only mode. Keep your graphics driver current; a full CUDA or ROCm SDK installation is not required. See [Runtime and hardware requirements](https://koharu.rs/hardware) for model-specific guidance.
+Koharu supports CUDA on Windows and Linux, ROCm / HIP on x86-64 Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux out of the box. See [Runtime and hardware requirements](https://koharu.rs/hardware) for model-specific guidance.
 
 ### CUDA
 
