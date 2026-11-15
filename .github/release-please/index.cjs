@@ -1,14 +1,19 @@
 const assert = require('node:assert/strict')
-const { execFileSync } = require('node:child_process')
+const { execFile } = require('node:child_process')
 const { readFileSync } = require('node:fs')
+const { promisify } = require('node:util')
 
 const { runGitCliff } = require('git-cliff')
 const { GitHub, Manifest, registerReleaseType } = require('release-please')
 // BaseStrategy is internal: keep the release-please dependency pinned and test this adapter on upgrades.
 const { BaseStrategy } = require('release-please/build/src/strategies/base')
 
-function command(program, args) {
-  return execFileSync(program, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }).trim()
+// Asynchronous, so Node's fetch closes idle GitHub connections while cargo runs: a
+// blocked event loop leaves one GitHub has already closed, and the next request fails on it.
+async function command(program, args) {
+  const options = { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
+  const { stdout } = await promisify(execFile)(program, args, options)
+  return stdout.trim()
 }
 
 class Koharu extends BaseStrategy {
@@ -18,12 +23,12 @@ class Koharu extends BaseStrategy {
       .mergeCommitIterator(this.targetBranch, { maxResults: 1 })
       .next()
     assert.equal(
-      command('git', ['rev-parse', 'HEAD']),
+      await command('git', ['rev-parse', 'HEAD']),
       head?.sha,
       'main changed; rerun with a fresh checkout',
     )
     assert.equal(
-      command('git', ['status', '--porcelain']),
+      await command('git', ['status', '--porcelain']),
       '',
       'Release preparation requires a clean checkout',
     )
@@ -44,8 +49,8 @@ class Koharu extends BaseStrategy {
   }
 
   async buildUpdates({ newVersion, changelogEntry }) {
-    command('cargo', ['set-version', '--workspace', newVersion.toString()])
-    const paths = command('git', ['diff', '--name-only']).split('\n').filter(Boolean)
+    await command('cargo', ['set-version', '--workspace', newVersion.toString()])
+    const paths = (await command('git', ['diff', '--name-only'])).split('\n').filter(Boolean)
     assert(
       paths.includes('Cargo.toml') && paths.includes('Cargo.lock'),
       'Cargo must update the workspace version and lockfile',
