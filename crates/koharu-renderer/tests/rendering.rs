@@ -584,12 +584,14 @@ fn hiding_a_block_shows_the_background_again() {
     );
 }
 
+/// A balloon crossing its panel's border stays in the panel it's read in, so
+/// a panel draws its children past its outline.
 #[test]
-fn a_panel_clips_its_children_and_a_layer_on_the_page_crosses_it() {
+fn a_panel_draws_its_children_past_its_outline() {
     if !gpu() {
         return;
     }
-    let (_dir, mut session, page, _) = page(
+    let (_dir, session, page, _) = page(
         64,
         64,
         vec![
@@ -598,8 +600,7 @@ fn a_panel_clips_its_children_and_a_layer_on_the_page_crosses_it() {
             json!({"op": "write_pixels", "layer": "$inside", "rect": {"x": 0, "y": 0, "width": 64, "height": 64}, "pixels": vec![255u8; 64 * 64 * 4]}),
         ],
     );
-    let renderer = renderer();
-    let pixels = renderer
+    let pixels = renderer()
         .render(&session, page)
         .expect("a frame")
         .rasterize()
@@ -607,25 +608,6 @@ fn a_panel_clips_its_children_and_a_layer_on_the_page_crosses_it() {
         .image;
     assert_eq!(
         (pixels.get_pixel(16, 32)[3], pixels.get_pixel(48, 32)[3]),
-        (255, 0)
-    );
-
-    apply(
-        &mut session,
-        vec![
-            json!({"op": "add_layer", "id": "$crossing", "page": page, "index": 1, "layer": {"kind": "raster"}}),
-            json!({"op": "write_pixels", "layer": "$crossing", "rect": {"x": 24, "y": 0, "width": 32, "height": 8}, "pixels": vec![255u8; 32 * 8 * 4]}),
-        ],
-    );
-    let pixels = renderer
-        .render(&session, page)
-        .expect("a frame")
-        .rasterize()
-        .expect("pixels")
-        .image;
-    assert_eq!(
-        pixels.get_pixel(48, 4)[3],
-        255,
-        "a layer on the page draws across the panel's edge"
+        (255, 255)
     );
 }

@@ -58,8 +58,8 @@ fn main() -> Result<()> {
     let page = session.project().pages().next().ok_or("no page")?.id;
 
     // Detection: panel > balloon > two texts, a sound effect and narration free
-    // in the panel, a balloon that crosses panels on the page, the next panel,
-    // and a text outside every panel.
+    // in the panel, a balloon in the panel that crosses its border, the next
+    // panel, and a text read in no panel.
     let panel = "M0 0 L600 0 L600 440 L0 440 Z";
     apply(
         &mut session,
@@ -71,10 +71,10 @@ fn main() -> Result<()> {
             json!({"op": "add_layer", "page": page, "parent": "$balloon", "index": 1, "layer": block(420.0, 40.0, "text")}),
             json!({"op": "add_layer", "page": page, "parent": "$panel", "index": 1, "layer": block(100.0, 250.0, "sfx")}),
             json!({"op": "add_layer", "page": page, "parent": "$panel", "index": 2, "layer": block(30.0, 30.0, "text")}),
-            json!({"op": "add_layer", "id": "$crossing", "page": page, "index": 1, "layer": {"kind": "balloon", "outline": "M200 380 L400 380 L400 520 L200 520 Z"}}),
+            json!({"op": "add_layer", "id": "$crossing", "page": page, "parent": "$panel", "index": 3, "layer": {"kind": "balloon", "outline": "M200 380 L400 380 L400 520 L200 520 Z"}}),
             json!({"op": "add_layer", "page": page, "parent": "$crossing", "index": 0, "layer": block(280.0, 400.0, "text")}),
-            json!({"op": "add_layer", "page": page, "index": 2, "layer": {"kind": "panel", "outline": "M0 460 L600 460 L600 900 L0 900 Z"}}),
-            json!({"op": "add_layer", "page": page, "index": 3, "layer": block(550.0, 800.0, "text")}),
+            json!({"op": "add_layer", "page": page, "index": 1, "layer": {"kind": "panel", "outline": "M0 460 L600 460 L600 900 L0 900 Z"}}),
+            json!({"op": "add_layer", "page": page, "index": 2, "layer": block(550.0, 800.0, "text")}),
         ],
     )?;
     let found = blocks(&session)?;

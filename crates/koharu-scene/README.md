@@ -227,7 +227,7 @@ variations].
 | Property | Model | Cite |
 |---|---|---|
 | `outline` | a closed path in page coordinates | a Clip Studio Paint frame is an outline edited with the Object tool, and transforming it leaves the layers in its folder as they are [CSP frames] |
-| clipping | its children show only inside the outline, so a layer that crosses panels sits on the page, outside them | inside a frame border folder "only the areas within the frame will show", and a layer above the folder draws across frames [CSP frames] |
+| children | what's read in it, drawn where they are, so a balloon or a text that crosses the outline stays in it; nothing is clipped | an ordinary Clip Studio Paint layer folder draws its layers where they are [CSP layers], where a frame border folder shows "only the areas within the frame" [CSP frames] |
 | border | never drawn, because the background already shows it; a new border is drawn as a shape | turning off Draw border leaves the frame lines invisible [CSP frames] |
 
 ### Balloons
@@ -345,11 +345,11 @@ Page              background: the scan     import
 │   │   ├── Text  block                    detection, or the box tool
 │   │   └── Text  block
 │   ├── SFX       block, sfx               free, in its panel
+│   ├── Balloon   balloon                  crosses the border, read in this panel
+│   │   └── Text  block
 │   └── Text      block                    narration, free, in its panel
-├── Balloon       balloon                  crosses panels, so on the page
-│   └── Text      block
 ├── Panel         panel                    the next panel
-└── Text          block                    free, outside every panel
+└── Text          block                    free, read in no panel
 ```
 
 ### What each step writes
@@ -360,7 +360,7 @@ fields of them.
 | Step | Reads | Writes |
 |---|---|---|
 | Import | the file | a page, its size, and its background |
-| Detection | the background | a `panel` for each panel it finds; a `balloon` for each balloon, inside its panel, or on the page when it crosses panels; a `block` for each text or sound effect, inside its balloon if it has one, else free in its panel or on the page, with its `role`, its source's frame, tilt, and direction, and its mask; all in reading order |
+| Detection | the background | a `panel` for each panel it finds; a `balloon` for each balloon, inside the panel it's read in, though it crosses the border, or on the page when it's read in none; a `block` for each text or sound effect, inside its balloon if it has one, else free in its panel or on the page, with its `role`, its source's frame, tilt, and direction, and its mask; all in reading order |
 | OCR | the background inside each block's source frame | the source's `content` and `language` |
 | Inpainting | the background, each block's mask, and its balloon's outline when it has one | the block's clean-up, only in the tiles it changes |
 | Translation | the page's sources in reading order, for context, and in a balloon, the balloon's outline and its other texts | each given block's translation: `content` and `language`; its `frame`, its room in its balloon, or its source's frame when it's free, with `best` fit; `anchor` and `direction` |
@@ -390,15 +390,20 @@ Each model also writes its `c2pa` action on the layers it wrote.
 - **A text needn't have a balloon or a panel.** Narration and sound effects are
   often free, so a block is free in its panel, or on the page outside every
   panel, as Clip Studio Paint's text needs no balloon [CSP text].
-- **A panel clips its children**, so a balloon or a free text that crosses
-  panels sits on the page, outside them, as a Clip Studio Paint layer above the
-  frame border folders draws across frames [CSP frames].
+- **A panel doesn't clip its children.** The artwork is the scan, under every
+  panel, so a panel holds only balloons and texts, and each stays in the panel
+  it's read in, though it crosses the border, as an ordinary Clip Studio Paint
+  layer folder draws its layers where they are [CSP layers]. Clipping, as a
+  frame border folder does [CSP frames], would put a crossing balloon beside
+  its panel, before or after all the panel holds, where its reading order is
+  lost, and would cut a translation that runs past the border.
 - **The background is the scan**, kept byte for byte, so clean-up lives in
   blocks, and hiding or deleting a block shows the original under it.
 - **Reading order is the tree's order.** Detection writes panels, balloons, and
-  blocks in reading order, so a balloon or text on the page sits between the
-  panels it's read between, and since they rarely overlap, the order doesn't
-  change what's drawn. Moving a layer moves it in reading order too.
+  blocks in reading order, so a text sits among its panel's texts, and one read
+  in no panel sits between the panels it's read between; since they rarely
+  overlap, the order doesn't change what's drawn. Moving a layer moves it in
+  reading order too.
 - **Translation places a balloon's texts from its outline, and a free text from
   its source's frame**, and resizing the frame reflows the text, as resizing a
   Clip Studio Paint balloon moves its text [CSP balloons].
@@ -414,8 +419,9 @@ Each model also writes its `c2pa` action on the layers it wrote.
 
 ### How the app shows it
 
-- **Layers panel:** the tree as it is, as Photoshop's and Clip Studio Paint's
-  layer palettes show it. A block's row shows its clean-up and its mask, and
+- **Layers panel:** the tree first to last, which is reading order, so the top
+  row is read first and the bottom row draws on top, where Photoshop's and Clip
+  Studio Paint's layer palettes list the topmost layer first. A block's row shows its clean-up and its mask, and
   painting goes to whichever is selected.
 - **Story panel:** each page's blocks in reading order, each with its source's
   wording and its translation's, as Clip Studio Paint's Story Editor "shows all

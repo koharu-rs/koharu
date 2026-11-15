@@ -22,7 +22,7 @@ its source, and its translation each stay a layer.
 |---|---|
 | background | the bottom pixel layer, hidden when the background is |
 | group | a folder, with its children, its blend mode, and its masks |
-| panel | a folder whose vector mask is its outline |
+| panel | a folder with its children, which draw past its outline as they do in Koharu |
 | balloon | a folder holding a hidden white shape layer of its outline, then its texts |
 | block | a folder holding its clean-up as a pixel layer, whose layer mask is the block's mask while that's shown, its source as a hidden type layer, and its translation as a type layer |
 | image, raster | a pixel layer, cropped to what it draws |

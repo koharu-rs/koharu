@@ -279,13 +279,13 @@ fn a_page_exports_as_layers_photoshop_can_edit() {
     assert!(runs.trim_start().starts_with("[ 4 6 ]"), "{runs}");
     assert!(data.contains("/ShapeType 0"));
 
-    // A panel is a folder masked by its outline; a balloon's outline is a
-    // hidden shape inside its folder.
+    // A panel is a folder that doesn't clip; a balloon's outline is a hidden
+    // shape inside its folder.
     let panel = record(&file, "Panel");
     assert_eq!(panel.section_type(), SectionType::OpenFolder);
     assert!(
-        panel.block(b"vmsk").is_some(),
-        "the panel clips by its outline"
+        panel.block(b"vmsk").is_none(),
+        "the panel draws its children past its outline"
     );
     assert!(!record(&file, "Balloon outline").is_visible());
     assert_eq!(

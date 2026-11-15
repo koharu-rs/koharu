@@ -1,6 +1,6 @@
 //! The layout as a layer tree in reading order.
 
-use koharu_ml::koharu_layout_highres::{Layout, Mask};
+use koharu_ml::koharu_layout_highres::Layout;
 
 /// A detected part of the page and the parts inside it.
 pub(super) struct Node {
@@ -16,9 +16,9 @@ pub(super) enum Part {
 }
 
 /// The layout as a tree in reading order: panels in their order, each
-/// balloon in its panel, and each lettering in its balloon, else free in its
-/// panel. A panel clips what it holds, so a balloon or a free lettering that
-/// reaches past its panel's border sits on the page, where it's read.
+/// balloon in the panel it's read in, and each lettering in its balloon, else
+/// free in the panel it's read in, though it reaches past the panel's border.
+/// The layout reads a panel's lettering together, so the tree keeps its order.
 pub(super) struct Tree<'l> {
     layout: &'l Layout,
     pub(super) top: Vec<Node>,
@@ -43,10 +43,7 @@ impl<'l> Tree<'l> {
             };
             match lettering.bubble {
                 Some(bubble) => tree.bubble(bubble).push(node),
-                None => {
-                    let panel = within(layout, lettering.bbox, &lettering.mask, lettering.panel);
-                    tree.holder(panel).push(node);
-                }
+                None => tree.holder(lettering.panel).push(node),
             }
         }
         // Panels and balloons holding no lettering.
@@ -89,8 +86,7 @@ impl<'l> Tree<'l> {
         let (panel, index) = match self.bubbles[at] {
             Some(place) => place,
             None => {
-                let bubble = &self.layout.bubbles[at];
-                let panel = within(self.layout, bubble.bbox, &bubble.mask, bubble.panel);
+                let panel = self.layout.bubbles[at].panel;
                 let holder = self.holder(panel);
                 holder.push(Node {
                     part: Part::Bubble(at),
@@ -105,23 +101,9 @@ impl<'l> Tree<'l> {
     }
 }
 
-/// `panel`, when a part with `bbox` and `mask` lies wholly inside the box
-/// its outline is drawn from.
-fn within(layout: &Layout, bbox: [f32; 4], mask: &Mask, panel: Option<usize>) -> Option<usize> {
-    let [left, top, right, bottom] = layout.panels[panel?].bbox;
-    let inside =
-        |[x0, y0, x1, y1]: [f32; 4]| x0 >= left && y0 >= top && x1 <= right && y1 <= bottom;
-    let masked = mask.width == 0
-        || mask.height == 0
-        || inside(
-            [mask.x, mask.y, mask.x + mask.width, mask.y + mask.height].map(|edge| edge as f32),
-        );
-    (inside(bbox) && masked).then_some(panel?)
-}
-
 #[cfg(test)]
 mod tests {
-    use koharu_ml::koharu_layout_highres::{Bubble, Kind, Lettering, Panel};
+    use koharu_ml::koharu_layout_highres::{Bubble, Kind, Lettering, Mask, Panel};
     use kurbo::Shape as _;
 
     use super::*;
@@ -190,40 +172,46 @@ mod tests {
                 lettering(Some(0), Some(1)),
                 lettering(None, None),
             ],
-            // The second is empty, crossing panels.
+            // The second is empty, read in no panel.
             bubbles: vec![bubble(vec![1], Some(1)), bubble(Vec::new(), None)],
             panels: vec![panel(), panel(), panel()],
         };
         assert_eq!(shown(&Tree::new(&layout).top), "P0 P1(L0 B0(L1)) L2 P2 B1");
     }
 
+    /// A balloon over its panel's top border, read between the panel's texts
+    /// as the layout reads Japanese comics, stays between them.
     #[test]
-    fn a_part_reaching_past_its_panel_sits_on_the_page() {
+    fn a_part_reaching_past_its_panel_stays_in_it() {
         let panel = Panel {
             score: 0.9,
-            bbox: [0.0, 0.0, 100.0, 100.0],
+            bbox: [0.0, 50.0, 200.0, 150.0],
             mask: mask(),
         };
-        let mut inside = lettering(None, Some(0));
-        inside.bbox = [10.0, 10.0, 40.0, 90.0];
-        let mut crossing = lettering(None, Some(0));
-        crossing.bbox = [-5.0, 10.0, 30.0, 90.0];
-        let mut spilling = lettering(None, Some(0));
-        spilling.bbox = [50.0, 10.0, 80.0, 90.0];
-        spilling.mask = Mask {
-            x: 60,
-            y: 10,
-            width: 45,
-            height: 10,
-            pixels: vec![255; 450],
+        let crossing = Bubble {
+            score: 0.9,
+            bbox: [90.0, 30.0, 140.0, 110.0],
+            mask: mask(),
+            outline: kurbo::Rect::new(90.0, 30.0, 140.0, 110.0).to_path(0.1),
+            lettering: vec![1],
+            panel: Some(0),
+        };
+        let at = |bbox, bubble| Lettering {
+            bbox,
+            ..lettering(bubble, Some(0))
         };
         let layout = Layout {
             width: 200,
             height: 200,
-            lettering: vec![inside, crossing, spilling],
-            bubbles: Vec::new(),
+            // On the right, in the balloon, and on the left.
+            lettering: vec![
+                at([150.0, 60.0, 180.0, 120.0], None),
+                at([100.0, 40.0, 130.0, 100.0], Some(0)),
+                at([20.0, 60.0, 50.0, 120.0], None),
+            ],
+            bubbles: vec![crossing],
             panels: vec![panel],
         };
-        assert_eq!(shown(&Tree::new(&layout).top), "P0(L0) L1 L2");
+        assert_eq!(shown(&Tree::new(&layout).top), "P0(L0 B0(L1) L2)");
     }
 }

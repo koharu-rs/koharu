@@ -4,10 +4,8 @@
 use std::sync::{Arc, Once};
 
 use anyhow::{Result, bail};
-use koharu_scene::{
-    Block, Content as SceneContent, Layer, LayerId, MaskMode, PageId, Session, Text,
-};
-use kurbo::{Affine, BezPath, Rect};
+use koharu_scene::{Block, Content as SceneContent, Layer, LayerId, PageId, Session, Text};
+use kurbo::{Affine, Rect};
 use parking_lot::RwLock;
 use rayon::prelude::*;
 
@@ -118,7 +116,7 @@ impl Renderer {
             .map(|child| self.layer(session, child))
             .collect::<Result<Vec<_>>>()?;
         // An empty mask covers nothing.
-        let mut masks = layer
+        let masks = layer
             .children
             .iter()
             .filter_map(|child| match &child.content {
@@ -135,18 +133,7 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>>>()?;
         let content = match &layer.content {
-            SceneContent::Group(_) | SceneContent::Balloon(_) => None,
-            SceneContent::Panel(panel) => {
-                // Its children show inside its outline, as a Clip Studio Paint
-                // frame border folder's do.
-                let outline = Content::Coverage(Arc::new(BezPath::from(&panel.outline)));
-                masks.push(MaskNode::new(
-                    true,
-                    MaskMode::Add,
-                    Some((outline, Affine::IDENTITY)),
-                ));
-                None
-            }
+            SceneContent::Group(_) | SceneContent::Panel(_) | SceneContent::Balloon(_) => None,
             SceneContent::Block(block) => {
                 children = self.block(session, layer.id, block)?;
                 None

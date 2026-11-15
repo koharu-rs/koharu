@@ -30,8 +30,7 @@ pub(crate) enum Content {
     Text(Arc<TextLayout>),
     Shape(Arc<ShapeVector>),
     Pixels(Arc<Pixels>),
-    /// A white shape: a panel's outline as its children's mask, or a mask
-    /// frame's area.
+    /// A white shape: a mask frame's area.
     Coverage(Arc<BezPath>),
 }
 

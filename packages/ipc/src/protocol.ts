@@ -609,9 +609,9 @@ export type PageSummary = {
 }
 
 /**
- *  A panel of the page. Its children show only inside its outline, which is
- *  never drawn, as a Clip Studio Paint frame border folder with Draw border
- *  off.
+ *  A panel of the page: what's read in it, drawn where it is, past the
+ *  outline too. The outline is never drawn, as a Clip Studio Paint frame
+ *  border folder's with Draw border off.
  */
 export type Panel = {
   /**  A closed path in page coordinates. */

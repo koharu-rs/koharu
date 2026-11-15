@@ -456,10 +456,10 @@ function sameFont(left: string, right: string): boolean {
   return normalize(left) === normalize(right)
 }
 
-/** The page's layers, frontmost first as Photoshop's Layers panel lists them, each with its
- * depth. A block's mask and clean-up are its own and aren't listed. */
+/** The page's layers first to last, which is reading order, each with its depth; the last
+ * draws on top. A block's mask and clean-up are its own and aren't listed. */
 function displayedLayers(layers: Layer[], depth = 0): { placed: Placed; depth: number }[] {
-  return [...layers].reverse().flatMap((layer) => {
+  return layers.flatMap((layer) => {
     const placed = { layer, ancestors: [] as Layer[] }
     return [
       { placed, depth },
@@ -574,8 +574,8 @@ function LayersInspector() {
                 onToggle={() => dispatch(setVisibility, [layer.id], !layer.visible, null)}
                 onLock={() => dispatch(setLocked, [layer.id], !layer.locked)}
                 onMove={(toward) => move(layer, toward)}
-                canMoveUp={!layer.locked && position < siblings.length - 1}
-                canMoveDown={!layer.locked && position > 0}
+                canMoveUp={!layer.locked && position > 0}
+                canMoveDown={!layer.locked && position < siblings.length - 1}
                 onDelete={() => deleteLayer(layer.id)}
               />
             )
@@ -649,7 +649,7 @@ function LayerRow({
               aria-label={t('layers.moveUp', { name })}
               disabled={!canMoveUp}
               className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
-              onClick={() => onMove(1)}
+              onClick={() => onMove(-1)}
             >
               <ArrowUp className='size-3' />
             </button>
@@ -658,7 +658,7 @@ function LayerRow({
               aria-label={t('layers.moveDown', { name })}
               disabled={!canMoveDown}
               className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
-              onClick={() => onMove(-1)}
+              onClick={() => onMove(1)}
             >
               <ArrowDown className='size-3' />
             </button>

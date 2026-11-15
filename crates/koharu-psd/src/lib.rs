@@ -179,17 +179,7 @@ impl Export<'_> {
         }
         let drawn = drawn(self.frame.layer(layer.id), || format!("layer {}", layer.id))?;
         match &layer.content {
-            Content::Group(_) => {
-                self.folder(layer, blocks, |export| export.children(layer))?;
-                return Ok(());
-            }
-            // A panel's folder is masked by its outline.
-            Content::Panel(panel) => {
-                blocks.push(blocks::vector_mask(
-                    &parse(&panel.outline)?,
-                    FillRule::NonZero,
-                    self.size,
-                ));
+            Content::Group(_) | Content::Panel(_) => {
                 self.folder(layer, blocks, |export| export.children(layer))?;
                 return Ok(());
             }

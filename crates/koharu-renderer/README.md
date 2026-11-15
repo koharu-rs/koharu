@@ -30,8 +30,8 @@ else, so nothing can store a result that goes stale.
   resolved layout, its masks merged into one, and its pixels alone, as a PSD's
   pixel layer needs them.
 - **A block** draws its clean-up through its mask, then its translation, each
-  apart, as PSD export takes them apart. A panel shows its children only inside
-  its outline, and no outline is drawn.
+  apart, as PSD export takes them apart. A panel and a balloon draw their
+  children as a group does, and no outline is drawn.
 - **Limits.** A page or an imported image may be up to 32,768 pixels on a side
   and 268,435,456 pixels in all.
 
