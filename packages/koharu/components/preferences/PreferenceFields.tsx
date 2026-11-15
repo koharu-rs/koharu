@@ -130,8 +130,9 @@ export function NumberField({
 }) {
   const { t } = useTranslation()
   const id = useId()
+  // The label takes the room a wrapped neighbour's label adds, so inputs side by side line up.
   return (
-    <label className='grid gap-1 text-[10px] text-muted-foreground'>
+    <label className='grid grid-rows-[1fr_auto] gap-1 text-[10px] text-muted-foreground'>
       {label}
       <Input
         id={id}
