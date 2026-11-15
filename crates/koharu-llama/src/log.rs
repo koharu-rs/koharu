@@ -105,6 +105,7 @@ pub(super) struct State {
     pub(super) options: LogOptions,
     module: Module,
     buffered: std::sync::Mutex<Option<(koharu_llama_sys::ggml_log_level, String)>>,
+    // A C `int`: bindgen types the `ggml_log_level` enum as `c_int` under MSVC and `c_uint` elsewhere.
     previous_level: std::sync::atomic::AtomicI32,
     is_buffering: std::sync::atomic::AtomicBool,
 }
@@ -209,8 +210,10 @@ impl State {
 
         self.is_buffering
             .store(true, std::sync::atomic::Ordering::Release);
-        self.previous_level
-            .store(level, std::sync::atomic::Ordering::Release);
+        self.previous_level.store(
+            level as std::ffi::c_int,
+            std::sync::atomic::Ordering::Release,
+        );
     }
 
     // Emit a normal unbuffered log message (not the CONT log level and the text ends with a newline).
@@ -233,8 +236,10 @@ impl State {
             Self::generate_log(self.module, buf_level, buf_text.as_str());
         }
 
-        self.previous_level
-            .store(level, std::sync::atomic::Ordering::Release);
+        self.previous_level.store(
+            level as std::ffi::c_int,
+            std::sync::atomic::Ordering::Release,
+        );
 
         let (text, newline) = text.split_at(text.len() - 1);
         debug_assert_eq!(newline, "\n");
@@ -267,8 +272,10 @@ impl State {
         level: koharu_llama_sys::ggml_log_level,
     ) {
         if level != koharu_llama_sys::GGML_LOG_LEVEL_CONT {
-            self.previous_level
-                .store(level, std::sync::atomic::Ordering::Release);
+            self.previous_level.store(
+                level as std::ffi::c_int,
+                std::sync::atomic::Ordering::Release,
+            );
         }
     }
 
