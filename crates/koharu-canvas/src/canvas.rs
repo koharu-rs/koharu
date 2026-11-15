@@ -497,7 +497,7 @@ impl Canvas {
             .map(|control| {
                 dragged
                     .iter()
-                    .find(|moved| moved.layer == control.layer && moved.part == control.part)
+                    .find(|moved| moved.layer == control.layer)
                     .unwrap_or(control)
             })
             .collect();

@@ -225,9 +225,9 @@ impl Frame {
 
     /// The same frame with `layers` left out. A block's id leaves out only
     /// its translation, the part the canvas drags in a move, since its
-    /// clean-up and mask stay with the scan; a block with none, whose moving
-    /// part is its undrawn source, isn't passed. Ids it doesn't draw are
-    /// ignored.
+    /// clean-up and mask stay with the scan unless the clean-up's own id is
+    /// listed too; a block with none, whose moving part is its undrawn
+    /// source, isn't passed. Ids it doesn't draw are ignored.
     #[must_use]
     pub fn without(&self, layers: &[LayerId]) -> Frame {
         fn keep(nodes: &[Node], layers: &[LayerId]) -> Vec<Node> {
@@ -238,11 +238,9 @@ impl Frame {
                     let translated = node.children.iter().any(|child| child.layer.is_none());
                     let children = match (listed, translated) {
                         (true, false) => return None,
-                        (true, true) => node
-                            .children
-                            .iter()
+                        (true, true) => keep(&node.children, layers)
+                            .into_iter()
                             .filter(|child| child.layer.is_some())
-                            .cloned()
                             .collect(),
                         (false, _) => keep(&node.children, layers),
                     };

@@ -10,7 +10,7 @@ use koharu_scene::{
 };
 use kurbo::{Affine, BezPath, Point, Rect, Shape as _, Size};
 
-use crate::control::{Control, Part, Resize};
+use crate::control::{Control, Resize};
 
 pub(crate) struct Snapshot {
     frame: Frame,
@@ -70,7 +70,7 @@ impl Snapshot {
         self.controls
             .iter()
             .rev()
-            .find(|control| control.hittable() && control.contains(page))
+            .find(|control| !control.locked && control.contains(page))
     }
 
     /// The topmost control of `layer`.
@@ -150,8 +150,8 @@ impl Walk<'_> {
 
     fn layer(&mut self, layer: &Layer, locked: bool) {
         let id = layer.id;
-        let plain = |part, local, transform, resize, rotates| {
-            Control::new(id, part, local, transform, resize, rotates, locked)
+        let plain = |local, transform, resize, rotates| {
+            Control::new(id, local, transform, resize, rotates, locked)
         };
         let control = match &layer.content {
             Content::Text(text) => {
@@ -160,7 +160,7 @@ impl Walk<'_> {
                     .layer(id)
                     .and_then(|drawn| drawn.text())
                     .map(|text| text.frame);
-                text_control(id, Part::Text, text, laid, locked)
+                text_control(id, text, laid, locked)
             }
             Content::Block(block) => {
                 // The clean-up draws under the translation, and is locked by
@@ -173,7 +173,6 @@ impl Walk<'_> {
                 {
                     self.controls.push(Control::new(
                         cleanup.id,
-                        Part::Cleanup,
                         bounds,
                         Affine::IDENTITY,
                         Resize::None,
@@ -188,9 +187,9 @@ impl Walk<'_> {
                             .translation(id)
                             .and_then(|drawn| drawn.text())
                             .map(|text| text.frame);
-                        text_control(id, Part::Translation, text, laid, locked)
+                        text_control(id, text, laid, locked)
                     }
-                    None => text_control(id, Part::Source, &block.source, None, locked),
+                    None => text_control(id, &block.source, None, locked),
                 }
             }
             Content::Image(image) => {
@@ -198,29 +197,17 @@ impl Walk<'_> {
                     .get(self.session, image.file)
                     .map(|(width, height)| {
                         let local = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
-                        plain(
-                            Part::Image,
-                            local,
-                            Affine::from(image.transform),
-                            Resize::All,
-                            true,
-                        )
+                        plain(local, Affine::from(image.transform), Resize::All, true)
                     })
             }
-            Content::Shape(shape) => BezPath::from_svg(shape.path.as_str()).ok().map(|path| {
-                plain(
-                    Part::Shape,
-                    path.bounding_box(),
-                    Affine::IDENTITY,
-                    Resize::All,
-                    true,
-                )
-            }),
+            Content::Shape(shape) => BezPath::from_svg(shape.path.as_str())
+                .ok()
+                .map(|path| plain(path.bounding_box(), Affine::IDENTITY, Resize::All, true)),
             Content::Raster(_) => self
                 .frame
                 .layer(id)
                 .and_then(|drawn| drawn.bounds())
-                .map(|bounds| plain(Part::Raster, bounds, Affine::IDENTITY, Resize::None, false)),
+                .map(|bounds| plain(bounds, Affine::IDENTITY, Resize::None, false)),
             _ => None,
         };
         self.controls.extend(control);
@@ -245,13 +232,7 @@ fn outlines_of(layers: &[Layer], outlines: &mut HashMap<LayerId, BezPath>) {
 
 /// A text's control: the box it laid out in, or for one that drew nothing,
 /// its frame's box. Point text that drew nothing has none.
-fn text_control(
-    layer: LayerId,
-    part: Part,
-    text: &Text,
-    laid: Option<Rect>,
-    locked: bool,
-) -> Option<Control> {
+fn text_control(layer: LayerId, text: &Text, laid: Option<Rect>, locked: bool) -> Option<Control> {
     let (local, resize) = match &text.frame {
         TextFrame::Point => (laid?, Resize::None),
         TextFrame::Box { bounds, .. } => (
@@ -275,7 +256,6 @@ fn text_control(
     (local.width() > 0.0 && local.height() > 0.0).then(|| {
         Control::new(
             layer,
-            part,
             local,
             Affine::from(text.transform),
             resize,

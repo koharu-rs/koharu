@@ -71,28 +71,12 @@ pub(crate) enum Resize {
     None,
 }
 
-/// What a control is of, for the edit a gesture on it makes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Part {
-    Text,
-    /// A block's translation.
-    Translation,
-    /// A block's source, when it has no translation.
-    Source,
-    Image,
-    Shape,
-    Raster,
-    /// A block's clean-up, which the Layers panel selects and a click never
-    /// hits.
-    Cleanup,
-}
-
 /// A layer as the canvas hits, outlines, and transforms it: `local` in the
-/// layer's own coordinates, put on the page by `transform`.
+/// layer's own coordinates, put on the page by `transform`. A block's is its
+/// translation's, or its source's without one; its clean-up has its own.
 #[derive(Clone, Debug)]
 pub(crate) struct Control {
     pub layer: LayerId,
-    pub part: Part,
     pub resize: Resize,
     pub rotates: bool,
     pub locked: bool,
@@ -107,7 +91,6 @@ pub(crate) struct Control {
 impl Control {
     pub fn new(
         layer: LayerId,
-        part: Part,
         local: Rect,
         transform: Affine,
         resize: Resize,
@@ -118,7 +101,6 @@ impl Control {
         let bounds = outline.bounding_box();
         Self {
             layer,
-            part,
             resize,
             rotates,
             locked,
@@ -156,11 +138,6 @@ impl Control {
     /// Whether it lies wholly inside the page rect `rect`.
     pub fn inside(&self, rect: Rect) -> bool {
         rect.contains_rect(self.bounds)
-    }
-
-    /// Whether a click hits it.
-    pub fn hittable(&self) -> bool {
-        !self.locked && self.part != Part::Cleanup
     }
 
     /// The handles it offers, the rotate handle first.
@@ -281,7 +258,6 @@ impl Control {
     fn rebuilt(&self, local: Rect, transform: Affine) -> Self {
         Self::new(
             self.layer,
-            self.part,
             local,
             transform,
             self.resize,

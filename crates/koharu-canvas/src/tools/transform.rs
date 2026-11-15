@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::{
     Effect,
-    control::{Control, Handle, Part},
+    control::{Control, Handle},
     draw::overlay::Overlay,
     gesture::Context,
     snapshot::Snapshot,
@@ -47,30 +47,28 @@ pub(crate) struct Transform {
 impl Transform {
     pub fn new(cx: &Context, mode: Mode, start: Point, controls: Vec<Control>) -> Self {
         let frame = cx.snapshot.frame();
-        let lifted: Vec<LayerId> = match mode {
+        let drawn: Vec<(usize, Frame)> = match mode {
             Mode::Resize(_) => Vec::new(),
             Mode::Move | Mode::Rotate => controls
                 .iter()
-                .filter(|control| control.part != Part::Source)
-                .map(|control| control.layer)
-                .collect(),
-        };
-        let under = (!lifted.is_empty()).then(|| frame.without(&lifted));
-        let drawn = match lifted.is_empty() {
-            true => Vec::new(),
-            false => controls
-                .iter()
                 .enumerate()
                 .filter_map(|(index, control)| {
-                    let drawn = match control.part {
-                        Part::Translation => frame.translation(control.layer),
-                        Part::Source => None,
+                    // A block draws only its translation, so one without has
+                    // nothing to lift; a clean-up isn't in the layer tree.
+                    let content = cx.snapshot.layer(control.layer).map(|layer| &layer.content);
+                    let drawn = match content {
+                        Some(Content::Block(_)) => frame.translation(control.layer),
                         _ => frame.layer(control.layer),
                     };
                     drawn.map(|drawn| (index, drawn.cropped()))
                 })
                 .collect(),
         };
+        let lifted: Vec<LayerId> = drawn
+            .iter()
+            .map(|(index, _)| controls[*index].layer)
+            .collect();
+        let under = (!lifted.is_empty()).then(|| frame.without(&lifted));
         Self {
             mode,
             start,
@@ -184,11 +182,12 @@ impl Transform {
 }
 
 /// The op that carries `control`'s layer along `affine`, a page-space move
-/// or turn. A picture moves by whole pixels, as the scene takes it.
+/// or turn. A picture, which can't turn, moves by whole pixels, as the scene
+/// takes it.
 pub(crate) fn transformed(control: &Control, affine: Affine) -> Op {
-    let affine = match control.part {
-        Part::Raster | Part::Cleanup => Affine::translate(affine.translation().round()),
-        _ => affine,
+    let affine = match control.rotates {
+        true => affine,
+        false => Affine::translate(affine.translation().round()),
     };
     Op::TransformLayer {
         layer: Ref::from(control.layer),
@@ -203,15 +202,13 @@ pub(crate) fn transformed(control: &Control, affine: Affine) -> Op {
 pub(crate) fn resized(snapshot: &Snapshot, control: &Control, local: Rect) -> Option<Op> {
     let stretch = map(control.local(), local);
     let layer = Ref::from(control.layer);
-    let patch = match (control.part, &snapshot.layer(control.layer)?.content) {
-        (Part::Text, Content::Text(text)) => json!({"frame": frame(text, local, stretch)?}),
-        (Part::Translation, Content::Block(block)) => {
-            json!({"translation": {"frame": frame(block.translation.as_ref()?, local, stretch)?}})
-        }
-        (Part::Source, Content::Block(block)) => {
-            json!({"source": {"frame": frame(&block.source, local, stretch)?}})
-        }
-        (Part::Image | Part::Shape, _) => {
+    let patch = match &snapshot.layer(control.layer)?.content {
+        Content::Text(text) => json!({"frame": frame(text, local, stretch)?}),
+        Content::Block(block) => match &block.translation {
+            Some(text) => json!({"translation": {"frame": frame(text, local, stretch)?}}),
+            None => json!({"source": {"frame": frame(&block.source, local, stretch)?}}),
+        },
+        Content::Image(_) | Content::Shape(_) => {
             let page = control.transform() * stretch * control.transform().inverse();
             return Some(Op::TransformLayer {
                 layer,

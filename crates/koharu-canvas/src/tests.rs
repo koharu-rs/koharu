@@ -906,17 +906,36 @@ fn painted_cleanup() -> Option<(Fixture, LayerId, LayerId)> {
 }
 
 #[test]
-fn a_selected_cleanup_moves_by_its_offset() {
+fn a_clicked_cleanup_moves_by_its_offset() {
     let Some((mut fixture, block, cleanup)) = painted_cleanup() else {
         return;
     };
-    fixture.canvas.select(vec![cleanup]);
     let effects = gesture(&mut fixture.canvas, (20.0, 20.0), (45.4, 30.0));
+    assert_eq!(selections(&effects), [vec![cleanup]]);
     assert_eq!(apply(&mut fixture, effects), ["move"]);
     assert_eq!(
         layer(&fixture, block)["cleanup"]["offset"],
         json!({"x": 25, "y": 10})
     );
+}
+
+/// The frame under a drag leaves out a block's clean-up when the clean-up is
+/// dragged along with its block's translation.
+#[test]
+fn a_block_dragged_with_its_cleanup_leaves_neither_behind() {
+    let Some((mut fixture, block, cleanup)) = painted_cleanup() else {
+        return;
+    };
+    let canvas = &mut fixture.canvas;
+    canvas.select(vec![block, cleanup]);
+    canvas
+        .input(down((20.0, 20.0), Modifiers::default()))
+        .expect("input");
+    canvas.input(drag(1, (120.0, 20.0))).expect("input");
+    canvas.draw().expect("a draw");
+    let snapshot = canvas.snapshot().expect("pixels");
+    assert_eq!(snapshot.get_pixel(20, 20).0, [255; 4]);
+    assert_eq!(snapshot.get_pixel(120, 20).0, [0, 128, 255, 255]);
 }
 
 #[test]

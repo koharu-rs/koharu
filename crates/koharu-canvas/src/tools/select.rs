@@ -18,9 +18,9 @@ use crate::{
 };
 
 /// A press on a handle resizes or turns its layer, and one inside a selected
-/// layer drags the selection, a clean-up the Layers panel chose among them;
-/// a click selects what it hits, toggled with Shift, Ctrl, or Command, and
-/// drags the selection; one that hits nothing starts a marquee.
+/// layer drags the selection, even one under another layer; a click selects
+/// what it hits, toggled with Shift, Ctrl, or Command, and drags the
+/// selection; one that hits nothing starts a marquee.
 pub(crate) fn press(cx: &Context, sample: Sample) -> Press {
     let page = sample.page;
     if let Some((control, handle)) = handle_at(cx, page) {
@@ -109,7 +109,7 @@ impl Marquee {
             .snapshot
             .controls()
             .iter()
-            .filter(|control| control.hittable() && control.inside(rect))
+            .filter(|control| !control.locked && control.inside(rect))
             .map(|control| control.layer)
             .collect();
         let next = match self.additive {
