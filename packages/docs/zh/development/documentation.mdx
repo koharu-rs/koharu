@@ -23,6 +23,14 @@ icon: 'book'
     打开 `http://localhost:3001`，MDX 或配置更改后会自动更新预览。
 
   </Step>
+  <Step title="检查链接">
+    在 `packages/docs` 中运行：
+
+    ```bash
+    bun x mint broken-links
+    ```
+
+  </Step>
 </Steps>
 
 ## 使用原生 MDX
@@ -41,7 +49,7 @@ icon: 'book'
 
 ## 连接发布
 
-在 Mintlify 控制台连接 `koharu-rs/koharu` 并选择生产分支。在 Git Settings 中启用 **docs.json is in a subdirectory**，输入不带结尾斜杠的 `/packages/docs`。添加自定义域名 `koharu.rs`，按 Mintlify 显示的记录配置 DNS。
+在 Mintlify 控制台连接 `koharu-rs/koharu` 并选择生产分支。在 Git Settings 中启用 **docs.json is in a subdirectory**，输入不带结尾斜杠的 `/packages/docs`。添加自定义域名 `koharu.rs`，按 Mintlify 显示的记录配置 DNS。连接后，每次向生产分支推送修改文档的提交都会发布文档。
 
 <Note>发布和域名启用需要 Mintlify GitHub 集成与域名配置。</Note>
 

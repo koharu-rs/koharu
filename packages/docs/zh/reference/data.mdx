@@ -1,42 +1,46 @@
 ---
 title: '格式与数据位置'
-description: '查找项目、非秘密设置、凭据与可重新下载的缓存。'
+description: '查找项目、设置、凭据、下载内容和日志的位置。'
 icon: 'database'
 ---
 
-## 支持格式
+## 支持的格式
 
-| 用途     | 格式                                |
-| -------- | ----------------------------------- |
-| 导入     | PNG、JPEG、WebP、CBZ、ZIP、RAR、PDF |
-| 合并导出 | PNG                                 |
-| 分层交换 | PSD                                 |
-| 工作项目 | `.khrproj` 目录                     |
+| 用途     | 格式                                     |
+| -------- | ---------------------------------------- |
+| 导入     | PNG、JPEG、WebP、ZIP、CBZ、RAR、CBR、PDF |
+| 拼合导出 | PNG，或由 PNG 页面组成的 CBZ             |
+| 分层交换 | PSD                                      |
+| 工作项目 | 一个 `.khr` 文件                         |
 
 ## 项目数据
 
-项目位于 `Documents/Koharu/<project-name>.khrproj/`，包含交替写入的持久状态文件、项目打开期间的锁文件，以及保存源图、生成画面和手动栅格编辑的内容寻址 blob。未被引用的 blob 不会自动移除，因此大量编辑过的项目可能随时间增大。
+每个项目都是项目文件夹中的一个 `.khr` 文件。项目文件夹在 Windows 上是 Koharu 安装文件夹中的 `projects`，在 macOS 上是 `~/Library/Application Support/Koharu/projects`，在 Linux 上是 `~/.local/share/Koharu/projects`。该文件是一个 SQLite 数据库，保存导入的图像、生成的图稿、栅格编辑和文字。项目打开期间，Koharu 会锁定该文件，并可能在旁边保留一个 `-wal` 文件。
 
-<Warning>项目打开时不要修改内部文件。在项目列表中删除会永久移除整个目录。</Warning>
+<Warning>项目打开时不要修改或复制其文件。从开始界面删除项目会永久删除其文件。</Warning>
 
 ## 设置与凭据
 
-非秘密的类型化设置位于 `~/.koharu/config.toml`，包含流水线（含翻译）、服务商、排字、Agent 和 HTTP 超时等部分。缺失字段使用默认值；无效的手动编辑可能导致初始化失败，请优先使用设置界面。
+设置保存在 `~/.koharu/config.toml` 中，每个组件一张表：`[pipeline]`、`[providers]`、`[renderer]` 和 `[agent]`。保持默认值的设置不会写入文件，因此默认值日后改变时会自动生效。不是有效 TOML 的文件或类型错误的值会报错，而不会悄悄改用默认值；请修正文件或使用设置界面。
 
-服务凭据使用操作系统安全凭据服务。项目备份不包含密钥或 Agent 账号会话。
+API 密钥和登录信息加密保存在 `~/.koharu/secrets.age` 中。Koharu 在操作系统凭据存储中只保存其密钥；Linux 上需要 GNOME Keyring、KWallet 或 KeePassXC 等 Secret Service。密钥丢失后该文件将无法再读取并会被删除，你需要重新登录。项目备份不包含任何密钥或登录信息。
 
-## 运行时与模型缓存
+## 运行时与模型存储
 
-在 macOS 和 Linux 上，软件包位于系统缓存目录中的 `<cache>/koharu/packages/`；在 Windows 上，位于 Koharu 安装目录内的 `store` 目录。这些数据可以重新获取：关闭 Koharu 后移除它们，会让需要的软件包重新下载。
+运行时软件包和模型文件在 Windows 上保存在 Koharu 安装文件夹中的 `store` 文件夹，在 macOS 和 Linux 上保存在系统缓存文件夹中的 `koharu/store`。这些数据可以重新获取：在 Koharu 关闭时删除，所需文件会重新下载。
 
-桌面进程可能仍加载原生库时，不要删除相应软件包。
+Koharu 可能仍加载着其中的库时，不要删除存储目录。
+
+## 日志
+
+Koharu 会把 INFO 及以上级别的消息写入日志文件，位置在 Windows 上为 `%LOCALAPPDATA%\Koharu\logs`，macOS 上为 `~/Library/Logs/Koharu`，Linux 上为 `~/.local/share/Koharu/logs`。如需更详细的日志，请参见[故障排除](/zh/reference/troubleshooting)。
 
 ## 安全备份
 
 <Steps>
-  <Step title='关闭项目'>完成当前工作后再复制文件。</Step>
-  <Step title='复制完整目录'>状态文件与 blob 必须一起保存。PSD 导出不是项目备份。</Step>
+  <Step title='关闭项目'>复制文件前先完成当前工作。</Step>
+  <Step title='复制项目文件'>复制 `.khr` 文件。PSD 或 CBZ 导出不是项目备份。</Step>
   <Step title='单独保存设置'>
-    需要时复制 `config.toml`，并在恢复后的设备上通过 Koharu 重新配置凭据。
+    需要时复制 `config.toml`，并在恢复后的设备上通过 Koharu 重新连接服务商。
   </Step>
 </Steps>

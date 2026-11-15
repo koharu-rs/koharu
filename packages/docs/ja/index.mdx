@@ -35,7 +35,7 @@ hideFooterPagination: true
       1 ページを翻訳し、確認して書き出します。
     </Card>
     <Card title='ハードウェアとランタイム' icon='microchip' href='/ja/hardware'>
-      対応デバイスとモデル取得の仕組みを確認します。
+      対応 GPU と、Koharu がダウンロードするものを確認します。
     </Card>
   </CardGroup>
 </section>
@@ -56,10 +56,10 @@ hideFooterPagination: true
       原文の文字を除去し、画像を補修します。
     </Card>
     <Card title='訳文の組版' icon='font' href='/ja/guides/typesetting'>
-      フォント、配置、塗り、縁取りを調整します。
+      フォント、サイズ、方向、色、縁取りを調整します。
     </Card>
-    <Card title='PNG と PSD の書き出し' icon='file-export' href='/ja/guides/export'>
-      統合画像や編集可能なレイヤー付きファイルを出力します。
+    <Card title='PNG・PSD・CBZ の書き出し' icon='file-export' href='/ja/guides/export'>
+      統合画像、レイヤー付きファイル、コミックアーカイブを出力します。
     </Card>
   </CardGroup>
 </section>
@@ -71,10 +71,10 @@ hideFooterPagination: true
       検出、OCR、インペイントのモデルを選びます。
     </Card>
     <Card title='翻訳プロバイダー' icon='plug' href='/ja/models/providers'>
-      ローカルモデルやホスト型サービスを接続します。
+      ローカルモデルを使うか、ホスト型プロバイダーを接続します。
     </Card>
     <Card title='翻訳の設定' icon='language' href='/ja/models/translation'>
-      言語、指示、生成オプションを設定します。
+      モデル、対象言語、システムプロンプトを設定します。
     </Card>
   </CardGroup>
 </section>
@@ -83,7 +83,7 @@ hideFooterPagination: true
   <h2 className='mb-6 text-center text-2xl font-semibold'>Koharu Agent</h2>
   <CardGroup cols={3}>
     <Card title='Agent のセットアップ' icon='robot' href='/ja/agent/setup'>
-      サインインし、プロジェクトを支援するモデルを選びます。
+      モデルを選び、外部のエージェントを MCP で接続します。
     </Card>
     <Card title='プロジェクトの操作' icon='comment' href='/ja/agent/projects'>
       ページの確認や範囲を指定した編集を依頼します。

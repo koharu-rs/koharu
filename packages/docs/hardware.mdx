@@ -1,18 +1,28 @@
 ---
 title: 'Hardware and runtimes'
-description: 'Choose a usable device and understand what Koharu downloads and caches.'
+description: 'Check GPU support and understand what Koharu downloads and stores.'
 icon: 'microchip'
 ---
 
-Koharu downloads the native libraries and model files needed by the features you use. You do not need a full CUDA or ROCm SDK installation to run a release.
+Koharu runs every model on one GPU and draws pages with it. It downloads the native libraries and model files that GPU needs; you do not need a CUDA or ROCm SDK installation to run a release.
 
 ## Device selection
 
-Startup chooses a shared ML device from the available backends: Metal on Apple silicon, then CUDA, ROCm/HIP, Vulkan, or CPU where supported. A device is selected only when the Torch, llama.cpp, and diffusion runtimes all publish a package for it, so the operating system, driver, and model backend must all support the selected path.
+The first time a model runs, Koharu picks the best GPU on the machine and keeps it for the session:
+
+| Rank | GPU                             |
+| ---- | ------------------------------- |
+| 1    | Metal, or a discrete NVIDIA GPU |
+| 2    | A discrete AMD GPU              |
+| 3    | An integrated NVIDIA GPU        |
+| 4    | An integrated AMD GPU           |
+| 5    | Any other GPU through Vulkan    |
+
+Within a rank, more memory wins, then a newer CUDA architecture. If the best GPU cannot be used, the run fails rather than falling back to the next one, so a model never runs somewhere you did not expect. There is no CPU-only mode: without a supported GPU, models do not run.
 
 <Tabs>
   <Tab title='NVIDIA'>
-    CUDA 13.3 support is available on Windows and Linux. Koharu selects a CUDA device only when the
+    CUDA 13.3 support is available on Windows and Linux. Koharu uses a CUDA device only when the
     driver reports CUDA 13.3 or newer and the GPU has compute capability 7.5 or newer, which means a
     Turing-class or newer GPU with an R610-series or newer driver. See NVIDIA's [driver and
     architecture
@@ -20,45 +30,41 @@ Startup chooses a shared ML device from the available backends: Metal on Apple s
     and [driver downloads](https://www.nvidia.com/en-us/drivers/).
   </Tab>
   <Tab title='AMD'>
-    ROCm/HIP support depends on the exact GPU, operating system, and driver. Install a compatible
-    [AMD driver](https://www.amd.com/en/support). Koharu resolves its required ROCm runtime packages
-    automatically. Check AMD's [compatibility
-    matrix](https://rocm.docs.amd.com/en/docs-10.0.0/compatibility/compatibility-matrix.html) for
+    ROCm 10.1 support is available on x86-64 Windows and Linux and depends on the exact GPU,
+    operating system, and driver. Install a compatible [AMD driver](https://www.amd.com/en/support).
+    Koharu downloads the ROCm runtime it needs. Check AMD's [compatibility
+    matrix](https://rocm.docs.amd.com/en/docs-10.1.0/compatibility/compatibility-matrix.html) for
     platform requirements.
   </Tab>
-  <Tab title='Apple silicon'>
-    Koharu uses Metal for supported local inference on Apple-silicon macOS.
-  </Tab>
-  <Tab title='Vulkan and CPU'>
-    Vulkan provides an accelerator option on Windows and Linux for llama.cpp and diffusion models,
-    such as local translation, FLUX.2 Klein, and RORem. Torch has no Vulkan build, so
-    detection, the other OCR models, and LaMa run on CPU on a Vulkan-only machine. If no
-    complete accelerator path initializes, Koharu falls back to CPU. CPU inference requires no GPU
-    SDK and is slower.
+  <Tab title='Apple silicon'>Koharu uses Metal on Apple-silicon macOS.</Tab>
+  <Tab title='Vulkan'>
+    Vulkan is the remaining option on Windows and Linux. Local language models and the diffusion
+    inpainters run on the Vulkan GPU. libtorch has no Vulkan build, so detection, OCR, and LaMa run
+    on the CPU on a Vulkan machine, which is slower.
   </Tab>
 </Tabs>
 
 <Note>
-  The editor canvas uses WebGPU in the embedded CEF webview. It still needs a working WebGPU adapter
-  and graphics driver when ML inference runs on CPU.
+  The canvas, exports, and page thumbnails are drawn on the GPU as well, so Koharu needs a working
+  graphics driver even to open a project.
 </Note>
 
-## Downloads and caches
+## Downloads and storage
 
-| Data                                                      | When it is needed                       |
-| --------------------------------------------------------- | --------------------------------------- |
-| Torch, llama.cpp, diffusion, and backend runtime packages | When their runtime is initialized       |
-| Pinned or versioned model weights                         | On first use of the selected processor  |
-| Local GGUF quantizations                                  | When you choose and use that model file |
+| Data                                                        | When it is downloaded                      |
+| ----------------------------------------------------------- | ------------------------------------------ |
+| libtorch, llama.cpp, stable-diffusion.cpp, and CUDA or ROCm | The first time any model runs              |
+| Model weights, pinned to a Hugging Face commit              | The first time that model loads            |
+| Fonts from Koharu's font dataset                            | When a text needs a face your system lacks |
 
-On macOS and Linux, packages live under the operating system cache directory in `koharu/packages`. On Windows, they live in the `store` directory inside Koharu's installation directory. Projects live under `Documents/Koharu`; settings live in `~/.koharu/config.toml`. See [data locations](/reference/data).
-
-Downloads are staged before being published to the cache. Retry an interrupted download on the next launch or model use.
+Everything goes into one store: the `store` folder in Koharu's installation folder on Windows, and `koharu/store` under the operating system's cache folder on macOS and Linux. Downloads are staged and validated before they move into place, so an interrupted download is retried on the next use. After an update, older runtime versions are removed in the background; model files stay. See [data locations](/reference/data).
 
 ## Memory and model residency
 
-The resource monitor in the page rail footer reports process and system memory, CPU usage, and the selected device's utilization and memory. Models load on first use and stay loaded for later stages. If a stage fails with an out-of-memory error, Koharu unloads the other stages' models and retries that stage once. Saving settings unloads models, so the next run reloads them.
+The activity center shows downloads and processing runs. A model loads the first time a stage needs it and stays loaded for later runs. It unloads when the settings switch to another model.
 
-Start with a moderate local quantization. Smaller files usually need less memory, with a possible quality trade-off. A model that fits on disk can still exceed device memory.
+Nothing is unloaded to make room: a model that does not fit fails, and the error names the free memory. Local language models shrink their context and move layers to system memory to fit; the diffusion inpainters place their weights in free GPU memory, then system memory.
 
-If startup fails, check network access to the package repositories, update the driver, and retry once. Capture the full error if it repeats and follow [troubleshooting](/reference/troubleshooting).
+Smaller local models and quantizations need less memory, with a possible quality trade-off. A model that fits on disk can still exceed device memory.
+
+If a run fails at the first model, check network access to GitHub, PyPI, AMD's repository, and Hugging Face, update the driver, and retry once. Capture the full error if it repeats and follow [troubleshooting](/reference/troubleshooting).

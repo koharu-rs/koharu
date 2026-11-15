@@ -1,39 +1,40 @@
 ---
 title: 'Set up Koharu Agent'
-description: 'Sign in with ChatGPT and configure the integrated project assistant.'
+description: 'Choose the Agent model and connect agents in other programs over MCP.'
 icon: 'robot'
 ---
 
-Koharu Agent is a Codex client inside the editor. It uses ChatGPT device-code sign-in; you do not enter an OpenAI API key for the Agent.
+Koharu Agent is a project assistant inside the editor. It runs on any model you can pick for translation that calls tools: a hosted model, a subscription such as ChatGPT, or one of Koharu's general local models.
 
 <Steps>
-  <Step title='Open the Agent panel'>Open a project and select **Agent** on the right.</Step>
-  <Step title='Authorize the device'>
-    Choose **Sign in with Codex**. Koharu opens the authorization page in your browser; enter the
-    code shown in the panel and approve the sign-in for your account. The code expires after 15
-    minutes.
+  <Step title='Connect a provider'>
+    Add an API key or sign in under **Settings → Providers**, or skip this step to use a local
+    model. See [translation providers](/models/providers).
+  </Step>
+  <Step title='Open the Agent panel'>
+    Open a project and select the **Agent** tab beside **Properties** on the right.
   </Step>
   <Step title='Choose a model'>
-    Return to Koharu and wait for the account and model list. Select a Codex model and reasoning
-    level at the top of the Agent panel; **Automatic** uses the first available model. More
-    reasoning can help with ambiguous edits but takes longer.
+    Select a model and a reasoning level at the top of the panel. **Provider default** uses the
+    model's own level. More reasoning can help with ambiguous edits but takes longer.
   </Step>
 </Steps>
 
-Only one sign-in attempt can run at a time. Cancel it before starting another.
-
 ## What context is shared
 
-The Agent starts with the open project's semantic state. It renders and attaches a page image only when it invokes visual page inspection; it does not automatically attach every page.
+Each request starts with the open project's outline: its pages and their layers. The Agent renders and attaches a page image only when it calls its page-view tool; it does not attach every page. A hosted model's provider receives what the Agent sends it.
 
 <Note>
-  Agent sign-in and translation-provider credentials are separate. ChatGPT sign-in does not
-  configure the pipeline's OpenAI provider, and an OpenAI API key does not sign in the Agent.
+  The Agent and translation share provider connections, but not models: the Agent's model and
+  reasoning are saved in the `[agent]` section of `~/.koharu/config.toml`, apart from translation's.
+  That section also holds the Agent's system prompt, `max_turns` (20 model calls per request by
+  default), and `corrections` (how many times a malformed tool call goes back to the model, 2 by
+  default).
 </Note>
 
-## Sign out
+## Connect other agents over MCP
 
-**Sign out** cancels active work, clears the current Agent session, and removes the Codex account authorization used by Koharu. Opening or closing a project also clears the conversation. Agent configuration is saved separately from translator settings.
+While Koharu runs, it serves the same tools to agents in other programs over MCP's Streamable HTTP transport at `http://127.0.0.1:7878/mcp`, shown at the top of the Agent panel. Add that URL to an MCP client on the same machine. The server works on whichever project is open, accepts connections from this machine only, and refuses requests from web pages.
 
 <Card title='Work with a project' icon='comment' href='/agent/projects'>
   Give the Agent a precise scope, review its edits, and use project history.

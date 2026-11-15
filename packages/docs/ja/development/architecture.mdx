@@ -1,69 +1,70 @@
 ---
 title: 'アーキテクチャ'
-description: 'React からシーン、処理、ネイティブランタイムまでの責務を追います。'
+description: 'React インターフェースからシーン、処理、ネイティブランタイムまでの責務を追います。'
 icon: 'sitemap'
 ---
 
-Koharu はデスクトップアプリです。React が型付き Tauri コマンドを呼び、ネイティブ側が永続プロジェクト状態と処理を担当します。
+Koharu はデスクトップアプリとして動作します。React は型付きの Tauri コマンドを呼び出し、永続的なプロジェクト状態、処理、描画はネイティブ側のコンポーネントが担います。
 
 ```mermaid
 flowchart TB
-  ui["packages/koharu: React + Next.js"] --> ipc["packages/ipc: プロトコル + WASM"]
-  entry["crates/koharu: 起動"] --> app["koharu-app"]
-  ipc -->|"コマンドとチャンネル"| app
-  app --> scene["koharu-scene"]
-  app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["ネイティブランタイム"]
-  app --> llm["koharu-llm"]
+  ui["packages/koharu: React + Next.js"] --> ipc["packages/ipc: 生成されたプロトコル"]
+  ipc -->|"コマンドとイベント"| desktop["koharu-desktop"]
+  entry["crates/koharu: プロセス"] --> desktop
+  desktop --> canvas["koharu-canvas"] --> renderer["koharu-renderer"]
+  desktop --> psd["koharu-psd"] --> renderer
+  desktop --> agent["koharu-agent"]
+  desktop --> scene["koharu-scene"]
+  agent --> pipeline["koharu-pipeline"]
+  agent --> llm["koharu-llm"]
   pipeline --> llm
-  app --> desktop["koharu-desktop"] --> renderer["koharu-renderer"] --> rasterizer["koharu-rasterizer"]
-  ipc --> canvas["koharu-canvas"] --> rasterizer
-  app --> psd["koharu-psd"] --> renderer
-  psd --> rasterizer
+  pipeline --> ml["koharu-ml"] --> runtime["koharu-runtime"]
+  llm --> runtime
+  renderer --> scene
+  pipeline --> scene
+  runtime --> native["libtorch、llama.cpp、stable-diffusion.cpp"]
 ```
 
-## UI とアプリケーション
+## インターフェースとアプリケーション
 
-| コンポーネント    | 責務                                                                                                        |
-| ----------------- | ----------------------------------------------------------------------------------------------------------- |
-| `packages/koharu` | プロジェクト一覧、ページ一覧、キャンバス操作、インスペクター、設定、アクティビティ、Agent、一時的な操作状態 |
-| `packages/ui`     | 共通 React 部品とスタイル                                                                                   |
-| `packages/ipc` | 生成 Tauri プロトコル、ブラウザーキャンバスアダプター、派生 WASM パッケージ                                 |
-| `crates/koharu`   | 起動、診断、Tauri 設定、ビルド統合                                                                          |
-| `koharu-app`      | Tauri 状態、プロジェクトのライフサイクル、コマンド直列化、ジョブ、同期、Agent ホスト                        |
+| コンポーネント    | 責務                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/koharu` | スタート画面、ページ一覧、処理セレクター、プロパティとレイヤー、エージェントパネル、設定、アクティビティセンター |
+| `packages/ui`     | 共通の React プリミティブとスタイル                                                                              |
+| `packages/ipc`    | デスクトップのコマンドとイベントから生成された TypeScript プロトコル                                             |
+| `crates/koharu`   | プロセス: クラッシュレポート、ログ、パニック、アプリの起動順序                                                   |
+| `koharu-desktop`  | ウィンドウ、コマンド、プロジェクトフォルダー、読み込みと書き出し、設定、MCP サーバー                             |
+| `koharu-sentry`   | インターフェースとネイティブ側を 1 つのアプリとして扱う Sentry                                                   |
 
-独立した型付きチャンネルがプロジェクト、キャンバス、ジョブ、ダウンロード、リソースの更新を運びます。Agent のサインインと実行は呼び出しごとのチャンネルでストリーミングします。設定はコマンドで取得・保存します。UI は HTTP クライアントや汎用アプリイベントの封筒を使いません。
+インターフェースは CEF でオフスクリーン描画され、ウィンドウはページを描くネイティブキャンバスの上にそれを合成します。インターフェースは、エージェントや MCP クライアントと同じシーンのクエリと編集を通じて、開いているプロジェクトを読み書きします。変更は書き手を問わずすべてウィンドウに通知されるため、キャンバスとパネルはポーリングせずに再描画されます。設定は `config.toml` のセクションで、保存時にそれぞれの担当コンポーネントへ渡されます。
 
 <Note>
-  `packages/ipc/src/protocol.ts` は Rust 署名から生成します。Rust
-  を変更して[バインディングを再生成](/ja/development/setup)してください。
+  `packages/ipc/src/protocol.ts` は Rust のシグネチャから生成されます。Rust
+  のソースを変更し、[バインディングを再生成](/ja/development/setup)してください。
 </Note>
 
 ## シーンと処理
 
-`koharu-scene` は正規プロジェクト、階層、コンポーネント、関係、パッチ、リビジョン、セッション undo、プロジェクトファイルを所有します。
+`koharu-scene` はプロジェクトファイル、ページとレイヤー、編集、取り消し履歴を担います。
 
-`koharu-pipeline` はページ・段階のスケジューリング、モデル寿命、進捗、停止、逐次コミットを担当します。`koharu-ml` は画像モデル、`koharu-llm` はローカル・ホスト型の言語モデルとエージェントを担当します。
+`koharu-pipeline` はページ、テキストブロック、塗った範囲に対して検出、OCR、インペイント、翻訳を実行し、スケジューリング、モデルの常駐、停止を担います。`koharu-ml` は画像系モデル、`koharu-llm` はローカルとホスト型の言語モデルとプロバイダーのサインインを担います。`koharu-agent` はエージェントと、エージェントと MCP クライアントが共有するツールを担います。
 
-## 描画と転送
+## 描画
 
-`koharu-renderer` はページを `koharu-rasterizer` 所有の移植可能な準備済みフレームへ変換します。ブラウザー転送ではマニフェストと内容ハッシュ付きリソースを分けます。ラスターはサンプリング用の余白付きタイルに分割し、コピー、検証、アップロード、解放の単位を制限します。
+`koharu-renderer` は vello で GPU 上にページを描画します。テキストのレイアウト、レイヤーの合成、ピクセルの生成を行います。キャンバス、PNG と PSD の書き出し、サムネイルはすべてこれを通して描かれるため、どの出力もエディターの表示と一致します。`koharu-canvas` はカメラ、ヒットテスト、選択、ツールのジェスチャーを担い、デスクトップが適用する編集を返します。`koharu-psd` はページをレイヤー付きの Photoshop ドキュメントとして書き出します。
 
-`koharu-canvas` はページ間でリソースを保持し、依存がそろった段階で WebGPU のフレームを切り替えます。ネイティブ PNG、PSD、フォントと Agent のプレビューも、同じフル解像度リソースをネイティブ読み戻しで合成します。
+## ネイティブランタイムの境界
 
-`koharu-desktop` は最新要求を優先した準備と、厳密な世代のマニフェスト・リソースを管理します。表示ウィンドウの表面は WebView が所有します。
+安全なラッパーである `koharu-torch`、`koharu-llama`、`koharu-diffusion` は、libtorch、llama.cpp、stable-diffusion.cpp の C API を宣言する `-sys` クレートから分離されています。`koharu-bindgen` はそれらの宣言を、実行時にライブラリを開いたときに解決されるよう生成します。`koharu-runtime` は GPU を選び、ライブラリをダウンロードして開き、モデルファイルを取得します。
 
-## ネイティブランタイム
-
-安全な `tch`、`llama-cpp-2`、`koharu-diffusion` は、Koharu 独自の `torch-sys` と `llama-cpp-sys-2` を含む unsafe な `-sys` 動的ロード crate から分離します。`koharu-runtime` がパッケージの検出、取得、検証、ロードを担当します。
-
-図には載せていない共通の crate が 1 つあります。`koharu-config` は `config.toml` の型付きセクションと暗号化されたシークレットを所有し、その鍵は OS の資格情報ストアに保管されます。
+図に共通して使われるため省略したクレートが 2 つあります。`koharu-config` は `config.toml` の型付きセクションと暗号化されたシークレットを担い、その鍵は OS の資格情報ストアに保管されます。`koharu-leptonica` は `koharu-ml` が文字の計測に使う Leptonica のアルゴリズムを移植したものです。
 
 <CardGroup cols={2}>
-  <Card title="シーンと保存" icon="database" href="/ja/development/scene">
-    編集、リビジョン、公開、復旧の流れを確認します。
+  <Card title="シーンとストレージ" icon="database" href="/ja/development/scene">
+    レイヤー、編集、履歴、プロジェクトファイルを追います。
   </Card>
 
   <Card title="処理と描画" icon="layer-group" href="/ja/development/rendering">
-    段階のコミットからブラウザー表示までを追います。
+    実行からレンダラーとウィンドウまでを追います。
   </Card>
 </CardGroup>

@@ -1,40 +1,34 @@
 ---
 title: 'Configure translation'
-description: 'Set language, instructions, quantization, sampling, and image input.'
+description: 'Set the model, target language, system prompt, reasoning, and image input.'
 icon: 'language'
 ---
 
-Choose output settings in the processing selector or **Settings → Translation**. Koharu captures them when a run starts; edits affect later runs. Provider connections and credentials are read for each request.
+Choose translation settings in **Settings → Translation**; the processing selector also sets the model and the target language. They are saved with Koharu's settings and apply to every project. Provider connections and credentials are read for each request.
 
-## Language and instructions
+## Language and system prompt
 
-Set the target language and concise instructions for names, terminology, tone, pronouns, formatting, or text that should remain untranslated. Instructions are saved with Koharu's settings and apply to every project; there is no per-project field. Test them on several pages and correct OCR first.
+Choose the **Target language**. The **System prompt** is the instruction the model gets; `{target}` stands for the target language's English name and must appear in it. Edit it for names, terminology, tone, pronouns, or text that should remain untranslated, and test it on several pages after correcting OCR. The default is Index-Translate's own translation instruction.
 
-LFM3 supports a limited set of target languages, and a run fails when its target is unsupported. Other local models accept every target language Koharu offers.
+LFM3 1.7B is made for a limited set of target languages. Other local and hosted models accept every target language Koharu offers.
+
+## How pages are translated
+
+Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the prompt starts a new one.
+
+Each page is sent as its texts in reading order, and the answer must return every one. A malformed answer, a missing text, or a blank translation fails that page. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
+
+## Options
+
+| Option    | What it does                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
+| Vision    | Sends the page image, 1,280 pixels on its longer side, ahead of the texts; off by default                   |
+| Reasoning | Lets the model reason before it answers, at the level you choose; **Provider default** uses the model's own |
+
+Vision works only with a model that reads images; with any other model the run fails and asks you to turn **Vision** off. Both options add time, and on Koharu's own tests with Index-Translate 9B neither read better, so try them on a few pages before keeping them.
 
 ## Local quantization
 
-GGUF models may offer multiple quantizations. Smaller files need less download space and memory, usually at a quality cost. Larger files can be slower or exceed available memory. Hosted providers control their own serving precision.
-
-## Generation controls
-
-| Control                               | What to adjust                                           |
-| ------------------------------------- | -------------------------------------------------------- |
-| Temperature, top P, top K, min P      | Sampling and randomness                                  |
-| Repeat, frequency, presence penalties | Repetition behavior                                      |
-| Maximum output tokens                 | Response length budget                                   |
-| Reasoning                             | Additional reasoning for supported models                |
-| Vision                                | Whether a supported model receives the source page image |
-
-<Tip>
-  Start with provider defaults and change one variable at a time. High randomness tends to make
-  names and terminology less consistent.
-</Tip>
-
-Reasoning can increase latency and token use. Reasoning and vision are dropped silently for a model that does not support them; other unsupported options may be ignored or rejected by a provider or model.
-
-## Text and vision inputs
-
-Text-only requests send semantic source text. With **Vision**, a capable model also receives the source page image. A custom OpenAI-compatible server is assumed to accept images, so turn **Vision** off if it does not support image messages.
+Koharu's local models load their default quantization. To choose another, set the model in `~/.koharu/config.toml` with the quantization after a colon, for example `model = "koharu/index-translate-9b:Q8_0"` under `[pipeline.translator]`. Smaller files need less memory, usually at a quality cost. Hosted providers control their own serving precision.
 
 Generated translations remain editable project data. [Review the wording and page layout](/guides/review) before export.

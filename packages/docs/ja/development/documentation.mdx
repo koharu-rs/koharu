@@ -23,6 +23,14 @@ icon: 'book'
     `http://localhost:3001` を開きます。MDX や設定を変更すると表示が更新されます。
 
   </Step>
+  <Step title="リンクを確認する">
+    `packages/docs` で実行します。
+
+    ```bash
+    bun x mint broken-links
+    ```
+
+  </Step>
 </Steps>
 
 ## ネイティブ MDX を書く
@@ -41,7 +49,7 @@ icon: 'book'
 
 ## 公開を接続する
 
-Mintlify ダッシュボードで `koharu-rs/koharu` を接続し、公開ブランチを選びます。Git Settings の **docs.json is in a subdirectory** を有効にして、末尾のスラッシュなしで `/packages/docs` を入力します。カスタムドメインに `koharu.rs` を指定し、Mintlify に表示された DNS 設定に従います。
+Mintlify ダッシュボードで `koharu-rs/koharu` を接続し、公開ブランチを選びます。Git Settings の **docs.json is in a subdirectory** を有効にして、末尾のスラッシュなしで `/packages/docs` を入力します。カスタムドメインに `koharu.rs` を指定し、Mintlify に表示された DNS 設定に従います。接続後は、ドキュメントを変更する push が公開ブランチに届くたびにサイトが公開されます。
 
 <Note>公開とドメイン有効化には Mintlify の GitHub 連携とドメイン設定が必要です。</Note>
 

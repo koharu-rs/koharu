@@ -1,6 +1,6 @@
 ---
 title: 'Translate your first page'
-description: 'Create a project, run the pipeline, review the page, and export PNG or PSD.'
+description: 'Create a project, run the pipeline, review the page, and export it.'
 icon: 'rocket'
 ---
 
@@ -8,41 +8,41 @@ Start with one readable PNG, JPEG, or WebP manga page and an [installed copy of 
 
 <Steps>
   <Step title="Create a project">
-    On the start screen, enter a name in **New project** and choose **Create**. Koharu creates a self-contained `.khrproj` directory under `Documents/Koharu` and opens the editor.
+    On the start screen, enter a name under **New project** and choose **Create**. Koharu creates a single `.khr` project file in its projects folder and opens the editor.
   </Step>
   <Step title="Import your page">
-    Choose **File → Import Pages → Files**, or use the **Import** button shown in the empty page rail. Select your image. Koharu copies it into the project, so you can move the original later.
+    Choose **File → Import Pages → Files…**, or use the **Import** button shown in the empty page list. Select your image. Koharu copies it into the project file, so you can move the original later.
   </Step>
   <Step title="Choose the translation output">
-    Open the processing selector above the canvas. Select a translation model, target language, and any instructions. Instructions are saved with Koharu's settings and apply to every project.
+    Open the processing selector above the canvas. Choose a **Model** and, under **Output**, a target language. Both are saved with Koharu's settings and apply to every project. The system prompt the model gets is in **Settings → Translation**.
 
-    For a hosted model, first save its connection in **Settings → Providers**. See [translation providers](/models/providers).
+    For a hosted model, first add its API key or sign in under **Settings → Providers**. See [translation providers](/models/providers).
 
   </Step>
   <Step title="Run the pipeline">
-    Choose **Current page**, select all four stages, and click **Run**.
+    Set **Scope** to **Current page**, keep all four **Stages** selected, and click **Run**.
 
-    Detection finds text, bubbles, and panels. OCR reads the detected text, translation writes the target-language text, and inpainting removes source lettering. Translation needs OCR; inpainting can proceed from detection.
+    Detection finds panels, speech bubbles, and text. OCR reads the source text, inpainting removes the source lettering, and translation writes and places the target-language text.
 
-    Follow the current page, stage, and model in the activity center.
+    Follow the page and stage in the activity center. The first run also downloads the runtime and the models.
 
   </Step>
   <Step title="Review the result">
-    Select a text layer and compare source text with its translation in the inspector. Correct OCR, wording, names, and line breaks.
+    In **Properties → Layers**, expand a text block to compare its **Source text** with its **Translation**. Correct OCR, wording, names, and line breaks.
 
-    Paint over missed source lettering with **Remove**; releasing the stroke runs inpainting on that area right away. Use **Brush** or **Eraser** for raster touch-ups and **Text** for a missing text box. Undo an unwanted edit.
+    Paint over missed source lettering with **Remove**; releasing the stroke inpaints that area right away. Use **Brush** or **Eraser** for raster touch-ups and **Text** for a missing line. Undo an unwanted edit with **Edit → Undo**.
 
   </Step>
   <Step title="Fit the text">
-    Adjust the font, size, automatic fitting, alignment, writing direction, fill, and stroke. Check the page at normal reading size.
+    Select a text block and adjust the font, size, alignment, direction, color, and border in the **Type** section. Check the page at normal reading size.
 
     <Note>
-      Only translated text is rendered. Source OCR stays editable, but it does not appear as fallback text when a translation is empty.
+      Only translations are drawn. Source text stays editable, but it never appears on the page.
     </Note>
 
   </Step>
   <Step title="Export">
-    Choose **File → Export PNG** for a flattened image or **File → Export PSD** for a layered document. Select an output directory.
+    Choose **File → Export Project**, then **PNG…** for flattened images, **PSD…** for layered documents, or **CBZ…** for a comic archive. Select where to save.
   </Step>
 </Steps>
 
@@ -52,6 +52,6 @@ Start with one readable PNG, JPEG, or WebP manga page and an [installed copy of 
   </Card>
 
   <Card title="Refine the artwork" icon="paintbrush" href="/guides/cleanup">
-    Use precise removal masks and manual raster corrections.
+    Fix clean-up with the Remove brush and manual raster corrections.
   </Card>
 </CardGroup>

@@ -1,10 +1,10 @@
 ---
 title: 'Work with Koharu Agent'
-description: 'Ask the Agent to inspect pages, edit content, and run the configured pipeline.'
+description: 'Ask the Agent to inspect pages, edit content, and run the pipeline.'
 icon: 'comment'
 ---
 
-Give the Agent a concrete goal within the currently open project. Name the pages, desired change, and anything it should leave untouched.
+Give the Agent a concrete goal within the open project. Name the pages, the change you want, and anything it should leave untouched.
 
 ## Write a scoped request
 
@@ -17,26 +17,36 @@ Give the Agent a concrete goal within the currently open project. Name the pages
   </Tab>
 </Tabs>
 
-Semantic inspection is sufficient for many text edits. Ask for visual inspection when appearance matters.
+Reading the project's layers is enough for many text edits. Ask for visual inspection when appearance matters.
 
-## Available actions
+## Available tools
 
-The Agent can inspect current semantic state, render a particular page, rename/reorder/delete pages, add paragraph text boxes, edit source text and translations, change typography and geometry, adjust visibility and opacity, move or delete elements, and run the configured pipeline for project, page, or text-element scopes.
+| Tool          | Does                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `get_project` | Lists the pages in order                                                                       |
+| `get_page`    | Reads a page's panels, balloons, and text blocks in reading order, with source and translation |
+| `get_layer`   | Reads one layer with everything inside it                                                      |
+| `get_history` | Reads the undo steps                                                                           |
+| `edit`        | Applies changes to layers and pages as one undo step                                           |
+| `run`         | Starts a pipeline run on the project, some pages, some text blocks, or a painted area          |
+| `stop`        | Stops every pipeline run                                                                       |
+| `history`     | Follows what a run has done so far                                                             |
+| `view_page`   | Renders a page as the editor draws it                                                          |
 
 <Note>
-  The project tools do not import source files, export files, manage provider credentials, or
-  operate outside the open project.
+  The tools do not import or export files, manage provider credentials, or work outside the open
+  project.
 </Note>
 
 ## Edits, cancellation, and history
 
-Agent changes use the same project operations as the desktop UI. Successful edits update the scene, renderer, revision, and undo history.
+Agent changes use the same edits as the editor, so they redraw the canvas as they happen and each is an undo step. Pipeline runs the Agent starts appear in the activity center like any other run.
 
-Pipeline runs commit completed stages incrementally. An Agent-started run does not appear in the activity center, but it blocks other processing until it finishes. Canceling the Agent request also asks an Agent-started pipeline to stop cooperatively. Only one Agent request runs at a time.
+One request runs at a time. **Cancel** stops the Agent, and an edit already being applied finishes whole. A pipeline run the Agent started keeps going; stop it from the activity center. The conversation continues across requests and ends when you change the Agent's model or close the project.
 
 <Steps>
   <Step title='Inspect the changed pages'>Review source text, translations, and the canvas.</Step>
-  <Step title='Check the layout'>Verify geometry and typography at normal reading size.</Step>
+  <Step title='Check the layout'>Verify placement and typography at normal reading size.</Step>
   <Step title='Keep or undo the change'>
     Use undo for unwanted changes, and export after your review.
   </Step>

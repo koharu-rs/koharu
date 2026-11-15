@@ -1,26 +1,26 @@
 ---
 title: 'Process pages'
-description: 'Run detection, OCR, translation, and inpainting at the scope your edit needs.'
+description: 'Run detection, OCR, inpainting, and translation at the scope your edit needs.'
 icon: 'play'
 ---
 
-The processing selector above the canvas controls the page scope and stages. Start with the smallest scope that covers the work.
+The processing selector above the canvas sets the model, page scope, stages, and target language. Start with the smallest scope that covers the work.
 
 ## Choose a scope
 
 <Tabs>
   <Tab title='Current page'>Process the page currently shown on the canvas.</Tab>
-  <Tab title='Selected pages'>Process the pages selected in the page rail.</Tab>
+  <Tab title='Selected pages'>Process the pages selected in the page list.</Tab>
   <Tab title='Entire project'>Process every page in project order.</Tab>
   <Tab title='Selected layers'>
-    Choose **Process → Process Selected Layers** after editing or adding a few text elements. It
-    runs OCR and translation on the selected layers only.
+    Choose **Process → Process Selected Layers** after correcting or adding a few text blocks. It
+    runs OCR and translation on the selected text blocks only.
   </Tab>
 </Tabs>
 
 ## Choose stages
 
-Select any non-empty set of stages, then choose **Run**. Selected stages follow this dependency order:
+Select one or more stages, then choose **Run**. Selected stages always run in this order:
 
 ```mermaid
 flowchart LR
@@ -28,29 +28,26 @@ flowchart LR
   detection --> inpainting["Inpainting"]
 ```
 
-Detection creates regions and removal masks. OCR reads those regions. Translation writes target text. Inpainting reconstructs artwork under the lettering.
+Detection finds panels, speech bubbles, and text blocks, with a mask over each block's source glyphs. OCR reads each block's source text. Inpainting rebuilds the artwork under each mask. Translation writes each block's translation and places it in its room in the balloon, or in its source's frame when it has no balloon.
 
 <Note>
-  Omitted prerequisites are not added automatically. Include detection or OCR when a later stage
-  needs fresh input. **Run Inpainting** means detection plus inpainting; it does not include OCR or
-  translation.
+  Omitted stages are not added. Include detection or OCR when a later stage needs fresh input.
 </Note>
 
-The **Process** menu also offers **Process Project**, **Process Selected Pages**, and **Run Detection**, **Run OCR**, **Run Translation**, and **Run Inpainting**. A **Run** item runs every stage up to the named one and always covers the entire project, regardless of the scope selector.
+The **Process** menu also offers **Process Project** and **Process Selected Pages**, which run all four stages, and **Run Detection**, **Run OCR**, **Run Inpainting**, and **Run Translation**. A **Run** item runs the named stage and every stage before it in the order Detection, OCR, Inpainting, Translation, and always covers the entire project, regardless of the scope selector.
 
 ## Follow progress and stop work
 
-Only one processing job runs at a time, and pages cannot be imported while one is running. The activity center shows the stage, model, progress, and failures.
+The activity center shows each run's stage, page, progress, and failures. Runs started while another is going wait their turn; runs on text blocks or a painted area go first. **Stop** stops every run, running and queued.
 
-Each stage commits when it finishes. Completed work remains available if a later stage fails. Stopping prevents new work from starting; a native call already in progress returns at a safe boundary. Its result is discarded if stop was requested before the commit.
+Each stage writes its result for a page as one undo step as soon as it finishes. Completed work stays when a later stage fails or the run stops. The first failure ends its run and names the page, stage, and reason.
 
-Stages with no applicable input complete without inference, although the model is still loaded first. A page with no detected text does not need OCR or translation.
+A stage with nothing to do, such as OCR on a page without text, does nothing and does not fail.
 
 <Warning>
-  Rerunning a stage does not discard your edits. Detection skips any page that already has a text
-  region, so delete the existing regions to detect a page again. OCR and translation replace
-  generated text but keep source text and translations you edited. Inpainting skips a page that
-  already has a cleanup layer unless you paint a new **Remove** mask.
+  A rerun replaces what is there, your own edits included, and undo is the way back. Detection
+  replaces a page's panels, balloons, and text blocks, but leaves locked ones as they are. OCR
+  rewrites source text, and translation rewrites each translation's wording and placement.
 </Warning>
 
 Continue with [text review](/guides/review) or [cleanup](/guides/cleanup).

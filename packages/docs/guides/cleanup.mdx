@@ -1,29 +1,37 @@
 ---
 title: 'Clean up source lettering'
-description: 'Use inpainting and precise manual masks to remove lettering while preserving artwork.'
+description: 'Use inpainting and the Remove brush to remove lettering while preserving artwork.'
 icon: 'eraser'
 ---
 
-Inpainting reconstructs the artwork beneath source text. A precise removal region usually matters more than a larger model.
+Inpainting reconstructs the artwork beneath source text. A precise removal area usually matters more than a larger model.
 
 ## Review automatic cleanup
 
-Detection produces a removal mask. Inpainting uses it to create a cleanup layer; without a mask, the stage completes without inference. The pipeline skips inpainting on a page that already has a cleanup layer, so use **Remove** to inpaint again.
+Detection gives each text block a mask over its source glyphs, reaching a few pixels past them but never into another text's box. Inpainting fills each mask and stores the result as the block's clean-up, shown under its translation. Rerunning inpainting replaces the clean-up.
 
-Inspect the result at normal reading size and high zoom. Look for glyph fragments, missed punctuation or furigana, erased bubble borders, repeated textures, smeared screentone, and changes outside the lettering.
+Most lettering sits on plain paper or a gradient, so Koharu fills it without the model when the surrounding pixels allow:
+
+| Surroundings                                  | Fill                                    |
+| --------------------------------------------- | --------------------------------------- |
+| One flat color                                | That color                              |
+| A smooth background                           | Telea's fast-marching fill, from OpenCV |
+| Line art, screentone, a bubble border, or art | The inpainting model                    |
+
+The model redraws each text with 256 pixels of context around it, at the page's own scale, and never across two panels. Only the masked pixels come back.
+
+Inspect the result at normal reading size and high zoom. Look for glyph fragments, missed punctuation or furigana, erased bubble borders, repeated textures, and smeared screentone.
 
 ## Repair a missed region
 
 <Steps>
-  <Step title='Paint a removal mask'>
-    Choose **Remove**, set the brush diameter, and cover only the source marks that need
-    reconstruction. Use controlled strokes and avoid neighboring line art. Cancel the gesture if the
-    mask is wrong.
+  <Step title='Paint the area'>
+    Choose **Remove**, set the brush size, and cover only the source marks that need reconstruction.
+    Use controlled strokes and avoid neighboring line art.
   </Step>
   <Step title='Let inpainting run'>
-    Release the stroke. Koharu runs inpainting for that area at once and merges the result into the
-    page's cleanup layer. Include enough of each glyph for the model to remove it without covering
-    an entire bubble unnecessarily.
+    Release the stroke. Koharu inpaints that area at once with the selected inpainting model and
+    adds the result as a new raster layer, limited to the painted area by its mask.
   </Step>
   <Step title='Touch up and inspect'>
     Use **Color picker**, **Brush**, and **Eraser** for small deterministic corrections. Check the
@@ -31,14 +39,13 @@ Inspect the result at normal reading size and high zoom. Look for glyph fragment
   </Step>
 </Steps>
 
-Stopping a processing job does not turn its temporary removal mask into visible artwork.
+To start a text over, delete its text block: its clean-up goes with it and the original lettering shows again.
 
 ## Choose a model
 
-**LaMa** provides direct inpainting. **FLUX.2 Klein** and **RORem Mixed** are generative alternatives with prompt controls and larger resource requirements. See [vision and inpainting models](/models/vision).
+Choose the inpainting model in **Settings → Pipeline**. **LaMa** is the default and takes no prompt. **RORem**, **FLUX.3 Klein**, **MOSS-Image**, and **Qwen-Image 2.1** are generative alternatives that follow the **Prompt** there and need more memory and time. See [vision and inpainting models](/models/vision).
 
 <Warning>
-  **Brush** strokes made while the cleanup layer is selected land on that layer, and a later
-  **Remove** stroke merges into it. Clear the selection before painting to keep manual touch-ups on
-  a separate Paint layer.
+  **Brush** strokes land on the selected raster layer, a Remove result included. Clear the selection
+  before painting to keep manual touch-ups on a new raster layer.
 </Warning>

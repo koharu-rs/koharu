@@ -4,50 +4,49 @@ description: 'Use local GGUF models, hosted services, or a compatible model serv
 icon: 'plug'
 ---
 
-The translation picker combines local and hosted backends. A selection records the provider, model ID, optional local quantization, and vision-input setting.
+The model picker lists Koharu's local models and every model of each provider you have connected. A model is named `provider/model`, such as `koharu/index-translate-9b`. Translation and the Agent pick from the same list; the Agent offers only models that can call tools.
 
 ## Available connections
 
-| Connection          | Providers                                                                |
-| ------------------- | ------------------------------------------------------------------------ |
-| Local inference     | GGUF models through llama.cpp                                            |
-| Hosted models       | OpenAI, Gemini, Claude, Grok, MiniMax, DeepSeek, OpenRouter |
-| Compatible servers  | LM Studio and OpenAI-compatible endpoints                                |
-| Machine translation | DeepL, Google Cloud Translation, Caiyun                                  |
+| Connection      | Providers                                                            | Connect with                                  |
+| --------------- | -------------------------------------------------------------------- | --------------------------------------------- |
+| Local inference | Koharu's GGUF models, run in-process through llama.cpp               | Nothing                                       |
+| Hosted APIs     | OpenAI, Anthropic, Google Gemini, xAI, DeepSeek, MiniMax, OpenRouter | An API key                                    |
+| Subscriptions   | ChatGPT, and Grok with a SuperGrok or X Premium plan                 | Sign-in                                       |
+| Self-hosted     | Ollama, LM Studio, and one OpenAI-compatible server                  | A base URL, and a key if the server needs one |
 
-Each provider owns its endpoint defaults, request mapping, and model discovery. Available models can change independently of these docs.
+Koharu's local models include Index-Translate (2B, 9B, and a 35B A3B preview), which only translate, and general models from the Gemma 4, Qwen 3.5, Qwen 3.6, Qwen 3.8, and LFM3 families, some in uncensored variants. Index-Translate 9B is the default translation model. Each local model downloads from Hugging Face the first time it runs.
 
 <Steps>
   <Step title='Save the connection'>
-    Open **Settings → Providers**, choose a provider, and fill in its fields. Hosted services
-    require credentials. A local compatible server needs its base URL; LM Studio defaults to
-    `http://localhost:1234` and OpenAI-compatible defaults to `http://localhost:11434/v1`. Whether a
-    local server needs a secret depends on that server.
+    Open **Settings → Providers**. Enter a provider's API key in its **Credential** field; it is
+    saved when the field loses focus. For ChatGPT or Grok, choose **Sign in** and finish signing in
+    on the page your browser opens, entering the code Koharu shows if asked.
+
+    For Ollama, LM Studio, or an OpenAI-compatible server, enter its **Base URL**. Ollama and LM
+    Studio default to their usual local addresses when the field is empty; LM Studio's is
+    `http://localhost:1234`. An OpenAI-compatible server needs a base URL ending where OpenAI's
+    `/v1` does, such as `https://example.com/v1`.
+
   </Step>
   <Step title='Select a model'>
-    Open the processing selector or **Settings → Translation**. Opening the processing selector, or
-    the Settings page, refreshes provider discovery. An unreachable provider may have no discovered
-    models even while its saved settings remain intact.
-  </Step>
-  <Step title='Choose whether to include the page image'>
-    **Vision** is on by default and the switch stays available for every model. If the selected
-    model does not accept images, Koharu drops the image from the request. OpenAI-compatible
-    endpoints are assumed to accept images, so turn the switch off when the server cannot handle
-    image messages.
+    Open the processing selector's **Model** or **Settings → Translation → Translation model**.
+    Opening the processing selector refreshes the list. A provider without a key, or one that
+    cannot be reached, lists no models.
   </Step>
   <Step title='Try one page'>
-    Check the source OCR, run translation on the current page, and review the response before
+    Check the source text, run translation on the current page, and review the result before
     processing a chapter.
   </Step>
 </Steps>
 
 ## Credentials and privacy
 
-Provider secrets use the operating system's secure credential service. Non-secret endpoint settings live in `~/.koharu/config.toml`.
+API keys and sign-ins are stored encrypted in `~/.koharu/secrets.age`, with the key kept in the operating system's credential store; no environment variable is read. Base URLs live in the `[providers]` section of `~/.koharu/config.toml`. **Sign out** revokes a subscription sign-in and deletes it; the eraser button clears a key.
 
-Local models keep prompts and text on your machine after download. Hosted providers receive request content and apply their own retention terms. Local detection and OCR do not make a hosted translation request local.
+Local models keep pages and text on your machine after download. A hosted provider receives the text of each page it translates, and the page image when **Vision** is on, under its own retention terms. Local detection and OCR do not make a hosted translation request local.
 
 <Warning>
-  Keep keys out of project instructions, text layers, and configuration files. Save credentials
-  through **Settings → Providers**.
+  Keep keys out of the system prompt, text layers, and configuration files. Save credentials through
+  **Settings → Providers**.
 </Warning>

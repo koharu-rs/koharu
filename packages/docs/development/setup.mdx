@@ -6,17 +6,18 @@ icon: 'terminal'
 
 ## Prerequisites
 
-Koharu is developed against Rust 1.97.1 with the 2024 edition, Bun 1.3.14, and LLVM 22.1.8. The repository does not pin these versions. LLVM supplies the libclang that bindgen needs in the `-sys` crates; the native libraries themselves are prebuilt packages downloaded at runtime, so no C++ build system is required.
+Koharu is developed against Rust 1.97.1 with the 2024 edition, Bun 1.3.14, and LLVM 22.1.8. The repository does not pin these versions. LLVM supplies the libclang that the `-sys` crates' bindings are generated with; the native libraries themselves are prebuilt packages downloaded at runtime, so no C++ build system is required.
 
 <Tabs>
-  <Tab title='Windows'>Install MSVC C/C++ build tools for native dependencies.</Tab>
+  <Tab title='Windows'>Install the MSVC C/C++ build tools for native dependencies.</Tab>
   <Tab title='Linux'>
     Install the packages the CI workflow uses: `build-essential`, `libgtk-4-dev`, `libxdo-dev`,
     `libssl-dev`, `libayatana-appindicator3-dev`, and `librsvg2-dev`. Tests also need
     `fonts-noto-cjk`, `dbus-x11`, and `gnome-keyring`.
   </Tab>
   <Tab title='macOS'>
-    Install the platform C/C++ development tools required by native dependencies.
+    Install the platform C/C++ development tools, and add the Rust targets CEF's helper processes
+    build for: `rustup target add aarch64-apple-darwin x86_64-apple-darwin`.
   </Tab>
 </Tabs>
 
@@ -29,7 +30,14 @@ bun install
 bun dev
 ```
 
-`bun dev` launches the Next.js UI and Tauri app. It builds `koharu-canvas` for WASM with wasm-pack into `packages/ipc/src/wasm`, then watches `koharu-canvas` and `koharu-rasterizer` and rebuilds on change. Turbopack refreshes the browser client after successful rebuilds. Debug builds expose CEF remote debugging at `http://127.0.0.1:4000`.
+`bun install` also installs the Tauri CLI at the revision the workspace uses, with `cargo install`. `bun dev` runs `cargo tauri dev`, which starts the Next.js interface on port 3000 and the desktop app, and downloads CEF on the first build. Debug builds expose CEF remote debugging at `http://127.0.0.1:4000`.
+
+<Note>
+  The Tauri CLI sets `CEF_PATH` for the builds it runs. Plain `cargo` commands on crates that link
+  CEF, such as `koharu` and `koharu-desktop`, need it set to the same folder, `tauri-cef` under the
+  operating system's cache folder, or they download CEF again and rebuild it. On Windows that is
+  `%LOCALAPPDATA%\tauri-cef`.
+</Note>
 
 ## Check the affected component
 
@@ -41,7 +49,7 @@ cargo test -p koharu-pipeline <test_name>
 cargo fmt --all --check
 ```
 
-For frontend work, use the package's focused test or typecheck command. Repository formatting checks are available through `bun run check`; `bun run lint` runs frontend linting.
+For interface work, `bun run test` runs the interface's Vitest suite and `bun run lint` runs its linter. `bun run check` checks formatting across the repository's TypeScript and JSON.
 
 <Note>
   Do not run full suites, non-debug profiles, or end-to-end tests by default. Run them only when
@@ -50,7 +58,7 @@ For frontend work, use the package's focused test or typecheck command. Reposito
 
 ## Regenerate IPC bindings
 
-Rust command signatures and Specta types are authoritative:
+Rust command signatures and their Specta types are authoritative:
 
 ```bash
 cargo run -p koharu-desktop --bin ipc
@@ -61,7 +69,7 @@ Do not hand-edit `packages/ipc/src/protocol.ts`.
 
 ## Build an executable
 
-When you need a release executable, `bun run build` invokes `tauri build --no-bundle` and writes to `target/release`. Installer packaging belongs to the release workflow.
+When you need a release executable, `bun run build` runs `cargo tauri build --no-bundle` and writes to `target/release`. Installer packaging belongs to the release workflow.
 
 <Card title='Work on the documentation' icon='book-open' href='/development/documentation'>
   Preview Mintlify and maintain the English, Japanese, and Chinese documentation.

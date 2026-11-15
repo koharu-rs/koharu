@@ -1,46 +1,48 @@
 ---
 title: 'Vision and inpainting models'
-description: 'Choose processors for detection, OCR, and artwork reconstruction.'
+description: 'Choose models for detection, OCR, and artwork reconstruction.'
 icon: 'eye'
 ---
 
-Open **Settings → Pipeline** and choose a model for each stage. Models own their preprocessing and options; the [workflow](/guides/processing) stays the same.
+Open **Settings → Pipeline** and choose a model for each stage. Every model runs on your machine; the [workflow](/guides/processing) stays the same whichever you choose.
 
 ## Detection
 
-**Koharu Layout RF-DETR Seg 2XL** detects text, speech bubbles, and panels, and produces segmentation data for later stages.
+**Koharu Layout HighRes**, an RF-DETR segmenter, finds panels, speech bubbles, text, and sound effects, and gives each text block its mask and reading order.
 
-Text, bubble, and panel thresholds control how much evidence each class needs. Lower thresholds retain more uncertain regions and may increase false positives. Compare several representative pages before changing thresholds. Detection skips a page that already has text regions, so delete them to detect the page again with new thresholds.
+Text, SFX, bubble, and panel thresholds set how confident each class must be; empty fields use the model's own. Lower thresholds keep more uncertain regions and may add false positives. Compare several representative pages before changing them, then run detection again on those pages.
 
 ## OCR
 
-| Processor        | Use                                               |
-| ---------------- | ------------------------------------------------- |
-| manga-ocr-ar     | Japanese manga text, non-commercial license       |
-| Baberu OCR       | Alternative manga-oriented recognition            |
-| Hayai OCR        | Chinese, Korean, Japanese, and English manga text |
+| Model                                                                       | Reads                                  |
+| --------------------------------------------------------------------------- | -------------------------------------- |
+| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)    | Japanese manga text; the default       |
+| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)             | Japanese manga text                    |
+| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova) | Japanese, Chinese, Korean, and English |
+
+Manga OCR AR is licensed CC BY-NC-SA 4.0, so keeping the default holds you to non-commercial use. Check each model card for its license.
 
 <Note>
-  OCR reads detected text regions. Check detection first when text is missing: changing the
-  recognizer cannot recover a region that was never passed to it.
+  OCR reads detected text blocks. Check detection first when text is missing: changing the
+  recognizer cannot recover a block that was never detected.
 </Note>
 
 ## Inpainting
 
 <Tabs>
   <Tab title="Direct">
-    **LaMa** is the default. Start here for routine lettering removal.
+    **LaMa**, fine-tuned on manga, is the default. Start here for routine lettering removal.
   </Tab>
   <Tab title="Generative">
-    **FLUX.2 Klein** accepts a reconstruction prompt. **RORem Mixed** is manga-focused and exposes positive and negative prompts.
+    **RORem**, **FLUX.3 Klein**, **MOSS-Image**, and **Qwen-Image 2.1** run on stable-diffusion.cpp and follow the **Prompt** in **Settings → Pipeline**, which by default asks the model to remove all text and keep everything else.
 
-    These choices generally need more runtime data, memory, and time. Describe surrounding artwork and the removal of letters; typeset the translation with text layers.
+    These models need more download space, memory, and time. Describe the removal of lettering; typeset the translation with text layers. Qwen-Image 2.1 is under the Qwen Research License, for research and evaluation only.
 
   </Tab>
 </Tabs>
 
-## Profiles and first runs
+Flat and smoothly shaded backgrounds are filled without any model, so the choice matters most for lettering over line art and screentone. See [cleanup](/guides/cleanup).
 
-Supported processors keep independent settings profiles. Returning to a generative model restores its prompt fields instead of inheriting another model's options.
+## First runs
 
-Models load on demand and stay loaded until settings are saved or an out-of-memory retry unloads them. A first run includes download and loading costs, so compare warmed models on identical pages before selecting a project default.
+Weights download from Hugging Face, pinned to a commit, the first time a model loads, and the model stays loaded until the settings switch away from it. A first run includes download and loading costs, so compare warmed models on identical pages before choosing a project default.
