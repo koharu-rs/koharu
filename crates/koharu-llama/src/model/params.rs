@@ -694,7 +694,7 @@ mod tests {
         );
         assert_eq!(
             i32::from(LlamaSplitMode::Tensor),
-            koharu_llama_sys::LLAMA_SPLIT_MODE_TENSOR
+            koharu_llama_sys::LLAMA_SPLIT_MODE_TENSOR as std::ffi::c_int
         );
     }
 }
