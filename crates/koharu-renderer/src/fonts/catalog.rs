@@ -4,7 +4,7 @@
 
 use std::{collections::HashMap, ops::RangeInclusive, sync::LazyLock};
 
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow};
 use fontique::{Attributes, FontStyle};
 use koharu_runtime::Repository;
 use serde::Deserialize;
@@ -131,13 +131,12 @@ fn nearest(family: &Family, attributes: Attributes) -> &Face {
         .expect("a catalog family has a face")
 }
 
-/// The families the dataset's `index`, at schema 3, describes, by normalized
-/// name. A family with no faces is left out.
+/// The families the dataset's `index` describes, by normalized name. A
+/// family with no faces is left out.
 fn parse(index: &[u8]) -> Result<HashMap<String, Family>> {
     // The index as far as the catalog reads it.
     #[derive(Deserialize)]
     struct Index {
-        schema_version: u32,
         families: Vec<IndexFamily>,
     }
     #[derive(Deserialize)]
@@ -180,11 +179,6 @@ fn parse(index: &[u8]) -> Result<HashMap<String, Family>> {
     let index: Index =
         serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_slice(index))
             .context("invalid bundled font index")?;
-    ensure!(
-        index.schema_version == 3,
-        "unsupported bundled font index schema {}",
-        index.schema_version
-    );
     let mut families = HashMap::new();
     for family in index.families {
         let mut faces = Vec::new();
