@@ -349,6 +349,7 @@
       "deviceCodeHint": "ブラウザーで開いたページにこのコードを入力してください。",
       "notConfigured": "未設定",
       "openPage": "サインインページを開く",
+      "openaiCompatible": "OpenAI 互換",
       "signIn": "サインイン",
       "signInLabel": "{{provider}}にサインイン",
       "signOut": "サインアウト",

@@ -349,6 +349,7 @@
       "deviceCodeHint": "أدخل هذا الرمز في الصفحة التي فتحها متصفحك.",
       "notConfigured": "غير مهيّأ",
       "openPage": "فتح صفحة تسجيل الدخول",
+      "openaiCompatible": "متوافق مع OpenAI",
       "signIn": "تسجيل الدخول",
       "signInLabel": "تسجيل الدخول إلى {{provider}}",
       "signOut": "تسجيل الخروج",

@@ -70,7 +70,7 @@ export function TranslationPreferences({
               <span className='flex min-w-0 flex-1 items-center gap-2 text-left'>
                 {model && (
                   <Badge variant='outline' className='shrink-0 px-1.5 py-0 text-[9px] font-medium'>
-                    {vendorName(vendorOf(model))}
+                    {vendorName(vendorOf(model), t)}
                   </Badge>
                 )}
                 <span className='truncate'>

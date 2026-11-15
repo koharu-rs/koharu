@@ -9,6 +9,8 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
+use crate::hosted::openai_compatible;
+
 /// rig's agent builder on `model`, asking for answers `schema` describes in
 /// the way its vendor keeps to one. `prompt_typed` checks an answer; a caller
 /// of plain `prompt` checks it itself, as rig fails open on structured output.
@@ -25,12 +27,14 @@ pub fn answers(model: &DynModel<Completion>, schema: schemars::Schema) -> AgentB
 }
 
 /// This stays per vendor because rig's catalog says DeepSeek's models keep to
-/// a schema, while its DeepSeek dialect drops the schema.
+/// a schema, while its DeepSeek dialect drops the schema. An OpenAI-compatible
+/// server may not take a schema at all.
 fn output_mode(vendor: &str) -> OutputMode {
     match vendor {
-        chatgpt::PROVIDER_NAME | deepseek::PROVIDER_NAME | minimax::PROVIDER_NAME => {
-            OutputMode::Prompted
-        }
+        chatgpt::PROVIDER_NAME
+        | deepseek::PROVIDER_NAME
+        | minimax::PROVIDER_NAME
+        | openai_compatible::PROVIDER_NAME => OutputMode::Prompted,
         _ => OutputMode::Native,
     }
 }

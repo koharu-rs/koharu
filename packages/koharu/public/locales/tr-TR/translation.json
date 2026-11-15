@@ -349,6 +349,7 @@
       "deviceCodeHint": "Bu kodu tarayıcınızın açtığı sayfaya girin.",
       "notConfigured": "Yapılandırılmadı",
       "openPage": "Oturum açma sayfasını aç",
+      "openaiCompatible": "OpenAI uyumlu",
       "signIn": "Oturum aç",
       "signInLabel": "{{provider}} oturumu aç",
       "signOut": "Oturumu kapat",

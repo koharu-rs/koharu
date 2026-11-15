@@ -349,6 +349,7 @@
       "deviceCodeHint": "Enter this code on the page your browser opened.",
       "notConfigured": "Not configured",
       "openPage": "Open sign-in page",
+      "openaiCompatible": "OpenAI-compatible",
       "signIn": "Sign in",
       "signInLabel": "Sign in to {{provider}}",
       "signOut": "Sign out",

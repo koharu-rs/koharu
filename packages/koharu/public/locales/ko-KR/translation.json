@@ -349,6 +349,7 @@
       "deviceCodeHint": "브라우저에 열린 페이지에 이 코드를 입력하세요.",
       "notConfigured": "설정 안 됨",
       "openPage": "로그인 페이지 열기",
+      "openaiCompatible": "OpenAI 호환",
       "signIn": "로그인",
       "signInLabel": "{{provider}}에 로그인",
       "signOut": "로그아웃",

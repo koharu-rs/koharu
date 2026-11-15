@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next'
+
 import type { Detector, Inpainter, Recognizer } from '@koharu/ipc/protocol'
 
 /** The pipeline's models by id, as the backend names them; product names stay untranslated. */
@@ -40,6 +42,9 @@ export const vendorNames: Record<string, string> = {
   koharu: 'Koharu',
 }
 
-export function vendorName(vendor: string): string {
+/** The vendor's name: its maker's, or for an OpenAI-compatible server, which no one makes, a
+ * description in the interface's language. */
+export function vendorName(vendor: string, t: TFunction): string {
+  if (vendor === 'openai-compatible') return t('settings.providers.openaiCompatible')
   return vendorNames[vendor] ?? vendor
 }

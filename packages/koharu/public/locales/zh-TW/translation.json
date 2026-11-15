@@ -349,6 +349,7 @@
       "deviceCodeHint": "請在瀏覽器開啟的頁面上輸入此代碼。",
       "notConfigured": "未設定",
       "openPage": "開啟登入頁面",
+      "openaiCompatible": "OpenAI 相容",
       "signIn": "登入",
       "signInLabel": "登入 {{provider}}",
       "signOut": "登出",

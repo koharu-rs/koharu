@@ -880,11 +880,13 @@ export type Value = null | boolean | number | string | Value[] | { [key in strin
 
 /**
  *  A vendor, by rig's name: whether the user signs in to it with their plan
- *  in place of giving an API key, and whether its sign-in or key is stored.
+ *  in place of giving an API key, whether they name its server by a base
+ *  URL, and whether its sign-in or key is stored.
  */
 export type Vendor = {
   name: string
   signs_in: boolean
+  server: boolean
   connected: boolean
 }
 

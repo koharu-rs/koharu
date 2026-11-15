@@ -5,6 +5,7 @@ mod chatgpt;
 mod grok;
 mod http;
 mod lm_studio;
+pub(crate) mod openai_compatible;
 
 use std::collections::BTreeMap;
 
@@ -37,6 +38,16 @@ pub const VENDORS: &[&str] = &[
     grok::PROVIDER_NAME,
     ollama::PROVIDER_NAME,
     lm_studio::PROVIDER_NAME,
+    openai_compatible::PROVIDER_NAME,
+];
+
+/// The vendors whose server the user names by its base URL: one they run, or
+/// one that speaks OpenAI's format. Every vendor still reads a base URL from
+/// `[providers]`.
+pub const SERVERS: &[&str] = &[
+    ollama::PROVIDER_NAME,
+    lm_studio::PROVIDER_NAME,
+    openai_compatible::PROVIDER_NAME,
 ];
 
 /// The vendors the user signs in to with their plan, in place of an API key.
@@ -121,6 +132,7 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
     match vendor {
         grok::PROVIDER_NAME => return grok::connect(id, base_url),
         lm_studio::PROVIDER_NAME => return lm_studio::connect(id, base_url),
+        openai_compatible::PROVIDER_NAME => return openai_compatible::connect(id, base_url),
         _ => {}
     }
     let selection = catalog_id(vendor)?;
@@ -177,6 +189,9 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
         chatgpt::PROVIDER_NAME => return chatgpt::models(&reqwest()?).await,
         grok::PROVIDER_NAME => return grok::models(base_url(vendor)?).await,
         lm_studio::PROVIDER_NAME => return lm_studio::models(base_url(vendor)?).await,
+        openai_compatible::PROVIDER_NAME => {
+            return openai_compatible::models(base_url(vendor)?).await;
+        }
         _ => {}
     }
     let filed = catalog_id(vendor)?;
@@ -229,10 +244,14 @@ mod tests {
     /// Gemini format, and a model the catalog doesn't list keeps its id.
     #[test]
     fn every_vendor_connects() {
-        for vendor in VENDORS
-            .iter()
-            .filter(|vendor| ![grok::PROVIDER_NAME, lm_studio::PROVIDER_NAME].contains(vendor))
-        {
+        for vendor in VENDORS.iter().filter(|vendor| {
+            ![
+                grok::PROVIDER_NAME,
+                lm_studio::PROVIDER_NAME,
+                openai_compatible::PROVIDER_NAME,
+            ]
+            .contains(vendor)
+        }) {
             let spec = spec(catalog_id(vendor).unwrap(), "a-model-from-next-year");
             let options = ConnectOptions::new().api_key("key").http(Http::default());
             let model = Catalog::builtin().connect_with(&spec, options).unwrap();

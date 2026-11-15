@@ -349,6 +349,7 @@
       "deviceCodeHint": "拿箇个代码输到浏览器打开个页面里向。",
       "notConfigured": "还呒没配置",
       "openPage": "打开登录页面",
+      "openaiCompatible": "OpenAI 兼容",
       "signIn": "登录",
       "signInLabel": "登录 {{provider}}",
       "signOut": "退出登录",

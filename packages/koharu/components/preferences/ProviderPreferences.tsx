@@ -34,7 +34,7 @@ async function vendorsChanged() {
 
 /** Each vendor's API key, or its sign-in for one the user signs in to with their plan, kept in
  * the OS credential store and saved apart from `config.toml`, and the `[providers]` base URL for a
- * vendor whose server is elsewhere. */
+ * vendor whose server the user names. */
 export function ProviderPreferences({
   value,
   onChange,
@@ -57,18 +57,20 @@ export function ProviderPreferences({
         description={t('settings.providers.connectionsDescription')}
       >
         {(vendors.data ?? []).map((vendor) => (
-          <PreferenceRow key={vendor.name} title={vendorName(vendor.name)} align='start'>
+          <PreferenceRow key={vendor.name} title={vendorName(vendor.name, t)} align='start'>
             <div className='grid gap-2'>
               {vendor.signs_in ? <SignInField vendor={vendor} /> : <KeyField vendor={vendor} />}
-              <BaseUrlField
-                value={value[vendor.name]?.base_url ?? ''}
-                onChange={(base_url) => {
-                  const next = { ...value }
-                  if (base_url) next[vendor.name] = { base_url }
-                  else delete next[vendor.name]
-                  onChange(next)
-                }}
-              />
+              {vendor.server && (
+                <BaseUrlField
+                  value={value[vendor.name]?.base_url ?? ''}
+                  onChange={(base_url) => {
+                    const next = { ...value }
+                    if (base_url) next[vendor.name] = { base_url }
+                    else delete next[vendor.name]
+                    onChange(next)
+                  }}
+                />
+              )}
             </div>
           </PreferenceRow>
         ))}
@@ -82,7 +84,7 @@ function KeyField({ vendor }: { vendor: Vendor }) {
   const { t } = useTranslation()
   const inputId = useId()
   const [draft, setDraft] = useState('')
-  const name = vendorName(vendor.name)
+  const name = vendorName(vendor.name, t)
 
   const store = (key: string | null) =>
     void call(commands.setApiKey, vendor.name, key)
@@ -140,7 +142,7 @@ function SignInField({ vendor }: { vendor: Vendor }) {
   const { t } = useTranslation()
   const [waiting, setWaiting] = useState(false)
   const [prompt, setPrompt] = useState<SignInPrompt | null>(null)
-  const name = vendorName(vendor.name)
+  const name = vendorName(vendor.name, t)
 
   const signIn = async () => {
     setWaiting(true)

@@ -349,6 +349,7 @@
       "deviceCodeHint": "Saisissez ce code sur la page ouverte par votre navigateur.",
       "notConfigured": "Non configuré",
       "openPage": "Ouvrir la page de connexion",
+      "openaiCompatible": "Compatible OpenAI",
       "signIn": "Se connecter",
       "signInLabel": "Se connecter à {{provider}}",
       "signOut": "Se déconnecter",
