@@ -338,6 +338,7 @@
       "title": "Pipeline"
     },
     "providers": {
+      "browserHint": "Finish signing in on the page your browser opened.",
       "clearCredential": "Clear {{provider}} credential",
       "configured": "Configured",
       "connections": "Connections",
@@ -345,7 +346,15 @@
       "credential": "Credential",
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",
+      "deviceCodeHint": "Enter this code on the page your browser opened.",
       "notConfigured": "Not configured",
+      "openPage": "Open sign-in page",
+      "signIn": "Sign in",
+      "signInLabel": "Sign in to {{provider}}",
+      "signOut": "Sign out",
+      "signOutLabel": "Sign out of {{provider}}",
+      "signingIn": "Waiting for sign-in…",
+      "subscription": "Subscription",
       "title": "Providers"
     },
     "shortcuts": {

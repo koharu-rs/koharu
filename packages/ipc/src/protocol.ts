@@ -756,6 +756,17 @@ export type Shape = {
   stroke?: Stroke | null
 }
 
+/**
+ *  What a sign-in asks of the user: to sign in on a page, entering a code
+ *  there for a device code.
+ */
+export type SignInPrompt = {
+  url: string
+  /**  Whether the browser was opened on the page already. */
+  opened: boolean
+  code: string | null
+}
+
 export type Size = {
   width: number
   height: number
@@ -867,6 +878,16 @@ export type TranslatorConfig = {
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value }
 
+/**
+ *  A vendor, by rig's name: whether the user signs in to it with their plan
+ *  in place of giving an API key, and whether its sign-in or key is stored.
+ */
+export type Vendor = {
+  name: string
+  signs_in: boolean
+  connected: boolean
+}
+
 export const commands = {
   listProjects: () => invoke<string[]>('list_projects', {}, { headers: headers() }),
   /** Creates a project and opens it. */
@@ -908,12 +929,19 @@ export const commands = {
     invoke<Preferences>('save_preferences', { preferences }, { headers: headers() }),
   /** Koharu's own models, and each vendor's that has a key or a sign-in. */
   listModels: () => invoke<Model[]>('list_models', {}, { headers: headers() }),
-  /** The vendors that take an API key, by rig's names, each with whether one is stored. ChatGPT signs in instead, and its sign-in has the slot a key would take. */
-  listVendors: () =>
-    invoke<{ [key in string]: boolean }>('list_vendors', {}, { headers: headers() }),
+  /** Every vendor Koharu lists models from, in its order. */
+  listVendors: () => invoke<Vendor[]>('list_vendors', {}, { headers: headers() }),
   /** Stores `vendor`'s API key, encrypted with the key the OS credential store keeps, or forgets it for `None`. */
   setApiKey: (vendor: string, key: string | null) =>
     invoke<null>('set_api_key', { vendor, key }, { headers: headers() }),
+  /** Signs in to `vendor`, one that signs in, in place of the sign-in waiting; `on_prompt` hears what the user must do. A stopped sign-in ends without one. */
+  signInVendor: (vendor: string, onPrompt: Channel<SignInPrompt>) =>
+    invoke<null>('sign_in_vendor', { vendor, onPrompt }, { headers: headers() }),
+  /** Stops the sign-in waiting for the user. */
+  stopSignIn: () => invoke<null>('stop_sign_in', {}, { headers: headers() }),
+  /** Signs out of `vendor`: the vendor revokes the sign-in, and Koharu deletes it. */
+  signOutVendor: (vendor: string) =>
+    invoke<null>('sign_out_vendor', { vendor }, { headers: headers() }),
   listFonts: () => invoke<FontFamily[]>('list_fonts', {}, { headers: headers() }),
   /** `family`'s name set in it, as WebP. */
   getFontPreview: (family: string) =>

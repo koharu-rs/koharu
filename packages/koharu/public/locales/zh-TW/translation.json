@@ -338,6 +338,7 @@
       "title": "流程"
     },
     "providers": {
+      "browserHint": "請在瀏覽器開啟的頁面上完成登入。",
       "clearCredential": "清除 {{provider}} 認證資訊",
       "configured": "已設定",
       "connections": "連線",
@@ -345,7 +346,15 @@
       "credential": "認證資訊",
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
+      "deviceCodeHint": "請在瀏覽器開啟的頁面上輸入此代碼。",
       "notConfigured": "未設定",
+      "openPage": "開啟登入頁面",
+      "signIn": "登入",
+      "signInLabel": "登入 {{provider}}",
+      "signOut": "登出",
+      "signOutLabel": "登出 {{provider}}",
+      "signingIn": "正在等待登入…",
+      "subscription": "訂閱",
       "title": "提供者"
     },
     "shortcuts": {

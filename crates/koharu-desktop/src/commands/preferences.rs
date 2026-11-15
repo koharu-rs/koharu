@@ -1,16 +1,18 @@
 //! The preferences: `config.toml`'s sections, each handed to its owner when
-//! saved.
+//! saved, and each vendor's API key or sign-in.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
+use futures::future::{AbortHandle, Abortable};
 use koharu_agent::AgentConfig;
 use koharu_config::secrets::SecretString;
-use koharu_llm::{Model, Providers};
+use koharu_llm::{Model, Providers, SIGN_INS, SignInPrompt, VENDORS};
 use koharu_pipeline::PipelineConfig;
 use koharu_renderer::RendererConfig;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::State;
+use tauri::{State, ipc::Channel};
 
 use super::Result;
 use crate::app::App;
@@ -78,19 +80,28 @@ pub async fn list_models() -> Vec<Model> {
     koharu_llm::models().await
 }
 
-/// The vendors that take an API key, by rig's names, each with whether one
-/// is stored. ChatGPT signs in instead, and its sign-in has the slot a key
-/// would take.
+/// A vendor, by rig's name: whether the user signs in to it with their plan
+/// in place of giving an API key, and whether its sign-in or key is stored.
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct Vendor {
+    pub name: String,
+    pub signs_in: bool,
+    pub connected: bool,
+}
+
+/// Every vendor Koharu lists models from, in its order.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_vendors() -> Result<BTreeMap<String, bool>> {
+pub async fn list_vendors() -> Result<Vec<Vendor>> {
     Ok(tokio::task::spawn_blocking(|| -> anyhow::Result<_> {
-        keyed()
-            .map(|name| {
-                Ok((
-                    name.to_owned(),
-                    koharu_config::secrets::get(name)?.is_some(),
-                ))
+        VENDORS
+            .iter()
+            .map(|&name| {
+                Ok(Vendor {
+                    name: name.to_owned(),
+                    signs_in: SIGN_INS.contains(&name),
+                    connected: koharu_config::secrets::get(name)?.is_some(),
+                })
             })
             .collect()
     })
@@ -104,7 +115,7 @@ pub async fn list_vendors() -> Result<BTreeMap<String, bool>> {
 pub async fn set_api_key(vendor: String, key: Option<String>) -> Result<()> {
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         anyhow::ensure!(
-            keyed().any(|name| name == vendor),
+            VENDORS.contains(&vendor.as_str()) && !SIGN_INS.contains(&vendor.as_str()),
             "{vendor} isn't a vendor that takes an API key"
         );
         match key {
@@ -116,9 +127,39 @@ pub async fn set_api_key(vendor: String, key: Option<String>) -> Result<()> {
     .await??)
 }
 
-fn keyed() -> impl Iterator<Item = &'static str> {
-    koharu_llm::VENDORS
-        .iter()
-        .copied()
-        .filter(|&vendor| vendor != koharu_llm::rig::providers::chatgpt::PROVIDER_NAME)
+/// The sign-in waiting for the user, which the next one or `stop_sign_in`
+/// ends.
+static SIGNING_IN: Mutex<Option<AbortHandle>> = Mutex::new(None);
+
+/// Signs in to `vendor`, one that signs in, in place of the sign-in
+/// waiting; `on_prompt` hears what the user must do. A stopped sign-in ends
+/// without one.
+#[tauri::command]
+#[specta::specta]
+pub async fn sign_in_vendor(vendor: String, on_prompt: Channel<SignInPrompt>) -> Result<()> {
+    let (stop, stopped) = AbortHandle::new_pair();
+    if let Some(waiting) = SIGNING_IN.lock().replace(stop) {
+        waiting.abort();
+    }
+    let signed_in = koharu_llm::sign_in(&vendor, move |prompt| {
+        let _ = on_prompt.send(prompt);
+    });
+    Ok(Abortable::new(signed_in, stopped).await.unwrap_or(Ok(()))?)
+}
+
+/// Stops the sign-in waiting for the user.
+#[tauri::command]
+#[specta::specta]
+pub fn stop_sign_in() {
+    if let Some(waiting) = SIGNING_IN.lock().take() {
+        waiting.abort();
+    }
+}
+
+/// Signs out of `vendor`: the vendor revokes the sign-in, and Koharu
+/// deletes it.
+#[tauri::command]
+#[specta::specta]
+pub async fn sign_out_vendor(vendor: String) -> Result<()> {
+    Ok(koharu_llm::sign_out(&vendor).await?)
 }

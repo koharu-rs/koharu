@@ -338,6 +338,7 @@
       "title": "Конвейер"
     },
     "providers": {
+      "browserHint": "Завершите вход на странице, открытой в браузере.",
       "clearCredential": "Удалить учётные данные {{provider}}",
       "configured": "Настроено",
       "connections": "Подключения",
@@ -345,7 +346,15 @@
       "credential": "Учётные данные",
       "credentialLabel": "Учётные данные {{provider}}",
       "description": "Подключите провайдеров перевода и языковых моделей.",
+      "deviceCodeHint": "Введите этот код на странице, открытой в браузере.",
       "notConfigured": "Не настроено",
+      "openPage": "Открыть страницу входа",
+      "signIn": "Войти",
+      "signInLabel": "Войти в {{provider}}",
+      "signOut": "Выйти",
+      "signOutLabel": "Выйти из {{provider}}",
+      "signingIn": "Ожидание входа…",
+      "subscription": "Подписка",
       "title": "Провайдеры"
     },
     "shortcuts": {

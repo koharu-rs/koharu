@@ -94,6 +94,8 @@ machine-uid = "0.6.0"
 memmap2 = "0.9.12"
 minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_order", "serde"] }
 minijinja-contrib = { version = "3.1.0", features = ["pycompat"] }
+# oauth2 sends its requests on an older reqwest; Koharu sends them on rig's.
+oauth2 = { version = "5.0.0", default-features = false }
 parking_lot = "0.13.0"
 petgraph = "0.8.3"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97e5b4b1d9a03c3ef9b904dd5de864f5e8aa8" }

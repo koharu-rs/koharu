@@ -338,6 +338,7 @@
       "title": "파이프라인"
     },
     "providers": {
+      "browserHint": "브라우저에 열린 페이지에서 로그인을 마치세요.",
       "clearCredential": "{{provider}} 자격 증명 지우기",
       "configured": "설정됨",
       "connections": "연결",
@@ -345,7 +346,15 @@
       "credential": "자격 증명",
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
+      "deviceCodeHint": "브라우저에 열린 페이지에 이 코드를 입력하세요.",
       "notConfigured": "설정 안 됨",
+      "openPage": "로그인 페이지 열기",
+      "signIn": "로그인",
+      "signInLabel": "{{provider}}에 로그인",
+      "signOut": "로그아웃",
+      "signOutLabel": "{{provider}}에서 로그아웃",
+      "signingIn": "로그인 대기 중…",
+      "subscription": "구독",
       "title": "제공자"
     },
     "shortcuts": {

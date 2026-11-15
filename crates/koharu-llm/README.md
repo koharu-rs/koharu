@@ -22,7 +22,8 @@ provider only when the user picked that provider.
 | name | `vendor/model`, as rig names a model, such as `anthropic/claude-opus-5-5` or `koharu/index-translate-9b` | |
 | quantization | one of Koharu's own models takes it after a colon, `koharu/index-translate-9b:Q8_0`, and otherwise loads its first | Ollama names a model `model:tag` [Ollama API] |
 | a server's address | `[providers]` holds a vendor's `base_url` by its rig name, such as a remote Ollama | Codex's `[model_providers]` [Codex config] |
-| credentials | API keys and the ChatGPT sign-in live in Koharu's encrypted secrets, under the vendor's name; no environment variable is read | |
+| credentials | API keys and sign-ins live in Koharu's encrypted secrets, under the vendor's name; no environment variable is read | |
+| sign-in | `chatgpt` and `grok` sign in with the user's plan in place of a key: ChatGPT through rig's sign-in, the route Codex takes, and Grok, a SuperGrok or X Premium plan, with xAI's device code through xAI's shared client, its requests going to the endpoint the Grok CLI uses | Hermes Agent and OpenClaw sign in to xAI so [Hermes xAI] [OpenClaw xAI] |
 | listing | every model the user can pick, from each vendor with a key; one that needs a key and has none lists nothing, and a list that fails is left out | LM Studio's own list says what its models can do [LM Studio list] |
 | what a model can do | rig's catalog says; a model it knows as neither calling tools nor keeping to a schema, such as an embedding model, is dropped, and one it doesn't know is offered with its limits unknown | |
 | retries | a 429 or 5xx reply is sent again up to 3 times, after the wait the reply names or a growing one | |
@@ -36,6 +37,7 @@ vendor keeps to one:
 |---|---|---|
 | `koharu` | none | a grammar compiled from the schema, which sampling can't leave, so even a small model writes an answer translation can read |
 | `openai`, `anthropic`, `gcp.gemini`, `xai` | API key | the provider's own structured outputs [OpenAI structured outputs] |
+| `grok` | sign-in | xAI's own, as `xai` |
 | `openrouter` | API key | the provider's own, routed only to hosts that keep to it |
 | `chatgpt` | sign-in | asking in the prompt |
 | `deepseek`, `minimax` | API key | asking in the prompt |
@@ -76,6 +78,7 @@ A conversation keeps inside its model's window:
 Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list]
+- xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel]
 
 [rig]: https://github.com/0xPlaygrounds/rig
@@ -83,5 +86,7 @@ Read in November 2026.
 [Codex config]: https://developers.openai.com/codex/config-reference
 [OpenAI structured outputs]: https://developers.openai.com/api/docs/guides/structured-outputs
 [LM Studio list]: https://lmstudio.ai/docs/developer/rest/list
+[Hermes xAI]: https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth_xai.py
+[OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
 [llama.cpp fit]: https://github.com/ggml-org/llama.cpp/blob/785322d17f2d/common/fit.h
 [llama.cpp parallel]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/examples/parallel/parallel.cpp#L264-L476

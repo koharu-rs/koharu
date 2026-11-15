@@ -338,6 +338,7 @@
       "title": "Canalización"
     },
     "providers": {
+      "browserHint": "Termina de iniciar sesión en la página que abrió tu navegador.",
       "clearCredential": "Borrar credencial de {{provider}}",
       "configured": "Configurado",
       "connections": "Conexiones",
@@ -345,7 +346,15 @@
       "credential": "Credencial",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecta proveedores de traducción y modelos de lenguaje.",
+      "deviceCodeHint": "Introduce este código en la página que abrió tu navegador.",
       "notConfigured": "Sin configurar",
+      "openPage": "Abrir la página de inicio de sesión",
+      "signIn": "Iniciar sesión",
+      "signInLabel": "Iniciar sesión en {{provider}}",
+      "signOut": "Cerrar sesión",
+      "signOutLabel": "Cerrar sesión en {{provider}}",
+      "signingIn": "Esperando el inicio de sesión…",
+      "subscription": "Suscripción",
       "title": "Proveedores"
     },
     "shortcuts": {

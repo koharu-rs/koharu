@@ -338,6 +338,7 @@
       "title": "خط المعالجة"
     },
     "providers": {
+      "browserHint": "أكمل تسجيل الدخول في الصفحة التي فتحها متصفحك.",
       "clearCredential": "مسح API key لـ {{provider}}",
       "configured": "مهيّأ",
       "connections": "الاتصالات",
@@ -345,7 +346,15 @@
       "credential": "API key",
       "credentialLabel": "API key لـ {{provider}}",
       "description": "اربط مزوّدي الترجمة والنماذج اللغوية.",
+      "deviceCodeHint": "أدخل هذا الرمز في الصفحة التي فتحها متصفحك.",
       "notConfigured": "غير مهيّأ",
+      "openPage": "فتح صفحة تسجيل الدخول",
+      "signIn": "تسجيل الدخول",
+      "signInLabel": "تسجيل الدخول إلى {{provider}}",
+      "signOut": "تسجيل الخروج",
+      "signOutLabel": "تسجيل الخروج من {{provider}}",
+      "signingIn": "في انتظار تسجيل الدخول…",
+      "subscription": "الاشتراك",
       "title": "المزوّدون"
     },
     "shortcuts": {

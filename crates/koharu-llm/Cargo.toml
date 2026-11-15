@@ -26,6 +26,7 @@ koharu-runtime = { workspace = true }
 llguidance = { workspace = true }
 minijinja = { workspace = true }
 minijinja-contrib = { workspace = true }
+oauth2 = { workspace = true }
 reqwest = { workspace = true }
 rig-agent = { workspace = true }
 rig-core = { workspace = true }

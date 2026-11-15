@@ -1,26 +1,37 @@
 //! The HTTP client hosted models go through: rig's own, shared by the process,
 //! sending a 429 or 5xx reply again, up to three times, after the wait rig reads
 //! from it, or a second, then two, then four when it names none; rig itself
-//! retries nothing. For ChatGPT, it also puts the signed-in plan's credential
-//! on each request, so a long-lived model outlives any one token.
+//! retries nothing. For a vendor the user signs in to, it also puts the
+//! sign-in's current credential on each request, so a long-lived model
+//! outlives any one token.
 
-use std::time::{Duration, SystemTime};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::{Context, Result};
 use backon::{ExponentialBuilder, Retryable};
 use bytes::Bytes;
-use http::{HeaderValue, header::AUTHORIZATION, request::Parts};
+use futures::future::BoxFuture;
+use http::request::Parts;
 use rig_core::{
     error::ProviderError,
     http_client::{self, HttpClientExt, LazyBody, MultipartForm, StreamingResponse},
-    providers::chatgpt::auth::Authenticator,
 };
 use rig_reqwest::ReqwestClient;
+
+/// What a vendor the user signs in to puts on each request: the sign-in's
+/// credential, refreshed first when it has expired, and whatever else the
+/// vendor's endpoint requires of a signed-in request.
+pub(crate) trait SignIn: Send + Sync {
+    fn authorize<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<()>>;
+}
 
 #[derive(Clone, Default)]
 pub(crate) struct Http {
     client: ReqwestClient,
-    sign_in: Option<Authenticator>,
+    sign_in: Option<Arc<dyn SignIn>>,
 }
 
 /// A second, then two, then four.
@@ -65,32 +76,21 @@ fn retry_after(error: &http_client::Error, backoff: Option<Duration>) -> Option<
 
 impl Http {
     /// A client whose requests carry `sign_in`'s credential.
-    pub(crate) fn signed_in(sign_in: Authenticator) -> Self {
+    pub(crate) fn signed_in(sign_in: impl SignIn + 'static) -> Self {
         Self {
             client: ReqwestClient::default(),
-            sign_in: Some(sign_in),
+            sign_in: Some(Arc::new(sign_in)),
         }
     }
 
-    /// `parts` with the sign-in's current credential, refreshed by rig when it
-    /// has expired.
+    /// `parts` as the sign-in authorizes them.
     #[expect(clippy::result_large_err, reason = "rig's HTTP error is rig's")]
     async fn authorized(&self, mut parts: Parts) -> http_client::Result<Parts> {
-        let Some(sign_in) = &self.sign_in else {
-            return Ok(parts);
-        };
-        let credential = sign_in
-            .auth_context(&self.client)
-            .await
-            .map_err(|error| http_client::Error::Instance(error.into()))?;
-        let bearer = format!("Bearer {}", credential.api_key.expose());
-        parts
-            .headers
-            .insert(AUTHORIZATION, HeaderValue::try_from(bearer)?);
-        if let Some(account) = credential.account_id {
-            parts
-                .headers
-                .insert("chatgpt-account-id", HeaderValue::try_from(account)?);
+        if let Some(sign_in) = &self.sign_in {
+            sign_in
+                .authorize(&mut parts)
+                .await
+                .map_err(|error| http_client::Error::Instance(error.into()))?;
         }
         Ok(parts)
     }
@@ -159,32 +159,9 @@ impl HttpClientExt for Http {
 
 #[cfg(test)]
 mod tests {
-    use rig_core::providers::chatgpt::auth::{AuthSource, DeviceCodeHandler};
+    use http::header::AUTHORIZATION;
 
     use super::*;
-
-    /// The credential is read at each request, in place of the empty key the
-    /// model was connected with.
-    #[tokio::test]
-    async fn a_signed_in_request_carries_the_current_credential() {
-        let sign_in = Authenticator::new(
-            AuthSource::AccessToken {
-                access_token: "token".to_owned(),
-                account_id: Some("account".to_owned()),
-            },
-            crate::chatgpt::Secrets,
-            DeviceCodeHandler::default(),
-            true,
-        );
-        let (parts, ()) = http::Request::post("https://chatgpt.com")
-            .header(AUTHORIZATION, "Bearer ")
-            .body(())
-            .unwrap()
-            .into_parts();
-        let parts = Http::signed_in(sign_in).authorized(parts).await.unwrap();
-        assert_eq!(parts.headers[AUTHORIZATION], "Bearer token");
-        assert_eq!(parts.headers["chatgpt-account-id"], "account");
-    }
 
     #[tokio::test]
     async fn another_providers_request_is_left_alone() {

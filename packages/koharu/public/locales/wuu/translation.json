@@ -338,6 +338,7 @@
       "title": "处理流程"
     },
     "providers": {
+      "browserHint": "到浏览器打开个页面里向登录好。",
       "clearCredential": "清除 {{provider}} 个凭据",
       "configured": "配置好哉",
       "connections": "连接",
@@ -345,7 +346,15 @@
       "credential": "凭据",
       "credentialLabel": "{{provider}} 个凭据",
       "description": "连接提供翻译服务搭语言模型个提供商。",
+      "deviceCodeHint": "拿箇个代码输到浏览器打开个页面里向。",
       "notConfigured": "还呒没配置",
+      "openPage": "打开登录页面",
+      "signIn": "登录",
+      "signInLabel": "登录 {{provider}}",
+      "signOut": "退出登录",
+      "signOutLabel": "退出 {{provider}} 个登录",
+      "signingIn": "来勒等侬登录…",
+      "subscription": "订阅",
       "title": "提供商"
     },
     "shortcuts": {

@@ -338,6 +338,7 @@
       "title": "パイプライン"
     },
     "providers": {
+      "browserHint": "ブラウザーで開いたページでサインインを完了してください。",
       "clearCredential": "{{provider}}の認証情報を消去",
       "configured": "設定済み",
       "connections": "接続",
@@ -345,7 +346,15 @@
       "credential": "認証情報",
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",
+      "deviceCodeHint": "ブラウザーで開いたページにこのコードを入力してください。",
       "notConfigured": "未設定",
+      "openPage": "サインインページを開く",
+      "signIn": "サインイン",
+      "signInLabel": "{{provider}}にサインイン",
+      "signOut": "サインアウト",
+      "signOutLabel": "{{provider}}からサインアウト",
+      "signingIn": "サインインを待機中…",
+      "subscription": "サブスクリプション",
       "title": "プロバイダー"
     },
     "shortcuts": {

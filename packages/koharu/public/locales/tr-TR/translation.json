@@ -338,6 +338,7 @@
       "title": "İşlem hattı"
     },
     "providers": {
+      "browserHint": "Tarayıcınızın açtığı sayfada oturum açmayı tamamlayın.",
       "clearCredential": "{{provider}} kimlik bilgisini temizle",
       "configured": "Yapılandırıldı",
       "connections": "Bağlantılar",
@@ -345,7 +346,15 @@
       "credential": "Kimlik bilgisi",
       "credentialLabel": "{{provider}} kimlik bilgisi",
       "description": "Çeviri ve dil modeli sağlayıcılarını bağlayın.",
+      "deviceCodeHint": "Bu kodu tarayıcınızın açtığı sayfaya girin.",
       "notConfigured": "Yapılandırılmadı",
+      "openPage": "Oturum açma sayfasını aç",
+      "signIn": "Oturum aç",
+      "signInLabel": "{{provider}} oturumu aç",
+      "signOut": "Oturumu kapat",
+      "signOutLabel": "{{provider}} oturumunu kapat",
+      "signingIn": "Oturum açma bekleniyor…",
+      "subscription": "Abonelik",
       "title": "Sağlayıcılar"
     },
     "shortcuts": {

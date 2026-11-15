@@ -2,7 +2,6 @@
 //! connected with rig's own types: a `vendor/model` reference, its
 //! `ModelSpec`, and a `DynModel`.
 
-mod chatgpt;
 mod context;
 mod hosted;
 mod local;
@@ -11,9 +10,8 @@ mod model;
 use anyhow::{Context as _, Result};
 use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};
 
-pub use chatgpt::{sign_in, sign_out};
 pub use context::Context;
-pub use hosted::{Endpoint, Providers, VENDORS};
+pub use hosted::{Endpoint, Providers, SIGN_INS, SignInPrompt, VENDORS, sign_in, sign_out};
 pub use local::{Local, Quantization, Sampling, Size, local};
 pub use model::answers;
 pub use rig_agent::agent::AgentBuilder;

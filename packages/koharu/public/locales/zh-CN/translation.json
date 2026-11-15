@@ -338,6 +338,7 @@
       "title": "流水线"
     },
     "providers": {
+      "browserHint": "请在浏览器打开的页面上完成登录。",
       "clearCredential": "清除 {{provider}} 凭据",
       "configured": "已配置",
       "connections": "连接",
@@ -345,7 +346,15 @@
       "credential": "凭据",
       "credentialLabel": "{{provider}} 凭据",
       "description": "连接翻译和语言模型提供商。",
+      "deviceCodeHint": "请在浏览器打开的页面上输入此代码。",
       "notConfigured": "未配置",
+      "openPage": "打开登录页面",
+      "signIn": "登录",
+      "signInLabel": "登录 {{provider}}",
+      "signOut": "退出登录",
+      "signOutLabel": "退出 {{provider}} 登录",
+      "signingIn": "正在等待登录…",
+      "subscription": "订阅",
       "title": "提供商"
     },
     "shortcuts": {

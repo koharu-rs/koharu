@@ -1,18 +1,20 @@
 //! Hosted models through rig's providers, on Koharu's HTTP client, and the
 //! models each vendor lists, as rig's catalog describes them.
 
+mod chatgpt;
+mod grok;
 mod http;
 mod lm_studio;
 
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rig_core::{
     catalog::{Catalog, ModelSpec, ReasoningSupport},
     driver::DynModel,
     operation::Completion,
     providers::{
-        anthropic, chatgpt, deepseek, gemini, minimax, ollama, openai, openrouter,
+        anthropic, deepseek, gemini, minimax, ollama, openai, openrouter,
         registry::{ConnectOptions, ProviderConfig, ProviderId},
         xai,
     },
@@ -20,7 +22,7 @@ use rig_core::{
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 
-pub(crate) use http::{Http, reqwest};
+pub(crate) use http::{Http, SignIn, reqwest};
 
 /// The vendors Koharu lists models from, by rig's names.
 pub const VENDORS: &[&str] = &[
@@ -32,9 +34,47 @@ pub const VENDORS: &[&str] = &[
     minimax::PROVIDER_NAME,
     openrouter::PROVIDER_NAME,
     chatgpt::PROVIDER_NAME,
+    grok::PROVIDER_NAME,
     ollama::PROVIDER_NAME,
     lm_studio::PROVIDER_NAME,
 ];
+
+/// The vendors the user signs in to with their plan, in place of an API key.
+/// The sign-in is kept under the vendor's name, where a key would be.
+pub const SIGN_INS: &[&str] = &[chatgpt::PROVIDER_NAME, grok::PROVIDER_NAME];
+
+/// What a sign-in asks of the user: to sign in on a page, entering a code
+/// there for a device code.
+#[derive(Clone, Debug, Serialize, specta::Type)]
+pub struct SignInPrompt {
+    pub url: String,
+    /// Whether the browser was opened on the page already.
+    pub opened: bool,
+    pub code: Option<String>,
+}
+
+/// Signs in to `vendor`, one of [`SIGN_INS`], telling `prompt` what the
+/// user must do.
+pub async fn sign_in(
+    vendor: &str,
+    prompt: impl Fn(SignInPrompt) + Send + Sync + 'static,
+) -> Result<()> {
+    match vendor {
+        chatgpt::PROVIDER_NAME => chatgpt::sign_in(prompt).await,
+        grok::PROVIDER_NAME => grok::sign_in(prompt).await,
+        _ => bail!("{vendor} takes an API key, not a sign-in"),
+    }
+}
+
+/// Signs out of `vendor`, one of [`SIGN_INS`]: the vendor revokes the
+/// sign-in, and Koharu deletes it.
+pub async fn sign_out(vendor: &str) -> Result<()> {
+    match vendor {
+        chatgpt::PROVIDER_NAME => chatgpt::sign_out().await,
+        grok::PROVIDER_NAME => grok::sign_out().await,
+        _ => bail!("{vendor} takes an API key, not a sign-in"),
+    }
+}
 
 /// `[providers]`: where a vendor's server is when it isn't where rig, or
 /// Koharu for LM Studio, puts it, as Codex's `[model_providers.<id>]` holds a
@@ -78,15 +118,17 @@ fn catalog_id(vendor: &str) -> Result<ProviderId> {
 
 pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
     let base_url = base_url(vendor)?;
-    if vendor == lm_studio::PROVIDER_NAME {
-        return lm_studio::connect(id, base_url);
+    match vendor {
+        grok::PROVIDER_NAME => return grok::connect(id, base_url),
+        lm_studio::PROVIDER_NAME => return lm_studio::connect(id, base_url),
+        _ => {}
     }
     let selection = catalog_id(vendor)?;
     let options = match vendor {
         // The HTTP client puts the sign-in's credential on each request.
         chatgpt::PROVIDER_NAME => ConnectOptions::new()
             .api_key(String::new())
-            .http(crate::chatgpt::http()?),
+            .http(chatgpt::http()?),
         _ => {
             // Given a key, even an empty one, rig reads no environment
             // variable; an optional bearer then sends none.
@@ -132,7 +174,8 @@ fn unlisted(vendor: ProviderId, id: &str) -> ModelSpec {
 /// rig's catalog describes them.
 pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
     match vendor {
-        chatgpt::PROVIDER_NAME => return crate::chatgpt::models(&reqwest()?).await,
+        chatgpt::PROVIDER_NAME => return chatgpt::models(&reqwest()?).await,
+        grok::PROVIDER_NAME => return grok::models(base_url(vendor)?).await,
         lm_studio::PROVIDER_NAME => return lm_studio::models(base_url(vendor)?).await,
         _ => {}
     }
@@ -188,7 +231,7 @@ mod tests {
     fn every_vendor_connects() {
         for vendor in VENDORS
             .iter()
-            .filter(|vendor| **vendor != lm_studio::PROVIDER_NAME)
+            .filter(|vendor| ![grok::PROVIDER_NAME, lm_studio::PROVIDER_NAME].contains(vendor))
         {
             let spec = spec(catalog_id(vendor).unwrap(), "a-model-from-next-year");
             let options = ConnectOptions::new().api_key("key").http(Http::default());

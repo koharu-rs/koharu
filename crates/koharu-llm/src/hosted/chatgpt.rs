@@ -1,28 +1,32 @@
 //! ChatGPT sign-in through rig's ChatGPT provider, the route Codex uses,
 //! with rig's record kept in Koharu's encrypted secrets.
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result, bail};
+use futures::future::BoxFuture;
+use http::{HeaderValue, header::AUTHORIZATION, request::Parts};
 use rig_core::{
     catalog::{Catalog, ModelSpec, ReasoningSupport},
     error::BoxError,
-    providers::chatgpt::{
-        self,
-        auth::{
-            AuthSource, Authenticator, DeviceCodeHandler, DeviceCodePrompt, SignInMethod,
-            SignInPrompt, TokenStore,
-        },
+    providers::chatgpt::auth::{
+        self, AuthSource, Authenticator, DeviceCodeHandler, DeviceCodePrompt, SignInMethod,
+        TokenStore,
     },
     providers::registry::ProviderId,
     wasm_compat::WasmBoxedFuture,
 };
+use rig_reqwest::ReqwestClient;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
-use crate::hosted::Http;
+use super::{Http, SignIn, SignInPrompt};
+
+pub(super) use rig_core::providers::chatgpt::PROVIDER_NAME;
 
 /// rig's sign-in record, kept as a secret under the key rig names,
 /// `chatgpt`.
-pub(crate) struct Secrets;
+struct Secrets;
 
 impl TokenStore for Secrets {
     fn load<'a>(&'a self, key: &'a str) -> WasmBoxedFuture<'a, Result<Option<String>, BoxError>> {
@@ -53,40 +57,83 @@ fn authenticator(device_code: DeviceCodeHandler) -> Authenticator {
     Authenticator::new(AuthSource::OAuth, Secrets, device_code, true)
 }
 
-/// Signs in with the user's ChatGPT plan: in the system browser, or with a
-/// device code where no browser opens. `prompt` hears what the user must
-/// do, and `device_code` gets the code to enter.
-pub async fn sign_in(
-    prompt: impl FnMut(SignInPrompt) + Send,
-    device_code: impl Fn(DeviceCodePrompt) + Send + Sync + 'static,
-) -> Result<()> {
-    authenticator(DeviceCodeHandler::new(device_code))
-        .sign_in(&Http::default(), SignInMethod::Browser, prompt)
-        .await?;
+/// Signs in with the user's ChatGPT plan in the system browser, or with a
+/// device code when the browser's sign-in can't listen for its answer.
+/// `prompt` hears what the user must do.
+pub(super) async fn sign_in(prompt: impl Fn(SignInPrompt) + Send + Sync + 'static) -> Result<()> {
+    let prompt = Arc::new(prompt);
+    let device_code = Arc::clone(&prompt);
+    authenticator(DeviceCodeHandler::new(move |code: DeviceCodePrompt| {
+        device_code(SignInPrompt {
+            url: code.verification_uri,
+            opened: false,
+            code: Some(code.user_code),
+        });
+    }))
+    .sign_in(
+        &Http::default(),
+        SignInMethod::Browser,
+        |asked| match asked {
+            auth::SignInPrompt::Browser(page) => prompt(SignInPrompt {
+                url: page.authorize_url,
+                opened: page.browser_launched,
+                code: None,
+            }),
+            auth::SignInPrompt::BrowserUnavailable(reason) => {
+                tracing::info!(
+                    "ChatGPT's browser sign-in can't listen, so a device code follows: {reason}"
+                );
+            }
+        },
+    )
+    .await?;
     Ok(())
 }
 
 /// Signs out: ChatGPT revokes the tokens, and the record is deleted.
-pub async fn sign_out() -> Result<()> {
+pub(super) async fn sign_out() -> Result<()> {
     authenticator(DeviceCodeHandler::default())
         .sign_out(&Http::default())
         .await?;
     Ok(())
 }
 
+/// The signed-in plan's credential and account, on each request.
+struct Plan(Authenticator);
+
+impl SignIn for Plan {
+    fn authorize<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let credential = self.0.auth_context(&ReqwestClient::default()).await?;
+            let bearer = format!("Bearer {}", credential.api_key.expose());
+            parts
+                .headers
+                .insert(AUTHORIZATION, HeaderValue::try_from(bearer)?);
+            if let Some(account) = credential.account_id {
+                parts
+                    .headers
+                    .insert("chatgpt-account-id", HeaderValue::try_from(account)?);
+            }
+            Ok(())
+        })
+    }
+}
+
 /// The HTTP client for the signed-in plan's models.
-pub(crate) fn http() -> Result<Http> {
-    if koharu_config::secrets::get(chatgpt::PROVIDER_NAME)?.is_none() {
+pub(super) fn http() -> Result<Http> {
+    if koharu_config::secrets::get(PROVIDER_NAME)?.is_none() {
         bail!("ChatGPT isn't signed in");
     }
-    Ok(Http::signed_in(authenticator(DeviceCodeHandler::default())))
+    Ok(Http::signed_in(Plan(authenticator(
+        DeviceCodeHandler::default(),
+    ))))
 }
 
 /// Codex's model list for the signed-in plan, or none when nobody signed in,
 /// each as rig's catalog describes it, and as Codex's list does when the
 /// catalog doesn't.
-pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelSpec>> {
-    if koharu_config::secrets::get(chatgpt::PROVIDER_NAME)?.is_none() {
+pub(super) async fn models(client: &reqwest::Client) -> Result<Vec<ModelSpec>> {
+    if koharu_config::secrets::get(PROVIDER_NAME)?.is_none() {
         return Ok(Vec::new());
     }
     let context = authenticator(DeviceCodeHandler::default())
@@ -108,8 +155,7 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelSpec>> {
         .get("models")
         .and_then(Value::as_array)
         .context("Codex's model list has no `models` array")?;
-    let vendor =
-        ProviderId::catalog(chatgpt::PROVIDER_NAME).context("rig knows no ChatGPT vendor")?;
+    let vendor = ProviderId::catalog(PROVIDER_NAME).context("rig knows no ChatGPT vendor")?;
     let catalog = Catalog::builtin();
     Ok(models
         .iter()
@@ -140,4 +186,32 @@ pub(crate) async fn models(client: &reqwest::Client) -> Result<Vec<ModelSpec>> {
             Some(spec)
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The credential is read at each request, in place of the empty key the
+    /// model was connected with.
+    #[tokio::test]
+    async fn a_signed_in_request_carries_the_current_credential() {
+        let plan = Plan(Authenticator::new(
+            AuthSource::AccessToken {
+                access_token: "token".to_owned(),
+                account_id: Some("account".to_owned()),
+            },
+            Secrets,
+            DeviceCodeHandler::default(),
+            true,
+        ));
+        let (mut parts, ()) = http::Request::post("https://chatgpt.com")
+            .header(AUTHORIZATION, "Bearer ")
+            .body(())
+            .unwrap()
+            .into_parts();
+        plan.authorize(&mut parts).await.unwrap();
+        assert_eq!(parts.headers[AUTHORIZATION], "Bearer token");
+        assert_eq!(parts.headers["chatgpt-account-id"], "account");
+    }
 }

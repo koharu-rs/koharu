@@ -34,6 +34,7 @@ export const vendorNames: Record<string, string> = {
   minimax: 'MiniMax',
   openrouter: 'OpenRouter',
   chatgpt: 'ChatGPT',
+  grok: 'Grok',
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
   koharu: 'Koharu',

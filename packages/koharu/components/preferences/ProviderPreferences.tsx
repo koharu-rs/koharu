@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { Eraser } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,16 +12,29 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { call, refreshModels } from '@/lib/backend'
+import { call, dispatch, refreshModels } from '@/lib/backend'
 import { queryClient } from '@/lib/queries'
-import { commands, type Providers } from '@koharu/ipc/protocol'
+import {
+  Channel,
+  commands,
+  type Providers,
+  type SignInPrompt,
+  type Vendor,
+} from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 
 const vendorsKey = ['vendors'] as const
 
-/** Each vendor's API key, kept in the OS credential store and saved apart from `config.toml`,
- * and the `[providers]` base URL for a vendor whose server is elsewhere. */
+/** Lists the vendors and models again after a key or a sign-in changed. */
+async function vendorsChanged() {
+  await queryClient.invalidateQueries({ queryKey: vendorsKey })
+  await refreshModels(true)
+}
+
+/** Each vendor's API key, or its sign-in for one the user signs in to with their plan, kept in
+ * the OS credential store and saved apart from `config.toml`, and the `[providers]` base URL for a
+ * vendor whose server is elsewhere. */
 export function ProviderPreferences({
   value,
   onChange,
@@ -31,8 +45,7 @@ export function ProviderPreferences({
   const { t } = useTranslation()
   const vendors = useQuery({
     queryKey: vendorsKey,
-    queryFn: async () =>
-      Object.entries(await call(commands.listVendors)).map(([name, key]) => ({ name, key })),
+    queryFn: () => call(commands.listVendors),
   })
   return (
     <PreferencePage
@@ -46,7 +59,7 @@ export function ProviderPreferences({
         {(vendors.data ?? []).map((vendor) => (
           <PreferenceRow key={vendor.name} title={vendorName(vendor.name)} align='start'>
             <div className='grid gap-2'>
-              <KeyField vendor={vendor} />
+              {vendor.signs_in ? <SignInField vendor={vendor} /> : <KeyField vendor={vendor} />}
               <BaseUrlField
                 value={value[vendor.name]?.base_url ?? ''}
                 onChange={(base_url) => {
@@ -65,7 +78,7 @@ export function ProviderPreferences({
 }
 
 /** A vendor's key, written to the credential store when the field loses the focus. */
-function KeyField({ vendor }: { vendor: { name: string; key: boolean } }) {
+function KeyField({ vendor }: { vendor: Vendor }) {
   const { t } = useTranslation()
   const inputId = useId()
   const [draft, setDraft] = useState('')
@@ -75,8 +88,7 @@ function KeyField({ vendor }: { vendor: { name: string; key: boolean } }) {
     void call(commands.setApiKey, vendor.name, key)
       .then(async () => {
         setDraft('')
-        await queryClient.invalidateQueries({ queryKey: vendorsKey })
-        await refreshModels(true)
+        await vendorsChanged()
       })
       .catch(() => undefined)
 
@@ -95,7 +107,9 @@ function KeyField({ vendor }: { vendor: { name: string; key: boolean } }) {
           spellCheck={false}
           value={draft}
           placeholder={
-            vendor.key ? t('settings.providers.configured') : t('settings.providers.notConfigured')
+            vendor.connected
+              ? t('settings.providers.configured')
+              : t('settings.providers.notConfigured')
           }
           className='h-8 min-w-0 flex-1 text-[12px] [-webkit-text-security:disc] [&::placeholder]:[-webkit-text-security:none]'
           onChange={(event) => setDraft(event.currentTarget.value)}
@@ -104,7 +118,7 @@ function KeyField({ vendor }: { vendor: { name: string; key: boolean } }) {
             if (event.key === 'Enter') event.currentTarget.blur()
           }}
         />
-        {vendor.key && (
+        {vendor.connected && (
           <Button
             type='button'
             variant='outline'
@@ -116,6 +130,97 @@ function KeyField({ vendor }: { vendor: { name: string; key: boolean } }) {
           </Button>
         )}
       </div>
+    </div>
+  )
+}
+
+/** A vendor's sign-in with the user's plan: a button that signs in, showing the page and the code
+ * the sign-in waits on, or signs out. The browser opens on the page unless the sign-in opened it. */
+function SignInField({ vendor }: { vendor: Vendor }) {
+  const { t } = useTranslation()
+  const [waiting, setWaiting] = useState(false)
+  const [prompt, setPrompt] = useState<SignInPrompt | null>(null)
+  const name = vendorName(vendor.name)
+
+  const signIn = async () => {
+    setWaiting(true)
+    const channel = new Channel<SignInPrompt>()
+    channel.onmessage = (asked) => {
+      setPrompt(asked)
+      if (!asked.opened) void openUrl(asked.url).catch(() => undefined)
+    }
+    try {
+      await call(commands.signInVendor, vendor.name, channel)
+      await vendorsChanged()
+    } catch {
+      // `call` reports the failure.
+    } finally {
+      setWaiting(false)
+      setPrompt(null)
+    }
+  }
+
+  const signOut = () =>
+    void call(commands.signOutVendor, vendor.name)
+      .then(vendorsChanged)
+      .catch(() => undefined)
+
+  return (
+    <div className='grid gap-1'>
+      <span className='text-[10px] text-muted-foreground'>
+        {t('settings.providers.subscription')}
+      </span>
+      {waiting ? (
+        <div className='grid gap-2 rounded-md border bg-muted/40 p-2.5'>
+          {prompt?.code && (
+            <p className='font-mono text-base font-semibold tracking-[0.18em] select-text'>
+              {prompt.code}
+            </p>
+          )}
+          <p className='text-[11px] leading-4 text-muted-foreground'>
+            {prompt === null
+              ? t('settings.providers.signingIn')
+              : prompt.code
+                ? t('settings.providers.deviceCodeHint')
+                : t('settings.providers.browserHint')}
+          </p>
+          <div className='flex flex-wrap gap-2'>
+            {prompt && (
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => void openUrl(prompt.url).catch(() => undefined)}
+              >
+                {t('settings.providers.openPage')}
+              </Button>
+            )}
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              onClick={() => dispatch(commands.stopSignIn)}
+            >
+              {t('common.cancel')}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          className='justify-self-start'
+          aria-label={
+            vendor.connected
+              ? t('settings.providers.signOutLabel', { provider: name })
+              : t('settings.providers.signInLabel', { provider: name })
+          }
+          onClick={vendor.connected ? signOut : () => void signIn()}
+        >
+          {vendor.connected ? t('settings.providers.signOut') : t('settings.providers.signIn')}
+        </Button>
+      )}
     </div>
   )
 }
