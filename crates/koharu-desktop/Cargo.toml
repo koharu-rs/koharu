@@ -12,8 +12,6 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-# `unstable` brings the CEF methods of a window's child webview builder,
-# behind Tauri's own multiwebview API.
 alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }
@@ -23,6 +21,7 @@ globset = { workspace = true }
 hayro = { workspace = true }
 heck = { workspace = true }
 image = { workspace = true }
+indoc = { workspace = true }
 koharu-agent = { workspace = true }
 koharu-canvas = { workspace = true }
 koharu-config = { workspace = true }
