@@ -472,6 +472,34 @@ fn box_text_resizes_by_its_edges_and_rotates_about_its_centre() {
     assert!(close(across.to_point(), Point::new(0.0, 1.0)));
 }
 
+/// A corner of a text's box resizes it both ways, as a corner of Photoshop's
+/// paragraph type box does, while a side is still caught along its length.
+#[test]
+fn box_text_resizes_both_ways_from_a_corner() {
+    let Some(mut fixture) = unscaled(vec![json!({"op": "add_layer", "page": "$page", "index": 0,
+    "layer": {
+        "kind": "text", "content": "Hello",
+        "frame": {"box": {"bounds": {"x": 0, "y": 0, "width": 100, "height": 40}}},
+        "transform": [[1.0, 0.0, 50.0], [0.0, 1.0, 50.0]],
+    }})]) else {
+        return;
+    };
+    let text = layers(&fixture)[0];
+    let canvas = &mut fixture.canvas;
+    let mut effects = canvas
+        .input(down((100.0, 70.0), Modifiers::default()))
+        .expect("input");
+    effects.extend(canvas.input(up(1, (100.0, 70.0))).expect("input"));
+    assert_eq!(selections(&effects), [vec![text]]);
+
+    let effects = gesture(&mut fixture.canvas, (150.0, 90.0), (170.0, 110.0));
+    assert_eq!(apply(&mut fixture, effects), ["resize"]);
+    assert_eq!(
+        layer(&fixture, text)["frame"]["box"]["bounds"],
+        json!({"x": 0.0, "y": 0.0, "width": 120.0, "height": 60.0})
+    );
+}
+
 #[test]
 fn a_locked_layer_does_not_move() {
     let Some(mut fixture) = unscaled(vec![shape(

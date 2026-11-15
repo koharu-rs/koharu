@@ -66,7 +66,9 @@ impl Handle {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Resize {
     All,
-    /// The four sides only, as a text's frame resized in the editor.
+    /// The corners, and the sides along their length, as a text's frame
+    /// resized in the editor; a corner resizes both ways, as one of
+    /// Photoshop's paragraph type box does.
     Edges,
     None,
 }
@@ -149,16 +151,18 @@ impl Control {
         if self.rotates {
             handles.push(Handle::Rotate);
         }
-        if self.resize == Resize::All {
+        // Corners first, so one is caught before the sides that meet there.
+        if self.resize != Resize::None {
             handles.extend([
                 Handle::NorthWest,
                 Handle::NorthEast,
                 Handle::SouthEast,
                 Handle::SouthWest,
+                Handle::North,
+                Handle::East,
+                Handle::South,
+                Handle::West,
             ]);
-        }
-        if self.resize != Resize::None {
-            handles.extend([Handle::North, Handle::East, Handle::South, Handle::West]);
         }
         handles
     }
