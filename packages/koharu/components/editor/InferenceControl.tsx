@@ -19,7 +19,7 @@ import { OutputPicker } from '@/components/controls/OutputPicker'
 import { call, refreshModels, savePreferences } from '@/lib/backend'
 import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { modelName, vendorOf } from '@/lib/translation'
-import { commands, type Model, type Stage, type TranslatorConfig } from '@koharu/bridge/protocol'
+import { commands, type Model, type Stage, type TranslatorConfig } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
@@ -43,7 +43,7 @@ export function InferenceControl({
   const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
   const unavailable = scope === 'selected-pages' && selectedPages.length === 0
 
-  const stop = () => void call(commands.stop).catch(() => undefined)
+  const stop = () => void call(commands.stopPipeline).catch(() => undefined)
 
   return (
     <div className='flex items-center gap-1'>

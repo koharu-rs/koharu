@@ -4,7 +4,7 @@ import { Check, ChevronLeft, LoaderCircle, Search, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { Model } from '@koharu/bridge/protocol'
+import type { Model } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   InputGroup,

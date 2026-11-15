@@ -7,7 +7,10 @@ use koharu_canvas::{Camera, Notice};
 use koharu_pipeline::Event as PipelineEvent;
 use koharu_runtime::Transfer;
 use koharu_scene::{Change, LayerId, PageId, Rgba};
+use serde::Serialize;
 use specta::{Type, Types, datatype::DataType};
+use tauri::{AppHandle, Emitter as _};
+use tauri_runtime_cef::CefRuntime;
 
 /// An event's name, typed by what it carries, so a send and the bindings
 /// agree.
@@ -26,6 +29,15 @@ impl<T: Type> Event<T> {
 
     fn binding(&self, types: &mut Types) -> (&'static str, DataType) {
         (self.name, T::definition(types))
+    }
+}
+
+impl<T: Serialize + Clone> Event<T> {
+    /// Tells the interface `payload` through `handle`.
+    pub fn tell(&self, handle: &AppHandle<CefRuntime>, payload: T) {
+        if let Err(error) = handle.emit(self.name, payload) {
+            tracing::warn!("failed to tell the interface {}: {error}", self.name);
+        }
     }
 }
 

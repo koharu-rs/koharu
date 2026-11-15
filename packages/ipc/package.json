@@ -1,5 +1,5 @@
 {
-  "name": "@koharu/bridge",
+  "name": "@koharu/ipc",
   "version": "0.1.0",
   "private": true,
   "license": "MIT OR Apache-2.0",

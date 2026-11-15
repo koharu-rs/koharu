@@ -2,7 +2,7 @@
 //! as premultiplied BGRA on the CPU with the rectangles that changed since
 //! the compositor last uploaded them.
 
-use std::{os::raw::c_int, sync::Arc};
+use std::os::raw::c_int;
 
 use tauri_runtime_cef::{
     OffscreenView,
@@ -16,7 +16,7 @@ use winit::{
     window::{ImeRequest, ImeRequestData},
 };
 
-use super::Screen;
+use super::{remember, with};
 
 /// One painted image.
 pub struct Paint {
@@ -105,13 +105,12 @@ fn clip(rect: &CefRect, width: u32, height: u32) -> Option<PixelRect> {
 
 wrap_render_handler! {
     pub struct Painter {
-        screen: Arc<Screen>,
         view: OffscreenView,
     }
 
     impl RenderHandler {
         fn view_rect(&self, browser: Option<&mut Browser>, rect: Option<&mut CefRect>) {
-            self.screen.remember(browser);
+            remember(browser);
             let Some(rect) = rect else { return };
             let size = self.view.bounds().size.to_logical::<f64>(1.0);
             // CEF asserts on an empty view, which a minimized window has.
@@ -138,10 +137,10 @@ wrap_render_handler! {
 
         fn on_popup_show(&self, _browser: Option<&mut Browser>, show: c_int) {
             if show == 0 {
-                let mut painted = self.screen.painted.lock();
-                painted.popup = None;
-                painted.popup_origin = None;
-                drop(painted);
+                with(|main| {
+                    main.painted.popup = None;
+                    main.painted.popup_origin = None;
+                });
                 self.view.request_redraw();
             }
         }
@@ -149,10 +148,11 @@ wrap_render_handler! {
         fn on_popup_size(&self, _browser: Option<&mut Browser>, rect: Option<&CefRect>) {
             let Some(rect) = rect else { return };
             let scale = self.view.window().map_or(1.0, |window| window.scale_factor());
-            self.screen.painted.lock().popup_origin = Some((
+            let origin = (
                 (f64::from(rect.x) * scale).round() as i32,
                 (f64::from(rect.y) * scale).round() as i32,
-            ));
+            );
+            with(|main| main.painted.popup_origin = Some(origin));
         }
 
         fn on_paint(
@@ -164,7 +164,7 @@ wrap_render_handler! {
             width: c_int,
             height: c_int,
         ) {
-            self.screen.remember(browser);
+            remember(browser);
             let (Ok(width), Ok(height)) = (u32::try_from(width), u32::try_from(height)) else {
                 return;
             };
@@ -176,14 +176,14 @@ wrap_render_handler! {
             let buffer =
                 unsafe { std::slice::from_raw_parts(buffer, width as usize * height as usize * 4) };
             let dirty = dirty_rects.unwrap_or_default();
-            let mut painted = self.screen.painted.lock();
-            let slot = if type_ == PaintElementType::POPUP {
-                &mut painted.popup
-            } else {
-                &mut painted.view
-            };
-            update(slot, buffer, width, height, dirty);
-            drop(painted);
+            with(|main| {
+                let slot = if type_ == PaintElementType::POPUP {
+                    &mut main.painted.popup
+                } else {
+                    &mut main.painted.view
+                };
+                update(slot, buffer, width, height, dirty);
+            });
             self.view.request_redraw();
         }
 

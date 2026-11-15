@@ -1,4 +1,4 @@
-import type { Model } from '@koharu/bridge/protocol'
+import type { Model } from '@koharu/ipc/protocol'
 
 /** The languages the translator is offered, as BCP 47 tags. The pipeline takes any language CLDR
  * names; these are the ones manga is commonly translated into, with a region or a script only

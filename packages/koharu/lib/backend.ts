@@ -2,8 +2,8 @@
 
 import * as Sentry from '@sentry/nextjs'
 
-import { commands } from '@koharu/bridge/protocol'
-import type { Preferences } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/ipc/protocol'
+import type { Preferences } from '@koharu/ipc/protocol'
 
 import { receiveError, receiveModels, receivePreferences } from './store'
 
@@ -64,7 +64,7 @@ export function refreshModels(force = false): Promise<void> {
   if (!force && modelsRequest) return modelsRequest
 
   const generation = ++modelsGeneration
-  const request = call(commands.getModels)
+  const request = call(commands.listModels)
     .then((models) => {
       if (generation === modelsGeneration) receiveModels(models)
     })

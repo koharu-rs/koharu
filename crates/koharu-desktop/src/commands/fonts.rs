@@ -7,7 +7,7 @@ use super::{Bytes, Result};
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_fonts() -> Result<Vec<FontFamily>> {
+pub async fn list_fonts() -> Result<Vec<FontFamily>> {
     Ok(fonts::list().await?)
 }
 

@@ -1,4 +1,5 @@
-//! What the interface sets on the canvas.
+//! What the interface sets on the canvas. The screen tells the camera when
+//! one of them moves it.
 
 use std::sync::Arc;
 
@@ -14,25 +15,24 @@ use crate::app::App;
 pub fn set_canvas_viewport(app: State<'_, Arc<App>>, x: f64, y: f64, width: f64, height: f64) {
     app.screen
         .set_viewport(Rect::new(x, y, x + width.max(0.0), y + height.max(0.0)));
-    app.camera();
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_tool(app: State<'_, Arc<App>>, tool: Tool) {
+pub fn set_canvas_tool(app: State<'_, Arc<App>>, tool: Tool) {
     tracing::info!(?tool, "tool");
     app.screen.set_tool(tool);
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_brush(app: State<'_, Arc<App>>, brush: Brush) {
+pub fn set_canvas_brush(app: State<'_, Arc<App>>, brush: Brush) {
     app.screen.set_brush(brush);
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_colors(app: State<'_, Arc<App>>, colors: Colors) {
+pub fn set_canvas_colors(app: State<'_, Arc<App>>, colors: Colors) {
     app.screen.set_colors(colors);
 }
 
@@ -40,25 +40,20 @@ pub fn set_colors(app: State<'_, Arc<App>>, colors: Colors) {
 #[tauri::command]
 #[specta::specta]
 pub fn fit_canvas(app: State<'_, Arc<App>>) {
-    app.screen.with_canvas(|canvas| canvas.fit());
-    app.camera();
-    app.screen.request_redraw();
+    app.screen.fit();
 }
 
 /// Zooms about the canvas's centre, `zoom` CSS pixels to a page pixel, as
 /// the status bar's slider sets it.
 #[tauri::command]
 #[specta::specta]
-pub fn set_zoom(app: State<'_, Arc<App>>, zoom: f64) {
-    app.screen.with_canvas(|canvas| canvas.zoom_to(zoom));
-    app.camera();
-    app.screen.request_redraw();
+pub fn set_canvas_zoom(app: State<'_, Arc<App>>, zoom: f64) {
+    app.screen.zoom_to(zoom);
 }
 
 /// The selection the Layers panel made.
 #[tauri::command]
 #[specta::specta]
 pub fn select_layers(app: State<'_, Arc<App>>, layers: Vec<LayerId>) {
-    app.screen.with_canvas(|canvas| canvas.select(layers));
-    app.screen.request_redraw();
+    app.screen.select(layers);
 }

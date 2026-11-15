@@ -6,7 +6,7 @@ import Providers from '@/app/providers'
 import { call } from '@/lib/backend'
 import { useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, events, type Preferences } from '@koharu/bridge/protocol'
+import { commands, events, type Preferences } from '@koharu/ipc/protocol'
 
 vi.mock('@tauri-apps/api/core', () => ({
   Channel: class {},
@@ -32,7 +32,7 @@ const preferences: Preferences = {
 function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
-  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
+  vi.spyOn(commands, 'queryScene').mockImplementation(async (query) =>
     query.query === 'get_project'
       ? { id: 'project', version: '1', pages: [] }
       : { steps: [], current: 0 },
@@ -47,9 +47,9 @@ beforeEach(() => {
       return () => undefined
     })
   }
-  vi.spyOn(commands, 'getModels').mockResolvedValue([])
+  vi.spyOn(commands, 'listModels').mockResolvedValue([])
   vi.spyOn(commands, 'getPreferences').mockResolvedValue(preferences)
-  vi.spyOn(commands, 'getRuns').mockResolvedValue([])
+  vi.spyOn(commands, 'getPipelineEvents').mockResolvedValue([])
 })
 
 function ProjectProbe() {
@@ -71,7 +71,7 @@ describe('Tauri runtime', () => {
   })
 
   it('listens once through Strict Mode effect replay', async () => {
-    const runs = vi.spyOn(commands, 'getRuns').mockResolvedValue([])
+    const runs = vi.spyOn(commands, 'getPipelineEvents').mockResolvedValue([])
     const view = render(
       createElement(StrictMode, null, createElement(Providers, null, createElement('div'))),
     )
@@ -100,7 +100,7 @@ describe('Tauri runtime', () => {
   it('applies the canvas and download events directly to the store', async () => {
     useKoharuStore.setState({ downloads: {} })
     const view = render(createElement(Providers, null, createElement('div')))
-    await waitFor(() => expect(commands.getRuns).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(commands.getPipelineEvents).toHaveBeenCalledTimes(1))
 
     act(() => {
       tell('download', { id: 7, state: 'Running', name: 'model.bin', completed: 25, total: 100 })

@@ -1,4 +1,4 @@
-import type { Text, Transform } from '@koharu/bridge/protocol'
+import type { Text, Transform } from '@koharu/ipc/protocol'
 
 import type { Camera } from './store'
 

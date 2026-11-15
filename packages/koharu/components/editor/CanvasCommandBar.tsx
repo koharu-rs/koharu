@@ -2,10 +2,9 @@
 
 import { InferenceControl } from '@/components/editor/InferenceControl'
 import { call } from '@/lib/backend'
-import { trace } from '@/lib/sentry'
 import { usePage } from '@/lib/queries'
 import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
-import { commands, type Stage, type Target } from '@koharu/bridge/protocol'
+import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
 
 export function CanvasCommandBar() {
   const page = usePage().data
@@ -23,7 +22,7 @@ export function CanvasCommandBar() {
           : { pages: [page.id] }
     // A run takes its stages in the pipeline's order, whichever order they were picked in.
     const ordered = pipelineStages.filter((stage) => stages.includes(stage))
-    void call(commands.process, target, ordered, trace()).catch(() => undefined)
+    void call(commands.runPipeline, target, ordered).catch(() => undefined)
   }
 
   return (

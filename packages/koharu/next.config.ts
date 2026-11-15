@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // repository keeps its own agent rules.
   agentRules: false,
   devIndicators: false,
-  transpilePackages: ['@koharu/bridge', '@koharu/ui'],
+  transpilePackages: ['@koharu/ipc', '@koharu/ui'],
   output: 'export',
   images: {
     unoptimized: true,

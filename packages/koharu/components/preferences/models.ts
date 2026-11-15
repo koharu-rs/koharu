@@ -1,4 +1,4 @@
-import type { Detector, Inpainter, Recognizer } from '@koharu/bridge/protocol'
+import type { Detector, Inpainter, Recognizer } from '@koharu/ipc/protocol'
 
 /** The pipeline's models by id, as the backend names them; product names stay untranslated. */
 export const detectors: Record<Detector, string> = {

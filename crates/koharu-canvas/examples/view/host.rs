@@ -3,8 +3,8 @@
 
 use std::{sync::Arc, time::Instant};
 
-use anyhow::Result;
-use koharu_canvas::{Brush, Canvas, Effect};
+use anyhow::{Context as _, Result};
+use koharu_canvas::{Brush, Canvas, Effect, Snapshot};
 use koharu_renderer::{Gpu, Renderer};
 use koharu_scene::{Edit, Op, PageId, Ref, Rgba, Session};
 use parking_lot::Mutex;
@@ -16,10 +16,10 @@ pub struct Host {
     pub page: PageId,
     pub canvas: Canvas,
     brush: Brush,
-    /// How long each applied edit and each `set_frame` took, in
+    /// How long each applied edit and each `show` took, in
     /// milliseconds, for the script's report.
     pub applies: Vec<f64>,
-    pub set_frames: Vec<f64>,
+    pub shows: Vec<f64>,
 }
 
 impl Host {
@@ -37,7 +37,7 @@ impl Host {
             canvas,
             brush,
             applies: Vec::new(),
-            set_frames: Vec::new(),
+            shows: Vec::new(),
         };
         host.canvas.set_brush(brush);
         host.refresh()?;
@@ -46,10 +46,13 @@ impl Host {
 
     /// The page's frame again, after a change, on the canvas.
     pub fn refresh(&mut self) -> Result<()> {
-        let frame = self.renderer.render(&self.session.lock(), self.page)?;
+        let session = self.session.lock();
+        let frame = self.renderer.render(&session, self.page)?;
+        let snapshot = Snapshot::new(frame, &session).context("the page is gone")?;
+        drop(session);
         let start = Instant::now();
-        self.canvas.set_frame(frame);
-        self.set_frames.push(milliseconds(start));
+        self.canvas.show(snapshot);
+        self.shows.push(milliseconds(start));
         Ok(())
     }
 

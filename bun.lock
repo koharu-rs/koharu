@@ -17,8 +17,14 @@
         "typescript": "^7.0.2",
       },
     },
-    "packages/bridge": {
-      "name": "@koharu/bridge",
+    "packages/docs": {
+      "name": "@koharu/docs",
+      "devDependencies": {
+        "mint": "4.3.12",
+      },
+    },
+    "packages/ipc": {
+      "name": "@koharu/ipc",
       "version": "0.1.0",
       "dependencies": {
         "@tauri-apps/api": "3.0.0-alpha.3",
@@ -27,16 +33,11 @@
         "typescript": "^7.0.2",
       },
     },
-    "packages/docs": {
-      "name": "@koharu/docs",
-      "devDependencies": {
-        "mint": "4.3.12",
-      },
-    },
     "packages/koharu": {
       "name": "@koharu/app",
       "version": "0.1.0",
       "dependencies": {
+        "@koharu/ipc": "workspace:*",
         "@koharu/ui": "workspace:*",
         "@sentry/core": "^11.11.0",
         "@sentry/nextjs": "^11.11.0",
@@ -368,9 +369,9 @@
 
     "@koharu/app": ["@koharu/app@workspace:packages/koharu"],
 
-    "@koharu/bridge": ["@koharu/bridge@workspace:packages/bridge"],
-
     "@koharu/docs": ["@koharu/docs@workspace:packages/docs"],
+
+    "@koharu/ipc": ["@koharu/ipc@workspace:packages/ipc"],
 
     "@koharu/ui": ["@koharu/ui@workspace:packages/ui"],
 

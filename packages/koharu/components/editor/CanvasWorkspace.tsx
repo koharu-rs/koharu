@@ -13,7 +13,7 @@ import { cssBox, textBounds } from '@/lib/geometry'
 import { usePage } from '@/lib/queries'
 import { deleteLayers, setText } from '@/lib/scene'
 import { hexToRgba, useKoharuStore, type CanvasTool } from '@/lib/store'
-import { commands, type Layer, type Rgba, type Text } from '@koharu/bridge/protocol'
+import { commands, type Layer, type Rgba, type Text } from '@koharu/ipc/protocol'
 
 const TOOLS = ['select', 'text', 'draw', 'eraser', 'color_picker', 'remove', 'pan'] as const
 
@@ -50,16 +50,16 @@ export function CanvasWorkspace() {
     }
   }, [])
 
-  useEffect(() => dispatch(commands.setTool, tool), [tool])
+  useEffect(() => dispatch(commands.setCanvasTool, tool), [tool])
 
   useEffect(
-    () => dispatch(commands.setBrush, { diameter: brush.diameter, color: hexToRgba(brush.color) }),
+    () => dispatch(commands.setCanvasBrush, { diameter: brush.diameter, color: hexToRgba(brush.color) }),
     [brush],
   )
 
   useEffect(() => {
     const send = () =>
-      dispatch(commands.setColors, {
+      dispatch(commands.setCanvasColors, {
         workspace: cssColor('--surface-canvas'),
         selection: cssColor('--canvas-selection'),
       })
@@ -107,7 +107,7 @@ export function CanvasWorkspace() {
       const command = event.ctrlKey || event.metaKey
       if (command && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        dispatch(event.shiftKey ? commands.redo : commands.undo)
+        dispatch(event.shiftKey ? commands.redoEdit : commands.undoEdit)
         return
       }
       if (command && event.key.toLowerCase() === 'a' && page) {
@@ -181,7 +181,7 @@ export function CanvasWorkspace() {
           )}
         </div>
       </div>
-      <StatusBar onZoomChange={(zoom) => dispatch(commands.setZoom, zoom)} />
+      <StatusBar onZoomChange={(zoom) => dispatch(commands.setCanvasZoom, zoom)} />
     </main>
   )
 }

@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@koharu/ipc": "workspace:*",
     "@koharu/ui": "workspace:*",
     "@sentry/core": "^11.11.0",
     "@sentry/nextjs": "^11.11.0",

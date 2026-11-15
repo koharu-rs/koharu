@@ -39,6 +39,8 @@ only.
 - **What a run told** is kept in order as it's told, the last event saying how
   it ended, so a caller that looks late still sees everything, as ComfyUI keeps
   a prompt's history [ComfyUI routes].
+- **Each run is traced**: a span from its queuing to its end, under whatever
+  asked for it, and one for each page stage while it runs.
 
 ## 2. Stages
 

@@ -5,7 +5,6 @@ use std::{io::Cursor, sync::Arc};
 use image::ImageFormat;
 use tauri::{AppHandle, Manager as _, State, ipc::Response};
 use tauri_runtime_cef::CefRuntime;
-use tokio::sync::oneshot;
 
 use crate::{
     app::App,
@@ -16,11 +15,9 @@ use crate::{
 /// together, which a CDP screenshot of the page alone can't show.
 #[tauri::command]
 pub async fn capture_window(app: State<'_, Arc<App>>) -> Result<Response, String> {
-    let screen = &app.screen;
-    let (sender, receiver) = oneshot::channel();
-    *screen.capture.lock() = Some(sender);
-    screen.request_redraw();
-    let image = receiver
+    let image = app
+        .screen
+        .capture()
         .await
         .map_err(|_| "the window closed before it drew".to_owned())?;
     let mut png = Cursor::new(Vec::new());

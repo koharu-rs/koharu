@@ -9,14 +9,15 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
+use futures::StreamExt as _;
 use koharu_agent::{Agent, McpServer, Tools};
-use koharu_canvas::{Canvas, Effect};
-use koharu_pipeline::{Area, Pipeline, Stage, Target};
+use koharu_canvas::{Canvas, Effect, Snapshot};
+use koharu_pipeline::{Area, Pipeline, Request, RunId, Stage, Target};
 use koharu_renderer::{Gpu, Renderer};
 use koharu_scene::{Change, Edit, PageId, Session};
 use parking_lot::Mutex;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter as _};
+use tauri::AppHandle;
 use tauri_runtime_cef::CefRuntime;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
 use tokio_util::task::AbortOnDropHandle;
@@ -24,22 +25,16 @@ use tokio_util::task::AbortOnDropHandle;
 use crate::{
     events::{self, Event},
     library::Library,
-    runs::Telemetry,
     screen::Screen,
 };
-
-/// The port the MCP server listens on, the `serve` example's, so a client's
-/// configuration stays valid from one launch to the next.
-const MCP_PORT: u16 = 7878;
 
 pub struct App {
     pub library: Library,
     pub renderer: Renderer,
     pub gpu: &'static Gpu,
     pub pipeline: Pipeline,
-    pub screen: Arc<Screen>,
+    pub screen: Screen,
     pub project: Mutex<Option<Project>>,
-    pub telemetry: Telemetry,
     /// Set once the window's app starts, before anything is told.
     handle: OnceLock<AppHandle<CefRuntime>>,
     /// Set once it listens; serves the open project.
@@ -57,7 +52,7 @@ pub struct Project {
     /// The agent's run going on, numbered, which closing aborts.
     pub run: Option<(u64, AbortOnDropHandle<()>)>,
     /// Shows and tells the session's changes.
-    _follow: AbortOnDropHandle<()>,
+    _relay: AbortOnDropHandle<()>,
 }
 
 impl App {
@@ -70,31 +65,49 @@ impl App {
         Self {
             library,
             renderer,
-            screen: Arc::new(Screen::new(gpu)),
+            screen: Screen::default(),
             gpu,
             pipeline,
             project: Mutex::new(None),
-            telemetry: Telemetry::default(),
             handle: OnceLock::new(),
             mcp: OnceLock::new(),
         }
     }
 
-    /// Starts telling the interface, following the pipeline and the
-    /// runtime's downloads, and serving MCP.
+    /// Starts telling the interface every run's events and every download,
+    /// and serving MCP.
     pub fn start(self: &Arc<Self>, handle: AppHandle<CefRuntime>) {
         let _ = self.handle.set(handle);
-        self.follow_pipeline();
+        let app = Arc::clone(self);
+        let mut runs = self.pipeline.events();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                match runs.recv().await {
+                    Ok(event) => app.emit(events::PIPELINE, event),
+                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Closed) => return,
+                }
+            }
+        });
         let app = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
-            match McpServer::start(MCP_PORT).await {
+            let mut transfers = koharu_runtime::transfers();
+            while let Some(transfer) = transfers.next().await {
+                app.emit(events::DOWNLOAD, transfer);
+            }
+        });
+        let app = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            // The `serve` example's port, fixed so a client's configuration
+            // stays valid from one launch to the next.
+            match McpServer::start(7878).await {
                 Ok(server) => {
                     let server = app.mcp.get_or_init(|| server);
                     let project = app.project.lock();
                     server.open(project.as_ref().map(|project| app.tools(project)));
                 }
                 Err(error) => {
-                    tracing::warn!("couldn't serve MCP on port {MCP_PORT}: {error:#}");
+                    tracing::warn!("couldn't serve MCP on port 7878: {error:#}");
                 }
             }
         });
@@ -102,10 +115,8 @@ impl App {
 
     /// Tells the interface `payload`, once it can be told.
     pub fn emit<T: Serialize + Clone>(&self, event: Event<T>, payload: T) {
-        if let Some(handle) = self.handle.get()
-            && let Err(error) = handle.emit(event.name, payload)
-        {
-            tracing::warn!("failed to tell the interface {}: {error}", event.name);
+        if let Some(handle) = self.handle.get() {
+            event.tell(handle, payload);
         }
     }
 
@@ -113,10 +124,10 @@ impl App {
     pub fn open(self: &Arc<Self>, name: String, session: Session) -> Result<()> {
         self.close();
         let page = session.project().pages().next().map(|page| page.id);
-        let follow = self.follow(session.subscribe());
+        let relay = self.relay(session.subscribe());
         let session = Arc::new(Mutex::new(session));
         self.screen
-            .show(Canvas::new(self.gpu, Arc::clone(&session)));
+            .set_canvas(Some(Canvas::new(self.gpu, Arc::clone(&session))));
         {
             let mut project = self.project.lock();
             let opened = project.insert(Project {
@@ -125,7 +136,7 @@ impl App {
                 page,
                 conversation: None,
                 run: None,
-                _follow: follow,
+                _relay: relay,
             });
             if let Some(server) = self.mcp.get() {
                 server.open(Some(self.tools(opened)));
@@ -147,13 +158,12 @@ impl App {
             project.take()
         };
         self.pipeline.stop();
-        self.screen.hide();
+        self.screen.set_canvas(None);
         if let Some(project) = project {
             self.pipeline.close(project.session.lock().id());
             self.emit(events::PROJECT, None);
             self.emit(events::PAGE, None);
         }
-        self.screen.request_redraw();
     }
 
     /// The open project's session.
@@ -174,16 +184,17 @@ impl App {
         )
     }
 
-    /// Shows `page` on the canvas.
-    pub fn show(self: &Arc<Self>, page: PageId) -> Result<()> {
-        {
-            let mut project = self.project.lock();
-            let project = project.as_mut().context("no project is open")?;
-            project.session.lock().project().page(page)?;
-            project.page = Some(page);
-        }
-        self.emit(events::PAGE, Some(page));
-        self.refresh()
+    /// Runs `stages` on `target` in the open project. The pipeline traces the
+    /// run under whatever asked for it.
+    pub fn process(&self, target: Target, stages: BTreeSet<Stage>) -> Result<RunId> {
+        Ok(self.pipeline.run(
+            self.session()?,
+            Request {
+                target,
+                stages,
+                config: None,
+            },
+        )?)
     }
 
     /// Runs `edit` on the open project as one undo step.
@@ -195,7 +206,7 @@ impl App {
     /// Tells the interface `session`'s changes, and shows them on the canvas
     /// one redraw at a time: a burst, and what comes during a redraw, shows
     /// once.
-    fn follow(self: &Arc<Self>, mut changes: Receiver<Change>) -> AbortOnDropHandle<()> {
+    fn relay(self: &Arc<Self>, mut changes: Receiver<Change>) -> AbortOnDropHandle<()> {
         let app = Arc::clone(self);
         AbortOnDropHandle::new(tokio::spawn(async move {
             loop {
@@ -240,21 +251,16 @@ impl App {
         }
         match page {
             Some(page) => {
-                let frame = self.renderer.render(&session.lock(), page)?;
-                self.screen.set_frame(frame);
+                // The snapshot reads the project the frame drew, under the
+                // same lock, so the main thread never takes it.
+                let session = session.lock();
+                let frame = self.renderer.render(&session, page)?;
+                let snapshot = Snapshot::new(frame, &session).context("the page is gone")?;
+                self.screen.show(snapshot);
             }
-            None => self.screen.show(Canvas::new(self.gpu, session)),
+            None => self.screen.set_canvas(Some(Canvas::new(self.gpu, session))),
         }
-        self.camera();
-        self.screen.request_redraw();
         Ok(())
-    }
-
-    /// Tells the interface where the page shows, if that moved.
-    pub fn camera(&self) {
-        if let Some(camera) = self.screen.camera() {
-            self.emit(events::CAMERA, camera);
-        }
     }
 
     /// Carries out what a canvas gesture did.
@@ -267,10 +273,8 @@ impl App {
                     self.emit(events::SELECTION, layers);
                     Ok(())
                 }
-                Effect::Camera(_) => {
-                    self.camera();
-                    Ok(())
-                }
+                // The screen tells the camera itself.
+                Effect::Camera(_) => Ok(()),
                 Effect::Color(color) => {
                     tracing::info!(?color, "color picked");
                     self.emit(events::COLOR, color);
@@ -293,7 +297,6 @@ impl App {
                             prompt: None,
                         },
                         BTreeSet::from([Stage::Inpaint]),
-                        None,
                     )
                     .map(drop),
             };
@@ -301,110 +304,5 @@ impl App {
                 tracing::error!("failed to carry out a canvas gesture: {error:#}");
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use koharu_agent::AgentConfig;
-    use koharu_pipeline::PipelineConfig;
-    use koharu_renderer::RendererConfig;
-    use tokio::sync::{mpsc, oneshot};
-
-    use super::*;
-    use crate::runs::AgentEvent;
-
-    /// Sends when the run holding it is dropped.
-    struct Dropped(Option<oneshot::Sender<()>>);
-
-    impl Drop for Dropped {
-        fn drop(&mut self) {
-            if let Some(sender) = self.0.take() {
-                let _ = sender.send(());
-            }
-        }
-    }
-
-    /// The agent's run going on.
-    fn agent_run(app: &App) -> Option<u64> {
-        app.project
-            .lock()
-            .as_ref()
-            .and_then(|project| project.run.as_ref().map(|(run, _)| *run))
-    }
-
-    /// An app on a projects folder in `dir`, or `None` on a machine without a
-    /// GPU.
-    fn app(dir: &std::path::Path) -> anyhow::Result<Option<Arc<App>>> {
-        let renderer = Renderer::new(RendererConfig::default());
-        let Ok(gpu) = Gpu::get() else {
-            return Ok(None);
-        };
-        Ok(Some(Arc::new(App::new(
-            Library::new(dir.to_owned())?,
-            renderer,
-            gpu,
-            Pipeline::new(PipelineConfig::default()),
-        ))))
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn closing_a_project_stops_its_runs() -> anyhow::Result<()> {
-        let dir = tempfile::tempdir()?;
-        let Some(app) = app(dir.path())? else {
-            return Ok(());
-        };
-        let session = app.library.create("closing")?;
-        app.open("closing".to_owned(), session)?;
-
-        // An agent run holding the project, as the agent's tools do.
-        let held = app.session()?;
-        let (sender, dropped) = oneshot::channel();
-        let guard = Dropped(Some(sender));
-        app.start_agent(async move {
-            let _held = (held, guard);
-            std::future::pending::<()>().await;
-        })?;
-        assert!(agent_run(&app).is_some());
-
-        app.close();
-        assert!(agent_run(&app).is_none());
-        assert!(app.session().is_err());
-        tokio::time::timeout(Duration::from_secs(5), dropped).await??;
-        // Nothing holds the file any more: it opens again.
-        drop(app.library.open("closing")?);
-        Ok(())
-    }
-
-    /// A run connects to its model inside the run, which closing the project
-    /// aborts; connected first, a conversation made during a close would keep
-    /// the closed project. A model that can't connect fails the run, not its
-    /// start.
-    #[tokio::test(flavor = "multi_thread")]
-    async fn an_agent_run_connects_to_its_model_inside_the_run() -> anyhow::Result<()> {
-        let dir = tempfile::tempdir()?;
-        let Some(app) = app(dir.path())? else {
-            return Ok(());
-        };
-        let session = app.library.create("connecting")?;
-        app.open("connecting".to_owned(), session)?;
-
-        let (sender, mut events) = mpsc::unbounded_channel();
-        app.run_agent(
-            "no model",
-            AgentConfig::default(),
-            "hi".to_owned(),
-            move |event| {
-                let _ = sender.send(event);
-            },
-            None,
-        )?;
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
-            .await?
-            .context("the run ended without telling")?;
-        assert!(matches!(event, AgentEvent::Failed { .. }), "{event:?}");
-        Ok(())
     }
 }

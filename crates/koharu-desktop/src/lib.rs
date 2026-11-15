@@ -5,7 +5,6 @@ mod app;
 mod commands;
 mod events;
 mod library;
-mod runs;
 mod screen;
 
 use std::sync::Arc;
@@ -60,8 +59,8 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     let pipeline = Pipeline::new(koharu_config::get::<PipelineConfig>()?);
     let app = Arc::new(App::new(library, renderer, gpu, pipeline));
     koharu_sentry::set_screenshot({
-        let screen = Arc::clone(&app.screen);
-        move || screen.snapshot()
+        let screen = app.screen.clone();
+        move || screen.screenshot()
     });
 
     let cef = Cef::default()
@@ -120,8 +119,9 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .manage(app)
         .invoke_handler(commands::handler())
         .setup(|tauri| {
-            tauri.state::<Arc<App>>().start(tauri.handle().clone());
-            Ok(screen::open(tauri.handle())?)
+            let app = tauri.state::<Arc<App>>();
+            app.start(tauri.handle().clone());
+            Ok(screen::open(tauri.handle(), &app.screen, app.gpu)?)
         })
         .run(context)?;
     Ok(())

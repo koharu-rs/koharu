@@ -18,7 +18,7 @@ import { call, dispatch } from '@/lib/backend'
 import { useImportPages, usePage, useProject } from '@/lib/queries'
 import { deletePages, movePage } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type ImportSource, type PageSummary } from '@koharu/bridge/protocol'
+import { commands, type ImportSource, type PageSummary } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   DropdownMenu,
@@ -444,7 +444,7 @@ function PageThumbnail({ page, version, label }: { page: string; version: string
 
   const thumbnail = useQuery({
     queryKey: ['thumbnail', page, version],
-    queryFn: async () => new Uint8Array(await call(commands.getThumbnail, page)),
+    queryFn: async () => new Uint8Array(await call(commands.getPageThumbnail, page)),
     enabled: settled,
     staleTime: Number.POSITIVE_INFINITY,
     notifyOnChangeProps: ['data'],

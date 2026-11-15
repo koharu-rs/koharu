@@ -133,6 +133,7 @@ smallvec = "1.16.5"
 specta = { version = "=2.0.0-rc.28", features = ["derive", "serde_json", "url", "uuid"] }
 specta-serde = "=0.0.15"
 specta-typescript = "=0.0.15"
+specta-util = "=0.0.15"
 static_assertions = "1.1.0"
 strum = { version = "0.28.0", features = ["derive"] }
 syn = { version = "3.0.10", features = ["full"] }
@@ -141,6 +142,7 @@ tauri = { git = "https://github.com/tauri-apps/tauri", rev = "17a527316d3aee46f7
     "compression",
     "dynamic-acl",
     "specta",
+    "tracing",
 ] }
 tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "17a527316d3aee46f7185c178d3b3122d8ebfd7b" }
 tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "17a527316d3aee46f7185c178d3b3122d8ebfd7b", features = ["build"] }

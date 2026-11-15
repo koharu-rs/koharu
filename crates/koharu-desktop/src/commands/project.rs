@@ -1,8 +1,7 @@
-//! The projects folder, the open project, and the page the canvas shows.
+//! The projects folder and the open project.
 
 use std::sync::Arc;
 
-use koharu_scene::PageId;
 use tauri::State;
 
 use super::Result;
@@ -66,18 +65,4 @@ pub fn get_open_project(app: State<'_, Arc<App>>) -> Option<String> {
         .lock()
         .as_ref()
         .map(|project| project.name.clone())
-}
-
-/// The page the canvas shows.
-#[tauri::command]
-#[specta::specta]
-pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
-    app.project.lock().as_ref().and_then(|project| project.page)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn show_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
-    let app = Arc::clone(&app);
-    Ok(tokio::task::spawn_blocking(move || app.show(page)).await??)
 }

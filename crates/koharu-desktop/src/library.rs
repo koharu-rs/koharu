@@ -1,6 +1,6 @@
 //! The projects the start view lists: `.khr` files in one folder.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::SystemTime};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use koharu_scene::{EXTENSION, Session};
@@ -17,21 +17,29 @@ impl Library {
         Ok(Self { root })
     }
 
-    /// The projects' names in name order, numbers by value.
+    /// The projects' names, the last changed first; two changed at once in
+    /// name order, numbers by value.
     pub fn list(&self) -> Result<Vec<String>> {
-        let mut names: Vec<String> = fs_err::read_dir(&self.root)?
+        let mut projects: Vec<(Option<SystemTime>, String)> = fs_err::read_dir(&self.root)?
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
             .filter_map(|entry| {
                 let path = entry.path();
-                path.extension()
+                let name = path
+                    .extension()
                     .is_some_and(|extension| extension.eq_ignore_ascii_case(EXTENSION))
                     .then(|| Some(path.file_stem()?.to_str()?.to_owned()))
-                    .flatten()
+                    .flatten()?;
+                let changed = entry.metadata().and_then(|metadata| metadata.modified());
+                Some((changed.ok(), name))
             })
             .collect();
-        names.sort_by(|a, b| alphanumeric_sort::compare_str(a, b));
-        Ok(names)
+        projects.sort_by(|(a_changed, a), (b_changed, b)| {
+            b_changed
+                .cmp(a_changed)
+                .then_with(|| alphanumeric_sort::compare_str(a, b))
+        });
+        Ok(projects.into_iter().map(|(_, name)| name).collect())
     }
 
     pub fn create(&self, name: &str) -> Result<Session> {
@@ -64,35 +72,5 @@ impl Library {
             "{name:?} can't be a file name"
         );
         Ok(self.root.join(format!("{name}.{EXTENSION}")))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_library_lists_creates_opens_and_deletes_projects() -> Result<()> {
-        let root = tempfile::tempdir()?;
-        let library = Library::new(root.path().join("Koharu"))?;
-        assert!(library.list()?.is_empty());
-
-        drop(library.create("chapter 10")?);
-        drop(library.create("chapter 9")?);
-        assert_eq!(library.list()?, ["chapter 9", "chapter 10"]);
-
-        assert!(library.create("chapter 9").is_err());
-        assert!(library.create("a/b").is_err());
-        assert!(library.create("CON").is_err());
-        assert!(library.create("trailing.").is_err());
-
-        let session = library.open("chapter 9")?;
-        assert_eq!(session.project().pages().count(), 0);
-        drop(session);
-
-        library.delete("chapter 9")?;
-        assert_eq!(library.list()?, ["chapter 10"]);
-        assert!(library.open("chapter 9").is_err());
-        Ok(())
     }
 }

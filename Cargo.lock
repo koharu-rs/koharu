@@ -5550,6 +5550,7 @@ dependencies = [
  "koharu-scene",
  "kurbo",
  "parking_lot 0.13.0",
+ "quick_cache",
  "serde",
  "serde_json",
  "specta",
@@ -5620,6 +5621,7 @@ dependencies = [
  "specta",
  "specta-serde",
  "specta-typescript",
+ "specta-util",
  "tauri",
  "tauri-plugin-log",
  "tauri-plugin-opener",
@@ -5629,7 +5631,6 @@ dependencies = [
  "tauri-plugin-window-state",
  "tauri-runtime-cef",
  "tauri-winit",
- "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
@@ -10515,6 +10516,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "specta-util"
+version = "0.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed24b868f6dec27caa846d02ea7ba6568fea4676dc7ebf27f2ca407f6b787d05"
+dependencies = [
+ "specta",
+]
+
+[[package]]
 name = "spin"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10870,6 +10880,7 @@ dependencies = [
  "tauri-utils",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
  "url",
  "window-vibrancy",
  "windows",

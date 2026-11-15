@@ -100,7 +100,7 @@ fn reader(path: &Path) -> Option<Reader> {
 /// theirs.
 #[tauri::command]
 #[specta::specta]
-pub async fn import(
+pub async fn import_pages(
     app: State<'_, Arc<App>>,
     window: Window<CefRuntime>,
     source: ImportSource,

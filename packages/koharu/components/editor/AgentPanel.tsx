@@ -6,10 +6,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call, savePreferences } from '@/lib/backend'
-import { trace } from '@/lib/sentry'
 import { useKoharuStore } from '@/lib/store'
 import { modelName, REASONING } from '@/lib/translation'
-import { commands, type AgentConfig, type AgentEvent } from '@koharu/bridge/protocol'
+import { commands, type AgentConfig, type AgentEvent } from '@koharu/ipc/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
@@ -200,7 +199,7 @@ export function AgentPanel() {
 
   function cancel() {
     if (running === null) return
-    void call(commands.cancelAgent, running).catch(() => undefined)
+    void call(commands.stopAgent, running).catch(() => undefined)
     // A cancelled run tells nothing more.
     setRunning(null)
     setActivity(null)
@@ -261,7 +260,7 @@ export function AgentPanel() {
       }
     }
     try {
-      const run = await call(commands.runAgent, message, channel, trace())
+      const run = await call(commands.runAgent, message, channel)
       if (!settled) setRunning(run)
     } catch (error) {
       updateAssistant(() => (error instanceof Error ? error.message : t('agent.failed')), true)

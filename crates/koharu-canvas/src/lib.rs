@@ -18,4 +18,5 @@ pub use canvas::Canvas;
 pub use effect::{Effect, Notice};
 pub use kurbo::{Point, Rect, Size, TranslateScale, Vec2};
 pub use settings::{Brush, Colors, Tool};
+pub use snapshot::Snapshot;
 pub use view::Camera;

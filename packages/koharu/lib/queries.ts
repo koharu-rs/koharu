@@ -17,7 +17,7 @@ import {
   type PageId,
   type PageSummary,
   type ProjectAnswer,
-} from '@koharu/bridge/protocol'
+} from '@koharu/ipc/protocol'
 
 import { call } from './backend'
 
@@ -44,8 +44,8 @@ const projectQuery = queryOptions({
     if (name === null) return null
     const [page, project, history] = await Promise.all([
       call(commands.getShownPage),
-      call(commands.query, { query: 'get_project' }),
-      call(commands.query, { query: 'get_history' }),
+      call(commands.queryScene, { query: 'get_project' }),
+      call(commands.queryScene, { query: 'get_history' }),
     ])
     const known = queryClient.getQueryData<ProjectView | null>(projectKey)
     return {
@@ -63,13 +63,13 @@ const pageQuery = queryOptions({
   queryFn: async (): Promise<Page | null> => {
     const page = await call(commands.getShownPage)
     if (page === null) return null
-    return (await call(commands.query, { query: 'get_page', page })) as Page
+    return (await call(commands.queryScene, { query: 'get_page', page })) as Page
   },
 })
 
 const fontsQuery = queryOptions({
   queryKey: fontsKey,
-  queryFn: () => call(commands.getFonts),
+  queryFn: () => call(commands.listFonts),
 })
 
 export const queryClient = new QueryClient({
@@ -136,7 +136,7 @@ export function useCommand<Args extends unknown[], Result>(
 
 /** Imports pages; the project's change arrives as an event. */
 export function useImportPages() {
-  const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing')
+  const { run, busy } = useCommand(['import-pages'], commands.importPages, 'navigator.importing')
   return { importPages: run, importing: busy }
 }
 

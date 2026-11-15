@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { StartView } from '@/components/start/StartView'
 import { queryClient, useProject } from '@/lib/queries'
-import { commands } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/ipc/protocol'
 
 function ProjectFlow() {
   const project = useProject().data
@@ -15,7 +15,7 @@ function ProjectFlow() {
 function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
-  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
+  vi.spyOn(commands, 'queryScene').mockImplementation(async (query) =>
     query.query === 'get_project'
       ? { id: 'project', version: '1', pages: [] }
       : { steps: [], current: 0 },

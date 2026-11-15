@@ -3,7 +3,7 @@
 // context. Vendored from getsentry/sentry-tauri js/index.ts at
 // f83b7225301e327884c3ba62a51bba6d324c3871 (v0.9.0). Divergence: the app starts
 // @sentry/nextjs itself (instrumentation-client.ts) with these options, so nothing is
-// injected, and `trace` continues the interface's trace in the backend.
+// injected, and every command carries the interface's trace in its headers.
 import type {
   BaseTransportOptions,
   Breadcrumb,
@@ -84,8 +84,12 @@ export const tauriOptions = {
   traceLifecycle: 'static',
 } satisfies BrowserOptions
 
-/** The current trace as a `sentry-trace` value, for a command whose backend work continues
+/** The current trace as headers, which every command sends so its backend work continues
  * it. */
-export function trace(): string | null {
-  return getTraceData()['sentry-trace'] ?? null
+export function traceHeaders(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(getTraceData()).filter((entry): entry is [string, string] =>
+      Boolean(entry[1]),
+    ),
+  )
 }

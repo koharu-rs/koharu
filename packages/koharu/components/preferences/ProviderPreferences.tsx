@@ -13,7 +13,7 @@ import {
 } from '@/components/preferences/PreferenceFields'
 import { call, refreshModels } from '@/lib/backend'
 import { queryClient } from '@/lib/queries'
-import { commands, type Providers } from '@koharu/bridge/protocol'
+import { commands, type Providers } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 
@@ -32,7 +32,7 @@ export function ProviderPreferences({
   const vendors = useQuery({
     queryKey: vendorsKey,
     queryFn: async () =>
-      Object.entries(await call(commands.getVendors)).map(([name, key]) => ({ name, key })),
+      Object.entries(await call(commands.listVendors)).map(([name, key]) => ({ name, key })),
   })
   return (
     <PreferencePage

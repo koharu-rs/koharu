@@ -1,4 +1,4 @@
-import type { Layer, LayerId, Text } from '@koharu/bridge/protocol'
+import type { Layer, LayerId, Text } from '@koharu/ipc/protocol'
 
 export type TextLayer = Extract<Layer, { kind: 'text' }>
 export type BlockLayer = Extract<Layer, { kind: 'block' }>

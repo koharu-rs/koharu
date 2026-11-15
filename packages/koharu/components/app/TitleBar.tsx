@@ -12,9 +12,8 @@ import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call, dispatch } from '@/lib/backend'
 import { useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
 import { deleteLayers } from '@/lib/scene'
-import { trace } from '@/lib/sentry'
 import { pipelineStages, useKoharuStore } from '@/lib/store'
-import { commands, type Stage, type Target } from '@koharu/bridge/protocol'
+import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
 import {
   Menubar,
   MenubarContent as UiMenubarContent,
@@ -46,12 +45,12 @@ export function TitleBar() {
   const { importPages, importing } = useImportPages()
   const { run: exportProject, busy: exporting } = useCommand(
     ['export-project'],
-    commands.export,
+    commands.exportPages,
     'menu.export',
   )
 
   const run = (target: Target, stages: Stage[] = [...pipelineStages]) =>
-    void call(commands.process, target, stages, trace()).catch(() => undefined)
+    void call(commands.runPipeline, target, stages).catch(() => undefined)
   const psdLabels = {
     background: t('psd.background'),
     cleanup: t('psd.cleanup'),
@@ -176,14 +175,14 @@ export function TitleBar() {
             <MenubarContent>
               <MenubarItem
                 disabled={!history || history.current === 0}
-                onClick={() => dispatch(commands.undo)}
+                onClick={() => dispatch(commands.undoEdit)}
               >
                 {t('menu.undo')}
                 <MenubarShortcut>Ctrl+Z</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
                 disabled={!history || history.current >= history.steps.length}
-                onClick={() => dispatch(commands.redo)}
+                onClick={() => dispatch(commands.redoEdit)}
               >
                 {t('menu.redo')}
                 <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>

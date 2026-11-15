@@ -1,12 +1,20 @@
-//! What a run tells the app as it goes, and what each run told so far.
+//! What a run tells the app as it goes, what each run told so far, and the
+//! spans each run leaves: one from its queuing to its end, made where it was
+//! asked for so it continues that trace, and one for each page stage while
+//! it runs.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use koharu_scene::PageId;
 use parking_lot::Mutex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, watch};
+use tracing::{Span, info_span};
 
 use crate::Stage;
 
@@ -64,8 +72,9 @@ pub enum Outcome {
     Stopped,
 }
 
-/// Where events go: every run's history, then whoever listens. Recording as
-/// they're sent means a history never misses one, however slow a listener.
+/// Where events go: every run's history and spans, then whoever listens.
+/// Recording as they're sent means a history never misses one, however
+/// slow a listener.
 #[derive(Clone)]
 pub(crate) struct Events {
     sender: broadcast::Sender<Event>,
@@ -76,6 +85,10 @@ struct Record {
     events: Vec<Event>,
     /// Whether the run ended, which a waiting history watches.
     ended: watch::Sender<bool>,
+    /// The run's span until it ends.
+    span: Option<Span>,
+    /// Each page stage's span while it runs.
+    stages: BTreeMap<(PageId, Stage), Span>,
 }
 
 impl Events {
@@ -98,8 +111,47 @@ impl Events {
         {
             let mut runs = self.runs.lock();
             let record = runs.entry(*run).or_insert_with(Record::new);
-            if let Event::Ended { .. } = &event {
-                record.ended.send_replace(true);
+            match &event {
+                // Sent by `Pipeline::run`, on its caller's thread.
+                Event::Queued { run, steps } => {
+                    record.span = Some(info_span!(
+                        "pipeline run",
+                        sentry.op = "pipeline.run",
+                        run = run.0,
+                        steps,
+                        outcome = tracing::field::Empty,
+                    ));
+                }
+                Event::Started { page, stage, .. } => {
+                    if let Some(span) = &record.span {
+                        let stage_span = info_span!(
+                            parent: span,
+                            "pipeline stage",
+                            sentry.op = "pipeline.stage",
+                            %stage,
+                            %page,
+                        );
+                        record.stages.insert((*page, *stage), stage_span);
+                    }
+                }
+                Event::Finished { page, stage, .. } => {
+                    record.stages.remove(&(*page, *stage));
+                }
+                Event::Ended { outcome, .. } => {
+                    record.ended.send_replace(true);
+                    // A failed or stopped run leaves stages it never finished.
+                    record.stages.clear();
+                    if let Some(span) = record.span.take() {
+                        span.record(
+                            "outcome",
+                            match outcome {
+                                Outcome::Done => "done",
+                                Outcome::Failed { .. } => "failed",
+                                Outcome::Stopped => "stopped",
+                            },
+                        );
+                    }
+                }
             }
             record.events.push(event.clone());
         }
@@ -132,6 +184,8 @@ impl Record {
         Self {
             events: Vec::new(),
             ended: watch::channel(false).0,
+            span: None,
+            stages: BTreeMap::new(),
         }
     }
 }

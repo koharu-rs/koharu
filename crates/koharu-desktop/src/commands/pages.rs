@@ -1,13 +1,13 @@
-//! The pages rail's thumbnails.
+//! The pages: the one the canvas shows, and the pages rail's thumbnails.
 
 use std::sync::Arc;
 
-use anyhow::ensure;
+use anyhow::{Context as _, ensure};
 use koharu_scene::PageId;
 use tauri::State;
 
 use super::{Bytes, Result};
-use crate::app::App;
+use crate::{app::App, events};
 
 /// How tall a thumbnail is, in pixels.
 const HEIGHT: u32 = 256;
@@ -15,7 +15,7 @@ const HEIGHT: u32 = 256;
 /// The page as it renders, `HEIGHT` pixels tall, as WebP.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Bytes> {
+pub async fn get_page_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Bytes> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || {
         let session = app.session()?;
@@ -27,6 +27,31 @@ pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Byt
         let image = image::imageops::thumbnail(&raster.image, u32::try_from(scaled)?, HEIGHT);
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
         Ok(Bytes(encoder.encode(80.0).to_vec()))
+    })
+    .await??)
+}
+
+/// The page the canvas shows.
+#[tauri::command]
+#[specta::specta]
+pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
+    app.project.lock().as_ref().and_then(|project| project.page)
+}
+
+/// Shows `page` on the canvas.
+#[tauri::command]
+#[specta::specta]
+pub async fn show_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
+    let app = Arc::clone(&app);
+    Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        {
+            let mut project = app.project.lock();
+            let project = project.as_mut().context("no project is open")?;
+            project.session.lock().project().page(page)?;
+            project.page = Some(page);
+        }
+        app.emit(events::PAGE, Some(page));
+        app.refresh()
     })
     .await??)
 }

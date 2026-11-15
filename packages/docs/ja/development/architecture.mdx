@@ -8,15 +8,15 @@ Koharu はデスクトップアプリです。React が型付き Tauri コマン
 
 ```mermaid
 flowchart TB
-  ui["packages/koharu: React + Next.js"] --> bridge["packages/bridge: プロトコル + WASM"]
+  ui["packages/koharu: React + Next.js"] --> ipc["packages/ipc: プロトコル + WASM"]
   entry["crates/koharu: 起動"] --> app["koharu-app"]
-  bridge -->|"コマンドとチャンネル"| app
+  ipc -->|"コマンドとチャンネル"| app
   app --> scene["koharu-scene"]
   app --> pipeline["koharu-pipeline"] --> ml["koharu-ml"] --> runtime["koharu-runtime"] --> native["ネイティブランタイム"]
   app --> llm["koharu-llm"]
   pipeline --> llm
   app --> desktop["koharu-desktop"] --> renderer["koharu-renderer"] --> rasterizer["koharu-rasterizer"]
-  bridge --> canvas["koharu-canvas"] --> rasterizer
+  ipc --> canvas["koharu-canvas"] --> rasterizer
   app --> psd["koharu-psd"] --> renderer
   psd --> rasterizer
 ```
@@ -27,14 +27,14 @@ flowchart TB
 | ----------------- | ----------------------------------------------------------------------------------------------------------- |
 | `packages/koharu` | プロジェクト一覧、ページ一覧、キャンバス操作、インスペクター、設定、アクティビティ、Agent、一時的な操作状態 |
 | `packages/ui`     | 共通 React 部品とスタイル                                                                                   |
-| `packages/bridge` | 生成 Tauri プロトコル、ブラウザーキャンバスアダプター、派生 WASM パッケージ                                 |
+| `packages/ipc` | 生成 Tauri プロトコル、ブラウザーキャンバスアダプター、派生 WASM パッケージ                                 |
 | `crates/koharu`   | 起動、診断、Tauri 設定、ビルド統合                                                                          |
 | `koharu-app`      | Tauri 状態、プロジェクトのライフサイクル、コマンド直列化、ジョブ、同期、Agent ホスト                        |
 
 独立した型付きチャンネルがプロジェクト、キャンバス、ジョブ、ダウンロード、リソースの更新を運びます。Agent のサインインと実行は呼び出しごとのチャンネルでストリーミングします。設定はコマンドで取得・保存します。UI は HTTP クライアントや汎用アプリイベントの封筒を使いません。
 
 <Note>
-  `packages/bridge/src/protocol.ts` は Rust 署名から生成します。Rust
+  `packages/ipc/src/protocol.ts` は Rust 署名から生成します。Rust
   を変更して[バインディングを再生成](/ja/development/setup)してください。
 </Note>
 

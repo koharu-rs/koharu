@@ -200,14 +200,14 @@ impl Compositor {
     }
 
     /// Draws a frame of the window's `size`, from CEF's latest paints and
-    /// the canvas's texture in its viewport, and answers `capture` with it.
+    /// the canvas's texture in its viewport, and answers `captures` with it.
     pub fn present(
         &mut self,
         gpu: &Gpu,
         size: (u32, u32),
         painted: &mut Painted,
         canvas: Option<(&wgpu::Texture, Rect)>,
-        capture: Option<oneshot::Sender<RgbaImage>>,
+        captures: Vec<oneshot::Sender<RgbaImage>>,
     ) -> Result<()> {
         if (self.config.width, self.config.height) != size {
             (self.config.width, self.config.height) = size;
@@ -260,8 +260,11 @@ impl Compositor {
         self.draw(gpu, &target);
         gpu.queue.present(frame);
 
-        if let Some(capture) = capture {
-            let _ = capture.send(self.capture(gpu, size)?);
+        if !captures.is_empty() {
+            let image = self.capture(gpu, size)?;
+            for capture in captures {
+                let _ = capture.send(image.clone());
+            }
         }
         Ok(())
     }

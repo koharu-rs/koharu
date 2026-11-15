@@ -12,7 +12,7 @@ import {
   PreferenceSection,
   TextField,
 } from '@/components/preferences/PreferenceFields'
-import type { Detector, Inpainter, PipelineConfig, Recognizer } from '@koharu/bridge/protocol'
+import type { Detector, Inpainter, PipelineConfig, Recognizer } from '@koharu/ipc/protocol'
 import {
   Select,
   SelectContent,

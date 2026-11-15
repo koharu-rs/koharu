@@ -2,11 +2,12 @@
 //! canvas, composited with wgpu on the window's own surface, and the
 //! window's input routed to one or the other.
 //!
-//! CEF's UI thread is the event loop's: the runtime drives CEF through its
-//! external message pump, so the render handler, the cursor handler, and
-//! `on_window_event` all run on the main thread. CEF may call the render
-//! handler back from inside a call into it, so no lock here is held across a
-//! call into CEF.
+//! The main thread owns all of it. CEF's UI thread is the event loop's: the
+//! runtime drives CEF through its external message pump, so the render
+//! handler, the cursor handler, and `on_window_event` all run there, and
+//! other threads reach the window through `Screen`, whose changes run there
+//! in the order asked. CEF may call the render handler back from inside a
+//! call into it, so nothing borrows the window across a call into CEF.
 
 mod compose;
 mod input;
@@ -14,20 +15,18 @@ mod keys;
 mod paint;
 
 use std::{
+    cell::RefCell,
     io::Cursor,
-    sync::{
-        Arc, OnceLock,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{Arc, OnceLock},
     thread,
     time::{Duration, Instant},
 };
 
 use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Tool};
-use koharu_renderer::{Frame, Gpu};
-use parking_lot::Mutex;
+use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Snapshot, Tool};
+use koharu_renderer::Gpu;
+use koharu_scene::LayerId;
 use tauri::{AppHandle, LogicalPosition, Manager as _, webview::WebviewBuilder};
 use tauri_runtime_cef::{
     AsCefWebviewAttributes as _, CefRuntime, Offscreen, OffscreenView, WebviewBuilderCefExt as _,
@@ -43,272 +42,147 @@ use winit::{
     window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData, Window},
 };
 
-use self::{compose::Compositor, input::Input, paint::Painted};
-use crate::app::App;
-
 pub use self::input::Pointer;
-
-/// An error event's window image: its longer side, its JPEG quality, and
-/// how long it waits for the frame.
-const SNAPSHOT_SIDE: u32 = 1600;
-const SNAPSHOT_QUALITY: u8 = 80;
-const SNAPSHOT_WAIT: Duration = Duration::from_secs(1);
+use self::{compose::Compositor, input::Input, paint::Painted};
+use crate::{app::App, events};
 
 /// The window's label in `tauri.conf.json`, and its webview's.
 pub const MAIN: &str = "main";
 
-/// What the main window shows, shared between the main thread, where CEF
-/// paints and winit delivers events, and the commands.
-pub struct Screen {
-    gpu: &'static Gpu,
-    /// The webview's layout, which the runtime keeps current; set when CEF
-    /// creates the browser.
-    pub view: OnceLock<OffscreenView>,
-    pub painted: Mutex<Painted>,
-    /// A `capture_window` waiting for the next composited frame.
-    pub capture: Mutex<Option<oneshot::Sender<RgbaImage>>>,
-    /// The open project's canvas.
-    canvas: Mutex<Option<Canvas>>,
-    /// The canvas element's rectangle, in CSS pixels.
-    viewport: Mutex<Rect>,
-    /// What the interface set, for a canvas made later.
-    settings: Mutex<Settings>,
-    /// The camera as the interface last heard it.
-    camera: Mutex<Option<Camera>>,
-    /// The browser CEF first paints for, which input reaches through its
-    /// host.
-    browser: Mutex<Option<Browser>>,
-    input: Mutex<Input>,
-    /// CEF's cursor, put back when the pointer leaves the canvas; `None`
-    /// hides it.
-    web_cursor: Mutex<Option<CursorIcon>>,
-    compositor: Mutex<Option<Compositor>>,
-    ime: AtomicBool,
+thread_local! {
+    /// The main window, on the main thread, from `open` until it's
+    /// destroyed.
+    static WINDOW: RefCell<Option<Main>> = const { RefCell::new(None) };
 }
 
-#[derive(Clone, Copy, Default)]
-struct Settings {
-    tool: Tool,
-    brush: Brush,
-    colors: Colors,
+/// Runs `f` on the main window, if this is the main thread and it's open.
+fn with<T>(f: impl FnOnce(&mut Main) -> T) -> Option<T> {
+    WINDOW.with_borrow_mut(|main| main.as_mut().map(f))
 }
+
+/// Runs `change` on the main window, draws it again, and tells the
+/// interface where the page shows if that moved, once the borrow is over.
+fn change(change: impl FnOnce(&mut Main)) {
+    let moved = with(|main| {
+        change(main);
+        main.request_redraw();
+        main.moved()
+    })
+    .flatten();
+    if let Some((handle, camera)) = moved {
+        events::CAMERA.tell(&handle, camera);
+    }
+}
+
+/// The main window as other threads reach it: each change runs on the main
+/// thread, in the order asked, and draws again. Before the window opens, as
+/// in tests, which open none, a change goes nowhere.
+#[derive(Clone, Default)]
+pub struct Screen(Arc<OnceLock<AppHandle<CefRuntime>>>);
 
 impl Screen {
-    pub fn new(gpu: &'static Gpu) -> Self {
-        Self {
-            gpu,
-            view: OnceLock::new(),
-            painted: Mutex::new(Painted::default()),
-            capture: Mutex::new(None),
-            canvas: Mutex::new(None),
-            viewport: Mutex::new(Rect::ZERO),
-            settings: Mutex::new(Settings::default()),
-            camera: Mutex::new(None),
-            browser: Mutex::new(None),
-            input: Mutex::new(Input::default()),
-            web_cursor: Mutex::new(Some(CursorIcon::Default)),
-            compositor: Mutex::new(None),
-            ime: AtomicBool::new(false),
+    fn change(&self, change: impl FnOnce(&mut Main) + Send + 'static) {
+        let Some(handle) = self.0.get() else {
+            return;
+        };
+        if let Err(error) = handle.run_on_main_thread(move || self::change(change)) {
+            tracing::warn!("failed to change the window: {error}");
         }
     }
 
-    pub fn request_redraw(&self) {
-        if let Some(view) = self.view.get() {
-            view.request_redraw();
-        }
+    /// The open project's canvas, set up as the interface asked, or none.
+    pub fn set_canvas(&self, canvas: Option<Canvas>) {
+        self.change(move |main| main.set_canvas(canvas));
     }
 
-    fn window(&self) -> Option<Arc<dyn Window>> {
-        self.view.get().and_then(OffscreenView::window)
-    }
-
-    /// Physical pixels to a device-independent one.
-    fn scale(&self) -> f64 {
-        self.window().map_or(1.0, |window| window.scale_factor())
-    }
-
-    /// The canvas's place in the window, in whole physical pixels.
-    fn physical_viewport(&self) -> Rect {
-        let scale = self.scale();
-        let viewport = *self.viewport.lock();
-        Rect::new(
-            (viewport.x0 * scale).round(),
-            (viewport.y0 * scale).round(),
-            (viewport.x1 * scale).round(),
-            (viewport.y1 * scale).round(),
-        )
-    }
-
-    /// Shows `canvas`, set up as the interface asked.
-    pub fn show(&self, mut canvas: Canvas) {
-        let settings = *self.settings.lock();
-        canvas.set_viewport(self.physical_viewport(), self.scale());
-        canvas.set_tool(settings.tool);
-        canvas.set_brush(settings.brush);
-        canvas.set_colors(settings.colors);
-        *self.canvas.lock() = Some(canvas);
-        self.request_redraw();
-    }
-
-    pub fn hide(&self) {
-        *self.canvas.lock() = None;
-        *self.camera.lock() = None;
-    }
-
-    pub fn set_frame(&self, frame: Frame) {
-        self.with_canvas(|canvas| canvas.set_frame(frame));
-    }
-
-    /// Runs `f` on the canvas, if a project is open.
-    pub fn with_canvas<T>(&self, f: impl FnOnce(&mut Canvas) -> T) -> Option<T> {
-        self.canvas.lock().as_mut().map(f)
+    /// What the canvas shows, after a change.
+    pub fn show(&self, snapshot: Snapshot) {
+        self.change(move |main| {
+            if let Some(canvas) = &mut main.canvas {
+                canvas.show(snapshot);
+            }
+        });
     }
 
     /// Moves the canvas to the element's rectangle, in CSS pixels.
     pub fn set_viewport(&self, viewport: Rect) {
-        *self.viewport.lock() = viewport;
-        self.rescale();
-    }
-
-    /// Places the canvas again for the window's scale.
-    fn rescale(&self) {
-        let (viewport, scale) = (self.physical_viewport(), self.scale());
-        self.with_canvas(|canvas| canvas.set_viewport(viewport, scale));
-        self.request_redraw();
+        self.change(move |main| {
+            main.viewport = viewport;
+            main.place();
+        });
     }
 
     pub fn set_tool(&self, tool: Tool) {
-        self.settings.lock().tool = tool;
-        self.with_canvas(|canvas| canvas.set_tool(tool));
-        self.request_redraw();
+        self.change(move |main| {
+            main.settings.tool = tool;
+            if let Some(canvas) = &mut main.canvas {
+                canvas.set_tool(tool);
+            }
+        });
     }
 
     pub fn set_brush(&self, brush: Brush) {
-        self.settings.lock().brush = brush;
-        self.with_canvas(|canvas| canvas.set_brush(brush));
-        self.request_redraw();
+        self.change(move |main| {
+            main.settings.brush = brush;
+            if let Some(canvas) = &mut main.canvas {
+                canvas.set_brush(brush);
+            }
+        });
     }
 
     pub fn set_colors(&self, colors: Colors) {
-        self.settings.lock().colors = colors;
-        self.with_canvas(|canvas| canvas.set_colors(colors));
-        self.request_redraw();
-    }
-
-    /// The camera, if it moved since the interface last heard it.
-    pub fn camera(&self) -> Option<Camera> {
-        let camera = self.with_canvas(|canvas| canvas.placement())?;
-        let mut last = self.camera.lock();
-        (*last != Some(camera)).then(|| *last.insert(camera))
-    }
-
-    fn host(&self) -> Option<BrowserHost> {
-        self.browser
-            .lock()
-            .as_ref()
-            .and_then(|browser| browser.host())
-    }
-
-    /// Keeps the browser the render handler is first called with.
-    fn remember(&self, browser: Option<&mut Browser>) {
-        if let Some(browser) = browser {
-            self.browser.lock().get_or_insert_with(|| browser.clone());
-        }
-    }
-
-    /// Takes the keyboard focus from the page's focused field, as a press
-    /// on the canvas would in a browser.
-    fn blur(&self) {
-        let frame = self
-            .browser
-            .lock()
-            .as_ref()
-            .and_then(|browser| browser.main_frame());
-        if let Some(frame) = frame {
-            frame.execute_java_script(
-                Some(&CefString::from(
-                    "document.activeElement instanceof HTMLElement && document.activeElement.blur()",
-                )),
-                None,
-                0,
-            );
-        }
-    }
-
-    /// CEF's cursor, over its page.
-    fn set_web_cursor(&self, cursor: CursorType) {
-        let icon = match cursor.as_ref() {
-            cef_cursor_type_t::CT_NONE => None,
-            cef_cursor_type_t::CT_CROSS => Some(CursorIcon::Crosshair),
-            cef_cursor_type_t::CT_HAND => Some(CursorIcon::Pointer),
-            cef_cursor_type_t::CT_IBEAM => Some(CursorIcon::Text),
-            cef_cursor_type_t::CT_VERTICALTEXT => Some(CursorIcon::VerticalText),
-            cef_cursor_type_t::CT_WAIT => Some(CursorIcon::Wait),
-            cef_cursor_type_t::CT_PROGRESS => Some(CursorIcon::Progress),
-            cef_cursor_type_t::CT_HELP => Some(CursorIcon::Help),
-            cef_cursor_type_t::CT_EASTRESIZE => Some(CursorIcon::EResize),
-            cef_cursor_type_t::CT_NORTHRESIZE => Some(CursorIcon::NResize),
-            cef_cursor_type_t::CT_NORTHEASTRESIZE => Some(CursorIcon::NeResize),
-            cef_cursor_type_t::CT_NORTHWESTRESIZE => Some(CursorIcon::NwResize),
-            cef_cursor_type_t::CT_SOUTHRESIZE => Some(CursorIcon::SResize),
-            cef_cursor_type_t::CT_SOUTHEASTRESIZE => Some(CursorIcon::SeResize),
-            cef_cursor_type_t::CT_SOUTHWESTRESIZE => Some(CursorIcon::SwResize),
-            cef_cursor_type_t::CT_WESTRESIZE => Some(CursorIcon::WResize),
-            cef_cursor_type_t::CT_NORTHSOUTHRESIZE => Some(CursorIcon::NsResize),
-            cef_cursor_type_t::CT_EASTWESTRESIZE => Some(CursorIcon::EwResize),
-            cef_cursor_type_t::CT_NORTHEASTSOUTHWESTRESIZE => Some(CursorIcon::NeswResize),
-            cef_cursor_type_t::CT_NORTHWESTSOUTHEASTRESIZE => Some(CursorIcon::NwseResize),
-            cef_cursor_type_t::CT_COLUMNRESIZE => Some(CursorIcon::ColResize),
-            cef_cursor_type_t::CT_ROWRESIZE => Some(CursorIcon::RowResize),
-            cef_cursor_type_t::CT_MIDDLEPANNING
-            | cef_cursor_type_t::CT_EASTPANNING
-            | cef_cursor_type_t::CT_NORTHPANNING
-            | cef_cursor_type_t::CT_NORTHEASTPANNING
-            | cef_cursor_type_t::CT_NORTHWESTPANNING
-            | cef_cursor_type_t::CT_SOUTHPANNING
-            | cef_cursor_type_t::CT_SOUTHEASTPANNING
-            | cef_cursor_type_t::CT_SOUTHWESTPANNING
-            | cef_cursor_type_t::CT_WESTPANNING
-            | cef_cursor_type_t::CT_MOVE => Some(CursorIcon::Move),
-            cef_cursor_type_t::CT_CELL => Some(CursorIcon::Cell),
-            cef_cursor_type_t::CT_CONTEXTMENU => Some(CursorIcon::ContextMenu),
-            cef_cursor_type_t::CT_ALIAS => Some(CursorIcon::Alias),
-            cef_cursor_type_t::CT_NODROP | cef_cursor_type_t::CT_NOTALLOWED => {
-                Some(CursorIcon::NotAllowed)
+        self.change(move |main| {
+            main.settings.colors = colors;
+            if let Some(canvas) = &mut main.canvas {
+                canvas.set_colors(colors);
             }
-            cef_cursor_type_t::CT_COPY => Some(CursorIcon::Copy),
-            cef_cursor_type_t::CT_ZOOMIN => Some(CursorIcon::ZoomIn),
-            cef_cursor_type_t::CT_ZOOMOUT => Some(CursorIcon::ZoomOut),
-            cef_cursor_type_t::CT_GRAB => Some(CursorIcon::Grab),
-            cef_cursor_type_t::CT_GRABBING => Some(CursorIcon::Grabbing),
-            _ => Some(CursorIcon::Default),
-        };
-        *self.web_cursor.lock() = icon;
-        if self.input.lock().over_web()
-            && let Some(window) = self.window()
-        {
-            set_cursor(window.as_ref(), icon);
-        }
+        });
     }
 
-    /// The window as its next frame shows it, downscaled to fit
-    /// `SNAPSHOT_SIDE` and as JPEG, for an error event. The main thread
-    /// draws that frame, so there it's `None`, as when no frame comes in
-    /// `SNAPSHOT_WAIT` or another capture is waiting.
-    pub fn snapshot(&self) -> Option<Vec<u8>> {
+    /// Fits the page in the canvas.
+    pub fn fit(&self) {
+        self.change(|main| {
+            if let Some(canvas) = &mut main.canvas {
+                canvas.fit();
+            }
+        });
+    }
+
+    /// Zooms about the canvas's centre, `zoom` CSS pixels to a page pixel.
+    pub fn zoom_to(&self, zoom: f64) {
+        self.change(move |main| {
+            if let Some(canvas) = &mut main.canvas {
+                canvas.zoom_to(zoom);
+            }
+        });
+    }
+
+    pub fn select(&self, layers: Vec<LayerId>) {
+        self.change(move |main| {
+            if let Some(canvas) = &mut main.canvas {
+                canvas.select(layers);
+            }
+        });
+    }
+
+    /// The window as its next composited frame shows it: the canvas and
+    /// CEF's paint together.
+    pub fn capture(&self) -> oneshot::Receiver<RgbaImage> {
+        let (sender, receiver) = oneshot::channel();
+        self.change(move |main| main.captures.push(sender));
+        receiver
+    }
+
+    /// The window as its next frame shows it, its longer side at most 1600
+    /// pixels and as JPEG at quality 80, for an error event. The main
+    /// thread draws that frame, so there it's `None`, as when no frame
+    /// comes within a second.
+    pub fn screenshot(&self) -> Option<Vec<u8>> {
         if thread::current().name() == Some("main") {
             return None;
         }
-        let (sender, mut receiver) = oneshot::channel();
-        {
-            let mut capture = self.capture.lock();
-            if capture.as_ref().is_some_and(|waiting| !waiting.is_closed()) {
-                return None;
-            }
-            *capture = Some(sender);
-        }
-        self.request_redraw();
-        let deadline = Instant::now() + SNAPSHOT_WAIT;
+        let mut receiver = self.capture();
+        let deadline = Instant::now() + Duration::from_secs(1);
         let image = loop {
             match receiver.try_recv() {
                 Ok(image) => break DynamicImage::ImageRgba8(image),
@@ -318,44 +192,153 @@ impl Screen {
                 Err(_) => return None,
             }
         };
-        let image = if image.width().max(image.height()) > SNAPSHOT_SIDE {
-            image.resize(SNAPSHOT_SIDE, SNAPSHOT_SIDE, FilterType::Triangle)
+        let image = if image.width().max(image.height()) > 1600 {
+            image.resize(1600, 1600, FilterType::Triangle)
         } else {
             image
         };
         let mut jpeg = Cursor::new(Vec::new());
-        JpegEncoder::new_with_quality(&mut jpeg, SNAPSHOT_QUALITY)
+        JpegEncoder::new_with_quality(&mut jpeg, 80)
             .encode_image(&image.to_rgb8())
             .ok()?;
         Some(jpeg.into_inner())
     }
+}
 
-    /// Composites the canvas and CEF's paint on the window, and answers a
-    /// waiting capture with the same frame.
-    fn present(&self, window: &Arc<dyn Window>) {
+/// The main window as the main thread holds it.
+struct Main {
+    gpu: &'static Gpu,
+    /// Tells the interface where the page shows.
+    handle: AppHandle<CefRuntime>,
+    /// The webview's layout, which the runtime keeps current; set when CEF
+    /// creates the browser.
+    view: Option<OffscreenView>,
+    painted: Painted,
+    /// Captures waiting for the next composited frame.
+    captures: Vec<oneshot::Sender<RgbaImage>>,
+    /// The open project's canvas.
+    canvas: Option<Canvas>,
+    /// The canvas element's rectangle, in CSS pixels.
+    viewport: Rect,
+    /// What the interface set, for a canvas made later.
+    settings: Settings,
+    /// The camera as the interface last heard it.
+    camera: Option<Camera>,
+    /// The browser CEF first paints for, which input reaches through its
+    /// host.
+    browser: Option<Browser>,
+    input: Input,
+    /// CEF's cursor, put back when the pointer leaves the canvas; `None`
+    /// hides it.
+    web_cursor: Option<CursorIcon>,
+    compositor: Option<Compositor>,
+    /// Whether the input method composes for the page yet.
+    ime: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+struct Settings {
+    tool: Tool,
+    brush: Brush,
+    colors: Colors,
+}
+
+impl Main {
+    fn request_redraw(&self) {
+        if let Some(view) = &self.view {
+            view.request_redraw();
+        }
+    }
+
+    fn window(&self) -> Option<Arc<dyn Window>> {
+        self.view.as_ref().and_then(OffscreenView::window)
+    }
+
+    /// Physical pixels to a device-independent one.
+    fn scale(&self) -> f64 {
+        self.window().map_or(1.0, |window| window.scale_factor())
+    }
+
+    /// The canvas's place in the window, in whole physical pixels.
+    fn physical_viewport(&self) -> Rect {
+        let (scale, viewport) = (self.scale(), self.viewport);
+        Rect::new(
+            (viewport.x0 * scale).round(),
+            (viewport.y0 * scale).round(),
+            (viewport.x1 * scale).round(),
+            (viewport.y1 * scale).round(),
+        )
+    }
+
+    fn set_canvas(&mut self, canvas: Option<Canvas>) {
+        let (viewport, scale, settings) = (self.physical_viewport(), self.scale(), self.settings);
+        self.canvas = canvas.map(|mut canvas| {
+            canvas.set_viewport(viewport, scale);
+            canvas.set_tool(settings.tool);
+            canvas.set_brush(settings.brush);
+            canvas.set_colors(settings.colors);
+            canvas
+        });
+        if self.canvas.is_none() {
+            self.camera = None;
+        }
+    }
+
+    /// Places the canvas in the window again, for its viewport and scale.
+    fn place(&mut self) {
+        let (viewport, scale) = (self.physical_viewport(), self.scale());
+        if let Some(canvas) = &mut self.canvas {
+            canvas.set_viewport(viewport, scale);
+        }
+    }
+
+    /// The camera, with the handle to tell it through, if it moved since
+    /// the interface last heard it.
+    fn moved(&mut self) -> Option<(AppHandle<CefRuntime>, Camera)> {
+        let camera = self.canvas.as_ref()?.placement();
+        (self.camera != Some(camera)).then(|| {
+            self.camera = Some(camera);
+            (self.handle.clone(), camera)
+        })
+    }
+
+    fn host(&self) -> Option<BrowserHost> {
+        self.browser.as_ref().and_then(|browser| browser.host())
+    }
+
+    /// CEF's cursor, over its page.
+    fn set_web_cursor(&mut self, cursor: CursorType) {
+        self.web_cursor = icon(cursor);
+        if self.input.over_web()
+            && let Some(window) = self.window()
+        {
+            set_cursor(window.as_ref(), self.web_cursor);
+        }
+    }
+
+    /// Composites the canvas and CEF's paint on the window, and answers the
+    /// waiting captures with the same frame.
+    fn present(&mut self, window: &Arc<dyn Window>) {
         let size = window.surface_size();
         // A minimized window has no surface to draw on; the restore's
         // resize draws again.
         if size.width == 0 || size.height == 0 {
             return;
         }
-        let gpu = self.gpu;
-        let mut compositor = self.compositor.lock();
-        if compositor.is_none() {
-            match Compositor::new(gpu, Arc::clone(window)) {
-                Ok(created) => *compositor = Some(created),
+        if self.compositor.is_none() {
+            match Compositor::new(self.gpu, Arc::clone(window)) {
+                Ok(created) => self.compositor = Some(created),
                 Err(error) => {
                     tracing::error!("failed to create the window's surface: {error:#}");
                     return;
                 }
             }
         }
-        let Some(compositor) = compositor.as_mut() else {
+        let origin = self.physical_viewport().origin();
+        let Some(compositor) = self.compositor.as_mut() else {
             return;
         };
-        let origin = self.physical_viewport().origin();
-        let mut canvas = self.canvas.lock();
-        let canvas = canvas.as_mut().and_then(|canvas| {
+        let canvas = self.canvas.as_mut().and_then(|canvas| {
             if let Err(error) = canvas.draw() {
                 tracing::error!("failed to draw the canvas: {error:#}");
             }
@@ -364,33 +347,65 @@ impl Screen {
                 (texture, Rect::from_origin_size(origin, size))
             })
         });
-        let capture = self.capture.lock().take();
         if let Err(error) = compositor.present(
-            gpu,
+            self.gpu,
             (size.width, size.height),
-            &mut self.painted.lock(),
+            &mut self.painted,
             canvas,
-            capture,
+            std::mem::take(&mut self.captures),
         ) {
             tracing::error!("failed to present the window: {error:#}");
         }
     }
+}
 
-    /// Lets the input method compose text for the page, with its candidate
-    /// window placed from CEF's composition bounds as they arrive.
-    fn enable_ime(&self, window: &dyn Window) {
-        if self.ime.swap(true, Ordering::Relaxed) {
-            return;
+/// The winit cursor of CEF's.
+fn icon(cursor: CursorType) -> Option<CursorIcon> {
+    match cursor.as_ref() {
+        cef_cursor_type_t::CT_NONE => None,
+        cef_cursor_type_t::CT_CROSS => Some(CursorIcon::Crosshair),
+        cef_cursor_type_t::CT_HAND => Some(CursorIcon::Pointer),
+        cef_cursor_type_t::CT_IBEAM => Some(CursorIcon::Text),
+        cef_cursor_type_t::CT_VERTICALTEXT => Some(CursorIcon::VerticalText),
+        cef_cursor_type_t::CT_WAIT => Some(CursorIcon::Wait),
+        cef_cursor_type_t::CT_PROGRESS => Some(CursorIcon::Progress),
+        cef_cursor_type_t::CT_HELP => Some(CursorIcon::Help),
+        cef_cursor_type_t::CT_EASTRESIZE => Some(CursorIcon::EResize),
+        cef_cursor_type_t::CT_NORTHRESIZE => Some(CursorIcon::NResize),
+        cef_cursor_type_t::CT_NORTHEASTRESIZE => Some(CursorIcon::NeResize),
+        cef_cursor_type_t::CT_NORTHWESTRESIZE => Some(CursorIcon::NwResize),
+        cef_cursor_type_t::CT_SOUTHRESIZE => Some(CursorIcon::SResize),
+        cef_cursor_type_t::CT_SOUTHEASTRESIZE => Some(CursorIcon::SeResize),
+        cef_cursor_type_t::CT_SOUTHWESTRESIZE => Some(CursorIcon::SwResize),
+        cef_cursor_type_t::CT_WESTRESIZE => Some(CursorIcon::WResize),
+        cef_cursor_type_t::CT_NORTHSOUTHRESIZE => Some(CursorIcon::NsResize),
+        cef_cursor_type_t::CT_EASTWESTRESIZE => Some(CursorIcon::EwResize),
+        cef_cursor_type_t::CT_NORTHEASTSOUTHWESTRESIZE => Some(CursorIcon::NeswResize),
+        cef_cursor_type_t::CT_NORTHWESTSOUTHEASTRESIZE => Some(CursorIcon::NwseResize),
+        cef_cursor_type_t::CT_COLUMNRESIZE => Some(CursorIcon::ColResize),
+        cef_cursor_type_t::CT_ROWRESIZE => Some(CursorIcon::RowResize),
+        cef_cursor_type_t::CT_MIDDLEPANNING
+        | cef_cursor_type_t::CT_EASTPANNING
+        | cef_cursor_type_t::CT_NORTHPANNING
+        | cef_cursor_type_t::CT_NORTHEASTPANNING
+        | cef_cursor_type_t::CT_NORTHWESTPANNING
+        | cef_cursor_type_t::CT_SOUTHPANNING
+        | cef_cursor_type_t::CT_SOUTHEASTPANNING
+        | cef_cursor_type_t::CT_SOUTHWESTPANNING
+        | cef_cursor_type_t::CT_WESTPANNING
+        | cef_cursor_type_t::CT_MOVE => Some(CursorIcon::Move),
+        cef_cursor_type_t::CT_CELL => Some(CursorIcon::Cell),
+        cef_cursor_type_t::CT_CONTEXTMENU => Some(CursorIcon::ContextMenu),
+        cef_cursor_type_t::CT_ALIAS => Some(CursorIcon::Alias),
+        cef_cursor_type_t::CT_NODROP | cef_cursor_type_t::CT_NOTALLOWED => {
+            Some(CursorIcon::NotAllowed)
         }
-        let request = ImeEnableRequest::new(
-            ImeCapabilities::new().with_cursor_area(),
-            ImeRequestData::default(),
-        );
-        if let Some(request) = request
-            && let Err(error) = window.request_ime_update(ImeRequest::Enable(request))
-        {
-            tracing::warn!("the window has no input method: {error}");
-        }
+        cef_cursor_type_t::CT_COPY => Some(CursorIcon::Copy),
+        cef_cursor_type_t::CT_ZOOMIN => Some(CursorIcon::ZoomIn),
+        cef_cursor_type_t::CT_ZOOMOUT => Some(CursorIcon::ZoomOut),
+        cef_cursor_type_t::CT_GRAB => Some(CursorIcon::Grab),
+        cef_cursor_type_t::CT_GRABBING => Some(CursorIcon::Grabbing),
+        _ => Some(CursorIcon::Default),
     }
 }
 
@@ -405,28 +420,92 @@ fn set_cursor(window: &dyn Window, cursor: Option<CursorIcon>) {
     }
 }
 
+/// Keeps the browser the render handler is first called with.
+fn remember(browser: Option<&mut Browser>) {
+    if let Some(browser) = browser {
+        with(|main| {
+            main.browser.get_or_insert_with(|| browser.clone());
+        });
+    }
+}
+
+/// Takes the keyboard focus from the page's focused field, as a press on
+/// the canvas would in a browser.
+fn blur() {
+    let frame = with(|main| {
+        main.browser
+            .as_ref()
+            .and_then(|browser| browser.main_frame())
+    });
+    if let Some(frame) = frame.flatten() {
+        frame.execute_java_script(
+            Some(&CefString::from(
+                "document.activeElement instanceof HTMLElement && document.activeElement.blur()",
+            )),
+            None,
+            0,
+        );
+    }
+}
+
+/// Lets the input method compose text for the page, with its candidate
+/// window placed from CEF's composition bounds as they arrive.
+fn enable_ime(window: &dyn Window) {
+    if with(|main| std::mem::replace(&mut main.ime, true)) != Some(false) {
+        return;
+    }
+    let request = ImeEnableRequest::new(
+        ImeCapabilities::new().with_cursor_area(),
+        ImeRequestData::default(),
+    );
+    if let Some(request) = request
+        && let Err(error) = window.request_ime_update(ImeRequest::Enable(request))
+    {
+        tracing::warn!("the window has no input method: {error}");
+    }
+}
+
 /// Opens the main window from its configuration, with one webview covering
-/// it that renders off-screen into `Screen`.
-pub fn open(app: &AppHandle<CefRuntime>) -> Result<()> {
-    let config = app
+/// it that renders off-screen into it, and makes `screen` reach it. Runs on
+/// the main thread, in the app's setup.
+pub fn open(handle: &AppHandle<CefRuntime>, screen: &Screen, gpu: &'static Gpu) -> Result<()> {
+    WINDOW.set(Some(Main {
+        gpu,
+        handle: handle.clone(),
+        view: None,
+        painted: Painted::default(),
+        captures: Vec::new(),
+        canvas: None,
+        viewport: Rect::ZERO,
+        settings: Settings::default(),
+        camera: None,
+        browser: None,
+        input: Input::default(),
+        web_cursor: Some(CursorIcon::Default),
+        compositor: None,
+        ime: false,
+    }));
+    let _ = screen.0.set(handle.clone());
+
+    let config = handle
         .config()
         .app
         .windows
         .iter()
         .find(|window| window.label == MAIN)
         .context("the main window's configuration is missing")?;
-    let window = tauri::window::WindowBuilder::from_config(app, config)?
+    let window = tauri::window::WindowBuilder::from_config(handle, config)?
         .build()
         .context("failed to create the main window")?;
 
-    let screen = Arc::clone(&app.state::<Arc<App>>().screen);
-    let painter = Arc::clone(&screen);
-    let mut offscreen = Offscreen::new(move |view| {
-        let _ = painter.view.set(view.clone());
-        paint::Painter::new(Arc::clone(&painter), view)
+    let mut offscreen = Offscreen::new(|view| {
+        with(|main| main.view = Some(view.clone()));
+        paint::Painter::new(view)
     });
     // Without a native view, Chromium has nowhere to set the cursor itself.
-    offscreen.cursor_handler = Some(Arc::new(move |cursor, _| screen.set_web_cursor(cursor)));
+    offscreen.cursor_handler = Some(Arc::new(|cursor, _| {
+        with(|main| main.set_web_cursor(cursor));
+    }));
 
     let size = window
         .inner_size()?
@@ -456,8 +535,7 @@ pub fn open(app: &AppHandle<CefRuntime>) -> Result<()> {
 /// debug build's `debug_pointer` calls it on the main thread.
 #[cfg(debug_assertions)]
 pub fn feed(app: &Arc<App>, pointer: Pointer, ctrl: bool) {
-    let screen = &app.screen;
-    let Some(window) = screen.window() else {
+    let Some(window) = with(|main| main.window()).flatten() else {
         return;
     };
     let modifiers = if ctrl {
@@ -465,9 +543,11 @@ pub fn feed(app: &Arc<App>, pointer: Pointer, ctrl: bool) {
     } else {
         winit::keyboard::ModifiersState::empty()
     };
-    let held = std::mem::replace(&mut screen.input.lock().modifiers, modifiers);
+    let Some(held) = with(|main| std::mem::replace(&mut main.input.modifiers, modifiers)) else {
+        return;
+    };
     input::pointer(app, window.as_ref(), pointer);
-    screen.input.lock().modifiers = held;
+    with(|main| main.input.modifiers = held);
 }
 
 /// The native events of every window, from `Cef::on_window_event`. It runs
@@ -477,36 +557,34 @@ pub fn on_window_event(app: &Arc<App>, label: &str, window: Arc<dyn Window>, eve
     if label != MAIN {
         return;
     }
-    let screen = &app.screen;
     match event {
         // The surface holds the window, which must go before the runtime
-        // lets it go.
-        WindowEvent::Destroyed => drop(screen.compositor.lock().take()),
-        WindowEvent::RedrawRequested => screen.present(&window),
-        WindowEvent::SurfaceResized(_) => window.request_redraw(),
-        WindowEvent::ScaleFactorChanged { .. } => {
-            screen.rescale();
-            app.camera();
+        // lets it go, and CEF's browser goes before CEF does.
+        WindowEvent::Destroyed => drop(WINDOW.take()),
+        WindowEvent::RedrawRequested => {
+            with(|main| main.present(&window));
         }
+        WindowEvent::SurfaceResized(_) => window.request_redraw(),
+        WindowEvent::ScaleFactorChanged { .. } => change(Main::place),
         WindowEvent::Focused(focused) => {
             if *focused {
-                screen.enable_ime(window.as_ref());
+                enable_ime(window.as_ref());
             }
-            if let Some(host) = screen.host() {
+            if let Some(host) = with(|main| main.host()).flatten() {
                 host.set_focus(i32::from(*focused));
             }
         }
         WindowEvent::ModifiersChanged(modifiers) => {
-            screen.input.lock().modifiers = modifiers.state();
+            with(|main| main.input.modifiers = modifiers.state());
         }
         WindowEvent::KeyboardInput { event, .. } => {
-            let modifiers = screen.input.lock().modifiers;
-            if let Some(host) = screen.host() {
+            let held = with(|main| Some((main.host()?, main.input.modifiers))).flatten();
+            if let Some((host, modifiers)) = held {
                 keys::send_key(&host, event, modifiers);
             }
         }
         WindowEvent::Ime(ime) => {
-            if let Some(host) = screen.host() {
+            if let Some(host) = with(|main| main.host()).flatten() {
                 keys::send_ime(&host, ime);
             }
         }

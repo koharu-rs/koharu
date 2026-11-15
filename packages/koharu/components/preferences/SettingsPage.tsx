@@ -31,7 +31,7 @@ import { TypesettingPreferences } from '@/components/preferences/TypesettingPref
 import { refreshModels, refreshPreferences, savePreferences } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
 import { useKoharuStore, type ShortcutAction } from '@/lib/store'
-import type { Preferences } from '@koharu/bridge/protocol'
+import type { Preferences } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'

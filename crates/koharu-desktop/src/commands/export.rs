@@ -32,7 +32,7 @@ pub enum ExportFormat {
 /// names a PSD's layers the scene names nothing, in the interface's language.
 #[tauri::command]
 #[specta::specta]
-pub async fn export(
+pub async fn export_pages(
     app: State<'_, Arc<App>>,
     window: Window<CefRuntime>,
     format: ExportFormat,

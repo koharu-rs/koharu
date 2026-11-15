@@ -74,7 +74,7 @@ pub async fn save_preferences(
 /// Koharu's own models, and each vendor's that has a key or a sign-in.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_models() -> Vec<Model> {
+pub async fn list_models() -> Vec<Model> {
     koharu_llm::models().await
 }
 
@@ -83,7 +83,7 @@ pub async fn get_models() -> Vec<Model> {
 /// would take.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_vendors() -> Result<BTreeMap<String, bool>> {
+pub async fn list_vendors() -> Result<BTreeMap<String, bool>> {
     Ok(tokio::task::spawn_blocking(|| -> anyhow::Result<_> {
         keyed()
             .map(|name| {

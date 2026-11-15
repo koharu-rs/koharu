@@ -12,7 +12,7 @@ import {
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
 import { modelName, orderedLanguageChoices, REASONING, vendorOf } from '@/lib/translation'
-import type { Model, TranslatorConfig } from '@koharu/bridge/protocol'
+import type { Model, TranslatorConfig } from '@koharu/ipc/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {

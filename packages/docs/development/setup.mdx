@@ -29,7 +29,7 @@ bun install
 bun dev
 ```
 
-`bun dev` launches the Next.js UI and Tauri app. It builds `koharu-canvas` for WASM with wasm-pack into `packages/bridge/src/wasm`, then watches `koharu-canvas` and `koharu-rasterizer` and rebuilds on change. Turbopack refreshes the browser client after successful rebuilds. Debug builds expose CEF remote debugging at `http://127.0.0.1:4000`.
+`bun dev` launches the Next.js UI and Tauri app. It builds `koharu-canvas` for WASM with wasm-pack into `packages/ipc/src/wasm`, then watches `koharu-canvas` and `koharu-rasterizer` and rebuilds on change. Turbopack refreshes the browser client after successful rebuilds. Debug builds expose CEF remote debugging at `http://127.0.0.1:4000`.
 
 ## Check the affected component
 
@@ -56,7 +56,7 @@ Rust command signatures and Specta types are authoritative:
 cargo run -p koharu-app --bin generate
 ```
 
-Do not hand-edit `packages/bridge/src/protocol.ts`.
+Do not hand-edit `packages/ipc/src/protocol.ts`.
 
 ## Build an executable
 

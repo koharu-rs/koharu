@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::Context as _;
 use cursor_icon::CursorIcon;
 use image::RgbaImage;
-use koharu_renderer::{Drawing, Frame, Gpu};
+use koharu_renderer::{Drawing, Gpu};
 use koharu_scene::{LayerId, Session};
 use kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2};
 use parking_lot::Mutex;
@@ -24,7 +24,7 @@ use crate::{
     draw::{Target, color, overlay::Overlay},
     gesture::{Context, Gesture, GestureLook, Press},
     selection::Selection,
-    snapshot::{ImageSizes, Snapshot},
+    snapshot::Snapshot,
     tools::{self, pan::Pan, text::Draft},
     view::{Sample, View},
 };
@@ -37,14 +37,13 @@ pub struct Canvas {
     view: View,
     colors: Colors,
     snapshot: Option<Snapshot>,
-    sizes: ImageSizes,
     tool: Tool,
     brush: Brush,
     selection: Selection,
     gesture: Option<Active>,
     /// The pointer's last place, while it's over the canvas.
     pointer: Option<Sample>,
-    /// Bumped by every `set_frame`.
+    /// Bumped by every `show`.
     generation: u64,
     target: Option<Target>,
     /// What the last draw showed: a draw that would show the same does
@@ -59,7 +58,7 @@ struct Look {
     /// The camera's, which has no equality of its own.
     translation: Vec2,
     zoom: f64,
-    /// A count every `set_frame` bumps, not the frame's revision: a frame of
+    /// A count every `show` bumps, not the frame's revision: a frame of
     /// the same revision draws differently once `[renderer]` changes.
     generation: u64,
     /// The layers a gesture lifts out of the page to draw itself.
@@ -89,7 +88,6 @@ impl Canvas {
             view: View::default(),
             colors: Colors::default(),
             snapshot: None,
-            sizes: ImageSizes::default(),
             tool: Tool::default(),
             brush: Brush::default(),
             selection: Selection::default(),
@@ -107,23 +105,23 @@ impl Canvas {
         self.view.set_viewport(viewport, scale);
     }
 
-    /// The frame to show, rendered by the host after any change. A frame of
-    /// another page fits the camera to it.
-    pub fn set_frame(&mut self, frame: Frame) {
+    /// Shows `snapshot`, of the frame the host rendered after a change. One
+    /// of another page fits the camera to it.
+    pub fn show(&mut self, snapshot: Snapshot) {
         // The project changed under a gesture, by another writer: it would
         // write over that change, so it's dropped, as the editor's was.
         if self
             .snapshot
             .as_ref()
-            .is_some_and(|old| old.frame().revision() != frame.revision())
+            .is_some_and(|old| old.frame().revision() != snapshot.frame().revision())
         {
             self.gesture = None;
         }
         let other = self
             .snapshot
             .as_ref()
-            .is_none_or(|snapshot| snapshot.page().id != frame.page());
-        self.snapshot = Snapshot::new(frame, &self.session.lock(), &mut self.sizes);
+            .is_none_or(|old| old.page().id != snapshot.page().id);
+        self.snapshot = Some(snapshot);
         self.generation += 1;
         self.view.set_page(self.page_size(), other);
     }

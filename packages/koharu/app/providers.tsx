@@ -19,7 +19,7 @@ import {
   rgbaToHex,
   useKoharuStore,
 } from '@/lib/store'
-import { commands, events, type Change, type PageId } from '@koharu/bridge/protocol'
+import { commands, events, type Change, type PageId } from '@koharu/ipc/protocol'
 import { toast, Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
@@ -60,7 +60,7 @@ export function Providers({ children }: { children: ReactNode }) {
         listen(events.pipeline, receivePipeline),
         listen(events.download, receiveDownload),
       ])
-        .then(() => commands.getRuns())
+        .then(() => commands.getPipelineEvents())
         .then((runs) => {
           if (lifecycle.active) receiveRuns(runs)
         })

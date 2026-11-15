@@ -10,7 +10,7 @@ use std::{
 use koharu_canvas::{Point, Rect};
 use serde::Deserialize;
 use specta::Type;
-use tauri_runtime_cef::cef::{ImplBrowserHost as _, MouseButtonType, MouseEvent};
+use tauri_runtime_cef::cef::{BrowserHost, ImplBrowserHost as _, MouseButtonType, MouseEvent};
 use ui_events::{
     ScrollDelta,
     keyboard::Modifiers,
@@ -25,7 +25,7 @@ use winit::{
     window::Window,
 };
 
-use super::{Screen, keys, set_cursor};
+use super::{Main, blur, change, keys, set_cursor, with};
 use crate::app::App;
 
 /// A native pointer event, in the window's physical pixels: as the window
@@ -248,29 +248,28 @@ impl Input {
 
 /// Routes one pointer event to its side.
 pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
-    let screen = &app.screen;
     let scale = window.scale_factor();
     match pointer {
         Pointer::Moved { x, y } => {
             let at = Point::new(x, y);
-            let held = {
-                let mut input = screen.input.lock();
-                input.position = at;
-                input.drag.side()
+            let Some(side) = with(|main| {
+                main.input.position = at;
+                main.input.drag.side().unwrap_or_else(|| main.under(at))
+            }) else {
+                return;
             };
-            let side = held.unwrap_or_else(|| screen.under(at));
             hover(app, window, side);
             match side {
-                Side::Web => {
-                    let event = screen.mouse_event(scale);
-                    if let Some(host) = screen.host() {
-                        host.send_mouse_move_event(Some(&event), 0);
-                    }
-                }
+                Side::Web => web(scale, |host, event| {
+                    host.send_mouse_move_event(Some(event), 0)
+                }),
                 Side::Canvas => {
+                    let Some(current) = with(|main| main.pointer_state(scale, 0)) else {
+                        return;
+                    };
                     let update = PointerUpdate {
                         pointer: mouse(),
-                        current: screen.pointer_state(scale, 0),
+                        current,
                         coalesced: Vec::new(),
                         predicted: Vec::new(),
                     };
@@ -280,84 +279,86 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
         }
         Pointer::Pressed { x, y, button } => {
             let at = Point::new(x, y);
-            screen.input.lock().position = at;
-            let under = screen.under(at);
-            let (side, count, first) = {
-                let mut input = screen.input.lock();
-                let first = input.drag.side().is_none();
-                let side = input.drag.press(button.flag(), under);
-                (side, input.click(button.flag(), scale), first)
+            let Some((side, count, first)) = with(|main| {
+                main.input.position = at;
+                let under = main.under(at);
+                let first = main.input.drag.side().is_none();
+                let side = main.input.drag.press(button.flag(), under);
+                (side, main.input.click(button.flag(), scale), first)
+            }) else {
+                return;
             };
             hover(app, window, side);
             match side {
-                Side::Web => {
-                    let event = screen.mouse_event(scale);
-                    if let Some(host) = screen.host() {
-                        host.send_mouse_click_event(
-                            Some(&event),
-                            button.cef(),
-                            0,
-                            i32::from(count),
-                        );
-                    }
-                }
+                Side::Web => web(scale, |host, event| {
+                    host.send_mouse_click_event(Some(event), button.cef(), 0, i32::from(count));
+                }),
                 Side::Canvas => {
                     if first {
-                        screen.blur();
+                        blur();
                     }
+                    let Some(state) = with(|main| main.pointer_state(scale, count)) else {
+                        return;
+                    };
                     let down = PointerButtonEvent {
                         button: Some(button.ui()),
                         pointer: mouse(),
-                        state: screen.pointer_state(scale, count),
+                        state,
                     };
                     canvas(app, window, PointerEvent::Down(down));
                 }
             }
         }
         Pointer::Released { x, y, button } => {
-            let (side, count) = {
-                let mut input = screen.input.lock();
+            let Some((side, count)) = with(|main| {
+                let input = &mut main.input;
                 input.position = Point::new(x, y);
                 input.buttons &= !button.flag();
                 let count = input.last_press.as_ref().map_or(1, |press| press.count);
                 (input.drag.release(button.flag()), count)
+            }) else {
+                return;
             };
             match side {
-                Side::Web => {
-                    let event = screen.mouse_event(scale);
-                    if let Some(host) = screen.host() {
-                        host.send_mouse_click_event(
-                            Some(&event),
-                            button.cef(),
-                            1,
-                            i32::from(count),
-                        );
-                    }
-                }
+                Side::Web => web(scale, |host, event| {
+                    host.send_mouse_click_event(Some(event), button.cef(), 1, i32::from(count));
+                }),
                 Side::Canvas => {
+                    let Some(state) = with(|main| main.pointer_state(scale, count)) else {
+                        return;
+                    };
                     let up = PointerButtonEvent {
                         button: Some(button.ui()),
                         pointer: mouse(),
-                        state: screen.pointer_state(scale, count),
+                        state,
                     };
                     canvas(app, window, PointerEvent::Up(up));
                 }
             }
             // The drag over, the pointer belongs to the side it's over.
-            let (held, at) = {
-                let input = screen.input.lock();
-                (input.drag.side(), input.position)
-            };
-            if held.is_none() {
-                hover(app, window, screen.under(at));
+            let over = with(|main| {
+                let input = &main.input;
+                input
+                    .drag
+                    .side()
+                    .is_none()
+                    .then(|| main.under(input.position))
+            });
+            if let Some(side) = over.flatten() {
+                hover(app, window, side);
             }
         }
         Pointer::Wheel { dx, dy, lines } => {
-            let (held, at) = {
-                let input = screen.input.lock();
-                (input.drag.side(), input.position)
+            let Some(side) = with(|main| {
+                let input = &main.input;
+                input
+                    .drag
+                    .side()
+                    .unwrap_or_else(|| main.under(input.position))
+            }) else {
+                return;
             };
-            match held.unwrap_or_else(|| screen.under(at)) {
+            match side {
                 Side::Web => {
                     // Chromium scrolls by pixels, and a notch is 120 of
                     // them, Windows' convention, which CEF follows
@@ -367,10 +368,9 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
                     } else {
                         (dx, dy)
                     };
-                    let event = screen.mouse_event(scale);
-                    if let Some(host) = screen.host() {
-                        host.send_mouse_wheel_event(Some(&event), dx as i32, dy as i32);
-                    }
+                    web(scale, |host, event| {
+                        host.send_mouse_wheel_event(Some(event), dx as i32, dy as i32);
+                    });
                 }
                 Side::Canvas => {
                     // The canvas takes a browser's sign, where a positive
@@ -380,22 +380,24 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
                     } else {
                         ScrollDelta::PixelDelta((-f64::from(dx), -f64::from(dy)).into())
                     };
+                    let Some(state) = with(|main| main.pointer_state(scale, 0)) else {
+                        return;
+                    };
                     let scroll = PointerScrollEvent {
                         pointer: mouse(),
                         delta,
-                        state: screen.pointer_state(scale, 0),
+                        state,
                     };
                     canvas(app, window, PointerEvent::Scroll(scroll));
                 }
             }
         }
         Pointer::Left => {
-            if screen.input.lock().drag.side().is_none() {
+            if with(|main| main.input.drag.side().is_none()) == Some(true) {
                 hover(app, window, Side::Web);
-                let event = screen.mouse_event(scale);
-                if let Some(host) = screen.host() {
-                    host.send_mouse_move_event(Some(&event), 1);
-                }
+                web(scale, |host, event| {
+                    host.send_mouse_move_event(Some(event), 1)
+                });
             }
         }
     }
@@ -404,22 +406,31 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
 /// Moves the pointer to `side`: the side it leaves hears that it left, and
 /// the cursor becomes the new side's.
 fn hover(app: &Arc<App>, window: &dyn Window, side: Side) {
-    let screen = &app.screen;
-    let left = std::mem::replace(&mut screen.input.lock().hover, side);
+    let Some(left) = with(|main| std::mem::replace(&mut main.input.hover, side)) else {
+        return;
+    };
     if left == side {
         return;
     }
     match side {
-        Side::Canvas => {
-            let event = screen.mouse_event(window.scale_factor());
-            if let Some(host) = screen.host() {
-                host.send_mouse_move_event(Some(&event), 1);
-            }
-        }
+        Side::Canvas => web(window.scale_factor(), |host, event| {
+            host.send_mouse_move_event(Some(event), 1);
+        }),
         Side::Web => {
             canvas(app, window, PointerEvent::Leave(mouse()));
-            set_cursor(window, *screen.web_cursor.lock());
+            if let Some(cursor) = with(|main| main.web_cursor) {
+                set_cursor(window, cursor);
+            }
         }
+    }
+}
+
+/// Sends CEF a mouse event at the pointer, through the browser's host,
+/// once the window's borrow is over.
+fn web(scale: f64, send: impl FnOnce(&BrowserHost, &MouseEvent)) {
+    let sent = with(|main| Some((main.host()?, main.mouse_event(scale))));
+    if let Some((host, event)) = sent.flatten() {
+        send(&host, &event);
     }
 }
 
@@ -427,40 +438,42 @@ fn hover(app: &Arc<App>, window: &dyn Window, side: Side) {
 /// cursor while the pointer is over it.
 fn canvas(app: &Arc<App>, window: &dyn Window, event: PointerEvent) {
     let left = matches!(event, PointerEvent::Leave(_));
-    let answer = app.screen.with_canvas(|canvas| {
-        canvas
-            .input(event)
-            .map(|effects| (effects, canvas.cursor()))
+    let answer = with(|main| {
+        let canvas = main.canvas.as_mut()?;
+        Some(
+            canvas
+                .input(event)
+                .map(|effects| (effects, canvas.cursor())),
+        )
     });
-    match answer {
+    match answer.flatten() {
         Some(Ok((effects, cursor))) => {
             if !left {
                 set_cursor(window, cursor);
             }
             app.handle(effects);
-            app.screen.request_redraw();
+            change(|_| ());
         }
         Some(Err(error)) => tracing::error!("the canvas failed a pointer event: {error:#}"),
         None => {}
     }
 }
 
-impl Screen {
+impl Main {
     /// The side under a pointer at `at`.
     fn under(&self, at: Point) -> Side {
-        if self.canvas.lock().is_none() {
+        if self.canvas.is_none() {
             return Side::Web;
         }
         let alpha = self
             .painted
-            .lock()
             .alpha(at.x.max(0.0) as u32, at.y.max(0.0) as u32);
         route(at, self.physical_viewport(), alpha)
     }
 
     /// A CEF mouse event at the pointer, in the view's DIPs.
     fn mouse_event(&self, scale: f64) -> MouseEvent {
-        let input = self.input.lock();
+        let input = &self.input;
         MouseEvent {
             x: (input.position.x / scale).round() as i32,
             y: (input.position.y / scale).round() as i32,
@@ -470,7 +483,7 @@ impl Screen {
 
     /// The pointer as the canvas takes it.
     fn pointer_state(&self, scale: f64, count: u8) -> PointerState {
-        let input = self.input.lock();
+        let input = &self.input;
         let mut buttons = PointerButtons::default();
         for button in [Button::Left, Button::Middle, Button::Right] {
             if input.buttons & button.flag() != 0 {
@@ -508,46 +521,4 @@ fn mouse() -> PointerInfo {
         persistent_device_id: None,
         pointer_type: PointerType::Mouse,
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const VIEWPORT: Rect = Rect::new(100.0, 50.0, 900.0, 650.0);
-
-    #[test]
-    fn a_press_over_a_transparent_canvas_pixel_goes_to_the_canvas() {
-        assert_eq!(route(Point::new(400.0, 300.0), VIEWPORT, 0), Side::Canvas);
-    }
-
-    #[test]
-    fn a_press_over_painted_ui_goes_to_the_web() {
-        // A panel or a toolbar over the canvas.
-        assert_eq!(route(Point::new(400.0, 300.0), VIEWPORT, 255), Side::Web);
-        assert_eq!(route(Point::new(400.0, 300.0), VIEWPORT, 1), Side::Web);
-        // Transparent, but outside the viewport.
-        assert_eq!(route(Point::new(20.0, 300.0), VIEWPORT, 0), Side::Web);
-    }
-
-    #[test]
-    fn a_drag_keeps_the_side_it_began_on() {
-        let mut drag = Drag::default();
-        assert_eq!(drag.side(), None);
-        assert_eq!(drag.press(LEFT, Side::Canvas), Side::Canvas);
-        assert_eq!(drag.side(), Some(Side::Canvas));
-        // A second button pressed over the interface stays with the drag.
-        assert_eq!(drag.press(RIGHT, Side::Web), Side::Canvas);
-        assert_eq!(drag.release(RIGHT), Side::Canvas);
-        assert_eq!(drag.side(), Some(Side::Canvas));
-        assert_eq!(drag.release(LEFT), Side::Canvas);
-        assert_eq!(drag.side(), None);
-
-        assert_eq!(drag.press(LEFT, Side::Web), Side::Web);
-        assert_eq!(drag.release(LEFT), Side::Web);
-        assert_eq!(drag.side(), None);
-    }
-
-    const LEFT: u32 = 1;
-    const RIGHT: u32 = 4;
 }

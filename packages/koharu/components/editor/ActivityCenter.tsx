@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { call } from '@/lib/backend'
 import { usePages } from '@/lib/queries'
 import { useKoharuStore, type Job } from '@/lib/store'
-import { commands, type Transfer } from '@koharu/bridge/protocol'
+import { commands, type Transfer } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 export function ActivityCenter() {
@@ -137,7 +137,7 @@ function JobItem({ job }: { job: Job }) {
           variant='ghost'
           className='-mt-1'
           aria-label={t('activity.stop')}
-          onClick={() => void call(commands.stop).catch(() => undefined)}
+          onClick={() => void call(commands.stopPipeline).catch(() => undefined)}
         >
           <Square className='size-2.5 fill-current' />
         </Button>

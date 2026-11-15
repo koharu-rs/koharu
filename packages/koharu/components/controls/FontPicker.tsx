@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useFontPreview } from '@/lib/queries'
-import type { FontFamily } from '@koharu/bridge/protocol'
+import type { FontFamily } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Empty, EmptyTitle } from '@koharu/ui/components/empty'
 import {

@@ -39,11 +39,10 @@ struct Fixture {
 impl Fixture {
     /// The page's frame again, after an edit, shown on the canvas.
     fn render(&mut self) {
-        let frame = self
-            .renderer
-            .render(&self.session.lock(), self.page)
-            .expect("a frame");
-        self.canvas.set_frame(frame);
+        let session = self.session.lock();
+        let frame = self.renderer.render(&session, self.page).expect("a frame");
+        let snapshot = crate::Snapshot::new(frame, &session).expect("the page");
+        self.canvas.show(snapshot);
     }
 }
 

@@ -45,6 +45,7 @@ serde_json = { workspace = true }
 specta = { workspace = true }
 specta-serde = { workspace = true }
 specta-typescript = { workspace = true }
+specta-util = { workspace = true }
 tauri = { workspace = true }
 tauri-plugin-log = { workspace = true }
 tauri-plugin-opener = { workspace = true }
@@ -62,5 +63,3 @@ webp = { workspace = true }
 wgpu = { workspace = true }
 zip = { workspace = true }
 
-[dev-dependencies]
-tempfile = { workspace = true }

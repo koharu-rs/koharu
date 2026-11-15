@@ -8,7 +8,7 @@ import {
   type Op,
   type PageId,
   type Value,
-} from '@koharu/bridge/protocol'
+} from '@koharu/ipc/protocol'
 
 import { isBlockLayer, isTextLayer } from './document'
 
@@ -16,7 +16,7 @@ import { isBlockLayer, isTextLayer } from './document'
  * History panel translates. */
 
 function edit(label: string, ops: Op[]): Promise<Change> {
-  return commands.edit({ label, ops })
+  return commands.editScene({ label, ops })
 }
 
 /** Shows, hides, or fades layers. */

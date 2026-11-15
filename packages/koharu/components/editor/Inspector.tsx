@@ -63,7 +63,7 @@ import {
   type Text,
   type TextStyle,
   type Value,
-} from '@koharu/bridge/protocol'
+} from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   DropdownMenu,

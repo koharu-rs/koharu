@@ -27,7 +27,7 @@ bun install
 bun dev
 ```
 
-`bun dev` 同时启动 Next.js UI 和 Tauri。它先用 wasm-pack 将 `koharu-canvas` 构建为 WASM 并输出到 `packages/bridge/src/wasm`，再监听 `koharu-canvas` 与 `koharu-rasterizer`，在变更时重新构建。成功构建后，Turbopack 会刷新浏览器客户端。debug 构建在 `http://127.0.0.1:4000` 暴露 CEF 远程调试。
+`bun dev` 同时启动 Next.js UI 和 Tauri。它先用 wasm-pack 将 `koharu-canvas` 构建为 WASM 并输出到 `packages/ipc/src/wasm`，再监听 `koharu-canvas` 与 `koharu-rasterizer`，在变更时重新构建。成功构建后，Turbopack 会刷新浏览器客户端。debug 构建在 `http://127.0.0.1:4000` 暴露 CEF 远程调试。
 
 ## 检查受影响组件
 
@@ -51,7 +51,7 @@ Rust 命令签名与 Specta 类型是权威输入：
 cargo run -p koharu-app --bin generate
 ```
 
-不要手动修改 `packages/bridge/src/protocol.ts`。
+不要手动修改 `packages/ipc/src/protocol.ts`。
 
 ## 构建可执行文件
 

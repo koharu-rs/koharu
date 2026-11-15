@@ -1,8 +1,8 @@
-//! A snapshot of what `set_frame` showed: the frame, the page and project
-//! it drew, and what each shown layer offers the canvas. Tools read the same
+//! A snapshot of what the canvas shows: the frame, the page and project it
+//! drew, and what each shown layer offers the canvas. Tools read the same
 //! state the frame drew, never the session's newer one.
 
-use std::{collections::HashMap, io::Cursor};
+use std::{collections::HashMap, io::Cursor, sync::LazyLock};
 
 use koharu_renderer::Frame;
 use koharu_scene::{
@@ -12,7 +12,9 @@ use kurbo::{Affine, BezPath, Point, Rect, Shape as _, Size};
 
 use crate::control::{Control, Resize};
 
-pub(crate) struct Snapshot {
+/// What `Canvas::show` shows. The host makes it from the session the frame
+/// drew, on its own thread, so the canvas's never waits on the session.
+pub struct Snapshot {
     frame: Frame,
     page: Page,
     project: Project,
@@ -24,13 +26,12 @@ pub(crate) struct Snapshot {
 
 impl Snapshot {
     /// `None` when the frame's page is gone.
-    pub fn new(frame: Frame, session: &Session, sizes: &mut ImageSizes) -> Option<Self> {
+    pub fn new(frame: Frame, session: &Session) -> Option<Self> {
         let project = session.project();
         let page = project.page(frame.page()).ok()?.clone();
         let mut walk = Walk {
             frame: &frame,
             session,
-            sizes,
             controls: Vec::new(),
         };
         walk.layers(&page.layers, false);
@@ -46,27 +47,27 @@ impl Snapshot {
         })
     }
 
-    pub fn frame(&self) -> &Frame {
+    pub(crate) fn frame(&self) -> &Frame {
         &self.frame
     }
 
-    pub fn page(&self) -> &Page {
+    pub(crate) fn page(&self) -> &Page {
         &self.page
     }
 
-    pub fn size(&self) -> Size {
+    pub(crate) fn size(&self) -> Size {
         Size::new(
             f64::from(self.page.size.width),
             f64::from(self.page.size.height),
         )
     }
 
-    pub fn controls(&self) -> &[Control] {
+    pub(crate) fn controls(&self) -> &[Control] {
         &self.controls
     }
 
     /// The topmost control a click at `page` hits.
-    pub fn hit(&self, page: Point) -> Option<&Control> {
+    pub(crate) fn hit(&self, page: Point) -> Option<&Control> {
         self.controls
             .iter()
             .rev()
@@ -74,7 +75,7 @@ impl Snapshot {
     }
 
     /// The topmost control of `layer`.
-    pub fn control(&self, layer: LayerId) -> Option<&Control> {
+    pub(crate) fn control(&self, layer: LayerId) -> Option<&Control> {
         self.controls
             .iter()
             .rev()
@@ -82,18 +83,18 @@ impl Snapshot {
     }
 
     /// A layer's own values, a block's parts not among them.
-    pub fn layer(&self, id: LayerId) -> Option<&Layer> {
+    pub(crate) fn layer(&self, id: LayerId) -> Option<&Layer> {
         self.project.layer(id).ok()
     }
 
     /// A panel's or a balloon's outline on the page.
-    pub fn outline(&self, id: LayerId) -> Option<&BezPath> {
+    pub(crate) fn outline(&self, id: LayerId) -> Option<&BezPath> {
         self.outlines.get(&id)
     }
 
     /// The offset of `id` when it's a raster or a block's clean-up a brush
     /// can write to: shown and unlocked, with every layer it's in.
-    pub fn writable(&self, id: LayerId) -> Option<Offset> {
+    pub(crate) fn writable(&self, id: LayerId) -> Option<Offset> {
         fn find(layers: &[Layer], id: LayerId) -> Option<Offset> {
             layers
                 .iter()
@@ -114,27 +115,30 @@ impl Snapshot {
     }
 }
 
-/// Image files' pixel sizes, read from their headers once each.
-#[derive(Default)]
-pub(crate) struct ImageSizes(HashMap<Hash, Option<(u32, u32)>>);
+/// Image files' pixel sizes, read from their headers once each. A file is
+/// named by its contents' hash, so a size holds in every project.
+static IMAGE_SIZES: LazyLock<quick_cache::sync::Cache<Hash, Option<(u32, u32)>>> =
+    LazyLock::new(|| quick_cache::sync::Cache::new(4096));
 
-impl ImageSizes {
-    fn get(&mut self, session: &Session, file: Hash) -> Option<(u32, u32)> {
-        *self.0.entry(file).or_insert_with(|| {
-            let bytes = session.file(&file).ok()?;
-            image::ImageReader::new(Cursor::new(bytes))
-                .with_guessed_format()
-                .ok()?
-                .into_dimensions()
-                .ok()
-        })
+/// `file`'s pixel size, read from its header the first time.
+fn image_size(session: &Session, file: Hash) -> Option<(u32, u32)> {
+    if let Some(size) = IMAGE_SIZES.get(&file) {
+        return size;
     }
+    let size = session.file(&file).ok().and_then(|bytes| {
+        image::ImageReader::new(Cursor::new(bytes))
+            .with_guessed_format()
+            .ok()?
+            .into_dimensions()
+            .ok()
+    });
+    IMAGE_SIZES.insert(file, size);
+    size
 }
 
 struct Walk<'a> {
     frame: &'a Frame,
     session: &'a Session,
-    sizes: &'a mut ImageSizes,
     controls: Vec<Control>,
 }
 
@@ -192,14 +196,10 @@ impl Walk<'_> {
                     None => text_control(id, &block.source, None, locked),
                 }
             }
-            Content::Image(image) => {
-                self.sizes
-                    .get(self.session, image.file)
-                    .map(|(width, height)| {
-                        let local = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
-                        plain(local, Affine::from(image.transform), Resize::All, true)
-                    })
-            }
+            Content::Image(image) => image_size(self.session, image.file).map(|(width, height)| {
+                let local = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
+                plain(local, Affine::from(image.transform), Resize::All, true)
+            }),
             Content::Shape(shape) => BezPath::from_svg(shape.path.as_str())
                 .ok()
                 .map(|path| plain(path.bounding_box(), Affine::IDENTITY, Resize::All, true)),

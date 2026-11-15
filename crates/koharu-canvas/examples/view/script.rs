@@ -177,11 +177,8 @@ pub fn run(mut host: Host, snapshot: &Path, dense: bool) -> Result<()> {
         );
     }
     println!("stroke finish: {finish:.2} ms");
-    let set_frame = spread(&host.set_frames);
-    println!(
-        "set_frame: p50 {:.3} p95 {:.3} ms",
-        set_frame.0, set_frame.1
-    );
+    let show = spread(&host.shows);
+    println!("show: p50 {:.3} p95 {:.3} ms", show.0, show.1);
     for layer in &page.layers {
         let value = serde_json::to_value(layer)?;
         if value["kind"] != "text" || !dense {

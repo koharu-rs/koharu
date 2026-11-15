@@ -14,7 +14,7 @@ import type {
   Stage,
   Tool,
   Transfer,
-} from '@koharu/bridge/protocol'
+} from '@koharu/ipc/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
 export type CanvasTool = Tool

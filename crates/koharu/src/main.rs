@@ -36,7 +36,16 @@ fn main() {
             .with(
                 tracing_subscriber::filter::EnvFilter::builder()
                     .with_default_directive(tracing::Level::INFO.into())
-                    .from_env_lossy(),
+                    .from_env_lossy()
+                    // Tauri runs an async command inside its own DEBUG span,
+                    // made where the commands are dispatched; it carries the
+                    // command's span, and with it the interface's trace, into
+                    // the command's task.
+                    .add_directive(
+                        "koharu_desktop::commands=debug"
+                            .parse()
+                            .expect("the directive parses"),
+                    ),
             )
             // INFO and up as spans, logs, and breadcrumbs, since a crash report
             // carries breadcrumbs and not logs; errors as issues.

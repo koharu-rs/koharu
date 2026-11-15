@@ -49,48 +49,68 @@ impl IpcResponse for Bytes {
     }
 }
 
+/// Every command, each run inside a span continuing the trace its
+/// `sentry-trace` header carries: the interface's span of that call. Tauri
+/// runs an async command's future inside a span of its own, made under
+/// this one.
 pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![
+    let commands: fn(Invoke<CefRuntime>) -> bool = tauri::generate_handler![
         project::list_projects,
         project::create_project,
         project::open_project,
         project::delete_project,
         project::close_project,
         project::get_open_project,
-        project::get_shown_page,
-        project::show_page,
-        scene::query,
-        scene::edit,
-        scene::undo,
-        scene::redo,
+        pages::get_shown_page,
+        pages::show_page,
+        scene::query_scene,
+        scene::edit_scene,
+        scene::undo_edit,
+        scene::redo_edit,
         scene::go_to_step,
-        pages::get_thumbnail,
-        processing::process,
-        processing::stop,
-        processing::get_runs,
+        pages::get_page_thumbnail,
+        processing::run_pipeline,
+        processing::stop_pipeline,
+        processing::get_pipeline_events,
         agent::run_agent,
-        agent::cancel_agent,
+        agent::stop_agent,
         preferences::get_preferences,
         preferences::save_preferences,
-        preferences::get_models,
-        preferences::get_vendors,
+        preferences::list_models,
+        preferences::list_vendors,
         preferences::set_api_key,
-        fonts::get_fonts,
+        fonts::list_fonts,
         fonts::get_font_preview,
-        import::import,
-        export::export,
+        import::import_pages,
+        export::export_pages,
         canvas::set_canvas_viewport,
-        canvas::set_tool,
-        canvas::set_brush,
-        canvas::set_colors,
+        canvas::set_canvas_tool,
+        canvas::set_canvas_brush,
+        canvas::set_canvas_colors,
         canvas::fit_canvas,
-        canvas::set_zoom,
+        canvas::set_canvas_zoom,
         canvas::select_layers,
         #[cfg(debug_assertions)]
         debug::capture_window,
         #[cfg(debug_assertions)]
         debug::debug_pointer,
-    ]
+    ];
+    move |invoke: Invoke<CefRuntime>| {
+        let message = &invoke.message;
+        let trace = message
+            .headers()
+            .get("sentry-trace")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        let _span = tracing::info_span!(
+            "command",
+            sentry.name = message.command(),
+            sentry.op = "command",
+            sentry.trace = trace,
+        )
+        .entered();
+        commands(invoke)
+    }
 }
 
 /// Every command's signature, for the bindings; the same commands as
@@ -103,34 +123,34 @@ pub fn bindings(types: &mut Types) -> Vec<Function> {
         project::delete_project,
         project::close_project,
         project::get_open_project,
-        project::get_shown_page,
-        project::show_page,
-        scene::query,
-        scene::edit,
-        scene::undo,
-        scene::redo,
+        pages::get_shown_page,
+        pages::show_page,
+        scene::query_scene,
+        scene::edit_scene,
+        scene::undo_edit,
+        scene::redo_edit,
         scene::go_to_step,
-        pages::get_thumbnail,
-        processing::process,
-        processing::stop,
-        processing::get_runs,
+        pages::get_page_thumbnail,
+        processing::run_pipeline,
+        processing::stop_pipeline,
+        processing::get_pipeline_events,
         agent::run_agent,
-        agent::cancel_agent,
+        agent::stop_agent,
         preferences::get_preferences,
         preferences::save_preferences,
-        preferences::get_models,
-        preferences::get_vendors,
+        preferences::list_models,
+        preferences::list_vendors,
         preferences::set_api_key,
-        fonts::get_fonts,
+        fonts::list_fonts,
         fonts::get_font_preview,
-        import::import,
-        export::export,
+        import::import_pages,
+        export::export_pages,
         canvas::set_canvas_viewport,
-        canvas::set_tool,
-        canvas::set_brush,
-        canvas::set_colors,
+        canvas::set_canvas_tool,
+        canvas::set_canvas_brush,
+        canvas::set_canvas_colors,
         canvas::fit_canvas,
-        canvas::set_zoom,
+        canvas::set_canvas_zoom,
         canvas::select_layers,
     ](types)
 }
