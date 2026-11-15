@@ -19,7 +19,6 @@ fs-err = { workspace = true }
 keyring = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
-serde_ignored = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }

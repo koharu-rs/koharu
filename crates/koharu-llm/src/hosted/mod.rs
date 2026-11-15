@@ -13,7 +13,7 @@ use rig_core::{
     operation::Completion,
     providers::{
         anthropic, chatgpt, deepseek, gemini, minimax, ollama, openai, openrouter,
-        registry::{ConnectOptions, Format, ProviderConfig, ProviderId},
+        registry::{ConnectOptions, ProviderConfig, ProviderId},
         xai,
     },
 };
@@ -48,9 +48,12 @@ impl koharu_config::Section for Providers {
     const NAME: &'static str = "providers";
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, specta::Type)]
+/// A vendor's server: where rig, or Koharu for LM Studio, puts it while
+/// `base_url` is unset, as in an empty table.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, specta::Type)]
 pub struct Endpoint {
-    pub base_url: url::Url,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<url::Url>,
 }
 
 /// The base URL `[providers]` sets for `vendor`, if it sets one.
@@ -59,7 +62,8 @@ fn base_url(vendor: &str) -> Result<Option<String>> {
     Ok(providers
         .0
         .get(vendor)
-        .map(|endpoint| endpoint.base_url.as_str().trim_end_matches('/').to_owned()))
+        .and_then(|endpoint| endpoint.base_url.as_ref())
+        .map(|url| url.as_str().trim_end_matches('/').to_owned()))
 }
 
 /// The vendor's API key, stored under its rig name.
@@ -70,12 +74,6 @@ fn key(vendor: &str) -> Result<Option<String>> {
 /// The id rig's catalog files `vendor`'s models under.
 fn catalog_id(vendor: &str) -> Result<ProviderId> {
     ProviderId::catalog(vendor).with_context(|| format!("rig knows no vendor `{vendor}`"))
-}
-
-/// The family Koharu reaches `vendor` in when it isn't the catalog's:
-/// MiniMax's OpenAI dialect, which Koharu's prompted answers are for.
-fn family(vendor: &str) -> Option<Format> {
-    (vendor == minimax::PROVIDER_NAME).then_some(Format::OpenAi)
 }
 
 pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
@@ -101,10 +99,6 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
                 .api_key(key.unwrap_or_default())
                 .http(Http::default())
         }
-    };
-    let options = match family(vendor) {
-        Some(format) => options.format(format),
-        None => options,
     };
     let options = match base_url {
         Some(base_url) => options.base_url(base_url),
@@ -147,12 +141,9 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
     if key.is_none() && filed.requires_credential() {
         return Ok(Vec::new());
     }
-    let config = match family(vendor) {
-        Some(format) => ProviderId::new(vendor, format),
-        None => Some(filed),
-    }
-    .and_then(|selection| selection.config(key.unwrap_or_default()))
-    .with_context(|| format!("rig can't configure {vendor}"))?;
+    let config = filed
+        .config(key.unwrap_or_default())
+        .with_context(|| format!("rig can't configure {vendor}"))?;
     let config = match base_url(vendor)? {
         Some(base_url) => config.with_base_url(base_url),
         None => config,
@@ -200,10 +191,7 @@ mod tests {
             .filter(|vendor| **vendor != lm_studio::PROVIDER_NAME)
         {
             let spec = spec(catalog_id(vendor).unwrap(), "a-model-from-next-year");
-            let mut options = ConnectOptions::new().api_key("key").http(Http::default());
-            if let Some(format) = family(vendor) {
-                options = options.format(format);
-            }
+            let options = ConnectOptions::new().api_key("key").http(Http::default());
             let model = Catalog::builtin().connect_with(&spec, options).unwrap();
             assert_eq!(model.spec().unwrap().id, "a-model-from-next-year");
         }

@@ -120,7 +120,6 @@ secrecy = "0.10.3"
 semver = "1.0.28"
 sentry = { version = "0.49.5", features = ["minidump", "tracing"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_ignored = "0.1.14"
 # Floats must survive a write and a reopen unchanged, so memory and file agree.
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 serde_json_canonicalizer = "0.4.1"

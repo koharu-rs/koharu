@@ -4,11 +4,9 @@ mod error;
 pub mod secrets;
 
 use std::{
-    collections::BTreeSet,
     ffi::OsString,
     io::{self, Write as _},
     path::{Path, PathBuf},
-    sync::{Mutex, PoisonError},
 };
 
 use atomicwrites::{AtomicFile, OverwriteBehavior};
@@ -120,10 +118,7 @@ fn section<T: Section>(path: &Path, text: &str) -> Result<T> {
     else {
         return empty_section(path);
     };
-    serde_ignored::deserialize(value.into_deserializer(), |key| {
-        warn_unknown(path, T::NAME, &key.to_string());
-    })
-    .map_err(|mut error: toml::de::Error| {
+    T::deserialize(value.into_deserializer()).map_err(|mut error: toml::de::Error| {
         error.set_input(Some(text));
         invalid(path, format!("[{}]: {error}", T::NAME))
     })
@@ -133,20 +128,6 @@ fn section<T: Section>(path: &Path, text: &str) -> Result<T> {
 fn empty_section<T: Section>(path: &Path) -> Result<T> {
     toml::from_str("")
         .map_err(|error: toml::de::Error| invalid(path, format!("[{}]: {error}", T::NAME)))
-}
-
-/// Logs a key the section's type doesn't know, once per key in a process, as
-/// `get` reads the file every time it's called.
-fn warn_unknown(path: &Path, section: &str, key: &str) {
-    static WARNED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
-    let key = format!("{section}.{key}");
-    let first = WARNED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(key.clone());
-    if first {
-        tracing::warn!("{} has a key Koharu doesn't use: `{key}`", path.display());
-    }
 }
 
 /// The section as a table. A section that isn't one is a bug in its type, so

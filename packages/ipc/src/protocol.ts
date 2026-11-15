@@ -247,8 +247,12 @@ export type Edit = {
   ops: Op[]
 }
 
+/**
+ *  A vendor's server: where rig, or Koharu for LM Studio, puts it while
+ *  `base_url` is unset, as in an empty table.
+ */
 export type Endpoint = {
-  base_url: string
+  base_url?: string | null
 }
 
 /**  A command's failure, as its message with its causes. */

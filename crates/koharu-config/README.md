@@ -22,7 +22,7 @@ central list of them can drift from the component.
 | reading | from the file every time, with no cache to go stale; a missing file or table is the defaults | |
 | writing | under a lock other processes respect, on what the file holds now, writing only what changed, so comments and other tables stay as they are; no change, no write; the file is replaced at once, never half written | |
 | overrides only | a value set back to its default leaves the file, so a user who reset it follows later changes to the default | |
-| unknown keys | kept on save, with a warning once per key | |
+| unknown keys | kept as they are on save | |
 | bad files | a file that isn't TOML or a value of the wrong type is an error, never the defaults | |
 
 A write reads back what it's about to save and saves only if reading would
