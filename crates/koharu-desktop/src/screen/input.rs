@@ -366,6 +366,17 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
                     // 120 delta, so 40 a line scrolls 100/3 px a line, as
                     // Chrome does (`web_input_event_builders_win.cc`).
                     // Elsewhere a line delta stays a 120 notch.
+                    //
+                    // TODO: `LINE` is fitted to CEF 154's
+                    // `send_mouse_wheel_event`, which takes the raw wheel
+                    // delta and knows neither the lines setting nor a page a
+                    // notch. CEF's API 15800 adds
+                    // `CefBrowserHost::SendWheelEvent`, which takes pixels
+                    // with their units and the notches (cefclient's
+                    // `SetOsrWindowsWheelDelta` in `osr_input_util.h`). Once
+                    // tauri-runtime-cef's CEF has it, send winit's lines at
+                    // 100/3 px each, or a page for `WHEEL_PAGESCROLL`, and
+                    // drop `LINE`.
                     const LINE: f32 = if cfg!(windows) { 40.0 } else { 120.0 };
                     let (dx, dy) = if lines {
                         (dx * LINE, dy * LINE)
