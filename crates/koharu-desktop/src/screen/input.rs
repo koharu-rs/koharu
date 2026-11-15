@@ -449,8 +449,9 @@ fn web(scale: f64, send: impl FnOnce(&BrowserHost, &MouseEvent)) {
     }
 }
 
-/// Gives the canvas `event`, carries out what it answers, and shows its
-/// cursor while the pointer is over it.
+/// Gives the canvas `event`, carries out what it answers, shows the page as
+/// its edit left it in the same redraw, and shows its cursor while the
+/// pointer is over it.
 fn canvas(app: &Arc<App>, window: &dyn Window, event: PointerEvent) {
     let left = matches!(event, PointerEvent::Leave(_));
     let answer = with(|main| {
@@ -466,8 +467,12 @@ fn canvas(app: &Arc<App>, window: &dyn Window, event: PointerEvent) {
             if !left {
                 set_cursor(window, cursor);
             }
-            app.handle(effects);
-            change(|_| ());
+            let edited = app.handle(effects);
+            change(|main| {
+                if let (Some(snapshot), Some(canvas)) = (edited, &mut main.canvas) {
+                    canvas.show(snapshot);
+                }
+            });
         }
         Some(Err(error)) => tracing::error!("the canvas failed a pointer event: {error:#}"),
         None => {}

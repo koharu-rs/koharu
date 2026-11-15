@@ -250,24 +250,29 @@ impl App {
             self.emit(events::PAGE, page);
         }
         match page {
-            Some(page) => {
-                // The snapshot reads the project the frame drew, under the
-                // same lock, so the main thread never takes it.
-                let session = session.lock();
-                let frame = self.renderer.render(&session, page)?;
-                let snapshot = Snapshot::new(frame, &session).context("the page is gone")?;
-                self.screen.show(snapshot);
-            }
+            Some(page) => self.screen.show(self.render(&session, page)?),
             None => self.screen.set_canvas(Some(Canvas::new(self.gpu, session))),
         }
         Ok(())
     }
 
-    /// Carries out what a canvas gesture did.
-    pub fn handle(self: &Arc<Self>, effects: Vec<Effect>) {
+    /// `page` as `session` holds it now. The snapshot reads the project the
+    /// frame drew, under the same lock, so the canvas never takes it.
+    fn render(&self, session: &Mutex<Session>, page: PageId) -> Result<Snapshot> {
+        let session = session.lock();
+        let frame = self.renderer.render(&session, page)?;
+        Snapshot::new(frame, &session).context("the page is gone")
+    }
+
+    /// Carries out what a canvas gesture did, and gives back the page as its
+    /// edits left it, so the redraw that ends the gesture shows them: the
+    /// relay renders a change only later, on another thread, and the canvas
+    /// would meanwhile draw the page from before the edit.
+    pub fn handle(self: &Arc<Self>, effects: Vec<Effect>) -> Option<Snapshot> {
+        let mut edited = false;
         for effect in effects {
             let result = match effect {
-                Effect::Edit(edit) => self.edit(edit).map(drop),
+                Effect::Edit(edit) => self.edit(edit).map(|_| edited = true),
                 Effect::Selection(layers) => {
                     tracing::info!(layers = layers.len(), "selection");
                     self.emit(events::SELECTION, layers);
@@ -304,5 +309,16 @@ impl App {
                 tracing::error!("failed to carry out a canvas gesture: {error:#}");
             }
         }
+        if !edited {
+            return None;
+        }
+        let (session, page) = {
+            let project = self.project.lock();
+            let project = project.as_ref()?;
+            (Arc::clone(&project.session), project.page?)
+        };
+        self.render(&session, page)
+            .inspect_err(|error| tracing::error!("failed to show a canvas edit: {error:#}"))
+            .ok()
     }
 }
