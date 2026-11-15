@@ -360,11 +360,15 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
             };
             match side {
                 Side::Web => {
-                    // Chromium scrolls by pixels, and a notch is 120 of
-                    // them, Windows' convention, which CEF follows
-                    // everywhere; its sign is winit's.
+                    // Its sign is winit's. On Windows a line delta counts
+                    // lines, winit giving a notch the system's lines per
+                    // notch, three by default, and CEF scrolls 100 px for a
+                    // 120 delta, so 40 a line scrolls 100/3 px a line, as
+                    // Chrome does (`web_input_event_builders_win.cc`).
+                    // Elsewhere a line delta stays a 120 notch.
+                    const LINE: f32 = if cfg!(windows) { 40.0 } else { 120.0 };
                     let (dx, dy) = if lines {
-                        (dx * 120.0, dy * 120.0)
+                        (dx * LINE, dy * LINE)
                     } else {
                         (dx, dy)
                     };
