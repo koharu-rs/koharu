@@ -1,14 +1,15 @@
 //! What CEF paints: the page and its popup widget (an open `<select>`), kept
 //! as premultiplied BGRA on the CPU with the rectangles that changed since
-//! the compositor last uploaded them.
+//! the compositor last uploaded them, or, where CEF shares its frames, as
+//! Koharu's own GPU textures with the page's transparency mask.
 
 use std::os::raw::c_int;
 
 use tauri_runtime_cef::{
     OffscreenView,
     cef::{
-        Browser, ImplRenderHandler, PaintElementType, Range, Rect as CefRect, RenderHandler,
-        ScreenInfo, WrapRenderHandler, rc::Rc as _, wrap_render_handler,
+        AcceleratedPaintInfo, Browser, ImplRenderHandler, PaintElementType, Range, Rect as CefRect,
+        RenderHandler, ScreenInfo, WrapRenderHandler, rc::Rc as _, wrap_render_handler,
     },
 };
 use winit::{
@@ -16,7 +17,7 @@ use winit::{
     window::{ImeRequest, ImeRequestData},
 };
 
-use super::{remember, with};
+use super::{copy_frames, remember, with};
 
 /// One painted image.
 pub struct Paint {
@@ -37,6 +38,15 @@ pub struct PixelRect {
     pub height: u32,
 }
 
+/// The page's transparency at a fraction of its size: each byte the largest
+/// alpha of a `scale`×`scale` block of its pixels.
+pub struct Mask {
+    pub width: u32,
+    pub height: u32,
+    pub scale: u32,
+    pub bytes: Vec<u8>,
+}
+
 /// CEF's latest paints.
 #[derive(Default)]
 pub struct Painted {
@@ -44,12 +54,27 @@ pub struct Painted {
     pub popup: Option<Paint>,
     /// Where the popup goes, in window pixels.
     pub popup_origin: Option<(i32, i32)>,
+    /// The page and the popup as Koharu's textures, where CEF shares its
+    /// frames, in place of `view` and `popup`.
+    pub view_frame: Option<wgpu::Texture>,
+    pub popup_frame: Option<wgpu::Texture>,
+    /// The page's transparency, where CEF shares its frames.
+    pub mask: Option<Mask>,
 }
 
 impl Painted {
     /// The page's alpha at a window pixel: zero where it paints nothing, or
-    /// outside what it painted.
+    /// outside what it painted; a block's at a time where CEF shares its
+    /// frames, so the page takes up to a block's width more of the canvas.
     pub fn alpha(&self, x: u32, y: u32) -> u8 {
+        if let Some(mask) = &self.mask {
+            let (x, y) = (x / mask.scale, y / mask.scale);
+            return if x < mask.width && y < mask.height {
+                mask.bytes[(y * mask.width + x) as usize]
+            } else {
+                0
+            };
+        }
         self.view
             .as_ref()
             .filter(|paint| x < paint.width && y < paint.height)
@@ -139,6 +164,7 @@ wrap_render_handler! {
             if show == 0 {
                 with(|main| {
                     main.painted.popup = None;
+                    main.painted.popup_frame = None;
                     main.painted.popup_origin = None;
                 });
                 self.view.request_redraw();
@@ -185,6 +211,26 @@ wrap_render_handler! {
                 update(slot, buffer, width, height, dirty);
             });
             self.view.request_redraw();
+        }
+
+        fn on_accelerated_paint(
+            &self,
+            browser: Option<&mut Browser>,
+            type_: PaintElementType,
+            _dirty_rects: Option<&[CefRect]>,
+            info: Option<&AcceleratedPaintInfo>,
+        ) {
+            remember(browser);
+            let Some(info) = info else { return };
+            if let Some(Err(error)) = with(|main| main.take_shared(type_, info)) {
+                tracing::error!("falling back to CEF's software frames: {error:#}");
+                copy_frames();
+                return;
+            }
+            // The pacer wakes the window when a page frame is due.
+            if type_ == PaintElementType::POPUP {
+                self.view.request_redraw();
+            }
         }
 
         fn on_ime_composition_range_changed(

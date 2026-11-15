@@ -52,6 +52,8 @@ bindgen = { version = "0.73.2", default-features = false, features = ["logging",
 blake3 = "1.8.7"
 bytes = "1.12.1"
 bytesize = "2.7.0"
+# CEF's frames as GPU textures; tauri-runtime-cef pins this version.
+cef = { version = "=154.5.0", default-features = false, features = ["accelerated_osr"] }
 clap = { version = "4.6.7", features = ["derive"] }
 color = "0.3.3"
 criterion = { version = "0.8.2", features = ["html_reports"] }
@@ -184,6 +186,8 @@ wgpu = "30.0.1"
 winit = "0.30.13"
 windows = { version = "0.62.2", features = [
     "Win32",
+    "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
     "Win32_System",
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",

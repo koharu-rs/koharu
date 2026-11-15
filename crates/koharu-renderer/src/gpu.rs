@@ -77,7 +77,11 @@ impl Gpu {
             max_buffer_size: supported.max_buffer_size,
             ..wgpu::Limits::default()
         };
-        let optional = wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE;
+        // External memory lets the window import the frames CEF shares.
+        let optional = wgpu::Features::CLEAR_TEXTURE
+            | wgpu::Features::PIPELINE_CACHE
+            | wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32
+            | wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("koharu renderer"),
             required_features: adapter.features() & optional,

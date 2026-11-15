@@ -213,22 +213,31 @@ impl Compositor {
             (self.config.width, self.config.height) = size;
             self.surface.configure(&gpu.device, &self.config);
         }
-        self.view.rect = self.view.upload(
-            gpu,
-            &self.layout,
-            &self.sampler,
-            painted.view.as_mut(),
-            (0, 0),
-        );
-        self.popup.rect = match painted.popup_origin {
-            Some(origin) => self.popup.upload(
+        self.view.rect = match &painted.view_frame {
+            Some(frame) => self
+                .view
+                .frame(gpu, &self.layout, &self.sampler, frame, (0, 0)),
+            None => self.view.upload(
+                gpu,
+                &self.layout,
+                &self.sampler,
+                painted.view.as_mut(),
+                (0, 0),
+            ),
+        };
+        self.popup.rect = match (painted.popup_origin, &painted.popup_frame) {
+            (Some(origin), Some(frame)) => {
+                self.popup
+                    .frame(gpu, &self.layout, &self.sampler, frame, origin)
+            }
+            (Some(origin), None) => self.popup.upload(
                 gpu,
                 &self.layout,
                 &self.sampler,
                 painted.popup.as_mut(),
                 origin,
             ),
-            None => None,
+            (None, _) => None,
         };
         self.canvas.rect = None;
         if let Some((texture, viewport)) = canvas {
@@ -353,8 +362,13 @@ impl Layer {
         origin: (i32, i32),
     ) -> Option<Rect> {
         let paint = paint?;
+        // A shared frame's texture, which takes no uploads, is replaced too.
         let sized = self.source.as_ref().is_some_and(|source| {
             (source.texture.width(), source.texture.height()) == (paint.width, paint.height)
+                && source
+                    .texture
+                    .usage()
+                    .contains(wgpu::TextureUsages::COPY_DST)
         });
         if !sized {
             let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -414,6 +428,26 @@ impl Layer {
             y,
             x + f64::from(paint.width),
             y + f64::from(paint.height),
+        ))
+    }
+
+    /// Samples `frame`, a frame CEF shared, drawn at `origin`, and answers
+    /// where it goes.
+    fn frame(
+        &mut self,
+        gpu: &Gpu,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        frame: &wgpu::Texture,
+        origin: (i32, i32),
+    ) -> Option<Rect> {
+        self.show(gpu, layout, sampler, frame);
+        let (x, y) = (f64::from(origin.0), f64::from(origin.1));
+        Some(Rect::new(
+            x,
+            y,
+            x + f64::from(frame.width()),
+            y + f64::from(frame.height()),
         ))
     }
 

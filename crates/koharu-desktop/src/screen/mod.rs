@@ -12,7 +12,9 @@
 mod compose;
 mod input;
 mod keys;
+mod pace;
 mod paint;
+mod shared;
 
 use std::{
     cell::RefCell,
@@ -27,12 +29,12 @@ use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::Filter
 use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Snapshot, Tool};
 use koharu_renderer::Gpu;
 use koharu_scene::LayerId;
-use tauri::{AppHandle, LogicalPosition, Manager as _, webview::WebviewBuilder};
+use tauri::{AppHandle, LogicalPosition, Manager as _, WebviewUrl, webview::WebviewBuilder};
 use tauri_runtime_cef::{
     AsCefWebviewAttributes as _, CefRuntime, Offscreen, OffscreenView, WebviewBuilderCefExt as _,
     cef::{
-        Browser, BrowserHost, CefString, CursorType, ImplBrowser as _, ImplBrowserHost as _,
-        ImplFrame as _, sys::cef_cursor_type_t,
+        AcceleratedPaintInfo, Browser, BrowserHost, CefString, CursorType, ImplBrowser as _,
+        ImplBrowserHost as _, ImplFrame as _, PaintElementType, sys::cef_cursor_type_t,
     },
 };
 use tokio::sync::oneshot::{self, error::TryRecvError};
@@ -42,12 +44,15 @@ use winit::{
     window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData, Window},
 };
 
-pub use self::input::Pointer;
-use self::{compose::Compositor, input::Input, paint::Painted};
+use self::{compose::Compositor, input::Input, pace::Pacer, paint::Painted, shared::Importer};
+pub use self::{input::Pointer, shared::sharing};
 use crate::{app::App, events};
 
 /// The window's label in `tauri.conf.json`, and its webview's.
 pub const MAIN: &str = "main";
+
+/// The frames a second CEF renders the page at, and paces them by.
+const FRAME_RATE: i32 = 60;
 
 thread_local! {
     /// The main window, on the main thread, from `open` until it's
@@ -234,6 +239,14 @@ struct Main {
     compositor: Option<Compositor>,
     /// Whether the input method composes for the page yet.
     ime: bool,
+    /// Takes CEF's frames and paces them, where it shares them as GPU
+    /// textures.
+    shared: Option<Shared>,
+}
+
+struct Shared {
+    importer: Importer,
+    pacer: Pacer,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -306,6 +319,28 @@ impl Main {
         self.browser.as_ref().and_then(|browser| browser.host())
     }
 
+    /// Takes a frame CEF shared: the page's with its mask, or the popup's.
+    fn take_shared(&mut self, type_: PaintElementType, info: &AcceleratedPaintInfo) -> Result<()> {
+        let Some(shared) = self.shared.as_mut() else {
+            return Ok(());
+        };
+        if type_ == PaintElementType::POPUP {
+            return shared
+                .importer
+                .take(self.gpu, info, &mut self.painted.popup_frame, None);
+        }
+        let (mut frame, mut mask) = (shared.pacer.spare(), None);
+        shared
+            .importer
+            .take(self.gpu, info, &mut frame, Some(&mut mask))?;
+        if let (Some(texture), Some(view)) = (frame, &self.view) {
+            shared
+                .pacer
+                .arrive(texture, mask, info.extra.timestamp, view);
+        }
+        Ok(())
+    }
+
     /// CEF's cursor, over its page.
     fn set_web_cursor(&mut self, cursor: CursorType) {
         self.web_cursor = icon(cursor);
@@ -324,6 +359,9 @@ impl Main {
         // resize draws again.
         if size.width == 0 || size.height == 0 {
             return;
+        }
+        if let Some(shared) = &mut self.shared {
+            shared.pacer.show(&mut self.painted, Instant::now());
         }
         if self.compositor.is_none() {
             match Compositor::new(self.gpu, Arc::clone(window)) {
@@ -466,9 +504,14 @@ fn enable_ime(window: &dyn Window) {
 }
 
 /// Opens the main window from its configuration, with one webview covering
-/// it that renders off-screen into it, and makes `screen` reach it. Runs on
-/// the main thread, in the app's setup.
-pub fn open(handle: &AppHandle<CefRuntime>, screen: &Screen, gpu: &'static Gpu) -> Result<()> {
+/// it that renders off-screen into it, as GPU textures when `shared`, and
+/// makes `screen` reach it. Runs on the main thread, in the app's setup.
+pub fn open(
+    handle: &AppHandle<CefRuntime>,
+    screen: &Screen,
+    gpu: &'static Gpu,
+    shared: bool,
+) -> Result<()> {
     WINDOW.set(Some(Main {
         gpu,
         handle: handle.clone(),
@@ -484,6 +527,10 @@ pub fn open(handle: &AppHandle<CefRuntime>, screen: &Screen, gpu: &'static Gpu) 
         web_cursor: Some(CursorIcon::Default),
         compositor: None,
         ime: false,
+        shared: shared.then(|| Shared {
+            importer: Importer::new(gpu),
+            pacer: Pacer::new(),
+        }),
     }));
     let _ = screen.0.set(handle.clone());
 
@@ -497,7 +544,15 @@ pub fn open(handle: &AppHandle<CefRuntime>, screen: &Screen, gpu: &'static Gpu) 
     let window = tauri::window::WindowBuilder::from_config(handle, config)?
         .build()
         .context("failed to create the main window")?;
+    add_webview(&window, config.url.clone(), shared)?;
+    window.show()?;
+    window.set_focus()?;
+    Ok(())
+}
 
+/// Adds the main webview to `window`, covering it and rendering off-screen
+/// into it, as GPU textures when `shared`.
+fn add_webview(window: &tauri::Window<CefRuntime>, url: WebviewUrl, shared: bool) -> Result<()> {
     let mut offscreen = Offscreen::new(|view| {
         with(|main| main.view = Some(view.clone()));
         paint::Painter::new(view)
@@ -506,17 +561,18 @@ pub fn open(handle: &AppHandle<CefRuntime>, screen: &Screen, gpu: &'static Gpu) 
     offscreen.cursor_handler = Some(Arc::new(|cursor, _| {
         with(|main| main.set_web_cursor(cursor));
     }));
+    offscreen.shared_texture_enabled = shared;
 
     let size = window
         .inner_size()?
         .to_logical::<f64>(window.scale_factor()?);
-    let mut webview = WebviewBuilder::<CefRuntime>::new(MAIN, config.url.clone())
+    let mut webview = WebviewBuilder::<CefRuntime>::new(MAIN, url)
         .auto_resize()
         .position(LogicalPosition::new(0.0, 0.0))
         .size(size)
         // The canvas shows through where the page paints nothing.
         .transparent(true)
-        .with_browser_settings(|settings| settings.windowless_frame_rate = 60);
+        .with_browser_settings(|settings| settings.windowless_frame_rate = FRAME_RATE);
     webview
         .runtime_specific_attributes_mut()
         .as_cef_webview_attributes_mut()
@@ -525,9 +581,59 @@ pub fn open(handle: &AppHandle<CefRuntime>, screen: &Screen, gpu: &'static Gpu) 
     window
         .add_child(webview)
         .context("failed to add the main webview")?;
-    window.show()?;
-    window.set_focus()?;
     Ok(())
+}
+
+/// Puts the main webview back with CEF painting into memory, after a frame
+/// it shared couldn't be imported: the interface reloads once, on the path
+/// every machine takes, and keeps working.
+fn copy_frames() {
+    let handle = with(|main| {
+        main.shared.take()?;
+        main.painted = Painted::default();
+        main.browser = None;
+        Some(main.handle.clone())
+    })
+    .flatten();
+    let Some(handle) = handle else { return };
+    // Off CEF's callback, which mustn't wait on the window's operations.
+    thread::spawn(move || {
+        if let Some(webview) = handle.get_webview(MAIN)
+            && let Err(error) = webview.close()
+        {
+            tracing::error!("failed to close the main webview: {error}");
+            return;
+        }
+        // Its label frees once the runtime has let it go.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while handle.get_webview(MAIN).is_some() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        let reopen = handle.clone();
+        let ran = handle.run_on_main_thread(move || {
+            let added = reopen
+                .get_window(MAIN)
+                .context("the main window is gone")
+                .and_then(|window| {
+                    let url = reopen
+                        .config()
+                        .app
+                        .windows
+                        .iter()
+                        .find(|window| window.label == MAIN)
+                        .context("the main window's configuration is missing")?
+                        .url
+                        .clone();
+                    add_webview(&window, url, false)
+                });
+            if let Err(error) = added {
+                tracing::error!("failed to add the main webview again: {error:#}");
+            }
+        });
+        if let Err(error) = ran {
+            tracing::error!("failed to add the main webview again: {error}");
+        }
+    });
 }
 
 /// Routes `pointer` as the main window would have, with Ctrl held for it when

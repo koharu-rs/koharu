@@ -45,7 +45,9 @@ fn main() {
                         "koharu_desktop::commands=debug"
                             .parse()
                             .expect("the directive parses"),
-                    ),
+                    )
+                    // The `cef` crate's texture importer logs every frame.
+                    .add_directive("cef=warn".parse().expect("the directive parses")),
             )
             // INFO and up as spans, logs, and breadcrumbs, since a crash report
             // carries breadcrumbs and not logs; errors as issues.

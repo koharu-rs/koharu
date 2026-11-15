@@ -44,6 +44,16 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     // The window composites with it from its first frame.
     let gpu = Gpu::get()?;
     let adapter = gpu.adapter.get_info();
+    // CEF hands its frames over as GPU textures where Koharu's GPU can take
+    // them, and copies them through memory everywhere else.
+    let sharing = screen::sharing(gpu);
+    let shared = sharing.is_some();
+    tracing::info!(
+        "CEF's frames: {} on {} ({})",
+        if shared { "shared textures" } else { "copied" },
+        adapter.name,
+        adapter.backend
+    );
     koharu_sentry::set_context(
         "gpu",
         GpuContext {
@@ -70,6 +80,11 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
             let app = Arc::clone(&app);
             move |label, _, window, event| screen::on_window_event(&app, label, window, event)
         });
+    // A shared texture opens only on the GPU that made it.
+    let cef = match sharing.flatten() {
+        Some(luid) => cef.command_line_arg("use-adapter-luid", Some(luid)),
+        None => cef,
+    };
     #[cfg(debug_assertions)]
     let cef = cef
         .remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
@@ -118,10 +133,10 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .on_web_content_process_terminate(koharu_sentry::web_content_process_terminated)
         .manage(app)
         .invoke_handler(commands::handler())
-        .setup(|tauri| {
+        .setup(move |tauri| {
             let app = tauri.state::<Arc<App>>();
             app.start(tauri.handle().clone());
-            Ok(screen::open(tauri.handle(), &app.screen, app.gpu)?)
+            Ok(screen::open(tauri.handle(), &app.screen, app.gpu, shared)?)
         })
         .run(context)?;
     Ok(())

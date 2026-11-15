@@ -14,6 +14,7 @@ publish.workspace = true
 [dependencies]
 alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
+cef = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
@@ -62,3 +63,5 @@ webp = { workspace = true }
 wgpu = { workspace = true }
 zip = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
