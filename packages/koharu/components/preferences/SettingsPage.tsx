@@ -203,19 +203,27 @@ function AppearancePreferences() {
           description={t('settings.appearance.themeDescription')}
         >
           <div className='grid grid-cols-3 rounded-xl border border-input bg-background p-0.5'>
-            {themes.map(([value, Icon]) => (
-              <Button
-                key={value}
-                type='button'
-                variant='ghost'
-                size='sm'
-                data-active={theme === value}
-                className='h-9 gap-1.5 text-[10px] text-muted-foreground hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90 data-[active=true]:hover:text-primary-foreground'
-                onClick={() => setTheme(value)}
-              >
-                <Icon className='size-3.5' /> {t(`settings.appearance.themes.${value}`)}
-              </Button>
-            ))}
+            {themes.map(([value, Icon]) => {
+              // The ghost variant's dark hover outranks any active override, so the
+              // chosen theme is a default button instead.
+              const active = theme === value
+              return (
+                <Button
+                  key={value}
+                  type='button'
+                  variant={active ? 'default' : 'ghost'}
+                  size='sm'
+                  className={
+                    active
+                      ? 'h-9 gap-1.5 text-[10px]'
+                      : 'h-9 gap-1.5 text-[10px] text-muted-foreground'
+                  }
+                  onClick={() => setTheme(value)}
+                >
+                  <Icon className='size-3.5' /> {t(`settings.appearance.themes.${value}`)}
+                </Button>
+              )
+            })}
           </div>
         </PreferenceRow>
         <PreferenceRow title={t('settings.appearance.language')}>
