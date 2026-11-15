@@ -7,13 +7,10 @@
 
 use std::time::Instant;
 
-use koharu_renderer::{Drawn, Frame, Renderer, RendererConfig, View};
+use koharu_renderer::{Drawn, Frame, Gpu, Renderer, RendererConfig};
 use koharu_scene::{Created, Edit, LayerKind, Op, Project, Session};
+use kurbo::{Affine, Point, Rect};
 use serde_json::{Value, json};
-use vello::{
-    kurbo::{Point, Rect},
-    wgpu,
-};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -58,48 +55,43 @@ fn main() -> Result<()> {
     };
 
     let renderer = Renderer::new(RendererConfig::default());
-    let gpu = renderer.gpu()?;
+    let gpu = Gpu::get()?;
     let started = Instant::now();
     let frame = renderer.render(&session, page)?;
     println!("rendered in {:?}", started.elapsed());
 
-    // The window, zoomed to 200% on the second balloon. Each strip renders
-    // into a texture of its own, which the canvas places at `strip.rect`.
+    // The window, zoomed to 200% on the second balloon, drawn into a texture
+    // the window's size.
     let balloon = frame
         .layer(line(1).expect("the line"))
         .and_then(|layer| layer.bounds())
         .expect("it draws");
-    let view = View {
-        rect: Rect::from_center_size(balloon.center(), (WINDOW.0 / 2.0, WINDOW.1 / 2.0)),
-        scale: 2.0,
-    };
-    let strips = frame.draw(view);
-    for strip in &strips {
-        let (width, height) = (strip.rect.width() as u32, strip.rect.height() as u32);
-        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("canvas strip"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        gpu.render(
-            &strip.scene,
-            &texture.create_view(&Default::default()),
-            width,
-            height,
-        )?;
-    }
-    println!("drew the 200% view in {} strip(s)", strips.len());
+    let shown = Rect::from_center_size(balloon.center(), (WINDOW.0 / 2.0, WINDOW.1 / 2.0));
+    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("canvas"),
+        size: wgpu::Extent3d {
+            width: WINDOW.0 as u32,
+            height: WINDOW.1 as u32,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let started = Instant::now();
+    let mut drawing = gpu.drawing(WINDOW.0 as u16, WINDOW.1 as u16);
+    frame.paint(
+        Affine::scale(2.0) * Affine::translate((-shown.x0, -shown.y0)),
+        Rect::new(0.0, 0.0, WINDOW.0, WINDOW.1),
+        &mut drawing,
+    )?;
+    drawing.render(&texture.create_view(&Default::default()))?;
+    println!("drew the 200% view in {:?}", started.elapsed());
 
-    if let Some(drawn) = topmost(&frame, &session.project(), view.rect.center()) {
+    if let Some(drawn) = topmost(&frame, &session.project(), shown.center()) {
         println!("under the pointer: {drawn:?}");
     }
     for layer in frame

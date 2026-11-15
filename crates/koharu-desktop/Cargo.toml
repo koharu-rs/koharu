@@ -12,6 +12,8 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+# `unstable` brings the CEF methods of a window's child webview builder,
+# behind Tauri's own multiwebview API.
 alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }
@@ -31,6 +33,7 @@ koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-sentry = { workspace = true }
+kurbo = { workspace = true }
 parking_lot = { workspace = true }
 rars = { workspace = true }
 rayon = { workspace = true }
@@ -49,16 +52,14 @@ tauri-plugin-process = { workspace = true }
 tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
-# `unstable` brings the CEF methods of a window's child webview builder,
-# behind Tauri's own multiwebview API.
 tauri-runtime-cef = { workspace = true }
 tauri-winit = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 ui-events = { workspace = true }
-vello = { workspace = true }
 webp = { workspace = true }
+wgpu = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]

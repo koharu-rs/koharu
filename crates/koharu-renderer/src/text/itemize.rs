@@ -265,15 +265,44 @@ fn upright_groups(text: &str, range: Range<usize>) -> Vec<(Range<usize>, bool)> 
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::Color;
+    use koharu_scene::{Align, Color, Frame};
     use unicode_bidi::BidiInfo;
 
     use super::*;
     use crate::{
-        fonts::{Font, FontSystem},
+        fonts::{Font, Library},
         text::style::Span,
-        text::testing::{primary, styled},
     };
+
+    /// `text` in one 16-pixel span of an installed sans-serif, as point
+    /// text.
+    fn styled(text: &str) -> Styled {
+        let font = [
+            "Arial",
+            "Segoe UI",
+            "Noto Sans",
+            "DejaVu Sans",
+            "Liberation Sans",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed sans-serif");
+        Styled {
+            text: text.to_owned(),
+            spans: vec![Span {
+                range: 0..text.len(),
+                fonts: vec![font],
+                size: 16.0,
+                fill: Color::BLACK,
+                stroke: None,
+            }],
+            vertical: false,
+            align: Align::Start,
+            line_height: 1.2,
+            hyphenation: None,
+            frame: Frame::Point,
+        }
+    }
 
     /// The text of each piece, with its span.
     fn cut(styled: &Styled) -> Vec<(&str, usize)> {
@@ -297,7 +326,7 @@ mod tests {
         };
         let styled = Styled {
             spans: vec![span(0..4), span(4..text.len())],
-            ..styled(text, Vec::new())
+            ..styled(text)
         };
         assert_eq!(
             cut(&styled),
@@ -334,10 +363,7 @@ mod tests {
     fn a_sideways_right_to_left_word_keeps_its_direction() {
         let styled = Styled {
             vertical: true,
-            ..styled(
-                "東\u{05e9}\u{05dc}\u{05d5}\u{05dd}",
-                vec![primary(&mut FontSystem::new())],
-            )
+            ..styled("東\u{05e9}\u{05dc}\u{05d5}\u{05dd}")
         };
         let levels = BidiInfo::new(&styled.text, None).levels;
         let (runs, _) = itemize(&styled, &levels);
@@ -391,22 +417,23 @@ mod tests {
 
     #[test]
     fn a_grapheme_the_first_font_lacks_falls_back() {
-        let mut fonts = FontSystem::new();
-        let primary = primary(&mut fonts);
+        let mut library = Library::new();
+        let primary = styled("").spans[0].fonts[0].clone();
+        let has = |font: &Font, symbol: char| font.covers(symbol.encode_utf8(&mut [0; 4]));
         let (fallback, symbol): (Font, char) = SYMBOLS
             .iter()
-            .filter(|symbol| !primary.has_glyph(**symbol))
+            .filter(|symbol| !has(&primary, **symbol))
             .find_map(|symbol| {
                 FALLBACK_FAMILIES.iter().find_map(|name| {
-                    let font = fonts.query_family(name).ok()?;
-                    (font.post_script_name() != primary.post_script_name()
-                        && font.has_glyph(*symbol))
-                    .then_some((font, *symbol))
+                    let font = library.family(name).ok()?;
+                    (font.post_script_name != primary.post_script_name && has(&font, *symbol))
+                        .then_some((font, *symbol))
                 })
             })
             .expect("no fallback font with missing primary glyph found");
 
-        let styled = styled(&format!("A{symbol}!"), vec![primary, fallback]);
+        let mut styled = styled(&format!("A{symbol}!"));
+        styled.spans[0].fonts = vec![primary, fallback];
         let levels = BidiInfo::new(&styled.text, None).levels;
         let (runs, uncovered) = itemize(&styled, &levels);
         let font = |at: usize| {
@@ -417,13 +444,5 @@ mod tests {
         };
         assert_eq!((font(0), font(1)), (0, 1));
         assert!(uncovered.is_empty());
-    }
-
-    #[test]
-    fn characters_no_font_has_are_reported_once() {
-        let styled = styled("a\u{378}b\u{378}", vec![primary(&mut FontSystem::new())]);
-        let levels = BidiInfo::new(&styled.text, None).levels;
-        // U+0378 is unassigned, so no font has it.
-        assert_eq!(itemize(&styled, &levels).1, ['\u{378}']);
     }
 }

@@ -1,151 +1,142 @@
-//! The GPU: one wgpu device and vello renderer, rendering scenes to textures
-//! and reading them back.
+//! The GPU: one wgpu device and a vello_gpu renderer, which draws every page
+//! Koharu shows or exports.
 
 use std::{
-    collections::HashSet,
-    sync::{LazyLock, mpsc},
+    collections::HashMap,
+    sync::{Arc, LazyLock, Weak, mpsc},
 };
 
 use anyhow::{Context, Result, anyhow};
+use glifo::{FontEmbolden, Glyph};
 use image::RgbaImage;
-use parking_lot::Mutex;
-use vello::{
-    AaConfig, AaSupport, RenderParams, RendererOptions, Scene,
-    kurbo::{Affine, Rect},
-    low_level::vello_encoding::Patch,
-    peniko::{Blob, Color, Fill, ImageAlphaType, ImageBrush, ImageData, ImageFormat},
-    wgpu::{
-        self, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
-        TexelCopyBufferInfo, Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
-    },
+use kurbo::Affine;
+use parking_lot::{Mutex, MutexGuard};
+use vello_gpu::{
+    ImageSource, Pixmap, RenderOptions, RenderTarget, RenderTargetConfig, Renderer, Resources,
+    Scene, TextureBindings, TextureId, TextureRegion,
+};
+use wgpu::{
+    BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d, TexelCopyBufferInfo,
+    Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView, util::DeviceExt as _,
 };
 
-/// The pixels vello 0.11's image atlas holds at most; it draws every image
-/// of a render from it, and skips what doesn't fit.
-pub(crate) const ATLAS: u64 = 8192 * 8192;
+use crate::fonts::Font;
 
-/// One transparent pixel, drawn so a render always has an image.
-static PIXEL: LazyLock<ImageData> = LazyLock::new(|| ImageData {
-    data: Blob::from(vec![0; 4]),
-    format: ImageFormat::Rgba8,
-    alpha_type: ImageAlphaType::Alpha,
-    width: 1,
-    height: 1,
-});
+/// The process's GPU, started the first time it's asked for. One that fails
+/// to start stays failed until Koharu starts again.
+static GPU: LazyLock<Result<Gpu>> = LazyLock::new(Gpu::new);
 
-/// The device, its queue, and the vello renderer, shared by export and the
-/// desktop canvas. The instance and adapter stay, because a window's surface
-/// must come from the instance the device came from, on an adapter that
-/// presents to it.
+/// The device and its queue, which the desktop's compositor shares, and
+/// vello_gpu's renderer. The instance and adapter stay, because a window's
+/// surface must come from the instance the device came from, on an adapter
+/// that presents to it.
 pub struct Gpu {
     pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    vello: Mutex<Vello>,
-    targets: Mutex<Vec<Target>>,
+    /// What one drawing holds at a time.
+    vello: Mutex<State>,
 }
 
-struct Vello {
-    renderer: vello::Renderer,
-    /// The image pixels each of the last two renders drew.
-    recent: [u64; 2],
-}
-
-struct Target {
-    width: u32,
-    height: u32,
-    texture: Texture,
-    view: TextureView,
+/// vello_gpu's renderer, the glyphs it keeps, and each image uploaded as a
+/// texture of its own, by its pixmap's address, kept while the pixmap lives.
+struct State {
+    renderer: Renderer,
+    resources: Resources,
+    textures: HashMap<usize, (Weak<Pixmap>, TextureId, TextureView)>,
+    /// The id the next uploaded image is named by.
+    next_texture: u64,
 }
 
 impl Gpu {
-    pub(crate) fn new() -> Result<Self> {
-        let (instance, adapter, device, queue) = pollster::block_on(request_device())?;
-        let renderer = vello::Renderer::new(
+    /// The process's GPU, which the canvas and the window draw with.
+    pub fn get() -> Result<&'static Self> {
+        GPU.as_ref()
+            .map_err(|error| anyhow!("the GPU didn't start: {error:#}"))
+    }
+
+    /// Creates the device with the adapter's texture and buffer limits, rather
+    /// than `Limits::default()`, which caps a texture at 8192 pixels whatever
+    /// the GPU supports.
+    fn new() -> Result<Self> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            display: None,
+            backends: wgpu::Backends::from_env().unwrap_or_default(),
+            flags: wgpu::InstanceFlags::from_build_config().with_env(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            backend_options: wgpu::BackendOptions::from_env_or_default(),
+        });
+        let adapter = pollster::block_on(wgpu::util::initialize_adapter_from_env_or_default(
+            &instance, None,
+        ))
+        .context("no GPU adapter is available")?;
+        let supported = adapter.limits();
+        let required_limits = wgpu::Limits {
+            max_texture_dimension_2d: supported.max_texture_dimension_2d,
+            max_buffer_size: supported.max_buffer_size,
+            ..wgpu::Limits::default()
+        };
+        let optional = wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("koharu renderer"),
+            required_features: adapter.features() & optional,
+            required_limits,
+            ..Default::default()
+        }))
+        .context("no GPU adapter supports vello_gpu's features")?;
+        // A render takes its size from its target; this only sizes the
+        // renderer's first buffers.
+        let (renderer, resources) = Renderer::new(
             &device,
-            RendererOptions {
-                antialiasing_support: AaSupport::area_only(),
-                ..Default::default()
+            &queue,
+            &RenderTargetConfig {
+                format: TextureFormat::Rgba8Unorm,
+                width: 1,
+                height: 1,
             },
-        )
-        .map_err(|error| anyhow!("failed to create the vello renderer: {error:?}"))?;
+        );
         Ok(Self {
             instance,
             adapter,
             device,
             queue,
-            vello: Mutex::new(Vello {
+            vello: Mutex::new(State {
                 renderer,
-                recent: [0; 2],
+                resources,
+                textures: HashMap::new(),
+                next_texture: 0,
             }),
-            targets: Mutex::new(Vec::new()),
         })
     }
 
-    /// Renders `scene` onto `target`, a transparent `width`×`height`
-    /// `Rgba8Unorm` storage texture. Every vello render goes through here,
-    /// which works around two faults of vello 0.11's image atlas:
-    ///
-    /// - A render with no image, gradient, or glyph frees the atlas while
-    ///   vello still counts its images as uploaded, so they draw transparent
-    ///   from then on [vello#1948]. Such a scene gets a transparent pixel.
-    /// - vello never evicts an image either of the last two renders drew
-    ///   [vello#2011], so a render whose images don't fit beside theirs loses
-    ///   some, as consecutive strips of an export would. Two renders of the
-    ///   pixel alone come first, so those images can go.
-    ///
-    /// [vello#1948]: https://github.com/linebender/vello/issues/1948
-    /// [vello#2011]: https://github.com/linebender/vello/issues/2011
-    pub fn render(
-        &self,
-        scene: &Scene,
-        target: &TextureView,
-        width: u32,
-        height: u32,
-    ) -> Result<()> {
+    /// The longest side a texture may have on this GPU, and so a drawing's.
+    pub(crate) fn largest_texture(&self) -> u32 {
+        self.device
+            .limits()
+            .max_texture_dimension_2d
+            .min(u32::from(u16::MAX))
+    }
+
+    /// A drawing for a `width`×`height` target. It holds the renderer until
+    /// it's rendered.
+    pub fn drawing(&self, width: u16, height: u16) -> Drawing<'_> {
         let mut vello = self.vello.lock();
-        let pixels = image_pixels(scene);
-        if pixels > 0 && vello.recent.iter().sum::<u64>() + pixels > ATLAS {
-            let spacer = self.target(1, 1)?;
-            let mut pixel = Scene::new();
-            draw_pixel(&mut pixel);
-            for _ in 0..2 {
-                vello.draw(&self.device, &self.queue, &pixel, &spacer.view, 1, 1)?;
-            }
-            self.release(spacer);
-            vello.recent = [0; 2];
+        // A texture whose pixmap has gone, as an evicted layer's, goes too.
+        vello
+            .textures
+            .retain(|_, (pixmap, ..)| pixmap.strong_count() > 0);
+        Drawing {
+            gpu: self,
+            vello,
+            scene: Scene::new(width, height),
+            bindings: TextureBindings::new(),
         }
-        if scene.encoding().resources.patches.is_empty() {
-            let mut padded = Scene::new();
-            padded.append(scene, None);
-            draw_pixel(&mut padded);
-            vello.draw(&self.device, &self.queue, &padded, target, width, height)?;
-        } else {
-            vello.draw(&self.device, &self.queue, scene, target, width, height)?;
-        }
-        vello.recent = [vello.recent[1], pixels];
-        Ok(())
     }
 
-    /// Renders `scene` onto a transparent `width`×`height` surface and reads
-    /// it back as straight-alpha RGBA.
-    pub fn read(&self, scene: &Scene, width: u32, height: u32) -> Result<RgbaImage> {
-        let limit = self.device.limits().max_texture_dimension_2d;
-        if width > limit || height > limit {
-            anyhow::bail!(
-                "a {width}×{height} pass is larger than this GPU's {limit}-pixel textures"
-            );
-        }
-        let target = self.target(width, height)?;
-        self.render(scene, &target.view, width, height)?;
-        let pixels = self.read_texture(&target.texture);
-        self.release(target);
-        pixels
-    }
-
-    /// `texture`, an `Rgba8Unorm` texture made with `COPY_SRC`, as vello
-    /// draws it: straight-alpha RGBA at its own size.
+    /// `texture`, an `Rgba8Unorm` texture made with `COPY_SRC` that holds
+    /// premultiplied RGBA, as vello_gpu draws it, read back as straight
+    /// alpha.
     pub fn read_texture(&self, texture: &Texture) -> Result<RgbaImage> {
         let (width, height) = (texture.width(), texture.height());
         let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -206,206 +197,144 @@ impl Gpu {
         }
         drop(mapped);
         readback.unmap();
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            let alpha = u32::from(pixel[3]);
+            if alpha != 0 && alpha != 255 {
+                for channel in &mut pixel[..3] {
+                    *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                }
+            }
+        }
         RgbaImage::from_raw(width, height, pixels).context("the readback has the wrong size")
     }
+}
 
-    fn release(&self, target: Target) {
-        let mut targets = self.targets.lock();
-        if targets.len() < 4 {
-            targets.push(target);
-        }
-    }
+/// A scene for one render on the GPU, with the textures its images name.
+pub struct Drawing<'a> {
+    pub(crate) gpu: &'a Gpu,
+    vello: MutexGuard<'a, State>,
+    /// What the canvas draws over the page goes here too.
+    pub scene: Scene,
+    bindings: TextureBindings,
+}
 
-    /// A `width`×`height` target, transparent. vello draws nothing for a
-    /// scene that overflows its fixed buffers and says nothing, so a reused
-    /// target is cleared first: such a render then reads back transparent,
-    /// not as the last image read through it.
-    fn target(&self, width: u32, height: u32) -> Result<Target> {
-        let mut targets = self.targets.lock();
-        if let Some(at) = targets
-            .iter()
-            .position(|target| target.width == width && target.height == height)
-        {
-            let target = targets.swap_remove(at);
-            drop(targets);
-            let mut encoder = self
-                .device
-                .create_command_encoder(&CommandEncoderDescriptor {
-                    label: Some("koharu clear"),
-                });
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("koharu clear"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &target.view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            self.queue.submit([encoder.finish()]);
-            return Ok(target);
-        }
-        drop(targets);
-        let texture = self.device.create_texture(&TextureDescriptor {
-            label: Some("koharu render target"),
+impl Drawing<'_> {
+    /// Renders into a texture the drawing's size and reads it back as
+    /// straight-alpha RGBA.
+    pub(crate) fn read(self) -> Result<RgbaImage> {
+        let gpu = self.gpu;
+        let texture = gpu.device.create_texture(&TextureDescriptor {
+            label: Some("koharu raster"),
             size: Extent3d {
-                width,
-                height,
+                width: u32::from(self.scene.width()),
+                height: u32::from(self.scene.height()),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::STORAGE_BINDING
-                | TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::COPY_SRC,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        Ok(Target {
-            width,
-            height,
-            texture,
-            view,
-        })
+        self.render(&texture.create_view(&wgpu::TextureViewDescriptor::default()))?;
+        gpu.read_texture(&texture)
     }
-}
 
-impl Vello {
-    fn draw(
+    /// Renders into `target`, an `Rgba8Unorm` render attachment the drawing's
+    /// size, as premultiplied RGBA.
+    pub fn render(mut self, target: &TextureView) -> Result<()> {
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("koharu render"),
+            });
+        let State {
+            renderer,
+            resources,
+            ..
+        } = &mut *self.vello;
+        renderer
+            .render(
+                &self.scene,
+                resources,
+                &mut encoder,
+                RenderTarget {
+                    view: target,
+                    depth_view: None,
+                },
+                &self.bindings,
+                RenderOptions::default(),
+            )
+            .map_err(|error| anyhow!("the GPU couldn't render: {error}"))?;
+        self.gpu.queue.submit([encoder.finish()]);
+        Ok(())
+    }
+
+    /// Fills `glyphs` of `font` at `size` with the current paint and
+    /// transform, each turned by `turn` and grown by `embolden`.
+    pub(crate) fn glyphs(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        scene: &Scene,
-        target: &TextureView,
-        width: u32,
-        height: u32,
+        font: &Font,
+        size: f32,
+        turn: Option<Affine>,
+        embolden: FontEmbolden,
+        glyphs: &[Glyph],
     ) -> Result<()> {
-        let params = RenderParams {
-            base_color: Color::TRANSPARENT,
-            width,
-            height,
-            antialiasing_method: AaConfig::Area,
-        };
-        self.renderer
-            .render_to_texture(device, queue, scene, target, &params)
-            .map_err(|error| anyhow!("vello rendering failed: {error:?}"))
-    }
-}
-
-/// The pixels of the distinct images `scene` draws.
-fn image_pixels(scene: &Scene) -> u64 {
-    let mut seen = HashSet::new();
-    scene
-        .encoding()
-        .resources
-        .patches
-        .iter()
-        .filter_map(|patch| match patch {
-            Patch::Image { image, .. } if seen.insert(image.data.id()) => {
-                Some(u64::from(image.width) * u64::from(image.height))
-            }
-            _ => None,
-        })
-        .sum()
-}
-
-fn draw_pixel(scene: &mut Scene) {
-    scene.fill(
-        Fill::NonZero,
-        Affine::IDENTITY,
-        &ImageBrush::new(PIXEL.clone()),
-        None,
-        &Rect::new(0.0, 0.0, 1.0, 1.0),
-    );
-}
-
-/// Creates the device as vello's `RenderContext` does, but with the
-/// adapter's texture and buffer limits: vello asks for `Limits::default()`,
-/// which caps a surface at 8192 pixels whatever the GPU supports.
-async fn request_device() -> Result<(wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        display: None,
-        backends: wgpu::Backends::from_env().unwrap_or_default(),
-        flags: wgpu::InstanceFlags::from_build_config().with_env(),
-        memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-        backend_options: wgpu::BackendOptions::from_env_or_default(),
-    });
-    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, None)
-        .await
-        .context("no GPU adapter is available")?;
-    let supported = adapter.limits();
-    let required_limits = wgpu::Limits {
-        max_texture_dimension_2d: supported.max_texture_dimension_2d,
-        max_buffer_size: supported.max_buffer_size,
-        ..wgpu::Limits::default()
-    };
-    let optional = wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE;
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: Some("koharu renderer"),
-            required_features: adapter.features() & optional,
-            required_limits,
-            ..Default::default()
-        })
-        .await
-        .context("no GPU adapter supports vello's features")?;
-    Ok((instance, adapter, device, queue))
-}
-
-#[cfg(test)]
-mod tests {
-    use vello::peniko::{BlendMode, Compose, Mix};
-
-    use super::*;
-
-    /// A render vello drops, as it drops one that overflows its fixed
-    /// buffers, reads back transparent, not as the last image read at its
-    /// size.
-    #[test]
-    fn a_dropped_render_reads_back_transparent() {
-        let Ok(gpu) = Gpu::new() else {
-            eprintln!("skipped without a GPU");
-            return;
-        };
-        let (width, height) = (2400, 3200);
-        let page = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
-        let mut red = Scene::new();
-        red.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            Color::from_rgb8(255, 0, 0),
-            None,
-            &page,
-        );
-        let read = gpu.read(&red, width, height).expect("pixels");
-        assert_eq!(read.get_pixel(10, 10).0, [255, 0, 0, 255]);
-
-        // Layers clipped to the whole page, each taking every tile.
-        let mut overflowing = Scene::new();
-        for _ in 0..200 {
-            overflowing.push_layer(
-                Fill::NonZero,
-                BlendMode::new(Mix::Normal, Compose::SrcOver),
-                0.5,
-                Affine::IDENTITY,
-                &page,
-            );
-            overflowing.fill(
-                Fill::NonZero,
-                Affine::IDENTITY,
-                Color::WHITE,
-                None,
-                &Rect::new(0.0, 0.0, 1.0, 1.0),
-            );
-            overflowing.pop_layer();
+        let mut run = self
+            .scene
+            .glyph_run(&mut self.vello.resources, &font.data)
+            .font_size(size)
+            .normalized_coords(&font.coords)
+            .font_embolden(embolden)
+            .hint(false);
+        if let Some(turn) = turn {
+            run = run.glyph_transform(turn);
         }
-        let read = gpu.read(&overflowing, width, height).expect("pixels");
-        assert_ne!(read.get_pixel(10, 10).0, [255, 0, 0, 255]);
+        run.fill_glyphs(glyphs.iter().copied())
+            .map_err(|error| anyhow!("glyphs couldn't be drawn: {error:?}"))
+    }
+
+    /// `pixmap` as an image the scene samples: uploaded as a texture of its
+    /// own the first time, and named by its id.
+    pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> ImageSource {
+        let address = Arc::as_ptr(pixmap) as usize;
+        let uploaded = self
+            .vello
+            .textures
+            .get(&address)
+            .filter(|(kept, ..)| kept.as_ptr() == Arc::as_ptr(pixmap))
+            .map(|(_, id, view)| (*id, view.clone()));
+        let (id, view) = uploaded.unwrap_or_else(|| {
+            let texture = self.gpu.device.create_texture_with_data(
+                &self.gpu.queue,
+                &TextureDescriptor {
+                    label: Some("koharu image"),
+                    size: Extent3d {
+                        width: u32::from(pixmap.width()),
+                        height: u32::from(pixmap.height()),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: TextureFormat::Rgba8Unorm,
+                    usage: TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                },
+                wgpu::util::TextureDataOrder::LayerMajor,
+                pixmap.data_as_u8_slice(),
+            );
+            let id = TextureId(self.vello.next_texture);
+            self.vello.next_texture += 1;
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.vello
+                .textures
+                .insert(address, (Arc::downgrade(pixmap), id, view.clone()));
+            (id, view)
+        });
+        self.bindings.insert(id, view);
+        ImageSource::external_texture(id, TextureRegion::Full, true)
     }
 }

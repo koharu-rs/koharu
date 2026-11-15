@@ -17,7 +17,6 @@ use ui_events::{
         PointerScrollEvent, PointerState, PointerType, PointerUpdate,
     },
 };
-use vello::wgpu;
 
 use crate::host::{Host, milliseconds};
 
@@ -28,7 +27,7 @@ const SCALE: f64 = 1.5;
 /// Runs the gestures and writes the canvas to `snapshot`; `dense` first
 /// adds 150 text layers.
 pub fn run(mut host: Host, snapshot: &Path, dense: bool) -> Result<()> {
-    let gpu = host.renderer.gpu()?;
+    let gpu = Gpu::get()?;
     if dense {
         add_dense(&mut host)?;
     }
@@ -44,7 +43,7 @@ pub fn run(mut host: Host, snapshot: &Path, dense: bool) -> Result<()> {
             .collect()
     };
     let mut timer = Timer {
-        gpu: &gpu,
+        gpu,
         phases: Vec::new(),
     };
 

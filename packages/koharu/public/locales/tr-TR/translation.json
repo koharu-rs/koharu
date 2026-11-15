@@ -85,51 +85,13 @@
     "title": "Geri bildirim gönder"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} etkin filtre",
-    "activeFilterCount_one": "{{count}} etkin filtre",
-    "activeFilterCount_other": "{{count}} etkin filtre",
-    "allPurposes": "Tüm amaçlar",
-    "allScripts": "Tüm yazı sistemleri",
-    "allSources": "Tüm kaynaklar",
-    "allStyles": "Tüm stiller",
     "choose": "Yazı tipi seç",
-    "clearFilters": "Filtreleri temizle",
-    "filter": "Yazı tiplerini filtrele",
-    "filterActiveLabel": "Yazı tiplerini filtrele, {{count}} etkin",
     "fontCount": "{{count}} yazı tipi",
     "fontCount_one": "{{count}} yazı tipi",
     "fontCount_other": "{{count}} yazı tipi",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "Yazı tipleri",
     "noResults": "Bu aramayla eşleşen yazı tipi yok",
-    "purpose": "Amaç",
-    "script": "Yazı sistemi",
-    "scripts": {
-      "arab": "Arap alfabesi",
-      "beng": "Bengal",
-      "cyrl": "Kiril",
-      "deva": "Devanagari",
-      "gujr": "Gücerat alfabesi",
-      "guru": "Gurmukhi",
-      "hang": "Hangıl",
-      "hani": "Han",
-      "hebr": "İbrani alfabesi",
-      "hira": "Hiragana",
-      "kana": "Katakana",
-      "knda": "Kannada",
-      "latn": "Latin",
-      "mlym": "Malayalam",
-      "taml": "Tamil alfabesi",
-      "telu": "Telugu alfabesi",
-      "thai": "Tay alfabesi"
-    },
-    "search": "Yazı tipi ara",
-    "source": "Kaynak",
-    "sources": {
-      "bundled": "Paketlenmiş",
-      "system": "Sistem"
-    },
-    "style": "Stil"
+    "search": "Yazı tipi ara"
   },
   "inference": {
     "currentPage": "Geçerli sayfa",

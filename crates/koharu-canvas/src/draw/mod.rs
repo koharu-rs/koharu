@@ -4,9 +4,9 @@ pub(crate) mod overlay;
 mod target;
 
 use koharu_scene::Rgba;
-use vello::peniko::Color;
+use vello_gpu::peniko::Color;
 
-pub(crate) use target::{Target, strip_origin};
+pub(crate) use target::Target;
 
 pub(crate) fn color(Rgba(components): Rgba) -> Color {
     Color::new(components)

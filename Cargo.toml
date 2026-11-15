@@ -68,6 +68,7 @@ futures = "0.3.34"
 globset = "0.4.21"
 half = "2.7.1"
 harfrust = "0.15.0"
+glifo = "0.5.0"
 hayro = "0.8.0"
 heck = "0.5.0"
 hf-hub = "1.0.0"
@@ -123,6 +124,7 @@ serde_ignored = "0.1.14"
 # Floats must survive a write and a reopen unchanged, so memory and file agree.
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 serde_json_canonicalizer = "0.4.1"
+serde_path_to_error = "0.1.20"
 serde_rusqlite = "0.44.0"
 serde_with = { version = "3.24.0", default-features = false, features = ["json", "macros"] }
 similar = "3.2.1"
@@ -172,9 +174,10 @@ ui-events-winit = "0.3.0"
 unicode-bidi = "0.3.18"
 url = { version = "2.5.8", features = ["serde"] }
 uuid = { version = "1.29.2", features = ["v4", "v7", "serde"] }
-vello = "0.11.0"
 vello_cpu = { version = "0.4.0", default-features = false, features = ["std", "u8_pipeline"] }
+vello_gpu = "0.4.0"
 webp = { version = "0.3.1" }
+wgpu = "30.0.1"
 winit = "0.30.13"
 windows = { version = "0.62.2", features = [
     "Win32",

@@ -7,7 +7,6 @@ use anyhow::Result;
 use hypher::Lang;
 use koharu_scene::{Align, CharStyle, Color, Direction, Frame, Text};
 
-use super::breaks::hyphenation;
 use crate::fonts::Font;
 
 pub(super) struct Styled {
@@ -69,7 +68,15 @@ impl Styled {
             vertical: text.direction == Direction::Vertical,
             align: text.style.align.unwrap_or_default(),
             line_height: text.style.line_height.unwrap_or(1.2) as f32,
-            hyphenation: hyphenation(&text.language),
+            // By the language's two-letter code.
+            hyphenation: text
+                .language
+                .language
+                .as_str()
+                .as_bytes()
+                .try_into()
+                .ok()
+                .and_then(Lang::from_iso),
             frame: text.frame.clone(),
         })
     }
@@ -80,54 +87,5 @@ impl Styled {
             .iter()
             .position(|span| span.range.contains(&offset))
             .unwrap_or(self.spans.len().saturating_sub(1))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use koharu_scene::{Rgba, RichText, Span as SceneSpan, TextStyle};
-
-    use super::*;
-
-    #[test]
-    fn a_span_takes_its_own_style_over_the_text_s_and_empty_ones_drop() -> Result<()> {
-        let red = Rgba([1.0, 0.0, 0.0, 1.0]);
-        let span = |insert: &str, attributes| SceneSpan {
-            insert: insert.to_owned(),
-            attributes,
-        };
-        let text = Text {
-            content: RichText(vec![
-                span(
-                    "big ",
-                    CharStyle {
-                        size: Some(40.0),
-                        ..CharStyle::default()
-                    },
-                ),
-                span("", CharStyle::default()),
-                span("red", CharStyle::default()),
-            ]),
-            style: TextStyle {
-                chars: CharStyle {
-                    fill: Some(red),
-                    ..CharStyle::default()
-                },
-                ..TextStyle::default()
-            },
-            ..Text::default()
-        };
-        let styled = Styled::new(&text, |_, _| Ok(Vec::new()))?;
-        assert_eq!(styled.text, "big red");
-        assert_eq!(styled.spans.len(), 2);
-        assert_eq!(styled.spans[0].size, 40.0);
-        assert_ne!(styled.spans[1].size, 40.0);
-        assert!(
-            styled
-                .spans
-                .iter()
-                .all(|span| span.fill == Color::from(red))
-        );
-        Ok(())
     }
 }

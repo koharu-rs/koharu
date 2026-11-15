@@ -417,26 +417,17 @@ function TypeInspector() {
 function placeholderFamily(name: string): FontFamily {
   return {
     name,
-    metadata: {
-      primary_script: null,
-      scripts: [],
-      languages: [],
-      category: null,
-      classifications: [],
-      use_cases: [],
-    },
-    sources: ['bundled'],
-    faces: [{ post_script_name: name, weight: 400, weight_range: null, style: 'normal' }],
+    faces: [{ post_script_name: name, weight: 400, weight_range: null, italic: false }],
   }
 }
 
 function hasItalic(family: FontFamily | undefined): boolean {
-  return Boolean(family?.faces.some((face) => face.style !== 'normal'))
+  return Boolean(family?.faces.some((face) => face.italic))
 }
 
 function usableFontWeights(family: FontFamily | undefined, italic: boolean): number[] {
   if (!family) return [400]
-  const styled = family.faces.filter((face) => (face.style !== 'normal') === italic)
+  const styled = family.faces.filter((face) => face.italic === italic)
   const faces = styled.length ? styled : family.faces
   const weights = new Set(faces.map((face) => face.weight))
   for (const face of faces) {

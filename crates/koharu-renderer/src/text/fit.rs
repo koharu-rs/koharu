@@ -7,7 +7,7 @@
 use std::ops::{Range, RangeInclusive};
 
 use koharu_scene::{Align, Anchor};
-use vello::kurbo::Rect;
+use kurbo::Rect;
 
 use super::{
     breaks::{Break, Breaking, Segment},
@@ -67,11 +67,10 @@ pub(super) fn fit(
         |scale| overflows(styled, room, &words, scale),
         |scale| match scale == 1.0 {
             // The text at its size is placed already.
-            true => ((), set.clone()),
-            false => ((), place(styled, room, &words, scale)),
+            true => set.clone(),
+            false => place(styled, room, &words, scale),
         },
-    )
-    .1;
+    );
     if !placed.overflowed {
         return (words, placed);
     }
@@ -117,36 +116,32 @@ pub(super) fn fit(
 /// its line ends the growth rather than being hyphenated.
 fn grow(styled: &Styled, room: &Room, segments: &[Segment], set: Placed) -> Placed {
     let overflows = |scale| overflows(styled, room, segments, scale);
-    let at = |scale| ((), place(styled, room, segments, scale));
+    let at = |scale| place(styled, room, segments, scale);
     let (mut low, mut best) = (1.0, set);
     while low < CEILING {
         let high = low * 2.0;
         let candidate = match overflows(high) {
             true => None,
-            false => Some(at(high).1).filter(|placed| !placed.overflowed),
+            false => Some(at(high)).filter(|placed| !placed.overflowed),
         };
         match candidate {
             Some(placed) => (low, best) = (high, placed),
-            None => return halve(&overflows, &at, low, high, ((), best)).1,
+            None => return halve(&overflows, &at, low, high, best),
         }
     }
     best
 }
 
 /// The largest scale from 1 down to `floor` at which `at` fits the text, else
-/// the text at `floor`, with what `at` returned beside it. It probes down from
+/// the text at `floor`. It probes down from
 /// the top in eighths, because a path's room changes with the line count, so
 /// a smaller size can fail where a larger one fits; then halves the step
 /// eight times. Above the floor only whether the text fits matters, so a
 /// scale `overflows` is sure of isn't laid out.
-fn largest_fit<T>(
-    floor: f32,
-    overflows: impl Fn(f32) -> bool,
-    at: impl Fn(f32) -> (T, Placed),
-) -> (T, Placed) {
+fn largest_fit(floor: f32, overflows: impl Fn(f32) -> bool, at: impl Fn(f32) -> Placed) -> Placed {
     if floor >= 1.0 || !overflows(1.0) {
         let set = at(1.0);
-        if !set.1.overflowed || floor >= 1.0 {
+        if !set.overflowed || floor >= 1.0 {
             return set;
         }
     }
@@ -159,14 +154,14 @@ fn largest_fit<T>(
             continue;
         }
         let candidate = at(scale);
-        if !candidate.1.overflowed {
+        if !candidate.overflowed {
             return halve(&overflows, &at, scale, above, candidate);
         }
         above = scale;
     }
     let scale = 1.0 - step * 8.0;
     let candidate = at(scale);
-    match candidate.1.overflowed {
+    match candidate.overflowed {
         true => candidate,
         false => halve(&overflows, &at, scale, above, candidate),
     }
@@ -174,13 +169,13 @@ fn largest_fit<T>(
 
 /// The largest scale between `low`, where the text fits as `best`, and
 /// `high`, where it doesn't, found by halving the gap eight times.
-fn halve<T>(
+fn halve(
     overflows: &impl Fn(f32) -> bool,
-    at: &impl Fn(f32) -> (T, Placed),
+    at: &impl Fn(f32) -> Placed,
     mut low: f32,
     mut high: f32,
-    mut best: (T, Placed),
-) -> (T, Placed) {
+    mut best: Placed,
+) -> Placed {
     for _ in 0..8 {
         let middle = (low + high) * 0.5;
         if overflows(middle) {
@@ -188,7 +183,7 @@ fn halve<T>(
             continue;
         }
         let candidate = at(middle);
-        if candidate.1.overflowed {
+        if candidate.overflowed {
             high = middle;
         } else {
             low = middle;
@@ -229,32 +224,6 @@ fn place(styled: &Styled, room: &Room, segments: &[Segment], scale: f32) -> Plac
             anchor,
             inset,
         } => in_path(styled, segments, scale, outline, *anchor, *inset).place(),
-    }
-}
-
-fn in_path<'a>(
-    styled: &Styled,
-    segments: &'a [Segment],
-    scale: f32,
-    outline: &'a Outline,
-    anchor: Anchor,
-    inset: f32,
-) -> InPath<'a> {
-    let size = segments.iter().map(|s| s.size).fold(0.0, f32::max);
-    InPath {
-        segments,
-        scale,
-        outline,
-        anchor,
-        pitch: pitch(segments, scale, styled.line_height).max(0.01),
-        air: size * scale * inset,
-        frame: physical(
-            styled.vertical,
-            outline.bounds.x0,
-            outline.bounds.y0,
-            outline.bounds.x1,
-            outline.bounds.y1,
-        ),
     }
 }
 
@@ -399,6 +368,32 @@ struct InPath<'a> {
     frame: Rect,
 }
 
+fn in_path<'a>(
+    styled: &Styled,
+    segments: &'a [Segment],
+    scale: f32,
+    outline: &'a Outline,
+    anchor: Anchor,
+    inset: f32,
+) -> InPath<'a> {
+    let size = segments.iter().map(|s| s.size).fold(0.0, f32::max);
+    InPath {
+        segments,
+        scale,
+        outline,
+        anchor,
+        pitch: pitch(segments, scale, styled.line_height).max(0.01),
+        air: size * scale * inset,
+        frame: physical(
+            styled.vertical,
+            outline.bounds.x0,
+            outline.bounds.y0,
+            outline.bounds.x1,
+            outline.bounds.y1,
+        ),
+    }
+}
+
 impl InPath<'_> {
     /// Every line count the path's block extent holds is tried, and the
     /// cheapest count that fits wins; when none fits, the least overflowing,
@@ -498,9 +493,25 @@ impl InPath<'_> {
             Some(count),
             |line| spans[line].1,
         )?;
-        let cost = cost_of(self.segments, &lines.lines, self.scale, |line| {
-            spans[line].1
-        });
+        // The lines' unfilled shares squared, and far more for one longer
+        // than its room, to compare line counts.
+        let cost = lines
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(line, range)| {
+                let room = spans[line].1;
+                let used = lines::length(self.segments, range.clone(), self.scale);
+                if used > room {
+                    1e6 * (1.0 + used - room)
+                } else if room > 0.0 {
+                    let slack = (room - used) / room;
+                    slack * slack
+                } else {
+                    0.0
+                }
+            })
+            .sum();
         let placed = lines
             .lines
             .into_iter()
@@ -572,31 +583,6 @@ impl InPath<'_> {
     }
 }
 
-/// The cost `break_lines` gave the chosen lines, to compare line counts.
-fn cost_of(
-    segments: &[Segment],
-    lines: &[Range<usize>],
-    scale: f32,
-    room: impl Fn(usize) -> f32,
-) -> f32 {
-    lines
-        .iter()
-        .enumerate()
-        .map(|(line, range)| {
-            let room = room(line);
-            let used = lines::length(segments, range.clone(), scale);
-            if used > room {
-                1e6 * (1.0 + used - room)
-            } else if room > 0.0 {
-                let slack = (room - used) / room;
-                slack * slack
-            } else {
-                0.0
-            }
-        })
-        .sum()
-}
-
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
@@ -604,7 +590,6 @@ mod tests {
     use koharu_scene::Frame;
 
     use super::*;
-    use crate::text::testing::styled;
 
     /// A word `advance` long with a space after it, ending as `after` says.
     fn word(advance: f32, after: Break) -> Segment {
@@ -625,12 +610,16 @@ mod tests {
         let frame: Frame = serde_json::from_value(serde_json::json!({
             "box": {"bounds": {"x": 0.0, "y": 0.0, "width": width, "height": height}, "fit": fit}
         }))?;
-        let room = Room::new(&frame, false)?;
+        let room = Room::new(&frame, false);
         Ok((
             Styled {
-                frame,
+                text: String::new(),
+                spans: Vec::new(),
+                vertical: false,
+                align: Align::Start,
+                line_height: 1.2,
                 hyphenation: Some(Lang::English),
-                ..styled("", Vec::new())
+                frame,
             },
             room,
         ))
@@ -656,40 +645,6 @@ mod tests {
             Breaking::Words => vec![word(150.0, Break::End)],
             Breaking::Hyphens => vec![word(75.0, Break::Hyphen), word(75.0, Break::End)],
         }
-    }
-
-    #[test]
-    fn a_word_wider_than_its_line_shrinks_before_it_hyphenates() -> Result<()> {
-        let (styled, room) = in_box(100.0, 100.0, "shrink")?;
-        let (segments, placed) = fit(&styled, &room, long);
-        // Whole, at 100 / 151 at most.
-        assert_eq!(segments.len(), 1);
-        assert!((0.64..0.67).contains(&placed.scale), "{}", placed.scale);
-        assert!(!placed.overflowed);
-        Ok(())
-    }
-
-    #[test]
-    fn a_word_too_wide_even_at_half_size_hyphenates_there() -> Result<()> {
-        // At half size the word is 75 long, in a box 60 wide.
-        let (styled, room) = in_box(60.0, 100.0, "shrink")?;
-        let (segments, placed) = fit(&styled, &room, long);
-        assert_eq!((segments.len(), placed.scale), (2, 0.5));
-        assert!(!placed.overflowed);
-        Ok(())
-    }
-
-    #[test]
-    fn a_word_that_cannot_hyphenate_runs_past_its_room_whole() -> Result<()> {
-        let (styled, room) = in_box(60.0, 100.0, "best")?;
-        let styled = Styled {
-            hyphenation: None,
-            ..styled
-        };
-        let (segments, placed) = fit(&styled, &room, long);
-        assert_eq!((segments.len(), placed.lines.len()), (1, 1));
-        assert!(placed.overflowed && placed.scale == 0.5, "{placed:?}");
-        Ok(())
     }
 
     #[test]

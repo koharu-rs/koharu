@@ -3,10 +3,10 @@
 //! values, and a text's frame resizes as the scene's own `Frame`.
 
 use cursor_icon::CursorIcon;
-use koharu_renderer::{Frame, View};
+use koharu_renderer::Frame;
 use koharu_scene::{Bounds, Content, Edit, Frame as TextFrame, LayerId, Op, Path, Ref, Text};
+use kurbo::{Affine, BezPath, Point, Rect};
 use serde_json::{Value, json};
-use vello::kurbo::{Affine, BezPath, Point, Rect};
 
 use crate::{
     Effect,
@@ -165,28 +165,12 @@ impl Transform {
             .collect()
     }
 
-    /// Each lifted layer's own drawing, where the drag takes it, from the
-    /// part of it that shows there.
-    pub fn preview(&self, cx: &Context, overlay: &mut Overlay) {
-        let visible = cx.view.visible();
-        let zoom = cx.view.camera().scale;
+    /// Each lifted layer's own drawing, where the drag takes it.
+    pub fn preview(&self, overlay: &mut Overlay) -> anyhow::Result<()> {
         for (index, own) in &self.drawn {
-            let affine = self.turn(&self.controls[*index]);
-            let rect = own
-                .area()
-                .intersect(affine.inverse().transform_rect_bbox(visible));
-            if rect.width() <= 0.0 || rect.height() <= 0.0 {
-                continue;
-            }
-            for strip in own.draw(View { rect, scale: zoom }) {
-                let placed = cx.view.to_screen()
-                    * affine
-                    * Affine::translate(rect.origin().to_vec2())
-                    * Affine::scale(1.0 / zoom)
-                    * Affine::translate(strip.rect.origin().to_vec2());
-                overlay.scene(&strip.scene, placed);
-            }
+            overlay.frame(own, self.turn(&self.controls[*index]))?;
         }
+        Ok(())
     }
 
     /// What a move or a turn does to `control` so far, in page space.

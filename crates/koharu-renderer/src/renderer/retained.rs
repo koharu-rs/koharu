@@ -2,50 +2,41 @@
 //! what changes them, so a render after an edit rebuilds only what it
 //! touched.
 
-use std::sync::{Arc, atomic::Ordering};
+use std::{io::Cursor, sync::Arc};
 
-use koharu_scene::{
-    Content as SceneContent, FillRule, Hash, LayerId, PageId, Project, Session, Shape, Text,
-};
-use vello::{
-    Scene,
-    kurbo::{Affine, Cap, Join, Shape as _, Stroke},
-    peniko::{Color, Fill},
-};
+use anyhow::{Context as _, Result, anyhow};
+use image::ImageReader;
+use koharu_scene::{FillRule, Hash, LayerId, Offset, Session, Shape, Text};
+use kurbo::{BezPath, Cap, Join, Shape as _, Stroke};
+use vello_gpu::peniko::{Color, Fill};
 
 use super::Renderer;
 use crate::{
-    Error, Result,
-    frame::{Retained, Source, Vector, parse},
-    images, text,
-    tiles::{Tiled, assemble},
+    fonts,
+    frame::{Content, ShapeVector},
+    pixels::{Pixels, assemble, check_size},
+    text,
 };
 
-pub(super) type Cache = quick_cache::sync::Cache<Key, Retained, Weight>;
+/// Each source's content, by the hash of what it's built from: an image's
+/// file, a picture's tiles, or a text's or shape's canonical JSON (RFC
+/// 8785), which stays the same for equal values whatever order a map's keys
+/// come in. No two kinds hash the same bytes: a file is an image, the tiles
+/// hash binary, a text's JSON is an array, and a shape's an object. `None`
+/// for a source that draws nothing.
+pub(super) type Cache = quick_cache::sync::Cache<Hash, Option<Content>, Weight>;
 
-/// What retained content may take, in bytes: pixels count with their tiles;
-/// a vector scene counts as a kilobyte.
+/// What retained content may take, in bytes: pixels count with their levels;
+/// a text's layout or a shape counts as a kilobyte.
 const CACHE_BYTES: u64 = 2 << 30;
-
-/// What retained content is keyed by: only what changes it. Texts and shapes
-/// key on the hash of their canonical JSON (RFC 8785), so the key stays the
-/// same for equal values whatever order a map's keys come in.
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub(super) enum Key {
-    /// A text's hash and the font generation.
-    Text(Hash, u64),
-    Shape(Hash),
-    Image(Hash),
-    Tiles(Hash),
-}
 
 #[derive(Clone)]
 pub(super) struct Weight;
 
-impl quick_cache::Weighter<Key, Retained> for Weight {
-    fn weight(&self, _: &Key, retained: &Retained) -> u64 {
-        match retained {
-            Retained::Pixels(Some(tiled)) => tiled.bytes(),
+impl quick_cache::Weighter<Hash, Option<Content>> for Weight {
+    fn weight(&self, _: &Hash, content: &Option<Content>) -> u64 {
+        match content {
+            Some(Content::Pixels(pixels)) => pixels.bytes(),
             _ => 1024,
         }
     }
@@ -69,38 +60,30 @@ pub(super) fn cache() -> Cache {
 
 fn canonical(value: &impl serde::Serialize) -> Result<Hash> {
     let bytes = serde_json_canonicalizer::to_vec(value)
-        .map_err(|error| Error::invalid(format!("a value has no canonical JSON: {error}")))?;
+        .map_err(|error| anyhow!("a value has no canonical JSON: {error}"))?;
     Ok(Hash::of(&bytes))
 }
 
 impl Renderer {
-    /// Content, retained by what it depends on.
-    pub(super) fn content(&self, session: &Session, source: Source) -> Result<Retained> {
-        let key = match source {
-            Source::Text(layer, text) => return self.text_content(layer, text),
-            Source::Shape(shape) => Key::Shape(canonical(shape)?),
-            Source::Image(file) => Key::Image(file),
-            Source::Tiles(layer) => Key::Tiles(session.tiles_hash(layer)?),
-        };
+    /// What `key` holds, `build` building it when nothing does. Two renders
+    /// may both build it: one waiting on the other's build inside rayon could
+    /// deadlock.
+    fn retain(
+        &self,
+        key: Hash,
+        build: impl FnOnce() -> Result<Option<Content>>,
+    ) -> Result<Option<Content>> {
         if let Some(retained) = self.0.cache.get(&key) {
             return Ok(retained);
         }
-        let retained = match source {
-            Source::Tiles(layer) => {
-                Retained::Pixels(assemble(session.tiles(layer, None)?)?.map(Arc::new))
-            }
-            Source::Image(file) => {
-                let decoded = images::decode(&file, &session.file(&file)?)?;
-                Retained::Pixels(Some(Arc::new(Tiled::new((0, 0), decoded))))
-            }
-            Source::Shape(shape) => shape_vector(shape)?,
-            Source::Text(..) => unreachable!("texts return above"),
-        };
+        let retained = build()?;
         self.0.cache.insert(key, retained.clone());
         Ok(retained)
     }
 
-    pub(super) fn text_content(&self, id: LayerId, layer: &Text) -> Result<Retained> {
+    /// Text layer `id`'s text laid out, falling back on the renderer's
+    /// families; `None` when it has no characters.
+    pub(super) fn text(&self, id: LayerId, layer: &Text) -> Result<Option<Content>> {
         // The transform places the layout when it's drawn, so moving a text
         // keeps its layout. Naming every field fails to build when one is
         // added, until the key says whether it counts.
@@ -112,122 +95,71 @@ impl Renderer {
             language,
             transform: _,
         } = layer;
-        let laid_out = canonical(&(content, style, frame, direction, language))?;
-        let key = Key::Text(laid_out, self.0.generation.load(Ordering::Relaxed));
-        if let Some(retained) = self.0.cache.get(&key) {
-            return Ok(retained);
-        }
-        let retained = self.text(id, layer)?;
-        self.0.cache.insert(key, retained.clone());
-        Ok(retained)
-    }
-
-    fn text(&self, id: LayerId, layer: &Text) -> Result<Retained> {
         let families = self.0.config.read().font_families.clone();
-        let mut missing = Vec::new();
-        let layout = text::layout(layer, |style, characters| {
-            let (fonts, request) =
-                self.0
-                    .fonts
-                    .resolve(style, &families, characters, &layer.language)?;
-            missing.extend(request);
-            Ok(fonts)
-        })
-        .map_err(|source| Error::Text { layer: id, source })?;
-        Ok(match layout {
-            Some(layout) => Retained::Vector {
-                vector: Arc::new(text::paint(&layout)),
-                text: Some(Arc::new(layout.resolved)),
-                missing,
-            },
-            None => Retained::Vector {
-                vector: Arc::new(Vector {
-                    scene: Scene::new(),
-                    strokes: None,
-                    bounds: vello::kurbo::Rect::ZERO,
-                }),
-                text: None,
-                missing,
-            },
+        let key = canonical(&(content, style, frame, direction, language, &families))?;
+        self.retain(key, || {
+            let layout = text::layout(layer, |style, characters| {
+                fonts::chain(style, &families, characters, language)
+            })
+            .with_context(|| format!("text layer {id} couldn't be laid out"))?;
+            Ok(layout.map(|layout| Content::Text(Arc::new(layout))))
         })
     }
-}
 
-/// Everything a page's content is built from: its background, and each
-/// layer's pixels, image, shape, or text.
-pub(super) fn sources(project: &Project, page: PageId) -> Result<Vec<Source<'_>>> {
-    let mut out: Vec<Source> = project
-        .page(page)?
-        .background
-        .map(|background| Source::Image(background.file))
-        .into_iter()
-        .collect();
-    for layer in project.layers_of(page)? {
-        match &layer.content {
-            SceneContent::Raster(_) | SceneContent::Mask(_) => {
-                out.push(Source::Tiles(layer.id));
-            }
-            SceneContent::Image(image) => out.push(Source::Image(image.file)),
-            SceneContent::Shape(shape) => out.push(Source::Shape(shape)),
-            SceneContent::Text(text) => out.push(Source::Text(layer.id, text)),
-            SceneContent::Block(block) => {
-                out.push(Source::Tiles(block.cleanup.id));
-                out.push(Source::Tiles(block.mask.id));
-                if let Some(text) = &block.translation {
-                    out.push(Source::Text(layer.id, text));
-                }
-            }
-            _ => {}
-        }
+    /// A shape layer's path, fill, and stroke: centred on the path, with
+    /// miter joins and butt caps.
+    pub(super) fn shape(&self, shape: &Shape) -> Result<Option<Content>> {
+        self.retain(canonical(shape)?, || {
+            let path = BezPath::from(&shape.path);
+            let mut bounds = path.bounding_box();
+            let stroke = shape.stroke.as_ref().map(|stroke| {
+                bounds = bounds.inflate(stroke.width * 2.0, stroke.width * 2.0);
+                (
+                    Stroke::new(stroke.width)
+                        .with_join(Join::Miter)
+                        .with_caps(Cap::Butt),
+                    Color::from(stroke.color),
+                )
+            });
+            Ok(Some(Content::Shape(Arc::new(ShapeVector {
+                path,
+                fill_rule: match shape.fill_rule {
+                    FillRule::NonZero => Fill::NonZero,
+                    FillRule::EvenOdd => Fill::EvenOdd,
+                },
+                fill: shape.fill.map(Color::from),
+                stroke,
+                bounds,
+            }))))
+        })
     }
-    Ok(out)
-}
 
-/// A shape layer's fill and stroke.
-fn shape_vector(shape: &Shape) -> Result<Retained> {
-    let path = parse(shape.path.as_str())?;
-    let mut scene = Scene::new();
-    let fill = match shape.fill_rule {
-        FillRule::NonZero => Fill::NonZero,
-        FillRule::EvenOdd => Fill::EvenOdd,
-    };
-    if let Some(color) = shape.fill {
-        scene.fill(fill, Affine::IDENTITY, Color::from(color), None, &path);
+    /// Imported file `file` decoded, its size checked before any pixel is.
+    pub(super) fn image(&self, session: &Session, file: Hash) -> Result<Option<Content>> {
+        self.retain(file, || {
+            let bytes = session.file(&file)?;
+            let unsupported = || format!("file {file} is not a supported image");
+            let reader = || {
+                ImageReader::new(Cursor::new(&bytes))
+                    .with_guessed_format()
+                    .with_context(unsupported)
+            };
+            let (width, height) = reader()?.into_dimensions().with_context(unsupported)?;
+            check_size(width, height)?;
+            let image = reader()?.decode().with_context(unsupported)?.into_rgba8();
+            Ok(Some(Content::Pixels(Arc::new(Pixels::new(
+                Offset::default(),
+                image,
+            )))))
+        })
     }
-    let mut bounds = path.bounding_box();
-    if let Some(stroke) = &shape.stroke {
-        // Centred on the path, with miter joins and butt caps.
-        let style = Stroke::new(stroke.width)
-            .with_join(Join::Miter)
-            .with_caps(Cap::Butt);
-        scene.stroke(
-            &style,
-            Affine::IDENTITY,
-            Color::from(stroke.color),
-            None,
-            &path,
-        );
-        bounds = bounds.inflate(stroke.width * 2.0, stroke.width * 2.0);
-    }
-    Ok(Retained::Vector {
-        vector: Arc::new(Vector {
-            scene,
-            strokes: None,
-            bounds,
-        }),
-        text: None,
-        missing: Vec::new(),
-    })
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::RendererConfig;
-
-    #[test]
-    fn a_layer_as_heavy_as_the_whole_budget_fits_one_shard() {
-        let renderer = Renderer::new(RendererConfig::default());
-        assert_eq!(renderer.0.cache.shard_capacity(), CACHE_BYTES);
+    /// The picture of the layer or block part `layer`, cropped to what it
+    /// paints; `None` when it paints nothing.
+    pub(super) fn tiles(&self, session: &Session, layer: LayerId) -> Result<Option<Content>> {
+        self.retain(session.tiles_hash(layer)?, || {
+            Ok(assemble(session.tiles(layer, None)?)?
+                .map(|pixels| Content::Pixels(Arc::new(pixels))))
+        })
     }
 }

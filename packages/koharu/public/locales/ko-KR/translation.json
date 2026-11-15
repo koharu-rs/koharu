@@ -85,51 +85,13 @@
     "title": "피드백 보내기"
   },
   "fontPicker": {
-    "activeFilterCount": "활성 필터 {{count}}개",
-    "activeFilterCount_one": "활성 필터 {{count}}개",
-    "activeFilterCount_other": "활성 필터 {{count}}개",
-    "allPurposes": "모든 용도",
-    "allScripts": "모든 문자 체계",
-    "allSources": "모든 출처",
-    "allStyles": "모든 스타일",
     "choose": "글꼴 선택",
-    "clearFilters": "필터 지우기",
-    "filter": "글꼴 필터링",
-    "filterActiveLabel": "글꼴 필터링, {{count}}개 활성",
     "fontCount": "글꼴 {{count}}개",
     "fontCount_one": "글꼴 {{count}}개",
     "fontCount_other": "글꼴 {{count}}개",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "글꼴",
     "noResults": "검색과 일치하는 글꼴이 없습니다",
-    "purpose": "용도",
-    "script": "문자 체계",
-    "scripts": {
-      "arab": "아랍 문자",
-      "beng": "벵골 문자",
-      "cyrl": "키릴 문자",
-      "deva": "데바나가리 문자",
-      "gujr": "구자라트 문자",
-      "guru": "구르무키 문자",
-      "hang": "한글",
-      "hani": "한자",
-      "hebr": "히브리 문자",
-      "hira": "히라가나",
-      "kana": "가타카나",
-      "knda": "칸나다 문자",
-      "latn": "라틴 문자",
-      "mlym": "말라얄람 문자",
-      "taml": "타밀 문자",
-      "telu": "텔루구 문자",
-      "thai": "타이 문자"
-    },
-    "search": "글꼴 검색",
-    "source": "출처",
-    "sources": {
-      "bundled": "번들",
-      "system": "시스템"
-    },
-    "style": "스타일"
+    "search": "글꼴 검색"
   },
   "inference": {
     "currentPage": "현재 페이지",

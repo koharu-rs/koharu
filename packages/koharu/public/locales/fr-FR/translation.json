@@ -85,51 +85,13 @@
     "title": "Envoyer un commentaire"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} filtres actifs",
-    "activeFilterCount_one": "{{count}} filtre actif",
-    "activeFilterCount_other": "{{count}} filtres actifs",
-    "allPurposes": "Tous les usages",
-    "allScripts": "Toutes les écritures",
-    "allSources": "Toutes les sources",
-    "allStyles": "Tous les styles",
     "choose": "Choisir une police",
-    "clearFilters": "Effacer les filtres",
-    "filter": "Filtrer les polices",
-    "filterActiveLabel": "Filtrer les polices, {{count}} actif(s)",
     "fontCount": "{{count}} polices",
     "fontCount_one": "{{count}} police",
     "fontCount_other": "{{count}} polices",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "Polices",
     "noResults": "Aucune police ne correspond à cette recherche",
-    "purpose": "Usage",
-    "script": "Écriture",
-    "scripts": {
-      "arab": "Arabe",
-      "beng": "Bengali",
-      "cyrl": "Cyrillique",
-      "deva": "Devanagari",
-      "gujr": "Goudjarati",
-      "guru": "Gurmukhi",
-      "hang": "Hangeul",
-      "hani": "Han",
-      "hebr": "Hébreu",
-      "hira": "Hiragana",
-      "kana": "Katakana",
-      "knda": "Kannada",
-      "latn": "Latin",
-      "mlym": "Malayalam",
-      "taml": "Tamoul",
-      "telu": "Télougou",
-      "thai": "Thaï"
-    },
-    "search": "Rechercher des polices",
-    "source": "Source",
-    "sources": {
-      "bundled": "Intégrées",
-      "system": "Système"
-    },
-    "style": "Style"
+    "search": "Rechercher des polices"
   },
   "inference": {
     "currentPage": "Page actuelle",

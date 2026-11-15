@@ -85,51 +85,13 @@
     "title": "Отправить отзыв"
   },
   "fontPicker": {
-    "activeFilterCount": "Активных фильтров: {{count}}",
-    "activeFilterCount_one": "Активный фильтр: {{count}}",
-    "activeFilterCount_other": "Активных фильтров: {{count}}",
-    "allPurposes": "Все назначения",
-    "allScripts": "Все системы письма",
-    "allSources": "Все источники",
-    "allStyles": "Все стили",
     "choose": "Выбрать шрифт",
-    "clearFilters": "Очистить фильтры",
-    "filter": "Фильтровать шрифты",
-    "filterActiveLabel": "Фильтровать шрифты, активно: {{count}}",
     "fontCount": "Шрифтов: {{count}}",
     "fontCount_one": "Шрифт: {{count}}",
     "fontCount_other": "Шрифтов: {{count}}",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "Шрифты",
     "noResults": "Нет шрифтов, соответствующих поиску",
-    "purpose": "Назначение",
-    "script": "Система письма",
-    "scripts": {
-      "arab": "Арабское письмо",
-      "beng": "Бенгальское письмо",
-      "cyrl": "Кириллица",
-      "deva": "Деванагари",
-      "gujr": "Письмо гуджарати",
-      "guru": "Гурмукхи",
-      "hang": "Хангыль",
-      "hani": "Хань",
-      "hebr": "Еврейское письмо",
-      "hira": "Хирагана",
-      "kana": "Катакана",
-      "knda": "Каннада",
-      "latn": "Латиница",
-      "mlym": "Малаялам",
-      "taml": "Тамильское письмо",
-      "telu": "Письмо телугу",
-      "thai": "Тайское письмо"
-    },
-    "search": "Искать шрифты",
-    "source": "Источник",
-    "sources": {
-      "bundled": "Встроенные",
-      "system": "Системные"
-    },
-    "style": "Стиль"
+    "search": "Искать шрифты"
   },
   "inference": {
     "currentPage": "Текущая страница",

@@ -1,20 +1,19 @@
-//! A rendered page: the tree of what each layer drew, drawn for a view of
-//! the canvas or for an export.
+//! A rendered page: the tree of what each layer drew, painted onto the
+//! canvas's drawing or rasterized for an export, both on the GPU.
 
 use std::{fmt, sync::Arc};
 
-use koharu_scene::{Blend, LayerId, MaskMode, PageId, Revision};
-use vello::{
-    Scene,
-    kurbo::{Rect, Shape as _},
-};
+use anyhow::Result;
+use image::RgbaImage;
+use koharu_scene::{Blend, LayerId, MaskMode, Offset, PageId, Revision};
+use kurbo::{Affine, Rect, Shape as _};
 
-use crate::{fonts::FontRequest, text::ResolvedText};
+use crate::{Drawing, Gpu, pixels::check_size, text::ResolvedText};
 
-mod compose;
+mod paint;
 mod tree;
 
-pub(crate) use tree::{Content, Node, Retained, Source, Tree, Vector, parse};
+pub(crate) use self::tree::{Content, MaskNode, Node, ShapeVector};
 
 /// A page at one revision, immutable and cheap to clone.
 #[derive(Clone)]
@@ -26,10 +25,13 @@ pub(crate) struct FrameData {
     /// What the frame draws, in page pixels: the page, or one layer's bounds.
     pub area: Rect,
     pub nodes: Vec<Node>,
-    /// The first node is the page's background: never in a frame of one
-    /// thing alone.
-    pub background: bool,
-    pub missing: Arc<[FontRequest]>,
+}
+
+/// A raster: RGBA pixels and where their corner sits in page pixels.
+#[derive(Debug)]
+pub struct Raster {
+    pub image: RgbaImage,
+    pub offset: Offset,
 }
 
 /// One thing a frame drew: a layer, a block's clean-up among them, the
@@ -66,7 +68,7 @@ impl<'a> Drawn<'a> {
     /// For a text layer or a translation, the laid-out runs.
     #[must_use]
     pub fn text(&self) -> Option<&'a ResolvedText> {
-        self.node.text.as_deref()
+        self.node.text()
     }
 
     /// Only its own content, shown, over its bounds rounded out to whole
@@ -86,23 +88,13 @@ impl<'a> Drawn<'a> {
 
     fn own(&self, strokes: bool) -> Frame {
         let node = self.node;
-        let content = match &node.content {
-            Content::Vector {
-                vector, transform, ..
-            } => Content::Vector {
-                vector: vector.clone(),
-                strokes,
-                transform: *transform,
-            },
-            content => content.clone(),
-        };
         self.frame.with(
             node.bounds.map_or(Rect::ZERO, Rect::expand),
             Node {
                 visible: true,
                 opacity: 1.0,
                 blend: Blend::Normal,
-                content,
+                strokes,
                 masks: Vec::new(),
                 ..node.clone()
             },
@@ -136,10 +128,13 @@ impl<'a> Drawn<'a> {
             Node {
                 masks: node.masks.clone(),
                 bounds: Some(area),
-                ..Node::plain(
+                ..Node::new(
                     node.layer,
                     true,
-                    Content::Coverage(Arc::new(area.to_path(0.0))),
+                    Some((
+                        Content::Coverage(Arc::new(area.to_path(0.0))),
+                        Affine::IDENTITY,
+                    )),
                 )
             },
         ))
@@ -155,21 +150,6 @@ impl fmt::Debug for Drawn<'_> {
             .field("bounds", &self.node.bounds)
             .finish_non_exhaustive()
     }
-}
-
-/// A view of the page: the page-pixel rectangle it shows, at `scale` output
-/// pixels per page pixel.
-#[derive(Clone, Copy, Debug)]
-pub struct View {
-    pub rect: Rect,
-    pub scale: f64,
-}
-
-/// One render pass: a scene for the output pixels `rect`, its origin at
-/// that rectangle's corner.
-pub struct Strip {
-    pub rect: Rect,
-    pub scene: Scene,
 }
 
 impl Frame {
@@ -206,27 +186,14 @@ impl Frame {
     /// What `layer` drew; a block's clean-up is found by its id too.
     #[must_use]
     pub fn layer(&self, layer: LayerId) -> Option<Drawn<'_>> {
-        fn find<'a>(
-            frame: &'a Frame,
-            nodes: &'a [Node],
-            shown: bool,
-            layer: LayerId,
-        ) -> Option<Drawn<'a>> {
-            nodes.iter().find_map(|node| {
-                let shown = shown && node.visible;
-                match node.layer == Some(layer) {
-                    true => Some(Drawn { frame, node, shown }),
-                    false => find(frame, &node.children, shown, layer),
-                }
-            })
-        }
-        find(self, &self.0.nodes, true, layer)
+        self.layers().find(|drawn| drawn.node.layer == Some(layer))
     }
 
-    /// The page's background, its first node.
+    /// The page's background, its first node, the only one at the top
+    /// drawing no layer.
     #[must_use]
     pub fn background(&self) -> Option<Drawn<'_>> {
-        let node = self.0.nodes.first().filter(|_| self.0.background)?;
+        let node = self.0.nodes.first().filter(|node| node.layer.is_none())?;
         Some(Drawn {
             frame: self,
             node,
@@ -250,11 +217,10 @@ impl Frame {
         })
     }
 
-    /// The passes that draw `view`: one, unless its images need more of
-    /// vello's atlas than one pass has, when they are strips across it.
-    #[must_use]
-    pub fn draw(&self, view: View) -> Vec<Strip> {
-        compose::strips(&self.0.nodes, view)
+    /// Paints the frame through `to_output`, from page pixels to output
+    /// pixels, within `clip`, a rectangle of output pixels.
+    pub fn paint(&self, to_output: Affine, clip: Rect, drawing: &mut Drawing) -> Result<()> {
+        paint::paint(&self.0.nodes, to_output, clip, drawing)
     }
 
     /// The same frame with `layers` left out. A block's id leaves out only
@@ -292,8 +258,6 @@ impl Frame {
             revision: self.0.revision.clone(),
             area: self.0.area,
             nodes: keep(&self.0.nodes, layers),
-            background: self.0.background,
-            missing: self.0.missing.clone(),
         }))
     }
 
@@ -304,9 +268,54 @@ impl Frame {
             revision: self.0.revision.clone(),
             area,
             nodes: vec![node],
-            background: false,
-            missing: self.0.missing.clone(),
         }))
+    }
+
+    /// The frame's area drawn at one output pixel per page pixel.
+    pub fn rasterize(&self) -> Result<Raster> {
+        let area = self.area();
+        Ok(Raster {
+            image: self.rasterize_rect(area)?,
+            offset: Offset {
+                x: area.x0.floor() as i32,
+                y: area.y0.floor() as i32,
+            },
+        })
+    }
+
+    /// `rect`, in page pixels, drawn at one output pixel per page pixel, its
+    /// corner rounded down to a whole pixel: in pieces when it's larger than
+    /// the GPU's largest texture.
+    pub fn rasterize_rect(&self, rect: Rect) -> Result<RgbaImage> {
+        let (width, height) = (rect.width().ceil() as u32, rect.height().ceil() as u32);
+        // What draws nothing, such as a block with no clean-up, is empty.
+        if width == 0 || height == 0 {
+            return Ok(RgbaImage::new(width, height));
+        }
+        check_size(width, height)?;
+        let gpu = Gpu::get()?;
+        let side = gpu.largest_texture();
+        let (x0, y0) = (rect.x0.floor(), rect.y0.floor());
+        let piece = |left: u32, top: u32| {
+            let (width, height) = (side.min(width - left), side.min(height - top));
+            let mut drawing = gpu.drawing(width as u16, height as u16);
+            self.paint(
+                Affine::translate((-(x0 + f64::from(left)), -(y0 + f64::from(top)))),
+                Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
+                &mut drawing,
+            )?;
+            drawing.read()
+        };
+        if width <= side && height <= side {
+            return piece(0, 0);
+        }
+        let mut image = RgbaImage::new(width, height);
+        for top in (0..height).step_by(side as usize) {
+            for left in (0..width).step_by(side as usize) {
+                image::imageops::replace(&mut image, &piece(left, top)?, left.into(), top.into());
+            }
+        }
+        Ok(image)
     }
 }
 
@@ -319,7 +328,8 @@ mod tests {
     use crate::{Renderer, RendererConfig};
 
     /// A view puts each page pixel at its output pixels, zoomed in on part of
-    /// the page or out to all of it, where a raster draws from halved tiles.
+    /// the page or out to all of it, where a raster draws from a halved
+    /// level.
     #[test]
     fn a_view_maps_page_pixels_to_its_output() {
         // A white raster under a red square from (256, 256) to (512, 512).
@@ -353,30 +363,31 @@ mod tests {
             })
             .expect("an edit");
         let renderer = Renderer::new(RendererConfig::default());
-        let Ok(gpu) = renderer.gpu() else {
+        let Ok(gpu) = Gpu::get() else {
             eprintln!("skipped without a GPU");
             return;
         };
         let frame = renderer
             .render(&session, change.pages.added[0])
             .expect("a frame");
-        let pixels = |view: View| {
-            let strips = frame.draw(view);
-            assert_eq!(strips.len(), 1);
-            let (width, height) = (
-                strips[0].rect.width() as u32,
-                strips[0].rect.height() as u32,
-            );
-            gpu.read(&strips[0].scene, width, height).expect("pixels")
+        // `rect` of the page at `scale` output pixels per page pixel.
+        let pixels = |rect: Rect, scale: f64| {
+            let size = rect.size() * scale;
+            let mut drawing = gpu.drawing(size.width.ceil() as u16, size.height.ceil() as u16);
+            frame
+                .paint(
+                    Affine::scale(scale) * Affine::translate((-rect.x0, -rect.y0)),
+                    size.to_rect(),
+                    &mut drawing,
+                )
+                .expect("drawn");
+            drawing.read().expect("pixels")
         };
         const RED: [u8; 4] = [255, 0, 0, 255];
         const WHITE: [u8; 4] = [255; 4];
 
         // (240, 240) to (272, 272) at twice its size: white, then red.
-        let zoomed = pixels(View {
-            rect: Rect::new(240.0, 240.0, 272.0, 272.0),
-            scale: 2.0,
-        });
+        let zoomed = pixels(Rect::new(240.0, 240.0, 272.0, 272.0), 2.0);
         assert_eq!(zoomed.dimensions(), (64, 64));
         assert_eq!(
             (zoomed.get_pixel(16, 16).0, zoomed.get_pixel(48, 48).0),
@@ -384,74 +395,10 @@ mod tests {
         );
 
         // The page at a quarter of its size.
-        let fitted = pixels(View {
-            rect: Rect::new(0.0, 0.0, 1024.0, 1024.0),
-            scale: 0.25,
-        });
+        let fitted = pixels(Rect::new(0.0, 0.0, 1024.0, 1024.0), 0.25);
         assert_eq!(fitted.dimensions(), (256, 256));
         let at = |x, y| fitted.get_pixel(x, y).0;
         assert_eq!((at(32, 32), at(96, 96), at(200, 200)), (WHITE, RED, WHITE));
-    }
-
-    /// Two tiles meeting inside an output pixel would each cover part of it,
-    /// and what's under would show through the line between them, at the
-    /// fractional scales and offsets the canvas draws at.
-    #[test]
-    fn tiles_meet_without_a_seam_at_any_scale() {
-        // A raster wider than one 512-pixel tile, opaque blue.
-        let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
-        let ops = vec![
-            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1100, "height": 64}}),
-            json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
-        ];
-        let mut ops: Vec<Op> = ops
-            .into_iter()
-            .map(|op| serde_json::from_value(op).expect("an op"))
-            .collect();
-        ops.push(Op::WritePixels {
-            layer: Ref::try_from("$paper".to_owned()).expect("a label"),
-            rect: PixelRect {
-                x: 0,
-                y: 0,
-                width: 1100,
-                height: 64,
-            },
-            pixels: [0, 0, 255, 255].repeat(1100 * 64),
-        });
-        let change = session
-            .apply(Edit {
-                label: "test".into(),
-                ops,
-            })
-            .expect("an edit");
-        let renderer = Renderer::new(RendererConfig::default());
-        let Ok(gpu) = renderer.gpu() else {
-            eprintln!("skipped without a GPU");
-            return;
-        };
-        let frame = renderer
-            .render(&session, change.pages.added[0])
-            .expect("a frame");
-        for (x0, scale) in [(0.0, 0.6), (0.37, 0.6), (3.3, 1.7), (0.0, 0.3)] {
-            let strips = frame.draw(View {
-                rect: Rect::new(x0, 0.0, 1100.0, 64.0),
-                scale,
-            });
-            let (width, height) = (
-                strips[0].rect.width() as u32,
-                strips[0].rect.height() as u32,
-            );
-            let pixels = gpu.read(&strips[0].scene, width, height).expect("pixels");
-            // Away from the raster's own edges, every pixel is wholly blue.
-            for x in 2..width - 2 {
-                assert_eq!(
-                    pixels.get_pixel(x, height / 2).0,
-                    [0, 0, 255, 255],
-                    "x {x} at {x0}, {scale}"
-                );
-            }
-        }
     }
 
     /// The canvas draws a frame without the layers a move is dragging, so
@@ -491,62 +438,18 @@ mod tests {
         let page = change.pages.added[0];
         let square = session.project().page(page).expect("the page").layers[1].id;
         let renderer = Renderer::new(RendererConfig::default());
-        if renderer.gpu().is_err() {
+        if Gpu::get().is_err() {
             eprintln!("skipped without a GPU");
             return;
         }
         let frame = renderer.render(&session, page).expect("a frame");
         let at = |frame: &Frame| {
-            let raster = renderer.rasterize(frame).expect("pixels");
+            let raster = frame.rasterize().expect("pixels");
             raster.image.get_pixel(32, 32).0
         };
         assert_eq!(at(&frame), [255, 0, 0, 255]);
         assert_eq!(at(&frame.without(&[square])), [255; 4]);
         let unknown = LayerId(koharu_scene::Uuid::now_v7());
         assert_eq!(at(&frame.without(&[unknown])), [255, 0, 0, 255]);
-    }
-
-    /// A large page of many small layers that composite apart, as a
-    /// translated page's blocks and panels do, still draws: vello 0.11's
-    /// buffers hold only so many tiles, and a layer clipped to the whole page
-    /// took them all.
-    #[test]
-    fn many_small_layers_on_a_large_page_draw() {
-        let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
-        let mut ops = vec![
-            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 2400, "height": 3200}}),
-        ];
-        for index in 0..150 {
-            let (x, y) = (100 + (index % 10) * 200, 100 + (index / 10) * 200);
-            ops.push(
-                json!({"op": "add_layer", "page": "$page", "index": index, "layer": {
-                    "kind": "shape", "opacity": 0.5,
-                    "path": format!("M{x} {y} h20 v20 h-20 Z"), "fill": [1.0, 0.0, 0.0, 1.0],
-                }}),
-            );
-        }
-        let change = session
-            .apply(Edit {
-                label: "test".into(),
-                ops: ops
-                    .into_iter()
-                    .map(|op| serde_json::from_value(op).expect("an op"))
-                    .collect(),
-            })
-            .expect("an edit");
-        let renderer = Renderer::new(RendererConfig::default());
-        if renderer.gpu().is_err() {
-            eprintln!("skipped without a GPU");
-            return;
-        }
-        let frame = renderer
-            .render(&session, change.pages.added[0])
-            .expect("a frame");
-        let raster = renderer.rasterize(&frame).expect("pixels");
-        // The last square, red at half opacity.
-        let [red, green, blue, alpha] = raster.image.get_pixel(1910, 2910).0;
-        assert_eq!([red, green, blue], [255, 0, 0]);
-        assert!((127..=128).contains(&alpha), "{alpha}");
     }
 }

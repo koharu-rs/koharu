@@ -1,32 +1,37 @@
-//! One face as a variable-font instance: its character map, metrics, HarfRust
-//! font and shape plans, and its variation coordinates.
+//! A font: one face as a variable-font instance, with its character map,
+//! metrics, HarfRust font and shape plans, and variation coordinates.
 
 use std::{fmt, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
-use fontique::{Blob, CharmapIndex, QueryFont, Synthesis};
+use fontique::{CharmapIndex, QueryFont, Synthesis};
 use harfrust::{Direction, Feature, Language, Script, ShapePlan, Tag, font::Variation};
+use icu_properties::{CodePointSetData, props::DefaultIgnorableCodePoint};
 use skrifa::{
     GlyphId, MetadataProvider,
     instance::{LocationRef, NormalizedCoord, Size},
     string::StringId,
 };
 use smallvec::SmallVec;
+use vello_gpu::peniko::FontData;
 
-/// A resolved face and variable-font instance used by shaping, metrics, and drawing.
+/// A face at the instance fontique matched, as text shapes, measures, and
+/// draws it.
 #[derive(Clone)]
 pub(crate) struct Font {
-    data: Blob<u8>,
-    index: u32,
-    family_name: String,
-    post_script_name: String,
-    synthesis: Synthesis,
+    /// The face's file and its index in it.
+    pub data: FontData,
+    pub family_name: String,
+    pub post_script_name: String,
+    /// The bold and slant fontique fakes for a face that lacks them.
+    pub synthesis: Synthesis,
     charmap: CharmapIndex,
-    shaper: harfrust::Font,
+    pub shaper: harfrust::Font,
     /// Shape plans, shared by the font's clones.
     plans: Arc<quick_cache::sync::Cache<PlanKey, Arc<ShapePlan>>>,
-    /// The instance's normalized variation coordinates, as vello takes them.
-    coords: Vec<vello::NormalizedCoord>,
+    /// The instance's normalized variation coordinates, as glyph runs take
+    /// them.
+    pub coords: Vec<glifo::NormalizedCoord>,
     units_per_em: f32,
     /// Above and below the baseline, both positive, in font units at the
     /// instance.
@@ -51,7 +56,7 @@ impl fmt::Debug for Font {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Font")
-            .field("index", &self.index)
+            .field("index", &self.data.index)
             .field("family_name", &self.family_name)
             .field("post_script_name", &self.post_script_name)
             .field("synthesis", &self.synthesis)
@@ -60,8 +65,9 @@ impl fmt::Debug for Font {
 }
 
 impl Font {
-    pub(super) fn from_query(font: QueryFont, family_name: String) -> Result<Self> {
-        let variations = font
+    /// The face fontique `found`, of family `family_name`.
+    pub(super) fn new(found: QueryFont, family_name: String) -> Result<Self> {
+        let variations = found
             .synthesis
             .variation_settings()
             .iter()
@@ -70,12 +76,12 @@ impl Font {
                 value: *value,
             })
             .collect::<Vec<_>>();
-        let shaper = harfrust::Font::new(font.blob.clone().into_raw_parts().0, font.index)
+        let shaper = harfrust::Font::new(found.blob.clone().into_raw_parts().0, found.index)
             .context("failed to create HarfRust font")?
             .instance_builder()
             .variations(&variations)
             .build();
-        let face = skrifa::FontRef::from_index(font.blob.as_ref(), font.index)
+        let face = skrifa::FontRef::from_index(found.blob.as_ref(), found.index)
             .context("failed to create Skrifa font reference")?;
         let location = face.axes().location(variations.iter().map(|variation| {
             (
@@ -89,12 +95,11 @@ impl Font {
         ensure!(metrics.units_per_em > 0, "the font has no units per em");
         let post_script_name = post_script_name(&face).unwrap_or_else(|| family_name.clone());
         Ok(Self {
-            data: font.blob,
-            index: font.index,
+            data: FontData::new(found.blob, found.index),
             family_name,
             post_script_name,
-            synthesis: font.synthesis,
-            charmap: font.charmap_index,
+            synthesis: found.synthesis,
+            charmap: found.charmap_index,
             shaper,
             plans: Arc::new(quick_cache::sync::Cache::new(64)),
             coords: location
@@ -106,30 +111,6 @@ impl Font {
             ascent: metrics.ascent,
             descent: -metrics.descent,
         })
-    }
-
-    /// Whether both are the same face of the same file.
-    pub(crate) fn same(&self, other: &Self) -> bool {
-        self.data.id() == other.data.id() && self.index == other.index
-    }
-
-    /// Whether this is the instance `query` asks for.
-    pub(super) fn is(&self, query: &QueryFont) -> bool {
-        self.data.id() == query.blob.id()
-            && self.index == query.index
-            && self.synthesis == query.synthesis
-    }
-
-    pub(crate) fn font_data(&self) -> vello::peniko::FontData {
-        vello::peniko::FontData::new(self.data.clone(), self.index)
-    }
-
-    pub(crate) fn normalized_coords(&self) -> &[vello::NormalizedCoord] {
-        &self.coords
-    }
-
-    pub(crate) fn shaper(&self) -> &harfrust::Font {
-        &self.shaper
     }
 
     /// From font units to pixels at `size`.
@@ -179,23 +160,10 @@ impl Font {
         plan
     }
 
-    pub(crate) fn synthetic_bold(&self) -> bool {
-        self.synthesis.embolden()
-    }
-
-    pub(crate) fn synthetic_skew(&self) -> Option<f32> {
-        self.synthesis.skew()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn has_glyph(&self, character: char) -> bool {
-        self.covers(character.encode_utf8(&mut [0; 4]))
-    }
-
     /// Whether the face has a glyph for every visible character of `text`.
     pub(crate) fn covers(&self, text: &str) -> bool {
         self.charmap
-            .charmap(self.data.as_ref())
+            .charmap(self.data.data.as_ref())
             .is_some_and(|charmap| {
                 text.chars()
                     .filter(|character| visible(*character))
@@ -207,7 +175,7 @@ impl Font {
     /// isn't a symbol font, and each visible character maps to a glyph with
     /// an outline.
     pub(crate) fn renders(&self, text: &str) -> bool {
-        let Ok(face) = skrifa::FontRef::from_index(self.data.as_ref(), self.index) else {
+        let Ok(face) = skrifa::FontRef::from_index(self.data.data.as_ref(), self.data.index) else {
             return false;
         };
         let charmap = face.charmap();
@@ -233,18 +201,6 @@ impl Font {
                     })
             })
     }
-
-    pub(crate) fn family_name(&self) -> &str {
-        &self.family_name
-    }
-
-    pub(crate) fn post_script_name(&self) -> &str {
-        &self.post_script_name
-    }
-
-    pub(crate) fn data(&self) -> &[u8] {
-        self.data.as_ref()
-    }
 }
 
 /// Whether a character draws: not a control, white space, or a default
@@ -252,15 +208,12 @@ impl Font {
 fn visible(character: char) -> bool {
     !character.is_control()
         && !character.is_whitespace()
-        && !matches!(
-            character as u32,
-            0x200C | 0x200D | 0xFE00..=0xFE0F | 0xE0020..=0xE007F | 0xE0100..=0xE01EF
-        )
+        && !CodePointSetData::new::<DefaultIgnorableCodePoint>().contains(character)
 }
 
-/// The face's PostScript name, when it has one.
-pub(super) fn post_script_name(font: &skrifa::FontRef<'_>) -> Option<String> {
-    font.localized_strings(StringId::POSTSCRIPT_NAME)
+/// The PostScript name of the face `file` holds, when it has one.
+pub(super) fn post_script_name(file: &skrifa::FontRef<'_>) -> Option<String> {
+    file.localized_strings(StringId::POSTSCRIPT_NAME)
         .english_or_first()
         .map(|name| name.to_string())
         .filter(|name| !name.is_empty())

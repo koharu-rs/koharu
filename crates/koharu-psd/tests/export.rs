@@ -5,7 +5,7 @@
 use std::io::Cursor;
 
 use koharu_psd::{Labels, export};
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::{Gpu, Renderer, RendererConfig};
 use koharu_scene::{Edit, Hash, Op, Session};
 use photocraft_psd::{
     BlendMode, LayerRecord, MaskData, PsdFile, SectionType, Version, VersionedDescriptor,
@@ -144,8 +144,11 @@ fn engine_data(record: &LayerRecord) -> String {
 #[test]
 fn a_page_exports_as_layers_photoshop_can_edit() {
     let (_dir, session, page) = poster();
-    let renderer = Renderer::new(RendererConfig::default());
-    if let Err(error) = renderer.gpu() {
+    // Installed fonts only, so the test downloads none.
+    let renderer = Renderer::new(RendererConfig {
+        font_families: Vec::new(),
+    });
+    if let Err(error) = Gpu::get() {
         eprintln!("skipped without a GPU: {error}");
         return;
     }

@@ -3,10 +3,10 @@
 //! the editor's pan and zoom. Pointer events become page points here, and
 //! nowhere else.
 
+use kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2};
 use serde::Serialize;
 use specta::Type;
 use ui_events::{keyboard::Modifiers, pointer::PointerState};
-use vello::kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2};
 
 /// The smallest and largest zoom, as the editor's canvas allowed.
 const ZOOM: (f64, f64) = (0.02, 16.0);
@@ -166,11 +166,6 @@ impl View {
 
     pub fn scale(&self) -> f64 {
         self.scale
-    }
-
-    /// The page rectangle the viewport shows.
-    pub fn visible(&self) -> Rect {
-        self.camera.inverse() * self.size().to_rect()
     }
 
     /// `camera` kept so 100 device-independent pixels of the page stay in

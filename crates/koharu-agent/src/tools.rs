@@ -379,15 +379,15 @@ impl Tool for ViewPage {
         args: PageArgs,
     ) -> Result<ToolResultContent, Self::Error> {
         let tools = project(context)?;
-        let frame = tools
-            .renderer
-            .render_loaded(Arc::clone(&tools.session), args.page)
-            .await
-            .map_err(failed)?;
-        let renderer = tools.renderer.clone();
-        let jpeg = tokio::task::spawn_blocking(move || seen(&renderer, &frame))
-            .await
-            .map_err(failed)??;
+        let jpeg = tokio::task::spawn_blocking(move || {
+            let frame = tools
+                .renderer
+                .render(&tools.session.lock(), args.page)
+                .map_err(failed)?;
+            seen(&frame)
+        })
+        .await
+        .map_err(failed)??;
         Ok(ToolResultContent::image_base64(
             jpeg,
             Some(ImageMediaType::JPEG),
@@ -442,8 +442,8 @@ fn schema<T: JsonSchema>() -> Value {
 
 /// `frame` as the model sees it: over white, fit to `SIGHT`, as a JPEG in
 /// base 64.
-fn seen(renderer: &Renderer, frame: &Frame) -> Result<String, ToolExecutionError> {
-    let raster = renderer.rasterize(frame).map_err(failed)?;
+fn seen(frame: &Frame) -> Result<String, ToolExecutionError> {
+    let raster = frame.rasterize().map_err(failed)?;
     let (width, height) = raster.image.dimensions();
     let mut page = RgbaImage::from_pixel(width, height, Rgba([255; 4]));
     imageops::overlay(&mut page, &raster.image, 0, 0);

@@ -85,51 +85,13 @@
     "title": "Send Feedback"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} active filters",
-    "activeFilterCount_one": "{{count}} active filter",
-    "activeFilterCount_other": "{{count}} active filters",
-    "allPurposes": "All purposes",
-    "allScripts": "All scripts",
-    "allSources": "All sources",
-    "allStyles": "All styles",
     "choose": "Choose a font",
-    "clearFilters": "Clear filters",
-    "filter": "Filter fonts",
-    "filterActiveLabel": "Filter fonts, {{count}} active",
     "fontCount": "{{count}} fonts",
     "fontCount_one": "{{count}} font",
     "fontCount_other": "{{count}} fonts",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "Fonts",
     "noResults": "No fonts match this search",
-    "purpose": "Purpose",
-    "script": "Script",
-    "scripts": {
-      "arab": "Arabic",
-      "beng": "Bengali",
-      "cyrl": "Cyrillic",
-      "deva": "Devanagari",
-      "gujr": "Gujarati",
-      "guru": "Gurmukhi",
-      "hang": "Hangul",
-      "hani": "Han",
-      "hebr": "Hebrew",
-      "hira": "Hiragana",
-      "kana": "Katakana",
-      "knda": "Kannada",
-      "latn": "Latin",
-      "mlym": "Malayalam",
-      "taml": "Tamil",
-      "telu": "Telugu",
-      "thai": "Thai"
-    },
-    "search": "Search fonts",
-    "source": "Source",
-    "sources": {
-      "bundled": "Bundled",
-      "system": "System"
-    },
-    "style": "Style"
+    "search": "Search fonts"
   },
   "inference": {
     "currentPage": "Current page",

@@ -8,8 +8,8 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use image::RgbaImage;
 use koharu_renderer::Gpu;
+use kurbo::Rect;
 use tokio::sync::oneshot;
-use vello::{kurbo::Rect, wgpu};
 use winit::window::Window;
 
 use super::paint::{Paint, Painted};

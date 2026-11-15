@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use koharu_pipeline::{Pipeline, PipelineConfig};
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::{Gpu, Renderer, RendererConfig};
 use sentry::protocol::GpuContext;
 use tauri::{Env, Manager as _, utils::platform};
 use tauri_plugin_log::{Target, TargetKind, log::LevelFilter};
@@ -43,7 +43,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
 
     let renderer = Renderer::new(koharu_config::get::<RendererConfig>()?);
     // The window composites with it from its first frame.
-    let gpu = renderer.gpu()?;
+    let gpu = Gpu::get()?;
     let adapter = gpu.adapter.get_info();
     koharu_sentry::set_context(
         "gpu",

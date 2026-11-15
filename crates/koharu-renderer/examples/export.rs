@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     let renderer = Renderer::new(RendererConfig::default());
     let frame = renderer.render(&session, change.pages.added[0])?;
     let project = session.project();
-    let composite = renderer.rasterize(&frame)?;
+    let composite = frame.rasterize()?;
     println!(
         "composite: {}×{}",
         composite.image.width(),
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
             LayerKind::Mask => continue,
             LayerKind::Group => println!("{label}: a folder{hidden}"),
             _ => {
-                let own = renderer.rasterize(&layer.cropped())?;
+                let own = layer.cropped().rasterize()?;
                 let (width, height) = own.image.dimensions();
                 println!(
                     "{label}: {width}×{height} at ({}, {}){hidden}",
@@ -95,7 +95,7 @@ fn main() -> Result<()> {
             }
         }
         if let Some(mask) = layer.mask() {
-            let coverage = renderer.rasterize(&mask)?;
+            let coverage = mask.rasterize()?;
             println!(
                 "  and a mask over the page, {} pixels covered",
                 coverage.image.pixels().filter(|pixel| pixel[3] > 0).count()

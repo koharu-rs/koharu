@@ -1,28 +1,28 @@
 //! A text layer set in its frame, in stages that each take one type and
 //! give the next: the text styled, its runs shaped once, its segments
 //! between break opportunities, lines fitted to the frame's room, and glyphs
-//! arranged into a `TextLayout`, which paints into vello scenes.
+//! arranged into a `TextLayout`, which draws itself onto a drawing.
 
 use std::ops::Range;
 
 use anyhow::Result;
 use koharu_scene::{Align, CharStyle, Color, Text};
-use vello::kurbo::Rect;
+use kurbo::Rect;
 
 use self::{room::Room, shape::ShapedText, style::Styled};
 use crate::fonts::Font;
 
 mod arrange;
 mod breaks;
+mod draw;
 mod fit;
 mod itemize;
 mod lines;
-mod paint;
 mod room;
 mod shape;
 mod style;
 
-pub(crate) use self::{arrange::TextLayout, breaks::preload_dictionary, paint::paint};
+pub(crate) use self::{arrange::TextLayout, breaks::preload_dictionary, draw::draw};
 
 /// Laid-out text, as a run of one face at one size and paint.
 #[derive(Clone, Debug, PartialEq)]
@@ -65,8 +65,8 @@ pub struct ResolvedText {
     pub uncovered: Vec<char>,
 }
 
-/// `text` laid out, each span set in the chain `fonts` gives for its style
-/// and characters; `None` when it has no characters.
+/// `text` laid out, each span set in the chain `fonts` gives for its
+/// style and characters; `None` when it has no characters.
 pub(crate) fn layout(
     text: &Text,
     fonts: impl FnMut(&CharStyle, &str) -> Result<Vec<Font>>,
@@ -76,56 +76,9 @@ pub(crate) fn layout(
         return Ok(None);
     }
     let shaped = ShapedText::new(&styled)?;
-    let room = Room::new(&styled.frame, styled.vertical)?;
+    let room = Room::new(&styled.frame, styled.vertical);
     let (segments, placed) = fit::fit(&styled, &room, |breaking| {
         breaks::segments(&shaped, breaking)
     });
     arrange::arrange(&shaped, &segments, placed).map(Some)
-}
-
-/// Texts set in installed fonts, for the stages' tests.
-#[cfg(test)]
-mod testing {
-    use koharu_scene::{Align, Color, Frame};
-
-    use super::style::{Span, Styled};
-    use crate::fonts::{Font, FontSystem};
-
-    const PRIMARY_FAMILIES: &[&str] = &[
-        "Arial",
-        "Segoe UI",
-        "Noto Sans",
-        "DejaVu Sans",
-        "Liberation Sans",
-        "Yu Gothic",
-        "MS Gothic",
-        "Times New Roman",
-    ];
-
-    /// The first of a few common text fonts that is installed.
-    pub(super) fn primary(fonts: &mut FontSystem) -> Font {
-        PRIMARY_FAMILIES
-            .iter()
-            .find_map(|name| fonts.query_family(name).ok())
-            .expect("no primary font available")
-    }
-
-    /// `text` in one 16-pixel span set in `fonts`, as point text.
-    pub(super) fn styled(text: &str, fonts: Vec<Font>) -> Styled {
-        Styled {
-            text: text.to_owned(),
-            spans: vec![Span {
-                range: 0..text.len(),
-                fonts,
-                size: 16.0,
-                fill: Color::BLACK,
-                stroke: None,
-            }],
-            vertical: false,
-            align: Align::Start,
-            line_height: 1.2,
-            hyphenation: None,
-            frame: Frame::Point,
-        }
-    }
 }

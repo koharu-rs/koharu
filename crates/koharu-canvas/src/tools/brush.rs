@@ -4,7 +4,7 @@
 
 use image::{RgbaImage, imageops};
 use koharu_scene::{Content, Edit, LayerId, Op, Raster, Ref, Rgba};
-use vello::kurbo::{
+use kurbo::{
     Affine, BezPath, Cap, Circle, Join, Point, Shape as _, Size, Stroke as Style, StrokeOpts,
     stroke,
 };

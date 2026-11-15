@@ -244,34 +244,21 @@ export type Fit =
  */
 "best";
 
+/**  One of a family's faces, by the weight and slant a text asks for. */
 export type FontFace = {
 	post_script_name: string,
 	weight: number,
 	/**  A variable face's weights. */
 	weight_range: RangeInclusive<number> | null,
-	style: FontStyle,
+	/**  Italic or oblique, as a text's `italic` asks for. */
+	italic: boolean,
 };
 
+/**  A family as the font list shows it, installed or bundled. */
 export type FontFamily = {
 	name: string,
-	metadata: FontMetadata,
-	sources: FontSource[],
 	faces: FontFace[],
 };
-
-export type FontMetadata = {
-	primary_script: string | null,
-	scripts: string[],
-	languages: string[],
-	category: string | null,
-	classifications: string[],
-	use_cases: string[],
-};
-
-export type FontSource = "system" | "bundled";
-
-/**  As the bundled font catalog spells it, too. */
-export type FontStyle = "normal" | "italic" | "oblique";
 
 /**
  *  Where a text lays out. Externally tagged, so a merge patch switches

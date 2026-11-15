@@ -1,8 +1,8 @@
 //! Moving the view: the pan gesture, the wheel, and pinch. Each answers the
 //! camera it wants, which the canvas clamps.
 
+use kurbo::{Point, TranslateScale, Vec2};
 use ui_events::ScrollDelta;
-use vello::kurbo::{Point, TranslateScale, Vec2};
 
 use super::command;
 use crate::{Effect, gesture::Context, view::Sample};

@@ -3,7 +3,7 @@
 use koharu_scene::{
     Bounds, Content, Edit, Frame, LanguageIdentifier, RichText, Text, TextStyle, Transform,
 };
-use vello::kurbo::{Point, Rect};
+use kurbo::{Point, Rect};
 
 use super::added;
 use crate::{Effect, draw::overlay::Overlay, gesture::Context, view::Sample};

@@ -10,7 +10,7 @@ use anyhow::Context as _;
 use fs_err::File;
 use image::ImageFormat;
 use koharu_psd::Labels;
-use koharu_renderer::{Frame, Renderer};
+use koharu_renderer::Frame;
 use koharu_scene::PageId;
 use serde::Deserialize;
 use specta::Type;
@@ -82,9 +82,7 @@ fn write(
     };
     for (index, &page) in pages.iter().enumerate() {
         let number = format!("{:0digits$}", index + 1);
-        // The page as it finally looks, its bundled fonts in.
-        let frame =
-            tauri::async_runtime::block_on(app.renderer.render_loaded(Arc::clone(&session), page))?;
+        let frame = app.renderer.render(&session.lock(), page)?;
         match (format, &mut archive) {
             (ExportFormat::Psd, _) => {
                 let psd = koharu_psd::export(&session.lock(), &app.renderer, page, labels)?;
@@ -95,13 +93,10 @@ fn write(
                 let options = ::zip::write::SimpleFileOptions::default()
                     .compression_method(::zip::CompressionMethod::Stored);
                 archive.start_file(format!("{number}.png"), options)?;
-                archive.write_all(&png(&app.renderer, &frame)?)?;
+                archive.write_all(&png(&frame)?)?;
             }
             (_, None) => {
-                fs_err::write(
-                    destination.join(format!("{number}.png")),
-                    png(&app.renderer, &frame)?,
-                )?;
+                fs_err::write(destination.join(format!("{number}.png")), png(&frame)?)?;
             }
         }
     }
@@ -111,8 +106,8 @@ fn write(
     Ok(())
 }
 
-fn png(renderer: &Renderer, frame: &Frame) -> anyhow::Result<Vec<u8>> {
-    let raster = renderer.rasterize(frame)?;
+fn png(frame: &Frame) -> anyhow::Result<Vec<u8>> {
+    let raster = frame.rasterize()?;
     let mut png = Cursor::new(Vec::new());
     raster.image.write_to(&mut png, ImageFormat::Png)?;
     Ok(png.into_inner())

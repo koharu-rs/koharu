@@ -60,7 +60,7 @@ pub const MAIN: &str = "main";
 /// What the main window shows, shared between the main thread, where CEF
 /// paints and winit delivers events, and the commands.
 pub struct Screen {
-    gpu: Arc<Gpu>,
+    gpu: &'static Gpu,
     /// The webview's layout, which the runtime keeps current; set when CEF
     /// creates the browser.
     pub view: OnceLock<OffscreenView>,
@@ -94,7 +94,7 @@ struct Settings {
 }
 
 impl Screen {
-    pub fn new(gpu: Arc<Gpu>) -> Self {
+    pub fn new(gpu: &'static Gpu) -> Self {
         Self {
             gpu,
             view: OnceLock::new(),
@@ -339,7 +339,7 @@ impl Screen {
         if size.width == 0 || size.height == 0 {
             return;
         }
-        let gpu = &self.gpu;
+        let gpu = self.gpu;
         let mut compositor = self.compositor.lock();
         if compositor.is_none() {
             match Compositor::new(gpu, Arc::clone(window)) {

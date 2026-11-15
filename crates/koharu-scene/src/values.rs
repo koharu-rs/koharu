@@ -20,6 +20,12 @@ pub struct Offset {
     pub y: i32,
 }
 
+impl From<Offset> for kurbo::Vec2 {
+    fn from(offset: Offset) -> Self {
+        Self::new(f64::from(offset.x), f64::from(offset.y))
+    }
+}
+
 /// A pixel rectangle, for pixel writes and reads.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -56,6 +62,17 @@ pub struct Bounds {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+impl From<Bounds> for kurbo::Rect {
+    fn from(bounds: Bounds) -> Self {
+        Self::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        )
+    }
 }
 
 /// A 2D affine `[[a, b, c], [d, e, f]]`, mapping `(x, y)` to
@@ -102,6 +119,12 @@ impl Path {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl From<&Path> for kurbo::BezPath {
+    fn from(path: &Path) -> Self {
+        Self::from_svg(&path.0).expect("a path parses, as it did when it was made")
     }
 }
 

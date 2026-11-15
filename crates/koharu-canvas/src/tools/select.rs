@@ -2,7 +2,7 @@
 //! the pointer hovers.
 
 use koharu_scene::LayerId;
-use vello::kurbo::{Point, Rect};
+use kurbo::{Point, Rect};
 
 use super::{
     command,

@@ -274,7 +274,7 @@ impl Run<'_, '_> {
         let affine = Affine::from(transform);
         let turned = |old: &mut Transform| *old = (affine * Affine::from(*old)).into();
         let reshaped = |old: &mut Path| {
-            let mut path = BezPath::from_svg(old.as_str()).expect("a stored path parses");
+            let mut path = BezPath::from(&*old);
             path.apply_affine(affine);
             *old = Path::try_from(path.to_svg()).expect("kurbo writes path data it reads");
         };

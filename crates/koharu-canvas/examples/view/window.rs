@@ -6,13 +6,13 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use koharu_canvas::{Rect, Tool};
+use koharu_renderer::Gpu;
 use ui_events::{
     ScrollDelta,
     keyboard::{Key, KeyState, KeyboardEvent, NamedKey},
     pointer::PointerEvent,
 };
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::wgpu;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -77,7 +77,7 @@ impl App {
         let Some(screen) = &self.window else {
             return Ok(());
         };
-        let gpu = self.host.renderer.gpu()?;
+        let gpu = Gpu::get()?;
         let texture = match self.host.canvas.draw()? {
             Some(texture) => texture,
             None => match self.host.canvas.texture() {
@@ -173,7 +173,7 @@ impl ApplicationHandler for App {
                         .with_inner_size(LogicalSize::new(1280.0, 800.0)),
                 )?,
             );
-            let gpu = self.host.renderer.gpu()?;
+            let gpu = Gpu::get()?;
             let surface = gpu.instance.create_surface(Arc::clone(&window))?;
             let capabilities = surface.get_capabilities(&gpu.adapter);
             // CEF's bytes and the canvas's are already encoded, so the surface
@@ -219,7 +219,7 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
-                if let (Some(screen), Ok(gpu)) = (&mut self.window, self.host.renderer.gpu()) {
+                if let (Some(screen), Ok(gpu)) = (&mut self.window, Gpu::get()) {
                     screen.config.width = size.width.max(1);
                     screen.config.height = size.height.max(1);
                     screen.surface.configure(&gpu.device, &screen.config);

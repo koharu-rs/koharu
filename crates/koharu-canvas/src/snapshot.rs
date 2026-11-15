@@ -8,7 +8,7 @@ use koharu_renderer::Frame;
 use koharu_scene::{
     Content, Frame as TextFrame, Hash, Layer, LayerId, Offset, Page, Project, Session, Text,
 };
-use vello::kurbo::{Affine, BezPath, Point, Rect, Shape as _, Size};
+use kurbo::{Affine, BezPath, Point, Rect, Shape as _, Size};
 
 use crate::control::{Control, Part, Resize};
 

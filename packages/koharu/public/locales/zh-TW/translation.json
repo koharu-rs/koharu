@@ -85,51 +85,13 @@
     "title": "傳送意見回饋"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} 個啟用的篩選條件",
-    "activeFilterCount_one": "{{count}} 個啟用的篩選條件",
-    "activeFilterCount_other": "{{count}} 個啟用的篩選條件",
-    "allPurposes": "所有用途",
-    "allScripts": "所有文字系統",
-    "allSources": "所有來源",
-    "allStyles": "所有樣式",
     "choose": "選擇字型",
-    "clearFilters": "清除篩選條件",
-    "filter": "篩選字型",
-    "filterActiveLabel": "篩選字型，已啟用 {{count}} 個",
     "fontCount": "{{count}} 種字型",
     "fontCount_one": "{{count}} 種字型",
     "fontCount_other": "{{count}} 種字型",
-    "fontLabel": "{{family}}，{{source}}",
     "fonts": "字型",
     "noResults": "沒有符合此搜尋的字型",
-    "purpose": "用途",
-    "script": "文字系統",
-    "scripts": {
-      "arab": "阿拉伯文",
-      "beng": "孟加拉文",
-      "cyrl": "西里爾文",
-      "deva": "天城文",
-      "gujr": "古吉拉特文",
-      "guru": "古木基文",
-      "hang": "諺文",
-      "hani": "漢字",
-      "hebr": "希伯來文",
-      "hira": "平假名",
-      "kana": "片假名",
-      "knda": "卡納達文",
-      "latn": "拉丁文",
-      "mlym": "馬拉雅拉姆文",
-      "taml": "坦米爾文",
-      "telu": "泰盧固文",
-      "thai": "泰文"
-    },
-    "search": "搜尋字型",
-    "source": "來源",
-    "sources": {
-      "bundled": "內建",
-      "system": "系統"
-    },
-    "style": "樣式"
+    "search": "搜尋字型"
   },
   "inference": {
     "currentPage": "目前頁面",

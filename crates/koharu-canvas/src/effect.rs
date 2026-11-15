@@ -3,9 +3,9 @@
 //! which the desktop builds from CEF's and the example from winit's.
 
 use koharu_scene::{Edit, LayerId, PageId, Rgba};
+use kurbo::TranslateScale;
 use serde::Serialize;
 use specta::Type;
-use vello::kurbo::TranslateScale;
 
 /// What a gesture did, for the host to act on.
 #[derive(Clone, Debug)]

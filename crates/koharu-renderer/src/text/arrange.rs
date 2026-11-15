@@ -7,8 +7,8 @@ use std::ops::Range;
 use anyhow::Result;
 use harfrust::Buffer;
 use koharu_scene::Align;
+use kurbo::Rect;
 use unicode_bidi::{BidiInfo, Level};
-use vello::kurbo::Rect;
 
 use super::{
     ResolvedText, TextRun,
@@ -17,7 +17,7 @@ use super::{
     itemize::{Orientation, Run},
     lines,
     room::physical,
-    shape::{Glyph, ShapedText},
+    shape::{Glyph, ShapedText, shape_run},
 };
 use crate::fonts::Font;
 
@@ -34,19 +34,23 @@ pub(crate) struct TextLayout {
 /// The font and positioned glyphs of one of a layout's runs.
 pub(crate) struct GlyphRun {
     pub font: Font,
-    pub glyphs: Vec<vello::Glyph>,
+    pub glyphs: Vec<glifo::Glyph>,
     /// Its glyphs are turned a quarter clockwise around their origins, as
     /// vertical text sets Latin.
     pub sideways: bool,
 }
 
-/// A glyph as positioned: its run's span, font, and whether it's turned
-/// sideways; the glyph; and the text offset of its cluster.
-type Positioned = (usize, usize, bool, vello::Glyph, usize);
+/// A glyph as positioned: what groups it into a run, its run's span, font,
+/// and whether it's turned sideways; the glyph; and the text offset of its
+/// cluster.
+type Positioned = ((usize, usize, bool), glifo::Glyph, usize);
 
 /// A run as one line holds it, with its glyphs there.
 type Piece<'a> = (&'a Run, Vec<Glyph>);
 
+/// The layout of `shaped` text set in `placed` lines of its `segments`:
+/// each line's runs in the order they show, its glyphs positioned, and
+/// what laying it out resolved.
 pub(super) fn arrange(
     shaped: &ShapedText,
     segments: &[Segment],
@@ -163,7 +167,7 @@ fn line_runs<'a>(
         };
         let piece = if unsafe_cut(range.start) || unsafe_cut(range.end) {
             let part = run.range.start.max(range.start)..run.range.end.min(range.end);
-            shaped.reshape(buffer, run, part)?
+            shape_run(shaped.styled, buffer, run, part)?
         } else {
             glyphs
                 .iter()
@@ -216,8 +220,8 @@ fn position(
         let sideways = run.orientation == Orientation::Sideways;
         let mut push = |x: f32, y: f32, glyph: &Glyph| {
             let id = glyph.id;
-            let drawn = vello::Glyph { id, x, y };
-            glyphs.push((run.span, run.font, sideways, drawn, glyph.cluster));
+            let drawn = glifo::Glyph { id, x, y };
+            glyphs.push(((run.span, run.font, sideways), drawn, glyph.cluster));
         };
         if run.orientation == Orientation::TateChuYoko {
             // An upright group shares one cell, its glyphs side by side
@@ -317,23 +321,24 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
     let styled = shaped.styled;
     let mut glyph_runs = Vec::new();
     let mut text_runs = Vec::new();
-    for run in glyphs.chunk_by(|a, b| (a.0, a.1, a.2) == (b.0, b.1, b.2)) {
-        let span = &styled.spans[run[0].0];
-        let font = &span.fonts[run[0].1];
-        let clusters = run.iter().map(|glyph| glyph.4);
+    for run in glyphs.chunk_by(|a, b| a.0 == b.0) {
+        let (span, font, sideways) = run[0].0;
+        let span = &styled.spans[span];
+        let font = &span.fonts[font];
+        let clusters = run.iter().map(|glyph| glyph.2);
         let start = clusters.clone().min().expect("a run has a glyph");
         let end = clusters.max().expect("a run has a glyph") + 1;
         text_runs.push(TextRun {
             range: utf16(&styled.text, start)..utf16(&styled.text, end),
-            post_script_name: font.post_script_name().to_owned(),
+            post_script_name: font.post_script_name.clone(),
             size: span.size * scale,
             fill: span.fill,
             stroke: span.stroke.map(|(color, width)| (color, width * scale)),
         });
         glyph_runs.push(GlyphRun {
             font: font.clone(),
-            glyphs: run.iter().map(|glyph| glyph.3).collect(),
-            sideways: run[0].2,
+            glyphs: run.iter().map(|glyph| glyph.1).collect(),
+            sideways,
         });
     }
     (glyph_runs, text_runs)
@@ -355,17 +360,49 @@ fn utf16(text: &str, offset: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use koharu_scene::Frame;
+
     use super::*;
     use crate::{
-        fonts::FontSystem,
-        text::testing::{primary, styled},
+        fonts::Library,
+        text::style::{Span, Styled},
     };
+
+    /// `text` in one 16-pixel span of an installed sans-serif, as point
+    /// text.
+    fn styled(text: &str) -> Styled {
+        let font = [
+            "Arial",
+            "Segoe UI",
+            "Noto Sans",
+            "DejaVu Sans",
+            "Liberation Sans",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed sans-serif");
+        Styled {
+            text: text.to_owned(),
+            spans: vec![Span {
+                range: 0..text.len(),
+                fonts: vec![font],
+                size: 16.0,
+                fill: koharu_scene::Color::BLACK,
+                stroke: None,
+            }],
+            vertical: false,
+            align: Align::Start,
+            line_height: 1.2,
+            hyphenation: None,
+            frame: Frame::Point,
+        }
+    }
 
     #[test]
     fn a_right_to_left_line_shows_its_first_words_rightmost() -> Result<()> {
         // Hebrew, which makes the paragraph right to left, then English.
         let text = "\u{05e9}\u{05dc}\u{05d5}\u{05dd} \u{05e2}\u{05d5}\u{05dc}\u{05dd} and more";
-        let styled = styled(text, vec![primary(&mut FontSystem::new())]);
+        let styled = styled(text);
         let shaped = ShapedText::new(&styled)?;
         let shown = visual_order(line_runs(&shaped, &mut Buffer::new(), 0..text.len())?);
         // The English shows leftmost, and the Hebrew it follows rightmost.
@@ -377,7 +414,7 @@ mod tests {
     #[test]
     fn a_line_cut_where_breaking_is_unsafe_shapes_that_side_alone() -> Result<()> {
         // A kerning pair, V and A, crosses the cut.
-        let styled = styled("AVAV", vec![primary(&mut FontSystem::new())]);
+        let styled = styled("AVAV");
         let shaped = ShapedText::new(&styled)?;
         let run = &shaped.runs[0];
         assert!(
@@ -388,7 +425,7 @@ mod tests {
         );
         let mut buffer = Buffer::new();
         let held = line_runs(&shaped, &mut buffer, 0..2)?;
-        let alone = shaped.reshape(&mut buffer, run, 0..2)?;
+        let alone = shape_run(&styled, &mut buffer, run, 0..2)?;
         let advance = |glyphs: &[Glyph]| glyphs.iter().map(|glyph| glyph.advance).sum::<f32>();
         assert_eq!(advance(&held[0].1), advance(&alone));
         Ok(())
@@ -398,7 +435,7 @@ mod tests {
     fn a_left_to_right_paragraph_after_a_right_to_left_one_starts_on_the_left() -> Result<()> {
         // Hebrew, then English on its own line.
         let text = "\u{05e9}\u{05dc}\u{05d5}\u{05dd}\nHello";
-        let styled = styled(text, vec![primary(&mut FontSystem::new())]);
+        let styled = styled(text);
         let shaped = ShapedText::new(&styled)?;
         let english = text.find('H').expect("English");
         let line = PlacedLine {
@@ -417,7 +454,7 @@ mod tests {
 
     #[test]
     fn sideways_latin_runs_down_its_column_centred_across_it() -> Result<()> {
-        let font = primary(&mut FontSystem::new());
+        let font = styled("").spans[0].fonts[0].clone();
         let text = koharu_scene::Text {
             content: "AV".into(),
             direction: koharu_scene::Direction::Vertical,

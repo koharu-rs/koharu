@@ -85,51 +85,13 @@
     "title": "Enviar comentarios"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} filtros activos",
-    "activeFilterCount_one": "{{count}} filtro activo",
-    "activeFilterCount_other": "{{count}} filtros activos",
-    "allPurposes": "Todos los usos",
-    "allScripts": "Todos los sistemas de escritura",
-    "allSources": "Todos los orígenes",
-    "allStyles": "Todos los estilos",
     "choose": "Elegir una fuente",
-    "clearFilters": "Borrar filtros",
-    "filter": "Filtrar fuentes",
-    "filterActiveLabel": "Filtrar fuentes, {{count}} activos",
     "fontCount": "{{count}} fuentes",
     "fontCount_one": "{{count}} fuente",
     "fontCount_other": "{{count}} fuentes",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "Fuentes",
     "noResults": "Ninguna fuente coincide con esta búsqueda",
-    "purpose": "Uso",
-    "script": "Sistema de escritura",
-    "scripts": {
-      "arab": "Árabe",
-      "beng": "Bengalí",
-      "cyrl": "Cirílico",
-      "deva": "Devanagari",
-      "gujr": "Guyaratí",
-      "guru": "Gurmukhi",
-      "hang": "Hangul",
-      "hani": "Han",
-      "hebr": "Hebreo",
-      "hira": "Hiragana",
-      "kana": "Katakana",
-      "knda": "Canarés",
-      "latn": "Latino",
-      "mlym": "Malayalam",
-      "taml": "Tamil",
-      "telu": "Telugu",
-      "thai": "Tailandés"
-    },
-    "search": "Buscar fuentes",
-    "source": "Origen",
-    "sources": {
-      "bundled": "Incluidas",
-      "system": "Sistema"
-    },
-    "style": "Estilo"
+    "search": "Buscar fuentes"
   },
   "inference": {
     "currentPage": "Página actual",

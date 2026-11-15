@@ -85,51 +85,13 @@
     "title": "フィードバックを送信"
   },
   "fontPicker": {
-    "activeFilterCount": "有効なフィルター: {{count}}件",
-    "activeFilterCount_one": "有効なフィルター: {{count}}件",
-    "activeFilterCount_other": "有効なフィルター: {{count}}件",
-    "allPurposes": "すべての用途",
-    "allScripts": "すべての文字体系",
-    "allSources": "すべての提供元",
-    "allStyles": "すべてのスタイル",
     "choose": "フォントを選択",
-    "clearFilters": "フィルターをクリア",
-    "filter": "フォントを絞り込む",
-    "filterActiveLabel": "フォントを絞り込む（{{count}}件有効）",
     "fontCount": "{{count}}個のフォント",
     "fontCount_one": "{{count}}個のフォント",
     "fontCount_other": "{{count}}個のフォント",
-    "fontLabel": "{{family}}、{{source}}",
     "fonts": "フォント",
     "noResults": "この検索に一致するフォントはありません",
-    "purpose": "用途",
-    "script": "文字体系",
-    "scripts": {
-      "arab": "アラビア文字",
-      "beng": "ベンガル文字",
-      "cyrl": "キリル文字",
-      "deva": "デーヴァナーガリー文字",
-      "gujr": "グジャラート文字",
-      "guru": "グルムキー文字",
-      "hang": "ハングル",
-      "hani": "漢字",
-      "hebr": "ヘブライ文字",
-      "hira": "ひらがな",
-      "kana": "カタカナ",
-      "knda": "カンナダ文字",
-      "latn": "ラテン文字",
-      "mlym": "マラヤーラム文字",
-      "taml": "タミル文字",
-      "telu": "テルグ文字",
-      "thai": "タイ文字"
-    },
-    "search": "フォントを検索",
-    "source": "提供元",
-    "sources": {
-      "bundled": "同梱",
-      "system": "システム"
-    },
-    "style": "スタイル"
+    "search": "フォントを検索"
   },
   "inference": {
     "currentPage": "現在のページ",

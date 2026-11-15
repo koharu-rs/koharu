@@ -52,14 +52,6 @@ describe('editor localization', () => {
     }
   })
 
-  it('distinguishes a font origin from source text', () => {
-    for (const [locale, resource] of Object.entries(resources)) {
-      expect(resource.translation.fontPicker.source, locale).not.toBe(
-        resource.translation.inspector.source,
-      )
-    }
-  })
-
   it('names the target languages in the interface language, in its order', () => {
     const names = orderedLanguageChoices('en-US').map((language) => language.name)
     expect(names).toContain('English')

@@ -151,13 +151,8 @@ impl Text {
     pub fn bounds(&self) -> Option<kurbo::Rect> {
         let rect = match &self.frame {
             Frame::Point => return None,
-            Frame::Box { bounds, .. } => kurbo::Rect::new(
-                bounds.x,
-                bounds.y,
-                bounds.x + bounds.width,
-                bounds.y + bounds.height,
-            ),
-            Frame::Path { path, .. } => BezPath::from_svg(path.as_str()).ok()?.bounding_box(),
+            Frame::Box { bounds, .. } => kurbo::Rect::from(*bounds),
+            Frame::Path { path, .. } => BezPath::from(path).bounding_box(),
         };
         Some(Affine::from(self.transform).transform_rect_bbox(rect))
     }

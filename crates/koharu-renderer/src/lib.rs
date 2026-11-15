@@ -1,22 +1,36 @@
 //! Renders Koharu scene pages with vello: layout, retained layer content,
 //! and the GPU passes that draw it.
 
-mod config;
-mod error;
-mod fonts;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+pub mod fonts;
 mod frame;
 mod gpu;
-mod images;
+mod pixels;
 mod renderer;
 mod script;
 mod text;
-mod tiles;
-mod types;
 
-pub use config::RendererConfig;
-pub use error::{Error, Result};
-pub use frame::{Drawn, Frame, Strip, View};
-pub use gpu::Gpu;
-pub use renderer::{Raster, Renderer};
+pub use frame::{Drawn, Frame, Raster};
+pub use gpu::{Drawing, Gpu};
+pub use renderer::Renderer;
 pub use text::{ResolvedText, TextRun};
-pub use types::{FontFace, FontFamily, FontMetadata, FontSource, FontStyle};
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Type)]
+#[serde(default)]
+pub struct RendererConfig {
+    pub font_families: Vec<String>,
+}
+
+impl Default for RendererConfig {
+    fn default() -> Self {
+        Self {
+            font_families: vec!["CCWildWords".to_owned(), "Adobe 黑体 Std".to_owned()],
+        }
+    }
+}
+
+impl koharu_config::Section for RendererConfig {
+    const NAME: &'static str = "renderer";
+}

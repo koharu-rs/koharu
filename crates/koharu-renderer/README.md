@@ -2,11 +2,12 @@
 
 Koharu's one renderer.
 
-It draws a page of a project with vello [vello]: it lays out the text,
+It draws a page of a project with vello_gpu [vello]: it lays out the text,
 composites the layers, and turns the page into pixels. The canvas, image
-export, and PSD export all draw the same frame, so every export matches what
-the editor shows. Where it follows an established product or standard, it
-cites it; the links are under [Sources](#sources).
+export, PSD export, and thumbnails all draw on the GPU through one painter, so
+every export matches what the editor shows, and Koharu needs a GPU to draw.
+Where it follows an established product or standard, it cites it; the links
+are under [Sources](#sources).
 
 ## Goal
 
@@ -71,8 +72,8 @@ lopsided balloon don't wander along its outline.
 | chain | a span's family, then the preferred families, then Arial, then the system's fallback for the text's scripts in its language, then symbol and emoji families | the system's fallback through fontique [fontique] |
 | language | a text with none takes Japanese from kana and Korean from Hangul, and Han alone falls back as Simplified Chinese, so Chinese never takes the system language's font, such as a Japanese one | |
 | graphemes | fallback never splits one, and a character no font in the chain has is listed for the inspector | |
-| bundled fonts | when the system lacks the chain's first family, it can come from Koharu's font dataset, pinned to one commit so its index, faces, and previews match | the `mayocream/fonts` dataset [Koharu fonts] |
-| arriving fonts | a face the page needs downloads in the background; the page draws with a fallback until it lands, then draws again | |
+| bundled fonts | a family of the chain the system lacks can come from Koharu's font dataset, in its place in the chain, pinned to one commit so its index, faces, and previews match | the `mayocream/fonts` dataset [Koharu fonts] |
+| font downloads | a face a text needs downloads as the text lays out, and the render waits for it; a family the dataset lacks, or one that fails to download, falls back down the chain | |
 
 ## Sources
 

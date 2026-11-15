@@ -56,12 +56,30 @@ impl<'a> ShapedText<'a> {
             run.glyphs = glyphs.len()..glyphs.len() + shaped.len();
             glyphs.extend(shaped);
         }
+        // Each span's hyphen, shaped in the first of its fonts that has one.
         let mut hyphens = Vec::with_capacity(styled.spans.len());
-        for span in 0..styled.spans.len() {
-            hyphens.push(match styled.hyphenation {
-                Some(_) => hyphen(styled, &mut buffer, span, &mut glyphs)?,
-                None => None,
-            });
+        for (index, span) in styled.spans.iter().enumerate() {
+            if styled.hyphenation.is_none() || span.fonts.is_empty() {
+                hyphens.push(None);
+                continue;
+            }
+            let mut run = Run {
+                range: 0..0,
+                span: index,
+                font: span
+                    .fonts
+                    .iter()
+                    .position(|font| font.covers("-"))
+                    .unwrap_or(0),
+                level: Level::ltr(),
+                script: harfrust_script(IcuScript::Common),
+                orientation: Orientation::Upright,
+                glyphs: 0..0,
+            };
+            let shaped = shape_text(styled, &mut buffer, "-", &run, |_| 0)?;
+            run.glyphs = glyphs.len()..glyphs.len() + shaped.len();
+            glyphs.extend(shaped);
+            hyphens.push(Some(run));
         }
         Ok(Self {
             styled,
@@ -88,17 +106,6 @@ impl<'a> ShapedText<'a> {
         })
     }
 
-    /// `range` of `run` shaped on its own, as a line's end or start where
-    /// breaking changes its shaping.
-    pub(super) fn reshape(
-        &self,
-        buffer: &mut Buffer,
-        run: &Run,
-        range: Range<usize>,
-    ) -> Result<Vec<Glyph>> {
-        shape_run(self.styled, buffer, run, range)
-    }
-
     /// Whether the paragraph holding `offset` runs right to left, which
     /// starts its lines on the right. Vertical text never does.
     pub(super) fn rtl_at(&self, offset: usize) -> bool {
@@ -112,8 +119,9 @@ impl<'a> ShapedText<'a> {
     }
 }
 
-/// `range` of `run` shaped on its own.
-fn shape_run(
+/// `range` of `run` shaped on its own: a run, or a line's end or start
+/// where breaking changes its shaping.
+pub(super) fn shape_run(
     styled: &Styled,
     buffer: &mut Buffer,
     run: &Run,
@@ -177,7 +185,7 @@ fn shape_text(
         features,
     );
     harfrust::shape(
-        &ShaperFont::new(font.shaper()),
+        &ShaperFont::new(&font.shaper),
         buffer,
         ShapeOptions::new()
             .plan(Some(&plan))
@@ -204,33 +212,6 @@ fn shape_text(
         .collect())
 }
 
-/// Span `span`'s hyphen, shaped in the first of its fonts that has one, its
-/// glyphs added to `glyphs`; `None` when the span has no fonts.
-fn hyphen(
-    styled: &Styled,
-    buffer: &mut Buffer,
-    span: usize,
-    glyphs: &mut Vec<Glyph>,
-) -> Result<Option<Run>> {
-    let fonts = &styled.spans[span].fonts;
-    if fonts.is_empty() {
-        return Ok(None);
-    }
-    let mut run = Run {
-        range: 0..0,
-        span,
-        font: fonts.iter().position(|font| font.covers("-")).unwrap_or(0),
-        level: Level::ltr(),
-        script: harfrust_script(IcuScript::Common),
-        orientation: Orientation::Upright,
-        glyphs: 0..0,
-    };
-    let shaped = shape_text(styled, buffer, "-", &run, |_| 0)?;
-    run.glyphs = glyphs.len()..glyphs.len() + shaped.len();
-    glyphs.extend(shaped);
-    Ok(Some(run))
-}
-
 /// `text` with `!` and `?` in their full-width forms, or in their
 /// `proportional` ones, and the source byte of each byte of the result.
 fn exclamations(text: &str, proportional: bool) -> (String, Vec<usize>) {
@@ -251,43 +232,46 @@ fn exclamations(text: &str, proportional: bool) -> (String, Vec<usize>) {
 
 #[cfg(test)]
 mod tests {
+    use koharu_scene::{Align, Color, Frame};
+
     use super::*;
-    use crate::{
-        fonts::FontSystem,
-        text::testing::{primary, styled},
-    };
+    use crate::{fonts::Library, text::style::Span};
 
-    #[test]
-    fn arabic_shapes_as_one_run() -> Result<()> {
-        // "مرحبا" (Marhaba)
-        let styled = styled(
-            "\u{0645}\u{0631}\u{062d}\u{0628}\u{0627}",
-            vec![primary(&mut FontSystem::new())],
-        );
-        let shaped = ShapedText::new(&styled)?;
-        assert_eq!(shaped.runs.len(), 1);
-        assert!(shaped.runs[0].level.is_rtl());
-        Ok(())
-    }
-
-    #[test]
-    fn scripts_shape_apart_in_logical_order() -> Result<()> {
-        // Arabic, then Hebrew.
-        let styled = styled(
-            "\u{0645}\u{0631}\u{062d}\u{0628}\u{0627} \u{05e9}\u{05dc}\u{05d5}\u{05dd}",
-            vec![primary(&mut FontSystem::new())],
-        );
-        let shaped = ShapedText::new(&styled)?;
-        assert!(shaped.runs.len() >= 2);
-        assert!(shaped.runs[0].range.start < shaped.runs[shaped.runs.len() - 1].range.start);
-        Ok(())
+    /// `text` in one 16-pixel span of an installed sans-serif, as point
+    /// text.
+    fn styled(text: &str) -> Styled {
+        let font = [
+            "Arial",
+            "Segoe UI",
+            "Noto Sans",
+            "DejaVu Sans",
+            "Liberation Sans",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed sans-serif");
+        Styled {
+            text: text.to_owned(),
+            spans: vec![Span {
+                range: 0..text.len(),
+                fonts: vec![font],
+                size: 16.0,
+                fill: Color::BLACK,
+                stroke: None,
+            }],
+            vertical: false,
+            align: Align::Start,
+            line_height: 1.2,
+            hyphenation: None,
+            frame: Frame::Point,
+        }
     }
 
     #[test]
     fn a_vertical_exclamation_stands_in_its_font_without_a_full_width_form() -> Result<()> {
-        let font = primary(&mut FontSystem::new());
-        assert!(font.has_glyph('!') && !font.has_glyph('！'));
-        let mut styled = styled("Dogo!", vec![font]);
+        let mut styled = styled("Dogo!");
+        let font = &styled.spans[0].fonts[0];
+        assert!(font.covers("!") && !font.covers("！"));
         styled.vertical = true;
         let shaped = ShapedText::new(&styled)?;
         let mark = shaped

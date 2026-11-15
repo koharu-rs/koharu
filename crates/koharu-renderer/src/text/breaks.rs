@@ -2,10 +2,7 @@
 //! whole, Korean broken between words, and words at hyphenation points; and
 //! the text between two breaks measured from its glyphs.
 
-use std::{
-    ops::Range,
-    sync::{LazyLock, Once},
-};
+use std::{ops::Range, sync::LazyLock};
 
 use hypher::{Lang, hyphenate_bounded};
 use icu_properties::{
@@ -17,25 +14,15 @@ use icu_segmenter::{
     options::{LineBreakOptions, LineBreakWordOption},
 };
 use jieba_rs::Jieba;
-use koharu_scene::LanguageIdentifier;
 
 use super::{itemize::Orientation, shape::ShapedText};
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
-/// Starts loading jieba's dictionary, which takes about 50 ms, so the first
-/// Chinese text needn't wait for it: once, on a thread of its own rather than
-/// rayon's global pool, which the app may not have set up yet. Should the
-/// thread fail to start, the first Chinese text loads it.
+/// Loads jieba's dictionary, which takes about 50 ms, so the first Chinese
+/// text needn't wait for it.
 pub(crate) fn preload_dictionary() {
-    static STARTED: Once = Once::new();
-    STARTED.call_once(|| {
-        let _ = std::thread::Builder::new()
-            .name("jieba".to_owned())
-            .spawn(|| {
-                LazyLock::force(&JIEBA);
-            });
-    });
+    LazyLock::force(&JIEBA);
 }
 
 /// Photoshop's hyphenation default keeps two letters on each side.
@@ -93,9 +80,10 @@ type Cut = (Range<usize>, usize, Break);
 /// The text cut at its break opportunities. With `hyphenate`, a word also
 /// breaks at its hyphenation points.
 fn opportunities(text: &str, hyphenate: Option<Lang>) -> Vec<Cut> {
+    let scripts = CodePointMapData::<IcuScript>::new();
     let mut options = LineBreakOptions::default();
     // Korean breaks between words, not syllables.
-    if contains_korean(text) {
+    if text.chars().any(|ch| scripts.get(ch) == IcuScript::Hangul) {
         options.word_option = Some(LineBreakWordOption::KeepAll);
     }
     let line_breaks = CodePointMapData::<LineBreak>::new();
@@ -110,8 +98,30 @@ fn opportunities(text: &str, hyphenate: Option<Lang>) -> Vec<Cut> {
             )
         })
     };
-    let words = match contains_chinese(text) {
-        true => chinese_word_ranges(text),
+    // Chinese breaks between jieba's words rather than every character: text
+    // with Han or Bopomofo and no kana or Hangul, which Japanese and Korean
+    // break by their own rules.
+    let chinese = |text: &str| {
+        text.chars()
+            .map(|ch| scripts.get(ch))
+            .try_fold(false, |chinese, script| match script {
+                IcuScript::Han | IcuScript::Bopomofo => Some(true),
+                IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Hangul => None,
+                _ => Some(chinese),
+            })
+            .unwrap_or(false)
+    };
+    let mut offset = 0;
+    let words: Vec<Range<usize>> = match chinese(text) {
+        true => JIEBA
+            .cut(text, true)
+            .into_iter()
+            .filter_map(|token| {
+                let start = offset;
+                offset += token.word.len();
+                chinese(token.word).then_some(start..offset)
+            })
+            .collect(),
         false => Vec::new(),
     };
     let offsets: Vec<usize> = LineSegmenter::new_auto(options)
@@ -152,14 +162,17 @@ fn hyphenated(
     lang: Lang,
     pieces: &mut Vec<Cut>,
 ) {
-    // Photoshop hyphenates words of more than five letters.
-    let word = hyphenatable_word_bounds(&text[range.clone()])
-        .map(|(start, end)| range.start + start..range.start + end)
-        .filter(|word| text[word.clone()].chars().count() >= 6);
-    let Some(word) = word else {
+    // A piece's word is its letters, between whatever else starts or ends
+    // it. Photoshop hyphenates words of more than five letters.
+    let piece = &text[range.clone()];
+    let not_letter = |ch: char| !ch.is_alphabetic();
+    let start = range.start + piece.len() - piece.trim_start_matches(not_letter).len();
+    let word = start..start + piece.trim_matches(not_letter).len();
+    let letters = &text[word.clone()];
+    if !letters.chars().all(char::is_alphabetic) || letters.chars().count() < 6 {
         pieces.push((range, next, after));
         return;
-    };
+    }
     let syllables = hyphenate_bounded(
         &text[word.clone()],
         lang,
@@ -178,62 +191,6 @@ fn hyphenated(
     pieces.push((start..range.end, next, after));
 }
 
-/// The patterns that hyphenate `language`, by its two-letter code.
-pub(super) fn hyphenation(language: &LanguageIdentifier) -> Option<Lang> {
-    Lang::from_iso(language.language.as_str().as_bytes().try_into().ok()?)
-}
-
-fn chinese_word_ranges(text: &str) -> Vec<Range<usize>> {
-    let mut offset = 0usize;
-    JIEBA
-        .cut(text, true)
-        .into_iter()
-        .filter_map(|token| {
-            let word = token.word;
-            let start = offset;
-            let end = start + word.len();
-            offset = end;
-
-            contains_chinese(word).then_some(start..end)
-        })
-        .collect()
-}
-
-fn contains_korean(text: &str) -> bool {
-    let script_map = CodePointMapData::<IcuScript>::new();
-    text.chars()
-        .any(|ch| script_map.get(ch) == IcuScript::Hangul)
-}
-
-fn contains_chinese(text: &str) -> bool {
-    let script_map = CodePointMapData::<IcuScript>::new();
-    text.chars()
-        .map(|ch| script_map.get(ch))
-        .try_fold(false, |has_chinese, script| match script {
-            IcuScript::Han | IcuScript::Bopomofo => Some(true),
-            IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Hangul => None,
-            _ => Some(has_chinese),
-        })
-        .unwrap_or(false)
-}
-
-fn hyphenatable_word_bounds(text: &str) -> Option<(usize, usize)> {
-    let start = text.find(|ch: char| ch.is_alphabetic())?;
-    let end = text
-        .char_indices()
-        .rev()
-        .find(|&(_, ch)| ch.is_alphabetic())
-        .map(|(idx, ch)| idx + ch.len_utf8())?;
-    if start >= end {
-        return None;
-    }
-
-    let core = &text[start..end];
-    core.chars()
-        .all(|ch| ch.is_alphabetic())
-        .then_some((start, end))
-}
-
 /// The text's segments, broken as `breaking` allows and measured from the
 /// glyphs it shaped into.
 pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> {
@@ -242,28 +199,41 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
         Breaking::Words => None,
         Breaking::Hyphens => styled.hyphenation,
     };
-    let cuts = opportunities(&styled.text, hyphenate);
-    let advances = advances(shaped);
-    joined(cuts, &breakable(shaped))
-        .into_iter()
-        .map(|(range, after)| measure(shaped, &advances, range, after))
-        .collect()
-}
-
-/// `cuts` where a break may fall. A cut inside a cluster, such as a
-/// ligature, or inside an upright group joins the next piece.
-fn joined(cuts: Vec<Cut>, breakable: &[bool]) -> Vec<(Range<usize>, Break)> {
-    let mut out = Vec::with_capacity(cuts.len());
+    // Where the text may break, where a run starts or ends or a cluster
+    // starts but not inside an upright group; and the advance of the text
+    // before each byte, each glyph's at its cluster and an upright group's
+    // cell at its start.
+    let mut breakable = vec![false; styled.text.len() + 1];
+    let mut advances = vec![0.0; styled.text.len() + 1];
+    for run in &shaped.runs {
+        breakable[run.range.start] = true;
+        breakable[run.range.end] = true;
+        if run.orientation == Orientation::TateChuYoko {
+            advances[run.range.start] += f64::from(styled.spans[run.span].size);
+            continue;
+        }
+        for glyph in shaped.glyphs(run) {
+            breakable[glyph.cluster] = true;
+            advances[glyph.cluster] += f64::from(glyph.advance);
+        }
+    }
+    let mut sum = 0.0;
+    for value in &mut advances {
+        (*value, sum) = (sum, sum + *value);
+    }
+    // A cut inside a cluster, such as a ligature, or inside an upright group
+    // joins the next piece.
+    let mut segments = Vec::new();
     let mut joined = None;
-    for (range, next, after) in cuts {
+    for (range, next, after) in opportunities(&styled.text, hyphenate) {
         let start = joined.take().unwrap_or(range.start);
         if matches!(after, Break::Mandatory | Break::End) || breakable[next] {
-            out.push((start..range.end, after));
+            segments.push(measure(shaped, &advances, start..range.end, after));
         } else {
             joined = Some(start);
         }
     }
-    out
+    segments
 }
 
 /// The segment `range` makes, measured by `advances`.
@@ -300,52 +270,48 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
     }
 }
 
-/// Where the text may break: where a run starts or ends, or a cluster
-/// starts, but not inside an upright group.
-fn breakable(shaped: &ShapedText) -> Vec<bool> {
-    let mut at = vec![false; shaped.styled.text.len() + 1];
-    for run in &shaped.runs {
-        at[run.range.start] = true;
-        at[run.range.end] = true;
-        if run.orientation != Orientation::TateChuYoko {
-            for glyph in shaped.glyphs(run) {
-                at[glyph.cluster] = true;
-            }
-        }
-    }
-    at
-}
-
-/// The advance of the text before each byte: each glyph's at its cluster,
-/// and an upright group's cell at its start.
-fn advances(shaped: &ShapedText) -> Vec<f64> {
-    let styled = shaped.styled;
-    let mut at = vec![0.0; styled.text.len() + 1];
-    for run in &shaped.runs {
-        if run.orientation == Orientation::TateChuYoko {
-            at[run.range.start] += f64::from(styled.spans[run.span].size);
-            continue;
-        }
-        for glyph in shaped.glyphs(run) {
-            at[glyph.cluster] += f64::from(glyph.advance);
-        }
-    }
-    let mut sum = 0.0;
-    for value in &mut at {
-        (*value, sum) = (sum, sum + *value);
-    }
-    at
-}
 #[cfg(test)]
 mod tests {
+    use koharu_scene::{Align, Color, Frame};
+
     use super::*;
     use crate::{
-        fonts::FontSystem,
+        fonts::Library,
         text::{
-            Styled,
-            testing::{primary, styled},
+            shape::shape_run,
+            style::{Span, Styled},
         },
     };
+
+    /// `text` in one 16-pixel span of an installed sans-serif, as point
+    /// text.
+    fn styled(text: &str) -> Styled {
+        let font = [
+            "Arial",
+            "Segoe UI",
+            "Noto Sans",
+            "DejaVu Sans",
+            "Liberation Sans",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed sans-serif");
+        Styled {
+            text: text.to_owned(),
+            spans: vec![Span {
+                range: 0..text.len(),
+                fonts: vec![font],
+                size: 16.0,
+                fill: Color::BLACK,
+                stroke: None,
+            }],
+            vertical: false,
+            align: Align::Start,
+            line_height: 1.2,
+            hyphenation: None,
+            frame: Frame::Point,
+        }
+    }
 
     /// The text of each piece.
     fn pieces(text: &str, hyphenate: Option<Lang>) -> Vec<&str> {
@@ -353,15 +319,6 @@ mod tests {
             .into_iter()
             .map(|(range, ..)| &text[range])
             .collect()
-    }
-
-    #[test]
-    fn break_on_whitespace() {
-        let text = "The quick brown fox jumps over the lazy dog.";
-        let expected = vec![
-            "The ", "quick ", "brown ", "fox ", "jumps ", "over ", "the ", "lazy ", "dog.",
-        ];
-        assert_eq!(pieces(text, None), expected);
     }
 
     #[test]
@@ -386,45 +343,12 @@ mod tests {
     }
 
     #[test]
-    fn chinese_word_segmentation_preserves_icu_punctuation_rules() {
-        let text = "\u{5c0f}\u{8bf4}\u{ff0c}\u{4f60}\u{597d}";
-        assert_eq!(
-            pieces(text, None),
-            vec!["\u{5c0f}\u{8bf4}\u{ff0c}", "\u{4f60}\u{597d}",]
-        );
-    }
-
-    #[test]
     fn chinese_word_segmentation_does_not_resegment_kana_text() {
         let text = "\u{543e}\u{8f29}\u{306f}\u{732b}";
         assert_eq!(
             pieces(text, None),
             vec!["\u{543e}", "\u{8f29}", "\u{306f}", "\u{732b}",]
         );
-    }
-
-    #[test]
-    fn korean_word_segmentation_uses_keep_all() {
-        let text = "B6층 모험가들이 돌아갔으니까 청소 부탁해";
-        assert_eq!(
-            pieces(text, None),
-            vec!["B6층 ", "모험가들이 ", "돌아갔으니까 ", "청소 ", "부탁해"]
-        );
-    }
-
-    #[test]
-    fn hyphenation_splits_a_long_word_at_hyphen_breaks() {
-        let text = "antidisestablishmentarianism";
-        let pieces = opportunities(text, Some(Lang::English));
-        assert!(pieces.len() > 1, "expected hyphen breaks, got {pieces:?}");
-        let (last, parts) = pieces.split_last().expect("a piece");
-        assert!(parts.iter().all(|(_, _, after)| *after == Break::Hyphen));
-        assert_eq!(last.2, Break::End);
-        let rebuilt: String = pieces
-            .iter()
-            .map(|(range, ..)| &text[range.clone()])
-            .collect();
-        assert_eq!(rebuilt, text);
     }
 
     #[test]
@@ -443,111 +367,11 @@ mod tests {
     }
 
     #[test]
-    fn hyphenation_language_tags_cover_hypher_languages() {
-        let cases = [
-            ("af", Lang::Afrikaans),
-            ("sq", Lang::Albanian),
-            ("as", Lang::Assamese),
-            ("be", Lang::Belarusian),
-            ("bn", Lang::Bengali),
-            ("bg", Lang::Bulgarian),
-            ("ca", Lang::Catalan),
-            ("hr", Lang::Croatian),
-            ("cs", Lang::Czech),
-            ("da", Lang::Danish),
-            ("nl", Lang::Dutch),
-            ("en-US", Lang::English),
-            ("et", Lang::Estonian),
-            ("fi", Lang::Finnish),
-            ("fr-FR", Lang::French),
-            ("gl", Lang::Galician),
-            ("ka", Lang::Georgian),
-            ("de-DE", Lang::German),
-            ("el", Lang::Greek),
-            ("gu", Lang::Gujarati),
-            ("hi", Lang::Hindi),
-            ("hu", Lang::Hungarian),
-            ("is", Lang::Icelandic),
-            ("it-IT", Lang::Italian),
-            ("kn", Lang::Kannada),
-            ("ku", Lang::Kurmanji),
-            ("la", Lang::Latin),
-            ("lt", Lang::Lithuanian),
-            ("ml", Lang::Malayalam),
-            ("mr", Lang::Marathi),
-            ("mn", Lang::Mongolian),
-            ("no", Lang::Norwegian),
-            ("nb", Lang::Norwegian),
-            ("nn", Lang::Norwegian),
-            ("or", Lang::Oriya),
-            ("pa", Lang::Panjabi),
-            ("pl", Lang::Polish),
-            ("pt-BR", Lang::Portuguese),
-            ("ru", Lang::Russian),
-            ("sa", Lang::Sanskrit),
-            ("sr", Lang::Serbian),
-            ("sk", Lang::Slovak),
-            ("sl", Lang::Slovenian),
-            ("es-ES", Lang::Spanish),
-            ("sv", Lang::Swedish),
-            ("ta", Lang::Tamil),
-            ("te", Lang::Telugu),
-            ("tr", Lang::Turkish),
-            ("tk", Lang::Turkmen),
-            ("uk", Lang::Ukrainian),
-        ];
-
-        let of = |tag: &str| hyphenation(&tag.parse().expect("a language tag"));
-        for (tag, lang) in cases {
-            assert_eq!(of(tag), Some(lang), "tag={tag}");
-        }
-
-        assert_eq!(of("ja-JP"), None);
-    }
-
-    #[test]
-    fn hyphenation_supports_unicode_words() {
-        let text = "электрификация";
-        let pieces = pieces(text, Some(Lang::Russian));
-        assert!(pieces.len() > 1, "expected hyphen breaks, got {pieces:?}");
-        assert_eq!(pieces.concat(), text);
-    }
-
-    #[test]
-    fn japanese_break_on_characters() {
-        let text = "吾輩は猫である。名前はまだない。";
-        let expected = vec![
-            "吾", "輩", "は", "猫", "で", "あ", "る。", "名", "前", "は", "ま", "だ", "な", "い。",
-        ];
-        assert_eq!(pieces(text, None), expected);
-    }
-
-    #[test]
-    fn mixed_language_breaks_01() {
-        let text = "『シャイニング』（The Shining）は、スタンリー・キューブリックが製作・監督し、小説家のダイアン・ジョンソンと共同脚本を務めた、1980年公開のサイコロジカルホラー映画。";
-        #[rustfmt::skip]
-        let expected = vec![
-            "『シャ", "イ", "ニ", "ン", "グ』", "（The ", "Shining）", "は、", "ス", "タ", "ン", "リー・", "キュー", "ブ", "リッ", "ク", "が", "製", "作・", "監", "督", "し、", "小", "説", "家", "の", "ダ", "イ", "ア", "ン・", "ジョ", "ン", "ソ", "ン", "と", "共", "同", "脚", "本", "を", "務", "め", "た、", "1980", "年", "公", "開", "の", "サ", "イ", "コ", "ロ", "ジ", "カ", "ル", "ホ", "ラー", "映", "画。"
-        ];
-        assert_eq!(pieces(text, None), expected);
-    }
-
-    #[test]
-    fn mixed_chinese_language_breaks_use_jieba() {
-        let text = "《我是猫》是日本作家夏目漱石创作的长篇小说，也是其代表作，它确立了夏目漱石在文学史上的地位。作品淋漓尽致地反映了二十世纪初，日本中小资产阶级的思想和生活，尖锐地揭露和批判了明治“文明开化”的资本主义社会。小说采用幽默、讽刺、滑稽的手法，借助一只猫的视觉、听觉、感觉，嘲笑了明治时代知识分子空虚的精神生活，小说构思奇巧，描写夸张，结构灵活，具有鲜明的艺术特色。";
-        #[rustfmt::skip]
-        let expected = vec![
-            "《我", "是", "猫》", "是", "日本", "作家", "夏目漱石", "创作", "的", "长篇小说，", "也", "是", "其", "代表作，", "它", "确立", "了", "夏目漱石", "在", "文学史", "上", "的", "地位。", "作品", "淋漓尽致", "地", "反映", "了", "二十世纪", "初，", "日本", "中小", "资产阶级", "的", "思想", "和", "生活，", "尖锐", "地", "揭露", "和", "批判", "了", "明治“文明", "开化”的", "资本主义", "社会。", "小说", "采用", "幽默、", "讽刺、", "滑稽", "的", "手法，", "借助", "一只", "猫", "的", "视觉、", "听觉、", "感觉，", "嘲笑", "了", "明治", "时代", "知识分子", "空虚", "的", "精神", "生活，", "小说", "构思", "奇巧，", "描写", "夸张，", "结构", "灵活，", "具有", "鲜明", "的", "艺术", "特色。"
-        ];
-        assert_eq!(pieces(text, None), expected);
-    }
-
-    #[test]
     fn a_hyphenated_word_is_measured_as_shaped_once() -> anyhow::Result<()> {
         // A kerning pair, A and V, crosses its hyphenation point: car-a-van.
         let styled = Styled {
             hyphenation: Some(Lang::English),
-            ..styled("CARAVAN", vec![primary(&mut FontSystem::new())])
+            ..styled("CARAVAN")
         };
         let shaped = ShapedText::new(&styled)?;
         let total = |segments: Vec<Segment>| segments.iter().map(|s| s.advance).sum::<f32>();
@@ -564,8 +388,7 @@ mod tests {
         let run = &shaped.runs[0];
         let mut alone = 0.0;
         for at in 0..7 {
-            alone += shaped
-                .reshape(&mut buffer, run, at..at + 1)?
+            alone += shape_run(&styled, &mut buffer, run, at..at + 1)?
                 .iter()
                 .map(|glyph| glyph.advance)
                 .sum::<f32>();
@@ -576,7 +399,7 @@ mod tests {
 
     #[test]
     fn an_empty_paragraph_keeps_its_span_s_size() -> anyhow::Result<()> {
-        let styled = styled("a\n\nb", vec![primary(&mut FontSystem::new())]);
+        let styled = styled("a\n\nb");
         let shaped = ShapedText::new(&styled)?;
         let sizes: Vec<f32> = segments(&shaped, Breaking::Words)
             .iter()

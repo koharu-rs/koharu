@@ -12,8 +12,8 @@ follows an established product, it cites it; the links are under
 
 The canvas draws pages at display rate on the GPU, and the interface draws
 everything else in a web view. Pages are large and drawn at every zoom, so they
-draw on the GPU the renderer already holds, and the web view only composites
-over them. Neither waits on the other, and both show the project as it is,
+draw on the process's one GPU, which exports draw with too, and the web view
+only composites over them. Neither waits on the other, and both show the project as it is,
 whoever changed it last: the user, a model's run, or an agent.
 
 ## 1. The window
@@ -21,7 +21,7 @@ whoever changed it last: the user, a model's run, or an agent.
 | Part | Model | Cite |
 |---|---|---|
 | interface | the React interface renders off-screen in CEF, which hands over each paint's pixels and the rectangles that changed | a windowless CEF browser paints into a BGRA buffer, with the rectangles that need repainting [CEF render handler]; Electron renders a page off-screen on the same engine [Electron offscreen rendering] |
-| canvas | `koharu-canvas` draws the page with the renderer's GPU | |
+| canvas | `koharu-canvas` draws the page with the process's GPU | |
 | frame | the canvas, then the interface over it, then the interface's popup, such as an open `<select>`, on the window's own surface | |
 | pointer | goes to the canvas where the interface painted nothing over it, and to the interface everywhere else | |
 | keys | go to the interface, the input method's composition included | |
@@ -43,7 +43,6 @@ do: with the scene's own queries and edits, its undo and redo, and its history.
   the History panel reads in the app's language.
 - **Changes are told, not polled.** The open project tells every change,
   whichever writer made it, and the window redraws and tells the interface.
-  The renderer tells when fonts it fetched arrive, and the page draws again.
 - **Outside agents** reach the open project over MCP at `127.0.0.1:7878`, always
   on, with the same tools as the agent panel. The port is fixed so a client's
   settings stay valid from one launch to the next.

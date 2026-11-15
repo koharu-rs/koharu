@@ -221,7 +221,7 @@ async fn main() -> Result<()> {
             .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("page");
-        let rendered = renderer.rasterize(&renderer.render(&session, page.id)?)?;
+        let rendered = renderer.render(&session, page.id)?.rasterize()?;
         save(&rendered.image, &cli.out, &format!("{stem}_final.png"))?;
         save(&cleaned, &cli.out, &format!("{stem}_cleaned.png"))?;
         save(&marked, &cli.out, &format!("{stem}_fills.png"))?;

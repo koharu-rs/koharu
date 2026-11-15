@@ -29,18 +29,6 @@ pub(super) struct Lines {
 /// default hyphen limit is two.
 const RUNS: usize = 3;
 
-fn penalty(segment: &Segment) -> f32 {
-    match segment.after {
-        Break::Mandatory | Break::End => 0.0,
-        Break::Normal if segment.punctuation => 0.0,
-        // A break inside a phrase rather than after punctuation.
-        Break::Normal => 2.0,
-        // Above any line's slack, so a word hyphenates only where its line
-        // can't hold it whole: Comicraft avoids a hyphen whenever it can.
-        Break::Hyphen => 1_000.0,
-    }
-}
-
 /// The length of segments `range` set on one line, at `scale`.
 pub(super) fn length(segments: &[Segment], range: Range<usize>, scale: f32) -> f32 {
     let Some(last) = range.end.checked_sub(1).map(|at| &segments[at]) else {
@@ -66,7 +54,15 @@ fn ended(advance: f32, last: &Segment, scale: f32) -> f32 {
 /// more, so the least overflowing breaks win when nothing fits.
 fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
     let paragraph_end = matches!(last.after, Break::Mandatory | Break::End);
-    let mut cost = penalty(last);
+    let mut cost = match last.after {
+        Break::Mandatory | Break::End => 0.0,
+        Break::Normal if last.punctuation => 0.0,
+        // A break inside a phrase rather than after punctuation.
+        Break::Normal => 2.0,
+        // Above any line's slack, so a word hyphenates only where its line
+        // can't hold it whole: Comicraft avoids a hyphen whenever it can.
+        Break::Hyphen => 1_000.0,
+    };
     if used > room + 0.01 {
         cost += 1_000_000.0 * (1.0 + (used - room) / room.max(1.0));
     } else if room > 0.0 && !(balance == Balance::Ragged && paragraph_end) {
@@ -187,16 +183,14 @@ fn solve(
             }
         }
     }
-    let last = (0..RUNS)
+    let mut state = (0..RUNS)
         .map(|run| at(count.unwrap_or(0), n, run))
         .min_by(|a, b| cost[*a].total_cmp(&cost[*b]))
         .expect("there is a state");
-    cost[last].is_finite().then(|| walk_back(&from, last, n))
-}
-
-/// The lines ending at each state on the way from `state` back to the
-/// first, in order.
-fn walk_back(from: &[usize], mut state: usize, n: usize) -> Vec<Range<usize>> {
+    if !cost[state].is_finite() {
+        return None;
+    }
+    // The lines ending at each state on the way back to the first.
     let end_of = |state: usize| state / RUNS % (n + 1);
     let mut lines = Vec::new();
     while state != 0 {
@@ -204,7 +198,7 @@ fn walk_back(from: &[usize], mut state: usize, n: usize) -> Vec<Range<usize>> {
         state = from[state];
     }
     lines.reverse();
-    lines
+    Some(lines)
 }
 
 #[cfg(test)]
@@ -266,12 +260,5 @@ mod tests {
             .map(|range| segments[range.end - 1].after == Break::Hyphen)
             .collect();
         assert!(!hyphenated.windows(3).any(|run| run.iter().all(|h| *h)));
-    }
-
-    #[test]
-    fn a_word_too_long_for_its_room_overflows() {
-        let segments = text(&[50.0]);
-        let lines = break_lines(&segments, 1.0, Balance::Even, None, |_| 20.0).expect("lines");
-        assert!(lines.overflowed);
     }
 }

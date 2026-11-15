@@ -2,12 +2,10 @@
 //! handles, the marquee, and what gestures preview. Callers give page
 //! geometry; lines and handles keep their size on screen at any zoom.
 
+use koharu_renderer::{Drawing, Frame};
 use koharu_scene::Rgba;
-use vello::{
-    Scene,
-    kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Stroke},
-    peniko::{Color, Fill},
-};
+use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Shape, Stroke};
+use vello_gpu::peniko::{Color, Fill};
 
 use crate::{
     Colors,
@@ -19,31 +17,47 @@ use crate::{
 /// A handle's side, in device-independent pixels.
 const HANDLE: f64 = 6.0;
 
-pub(crate) struct Overlay<'a> {
-    scene: Scene,
+/// How finely a curve is flattened, in viewport pixels.
+const TOLERANCE: f64 = 0.1;
+
+pub(crate) struct Overlay<'a, 'g> {
+    drawing: &'a mut Drawing<'g>,
     view: &'a View,
     colors: Colors,
 }
 
-impl<'a> Overlay<'a> {
-    pub fn new(view: &'a View, colors: Colors) -> Self {
+impl<'a, 'g> Overlay<'a, 'g> {
+    pub fn new(drawing: &'a mut Drawing<'g>, view: &'a View, colors: Colors) -> Self {
         Self {
-            scene: Scene::new(),
+            drawing,
             view,
             colors,
         }
     }
 
+    /// `shape` filled in `color` through `transform`.
+    fn filled(&mut self, transform: Affine, color: Color, shape: &impl Shape) {
+        let scene = &mut self.drawing.scene;
+        scene.set_transform(transform);
+        scene.set_fill_rule(Fill::NonZero);
+        scene.set_paint(color);
+        scene.fill_path(&shape.to_path(TOLERANCE));
+    }
+
+    /// `shape`, in viewport pixels, stroked by `stroke` in `color`.
+    fn stroked(&mut self, stroke: Stroke, color: Color, shape: &impl Shape) {
+        let scene = &mut self.drawing.scene;
+        scene.set_transform(Affine::IDENTITY);
+        scene.set_stroke(stroke);
+        scene.set_paint(color);
+        scene.stroke_path(&shape.to_path(TOLERANCE));
+    }
+
     /// A page path outlined a device pixel wide.
     pub fn outline(&mut self, path: &BezPath) {
         let path = self.view.to_screen() * path.clone();
-        self.scene.stroke(
-            &Stroke::new(self.view.scale()),
-            Affine::IDENTITY,
-            color(self.colors.selection),
-            None,
-            &path,
-        );
+        let selection = color(self.colors.selection);
+        self.stroked(Stroke::new(self.view.scale()), selection, &path);
     }
 
     pub fn control(&mut self, control: &Control) {
@@ -66,21 +80,13 @@ impl<'a> Overlay<'a> {
             );
             if handle == Handle::Rotate {
                 let top = to_screen * control.handle_point(Handle::North, self.view);
-                self.scene.stroke(
-                    &line,
-                    Affine::IDENTITY,
-                    selection,
-                    None,
-                    &Line::new(top, at),
-                );
+                self.stroked(line.clone(), selection, &Line::new(top, at));
             } else if !corner && control.resize != Resize::All {
                 continue;
             }
             let square = Rect::from_center_size(at, (side, side));
-            self.scene
-                .fill(Fill::NonZero, Affine::IDENTITY, selection, None, &square);
-            self.scene
-                .stroke(&line, Affine::IDENTITY, Color::WHITE, None, &square);
+            self.filled(Affine::IDENTITY, selection, &square);
+            self.stroked(line.clone(), Color::WHITE, &square);
         }
     }
 
@@ -88,20 +94,8 @@ impl<'a> Overlay<'a> {
     pub fn marquee(&mut self, rect: Rect) {
         let rect = self.view.to_screen().transform_rect_bbox(rect);
         let selection = color(self.colors.selection);
-        self.scene.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            selection.with_alpha(0.1),
-            None,
-            &rect,
-        );
-        self.scene.stroke(
-            &Stroke::new(self.view.scale()),
-            Affine::IDENTITY,
-            selection,
-            None,
-            &rect,
-        );
+        self.filled(Affine::IDENTITY, selection.with_alpha(0.1), &rect);
+        self.stroked(Stroke::new(self.view.scale()), selection, &rect);
     }
 
     /// A page rectangle outlined in dashes, as a frame being dragged out.
@@ -109,24 +103,13 @@ impl<'a> Overlay<'a> {
         let rect = self.view.to_screen().transform_rect_bbox(rect);
         let scale = self.view.scale();
         let dashed = Stroke::new(scale).with_dashes(0.0, [4.0 * scale, 3.0 * scale]);
-        self.scene.stroke(
-            &dashed,
-            Affine::IDENTITY,
-            color(self.colors.selection),
-            None,
-            &rect,
-        );
+        let selection = color(self.colors.selection);
+        self.stroked(dashed, selection, &rect);
     }
 
     /// A page path filled through the camera.
     pub fn fill(&mut self, path: &BezPath, tint: Rgba) {
-        self.scene.fill(
-            Fill::NonZero,
-            self.view.to_screen(),
-            color(tint),
-            None,
-            path,
-        );
+        self.filled(self.view.to_screen(), color(tint), path);
     }
 
     /// The brush's ring at `at` in the viewport, `diameter` page pixels
@@ -135,25 +118,17 @@ impl<'a> Overlay<'a> {
         let scale = self.view.scale();
         let radius = diameter * self.view.camera().scale * 0.5;
         let ring = Stroke::new(scale);
-        let outer = Circle::new(at, radius + scale);
-        self.scene
-            .stroke(&ring, Affine::IDENTITY, Color::BLACK, None, &outer);
-        self.scene.stroke(
-            &ring,
-            Affine::IDENTITY,
-            Color::WHITE,
-            None,
-            &Circle::new(at, radius),
-        );
+        self.stroked(ring.clone(), Color::BLACK, &Circle::new(at, radius + scale));
+        self.stroked(ring, Color::WHITE, &Circle::new(at, radius));
     }
 
-    /// Another scene laid in at `transform`, viewport pixels being its
-    /// output.
-    pub fn scene(&mut self, scene: &Scene, transform: Affine) {
-        self.scene.append(scene, Some(transform));
-    }
-
-    pub fn finish(self) -> Scene {
-        self.scene
+    /// `frame` painted through `transform` in page space, then the camera,
+    /// over what the viewport shows.
+    pub fn frame(&mut self, frame: &Frame, transform: Affine) -> anyhow::Result<()> {
+        frame.paint(
+            self.view.to_screen() * transform,
+            self.view.size().to_rect(),
+            self.drawing,
+        )
     }
 }

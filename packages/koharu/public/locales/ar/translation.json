@@ -85,51 +85,13 @@
     "title": "إرسال ملاحظات"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} مرشّحات نشطة",
-    "activeFilterCount_one": "{{count}} مرشّح نشط",
-    "activeFilterCount_other": "{{count}} مرشّح نشط",
-    "allPurposes": "كل الأغراض",
-    "allScripts": "كل الأنظمة الكتابية",
-    "allSources": "كل المصادر",
-    "allStyles": "كل الأنماط",
     "choose": "اختر خطًا",
-    "clearFilters": "مسح المرشّحات",
-    "filter": "تصفية الخطوط",
-    "filterActiveLabel": "تصفية الخطوط، {{count}} نشطة",
     "fontCount": "{{count}} خط",
     "fontCount_one": "{{count}} خط",
     "fontCount_other": "{{count}} خط",
-    "fontLabel": "{{family}}، {{source}}",
     "fonts": "الخطوط",
     "noResults": "لا توجد خطوط تطابق هذا البحث",
-    "purpose": "الغرض",
-    "script": "النظام الكتابي",
-    "scripts": {
-      "arab": "العربية",
-      "beng": "البنغالية",
-      "cyrl": "السيريلية",
-      "deva": "الديفاناغارية",
-      "gujr": "الغوجاراتية",
-      "guru": "الغورموخية",
-      "hang": "الهانغول",
-      "hani": "الهان",
-      "hebr": "العبرية",
-      "hira": "الهيراغانا",
-      "kana": "الكاتاكانا",
-      "knda": "الكانادية",
-      "latn": "اللاتينية",
-      "mlym": "المالايالامية",
-      "taml": "التاميلية",
-      "telu": "التيلوغوية",
-      "thai": "التايلاندية"
-    },
-    "search": "ابحث عن خطوط",
-    "source": "المصدر",
-    "sources": {
-      "bundled": "مضمّن",
-      "system": "النظام"
-    },
-    "style": "النمط"
+    "search": "ابحث عن خطوط"
   },
   "inference": {
     "currentPage": "الصفحة الحالية",

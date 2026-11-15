@@ -25,7 +25,7 @@ pub enum Error {
     Scene(#[from] koharu_scene::Error),
 
     #[error(transparent)]
-    Render(#[from] koharu_renderer::Error),
+    Render(#[from] anyhow::Error),
 
     #[error("the PSD couldn't be written")]
     Psd(#[from] PsdError),
@@ -87,7 +87,7 @@ pub fn export(
     for layer in &view.layers {
         export.layer(layer)?;
     }
-    let composite = renderer.rasterize(&frame)?;
+    let composite = frame.rasterize()?;
     export
         .builder
         .composite(PixelData::Rgba8(composite.image.into_raw()));
@@ -300,7 +300,7 @@ impl Export<'_> {
 
         let source = &block.source;
         let mut blocks = Vec::new();
-        if let Some(resolved) = self.renderer.lay_out(id, source)?
+        if let Some(resolved) = self.renderer.layout(id, source)?
             && !resolved.runs.is_empty()
         {
             blocks.extend(blocks::type_layer(source, &resolved, self.texts));
@@ -358,9 +358,9 @@ impl Export<'_> {
             // Under a stroke effect the pixels are the glyphs alone, as
             // Photoshop draws the effect around them.
             Some(drawn) if blocks.iter().any(|block| &block.key == b"lfx2") => {
-                self.renderer.rasterize(&drawn.unstroked())?
+                drawn.unstroked().rasterize()?
             }
-            Some(drawn) => self.renderer.rasterize(&drawn.cropped())?,
+            Some(drawn) => drawn.cropped().rasterize()?,
             None => Raster {
                 image: Default::default(),
                 offset: Offset::default(),
@@ -410,7 +410,7 @@ impl Export<'_> {
         let Some(mask) = drawn.mask() else {
             return Ok(None);
         };
-        let coverage = self.renderer.rasterize(&mask)?;
+        let coverage = mask.rasterize()?;
         let image = &coverage.image;
         let (mut x0, mut y0, mut x1, mut y1) = (image.width(), image.height(), 0, 0);
         for (x, y, pixel) in image.enumerate_pixels() {

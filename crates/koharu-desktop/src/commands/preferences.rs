@@ -61,6 +61,7 @@ pub async fn save_preferences(
         let saved = self::preferences()?;
         app.pipeline.set_config(saved.pipeline.clone());
         app.renderer.set_config(saved.renderer.clone());
+        app.show_later();
         Ok(saved)
     })
     .await??)

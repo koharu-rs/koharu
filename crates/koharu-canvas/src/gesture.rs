@@ -4,10 +4,10 @@
 //! and changes nothing: it answers effects, which the canvas applies.
 
 use cursor_icon::CursorIcon;
-use koharu_renderer::{Frame, Gpu};
+use koharu_renderer::Frame;
 use koharu_scene::{LayerId, Session};
+use kurbo::{Point, Rect};
 use parking_lot::Mutex;
-use vello::kurbo::{Point, Rect};
 
 use crate::{
     Brush, Colors, Effect, Tool,
@@ -28,7 +28,6 @@ pub(crate) struct Context<'a> {
     pub colors: Colors,
     /// Locked only to read pixels.
     pub session: &'a Mutex<Session>,
-    pub gpu: &'a Gpu,
 }
 
 /// What a press starts, and what it answers at once.
@@ -100,14 +99,15 @@ impl Gesture {
         }
     }
 
-    pub fn preview(&self, cx: &Context, overlay: &mut Overlay) {
+    pub fn preview(&self, cx: &Context, overlay: &mut Overlay) -> anyhow::Result<()> {
         match self {
             Self::Marquee(marquee) => marquee.preview(overlay),
-            Self::Transform(transform) => transform.preview(cx, overlay),
+            Self::Transform(transform) => return transform.preview(overlay),
             Self::Draft(draft) => draft.preview(overlay),
             Self::Pan(_) => {}
             Self::Stroke(stroke) => stroke.preview(cx, overlay),
         }
+        Ok(())
     }
 
     /// The pointer's shape while it runs; `None` hides it.

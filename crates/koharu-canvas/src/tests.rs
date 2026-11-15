@@ -3,8 +3,9 @@
 
 use std::sync::Arc;
 
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::{Gpu, Renderer, RendererConfig};
 use koharu_scene::{Edit, LayerId, Op, PageId, Ref, Rgba, Session};
+use kurbo::{Affine, BezPath, Point, Rect, Shape as _, TranslateScale, Vec2};
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 use ui_events::{
@@ -15,13 +16,16 @@ use ui_events::{
         PointerId, PointerInfo, PointerScrollEvent, PointerState, PointerType, PointerUpdate,
     },
 };
-use vello::kurbo::{Affine, BezPath, Point, Rect, Shape as _, TranslateScale, Vec2};
 
 use crate::{Brush, Canvas, Colors, Effect, Notice, Tool};
 
-/// One renderer for every test, as the app has one.
-static RENDERER: std::sync::LazyLock<Renderer> =
-    std::sync::LazyLock::new(|| Renderer::new(RendererConfig::default()));
+/// One renderer for every test, as the app has one, setting text in
+/// installed fonts so no test downloads one.
+static RENDERER: std::sync::LazyLock<Renderer> = std::sync::LazyLock::new(|| {
+    Renderer::new(RendererConfig {
+        font_families: Vec::new(),
+    })
+});
 
 /// A project of one page, its renderer, and a canvas showing it.
 struct Fixture {
@@ -62,7 +66,7 @@ fn fixture(size: (u32, u32), ops: Vec<Value>) -> Option<Fixture> {
         .expect("an edit");
     let page = change.pages.added[0];
     let renderer = RENDERER.clone();
-    let Ok(gpu) = renderer.gpu() else {
+    let Ok(gpu) = Gpu::get() else {
         eprintln!("skipped without a GPU");
         return None;
     };
@@ -1095,7 +1099,7 @@ fn a_frame_of_the_same_revision_redraws_the_page() {
         .canvas
         .set_viewport(Rect::new(0.0, 0.0, 400.0, 300.0), 1.0);
     assert!(fixture.canvas.draw().expect("a draw").is_some());
-    // As after fonts load: the same revision, drawn again.
+    // As after `[renderer]` changes: the same revision, drawn again.
     fixture.render();
     assert!(fixture.canvas.draw().expect("a draw").is_some());
 }

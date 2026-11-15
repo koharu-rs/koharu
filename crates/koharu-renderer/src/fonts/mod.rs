@@ -1,28 +1,28 @@
-//! Fonts: the installed ones through fontique, the bundled catalog's
-//! downloaded on first use, and the font chain a span resolves to.
+//! Fonts. They belong to the machine, so they're the process's, shared by
+//! every renderer: the installed ones and the bundled catalog's in one
+//! library, the font list the editor shows, each family's preview, and the
+//! chain of fonts a span of text is set in.
 
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::{Arc, OnceLock},
-};
+use std::{collections::BTreeMap, ops::RangeInclusive, sync::LazyLock};
 
 use anyhow::Result;
-use fontique::{Attributes, FontStyle, Language};
+use fontique::{Attributes, FontStyle, FontWeight, Language};
 use koharu_scene::{CharStyle, LanguageIdentifier};
-use parking_lot::Mutex;
-use tokio::sync::OnceCell;
-
-use crate::types::{FontFamily, FontMetadata, FontSource};
+use serde::Serialize;
+use specta::Type;
 
 mod catalog;
-mod face;
-mod system;
+mod font;
+mod library;
+mod preview;
 
-use catalog::{FONTS, FontBytes, FontCatalog, normalize};
-pub(crate) use face::Font;
-pub(crate) use system::FontSystem;
+use self::library::Request;
+pub use self::preview::preview;
+pub(crate) use self::{font::Font, library::Library};
 
-const SYMBOL_FALLBACK_FAMILIES: &[&str] = &[
+/// Families a text falls back on after the platform's fallback for its
+/// scripts, for the symbols and emoji that one lacks.
+const SYMBOL_FAMILIES: &[&str] = &[
     "Segoe UI Symbol",
     "Segoe UI Emoji",
     "Noto Sans Symbols 2",
@@ -34,217 +34,139 @@ const SYMBOL_FALLBACK_FAMILIES: &[&str] = &[
     "Arial Unicode MS",
 ];
 
-pub(crate) struct Fonts {
-    system: OnceLock<Arc<Mutex<FontSystem>>>,
-    catalog: OnceCell<Arc<FontCatalog>>,
-    /// Loaded bundled faces by PostScript name, bounded by their bytes.
-    bundled: quick_cache::sync::Cache<String, Font, FontBytes>,
-    /// Families a load found in neither the system nor the catalog, which
-    /// are no longer reported missing.
-    unavailable: Mutex<HashSet<String>>,
+/// A family as the font list shows it, installed or bundled.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct FontFamily {
+    pub name: String,
+    pub faces: Vec<FontFace>,
 }
 
-/// A face a text asked for that isn't installed or loaded yet.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct FontRequest {
-    pub(crate) family: String,
-    pub(crate) weight: u16,
-    pub(crate) italic: bool,
+/// One of a family's faces, by the weight and slant a text asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct FontFace {
+    pub post_script_name: String,
+    pub weight: u16,
+    /// A variable face's weights.
+    pub weight_range: Option<RangeInclusive<u16>>,
+    /// Italic or oblique, as a text's `italic` asks for.
+    pub italic: bool,
 }
 
-impl FontRequest {
-    fn attributes(&self) -> Attributes {
-        Attributes {
-            weight: fontique::FontWeight::new(f32::from(self.weight)),
-            style: if self.italic {
-                FontStyle::Italic
-            } else {
-                FontStyle::Normal
-            },
-            ..Attributes::default()
-        }
-    }
-}
-
-pub(crate) enum FontPreview {
-    Webp(Vec<u8>),
-    System(Box<Font>),
-}
-
-impl Fonts {
-    pub(crate) fn new() -> Self {
-        Self {
-            system: OnceLock::new(),
-            catalog: OnceCell::new(),
-            // A shard keeps nothing heavier than its share of the bytes, so
-            // one shard holds them all and the largest font stays.
-            bundled: quick_cache::sync::Cache::with_options(
-                quick_cache::OptionsBuilder::new()
-                    .estimated_items_capacity(16)
-                    .weight_capacity(64 << 20)
-                    .shards(1)
-                    .build()
-                    .expect("both capacities are set"),
-                FontBytes,
-                Default::default(),
-                Default::default(),
-            ),
-            unavailable: Mutex::new(HashSet::new()),
-        }
-    }
-
-    /// The installed fonts, scanned on first use.
-    fn system(&self) -> &Arc<Mutex<FontSystem>> {
-        self.system
-            .get_or_init(|| Arc::new(Mutex::new(FontSystem::new())))
-    }
-
-    pub(crate) async fn families(&self) -> Result<Vec<FontFamily>> {
-        let system = self.system().clone();
-        let catalog = self.catalog().await?;
+/// Every family installed or bundled, by name, upright faces first and then
+/// by weight. An installed family and a bundled one of the same name are
+/// one, and so are an installed face and a bundled one of the same
+/// PostScript name.
+pub async fn list() -> Result<Vec<FontFamily>> {
+    tokio::task::spawn_blocking(|| {
+        // Reading every installed face's names loads its file, so it's done
+        // once.
+        static INSTALLED: LazyLock<Vec<FontFamily>> =
+            LazyLock::new(|| library::with(Library::families));
+        let bundled = catalog::families()?.values().map(catalog::listed);
         let mut families = BTreeMap::<String, FontFamily>::new();
-
-        let faces = tokio::task::spawn_blocking(move || system.lock().faces()).await?;
-        for (name, face) in faces {
-            let key = normalize(&name);
-            let family = families.entry(key).or_insert_with(|| FontFamily {
-                name,
-                metadata: FontMetadata::default(),
-                sources: vec![FontSource::System],
-                faces: Vec::new(),
-            });
-            family.faces.push(face);
-        }
-
-        for bundled in &catalog.families {
-            let key = normalize(&bundled.name);
-            let family = families.entry(key).or_insert_with(|| bundled.clone());
-            if family.metadata.primary_script.is_none() {
-                family.metadata.clone_from(&bundled.metadata);
-            }
-            if !family.sources.contains(&FontSource::Bundled) {
-                family.sources.push(FontSource::Bundled);
-            }
-            let mut known = family
-                .faces
-                .iter()
-                .map(|face| normalize(&face.post_script_name))
-                .collect::<HashSet<_>>();
-            family.faces.extend(
-                bundled
+        for family in INSTALLED.iter().cloned().chain(bundled) {
+            let listed = families
+                .entry(normalize(&family.name))
+                .or_insert_with(|| FontFamily {
+                    name: family.name,
+                    faces: Vec::new(),
+                });
+            for face in family.faces {
+                let name = normalize(&face.post_script_name);
+                if !listed
                     .faces
                     .iter()
-                    .filter(|face| known.insert(normalize(&face.post_script_name)))
-                    .cloned(),
-            );
-        }
-
-        let mut families = families.into_values().collect::<Vec<_>>();
-        for family in &mut families {
-            family.faces.sort_by(|left, right| {
-                left.style
-                    .cmp(&right.style)
-                    .then_with(|| left.weight.cmp(&right.weight))
-                    .then_with(|| left.post_script_name.cmp(&right.post_script_name))
-            });
-            family.sources.sort_unstable();
-        }
-        Ok(families)
-    }
-
-    /// The font chain for `text` in `style`: its family, then the
-    /// renderer's families, then Arial, then the platform's fallback for the
-    /// text. A family that is neither installed nor loaded comes back as a
-    /// request, and the chain falls back until `load` brings it in.
-    pub(crate) fn resolve(
-        &self,
-        style: &CharStyle,
-        renderer_families: &[String],
-        text: &str,
-        language: &LanguageIdentifier,
-    ) -> Result<(Vec<Font>, Option<FontRequest>)> {
-        let preferred = style
-            .family
-            .as_deref()
-            .filter(|family| !family.trim().is_empty());
-        let mut families: Vec<String> = Vec::with_capacity(renderer_families.len() + 2);
-        for family in preferred
-            .into_iter()
-            .chain(renderer_families.iter().map(String::as_str))
-            .chain(["Arial"])
-        {
-            if !families
-                .iter()
-                .any(|known| known.eq_ignore_ascii_case(family))
-            {
-                families.push(family.to_owned());
+                    .any(|known| normalize(&known.post_script_name) == name)
+                {
+                    listed.faces.push(face);
+                }
             }
         }
-        let request = FontRequest {
-            family: families[0].clone(),
-            weight: style.weight.unwrap_or(400),
-            italic: style.italic.unwrap_or(false),
-        };
-        let attributes = request.attributes();
-        let (bundled, missing) = self.bundled_font(request);
-        let mut resolved = self.system().lock().chain(
-            &families,
-            SYMBOL_FALLBACK_FAMILIES,
+        Ok(families
+            .into_values()
+            .map(|mut family| {
+                family.faces.sort_by(|left, right| {
+                    (left.italic, left.weight, &left.post_script_name).cmp(&(
+                        right.italic,
+                        right.weight,
+                        &right.post_script_name,
+                    ))
+                });
+                family
+            })
+            .collect())
+    })
+    .await?
+}
+
+/// The fonts a span in `style` sets `text` in, in order: its family, then
+/// `fallbacks`, then Arial, then the platform's fallback for the text's
+/// scripts in `language`, then symbol and emoji families. A family that
+/// isn't installed is registered from the bundled catalog, downloaded here the
+/// first time it's asked for; one the catalog lacks too, or that fails to
+/// download, is left out.
+pub(crate) fn chain(
+    style: &CharStyle,
+    fallbacks: &[String],
+    text: &str,
+    language: &LanguageIdentifier,
+) -> Result<Vec<Font>> {
+    let mut families: Vec<String> = Vec::with_capacity(fallbacks.len() + 2);
+    let asked = style
+        .family
+        .as_deref()
+        .filter(|family| !family.trim().is_empty());
+    for family in asked
+        .into_iter()
+        .chain(fallbacks.iter().map(String::as_str))
+        .chain(["Arial"])
+    {
+        if !families
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(family))
+        {
+            families.push(family.to_owned());
+        }
+    }
+    let attributes = Attributes {
+        weight: FontWeight::new(f32::from(style.weight.unwrap_or(400))),
+        style: match style.italic.unwrap_or(false) {
+            true => FontStyle::Italic,
+            false => FontStyle::Normal,
+        },
+        ..Attributes::default()
+    };
+    for family in families.iter().filter(|family| !library::installed(family)) {
+        let registered = catalog::family(family).and_then(|bundled| match bundled {
+            Some(bundled) => catalog::register(bundled, attributes),
+            None => Ok(()),
+        });
+        if let Err(error) = registered {
+            tracing::warn!("couldn't download the font {family:?}: {error:#}");
+        }
+    }
+    let language = (*language != LanguageIdentifier::UNKNOWN)
+        .then(|| Language::parse(&language.to_string()).ok())
+        .flatten();
+    library::with(|library| {
+        library.chain(Request {
+            families: &families,
+            symbols: SYMBOL_FAMILIES,
             attributes,
             text,
-            (*language != LanguageIdentifier::UNKNOWN)
-                .then(|| Language::parse(&language.to_string()).ok())
-                .flatten(),
-        )?;
-        if let Some(font) = bundled {
-            resolved.retain(|candidate| !candidate.same(&font));
-            resolved.insert(0, font);
-        }
-        Ok((resolved, missing))
-    }
-
-    /// For a family that isn't installed, its bundled face when it's loaded,
-    /// else `request` to load it, unless the catalog lacks it.
-    fn bundled_font(&self, request: FontRequest) -> (Option<Font>, Option<FontRequest>) {
-        let family = &request.family;
-        if self
-            .system()
-            .lock()
-            .collection
-            .family_by_name(family)
-            .is_some()
-        {
-            return (None, None);
-        }
-        let font = self
-            .catalog
-            .get()
-            .and_then(|catalog| catalog.select(family, request.attributes()))
-            .and_then(|face| self.bundled.get(face.post_script_name.as_str()));
-        let unavailable = self.unavailable.lock().contains(&normalize(family));
-        match font {
-            None if !unavailable => (None, Some(request)),
-            font => (font, None),
-        }
-    }
-
-    pub(crate) async fn preview(&self, family_name: &str) -> Result<FontPreview> {
-        let system = self.system().clone();
-        let catalog = self.catalog().await?;
-        if let Some(face) = catalog.select(family_name, Attributes::default()) {
-            let [path] = FONTS.resolve([face.preview_file.as_str()]).await?;
-            return Ok(FontPreview::Webp(fs_err::tokio::read(&path).await?));
-        }
-        tokio::task::spawn_blocking({
-            let family_name = family_name.to_owned();
-            move || {
-                system
-                    .lock()
-                    .query_family(&family_name)
-                    .map(Box::new)
-                    .map(FontPreview::System)
-            }
+            language,
         })
-        .await?
-    }
+    })
+}
+
+/// Lists the installed families and loads the bundled catalog, which the
+/// first text would otherwise wait for.
+pub(crate) fn preload() {
+    library::preload();
+    let _ = catalog::families();
+}
+
+/// A family or face name as Koharu matches it: trimmed, in any case.
+fn normalize(name: &str) -> String {
+    name.trim().to_lowercase()
 }

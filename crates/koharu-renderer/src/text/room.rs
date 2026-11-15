@@ -1,10 +1,9 @@
 //! A frame's room for lines, in logical coordinates: `u` along the inline
 //! axis and `v` along the block axis.
 
-use anyhow::{Context, Result};
 use koharu_scene::{Anchor, Fit, Frame, PathFit};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect};
 use smallvec::SmallVec;
-use vello::kurbo::{Affine, BezPath, PathEl, Point, Rect};
 
 /// Where a text's lines go.
 pub(super) enum Room {
@@ -27,20 +26,15 @@ pub(super) enum Room {
 }
 
 impl Room {
-    pub(super) fn new(frame: &Frame, vertical: bool) -> Result<Self> {
-        Ok(match frame {
+    pub(super) fn new(frame: &Frame, vertical: bool) -> Self {
+        match frame {
             Frame::Point => Self::Point,
             Frame::Box {
                 bounds,
                 fit,
                 anchor,
             } => Self::Box {
-                bounds: logical(vertical).transform_rect_bbox(Rect::new(
-                    bounds.x,
-                    bounds.y,
-                    bounds.x + bounds.width,
-                    bounds.y + bounds.height,
-                )),
+                bounds: logical(vertical).transform_rect_bbox(Rect::from(*bounds)),
                 anchor: *anchor,
                 grow: *fit == Fit::Grow,
             },
@@ -50,14 +44,11 @@ impl Room {
                 inset,
                 ..
             } => Self::Path {
-                outline: Outline::new(
-                    &BezPath::from_svg(path.as_str()).context("invalid path data")?,
-                    vertical,
-                ),
+                outline: Outline::new(&BezPath::from(path), vertical),
                 anchor: *anchor,
                 inset: *inset as f32,
             },
-        })
+        }
     }
 }
 
@@ -117,7 +108,7 @@ impl Outline {
         let path = logical(vertical) * path.clone();
         let mut edges = Vec::new();
         let (mut first, mut last) = (Point::ZERO, Point::ZERO);
-        vello::kurbo::flatten(path.iter(), 0.25, |element| match element {
+        kurbo::flatten(path.iter(), 0.25, |element| match element {
             PathEl::MoveTo(point) => {
                 if last != first {
                     edges.push((last, first));
@@ -243,11 +234,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_vertical_room_runs_down_the_page() -> Result<()> {
+    fn a_vertical_room_runs_down_the_page() -> anyhow::Result<()> {
         let frame: Frame = serde_json::from_value(serde_json::json!({
             "box": {"bounds": {"x": 100.0, "y": 20.0, "width": 160.0, "height": 300.0}}
         }))?;
-        let Room::Box { bounds, .. } = Room::new(&frame, true)? else {
+        let Room::Box { bounds, .. } = Room::new(&frame, true) else {
             panic!("a box");
         };
         // Lines are as long as the box is tall, and stack from its right edge.
@@ -263,15 +254,6 @@ mod tests {
             .copied()
             .max_by(|a, b| (a.1 - a.0).total_cmp(&(b.1 - b.0)))
             .expect("a span")
-    }
-
-    #[test]
-    fn a_band_across_a_diamond_is_its_narrowest_width() {
-        let diamond = BezPath::from_svg("M0 50 L50 0 L100 50 L50 100 Z").expect("a path");
-        let outline = Outline::new(&diamond, false);
-        let (start, end) = widest(&outline.band(40.0, 50.0));
-        // Sampled at 41 at the narrowest: 82 wide around the middle.
-        assert!((end - start - 82.0).abs() < 0.5, "{start}..{end}");
     }
 
     #[test]

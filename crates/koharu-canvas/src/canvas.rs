@@ -8,24 +8,20 @@ use std::sync::Arc;
 use anyhow::Context as _;
 use cursor_icon::CursorIcon;
 use image::RgbaImage;
-use koharu_renderer::{Frame, Gpu};
+use koharu_renderer::{Drawing, Frame, Gpu};
 use koharu_scene::{LayerId, Session};
+use kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2};
 use parking_lot::Mutex;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerEvent, PointerGesture, PointerGestureEvent,
     PointerInfo, PointerScrollEvent, PointerType, PointerUpdate,
 };
-use vello::{
-    Scene,
-    kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2},
-    peniko::{Color, Fill},
-    wgpu,
-};
+use vello_gpu::peniko::Color;
 
 use crate::{
     Brush, Camera, Colors, Effect, Tool,
     control::Control,
-    draw::{Target, color, overlay::Overlay, strip_origin},
+    draw::{Target, color, overlay::Overlay},
     gesture::{Context, Gesture, GestureLook, Press},
     selection::Selection,
     snapshot::{ImageSizes, Snapshot},
@@ -36,7 +32,7 @@ use crate::{
 /// The page viewport over one open project. It reads the project, never
 /// writes it: every change leaves as an `Effect::Edit` for the host.
 pub struct Canvas {
-    gpu: Arc<Gpu>,
+    gpu: &'static Gpu,
     session: Arc<Mutex<Session>>,
     view: View,
     colors: Colors,
@@ -64,8 +60,7 @@ struct Look {
     translation: Vec2,
     zoom: f64,
     /// A count every `set_frame` bumps, not the frame's revision: a frame of
-    /// the same revision draws differently once its fonts load or
-    /// `[renderer]` changes.
+    /// the same revision draws differently once `[renderer]` changes.
     generation: u64,
     /// The layers a gesture lifts out of the page to draw itself.
     lifted: Vec<LayerId>,
@@ -87,7 +82,7 @@ struct Active {
 }
 
 impl Canvas {
-    pub fn new(gpu: Arc<Gpu>, session: Arc<Mutex<Session>>) -> Self {
+    pub fn new(gpu: &'static Gpu, session: Arc<Mutex<Session>>) -> Self {
         Self {
             gpu,
             session,
@@ -285,7 +280,6 @@ impl Canvas {
             brush: self.brush,
             colors: self.colors,
             session: &self.session,
-            gpu: &self.gpu,
         })
     }
 
@@ -419,13 +413,16 @@ impl Canvas {
         if sized && self.drawn.as_ref() == Some(&look) {
             return Ok(None);
         }
-        let (base, strips, overlay) = (self.base(), self.strips(), self.overlay());
+        let mut drawing = self.gpu.drawing(width as u16, height as u16);
+        self.base(&mut drawing);
+        self.page(&mut drawing)?;
+        self.overlay(&mut drawing)?;
         let target = match self.target.take() {
             Some(target) if sized => target,
-            _ => Target::new(&self.gpu, width, height),
+            _ => Target::new(self.gpu, width, height),
         };
         let target = self.target.insert(target);
-        target.draw(&self.gpu, base, strips, &overlay)?;
+        drawing.render(&target.view)?;
         self.drawn = Some(look);
         Ok(Some(&target.texture))
     }
@@ -454,23 +451,14 @@ impl Canvas {
     }
 
     /// The workspace around the page, and the page's white.
-    fn base(&self) -> Scene {
-        let mut base = Scene::new();
-        base.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            color(self.colors.workspace),
-            None,
-            &self.view.size().to_rect(),
-        );
-        base.fill(
-            Fill::NonZero,
-            self.view.to_screen(),
-            Color::WHITE,
-            None,
-            &self.page_size().to_rect(),
-        );
-        base
+    fn base(&self, drawing: &mut Drawing) {
+        let scene = &mut drawing.scene;
+        scene.set_transform(Affine::IDENTITY);
+        scene.set_paint(color(self.colors.workspace));
+        scene.fill_rect(&self.view.size().to_rect());
+        scene.set_transform(self.view.to_screen());
+        scene.set_paint(Color::WHITE);
+        scene.fill_rect(&self.page_size().to_rect());
     }
 
     /// The texture as last drawn.
@@ -486,14 +474,14 @@ impl Canvas {
 
     /// The overlay: the gesture's preview, then the selection's outlines and
     /// handles, following a drag, the hover, and the brush's ring.
-    fn overlay(&self) -> Scene {
-        let mut overlay = Overlay::new(&self.view, self.colors);
+    fn overlay(&self, drawing: &mut Drawing) -> anyhow::Result<()> {
+        let mut overlay = Overlay::new(drawing, &self.view, self.colors);
         let Some(cx) = self.context() else {
-            return overlay.finish();
+            return Ok(());
         };
         let gesture = self.gesture.as_ref().map(|active| &active.gesture);
         if let Some(gesture) = gesture {
-            gesture.preview(&cx, &mut overlay);
+            gesture.preview(&cx, &mut overlay)?;
         }
         for &id in self.selection.ids() {
             if let Some(path) = cx.snapshot.outline(id) {
@@ -530,42 +518,25 @@ impl Canvas {
         {
             overlay.ring(sample.screen, self.brush.diameter);
         }
-        overlay.finish()
+        Ok(())
     }
 
     fn page_size(&self) -> Size {
         self.snapshot.as_ref().map_or(Size::ZERO, Snapshot::size)
     }
 
-    /// The page's strips for what the viewport shows, each at its origin,
-    /// without the layers a gesture lifts.
-    fn strips(&self) -> Vec<(Point, Scene)> {
+    /// The page as the viewport shows it, without the layers a gesture
+    /// lifts.
+    fn page(&self, drawing: &mut Drawing) -> anyhow::Result<()> {
         let Some(snapshot) = &self.snapshot else {
-            return Vec::new();
+            return Ok(());
         };
         let frame = self
             .gesture
             .as_ref()
             .and_then(|active| active.gesture.under())
             .unwrap_or(snapshot.frame());
-        let rect = self.view.visible().intersect(frame.area());
-        if rect.width() <= 0.0 || rect.height() <= 0.0 {
-            return Vec::new();
-        }
-        // The view starts on a whole viewport pixel, so the renderer's output
-        // pixels are the screen's and its tiles meet on them.
-        let camera = self.view.camera();
-        let corner = (camera * rect.origin()).floor();
-        let rect = Rect::from_points(self.view.page_point(corner), (rect.x1, rect.y1));
-        let view = koharu_renderer::View {
-            rect,
-            scale: camera.scale,
-        };
-        frame
-            .draw(view)
-            .into_iter()
-            .map(|strip| (strip_origin(camera, view, strip.rect), strip.scene))
-            .collect()
+        frame.paint(self.view.to_screen(), self.view.size().to_rect(), drawing)
     }
 }
 

@@ -85,51 +85,13 @@
     "title": "发送反馈"
   },
   "fontPicker": {
-    "activeFilterCount": "当前启用个筛选条件：{{count}} 个",
-    "activeFilterCount_one": "当前启用个筛选条件：{{count}} 个",
-    "activeFilterCount_other": "当前启用个筛选条件：{{count}} 个",
-    "allPurposes": "全部用途",
-    "allScripts": "全部文字体系",
-    "allSources": "全部来源",
-    "allStyles": "全部样式",
     "choose": "选字体",
-    "clearFilters": "清除筛选条件",
-    "filter": "筛选字体",
-    "filterActiveLabel": "筛选字体，当前启用个筛选条件有 {{count}} 个",
     "fontCount": "{{count}} 种字体",
     "fontCount_one": "{{count}} 种字体",
     "fontCount_other": "{{count}} 种字体",
-    "fontLabel": "{{family}}，{{source}}",
     "fonts": "字体",
     "noResults": "寻弗着符合条件个字体",
-    "purpose": "用途",
-    "script": "文字体系",
-    "scripts": {
-      "arab": "阿拉伯文",
-      "beng": "孟加拉文",
-      "cyrl": "西里尔文",
-      "deva": "天城文",
-      "gujr": "古吉拉特文",
-      "guru": "古木基文",
-      "hang": "谚文",
-      "hani": "汉字",
-      "hebr": "希伯来文",
-      "hira": "平假名",
-      "kana": "片假名",
-      "knda": "卡纳达文",
-      "latn": "拉丁文",
-      "mlym": "马拉雅拉姆文",
-      "taml": "泰米尔文",
-      "telu": "泰卢固文",
-      "thai": "泰文"
-    },
-    "search": "搜寻字体",
-    "source": "来源",
-    "sources": {
-      "bundled": "内置",
-      "system": "系统"
-    },
-    "style": "样式"
+    "search": "搜寻字体"
   },
   "inference": {
     "currentPage": "当前页面",

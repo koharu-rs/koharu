@@ -35,7 +35,7 @@ const MCP_PORT: u16 = 7878;
 pub struct App {
     pub library: Library,
     pub renderer: Renderer,
-    pub gpu: Arc<Gpu>,
+    pub gpu: &'static Gpu,
     pub pipeline: Pipeline,
     pub screen: Arc<Screen>,
     pub project: Mutex<Option<Project>>,
@@ -61,11 +61,16 @@ pub struct Project {
 }
 
 impl App {
-    pub fn new(library: Library, renderer: Renderer, gpu: Arc<Gpu>, pipeline: Pipeline) -> Self {
+    pub fn new(
+        library: Library,
+        renderer: Renderer,
+        gpu: &'static Gpu,
+        pipeline: Pipeline,
+    ) -> Self {
         Self {
             library,
             renderer,
-            screen: Arc::new(Screen::new(Arc::clone(&gpu))),
+            screen: Arc::new(Screen::new(gpu)),
             gpu,
             pipeline,
             project: Mutex::new(None),
@@ -75,18 +80,11 @@ impl App {
         }
     }
 
-    /// Starts telling the interface, following the pipeline, the runtime's
-    /// downloads, and the renderer's fonts, and serving MCP.
+    /// Starts telling the interface, following the pipeline and the
+    /// runtime's downloads, and serving MCP.
     pub fn start(self: &Arc<Self>, handle: AppHandle<CefRuntime>) {
         let _ = self.handle.set(handle);
         self.follow_pipeline();
-        let app = Arc::clone(self);
-        let mut renderer = self.renderer.subscribe();
-        tauri::async_runtime::spawn(async move {
-            while renderer.changed().await.is_ok() {
-                app.show_later();
-            }
-        });
         let app = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
             match McpServer::start(MCP_PORT).await {
@@ -118,7 +116,7 @@ impl App {
         let follow = self.follow(session.subscribe());
         let session = Arc::new(Mutex::new(session));
         self.screen
-            .show(Canvas::new(Arc::clone(&self.gpu), Arc::clone(&session)));
+            .show(Canvas::new(self.gpu, Arc::clone(&session)));
         {
             let mut project = self.project.lock();
             let opened = project.insert(Project {
@@ -218,7 +216,7 @@ impl App {
     }
 
     /// Shows the open project off the async runtime's workers.
-    fn show_later(self: &Arc<Self>) {
+    pub(crate) fn show_later(self: &Arc<Self>) {
         let app = Arc::clone(self);
         tauri::async_runtime::spawn_blocking(move || {
             if let Err(error) = app.show() {
@@ -250,9 +248,7 @@ impl App {
                 let frame = self.renderer.render(&session.lock(), page)?;
                 self.screen.set_frame(frame);
             }
-            None => self
-                .screen
-                .show(Canvas::new(Arc::clone(&self.gpu), session)),
+            None => self.screen.show(Canvas::new(self.gpu, session)),
         }
         self.camera();
         self.screen.request_redraw();
@@ -348,7 +344,7 @@ mod tests {
     /// GPU.
     fn app(dir: &std::path::Path) -> anyhow::Result<Option<Arc<App>>> {
         let renderer = Renderer::new(RendererConfig::default());
-        let Ok(gpu) = renderer.gpu() else {
+        let Ok(gpu) = Gpu::get() else {
             return Ok(None);
         };
         Ok(Some(Arc::new(App::new(

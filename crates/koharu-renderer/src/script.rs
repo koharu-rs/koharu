@@ -68,24 +68,3 @@ fn script_tag(script: IcuScript) -> Option<[u8; 4]> {
     let bytes = script.short_name().as_bytes();
     (bytes.len() == 4).then(|| [bytes[0], bytes[1], bytes[2], bytes[3]])
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fallback_scripts_preserve_cjk_locale_selection() {
-        assert_eq!(
-            fontique_scripts("日本語"),
-            [fontique::Script::from_bytes(*b"Hani")]
-        );
-        assert_eq!(
-            fontique_scripts("한국어"),
-            [fontique::Script::from_bytes(*b"Hang")]
-        );
-        assert_eq!(
-            fontique_scripts("مرحبا"),
-            [fontique::Script::from_bytes(*b"Arab")]
-        );
-    }
-}

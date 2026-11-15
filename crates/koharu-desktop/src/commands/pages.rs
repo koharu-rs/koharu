@@ -20,7 +20,7 @@ pub async fn get_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Byt
     Ok(tokio::task::spawn_blocking(move || {
         let session = app.session()?;
         let frame = app.renderer.render(&session.lock(), page)?;
-        let raster = app.renderer.rasterize(&frame)?;
+        let raster = frame.rasterize()?;
         let (width, height) = raster.image.dimensions();
         ensure!(width > 0 && height > 0, "the page is empty");
         let scaled = (u64::from(width) * u64::from(HEIGHT) / u64::from(height)).max(1);

@@ -3,7 +3,7 @@
 
 use cursor_icon::CursorIcon;
 use koharu_scene::LayerId;
-use vello::kurbo::{Affine, BezPath, Line, ParamCurveNearest as _, Point, Rect, Shape as _};
+use kurbo::{Affine, BezPath, Line, ParamCurveNearest as _, Point, Rect, Shape as _};
 
 use crate::view::View;
 

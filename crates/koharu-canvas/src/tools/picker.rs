@@ -1,9 +1,8 @@
 //! The colour picker: the page's own pixel under the pointer, as
 //! Photoshop's eyedropper samples the image rather than the screen.
 
-use koharu_renderer::View;
 use koharu_scene::Rgba;
-use vello::kurbo::Rect;
+use kurbo::Rect;
 
 use crate::{Effect, gesture::Context, view::Sample};
 
@@ -15,14 +14,7 @@ pub(crate) fn pick(cx: &Context, sample: Sample) -> anyhow::Result<Vec<Effect>> 
         return Ok(Vec::new());
     }
     let pixel = Rect::from_origin_size((page.x.floor(), page.y.floor()), (1.0, 1.0));
-    let strips = cx.snapshot.frame().draw(View {
-        rect: pixel,
-        scale: 1.0,
-    });
-    let Some(strip) = strips.first() else {
-        return Ok(Vec::new());
-    };
-    let image = cx.gpu.read(&strip.scene, 1, 1)?;
+    let image = cx.snapshot.frame().rasterize_rect(pixel)?;
     let [r, g, b, a] = image
         .get_pixel(0, 0)
         .0
