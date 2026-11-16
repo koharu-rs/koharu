@@ -1,11 +1,12 @@
-//! Hayai OCR v2.5 Nova: crop-level OCR for Japanese, Chinese, Korean, and
-//! English text. A SigLIP2 NaFlex encoder's 2x2 patch blocks are merged into
-//! one token each by a projector, then a small GQA transformer decoder reads
-//! them over a shared visual and textual prefix, with block-causal attention
-//! and 2D multimodal RoPE.
+//! Hayai OCR v2.7 Supernova: crop-level OCR for Japanese, Chinese, Korean,
+//! and English text. A SigLIP2 NaFlex encoder's 2x2 patch blocks are merged
+//! into one token each by a projector that also reads them in both writing
+//! directions, then a small GQA transformer decoder reads them over a shared
+//! visual and textual prefix, with every encoder depth fused into its visual
+//! tokens, block-causal attention, and 2D multimodal RoPE.
 //!
 //! Upstream:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova/tree/2803d0dc005fa4396ab1e7c5a472d2c450a247f7
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/tree/517bdeeb64b68c08939e12f7211e99943c1e1640
 
 mod config;
 mod model;
@@ -23,8 +24,8 @@ use self::{
 };
 
 const REPOSITORY: Repository = Repository::model(
-    "JustANormalTinkerer/hayai-ocr-v2.5-nova",
-    "2803d0dc005fa4396ab1e7c5a472d2c450a247f7",
+    "JustANormalTinkerer/hayai-ocr-v2.7-supernova",
+    "517bdeeb64b68c08939e12f7211e99943c1e1640",
 );
 
 #[derive(Debug)]
@@ -51,7 +52,7 @@ impl HayaiOcr {
             tokenizer.len(),
             config.vocab_size
         );
-        let processor = ImageProcessor::new(device)?;
+        let processor = ImageProcessor::new(device);
 
         let mut model = Model::new(&config, &tokenizer, device, kind)?;
         model.load(&weights)?;

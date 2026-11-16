@@ -21,7 +21,7 @@ to the code that makes it.
 | Koharu Layout HighRes, an RF-DETR segmenter | text, onomatopoeia, balloons, and panels | libtorch | [RF-DETR], [Koharu Layout] |
 | manga-ocr-ar-experimental | Japanese OCR | libtorch | [manga-ocr-ar] |
 | Baberu OCR, with DINOv2 | Japanese OCR | libtorch | [Baberu OCR] |
-| Hayai OCR v2.5 Nova, with SigLIP2 | Japanese, Chinese, Korean, and English OCR | libtorch | [Hayai OCR] |
+| Hayai OCR v2.7 Supernova, with SigLIP2 | Japanese, Chinese, Korean, and English OCR | libtorch | [Hayai OCR] |
 | LaMa, fine-tuned on manga | inpainting | libtorch | [LaMa], as [IOPaint] runs it |
 | RORem | inpainting | stable-diffusion.cpp | [RORem] |
 | FLUX.3 Image Klein | inpainting and generation | stable-diffusion.cpp | [FLUX.3 Klein] |
@@ -78,7 +78,7 @@ Read in November 2026.
 [Koharu Layout]: https://huggingface.co/mayocream/koharu-layout-highres
 [manga-ocr-ar]: https://huggingface.co/muscgab/manga-ocr-ar-experimental
 [Baberu OCR]: https://huggingface.co/genshiai-daichi/baberu-ocr
-[Hayai OCR]: https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova
+[Hayai OCR]: https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova
 [LaMa]: https://github.com/advimman/lama/tree/786f5936b27fb3dacd2b1ad799e4de968ea697e7
 [IOPaint]: https://github.com/Sanster/IOPaint/tree/61a759fb3f332bacdce8b2813f4837495c9b86e0
 [RORem]: https://github.com/leeruibin/RORem/tree/891ab8a17bbcfb16a773c078cb256aae8cb30468

@@ -1,10 +1,12 @@
 //! Inference-only Hayai OCR network.
 //!
 //! Hayai architecture and generation implementation:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova/blob/2803d0dc005fa4396ab1e7c5a472d2c450a247f7/modeling_hayai.py
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/517bdeeb64b68c08939e12f7211e99943c1e1640/modeling_hayai.py
 //! Upstream generates through `_FastEngine`, an inference copy of the
 //! modules' math with fused weights; this port follows the modules and
-//! `_reference_generate`, which compute the same result.
+//! `_reference_generate`, which compute the same result. Upstream skips the
+//! last decoder layer's vision queries, whose outputs nothing reads; this
+//! port runs them, which leaves the logits the same.
 //! SigLIP2 NaFlex vision encoder instantiated by the upstream `HayaiModel`:
 //! https://github.com/huggingface/transformers/blob/598d8ba8baaec7fec5a22da0e2844c7bf4ea20e1/src/transformers/models/siglip2/modeling_siglip2.py
 
@@ -47,11 +49,13 @@ impl Model {
         let vision_encoder = Siglip2VisionModel::new(&(&root / "vision_encoder" / "vision_model"))?;
         let decoder = Decoder::new(&(&root / "decoder"), config)?;
 
-        // Text tokens use plain 1D RoPE; positions 0..=MAX_NEW_TOKENS cover
-        // every decoding step. Visual tokens receive their own 2D frequencies
-        // per spatial shape, computed during generation.
+        // Text tokens use plain 1D RoPE from `TEXT_ROPE_OFFSET`; positions
+        // 0..=MAX_NEW_TOKENS cover every decoding step. Visual tokens receive
+        // their own 2D frequencies per spatial shape, computed during
+        // generation.
         let inv_freq = inverse_frequencies(decoder::HEAD_DIM / 2, decoder::ROPE_THETA, device)?;
         let positions = Tensor::arange(MAX_NEW_TOKENS + 1, (Kind::Float, device))?
+            .add_scalar(decoder::TEXT_ROPE_OFFSET, 1)?
             .unsqueeze(1)?
             .matmul(&inv_freq.unsqueeze(0)?)?;
         let angles = Tensor::cat(&[positions.alias()?, positions], -1)?;
@@ -75,7 +79,7 @@ impl Model {
     }
 
     /// Greedy decoding for each crop, the crops decoded together. Every
-    /// crop is padded to the same patch budget, so their prefixes are the
+    /// crop is padded to the batch's longest, so their prefixes are the
     /// same length.
     pub(super) fn generate(
         &self,
@@ -86,43 +90,58 @@ impl Model {
         let kind = self.vs.kind();
         let rows = inputs.len();
         ensure!(rows > 0, "Hayai OCR needs at least one crop");
-        for input in inputs {
-            ensure!(
-                input.pixel_values.size()[1] == siglip2::MAX_NUM_PATCHES as i64,
-                "Hayai OCR expects {} patch tokens",
-                siglip2::MAX_NUM_PATCHES
-            );
-        }
-        let pixel_values = Tensor::cat(
-            &inputs
-                .iter()
-                .map(|input| input.pixel_values.alias())
-                .collect::<koharu_torch::Result<Vec<_>>>()?,
-            0,
-        )?
-        .to_kind(kind)?;
-        let attention_mask = Tensor::cat(
-            &inputs
-                .iter()
-                .map(|input| input.attention_mask.alias())
-                .collect::<koharu_torch::Result<Vec<_>>>()?,
-            0,
-        )?;
         let spatial_shapes = inputs
             .iter()
             .map(|input| input.spatial_shape)
             .collect::<Vec<_>>();
+        let lengths = spatial_shapes
+            .iter()
+            .map(|&[height, width]| height * width)
+            .collect::<Vec<_>>();
+        let patches = lengths.iter().copied().max().unwrap_or(1);
+        let pixel_values = Tensor::stack(
+            &inputs
+                .iter()
+                .zip(&lengths)
+                .map(|(input, &length)| {
+                    input
+                        .pixel_values
+                        .constant_pad_nd([0, 0, 0, patches - length], 0)
+                })
+                .collect::<koharu_torch::Result<Vec<_>>>()?,
+            0,
+        )?
+        .to_kind(kind)?;
 
-        // The encoder masks padded patches as attention keys only; their query
-        // rows still produce outputs that remain part of the visual prefix.
-        let key_mask = additive_mask(&attention_mask, kind)?;
-        let visual_features =
+        // Padded patches are masked as keys; their own rows are never read,
+        // since the projector gathers inside each crop's grid.
+        let key_mask = if lengths.iter().any(|&length| length < patches) {
+            let valid = lengths
+                .iter()
+                .flat_map(|&length| (0..patches).map(move |patch| i64::from(patch < length)))
+                .collect::<Vec<_>>();
+            Some(additive_mask(
+                &Tensor::from_slice(&valid)?
+                    .view([rows as i64, patches])?
+                    .to(device)?,
+                kind,
+            )?)
+        } else {
+            None
+        };
+        let (encoder_states, visual_features) =
             self.vision_encoder
-                .forward(&pixel_values, &spatial_shapes, Some(&key_mask))?;
-        let (vision_embeddings, merged_shapes) = self
+                .forward(&pixel_values, &spatial_shapes, key_mask.as_ref())?;
+        let (vision_embeddings, merged_shapes, blocks) = self
             .decoder
             .projector
             .forward(&visual_features, &spatial_shapes)?;
+        // One residual onto the visual tokens for each decoder layer.
+        let depth_residuals = self.decoder.depth_fusion.forward(
+            &encoder_states,
+            &blocks,
+            vision_embeddings.size()[1],
+        )?;
 
         let bos = Tensor::full([rows as i64, 1], self.bos_token_id, (Kind::Int64, device))?;
         let mut hidden = Tensor::cat(
@@ -222,6 +241,17 @@ impl Model {
 
         let mut caches: Vec<LayerCache> = Vec::with_capacity(self.decoder.layers.len());
         for index in 0..self.decoder.layers.len() {
+            // Upstream `_reference_generate` adds each layer's depth
+            // residual to the visual tokens before the layer runs.
+            hidden = Tensor::cat(
+                &[
+                    hidden
+                        .narrow(1, 0, m_vision)?
+                        .add_tensor(&depth_residuals.select_int(0, index as i64)?, 1)?,
+                    hidden.narrow(1, m_vision, 1)?,
+                ],
+                1,
+            )?;
             let (next_hidden_states, present) = self.decoder.layers[index].forward(
                 &hidden,
                 Some(&prefill_mask),
@@ -382,17 +412,22 @@ impl Siglip2VisionModel {
         })
     }
 
+    /// Each layer's input, the embeddings first, as the depths Hayai fuses,
+    /// and the last hidden state.
     fn forward(
         &self,
         pixel_values: &Tensor,
         spatial_shapes: &[[i64; 2]],
         attention_mask: Option<&Tensor>,
-    ) -> koharu_torch::Result<Tensor> {
+    ) -> koharu_torch::Result<(Vec<Tensor>, Tensor)> {
+        let mut states = Vec::with_capacity(self.layers.len());
         let mut hidden_states = self.embeddings.forward(pixel_values, spatial_shapes)?;
         for layer in &self.layers {
-            hidden_states = layer.forward(&hidden_states, attention_mask)?;
+            let next = layer.forward(&hidden_states, attention_mask)?;
+            states.push(hidden_states);
+            hidden_states = next;
         }
-        self.post_layernorm.forward(&hidden_states)
+        Ok((states, self.post_layernorm.forward(&hidden_states)?))
     }
 }
 
@@ -469,9 +504,15 @@ impl VisionEmbeddings {
         spatial_shapes: &[[i64; 2]],
     ) -> koharu_torch::Result<Tensor> {
         let patch_embeds = self.patch_embedding.forward(pixel_values)?;
+        let patches = pixel_values.size()[1];
         let position_embeddings = spatial_shapes
             .iter()
-            .map(|&[height, width]| self.position_embeddings(height, width))
+            .map(|&[height, width]| {
+                // Padded patches get none, as upstream adds them only to a
+                // crop's own.
+                self.position_embeddings(height, width)?
+                    .constant_pad_nd([0, 0, 0, patches - height * width], 0)
+            })
             .collect::<koharu_torch::Result<Vec<_>>>()?;
         patch_embeds.add_tensor(&Tensor::stack(&position_embeddings, 0)?, 1)
     }
@@ -480,8 +521,7 @@ impl VisionEmbeddings {
         // Antialiased bilinear interpolation of the square base grid to this
         // image's patch shape, as upstream: a grid side under 16 shrinks.
         let size = siglip2::POSITION_EMBEDDING_SIZE;
-        let position_embeddings = self
-            .position_embedding
+        self.position_embedding
             .ws
             .reshape([size, size, siglip2::HIDDEN_SIZE])?
             .permute([2, 0, 1])?
@@ -490,23 +530,7 @@ impl VisionEmbeddings {
             .internal_upsample_bilinear2d_aa([height, width], false, None::<f64>, None::<f64>)?
             .to_kind(self.position_embedding.ws.kind())?
             .reshape([siglip2::HIDDEN_SIZE, height * width])?
-            .transpose_int(0, 1)?;
-        // The upstream resize pads its output buffer to the full patch budget
-        // by repeating the first row, matching the zero-padded pixel values.
-        let num_patches = height * width;
-        let max_patches = siglip2::MAX_NUM_PATCHES as i64;
-        if num_patches < max_patches {
-            let first_row = position_embeddings.select_int(0, 0)?.unsqueeze(0)?;
-            Tensor::cat(
-                &[
-                    position_embeddings,
-                    first_row.expand([max_patches - num_patches, -1], false)?,
-                ],
-                0,
-            )
-        } else {
-            Ok(position_embeddings)
-        }
+            .transpose_int(0, 1)
     }
 }
 
@@ -676,6 +700,7 @@ impl VisionMlp {
 #[derive(Debug)]
 struct Decoder {
     projector: Projector,
+    depth_fusion: DepthFusion,
     token_embeddings: nn::Embedding,
     layers: Vec<DecoderLayer>,
     final_norm: RmsNorm,
@@ -697,6 +722,7 @@ impl Decoder {
                 nn::LinearConfig { bias: false },
             )?,
             projector: Projector::new(&(path / "projector"), config.d_vision, config.d_model)?,
+            depth_fusion: DepthFusion::new(&(path / "depth_fusion"), config)?,
             token_embeddings: nn::embedding(
                 path / "token_embeddings",
                 config.vocab_size,
@@ -726,12 +752,17 @@ impl Decoder {
     }
 }
 
-/// Upstream `DSCProjector`: each 2x2 block of patches becomes one token.
+/// Upstream `DSCProjector`: each 2x2 block of patches becomes one token,
+/// mixed with its 3x3 neighbours, then read in both orders by
+/// `VisualCausalFlow`.
 #[derive(Debug)]
 struct Projector {
     norm: nn::LayerNorm,
     linear1: nn::Linear,
     linear2: nn::Linear,
+    dw_weight: Tensor,
+    dw_bias: Tensor,
+    causal_flow: CausalFlow,
     out_norm: RmsNorm,
 }
 
@@ -743,18 +774,22 @@ impl Projector {
             norm: nn::layer_norm(path / "norm", vec![unshuffled], Default::default())?,
             linear1: nn::linear(path / "mlp" / 0, unshuffled, d_model, no_bias)?,
             linear2: nn::linear(path / "mlp" / 2, d_model, d_model, no_bias)?,
+            dw_weight: path.var("dw_weight", &[9, d_model])?,
+            dw_bias: path.var("dw_bias", &[d_model])?,
+            causal_flow: CausalFlow::new(&(path / "causal_flow"), d_model)?,
             out_norm: RmsNorm::new(&(path / "out_norm"), d_model)?,
         })
     }
 
     /// The tokens of `(batch, patches, d_vision)` patch features laid out
     /// row-major on `spatial_shapes`, padded to the batch's longest merged
-    /// grid, and each crop's merged grid.
+    /// grid, each crop's merged grid, and the flat patch index of each
+    /// token's 2x2 block, which depth fusion pools by.
     fn forward(
         &self,
         visual_features: &Tensor,
         spatial_shapes: &[[i64; 2]],
-    ) -> koharu_torch::Result<(Tensor, Vec<[i64; 2]>)> {
+    ) -> koharu_torch::Result<(Tensor, Vec<[i64; 2]>, Tensor)> {
         let r = decoder::DOWNSCALE;
         let size = visual_features.size();
         let [rows, patches, d_vision] = [size[0], size[1], size[2]];
@@ -802,7 +837,193 @@ impl Projector {
                 .forward(&self.norm.forward(&tokens)?)?
                 .gelu("none")?,
         )?;
-        Ok((self.out_norm.forward(&tokens)?, merged))
+        let tokens = self.mix(&tokens, &merged)?;
+        let tokens = self.causal_flow.forward(&tokens, &merged)?;
+        Ok((self.out_norm.forward(&tokens)?, merged, index))
+    }
+
+    /// Upstream `_dw_gather_mix_compiled`: each token plus a depthwise 3x3
+    /// filter over its neighbours on the merged grid, clamped into it, so
+    /// the grid's edges replicate.
+    fn mix(&self, tokens: &Tensor, merged: &[[i64; 2]]) -> koharu_torch::Result<Tensor> {
+        let size = tokens.size();
+        let [rows, length, d_model] = [size[0], size[1], size[2]];
+        let mut index = Vec::with_capacity((rows * length * 9) as usize);
+        for (row, &[height, width]) in merged.iter().enumerate() {
+            let (last_y, last_x) = ((height - 1).max(0), (width - 1).max(0));
+            for token in 0..length {
+                let (y, x) = (token / width.max(1), token % width.max(1));
+                let ys = [(y - 1).max(0), y.min(last_y), (y + 1).min(last_y)];
+                let xs = [(x - 1).max(0), x.min(last_x), (x + 1).min(last_x)];
+                for source_y in ys {
+                    for source_x in xs {
+                        index.push(row as i64 * length + source_y * width + source_x);
+                    }
+                }
+            }
+        }
+        let index = Tensor::from_slice(&index)?.to(tokens.device())?;
+        let neighbours = tokens
+            .reshape([rows * length, d_model])?
+            .index_select(0, &index)?
+            .view([rows, length, 9, d_model])?;
+        let filtered = neighbours
+            .mul_tensor(&self.dw_weight)?
+            .sum_dim_intlist(&[2i64][..], false, None::<Kind>)?
+            .add_tensor(&self.dw_bias, 1)?;
+        neighbours.select_int(2, 4)?.add_tensor(&filtered, 1)
+    }
+}
+
+/// Upstream `VisualCausalFlow`: gated attention over the merged grid, half
+/// its heads reading rows left to right, half columns right to left, each
+/// token seeing only what comes before it.
+#[derive(Debug)]
+struct CausalFlow {
+    norm: RmsNorm,
+    wqkv: nn::Linear,
+    wo: nn::Linear,
+    flow_gate: Tensor,
+}
+
+impl CausalFlow {
+    fn new(path: &nn::Path<'_>, d_model: i64) -> Result<Self> {
+        let no_bias = nn::LinearConfig { bias: false };
+        Ok(Self {
+            norm: RmsNorm::new(&(path / "norm"), d_model)?,
+            wqkv: nn::linear(path / "wqkv", d_model, 3 * d_model, no_bias)?,
+            wo: nn::linear(path / "wo", d_model, d_model, no_bias)?,
+            flow_gate: path.var("flow_gate", &[d_model])?,
+        })
+    }
+
+    fn forward(&self, tokens: &Tensor, merged: &[[i64; 2]]) -> koharu_torch::Result<Tensor> {
+        let size = tokens.size();
+        let [rows, length, d_model] = [size[0], size[1], size[2]];
+        let heads = decoder::FLOW_HEADS;
+        let head_dim = d_model / heads;
+        let qkv = self
+            .wqkv
+            .forward(&self.norm.forward(tokens)?)?
+            .view([rows, length, 3, heads, head_dim])?
+            .permute([2, 0, 3, 1, 4])?;
+        let mask = dual_causal_mask(merged, length, tokens.device())?.to_kind(tokens.kind())?;
+        let attended = Tensor::scaled_dot_product_attention(
+            &qkv.select_int(0, 0)?,
+            &qkv.select_int(0, 1)?,
+            &qkv.select_int(0, 2)?,
+            Some(&mask),
+            0.0,
+            false,
+            (head_dim as f64).powf(-0.5),
+            false,
+        )?
+        .transpose_int(1, 2)?
+        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+        .reshape([rows, length, d_model])?;
+        tokens.add_tensor(&self.wo.forward(&attended)?.mul_tensor(&self.flow_gate)?, 1)
+    }
+}
+
+/// Upstream `VisualCausalFlow.build_dual_causal_mask`, `(batch, FLOW_HEADS,
+/// tokens, tokens)`: the first half of the heads lets a token see the grid's
+/// tokens up to it row by row, the second half column by column from the
+/// right. A token past its crop's grid sees the first, so no row is empty.
+fn dual_causal_mask(
+    merged: &[[i64; 2]],
+    length: i64,
+    device: Device,
+) -> koharu_torch::Result<Tensor> {
+    let mut mask = Vec::with_capacity(merged.len() * 2 * (length * length) as usize);
+    for &[height, width] in merged {
+        let (height, width) = (height.max(1), width.max(1));
+        let valid = height * width;
+        let rank = |token: i64| (width - 1 - token % width) * height + token / width;
+        for vertical in [false, true] {
+            for query in 0..length {
+                for key in 0..length {
+                    let before = match vertical {
+                        false => query >= key,
+                        true => rank(query) >= rank(key),
+                    };
+                    let seen = (before && key < valid) || (query >= valid && key == 0);
+                    mask.push(if seen { 0.0f32 } else { f32::NEG_INFINITY });
+                }
+            }
+        }
+    }
+    let rows = merged.len() as i64;
+    let half = decoder::FLOW_HEADS / 2;
+    Tensor::from_slice(&mask)?
+        .view([rows, 2, 1, length, length])?
+        .expand([rows, 2, half, length, length], false)?
+        .reshape([rows, 2 * half, length, length])?
+        .to(device)
+}
+
+/// Upstream `StaticDepthFusion`: each encoder depth, pooled over the
+/// projector's 2x2 blocks, normalized, and projected, mixed by a softmax
+/// of each decoder layer's weights and scaled per channel. `(layers, batch,
+/// tokens, d_model)`.
+#[derive(Debug)]
+struct DepthFusion {
+    norms: Vec<RmsNorm>,
+    wo: nn::Linear,
+    gamma: Tensor,
+    depth_logits: Tensor,
+}
+
+impl DepthFusion {
+    fn new(path: &nn::Path<'_>, config: &HayaiConfig) -> Result<Self> {
+        Ok(Self {
+            norms: (0..config.n_vision_layers)
+                .map(|index| RmsNorm::new(&(path / "norms" / index), config.d_vision))
+                .collect::<Result<_>>()?,
+            wo: nn::linear(
+                path / "wo",
+                config.d_vision,
+                config.d_model,
+                nn::LinearConfig { bias: false },
+            )?,
+            gamma: path.var("gamma", &[config.n_layers as i64, config.d_model])?,
+            depth_logits: path.var(
+                "depth_logits",
+                &[config.n_layers as i64, config.n_vision_layers as i64],
+            )?,
+        })
+    }
+
+    fn forward(
+        &self,
+        states: &[Tensor],
+        blocks: &Tensor,
+        length: i64,
+    ) -> koharu_torch::Result<Tensor> {
+        let r = decoder::DOWNSCALE;
+        let projected = self
+            .norms
+            .iter()
+            .zip(states)
+            .map(|(norm, state)| {
+                let size = state.size();
+                let [rows, d_vision] = [size[0], size[2]];
+                // Upstream `_pool_2x2_enc_state`.
+                let pooled = state
+                    .reshape([rows * size[1], d_vision])?
+                    .index_select(0, blocks)?
+                    .view([rows, length, r * r, d_vision])?
+                    .sum_dim_intlist(&[2i64][..], false, None::<Kind>)?
+                    .mul_scalar(0.25)?;
+                self.wo.forward(&norm.forward(&pooled)?)
+            })
+            .collect::<koharu_torch::Result<Vec<_>>>()?;
+        let projected = Tensor::stack(&projected, 0)?;
+        let alpha = self
+            .depth_logits
+            .softmax_int(-1, Kind::Float)?
+            .to_kind(projected.kind())?;
+        Tensor::einsum("jl,lbnd->jbnd", &[alpha, projected], None::<&[i64]>)?
+            .mul_tensor(&self.gamma.unsqueeze(1)?.unsqueeze(1)?)
     }
 }
 

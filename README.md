@@ -84,7 +84,7 @@ OCR reads source text from detected regions.
 
 - [manga-ocr-ar-experimental](https://huggingface.co/muscgab/manga-ocr-ar-experimental) (CC BY-NC-SA 4.0)
 - [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)
-- [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova)
+- [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova)
 
 #### Inpainting
 

@@ -1,7 +1,7 @@
 //! Hayai OCR configuration.
 //!
 //! Upstream configuration:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.5-nova/blob/2803d0dc005fa4396ab1e7c5a472d2c450a247f7/configuration_hayai.py
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/517bdeeb64b68c08939e12f7211e99943c1e1640/configuration_hayai.py
 //! The vision encoder is the `Siglip2VisionModel` instantiated by
 //! `modeling_hayai.HayaiModel` from `google/siglip2-base-patch16-naflex`, whose
 //! released config only overrides the model type, so every value below is the
@@ -24,9 +24,6 @@ pub(super) mod siglip2 {
     /// interpolated per image instead of forcing a fixed input resolution.
     pub const POSITION_EMBEDDING_SIZE: i64 = 16;
     pub const LAYER_NORM_EPS: f64 = 1e-6;
-    /// Maximum number of 16x16 patches emitted by the SigLIP2 image processor:
-    /// the budget the Hayai v2.5 model card calls the default.
-    pub const MAX_NUM_PATCHES: usize = 384;
 }
 
 /// Decoder constants of `VisualCausalOCRDecoder`; upstream hardcodes them in
@@ -39,6 +36,13 @@ pub(super) mod decoder {
     /// `DSCProjector`'s `downscale_factor`: each 2x2 block of patches becomes
     /// one decoder token.
     pub const DOWNSCALE: i64 = 2;
+    /// `VisualCausalFlow`'s heads: half read the merged grid row by row,
+    /// half column by column from the right.
+    pub const FLOW_HEADS: i64 = 8;
+    /// `HayaiConfig`'s default `text_rope_offset`, which the released
+    /// `config.json` leaves out: text positions start here, past the visual
+    /// grid's.
+    pub const TEXT_ROPE_OFFSET: f64 = 64.0;
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -49,6 +53,8 @@ pub(super) struct HayaiConfig {
     #[allow(dead_code)]
     pub(super) d_ffn: i64,
     pub(super) n_layers: usize,
+    pub(super) n_vision_layers: usize,
+    pub(super) downscale_factor: i64,
     pub(super) num_ids_classes: i64,
 }
 
@@ -72,6 +78,16 @@ impl HayaiConfig {
             "decoder query heads must be divisible by key/value heads"
         );
         ensure!(self.n_layers > 0, "decoder must have at least one layer");
+        ensure!(
+            self.n_vision_layers == siglip2::NUM_HIDDEN_LAYERS,
+            "Hayai OCR fuses all {} SigLIP2 encoder depths",
+            siglip2::NUM_HIDDEN_LAYERS
+        );
+        ensure!(
+            self.downscale_factor == decoder::DOWNSCALE,
+            "Hayai OCR's projector merges {0}x{0} patch blocks",
+            decoder::DOWNSCALE
+        );
         Ok(())
     }
 }
