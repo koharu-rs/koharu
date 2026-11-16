@@ -1486,7 +1486,7 @@ dependencies = [
  "cef-dll-sys",
  "clap",
  "libc",
- "libloading 0.9.0",
+ "libloading 0.9.1",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "objc2-io-surface",
@@ -5665,7 +5665,7 @@ name = "koharu-diffusion-sys"
 version = "0.83.5"
 dependencies = [
  "koharu-bindgen",
- "libloading 0.9.0",
+ "libloading 0.9.1",
 ]
 
 [[package]]
@@ -5697,7 +5697,7 @@ name = "koharu-llama-sys"
 version = "0.83.5"
 dependencies = [
  "koharu-bindgen",
- "libloading 0.9.0",
+ "libloading 0.9.1",
 ]
 
 [[package]]
@@ -5874,7 +5874,7 @@ dependencies = [
  "koharu-diffusion-sys",
  "koharu-llama-sys",
  "koharu-torch-sys",
- "libloading 0.9.0",
+ "libloading 0.9.1",
  "reqwest",
  "serde",
  "specta",
@@ -5951,7 +5951,7 @@ name = "koharu-torch-sys"
 version = "0.83.5"
 dependencies = [
  "koharu-bindgen",
- "libloading 0.9.0",
+ "libloading 0.9.1",
 ]
 
 [[package]]
@@ -6168,9 +6168,9 @@ dependencies = [
 
 [[package]]
 name = "libloading"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
+checksum = "a1832accd5a4ca2795ace4d05d15c4039be15b62d3b950eff99746a990e3cc10"
 dependencies = [
  "cfg-if",
  "windows-link",
