@@ -69,7 +69,7 @@ fs-err = { version = "3.3.2", features = ["tokio"] }
 futures = "0.3.34"
 globset = "0.4.21"
 half = "2.7.1"
-harfrust = "0.15.0"
+harfrust = "0.16.0"
 glifo = "0.5.0"
 hayro = "0.8.0"
 heck = "0.5.0"
