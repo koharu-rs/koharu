@@ -24,9 +24,9 @@ same way and undo the same way.
 | cursor | CSS cursors, which the host shows | the CSS `cursor` property [CSS UI] |
 | view | where the page shows: the canvas's place in the window, its scale factor, and the camera from page points to the screen's pixels, with pan and zoom. Pointer events become page points here and nowhere else | |
 | what's shown | the frame the renderer last drew, the page and project it drew, and what each shown layer offers: its frame, its handles, and how it resizes and turns | |
-| selection | the selected layers, in the order they were picked, the one the select tool would pick under the pointer, and the anchors the direct selection tool picked on the selected text's frame | |
+| selection | the selected layers, in the order they were picked, the one the select tool would pick under the pointer, and the anchors the direct selection tool picked on the selected text's frame. A block's clean-up is picked only from the host's Layers, never by a click or a marquee | a layer mask is targeted by its thumbnail in the Layers panel, not on the canvas [Photoshop layer masks] |
 | story | while the host shows the Story panel, each text's frame outlined faintly, and its number in the scene's reading order in a pill centred on the frame's top-left corner, filled for dialogue and outlined for a sound effect; the frame of the text whose entry the pointer is on drawn stronger. They draw under the selection's handles, which keep their place and their reach | |
-| overlay | outlines, handles, a frame's anchors, the marquee, and each gesture's preview, drawn over the page in screen pixels, so lines and handles keep their size at any zoom | selected anchors are filled squares and the rest hollow [Photoshop path selection] |
+| overlay | outlines, handles, a frame's anchors, the marquee, and each gesture's preview, drawn over the page in screen pixels, so lines and handles keep their size at any zoom. A selected block's mask shows in place of its bounds as a half-red overlay over what it hides, and a selected clean-up with the rest of the page greyed out | selected anchors are filled squares and the rest hollow [Photoshop path selection]; a mask shows as a rubylith, a 50% red overlay [Photoshop layer masks] |
 | settings | the tool, the brush, and the theme's colours, which the host owns and the canvas only reads, so the panels and the canvas show one value | |
 
 Tools read the frame that was drawn, never a newer project, so what the
@@ -79,3 +79,4 @@ Read in November 2026.
 [Photoshop anchor points]: https://helpx.adobe.com/photoshop/desktop/draw-shapes-paths/create-shapes/add-delete-and-convert-anchor-points.html
 [InDesign paths]: https://helpx.adobe.com/indesign/desktop/create-lines-and-shapes/edit-and-style-paths/edit-and-reshape-paths.html
 [CSP layer masks]: https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_masks.htm
+[Photoshop layer masks]: https://helpx.adobe.com/photoshop/using/masking-layers.html

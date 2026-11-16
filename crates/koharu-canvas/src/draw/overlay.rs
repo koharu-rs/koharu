@@ -5,7 +5,7 @@
 use koharu_renderer::{Drawing, Frame, Label};
 use koharu_scene::Rgba;
 use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Shape, Stroke};
-use vello_gpu::peniko::{Color, Fill};
+use vello_gpu::peniko::{BlendMode, Color, Compose, Fill, Mix};
 
 use crate::{
     Colors,
@@ -66,6 +66,34 @@ impl<'a, 'g> Overlay<'a, 'g> {
 
     pub fn control(&mut self, control: &Control) {
         self.outline(control.outline());
+    }
+
+    /// The page under `tint`, but where `clear` draws, which shows through:
+    /// a selected mask or clean-up seen on its own, as Photoshop shows a mask
+    /// in its rubylith overlay.
+    pub fn isolate(
+        &mut self,
+        page: Rect,
+        tint: Color,
+        clear: Option<&Frame>,
+    ) -> anyhow::Result<()> {
+        let to_screen = self.view.to_screen();
+        let area = to_screen * page.to_path(TOLERANCE);
+        let viewport = self.view.size().to_rect();
+        let scene = &mut self.drawing.scene;
+        scene.set_transform(Affine::IDENTITY);
+        scene.push_layer(Some(&area), None, None, None, None);
+        scene.set_fill_rule(Fill::NonZero);
+        scene.set_paint(tint);
+        scene.fill_path(&area);
+        if let Some(clear) = clear {
+            let cut = BlendMode::new(Mix::Normal, Compose::DestOut);
+            scene.push_layer(Some(&area), Some(cut), None, None, None);
+            clear.paint(to_screen, viewport, self.drawing)?;
+            self.drawing.scene.pop_layer();
+        }
+        self.drawing.scene.pop_layer();
+        Ok(())
     }
 
     /// A text's frame while Story shows: faint, or full and wider when its

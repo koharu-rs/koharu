@@ -29,7 +29,7 @@ use crate::{
     draw::{Target, color, overlay::Overlay},
     gesture::{Context, Gesture, GestureLook, Press},
     selection::Selection,
-    snapshot::Snapshot,
+    snapshot::{Part, Snapshot},
     tools::{self, pan::Pan, text::Draft},
     view::{Sample, View},
 };
@@ -548,11 +548,38 @@ impl Canvas {
         if self.story.shown {
             self.story(&cx, &mut overlay)?;
         }
+        // A selected clean-up or mask is seen on its own in place of its
+        // bounds: a mask as Photoshop's rubylith, half red over what it
+        // hides, and a clean-up with the rest of the page greyed out.
+        let part = self
+            .selection
+            .single()
+            .and_then(|id| cx.snapshot.part(id).map(|part| (id, part)));
+        if let Some((id, part)) = part {
+            let frame = cx.snapshot.frame();
+            let (tint, clear) = match part {
+                Part::Cleanup => (
+                    Color::from_rgba8(128, 128, 128, 153),
+                    frame.layer(id).map(|drawn| drawn.cropped()),
+                ),
+                Part::Mask { cleanup } => (
+                    Color::from_rgba8(255, 0, 0, 128),
+                    frame.layer(cleanup).and_then(|drawn| drawn.mask()),
+                ),
+            };
+            overlay.isolate(cx.snapshot.size().to_rect(), tint, clear.as_ref())?;
+        }
+        let isolated = part.map(|(id, _)| id);
         let gesture = self.gesture.as_ref().map(|active| &active.gesture);
         if let Some(gesture) = gesture {
             gesture.preview(&cx, &mut overlay)?;
         }
-        for &id in self.selection.ids() {
+        for &id in self
+            .selection
+            .ids()
+            .iter()
+            .filter(|&&id| Some(id) != isolated)
+        {
             if let Some(path) = cx.snapshot.outline(id) {
                 overlay.outline(path);
             }
@@ -562,7 +589,9 @@ impl Canvas {
             .snapshot
             .controls()
             .iter()
-            .filter(|control| self.selection.contains(control.layer))
+            .filter(|control| {
+                self.selection.contains(control.layer) && Some(control.layer) != isolated
+            })
             .map(|control| {
                 dragged
                     .iter()

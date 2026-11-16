@@ -932,13 +932,61 @@ fn painted_cleanup() -> Option<(Fixture, LayerId, LayerId)> {
     Some((fixture, block, cleanup))
 }
 
+/// A block's clean-up is picked only by its button in Layers: a click or a
+/// marquee on the canvas passes over it.
 #[test]
-fn a_clicked_cleanup_moves_by_its_offset() {
+fn the_canvas_never_picks_a_cleanup() {
+    let Some((mut fixture, _, cleanup)) = painted_cleanup() else {
+        return;
+    };
+    for (from, to) in [((20.0, 20.0), (20.0, 20.0)), ((5.0, 5.0), (40.0, 40.0))] {
+        let effects = gesture(&mut fixture.canvas, from, to);
+        assert!(
+            !selections(&effects).concat().contains(&cleanup),
+            "{from:?} to {to:?}"
+        );
+    }
+}
+
+/// A selected mask shows as Photoshop's rubylith, red over what it hides,
+/// and a selected clean-up against the page greyed out; what each draws
+/// stays as it was.
+#[test]
+fn a_selected_part_shows_on_its_own() {
     let Some((mut fixture, block, cleanup)) = painted_cleanup() else {
         return;
     };
+    let mask: LayerId =
+        serde_json::from_value(layer(&fixture, block)["mask"]["id"].clone()).expect("a mask");
+    let canvas = &mut fixture.canvas;
+    let mut seen = |selection: Vec<LayerId>| {
+        canvas.select(selection);
+        canvas.draw().expect("a draw");
+        canvas.snapshot().expect("pixels")
+    };
+    let plain = seen(Vec::new());
+    assert_eq!(plain.get_pixel(60, 60).0, [255; 4]);
+    // Half red over white, and grey 128 at 60% over white.
+    for (part, pixel) in [(mask, [255, 128, 128]), (cleanup, [179, 179, 179])] {
+        let shown = seen(vec![part]);
+        assert_eq!(shown.get_pixel(20, 20), plain.get_pixel(20, 20), "{part}");
+        let [r, g, b, _] = shown.get_pixel(60, 60).0;
+        let near = |value: u8, want: u8| value.abs_diff(want) <= 2;
+        assert!(
+            near(r, pixel[0]) && near(g, pixel[1]) && near(b, pixel[2]),
+            "{part}: {:?}",
+            [r, g, b]
+        );
+    }
+}
+
+#[test]
+fn a_selected_cleanup_moves_by_its_offset() {
+    let Some((mut fixture, block, cleanup)) = painted_cleanup() else {
+        return;
+    };
+    fixture.canvas.select(vec![cleanup]);
     let effects = gesture(&mut fixture.canvas, (20.0, 20.0), (45.4, 30.0));
-    assert_eq!(selections(&effects), [vec![cleanup]]);
     assert_eq!(apply(&mut fixture, effects), ["move"]);
     assert_eq!(
         layer(&fixture, block)["cleanup"]["offset"],

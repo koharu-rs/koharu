@@ -86,12 +86,12 @@ impl Snapshot {
         &self.controls
     }
 
-    /// The topmost control a click at `page` hits.
+    /// The topmost control a click at `page` picks.
     pub(crate) fn hit(&self, page: Point) -> Option<&Control> {
         self.controls
             .iter()
             .rev()
-            .find(|control| !control.locked && control.contains(page))
+            .find(|control| control.picks && !control.locked && control.contains(page))
     }
 
     /// The topmost control of `layer`.
@@ -110,6 +110,21 @@ impl Snapshot {
     /// A panel's or a balloon's outline on the page.
     pub(crate) fn outline(&self, id: LayerId) -> Option<&BezPath> {
         self.outlines.get(&id)
+    }
+
+    /// Which part of a block `id` is, when it's a block's clean-up or mask,
+    /// shown or not.
+    pub(crate) fn part(&self, id: LayerId) -> Option<Part> {
+        fn find(layers: &[Layer], id: LayerId) -> Option<Part> {
+            layers.iter().find_map(|layer| match &layer.content {
+                Content::Block(block) if block.cleanup.id == id => Some(Part::Cleanup),
+                Content::Block(block) if block.mask.id == id => Some(Part::Mask {
+                    cleanup: block.cleanup.id,
+                }),
+                _ => find(&layer.children, id),
+            })
+        }
+        find(&self.page.layers, id)
     }
 
     /// The offset and format of `id` when it's a raster, or a block's
@@ -141,6 +156,16 @@ impl Snapshot {
         }
         find(&self.page.layers, id)
     }
+}
+
+/// A block's own picture layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Part {
+    Cleanup,
+    /// The mask its block's clean-up shows through.
+    Mask {
+        cleanup: LayerId,
+    },
 }
 
 /// Image files' pixel sizes, read from their headers once each. A file is
@@ -196,21 +221,24 @@ impl Walk<'_> {
             }
             Content::Block(block) => {
                 // The clean-up draws under the translation, and is locked by
-                // its own lock as well as its block's.
+                // its own lock as well as its block's. Only Layers picks it.
                 let cleanup = &block.cleanup;
                 if let Some(bounds) = self
                     .frame
                     .layer(cleanup.id)
                     .and_then(|drawn| drawn.bounds())
                 {
-                    self.controls.push(Control::new(
-                        cleanup.id,
-                        bounds,
-                        Affine::IDENTITY,
-                        Resize::None,
-                        false,
-                        locked || cleanup.locked,
-                    ));
+                    self.controls.push(
+                        Control::new(
+                            cleanup.id,
+                            bounds,
+                            Affine::IDENTITY,
+                            Resize::None,
+                            false,
+                            locked || cleanup.locked,
+                        )
+                        .unpicked(),
+                    );
                 }
                 match &block.translation {
                     Some(text) => {

@@ -110,7 +110,7 @@ impl Marquee {
             .snapshot
             .controls()
             .iter()
-            .filter(|control| !control.locked && control.inside(rect))
+            .filter(|control| control.picks && !control.locked && control.inside(rect))
             .map(|control| control.layer)
             .collect();
         let next = match self.additive {

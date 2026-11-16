@@ -82,6 +82,9 @@ pub(crate) struct Control {
     pub resize: Resize,
     pub rotates: bool,
     pub locked: bool,
+    /// Whether a click or a marquee on the canvas picks it; a block's
+    /// clean-up is picked only by its button in Layers.
+    pub picks: bool,
     local: Rect,
     transform: Affine,
     /// `local` on the page, and its bounds, kept since every pointer move
@@ -106,6 +109,7 @@ impl Control {
             resize,
             rotates,
             locked,
+            picks: true,
             local,
             transform,
             outline,
@@ -129,6 +133,12 @@ impl Control {
     pub fn contains(&self, page: Point) -> bool {
         let Rect { x0, y0, x1, y1 } = self.bounds;
         (x0..=x1).contains(&page.x) && (y0..=y1).contains(&page.y) && self.outline.contains(page)
+    }
+
+    /// Picked only from Layers, never by the canvas.
+    pub fn unpicked(mut self) -> Self {
+        self.picks = false;
+        self
     }
 
     /// Its corners on the page, clockwise from the top left.

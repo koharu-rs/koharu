@@ -340,7 +340,7 @@ pub(crate) fn press(cx: &Context, sample: Sample) -> Press {
         .controls()
         .iter()
         .rev()
-        .filter(|control| !control.locked && control.contains(at))
+        .filter(|control| control.picks && !control.locked && control.contains(at))
         .find_map(|control| Shape::of(cx, control.layer))
         .filter(|shape| Some(shape.layer) != selected.as_ref().map(|shape| shape.layer));
     if let (Some(shape), false) = (other, inside) {
