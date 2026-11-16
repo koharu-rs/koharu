@@ -20,7 +20,7 @@ use icu_experimental::displaynames::{
 };
 use icu_locale::LocaleExpander;
 use icu_locale_core::{LanguageIdentifier, Locale, langid, subtags::language};
-use indoc::indoc;
+use indoc::formatdoc;
 use koharu_llm::rig::{completion::Effort, driver::DynModel};
 use koharu_scene::{Content, LayerId, Op, Project};
 use rayon::prelude::*;
@@ -45,10 +45,10 @@ pub struct TranslatorConfig {
     #[serde(deserialize_with = "target")]
     #[specta(type = String)]
     pub target: LanguageIdentifier,
-    /// The system prompt, with `{target}` where the target's name goes.
-    #[serde(deserialize_with = "prompt")]
-    #[specta(type = String)]
-    pub prompt: String,
+    /// The user's own instructions to the model, in any language and form,
+    /// such as a name's spelling or the tone; they follow Koharu's own system
+    /// prompt as written, and can't replace it.
+    pub instructions: String,
     /// Whether each page's turn shows the model the page itself beside its
     /// texts, as an image goes with a chat message to OpenAI's and Gemini's
     /// models; only for a model that reads images.
@@ -67,36 +67,39 @@ impl Default for TranslatorConfig {
             // about twice the decoding time.
             model: "koharu/index-translate-9b".to_owned(),
             target: langid!("en"),
-            // Index-Translate's instTrans template in English, as
-            // bilibili/Index-Translate's `docs/prompts.md` gives it
-            // (93ac63774d1c6939aec05e6f0f191bf90f225365, Apache-2.0),
-            // measured against its Chinese template on Manga109 pages.
-            prompt: indoc! {"
-                Please translate the manga text in each message into {target} and strictly follow all constraints. Each message is a page's texts as a JSON object, numbered in reading order.
-
-                [Constraints]
-                1. [Hard Constraint] Preserve the JSON format in the source text unchanged
-
-                Output the translation in the same JSON format, keeping the keys unchanged and each value its translation. Output only the JSON without any explanation."}
-            .to_owned(),
+            instructions: String::new(),
             vision: false,
             reasoning: None,
         }
     }
 }
 
+/// The system prompt: Index-Translate's structured-data template in English,
+/// as bilibili/Index-Translate's `docs/prompts.md` gives it
+/// (93ac63774d1c6939aec05e6f0f191bf90f225365, Apache-2.0), for the JSON the
+/// answer is parsed by; then the user's instructions as they wrote them,
+/// whatever their form.
+fn system(config: &TranslatorConfig) -> Result<String> {
+    let template = formatdoc! {"
+        Translate the manga text in each message into {target}. Each message is a page's texts as a JSON object, numbered in reading order: translate only the values, and never alter the structure or the keys. Output only the translated JSON, without any explanation.",
+        target = name(&config.target)?,
+    };
+    Ok(match config.instructions.trim() {
+        "" => template,
+        instructions => formatdoc! {"
+            {template}
+
+            {instructions}",
+            template = template,
+            instructions = instructions,
+        },
+    })
+}
+
 fn target<'de, D: Deserializer<'de>>(deserializer: D) -> Result<LanguageIdentifier, D::Error> {
     let target = LanguageIdentifier::deserialize(deserializer)?;
     name(&target).map_err(D::Error::custom)?;
     Ok(target)
-}
-
-fn prompt<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
-    let prompt = String::deserialize(deserializer)?;
-    if !prompt.contains("{target}") {
-        return Err(D::Error::custom("the translation prompt has no {target}"));
-    }
-    Ok(prompt)
 }
 
 /// A page's texts, and the page as a JPEG in base 64 when the model sees it.
@@ -142,9 +145,7 @@ pub(crate) async fn translate(
             conversation.hosted(&translator).await?
         }
     };
-    let system = translator
-        .prompt
-        .replace("{target}", &name(&translator.target)?);
+    let system = system(&translator)?;
     let turn = Turn::new(
         system,
         &page.texts,
@@ -297,11 +298,40 @@ fn name(target: &LanguageIdentifier) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::*;
 
     #[test]
     fn a_language_cldr_doesnt_name_fails() {
         let language = LanguageIdentifier::try_from_str("xx").expect("a tag");
         assert!(name(&language).is_err());
+    }
+
+    #[test]
+    fn instructions_follow_the_whole_template() {
+        let template = system(&TranslatorConfig::default()).expect("English names it");
+        let config = TranslatorConfig {
+            instructions: indoc! {"
+
+                シャーレはSchaleと訳す。
+
+                敬称は残す。
+
+            "}
+            .to_owned(),
+            ..Default::default()
+        };
+        assert_eq!(
+            system(&config).expect("English names it"),
+            formatdoc! {"
+                {template}
+
+                シャーレはSchaleと訳す。
+
+                敬称は残す。",
+                template = template,
+            }
+        );
     }
 }

@@ -343,9 +343,8 @@
       "thresholds": "しきい値",
       "title": "パイプライン",
       "translator": {
-        "prompt": "システムプロンプト",
-        "promptDescription": "翻訳モデルへの指示です。{target} は翻訳先の言語に置き換えられます。",
-        "promptNeedsTarget": "プロンプトには {target} を含めてください。",
+        "instructions": "追加の指示",
+        "instructionsDescription": "任意。どの言語・形式でも書けます（名前の表記や口調など）。Koharu は自身のシステムプロンプトの後に、書いたとおりに追加します。",
         "reasoning": "推論",
         "reasoningDescription": "翻訳時にモデルの推論を使用します。",
         "targetLanguageDescription": "テキストの翻訳先言語を選択します。",

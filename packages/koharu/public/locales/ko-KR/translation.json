@@ -343,9 +343,8 @@
       "thresholds": "임곗값",
       "title": "파이프라인",
       "translator": {
-        "prompt": "시스템 프롬프트",
-        "promptDescription": "번역 모델에 보내는 지시입니다. {target}은(는) 대상 언어로 바뀝니다.",
-        "promptNeedsTarget": "프롬프트에 {target}을(를) 포함해야 합니다.",
+        "instructions": "추가 지시",
+        "instructionsDescription": "선택 사항이며 어떤 언어와 형식으로든 쓸 수 있습니다(이름 표기나 말투 등). Koharu는 자체 시스템 프롬프트 뒤에 쓴 그대로 덧붙입니다.",
         "reasoning": "추론",
         "reasoningDescription": "번역할 때 모델 추론을 사용합니다.",
         "targetLanguageDescription": "텍스트를 번역할 언어를 선택합니다.",

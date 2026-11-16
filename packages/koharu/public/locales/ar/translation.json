@@ -343,9 +343,8 @@
       "thresholds": "العتبات",
       "title": "خط المعالجة",
       "translator": {
-        "prompt": "موجّه النظام",
-        "promptDescription": "تعليمات لنموذج الترجمة؛ يُستبدل {target} باللغة الهدف.",
-        "promptNeedsTarget": "يجب أن يتضمن الموجّه {target}.",
+        "instructions": "تعليمات إضافية",
+        "instructionsDescription": "اختيارية، بأي لغة وأي صيغة، مثل طريقة كتابة اسم أو نبرة الأسلوب. يضيفها Koharu كما هي بعد موجّه النظام الخاص به.",
         "reasoning": "التفكير",
         "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
         "targetLanguageDescription": "اختر اللغة التي تُترجم إليها النصوص.",

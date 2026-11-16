@@ -343,9 +343,8 @@
       "thresholds": "阈值",
       "title": "流水线",
       "translator": {
-        "prompt": "系统提示词",
-        "promptDescription": "给翻译模型的指示；{target} 会替换为目标语言。",
-        "promptNeedsTarget": "提示词必须包含 {target}。",
+        "instructions": "附加指示",
+        "instructionsDescription": "可选，可用任何语言和形式填写，例如名字的写法或语气。Koharu 会按原样把它们附加在自己的系统提示词之后。",
         "reasoning": "推理",
         "reasoningDescription": "翻译时使用模型推理。",
         "targetLanguageDescription": "选择文本要翻译成的语言。",

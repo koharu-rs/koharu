@@ -1,20 +1,20 @@
 ---
 title: 'Configure translation'
-description: 'Set the model, target language, system prompt, reasoning, and image input.'
+description: 'Set the model, target language, instructions, reasoning, and image input.'
 icon: 'language'
 ---
 
-Choose translation settings in **Settings → Translation**; the processing selector also sets the model and the target language. They are saved with Koharu's settings and apply to every project. Provider connections and credentials are read for each request.
+Choose translation settings in the **Translator** section of **Settings → Pipeline**; the processing selector also sets the model and the target language. They are saved with Koharu's settings and apply to every project. Provider connections and credentials are read for each request.
 
-## Language and system prompt
+## Language and instructions
 
-Choose the **Target language**. The **System prompt** is the instruction the model gets; `{target}` stands for the target language's English name and must appear in it. Edit it for names, terminology, tone, pronouns, or text that should remain untranslated, and test it on several pages after correcting OCR. The default is Index-Translate's own translation instruction.
+Choose the **Target language**. Koharu's own system prompt, Index-Translate's translation instruction in English, asks the model to translate each page into it and to answer in the same JSON. Add your own under **Additional instructions**, in any language and form, such as the spelling of names, terminology, tone, pronouns, or text that should remain untranslated; Koharu adds them, as written, after its own prompt. Test them on several pages after correcting OCR.
 
 LFM3 1.7B is made for a limited set of target languages. Other local and hosted models accept every target language Koharu offers.
 
 ## How pages are translated
 
-Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the prompt starts a new one.
+Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the instructions starts a new one.
 
 Each page is sent as its texts in reading order, and the answer must return every one. A malformed answer, a missing text, or a blank translation fails that page. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
 

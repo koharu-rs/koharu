@@ -33,11 +33,6 @@ import {
 import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
 
-/** Whether the prompt has `{target}`, which the translator refuses one without. */
-export function promptNamesTarget(value: TranslatorConfig): boolean {
-  return (value.prompt ?? '').includes('{target}')
-}
-
 type StageName = 'detect' | 'recognize' | 'inpaint' | 'translate'
 
 /** The `[pipeline]` stages in the order they run, a section each with its model first: the
@@ -267,8 +262,8 @@ function TranslatorModel({
 }
 
 /** The translator's options under `[pipeline.translator]`, as rows of its section: whether the
- * model sees each page, how much it reasons, the target language, and the system prompt with
- * `{target}` where the target's name goes. */
+ * model sees each page, how much it reasons, the target language, and the user's instructions,
+ * which Koharu adds to its own fixed system prompt. */
 function TranslatorOptions({
   value,
   onChange,
@@ -346,24 +341,16 @@ function TranslatorOptions({
         </Select>
       </PreferenceRow>
       <PreferenceRow
-        title={t('settings.pipeline.translator.prompt')}
-        description={t('settings.pipeline.translator.promptDescription')}
+        title={t('settings.pipeline.translator.instructions')}
+        description={t('settings.pipeline.translator.instructionsDescription')}
         align='start'
       >
-        <div className='grid gap-1'>
-          <Textarea
-            aria-label={t('settings.pipeline.translator.prompt')}
-            aria-invalid={!promptNamesTarget(value)}
-            value={value.prompt ?? ''}
-            className='field-sizing-fixed min-h-32 resize-y overflow-y-auto text-[12px] leading-5'
-            onChange={(event) => onChange({ ...value, prompt: event.currentTarget.value })}
-          />
-          {!promptNamesTarget(value) && (
-            <p className='text-[10px] text-destructive'>
-              {t('settings.pipeline.translator.promptNeedsTarget')}
-            </p>
-          )}
-        </div>
+        <Textarea
+          aria-label={t('settings.pipeline.translator.instructions')}
+          value={value.instructions ?? ''}
+          className='field-sizing-fixed min-h-28 resize-y overflow-y-auto text-[12px] leading-5'
+          onChange={(event) => onChange({ ...value, instructions: event.currentTarget.value })}
+        />
       </PreferenceRow>
     </>
   )

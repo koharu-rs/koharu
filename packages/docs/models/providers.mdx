@@ -30,7 +30,7 @@ Koharu's local models include Index-Translate (2B, 9B, and a 35B A3B preview), w
 
   </Step>
   <Step title='Select a model'>
-    Open the processing selector's **Model** or **Settings → Translation → Translation model**.
+    Open the processing selector's **Model** or **Settings → Pipeline → Translator → Model**.
     Opening the processing selector refreshes the list. A provider without a key, or one that
     cannot be reached, lists no models.
   </Step>
@@ -47,6 +47,6 @@ API keys and sign-ins are stored encrypted in `~/.koharu/secrets.age`, with the 
 Local models keep pages and text on your machine after download. A hosted provider receives the text of each page it translates, and the page image when **Vision** is on, under its own retention terms. Local detection and OCR do not make a hosted translation request local.
 
 <Warning>
-  Keep keys out of the system prompt, text layers, and configuration files. Save credentials through
-  **Settings → Providers**.
+  Keep keys out of the additional instructions, text layers, and configuration files. Save
+  credentials through **Settings → Providers**.
 </Warning>

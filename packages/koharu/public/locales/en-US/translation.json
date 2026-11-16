@@ -343,9 +343,8 @@
       "thresholds": "Thresholds",
       "title": "Pipeline",
       "translator": {
-        "prompt": "System prompt",
-        "promptDescription": "Instructions for the translation model; {target} stands for the target language.",
-        "promptNeedsTarget": "The prompt must include {target}.",
+        "instructions": "Additional instructions",
+        "instructionsDescription": "Optional, in any language and form, such as a name's spelling or the tone. Koharu adds them, as written, after its own system prompt.",
         "reasoning": "Reasoning",
         "reasoningDescription": "Use model reasoning during translation.",
         "targetLanguageDescription": "Choose the language to translate text into.",

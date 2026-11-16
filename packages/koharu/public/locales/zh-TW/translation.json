@@ -343,9 +343,8 @@
       "thresholds": "閾值",
       "title": "流程",
       "translator": {
-        "prompt": "系統提示詞",
-        "promptDescription": "給翻譯模型的指示；{target} 會替換為目標語言。",
-        "promptNeedsTarget": "提示詞必須包含 {target}。",
+        "instructions": "附加指示",
+        "instructionsDescription": "選填，可使用任何語言和形式，例如名字的寫法或語氣。Koharu 會依原樣把它們附加在自己的系統提示詞之後。",
         "reasoning": "推理",
         "reasoningDescription": "翻譯時使用模型推理。",
         "targetLanguageDescription": "選擇文字要翻譯成的語言。",

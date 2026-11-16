@@ -5,10 +5,7 @@ import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  PipelinePreferences,
-  promptNamesTarget,
-} from '@/components/preferences/PipelinePreferences'
+import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
 import {
   PreferencePage,
   PreferenceRow,
@@ -51,12 +48,9 @@ export function SettingsPage() {
   const lastSaved = useRef<string | null>(null)
   const pending = useRef<Promise<unknown>>(Promise.resolve())
 
-  // A draft the backend would refuse waits for its fix instead of failing a save per keystroke.
   const saveDraft = useCallback((next: Preferences) => {
     const serialized = JSON.stringify(next)
-    if (serialized === lastSaved.current || !promptNamesTarget(next.pipeline.translator ?? {})) {
-      return pending.current
-    }
+    if (serialized === lastSaved.current) return pending.current
     lastSaved.current = serialized
     pending.current = savePreferences(next).catch((error: unknown) => {
       if (lastSaved.current === serialized) lastSaved.current = null

@@ -343,9 +343,8 @@
       "thresholds": "Umbrales",
       "title": "Canalización",
       "translator": {
-        "prompt": "Prompt del sistema",
-        "promptDescription": "Instrucciones para el modelo de traducción; {target} se sustituye por el idioma de destino.",
-        "promptNeedsTarget": "El prompt debe incluir {target}.",
+        "instructions": "Instrucciones adicionales",
+        "instructionsDescription": "Opcionales, en cualquier idioma y forma, como la grafía de un nombre o el tono. Koharu las añade tal cual después de su propia instrucción de sistema.",
         "reasoning": "Razonamiento",
         "reasoningDescription": "Utiliza el razonamiento del modelo durante la traducción.",
         "targetLanguageDescription": "Elige el idioma al que se traducirá el texto.",

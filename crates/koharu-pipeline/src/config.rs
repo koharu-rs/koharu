@@ -31,6 +31,5 @@ mod tests {
         assert!(parse(serde_json::json!({"detector": {"text": 0.3}})).is_ok());
         assert!(parse(serde_json::json!({"detector": {"text": 1.5}})).is_err());
         assert!(parse(serde_json::json!({"translator": {"target": "xx"}})).is_err());
-        assert!(parse(serde_json::json!({"translator": {"prompt": "Translate."}})).is_err());
     }
 }

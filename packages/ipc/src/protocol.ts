@@ -861,8 +861,12 @@ export type TranslatorConfig = {
   model?: string
   /**  A language CLDR names in English. */
   target?: string
-  /**  The system prompt, with `{target}` where the target's name goes. */
-  prompt?: string
+  /**
+   *  The user's own instructions to the model, in any language and form,
+   *  such as a name's spelling or the tone; they follow Koharu's own system
+   *  prompt as written, and can't replace it.
+   */
+  instructions?: string
   /**
    *  Whether each page's turn shows the model the page itself beside its
    *  texts, as an image goes with a chat message to OpenAI's and Gemini's

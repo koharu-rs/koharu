@@ -102,7 +102,7 @@ masked pixels come back.
 
 Translation is one conversation per open project, a turn per page in page
 order, and translating blocks is a turn of the same conversation. Changing the
-model, the target, or the prompt starts a new one.
+model, the target, or the instructions starts a new one.
 
 - **A page** is its texts as a JSON object keyed by reading order, and the
   answer must keep the keys. A broken answer, a missing key, or a blank
@@ -118,9 +118,11 @@ model, the target, or the prompt starts a new one.
 - **The history** keeps each page's texts and answer, not its image or the
   model's reasoning, so it grows as it does without them, and a local model
   reuses it from turn to turn.
-- **The system prompt** is the user's to rewrite. `{target}` becomes the
-  target's plain English name from CLDR [CLDR]. The default is
-  Index-Translate's instTrans template [Index-Translate].
+- **The system prompt** is Index-Translate's structured-data template
+  [Index-Translate] in English, fixed, naming the target by its plain English
+  name from CLDR [CLDR]. It keeps the JSON the answer is parsed by, which a
+  user's edit could otherwise drop. The user's instructions, in any language
+  and form, follow it as written.
 - **A full conversation** is recycled: a general model summarizes older pages,
   and a translation model, which can't, drops them.
 
@@ -147,8 +149,8 @@ model, the target, or the prompt starts a new one.
 
 ## 6. Settings
 
-The section fails to parse when a threshold isn't between 0 and 1, the target
-is a language CLDR doesn't name in English, or the prompt has no `{target}`.
+The section fails to parse when a threshold isn't between 0 and 1 or the target
+is a language CLDR doesn't name in English.
 
 | Key | Default |
 |---|---|
@@ -159,7 +161,7 @@ is a language CLDR doesn't name in English, or the prompt has no `{target}`.
 | `inpainter.prompt` | asks the model to remove all text and keep everything else, for a run that brings none |
 | `translator.model` | `koharu/index-translate-9b` |
 | `translator.target` | `en` |
-| `translator.prompt` | Index-Translate's instTrans template in English |
+| `translator.instructions` | none |
 | `translator.vision` | `false` |
 | `translator.reasoning` | the model's own |
 

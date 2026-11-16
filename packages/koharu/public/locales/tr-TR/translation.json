@@ -343,9 +343,8 @@
       "thresholds": "Eşikler",
       "title": "İşlem hattı",
       "translator": {
-        "prompt": "Sistem istemi",
-        "promptDescription": "Çeviri modeline verilen talimatlar; {target} hedef dille değiştirilir.",
-        "promptNeedsTarget": "İstem {target} içermelidir.",
+        "instructions": "Ek talimatlar",
+        "instructionsDescription": "İsteğe bağlı, herhangi bir dilde ve biçimde; örneğin bir adın yazılışı ya da üslup. Koharu bunları kendi sistem isteminin ardından olduğu gibi ekler.",
         "reasoning": "Akıl yürütme",
         "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
         "targetLanguageDescription": "Metnin çevrileceği dili seçin.",

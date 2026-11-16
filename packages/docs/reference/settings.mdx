@@ -12,19 +12,15 @@ Choose **Light**, **Dark**, or **System**, and the interface language. These set
 
 ## Pipeline
 
-Choose the detection, OCR, and inpainting models. Detection has text, SFX, bubble, and panel thresholds; inpainting has the prompt the generative models follow. See [vision and inpainting models](/models/vision).
+Choose a model for each stage: the detector, recognizer, inpainter, and translator. The detector has text, SFX, bubble, and panel thresholds; the inpainter has the prompt the generative models follow; the translator has **Vision**, **Reasoning**, the target language, and **Additional instructions**. The processing selector also sets the translation model and target language. See [vision and inpainting models](/models/vision) and [translation settings](/models/translation).
 
 ## Providers
 
 Add API keys, sign in to subscriptions, and set base URLs for the connections listed in [translation providers](/models/providers). Keys and sign-ins are stored encrypted on this device; base URLs are saved in `config.toml`.
 
-## Translation
+## Renderer
 
-Choose the translation model, **Vision**, **Reasoning**, the target language, and the system prompt. The processing selector also sets the model and target language. See [translation settings](/models/translation).
-
-## Typesetting
-
-Set the ordered default font families, CCWildWords and then Adobe 黑体 Std unless you change them. Koharu uses them for a text with no font of its own and when a font cannot supply a glyph, then falls back to system fonts. Individual text layers still own their typography.
+Set the ordered preferred fonts, CCWildWords and then Adobe 黑体 Std unless you change them. Koharu uses them for a text with no font of its own and when a font cannot supply a glyph, then falls back to system fonts. Individual text layers still own their typography.
 
 ## Shortcuts
 

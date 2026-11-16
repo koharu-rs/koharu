@@ -33,12 +33,12 @@ impl Conversation {
     }
 
     /// Starts again unless its history was written with `config`'s model,
-    /// target, and prompt.
+    /// target, and instructions.
     pub(super) fn keep(&mut self, config: &TranslatorConfig) {
         let with = (
             config.model.clone(),
             config.target.clone(),
-            config.prompt.clone(),
+            config.instructions.clone(),
         );
         if self.with.as_ref() != Some(&with) {
             *self = Self::new();
