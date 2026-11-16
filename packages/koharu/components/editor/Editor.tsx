@@ -34,7 +34,7 @@ export function Editor() {
         >
           <ResizablePanel
             id='pages'
-            defaultSize='220px'
+            defaultSize='160px'
             minSize='160px'
             maxSize='320px'
             collapsible
