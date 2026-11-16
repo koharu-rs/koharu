@@ -33,8 +33,9 @@ export interface ProjectView {
   page: PageId | null
   pages: PageSummary[]
   history: History
-  /** The last change's revision, which the shown page's thumbnail follows. */
-  revision: string | null
+  /** Each page's revision when a change last came while it was shown, which its thumbnail
+   * follows; a page keeps its own after another is shown, or after it's removed. */
+  revisions: Record<PageId, string>
 }
 
 const projectQuery = queryOptions({
@@ -53,7 +54,7 @@ const projectQuery = queryOptions({
       page,
       pages: (project as ProjectAnswer).pages,
       history: history as History,
-      revision: known?.name === name ? known.revision : null,
+      revisions: known?.name === name ? known.revisions : {},
     }
   },
 })

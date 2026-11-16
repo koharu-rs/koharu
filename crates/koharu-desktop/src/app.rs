@@ -205,25 +205,43 @@ impl App {
 
     /// Tells the interface `session`'s changes, and shows them on the canvas
     /// one redraw at a time: a burst, and what comes during a redraw, shows
-    /// once.
+    /// once. The shown page settles before the interface hears of a change,
+    /// as it reads the shown page again for one: a page the change removed
+    /// would otherwise be the one it asks for.
     fn relay(self: &Arc<Self>, mut changes: Receiver<Change>) -> AbortOnDropHandle<()> {
         let app = Arc::clone(self);
         AbortOnDropHandle::new(tokio::spawn(async move {
             loop {
-                match changes.recv().await {
-                    Ok(change) => app.emit(events::CHANGE, change),
-                    // The interface missed changes: it reads the project again.
-                    Err(RecvError::Lagged(_)) => {
-                        let name = app.project.lock().as_ref().map(|open| open.name.clone());
-                        app.emit(events::PROJECT, name);
+                let mut told = Vec::new();
+                let lagged = match changes.recv().await {
+                    Ok(change) => {
+                        told.push(change);
+                        false
                     }
+                    Err(RecvError::Lagged(_)) => true,
                     Err(RecvError::Closed) => return,
-                }
+                };
                 while let Ok(change) = changes.try_recv() {
-                    app.emit(events::CHANGE, change);
+                    told.push(change);
                 }
                 let showing = Arc::clone(&app);
-                let shown = tokio::task::spawn_blocking(move || showing.refresh()).await;
+                let shown = tokio::task::spawn_blocking(move || {
+                    let shown = showing.settle();
+                    // The interface missed changes: it reads the project again.
+                    if lagged {
+                        let name = showing
+                            .project
+                            .lock()
+                            .as_ref()
+                            .map(|open| open.name.clone());
+                        showing.emit(events::PROJECT, name);
+                    }
+                    for change in told {
+                        showing.emit(events::CHANGE, change);
+                    }
+                    shown.map_or(Ok(()), |shown| showing.show(shown))
+                })
+                .await;
                 if let Err(error) = shown.map_err(anyhow::Error::from).and_then(|result| result) {
                     tracing::error!("failed to show the project: {error:#}");
                 }
@@ -234,11 +252,15 @@ impl App {
     /// Shows the open project's page as it is now. A page that went away
     /// gives its place to the first.
     pub fn refresh(self: &Arc<Self>) -> Result<()> {
+        self.settle().map_or(Ok(()), |shown| self.show(shown))
+    }
+
+    /// The open project's session and the page it shows, which moves to the
+    /// first when it went away, telling the interface so.
+    fn settle(&self) -> Option<(Arc<Mutex<Session>>, Option<PageId>)> {
         let (session, page, moved) = {
             let mut project = self.project.lock();
-            let Some(project) = project.as_mut() else {
-                return Ok(());
-            };
+            let project = project.as_mut()?;
             let pages = project.session.lock().project();
             let moved = project.page.is_none_or(|page| pages.page(page).is_err());
             if moved {
@@ -249,6 +271,12 @@ impl App {
         if moved {
             self.emit(events::PAGE, page);
         }
+        Some((session, page))
+    }
+
+    /// Shows `page` of `session` on the canvas, or an empty canvas when the
+    /// project has no page.
+    fn show(&self, (session, page): (Arc<Mutex<Session>>, Option<PageId>)) -> Result<()> {
         match page {
             Some(page) => self.screen.show(self.render(&session, page)?),
             None => self.screen.set_canvas(Some(Canvas::new(self.gpu, session))),

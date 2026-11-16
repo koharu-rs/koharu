@@ -136,7 +136,15 @@ function receivePage(page: PageId | null): void {
 /** An edit, undo, or redo, from whichever writer: the project and its shown page are read again. */
 function receiveChange(change: Change): void {
   queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
-    project ? { ...project, history: change.history, revision: change.revision } : project,
+    project
+      ? {
+          ...project,
+          history: change.history,
+          revisions: project.page
+            ? { ...project.revisions, [project.page]: change.revision }
+            : project.revisions,
+        }
+      : project,
   )
   void refresh(projectKey, pageKey).catch(() => undefined)
 }

@@ -252,7 +252,7 @@ export function PageRail() {
                     <PageItem
                       page={page}
                       index={index}
-                      revision={active === page.id ? (project?.revision ?? undefined) : undefined}
+                      revision={project?.revisions[page.id]}
                       active={active === page.id}
                       selected={selected.includes(page.id)}
                       dragged={dragged?.page === page.id}
@@ -359,7 +359,8 @@ function PageItem({
 }: {
   page: PageSummary
   index: number
-  /** The project's revision while this page is the one edited, so its thumbnail follows. */
+  /** The project's revision when this page was last edited while shown, so its thumbnail follows
+   * its edits and keeps that once another page is shown. */
   revision: string | undefined
   active: boolean
   selected: boolean
