@@ -370,7 +370,7 @@
       "providers": "プロバイダー",
       "shortcuts": "ショートカット",
       "translation": "翻訳",
-      "typesetting": "組版"
+      "typesetting": "レンダラー"
     },
     "title": "設定",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "テキストレイヤーにファミリーが指定されていない場合に使う、順序付きフォントスタックを設定します。",
       "empty": "既定のファミリーがありません。Koharuはシステムの代替フォントを使用します。",
       "familyLabel": "既定のフォントファミリー {{index}}",
-      "fontFallback": "代替フォント",
+      "fontFallback": "優先フォント",
       "fontFallbackDescription": "Koharuは文字に対応する最初の利用可能なファミリーを使用します。",
       "loadError": "フォントを読み込めませんでした。既存のファミリーは削除できます。",
       "loadingFonts": "フォントを読み込み中…",
       "removeFamily": "{{family}}を削除",
-      "title": "組版"
+      "title": "レンダラー"
     }
   },
   "start": {

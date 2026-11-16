@@ -370,7 +370,7 @@
       "providers": "Sağlayıcılar",
       "shortcuts": "Kısayollar",
       "translation": "Çeviri",
-      "typesetting": "Dizgi"
+      "typesetting": "Oluşturucu"
     },
     "title": "Ayarlar",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "Bir metin katmanına aile atanmadığında kullanılacak sıralı yazı tipi yığınını ayarlayın.",
       "empty": "Varsayılan aile yok. Koharu sistem yedeğini kullanacak.",
       "familyLabel": "Varsayılan yazı tipi ailesi {{index}}",
-      "fontFallback": "Yedek yazı tipleri",
+      "fontFallback": "Tercih edilen yazı tipleri",
       "fontFallbackDescription": "Koharu, metni destekleyen ilk kullanılabilir aileyi kullanır.",
       "loadError": "Yazı tipleri yüklenemedi. Mevcut aileler yine de kaldırılabilir.",
       "loadingFonts": "Yazı tipleri yükleniyor…",
       "removeFamily": "{{family}} ailesini kaldır",
-      "title": "Dizgi"
+      "title": "Oluşturucu"
     }
   },
   "start": {

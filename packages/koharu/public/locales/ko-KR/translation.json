@@ -370,7 +370,7 @@
       "providers": "제공자",
       "shortcuts": "단축키",
       "translation": "번역",
-      "typesetting": "조판"
+      "typesetting": "렌더러"
     },
     "title": "설정",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "텍스트 레이어에 글꼴 패밀리가 지정되지 않았을 때 사용할 순서 있는 글꼴 스택을 설정합니다.",
       "empty": "기본 패밀리가 없습니다. Koharu가 시스템 대체 글꼴을 사용합니다.",
       "familyLabel": "기본 글꼴 패밀리 {{index}}",
-      "fontFallback": "대체 글꼴",
+      "fontFallback": "선호 글꼴",
       "fontFallbackDescription": "Koharu는 텍스트를 지원하는 첫 번째 사용 가능한 패밀리를 사용합니다.",
       "loadError": "글꼴을 불러오지 못했습니다. 기존 패밀리는 삭제할 수 있습니다.",
       "loadingFonts": "글꼴 불러오는 중…",
       "removeFamily": "{{family}} 삭제",
-      "title": "조판"
+      "title": "렌더러"
     }
   },
   "start": {

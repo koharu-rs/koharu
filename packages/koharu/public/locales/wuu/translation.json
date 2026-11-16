@@ -370,7 +370,7 @@
       "providers": "提供商",
       "shortcuts": "快捷键",
       "translation": "译文",
-      "typesetting": "排版"
+      "typesetting": "渲染器"
     },
     "title": "设置",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "设定字体系列个使用次序。文本图层呒没指定字体系列个辰光，就照箇个次序选用字体。",
       "empty": "呒没默认字体系列。Koharu 会用系统后备字体。",
       "familyLabel": "默认字体系列 {{index}}",
-      "fontFallback": "后备字体",
+      "fontFallback": "首选字体",
       "fontFallbackDescription": "Koharu 照次序寻，选第一个可用、又支持箇段文本个字体系列。",
       "loadError": "字体加载失败哉。列表里向原有个字体系列还是好移除。",
       "loadingFonts": "来勒加载字体…",
       "removeFamily": "从列表里向移除 {{family}}",
-      "title": "排版"
+      "title": "渲染器"
     }
   },
   "start": {

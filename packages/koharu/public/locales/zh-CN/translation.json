@@ -370,7 +370,7 @@
       "providers": "提供商",
       "shortcuts": "快捷键",
       "translation": "译文",
-      "typesetting": "排版"
+      "typesetting": "渲染器"
     },
     "title": "设置",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "设置文本图层未指定字体系列时使用的有序字体堆栈。",
       "empty": "没有默认字体系列。Koharu 将使用系统后备字体。",
       "familyLabel": "默认字体系列 {{index}}",
-      "fontFallback": "后备字体",
+      "fontFallback": "首选字体",
       "fontFallbackDescription": "Koharu 使用第一个支持该文本的可用字体系列。",
       "loadError": "无法加载字体。仍可删除现有字体系列。",
       "loadingFonts": "正在加载字体…",
       "removeFamily": "删除 {{family}}",
-      "title": "排版"
+      "title": "渲染器"
     }
   },
   "start": {

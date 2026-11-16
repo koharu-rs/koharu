@@ -370,7 +370,7 @@
       "providers": "Fournisseurs",
       "shortcuts": "Raccourcis",
       "translation": "Traduction",
-      "typesetting": "Lettrage"
+      "typesetting": "Moteur de rendu"
     },
     "title": "Paramètres",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "Définissez la liste ordonnée de polices utilisée lorsqu’aucune famille n’est attribuée à un calque de texte.",
       "empty": "Aucune famille par défaut. Koharu utilisera la police de secours du système.",
       "familyLabel": "Famille de polices par défaut {{index}}",
-      "fontFallback": "Police de secours",
+      "fontFallback": "Polices préférées",
       "fontFallbackDescription": "Koharu utilise la première famille disponible qui prend en charge le texte.",
       "loadError": "Impossible de charger les polices. Les familles existantes peuvent toujours être supprimées.",
       "loadingFonts": "Chargement des polices…",
       "removeFamily": "Retirer {{family}}",
-      "title": "Lettrage"
+      "title": "Moteur de rendu"
     }
   },
   "start": {

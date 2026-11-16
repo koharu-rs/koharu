@@ -370,7 +370,7 @@
       "providers": "提供者",
       "shortcuts": "快捷鍵",
       "translation": "譯文",
-      "typesetting": "排版"
+      "typesetting": "渲染器"
     },
     "title": "設定",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "設定文字圖層未指定字型家族時使用的有序字型堆疊。",
       "empty": "沒有預設字型家族。Koharu 將使用系統後備字型。",
       "familyLabel": "預設字型家族 {{index}}",
-      "fontFallback": "後備字型",
+      "fontFallback": "偏好字型",
       "fontFallbackDescription": "Koharu 使用第一個支援該文字的可用字型家族。",
       "loadError": "無法載入字型。仍可移除現有字型家族。",
       "loadingFonts": "正在載入字型…",
       "removeFamily": "移除 {{family}}",
-      "title": "排版"
+      "title": "渲染器"
     }
   },
   "start": {

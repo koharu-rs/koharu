@@ -370,7 +370,7 @@
       "providers": "Proveedores",
       "shortcuts": "Atajos",
       "translation": "Traducción",
-      "typesetting": "Composición"
+      "typesetting": "Renderizador"
     },
     "title": "Ajustes",
     "translation": {
@@ -396,12 +396,12 @@
       "description": "Define la pila ordenada de fuentes usada cuando una capa de texto no tiene una familia asignada.",
       "empty": "No hay familias predeterminadas. Koharu usará la alternativa del sistema.",
       "familyLabel": "Familia tipográfica predeterminada {{index}}",
-      "fontFallback": "Fuentes de respaldo",
+      "fontFallback": "Fuentes preferidas",
       "fontFallbackDescription": "Koharu usa la primera familia disponible compatible con el texto.",
       "loadError": "No se pudieron cargar las fuentes. Las familias existentes aún se pueden eliminar.",
       "loadingFonts": "Cargando fuentes…",
       "removeFamily": "Eliminar {{family}}",
-      "title": "Composición tipográfica"
+      "title": "Renderizador"
     }
   },
   "start": {
