@@ -15,6 +15,7 @@ import {
 import type { TFunction } from 'i18next'
 import {
   Brush,
+  createLucideIcon,
   Eye,
   EyeOff,
   Folder,
@@ -24,7 +25,6 @@ import {
   MessageCircle,
   PanelsTopLeft,
   Shapes,
-  SquareDashed,
   Trash2,
   Type,
   X,
@@ -338,11 +338,6 @@ function LayerRow({
                 onPick={(toggle) => onPick(part, toggle)}
               />
             ))}
-          {!expanded && (
-            <span className='w-7 shrink-0 text-right text-[9px] text-muted-foreground tabular-nums'>
-              {Math.round(layer.opacity * 100)}%
-            </span>
-          )}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -446,8 +441,33 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
   )
 }
 
-/** A block's clean-up or mask on its row, by the icon its kind has in the list: ringed while the
- * brush paints it and crossed out in red while hidden, as a layer mask's thumbnail is. */
+// Drawn on lucide's grid, in its two-unit strokes, so they sit with its icons.
+const turned = 'rotate(-45 12 12)'
+
+/** A bandage on the diagonal, as Photoshop's healing tools draw theirs. */
+const Healing = createLucideIcon('healing', [
+  ['rect', { x: '3', y: '7', width: '18', height: '10', rx: '2', transform: turned, key: 'strip' }],
+  ['path', { d: 'M7 7v10M17 7v10', transform: turned, key: 'pad' }],
+  [
+    'path',
+    {
+      d: 'M10.5 10.5h.01M13.5 10.5h.01M10.5 13.5h.01M13.5 13.5h.01',
+      transform: turned,
+      key: 'dots',
+    },
+  ],
+])
+
+/** Photoshop's layer mask symbol, a frame round a filled disc. The disc takes no stroke, which
+ * would grow it by a unit all round and outweigh the row's other icons. */
+const LayerMask = createLucideIcon('layer-mask', [
+  ['rect', { x: '3', y: '3', width: '18', height: '18', rx: '2', key: 'frame' }],
+  ['circle', { cx: '12', cy: '12', r: '4', fill: 'currentColor', stroke: 'none', key: 'disc' }],
+])
+
+/** A block's clean-up or mask on its row: the clean-up as a bandage, as Photoshop's healing tools
+ * draw theirs, since it heals the art under the source text, and the mask as a layer mask. Ringed
+ * while the brush paints it and crossed out in red while hidden, as a layer mask's thumbnail is. */
 function PartButton({
   block,
   part,
@@ -465,7 +485,7 @@ function PartButton({
   const layer = block[part]
   if (!layer) return null
   const label = t(`layers.parts.${part}`)
-  const Icon = part === 'cleanup' ? Brush : SquareDashed
+  const Icon = part === 'cleanup' ? Healing : LayerMask
   return (
     <Tooltip>
       <TooltipTrigger
@@ -529,7 +549,7 @@ function layerIcon(layer: Layer): typeof Type {
     case 'shape':
       return Shapes
     case 'mask':
-      return SquareDashed
+      return LayerMask
     default:
       return ImageIcon
   }
