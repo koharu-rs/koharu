@@ -147,6 +147,38 @@ wrap_render_handler! {
             };
         }
 
+        /// Where a point of the view is on the screen, which CEF opens its
+        /// own windows at, the context menu among them; unanswered, it takes
+        /// the view's point for the screen's.
+        fn screen_point(
+            &self,
+            _browser: Option<&mut Browser>,
+            view_x: c_int,
+            view_y: c_int,
+            screen_x: Option<&mut c_int>,
+            screen_y: Option<&mut c_int>,
+        ) -> c_int {
+            let (Some(window), Some(screen_x), Some(screen_y)) =
+                (self.view.window(), screen_x, screen_y)
+            else {
+                return 0;
+            };
+            let Ok(outer) = window.outer_position() else {
+                return 0;
+            };
+            let surface = window.surface_position();
+            let scale = window.scale_factor();
+            let view = self.view.bounds().position.to_logical::<f64>(1.0);
+            let x = f64::from(outer.x + surface.x) + (view.x + f64::from(view_x)) * scale;
+            let y = f64::from(outer.y + surface.y) + (view.y + f64::from(view_y)) * scale;
+            // CEF takes device pixels, but DIPs on macOS.
+            #[cfg(target_os = "macos")]
+            let (x, y) = (x / scale, y / scale);
+            *screen_x = x.round() as c_int;
+            *screen_y = y.round() as c_int;
+            1
+        }
+
         fn screen_info(
             &self,
             _browser: Option<&mut Browser>,
