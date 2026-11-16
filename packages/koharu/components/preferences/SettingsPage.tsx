@@ -1,32 +1,20 @@
 'use client'
 
-import {
-  ArrowLeft,
-  Cpu,
-  KeyRound,
-  Keyboard,
-  Languages,
-  Monitor,
-  Moon,
-  Palette,
-  Sun,
-  Type,
-} from 'lucide-react'
+import { ArrowLeft, Cpu, KeyRound, Keyboard, Monitor, Moon, Palette, Sun, Type } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
+import {
+  PipelinePreferences,
+  promptNamesTarget,
+} from '@/components/preferences/PipelinePreferences'
 import {
   PreferencePage,
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
 import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
-import {
-  promptNamesTarget,
-  TranslationPreferences,
-} from '@/components/preferences/TranslationPreferences'
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
 import { refreshModels, refreshPreferences, savePreferences } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
@@ -47,7 +35,6 @@ const tabs = [
   ['appearance', Palette],
   ['pipeline', Cpu],
   ['providers', KeyRound],
-  ['translation', Languages],
   ['typesetting', Type],
   ['shortcuts', Keyboard],
 ] as const
@@ -151,6 +138,7 @@ export function SettingsPage() {
             {tab === 'pipeline' && draft && (
               <PipelinePreferences
                 value={draft.pipeline}
+                models={models}
                 onChange={(pipeline) => setDraft({ ...draft, pipeline })}
               />
             )}
@@ -158,15 +146,6 @@ export function SettingsPage() {
               <ProviderPreferences
                 value={draft.providers}
                 onChange={(providers) => setDraft({ ...draft, providers })}
-              />
-            )}
-            {tab === 'translation' && draft && (
-              <TranslationPreferences
-                value={draft.pipeline.translator ?? {}}
-                models={models}
-                onChange={(translator) =>
-                  setDraft({ ...draft, pipeline: { ...draft.pipeline, translator } })
-                }
               />
             )}
             {tab === 'typesetting' && draft && (

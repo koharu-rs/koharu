@@ -312,30 +312,46 @@
     "loading": "Carregando preferências…",
     "pipeline": {
       "description": "Escolha os modelos e opções usados para processar cada página.",
+      "model": "Modelo",
       "modelLabel": "Modelo de {{stage}}",
       "options": {
         "bubbleThreshold": "Limite de balão",
         "onomatopoeiaThreshold": "Limite de onomatopeias",
         "panelThreshold": "Limite de quadro",
         "prompt": "Prompt",
+        "promptDescription": "Aplica-se apenas a modelos generativos.",
         "textThreshold": "Limite de texto"
       },
-      "processing": "Processando",
       "stages": {
         "detect": {
           "description": "Encontra texto, balões e quadros.",
-          "title": "Detecção"
+          "title": "Detector"
         },
         "inpaint": {
           "description": "Reconstrói a arte sob o texto removido.",
-          "title": "Preenchimento"
+          "title": "Preenchedor"
         },
         "recognize": {
           "description": "Lê o texto de origem nas regiões detectadas.",
-          "title": "OCR"
+          "title": "Reconhecedor"
+        },
+        "translate": {
+          "description": "Traduz o texto de origem para o idioma de destino.",
+          "title": "Tradutor"
         }
       },
-      "title": "Pipeline"
+      "thresholds": "Limites",
+      "title": "Pipeline",
+      "translator": {
+        "prompt": "Prompt do sistema",
+        "promptDescription": "Instruções para o modelo de tradução; {target} é substituído pelo idioma de destino.",
+        "promptNeedsTarget": "O prompt precisa incluir {target}.",
+        "reasoning": "Raciocínio",
+        "reasoningDescription": "Usa o raciocínio do modelo durante a tradução.",
+        "targetLanguageDescription": "Escolha o idioma para o qual o texto será traduzido.",
+        "vision": "Visão",
+        "visionDescription": "Fornece imagens das páginas ao LLM durante a tradução."
+      }
     },
     "providers": {
       "browserHint": "Conclua o login na página que seu navegador abriu.",
@@ -369,27 +385,9 @@
       "pipeline": "Pipeline",
       "providers": "Provedores",
       "shortcuts": "Atalhos",
-      "translation": "Tradução",
       "typesetting": "Renderizador"
     },
     "title": "Configurações",
-    "translation": {
-      "description": "Escolha um modelo de qualquer provedor configurado e aplique um conjunto compartilhado de opções de tradução e geração.",
-      "model": "Modelo",
-      "modelDescription": "Os rótulos de provedor indicam onde cada modelo é executado; as conexões são configuradas separadamente.",
-      "output": "Saída",
-      "prompt": "Prompt do sistema",
-      "promptDescription": "Instruções para o modelo de tradução; {target} é substituído pelo idioma de destino.",
-      "promptNeedsTarget": "O prompt precisa incluir {target}.",
-      "reasoning": "Raciocínio",
-      "reasoningDescription": "Usa o raciocínio do modelo durante a tradução.",
-      "targetLanguageDescription": "Escolha o idioma para o qual o texto será traduzido.",
-      "title": "Tradução",
-      "translationModel": "Modelo de tradução",
-      "translationModelDescription": "Escolha o modelo usado para traduzir texto.",
-      "vision": "Visão",
-      "visionDescription": "Fornece imagens das páginas ao LLM durante a tradução."
-    },
     "typesetting": {
       "addFamily": "Adicionar família de fontes",
       "defaultFamilies": "Famílias de fontes padrão",

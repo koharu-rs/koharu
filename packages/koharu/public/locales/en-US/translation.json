@@ -312,30 +312,46 @@
     "loading": "Loading preferences…",
     "pipeline": {
       "description": "Choose the models and options used to process each page.",
+      "model": "Model",
       "modelLabel": "{{stage}} model",
       "options": {
         "bubbleThreshold": "Bubble threshold",
         "onomatopoeiaThreshold": "SFX threshold",
         "panelThreshold": "Panel threshold",
         "prompt": "Prompt",
+        "promptDescription": "Applies only to generative models.",
         "textThreshold": "Text threshold"
       },
-      "processing": "Processing",
       "stages": {
         "detect": {
           "description": "Find text, speech bubbles, and panels.",
-          "title": "Detection"
+          "title": "Detector"
         },
         "inpaint": {
           "description": "Rebuild artwork beneath removed text.",
-          "title": "Inpainting"
+          "title": "Inpainter"
         },
         "recognize": {
           "description": "Read the source text inside detected regions.",
-          "title": "OCR"
+          "title": "Recognizer"
+        },
+        "translate": {
+          "description": "Translate the source text into the target language.",
+          "title": "Translator"
         }
       },
-      "title": "Pipeline"
+      "thresholds": "Thresholds",
+      "title": "Pipeline",
+      "translator": {
+        "prompt": "System prompt",
+        "promptDescription": "Instructions for the translation model; {target} stands for the target language.",
+        "promptNeedsTarget": "The prompt must include {target}.",
+        "reasoning": "Reasoning",
+        "reasoningDescription": "Use model reasoning during translation.",
+        "targetLanguageDescription": "Choose the language to translate text into.",
+        "vision": "Vision",
+        "visionDescription": "Feed page images to the LLM during translation."
+      }
     },
     "providers": {
       "browserHint": "Finish signing in on the page your browser opened.",
@@ -369,27 +385,9 @@
       "pipeline": "Pipeline",
       "providers": "Providers",
       "shortcuts": "Shortcuts",
-      "translation": "Translation",
       "typesetting": "Renderer"
     },
     "title": "Settings",
-    "translation": {
-      "description": "Choose any configured provider model, then apply one shared set of translation and generation options.",
-      "model": "Model",
-      "modelDescription": "Provider labels identify where each model runs; connections are configured separately.",
-      "output": "Output",
-      "prompt": "System prompt",
-      "promptDescription": "Instructions for the translation model; {target} stands for the target language.",
-      "promptNeedsTarget": "The prompt must include {target}.",
-      "reasoning": "Reasoning",
-      "reasoningDescription": "Use model reasoning during translation.",
-      "targetLanguageDescription": "Choose the language to translate text into.",
-      "title": "Translation",
-      "translationModel": "Translation model",
-      "translationModelDescription": "Choose the model used to translate text.",
-      "vision": "Vision",
-      "visionDescription": "Feed page images to the LLM during translation."
-    },
     "typesetting": {
       "addFamily": "Add font family",
       "defaultFamilies": "Default font families",

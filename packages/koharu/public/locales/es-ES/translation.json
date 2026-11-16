@@ -312,30 +312,46 @@
     "loading": "Cargando preferencias…",
     "pipeline": {
       "description": "Elige los modelos y opciones usados para procesar cada página.",
+      "model": "Modelo",
       "modelLabel": "Modelo de {{stage}}",
       "options": {
         "bubbleThreshold": "Umbral de bocadillo",
         "onomatopoeiaThreshold": "Umbral de onomatopeyas",
         "panelThreshold": "Umbral de viñeta",
         "prompt": "Indicación",
+        "promptDescription": "Solo se aplica a los modelos generativos.",
         "textThreshold": "Umbral de texto"
       },
-      "processing": "Procesando",
       "stages": {
         "detect": {
           "description": "Encuentra texto, bocadillos y viñetas.",
-          "title": "Detección"
+          "title": "Detector"
         },
         "inpaint": {
           "description": "Reconstruye la ilustración bajo el texto eliminado.",
-          "title": "Relleno"
+          "title": "Rellenador"
         },
         "recognize": {
           "description": "Lee el texto original dentro de las regiones detectadas.",
-          "title": "OCR"
+          "title": "Reconocedor"
+        },
+        "translate": {
+          "description": "Traduce el texto original al idioma de destino.",
+          "title": "Traductor"
         }
       },
-      "title": "Canalización"
+      "thresholds": "Umbrales",
+      "title": "Canalización",
+      "translator": {
+        "prompt": "Prompt del sistema",
+        "promptDescription": "Instrucciones para el modelo de traducción; {target} se sustituye por el idioma de destino.",
+        "promptNeedsTarget": "El prompt debe incluir {target}.",
+        "reasoning": "Razonamiento",
+        "reasoningDescription": "Utiliza el razonamiento del modelo durante la traducción.",
+        "targetLanguageDescription": "Elige el idioma al que se traducirá el texto.",
+        "vision": "Visión",
+        "visionDescription": "Proporciona imágenes de las páginas al LLM durante la traducción."
+      }
     },
     "providers": {
       "browserHint": "Termina de iniciar sesión en la página que abrió tu navegador.",
@@ -369,27 +385,9 @@
       "pipeline": "Canalización",
       "providers": "Proveedores",
       "shortcuts": "Atajos",
-      "translation": "Traducción",
       "typesetting": "Renderizador"
     },
     "title": "Ajustes",
-    "translation": {
-      "description": "Elige un modelo de cualquier proveedor configurado y aplica un conjunto compartido de opciones de traducción y generación.",
-      "model": "Modelo",
-      "modelDescription": "Las etiquetas de proveedor indican dónde se ejecuta cada modelo; las conexiones se configuran por separado.",
-      "output": "Salida",
-      "prompt": "Prompt del sistema",
-      "promptDescription": "Instrucciones para el modelo de traducción; {target} se sustituye por el idioma de destino.",
-      "promptNeedsTarget": "El prompt debe incluir {target}.",
-      "reasoning": "Razonamiento",
-      "reasoningDescription": "Utiliza el razonamiento del modelo durante la traducción.",
-      "targetLanguageDescription": "Elige el idioma al que se traducirá el texto.",
-      "title": "Traducción",
-      "translationModel": "Modelo de traducción",
-      "translationModelDescription": "Elige el modelo utilizado para traducir texto.",
-      "vision": "Visión",
-      "visionDescription": "Proporciona imágenes de las páginas al LLM durante la traducción."
-    },
     "typesetting": {
       "addFamily": "Añadir familia tipográfica",
       "defaultFamilies": "Familias tipográficas predeterminadas",

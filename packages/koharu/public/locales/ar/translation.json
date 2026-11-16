@@ -312,30 +312,46 @@
     "loading": "جارٍ تحميل التفضيلات…",
     "pipeline": {
       "description": "اختر النماذج والخيارات المستخدمة لمعالجة كل صفحة.",
+      "model": "النموذج",
       "modelLabel": "نموذج {{stage}}",
       "options": {
         "bubbleThreshold": "عتبة الفقاعات",
         "onomatopoeiaThreshold": "عتبة المؤثرات الصوتية",
         "panelThreshold": "عتبة الألواح",
         "prompt": "الطلب",
+        "promptDescription": "ينطبق على النماذج التوليدية فقط.",
         "textThreshold": "عتبة النص"
       },
-      "processing": "المعالجة",
       "stages": {
         "detect": {
           "description": "إيجاد النصوص وفقاعات الكلام والألواح.",
-          "title": "الكشف"
+          "title": "الكاشف"
         },
         "inpaint": {
           "description": "إعادة بناء الرسم أسفل النص المُزال.",
-          "title": "الترميم"
+          "title": "المرمّم"
         },
         "recognize": {
           "description": "قراءة النص المصدر داخل المناطق المكتشفة.",
-          "title": "OCR"
+          "title": "المتعرّف"
+        },
+        "translate": {
+          "description": "ترجمة النص المصدر إلى اللغة الهدف.",
+          "title": "المترجم"
         }
       },
-      "title": "خط المعالجة"
+      "thresholds": "العتبات",
+      "title": "خط المعالجة",
+      "translator": {
+        "prompt": "موجّه النظام",
+        "promptDescription": "تعليمات لنموذج الترجمة؛ يُستبدل {target} باللغة الهدف.",
+        "promptNeedsTarget": "يجب أن يتضمن الموجّه {target}.",
+        "reasoning": "التفكير",
+        "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
+        "targetLanguageDescription": "اختر اللغة التي تُترجم إليها النصوص.",
+        "vision": "الرؤية",
+        "visionDescription": "تزويد النموذج اللغوي بصور الصفحات أثناء الترجمة."
+      }
     },
     "providers": {
       "browserHint": "أكمل تسجيل الدخول في الصفحة التي فتحها متصفحك.",
@@ -369,27 +385,9 @@
       "pipeline": "خط المعالجة",
       "providers": "المزوّدون",
       "shortcuts": "الاختصارات",
-      "translation": "الترجمة",
       "typesetting": "محرك العرض"
     },
     "title": "الإعدادات",
-    "translation": {
-      "description": "اختر أي نموذج مزوّد مهيّأ، ثم طبّق مجموعة موحّدة من خيارات الترجمة والتوليد.",
-      "model": "النموذج",
-      "modelDescription": "تشير تسميات المزوّد إلى مكان تشغيل كل نموذج؛ وتُهيَّأ الاتصالات بشكل منفصل.",
-      "output": "الإخراج",
-      "prompt": "موجّه النظام",
-      "promptDescription": "تعليمات لنموذج الترجمة؛ يُستبدل {target} باللغة الهدف.",
-      "promptNeedsTarget": "يجب أن يتضمن الموجّه {target}.",
-      "reasoning": "التفكير",
-      "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
-      "targetLanguageDescription": "اختر اللغة التي تُترجم إليها النصوص.",
-      "title": "الترجمة",
-      "translationModel": "نموذج الترجمة",
-      "translationModelDescription": "اختر النموذج المستخدم لترجمة النصوص.",
-      "vision": "الرؤية",
-      "visionDescription": "تزويد النموذج اللغوي بصور الصفحات أثناء الترجمة."
-    },
     "typesetting": {
       "addFamily": "إضافة عائلة خطوط",
       "defaultFamilies": "عائلات الخطوط الافتراضية",

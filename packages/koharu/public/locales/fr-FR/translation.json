@@ -312,30 +312,46 @@
     "loading": "Chargement des préférences…",
     "pipeline": {
       "description": "Choisissez les modèles et les options utilisés pour traiter chaque page.",
+      "model": "Modèle",
       "modelLabel": "Modèle de {{stage}}",
       "options": {
         "bubbleThreshold": "Seuil des bulles",
         "onomatopoeiaThreshold": "Seuil des onomatopées",
         "panelThreshold": "Seuil des cases",
         "prompt": "Prompt",
+        "promptDescription": "Ne s’applique qu’aux modèles génératifs.",
         "textThreshold": "Seuil du texte"
       },
-      "processing": "Traitement",
       "stages": {
         "detect": {
           "description": "Trouver le texte, les bulles et les cases.",
-          "title": "Détection"
+          "title": "Détecteur"
         },
         "inpaint": {
           "description": "Reconstruire l’image sous le texte supprimé.",
-          "title": "Inpainting"
+          "title": "Retoucheur"
         },
         "recognize": {
           "description": "Lire le texte source dans les zones détectées.",
-          "title": "OCR"
+          "title": "Reconnaisseur"
+        },
+        "translate": {
+          "description": "Traduire le texte source dans la langue cible.",
+          "title": "Traducteur"
         }
       },
-      "title": "Pipeline"
+      "thresholds": "Seuils",
+      "title": "Pipeline",
+      "translator": {
+        "prompt": "Prompt système",
+        "promptDescription": "Instructions pour le modèle de traduction ; {target} est remplacé par la langue cible.",
+        "promptNeedsTarget": "Le prompt doit contenir {target}.",
+        "reasoning": "Raisonnement",
+        "reasoningDescription": "Utiliser le raisonnement du modèle pendant la traduction.",
+        "targetLanguageDescription": "Choisissez la langue dans laquelle traduire le texte.",
+        "vision": "Vision",
+        "visionDescription": "Transmettre les images des pages au LLM pendant la traduction."
+      }
     },
     "providers": {
       "browserHint": "Terminez la connexion sur la page ouverte par votre navigateur.",
@@ -369,27 +385,9 @@
       "pipeline": "Pipeline",
       "providers": "Fournisseurs",
       "shortcuts": "Raccourcis",
-      "translation": "Traduction",
       "typesetting": "Moteur de rendu"
     },
     "title": "Paramètres",
-    "translation": {
-      "description": "Choisissez le modèle de n’importe quel fournisseur configuré, puis appliquez un ensemble commun d’options de traduction et de génération.",
-      "model": "Modèle",
-      "modelDescription": "Les libellés de fournisseur indiquent où chaque modèle s’exécute ; les connexions se configurent séparément.",
-      "output": "Sortie",
-      "prompt": "Prompt système",
-      "promptDescription": "Instructions pour le modèle de traduction ; {target} est remplacé par la langue cible.",
-      "promptNeedsTarget": "Le prompt doit contenir {target}.",
-      "reasoning": "Raisonnement",
-      "reasoningDescription": "Utiliser le raisonnement du modèle pendant la traduction.",
-      "targetLanguageDescription": "Choisissez la langue dans laquelle traduire le texte.",
-      "title": "Traduction",
-      "translationModel": "Modèle de traduction",
-      "translationModelDescription": "Choisissez le modèle utilisé pour traduire le texte.",
-      "vision": "Vision",
-      "visionDescription": "Transmettre les images des pages au LLM pendant la traduction."
-    },
     "typesetting": {
       "addFamily": "Ajouter une famille de polices",
       "defaultFamilies": "Familles de polices par défaut",

@@ -312,30 +312,46 @@
     "loading": "正在加载偏好设置…",
     "pipeline": {
       "description": "选择用于处理每个页面的模型和选项。",
+      "model": "模型",
       "modelLabel": "{{stage}}模型",
       "options": {
         "bubbleThreshold": "气泡阈值",
         "onomatopoeiaThreshold": "拟声词阈值",
         "panelThreshold": "分镜阈值",
         "prompt": "提示词",
+        "promptDescription": "仅适用于生成式模型。",
         "textThreshold": "文本阈值"
       },
-      "processing": "正在处理",
       "stages": {
         "detect": {
           "description": "查找文本、气泡和分镜。",
-          "title": "检测"
+          "title": "检测器"
         },
         "inpaint": {
           "description": "重建已删除文本下方的图稿。",
-          "title": "修补"
+          "title": "修补器"
         },
         "recognize": {
           "description": "读取检测区域内的原文。",
-          "title": "OCR"
+          "title": "识别器"
+        },
+        "translate": {
+          "description": "将原文翻译为目标语言。",
+          "title": "翻译器"
         }
       },
-      "title": "流水线"
+      "thresholds": "阈值",
+      "title": "流水线",
+      "translator": {
+        "prompt": "系统提示词",
+        "promptDescription": "给翻译模型的指示；{target} 会替换为目标语言。",
+        "promptNeedsTarget": "提示词必须包含 {target}。",
+        "reasoning": "推理",
+        "reasoningDescription": "翻译时使用模型推理。",
+        "targetLanguageDescription": "选择文本要翻译成的语言。",
+        "vision": "视觉",
+        "visionDescription": "翻译时将页面图像输入给 LLM。"
+      }
     },
     "providers": {
       "browserHint": "请在浏览器打开的页面上完成登录。",
@@ -369,27 +385,9 @@
       "pipeline": "流水线",
       "providers": "提供商",
       "shortcuts": "快捷键",
-      "translation": "译文",
       "typesetting": "渲染器"
     },
     "title": "设置",
-    "translation": {
-      "description": "选择任意已配置提供商的模型，然后应用一组共享的翻译和生成选项。",
-      "model": "模型",
-      "modelDescription": "提供商标签表示各模型的运行位置；连接需单独配置。",
-      "output": "输出",
-      "prompt": "系统提示词",
-      "promptDescription": "给翻译模型的指示；{target} 会替换为目标语言。",
-      "promptNeedsTarget": "提示词必须包含 {target}。",
-      "reasoning": "推理",
-      "reasoningDescription": "翻译时使用模型推理。",
-      "targetLanguageDescription": "选择文本要翻译成的语言。",
-      "title": "译文",
-      "translationModel": "翻译模型",
-      "translationModelDescription": "选择用于翻译文本的模型。",
-      "vision": "视觉",
-      "visionDescription": "翻译时将页面图像输入给 LLM。"
-    },
     "typesetting": {
       "addFamily": "添加字体系列",
       "defaultFamilies": "默认字体系列",

@@ -312,30 +312,46 @@
     "loading": "Tercihler yükleniyor…",
     "pipeline": {
       "description": "Her sayfayı işlemek için kullanılan modelleri ve seçenekleri seçin.",
+      "model": "Model",
       "modelLabel": "{{stage}} modeli",
       "options": {
         "bubbleThreshold": "Konuşma balonu eşiği",
         "onomatopoeiaThreshold": "Ses efekti eşiği",
         "panelThreshold": "Panel eşiği",
         "prompt": "İstem",
+        "promptDescription": "Yalnızca üretken modellere uygulanır.",
         "textThreshold": "Metin eşiği"
       },
-      "processing": "İşleniyor",
       "stages": {
         "detect": {
           "description": "Metinleri, konuşma balonlarını ve panelleri bulur.",
-          "title": "Algılama"
+          "title": "Algılayıcı"
         },
         "inpaint": {
           "description": "Kaldırılan metnin altındaki çizimi yeniden oluşturur.",
-          "title": "Doldurma"
+          "title": "Doldurucu"
         },
         "recognize": {
           "description": "Algılanan bölgelerdeki kaynak metni okur.",
-          "title": "OCR"
+          "title": "Tanıyıcı"
+        },
+        "translate": {
+          "description": "Kaynak metni hedef dile çevirir.",
+          "title": "Çevirmen"
         }
       },
-      "title": "İşlem hattı"
+      "thresholds": "Eşikler",
+      "title": "İşlem hattı",
+      "translator": {
+        "prompt": "Sistem istemi",
+        "promptDescription": "Çeviri modeline verilen talimatlar; {target} hedef dille değiştirilir.",
+        "promptNeedsTarget": "İstem {target} içermelidir.",
+        "reasoning": "Akıl yürütme",
+        "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
+        "targetLanguageDescription": "Metnin çevrileceği dili seçin.",
+        "vision": "Görsel",
+        "visionDescription": "Çeviri sırasında sayfa görsellerini LLM'ye iletir."
+      }
     },
     "providers": {
       "browserHint": "Tarayıcınızın açtığı sayfada oturum açmayı tamamlayın.",
@@ -369,27 +385,9 @@
       "pipeline": "İşlem hattı",
       "providers": "Sağlayıcılar",
       "shortcuts": "Kısayollar",
-      "translation": "Çeviri",
       "typesetting": "Oluşturucu"
     },
     "title": "Ayarlar",
-    "translation": {
-      "description": "Yapılandırılmış bir sağlayıcı modeli seçin ve ortak çeviri ile üretim seçeneklerini uygulayın.",
-      "model": "Model",
-      "modelDescription": "Sağlayıcı etiketleri her modelin nerede çalıştığını gösterir; bağlantılar ayrı yapılandırılır.",
-      "output": "Çıktı",
-      "prompt": "Sistem istemi",
-      "promptDescription": "Çeviri modeline verilen talimatlar; {target} hedef dille değiştirilir.",
-      "promptNeedsTarget": "İstem {target} içermelidir.",
-      "reasoning": "Akıl yürütme",
-      "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
-      "targetLanguageDescription": "Metnin çevrileceği dili seçin.",
-      "title": "Çeviri",
-      "translationModel": "Çeviri modeli",
-      "translationModelDescription": "Metni çevirmek için kullanılacak modeli seçin.",
-      "vision": "Görsel",
-      "visionDescription": "Çeviri sırasında sayfa görsellerini LLM'ye iletir."
-    },
     "typesetting": {
       "addFamily": "Yazı tipi ailesi ekle",
       "defaultFamilies": "Varsayılan yazı tipi aileleri",

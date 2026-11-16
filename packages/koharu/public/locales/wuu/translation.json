@@ -312,30 +312,46 @@
     "loading": "来勒加载偏好设置…",
     "pipeline": {
       "description": "选好每一页处理个辰光要用个模型搭选项。",
+      "model": "模型",
       "modelLabel": "{{stage}}模型",
       "options": {
         "bubbleThreshold": "气泡阈值",
         "onomatopoeiaThreshold": "拟声词阈值",
         "panelThreshold": "分镜阈值",
         "prompt": "提示词",
+        "promptDescription": "只对生成式模型有用。",
         "textThreshold": "文本阈值"
       },
-      "processing": "来勒处理",
       "stages": {
         "detect": {
           "description": "寻出文本、对话气泡搭分镜。",
-          "title": "检测"
+          "title": "检测器"
         },
         "inpaint": {
           "description": "拿文字删脱仔，再重建原来文字底下个图稿。",
-          "title": "修补"
+          "title": "修补器"
         },
         "recognize": {
           "description": "读出检测区域里向个原文。",
-          "title": "OCR"
+          "title": "识别器"
+        },
+        "translate": {
+          "description": "拿原文翻成目标语言。",
+          "title": "翻译器"
         }
       },
-      "title": "处理流程"
+      "thresholds": "阈值",
+      "title": "处理流程",
+      "translator": {
+        "prompt": "系统提示词",
+        "promptDescription": "拨翻译模型个指示；{target} 会换成目标语言。",
+        "promptNeedsTarget": "提示词里向要有 {target}。",
+        "reasoning": "推理",
+        "reasoningDescription": "翻译个辰光用模型推理。",
+        "targetLanguageDescription": "选译文要用个目标语言。",
+        "vision": "视觉",
+        "visionDescription": "翻译个辰光，也拿页面图像输入畀 LLM。"
+      }
     },
     "providers": {
       "browserHint": "到浏览器打开个页面里向登录好。",
@@ -369,27 +385,9 @@
       "pipeline": "处理流程",
       "providers": "提供商",
       "shortcuts": "快捷键",
-      "translation": "译文",
       "typesetting": "渲染器"
     },
     "title": "设置",
-    "translation": {
-      "description": "先选已经配置好个提供商底下个模型，再设置各个模型共用个翻译搭生成选项。",
-      "model": "模型",
-      "modelDescription": "提供商标签标明各个模型来勒啥地方运行；连接要另外配置。",
-      "output": "输出",
-      "prompt": "系统提示词",
-      "promptDescription": "拨翻译模型个指示；{target} 会换成目标语言。",
-      "promptNeedsTarget": "提示词里向要有 {target}。",
-      "reasoning": "推理",
-      "reasoningDescription": "翻译个辰光用模型推理。",
-      "targetLanguageDescription": "选译文要用个目标语言。",
-      "title": "译文",
-      "translationModel": "翻译模型",
-      "translationModelDescription": "选用来翻译文本个模型。",
-      "vision": "视觉",
-      "visionDescription": "翻译个辰光，也拿页面图像输入畀 LLM。"
-    },
     "typesetting": {
       "addFamily": "添加字体系列",
       "defaultFamilies": "默认字体系列",

@@ -312,30 +312,46 @@
     "loading": "設定を読み込み中…",
     "pipeline": {
       "description": "各ページの処理に使用するモデルとオプションを選択します。",
+      "model": "モデル",
       "modelLabel": "{{stage}}モデル",
       "options": {
         "bubbleThreshold": "吹き出ししきい値",
         "onomatopoeiaThreshold": "擬音しきい値",
         "panelThreshold": "コマしきい値",
         "prompt": "プロンプト",
+        "promptDescription": "生成モデルにのみ適用されます。",
         "textThreshold": "テキストしきい値"
       },
-      "processing": "処理中",
       "stages": {
         "detect": {
           "description": "テキスト、吹き出し、コマを検出します。",
-          "title": "検出"
+          "title": "検出エンジン"
         },
         "inpaint": {
           "description": "削除した文字の下にあるアートワークを再構築します。",
-          "title": "インペイント"
+          "title": "インペイントエンジン"
         },
         "recognize": {
           "description": "検出領域内の原文を読み取ります。",
-          "title": "OCR"
+          "title": "認識エンジン"
+        },
+        "translate": {
+          "description": "原文を翻訳先の言語に翻訳します。",
+          "title": "翻訳エンジン"
         }
       },
-      "title": "パイプライン"
+      "thresholds": "しきい値",
+      "title": "パイプライン",
+      "translator": {
+        "prompt": "システムプロンプト",
+        "promptDescription": "翻訳モデルへの指示です。{target} は翻訳先の言語に置き換えられます。",
+        "promptNeedsTarget": "プロンプトには {target} を含めてください。",
+        "reasoning": "推論",
+        "reasoningDescription": "翻訳時にモデルの推論を使用します。",
+        "targetLanguageDescription": "テキストの翻訳先言語を選択します。",
+        "vision": "ビジョン",
+        "visionDescription": "翻訳時にページ画像をLLMへ入力します。"
+      }
     },
     "providers": {
       "browserHint": "ブラウザーで開いたページでサインインを完了してください。",
@@ -369,27 +385,9 @@
       "pipeline": "パイプライン",
       "providers": "プロバイダー",
       "shortcuts": "ショートカット",
-      "translation": "翻訳",
       "typesetting": "レンダラー"
     },
     "title": "設定",
-    "translation": {
-      "description": "設定済みプロバイダーのモデルを選び、共通の翻訳・生成オプションを適用します。",
-      "model": "モデル",
-      "modelDescription": "プロバイダー名はモデルの実行場所を示します。接続は別途設定します。",
-      "output": "出力",
-      "prompt": "システムプロンプト",
-      "promptDescription": "翻訳モデルへの指示です。{target} は翻訳先の言語に置き換えられます。",
-      "promptNeedsTarget": "プロンプトには {target} を含めてください。",
-      "reasoning": "推論",
-      "reasoningDescription": "翻訳時にモデルの推論を使用します。",
-      "targetLanguageDescription": "テキストの翻訳先言語を選択します。",
-      "title": "翻訳",
-      "translationModel": "翻訳モデル",
-      "translationModelDescription": "テキストの翻訳に使用するモデルを選択します。",
-      "vision": "ビジョン",
-      "visionDescription": "翻訳時にページ画像をLLMへ入力します。"
-    },
     "typesetting": {
       "addFamily": "フォントファミリーを追加",
       "defaultFamilies": "既定のフォントファミリー",

@@ -21,11 +21,6 @@ export const inpainters: Record<Inpainter, string> = {
   'qwen-image': 'Qwen-Image 2.1',
 }
 
-/** LaMa, which takes no prompt, ignores the inpainter's. */
-export function takesPrompt(inpainter: Inpainter): boolean {
-  return inpainter !== 'lama'
-}
-
 /** Vendors by rig's names, as their makers write them; others show their own name. */
 export const vendorNames: Record<string, string> = {
   openai: 'OpenAI',
