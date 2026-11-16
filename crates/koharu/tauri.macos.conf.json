@@ -11,6 +11,7 @@
         "minWidth": 900,
         "minHeight": 600,
         "center": true,
+        "maximized": true,
         "title": "Koharu",
         "decorations": true,
         "titleBarStyle": "Overlay",

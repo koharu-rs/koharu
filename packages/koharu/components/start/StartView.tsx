@@ -51,7 +51,7 @@ export function StartView() {
     if (!projectName || busy) return
     setBusy('create')
     try {
-      await call(commands.createProject, projectName)
+      await call(commands.create, projectName)
       await refresh(projectKey, pageKey)
       setName('')
     } finally {
@@ -63,7 +63,7 @@ export function StartView() {
     if (busy) return
     setBusy(projectName)
     try {
-      await call(commands.openProject, projectName)
+      await call(commands.open, projectName)
       await refresh(projectKey, pageKey)
     } finally {
       setBusy(null)

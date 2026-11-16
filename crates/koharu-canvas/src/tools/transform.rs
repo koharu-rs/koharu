@@ -202,22 +202,50 @@ pub(crate) fn transformed(control: &Control, affine: Affine) -> Op {
 pub(crate) fn resized(snapshot: &Snapshot, control: &Control, local: Rect) -> Option<Op> {
     let stretch = map(control.local(), local);
     let layer = Ref::from(control.layer);
-    let patch = match &snapshot.layer(control.layer)?.content {
-        Content::Text(text) => json!({"frame": frame(text, local, stretch)?}),
-        Content::Block(block) => match &block.translation {
-            Some(text) => json!({"translation": {"frame": frame(text, local, stretch)?}}),
-            None => json!({"source": {"frame": frame(&block.source, local, stretch)?}}),
-        },
-        Content::Image(_) | Content::Shape(_) => {
-            let page = control.transform() * stretch * control.transform().inverse();
-            return Some(Op::TransformLayer {
-                layer,
-                transform: page.into(),
-            });
+    let content = &snapshot.layer(control.layer)?.content;
+    if let Content::Image(_) | Content::Shape(_) = content {
+        let page = control.transform() * stretch * control.transform().inverse();
+        return Some(Op::TransformLayer {
+            layer,
+            transform: page.into(),
+        });
+    }
+    let (lettering, text) = Lettering::of(content)?;
+    Some(Op::UpdateLayer {
+        layer,
+        patch: lettering.patch(frame(text, local, stretch)?),
+    })
+}
+
+/// Where a layer's drawn text lives among its values: a text layer's own, a
+/// block's translation, or a block's source while it has none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Lettering {
+    Text,
+    Translation,
+    Source,
+}
+
+impl Lettering {
+    pub fn of(content: &Content) -> Option<(Self, &Text)> {
+        match content {
+            Content::Text(text) => Some((Self::Text, text)),
+            Content::Block(block) => Some(match &block.translation {
+                Some(text) => (Self::Translation, text),
+                None => (Self::Source, &block.source),
+            }),
+            _ => None,
         }
-        _ => return None,
-    };
-    Some(Op::UpdateLayer { layer, patch })
+    }
+
+    /// The layer's patch giving that text `frame`.
+    pub fn patch(self, frame: Value) -> Value {
+        match self {
+            Self::Text => json!({"frame": frame}),
+            Self::Translation => json!({"translation": {"frame": frame}}),
+            Self::Source => json!({"source": {"frame": frame}}),
+        }
+    }
 }
 
 /// `text`'s frame resized to `local`: a box takes it as its bounds, and a

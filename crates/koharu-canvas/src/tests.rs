@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 use ui_events::{
     ScrollDelta,
-    keyboard::Modifiers,
+    keyboard::{Code, Key, KeyState, KeyboardEvent, Modifiers, NamedKey},
     pointer::{
         PointerButton, PointerButtonEvent, PointerEvent, PointerGesture, PointerGestureEvent,
         PointerId, PointerInfo, PointerScrollEvent, PointerState, PointerType, PointerUpdate,
@@ -1168,4 +1168,169 @@ fn another_tool_drops_the_hover() {
     canvas.set_tool(Tool::Text);
     canvas.input(drag(1, (72.0, 72.0))).expect("input");
     assert!(drawn(canvas) == plain, "the outline is gone");
+}
+
+/// A mask's grey at `own`, in its own coordinates, as the session holds it.
+fn grey(fixture: &Fixture, mask: LayerId, own: (i32, i32)) -> u8 {
+    let tiles = fixture.session.lock().tiles(mask, None).expect("tiles");
+    let side = koharu_scene::Tile::SIZE as i32;
+    tiles
+        .tiles
+        .iter()
+        .find(|tile| own.0.div_euclid(side) == tile.x && own.1.div_euclid(side) == tile.y)
+        .map_or(0, |tile| {
+            let (x, y) = (own.0.rem_euclid(side), own.1.rem_euclid(side));
+            tile.pixels[(y * side + x) as usize]
+        })
+}
+
+#[test]
+fn the_eraser_hides_a_clean_up_through_its_mask_and_any_colour_uncovers_it() {
+    let Some((mut fixture, block, _)) = painted_cleanup() else {
+        return;
+    };
+    let mask: LayerId =
+        serde_json::from_value(layer(&fixture, block)["mask"]["id"].clone()).expect("an id");
+    fixture.canvas.select(vec![mask]);
+    fixture.canvas.set_tool(Tool::Eraser);
+    fixture.canvas.set_brush(brush(6.0, [0.0, 0.0, 0.0, 1.0]));
+    let effects = gesture(&mut fixture.canvas, (20.0, 20.0), (20.0, 20.0));
+    assert_eq!(apply(&mut fixture, effects), ["erase"]);
+    assert_eq!(grey(&fixture, mask, (20, 20)), 0);
+    assert_eq!(grey(&fixture, mask, (12, 12)), 255);
+
+    // Black uncovers as white would: a mask takes coverage, not colour.
+    fixture.canvas.set_tool(Tool::Draw);
+    let effects = gesture(&mut fixture.canvas, (20.0, 20.0), (20.0, 20.0));
+    assert_eq!(apply(&mut fixture, effects), ["paint"]);
+    assert_eq!(grey(&fixture, mask, (20, 20)), 255);
+}
+
+/// A block translated into the square path (100, 100) to (200, 200),
+/// selected under the direct selection tool: the fixture and the block.
+fn squared() -> Option<(Fixture, LayerId)> {
+    let mut fixture = unscaled(vec![json!({"op": "add_layer", "page": "$page", "index": 0,
+    "layer": {"kind": "block", "source": {"content": "やあ"}, "translation": {
+        "content": "Hi",
+        "frame": {"path": {"path": "M100 100L200 100L200 200L100 200Z", "fit": "best",
+            "anchor": "center", "inset": 0.5}},
+    }}})])?;
+    let block = layers(&fixture)[0];
+    fixture.canvas.set_tool(Tool::DirectSelect);
+    fixture.canvas.select(vec![block]);
+    Some((fixture, block))
+}
+
+/// The block's translation's frame, and its anchors in order.
+fn frame(fixture: &Fixture, block: LayerId) -> (Value, Vec<Point>) {
+    let frame = layer(fixture, block)["translation"]["frame"].clone();
+    let path = BezPath::from_svg(frame["path"]["path"].as_str().expect("a path")).expect("SVG");
+    let anchors = path
+        .elements()
+        .iter()
+        .filter_map(|element| match *element {
+            kurbo::PathEl::MoveTo(point) | kurbo::PathEl::LineTo(point) => Some(point),
+            _ => None,
+        })
+        .collect();
+    (frame, anchors)
+}
+
+#[test]
+fn a_dragged_anchor_reshapes_the_frame_and_keeps_its_fit() {
+    let Some((mut fixture, block)) = squared() else {
+        return;
+    };
+    let effects = gesture(&mut fixture.canvas, (200.0, 100.0), (240.0, 80.0));
+    assert_eq!(apply(&mut fixture, effects), ["edit_frame"]);
+    let (value, anchors) = frame(&fixture, block);
+    assert_eq!(
+        anchors,
+        [
+            (100.0, 100.0),
+            (240.0, 80.0),
+            (200.0, 200.0),
+            (100.0, 200.0)
+        ]
+        .map(Point::from)
+    );
+    assert_eq!(value["path"]["fit"], "best");
+    assert_eq!(value["path"]["inset"], 0.5);
+
+    // A segment drags both its anchors.
+    let effects = gesture(&mut fixture.canvas, (150.0, 200.0), (150.0, 220.0));
+    assert_eq!(apply(&mut fixture, effects), ["edit_frame"]);
+    let (_, anchors) = frame(&fixture, block);
+    assert_eq!(
+        anchors[2..],
+        [(200.0, 220.0), (100.0, 220.0)].map(Point::from)
+    );
+}
+
+/// Delete pressed, held, or released.
+fn delete(state: KeyState, repeat: bool) -> KeyboardEvent {
+    KeyboardEvent {
+        state,
+        key: Key::Named(NamedKey::Delete),
+        code: Code::Delete,
+        repeat,
+        ..KeyboardEvent::default()
+    }
+}
+
+#[test]
+fn deleting_anchors_joins_their_neighbours_and_never_opens_a_frame() {
+    let Some((mut fixture, block)) = squared() else {
+        return;
+    };
+    // A marquee around the top right corner picks it.
+    let effects = gesture(&mut fixture.canvas, (180.0, 80.0), (220.0, 120.0));
+    assert!(apply(&mut fixture, effects).is_empty());
+    let effects = fixture
+        .canvas
+        .key(&delete(KeyState::Down, false))
+        .expect("an anchor is picked");
+    assert_eq!(apply(&mut fixture, effects), ["edit_frame"]);
+    let (_, anchors) = frame(&fixture, block);
+    assert_eq!(
+        anchors,
+        [(100.0, 100.0), (200.0, 200.0), (100.0, 200.0)].map(Point::from)
+    );
+    // Held on with no anchor left, the key stays the canvas's until it's
+    // released, so it never goes on to delete the text.
+    let held = fixture.canvas.key(&delete(KeyState::Down, true));
+    assert!(held.is_some_and(|effects| effects.is_empty()));
+    let released = fixture.canvas.key(&delete(KeyState::Up, false));
+    assert!(released.is_some_and(|effects| effects.is_empty()));
+
+    // Three anchors are the fewest a frame keeps.
+    let effects = gesture(&mut fixture.canvas, (90.0, 90.0), (210.0, 210.0));
+    apply(&mut fixture, effects);
+    let effects = fixture
+        .canvas
+        .key(&delete(KeyState::Down, false))
+        .expect("anchors are picked");
+    assert!(apply(&mut fixture, effects).is_empty());
+    assert_eq!(frame(&fixture, block).1.len(), 3);
+    fixture.canvas.key(&delete(KeyState::Up, false));
+    // With no anchor picked, Delete is the host's.
+    assert!(fixture.canvas.key(&delete(KeyState::Down, false)).is_none());
+}
+
+#[test]
+fn a_box_frame_becomes_a_path_through_its_corners_at_its_first_edit() {
+    let Some((mut fixture, block, _)) = painted_cleanup() else {
+        return;
+    };
+    fixture.canvas.set_tool(Tool::DirectSelect);
+    fixture.canvas.select(vec![block]);
+    let effects = gesture(&mut fixture.canvas, (360.0, 330.0), (380.0, 350.0));
+    assert_eq!(apply(&mut fixture, effects), ["edit_frame"]);
+    let (value, anchors) = frame(&fixture, block);
+    assert!(value.get("box").is_none(), "{value}");
+    assert_eq!(value["path"]["inset"], 0.0);
+    assert_eq!(
+        anchors,
+        [(0.0, 0.0), (60.0, 0.0), (80.0, 50.0), (0.0, 30.0)].map(Point::from)
+    );
 }

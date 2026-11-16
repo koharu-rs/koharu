@@ -29,7 +29,6 @@
     "message": "Koharuエージェントにメッセージを送信",
     "model": "モデル",
     "placeholder": "Koharuにこのプロジェクトの作業を依頼…",
-    "properties": "プロパティ",
     "reasoning": "推論",
     "send": "送信",
     "thinking": "思考中…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "ページを選択して開始します。",
-    "fit": "ウィンドウに合わせる",
     "notice": {
       "eraser_needs_raster": "消去するにはラスターレイヤーを選択してください。"
     },
@@ -93,6 +91,35 @@
     "noResults": "この検索に一致するフォントはありません",
     "search": "フォントを検索"
   },
+  "history": {
+    "close": "ヒストリーを閉じる",
+    "opened": "開いた状態",
+    "steps": {
+      "add_text": "テキストを追加",
+      "delete_layers": "レイヤーを削除",
+      "delete_pages": "ページを削除",
+      "detect": "検出",
+      "edit_frame": "フレームを編集",
+      "erase": "消去",
+      "import": "ページを読み込み",
+      "inpaint": "インペイント",
+      "move": "移動",
+      "move_layer": "レイヤーを移動",
+      "move_page": "ページを移動",
+      "paint": "ペイント",
+      "recognize": "OCR",
+      "resize": "サイズ変更",
+      "rotate": "回転",
+      "set_locked": "ロック/ロック解除",
+      "set_source_text": "原文を編集",
+      "set_style": "書式を変更",
+      "set_text": "テキストを編集",
+      "set_visibility": "表示/非表示",
+      "translate": "翻訳",
+      "update_layer": "レイヤーを変更"
+    },
+    "title": "ヒストリー"
+  },
   "inference": {
     "currentPage": "現在のページ",
     "currentPageDescription": "キャンバスに表示中のページだけを処理します。",
@@ -139,15 +166,11 @@
     "borderColor": "縁取りの色",
     "borderWidth": "縁取り幅",
     "chooseFontSize": "フォントサイズを選択",
-    "color": "色",
     "decreaseBorderWidth": "縁取り幅を縮小",
-    "direction": "方向",
     "font": "フォント",
     "fontSize": "フォントサイズ",
-    "fontStyle": "フォントスタイル",
     "fontStyles": {
       "italic": "斜体",
-      "normal": "標準",
       "oblique": "オブリーク"
     },
     "fontWeight": "フォントの太さ",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "縁取り幅を拡大",
     "opacity": "不透明度",
     "selectPage": "ページを選択してレイヤーを確認します。",
-    "size": "サイズ",
     "source": "原文",
-    "style": "スタイル",
     "text": "テキスト",
     "textColor": "文字色",
     "textDirection": "文字方向",
     "translation": "翻訳",
     "type": "タイポグラフィ",
-    "vertical": "縦書き",
-    "weight": "太さ",
-    "width": "幅"
+    "vertical": "縦書き"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "{{name}}をロック",
     "locked": "ロック中",
-    "moveDown": "{{name}}を下へ移動",
-    "moveUp": "{{name}}を上へ移動",
     "opacityLabel": "{{name}}の不透明度",
+    "parts": {
+      "cleanup": "クリーンアップ",
+      "mask": "マスク",
+      "pick": "{{name}}の{{part}}",
+      "toggle": "Shift+クリックで表示/非表示"
+    },
     "show": "{{name}}を表示",
     "sourceLabel": "{{name}}の原文",
     "textLabel": "{{name}}のテキスト",
@@ -223,6 +246,7 @@
     "fit": "ウィンドウに合わせる",
     "github": "GitHub",
     "help": "ヘルプ",
+    "history": "ヒストリー",
     "import": "ページを読み込む",
     "process": "処理",
     "processLayers": "選択したレイヤーを処理",
@@ -373,17 +397,10 @@
       "subscription": "サブスクリプション",
       "title": "プロバイダー"
     },
-    "shortcuts": {
-      "description": "テキスト入力欄にフォーカスがないとき、単一キーのショートカットを使用できます。",
-      "inputLabel": "{{action}}のショートカット",
-      "title": "ショートカット",
-      "tools": "ツール"
-    },
     "tabs": {
       "appearance": "外観",
       "pipeline": "パイプライン",
       "providers": "プロバイダー",
-      "shortcuts": "ショートカット",
       "typesetting": "レンダラー"
     },
     "title": "設定",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "ズーム"
   },
+  "story": {
+    "noText": "このページにはテキストがありません。",
+    "sfx": "効果音",
+    "title": "ストーリー"
+  },
   "tools": {
     "brushSize": "ブラシサイズ",
     "brushSizeInput": "ブラシサイズ",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "カラーピッカー",
     "decreaseBrushSize": "ブラシサイズを縮小",
+    "direct_select": "パス選択",
     "draw": "描画",
     "eraser": "消しゴム",
     "increaseBrushSize": "ブラシサイズを拡大",

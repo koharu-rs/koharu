@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use koharu_canvas::{Brush, Colors, Rect, Tool};
+use koharu_canvas::{Brush, Colors, Rect, Story, Tool};
 use koharu_scene::LayerId;
 use tauri::State;
 
@@ -12,34 +12,42 @@ use crate::app::App;
 /// The canvas element's rectangle, in CSS pixels from the window's corner.
 #[tauri::command]
 #[specta::specta]
-pub fn set_canvas_viewport(app: State<'_, Arc<App>>, x: f64, y: f64, width: f64, height: f64) {
+pub fn set_viewport(app: State<'_, Arc<App>>, x: f64, y: f64, width: f64, height: f64) {
     app.screen
         .set_viewport(Rect::new(x, y, x + width.max(0.0), y + height.max(0.0)));
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_canvas_tool(app: State<'_, Arc<App>>, tool: Tool) {
+pub fn set_tool(app: State<'_, Arc<App>>, tool: Tool) {
     tracing::info!(?tool, "tool");
     app.screen.set_tool(tool);
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_canvas_brush(app: State<'_, Arc<App>>, brush: Brush) {
+pub fn set_brush(app: State<'_, Arc<App>>, brush: Brush) {
     app.screen.set_brush(brush);
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_canvas_colors(app: State<'_, Arc<App>>, colors: Colors) {
+pub fn set_colors(app: State<'_, Arc<App>>, colors: Colors) {
     app.screen.set_colors(colors);
+}
+
+/// Whether the Story panel shows, and the text whose entry the pointer is
+/// on, which the canvas numbers and outlines.
+#[tauri::command]
+#[specta::specta]
+pub fn set_story(app: State<'_, Arc<App>>, story: Story) {
+    app.screen.set_story(story);
 }
 
 /// Fits the page in the canvas, as the fit shortcut does.
 #[tauri::command]
 #[specta::specta]
-pub fn fit_canvas(app: State<'_, Arc<App>>) {
+pub fn fit(app: State<'_, Arc<App>>) {
     app.screen.fit();
 }
 
@@ -47,13 +55,13 @@ pub fn fit_canvas(app: State<'_, Arc<App>>) {
 /// the status bar's slider sets it.
 #[tauri::command]
 #[specta::specta]
-pub fn set_canvas_zoom(app: State<'_, Arc<App>>, zoom: f64) {
+pub fn set_zoom(app: State<'_, Arc<App>>, zoom: f64) {
     app.screen.zoom_to(zoom);
 }
 
 /// The selection the Layers panel made.
 #[tauri::command]
 #[specta::specta]
-pub fn select_layers(app: State<'_, Arc<App>>, layers: Vec<LayerId>) {
+pub fn select(app: State<'_, Arc<App>>, layers: Vec<LayerId>) {
     app.screen.select(layers);
 }

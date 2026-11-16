@@ -13,7 +13,7 @@ export function setHeaders(provide: () => Record<string, string>): void {
 }
 
 /**
- *  `[agent]`: the agent's model, how it is told to work, and how long a run
+ *  `[agent]`: the agent's model, how much it reasons, and how long a run
  *  goes.
  */
 export type AgentConfig = {
@@ -24,8 +24,6 @@ export type AgentConfig = {
    *  after OpenAI's `reasoning_effort`; the model's own default when unset.
    */
   reasoning?: string | null
-  /**  The system prompt. */
-  prompt?: string
   /**  How many model calls a run makes at most. */
   max_turns?: number
   /**  How many times a run lets the model correct a call it wrote wrong. */
@@ -49,7 +47,7 @@ export type Align = 'start' | 'center' | 'end' | 'justify'
  */
 export type Anchor = 'start' | 'center' | 'end'
 
-export type Answer = ProjectAnswer | Page | Layer | History
+export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History
 
 /**
  *  A painted area of a page: a byte a pixel over `rect`, in page pixels,
@@ -680,6 +678,11 @@ export type Query =
   | { query: 'get_page'; page: PageId }
   /**  Get one layer with everything inside it. */
   | { query: 'get_layer'; layer: LayerId }
+  /**
+   *  List the texts a reader sees on a page, in reading order: each block
+   *  and text layer that shows.
+   */
+  | { query: 'get_story'; page: PageId }
   /**  Get the undo and redo labels. */
   | { query: 'get_history' }
 
@@ -783,6 +786,16 @@ export type Stage = 'detect' | 'recognize' | 'inpaint' | 'translate'
 
 export type State = 'Running' | 'Finished' | { Failed: string }
 
+/**
+ *  The Story panel as the canvas follows it: while it shows, every text's
+ *  frame and its number in the scene's reading order, and the frame of the
+ *  text whose entry the pointer is on drawn stronger.
+ */
+export type Story = {
+  shown: boolean
+  hovered: LayerId | null
+}
+
 export type Stroke = {
   color: Rgba
   width: number
@@ -836,7 +849,15 @@ export type TextStyle = {
   line_height?: number | null
 }
 
-export type Tool = 'select' | 'text' | 'draw' | 'eraser' | 'color_picker' | 'remove' | 'pan'
+export type Tool =
+  | 'select'
+  | 'direct_select'
+  | 'text'
+  | 'draw'
+  | 'eraser'
+  | 'color_picker'
+  | 'remove'
+  | 'pan'
 
 /**  One transfer's whole state. */
 export type Transfer = {
@@ -897,23 +918,23 @@ export type Vendor = {
 export const commands = {
   listProjects: () => invoke<string[]>('list_projects', {}, { headers: headers() }),
   /** Creates a project and opens it. */
-  createProject: (name: string) => invoke<null>('create_project', { name }, { headers: headers() }),
-  openProject: (name: string) => invoke<null>('open_project', { name }, { headers: headers() }),
+  create: (name: string) => invoke<null>('create', { name }, { headers: headers() }),
+  open: (name: string) => invoke<null>('open', { name }, { headers: headers() }),
   /** Deletes a project, closing it first if it's the open one. */
   deleteProject: (name: string) => invoke<null>('delete_project', { name }, { headers: headers() }),
-  closeProject: () => invoke<null>('close_project', {}, { headers: headers() }),
+  close: () => invoke<null>('close', {}, { headers: headers() }),
   /** The open project's name, for an interface that loaded after it opened. */
   getOpenProject: () => invoke<string | null>('get_open_project', {}, { headers: headers() }),
   /** The page the canvas shows. */
   getShownPage: () => invoke<PageId | null>('get_shown_page', {}, { headers: headers() }),
   /** Shows `page` on the canvas. */
-  showPage: (page: PageId) => invoke<null>('show_page', { page }, { headers: headers() }),
-  queryScene: (query: Query) => invoke<Answer>('query_scene', { query }, { headers: headers() }),
-  editScene: (edit: Edit) => invoke<Change>('edit_scene', { edit }, { headers: headers() }),
-  undoEdit: () => invoke<null>('undo_edit', {}, { headers: headers() }),
-  redoEdit: () => invoke<null>('redo_edit', {}, { headers: headers() }),
+  show: (page: PageId) => invoke<null>('show', { page }, { headers: headers() }),
+  query: (query: Query) => invoke<Answer>('query', { query }, { headers: headers() }),
+  edit: (edit: Edit) => invoke<Change>('edit', { edit }, { headers: headers() }),
+  undo: () => invoke<null>('undo', {}, { headers: headers() }),
+  redo: () => invoke<null>('redo', {}, { headers: headers() }),
   /** Goes to the project as it was after `step` steps, as a click in Photoshop's History panel does; 0 is the project as it opened. */
-  goToStep: (step: number) => invoke<null>('go_to_step', { step }, { headers: headers() }),
+  goTo: (step: number) => invoke<null>('go_to', { step }, { headers: headers() }),
   /** The page as it renders, `HEIGHT` pixels tall, as WebP. */
   getPageThumbnail: (page: PageId) =>
     invoke<ArrayBuffer>('get_page_thumbnail', { page }, { headers: headers() }),
@@ -941,39 +962,35 @@ export const commands = {
   setApiKey: (vendor: string, key: string | null) =>
     invoke<null>('set_api_key', { vendor, key }, { headers: headers() }),
   /** Signs in to `vendor`, one that signs in, in place of the sign-in waiting; `on_prompt` hears what the user must do. A stopped sign-in ends without one. */
-  signInVendor: (vendor: string, onPrompt: Channel<SignInPrompt>) =>
-    invoke<null>('sign_in_vendor', { vendor, onPrompt }, { headers: headers() }),
+  signIn: (vendor: string, onPrompt: Channel<SignInPrompt>) =>
+    invoke<null>('sign_in', { vendor, onPrompt }, { headers: headers() }),
   /** Stops the sign-in waiting for the user. */
   stopSignIn: () => invoke<null>('stop_sign_in', {}, { headers: headers() }),
   /** Signs out of `vendor`: the vendor revokes the sign-in, and Koharu deletes it. */
-  signOutVendor: (vendor: string) =>
-    invoke<null>('sign_out_vendor', { vendor }, { headers: headers() }),
+  signOut: (vendor: string) => invoke<null>('sign_out', { vendor }, { headers: headers() }),
   listFonts: () => invoke<FontFamily[]>('list_fonts', {}, { headers: headers() }),
   /** `family`'s name set in it, as WebP. */
   getFontPreview: (family: string) =>
     invoke<ArrayBuffer>('get_font_preview', { family }, { headers: headers() }),
   /** Picks files or a folder and adds their pages after the project's last: the files in name order, numbers by value, an archive's or a PDF's own pages in theirs. */
-  importPages: (source: ImportSource) =>
-    invoke<null>('import_pages', { source }, { headers: headers() }),
+  import: (source: ImportSource) => invoke<null>('import', { source }, { headers: headers() }),
   /** Picks where the open project's pages go, and writes them there. `labels` names a PSD's layers the scene names nothing, in the interface's language. */
-  exportPages: (format: ExportFormat, labels: Labels) =>
-    invoke<null>('export_pages', { format, labels }, { headers: headers() }),
+  export: (format: ExportFormat, labels: Labels) =>
+    invoke<null>('export', { format, labels }, { headers: headers() }),
   /** The canvas element's rectangle, in CSS pixels from the window's corner. */
-  setCanvasViewport: (x: number, y: number, width: number, height: number) =>
-    invoke<null>('set_canvas_viewport', { x, y, width, height }, { headers: headers() }),
-  setCanvasTool: (tool: Tool) => invoke<null>('set_canvas_tool', { tool }, { headers: headers() }),
-  setCanvasBrush: (brush: Brush) =>
-    invoke<null>('set_canvas_brush', { brush }, { headers: headers() }),
-  setCanvasColors: (colors: Colors) =>
-    invoke<null>('set_canvas_colors', { colors }, { headers: headers() }),
+  setViewport: (x: number, y: number, width: number, height: number) =>
+    invoke<null>('set_viewport', { x, y, width, height }, { headers: headers() }),
+  setTool: (tool: Tool) => invoke<null>('set_tool', { tool }, { headers: headers() }),
+  setBrush: (brush: Brush) => invoke<null>('set_brush', { brush }, { headers: headers() }),
+  setColors: (colors: Colors) => invoke<null>('set_colors', { colors }, { headers: headers() }),
+  /** Whether the Story panel shows, and the text whose entry the pointer is on, which the canvas numbers and outlines. */
+  setStory: (story: Story) => invoke<null>('set_story', { story }, { headers: headers() }),
   /** Fits the page in the canvas, as the fit shortcut does. */
-  fitCanvas: () => invoke<null>('fit_canvas', {}, { headers: headers() }),
+  fit: () => invoke<null>('fit', {}, { headers: headers() }),
   /** Zooms about the canvas's centre, `zoom` CSS pixels to a page pixel, as the status bar's slider sets it. */
-  setCanvasZoom: (zoom: number) =>
-    invoke<null>('set_canvas_zoom', { zoom }, { headers: headers() }),
+  setZoom: (zoom: number) => invoke<null>('set_zoom', { zoom }, { headers: headers() }),
   /** The selection the Layers panel made. */
-  selectLayers: (layers: LayerId[]) =>
-    invoke<null>('select_layers', { layers }, { headers: headers() }),
+  select: (layers: LayerId[]) => invoke<null>('select', { layers }, { headers: headers() }),
 }
 
 export const events = {

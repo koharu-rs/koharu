@@ -37,7 +37,16 @@ use koharu_llm::{Context, KOHARU};
 
 use crate::{Tools, tools::refusal};
 
-/// `[agent]`: the agent's model, how it is told to work, and how long a run
+/// The system prompt: Koharu's own, not a setting, since it describes the
+/// tools and the project document, which Koharu owns.
+const PROMPT: &str = indoc! {"
+    You are Koharu Agent, operating a manga translation project inside Koharu.
+    The project's state when the request began is the JSON file with id project; tool results report changes since.
+    Use the provided tools whenever the user asks to inspect or change the project. Never claim a change succeeded unless its tool result says it succeeded.
+    All project changes are revisioned and reversible. Do not ask for permission. Continue using tools until the request is complete or cannot be completed.
+    Do not invent identifiers. Preserve artwork and existing authored content unless the user asks to change them."};
+
+/// `[agent]`: the agent's model, how much it reasons, and how long a run
 /// goes.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
@@ -49,8 +58,6 @@ pub struct AgentConfig {
     /// after OpenAI's `reasoning_effort`; the model's own default when unset.
     #[specta(type = Option<String>)]
     pub reasoning: Option<Effort>,
-    /// The system prompt.
-    pub prompt: String,
     /// How many model calls a run makes at most.
     pub max_turns: usize,
     /// How many times a run lets the model correct a call it wrote wrong.
@@ -62,13 +69,6 @@ impl Default for AgentConfig {
         Self {
             model: None,
             reasoning: None,
-            prompt: indoc! {"
-                You are Koharu Agent, operating a manga translation project inside Koharu.
-                The project's state when the request began is the JSON file with id project; tool results report changes since.
-                Use the provided tools whenever the user asks to inspect or change the project. Never claim a change succeeded unless its tool result says it succeeded.
-                All project changes are revisioned and reversible. Do not ask for permission. Continue using tools until the request is complete or cannot be completed.
-                Do not invent identifiers. Preserve artwork and existing authored content unless the user asks to change them."}
-            .to_owned(),
             // rig's default is one, which ends a run at its first tool call.
             max_turns: 20,
             corrections: 2,
@@ -175,7 +175,7 @@ impl Agent {
         let tools = ToolServer::new().run();
         tools.add_tools(toolset);
         let mut agent = AgentBuilder::new(self.model.clone())
-            .preamble(&self.config.prompt)
+            .preamble(PROMPT)
             .tool_server_handle(tools)
             .add_hook(Window::new(self.context.policy(&spec), spec.clone()))
             .add_hook(calls);

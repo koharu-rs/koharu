@@ -374,7 +374,7 @@ Each model also writes its `c2pa` action on the layers it wrote.
 | Add a text detection missed | Draw a box on the page | a block in the balloon under the box, else free in the panel or on the page there, whose source frame and mask are the box. Paint the mask smaller to keep art |
 | Read it | Run OCR on that block | its source's wording |
 | Fix what OCR read | Edit the source in the Story panel | its source's wording |
-| Translate again after a fix | Run translation on that block | its translation's wording, leaving its frame |
+| Translate again after a fix | Run translation on that block | its translation's wording, placed again in its room |
 | Undo an over-reaching clean-up | Paint the block's mask, or clear its clean-up, and run inpainting on it again if needed | that block's clean-up only |
 | Reletter a text | Delete its translation | the block keeps its clean-up, and its area stays clean |
 | Drop a text entirely | Delete its block | its clean-up goes with it, so the original shows again |
@@ -423,10 +423,11 @@ Each model also writes its `c2pa` action on the layers it wrote.
   row is read first and the bottom row draws on top, where Photoshop's and Clip
   Studio Paint's layer palettes list the topmost layer first. A block's row shows its clean-up and its mask, and
   painting goes to whichever is selected.
-- **Story panel:** each page's blocks in reading order, each with its source's
-  wording and its translation's, as Clip Studio Paint's Story Editor "shows all
-  text on each page" in text fields [CSP Story Editor]. Editing a row edits that
-  block, and removing a row deletes it.
+- **Story panel:** each page's shown blocks and texts in reading order, a
+  block with its source's wording and its translation's, as Clip Studio Paint's
+  Story Editor "shows all text on each page" in text fields, leaving out what
+  isn't visible [CSP Story Editor]. Editing a row edits that layer; a text is
+  deleted from the Layers panel or the canvas.
 - **Agent tools** read a page as `get_page` answers it, its layers nested in
   reading order, and edit one block at a time by its id.
 

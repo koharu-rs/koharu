@@ -29,7 +29,6 @@
     "message": "Сообщение агенту Koharu",
     "model": "Модель",
     "placeholder": "Попросите Koharu поработать над проектом…",
-    "properties": "Свойства",
     "reasoning": "Рассуждение",
     "send": "Отправить",
     "thinking": "Размышление…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "Выберите страницу, чтобы начать.",
-    "fit": "Вписать в окно",
     "notice": {
       "eraser_needs_raster": "Выберите растровый слой, чтобы стирать."
     },
@@ -93,6 +91,35 @@
     "noResults": "Нет шрифтов, соответствующих поиску",
     "search": "Искать шрифты"
   },
+  "history": {
+    "close": "Закрыть историю",
+    "opened": "При открытии",
+    "steps": {
+      "add_text": "Добавление текста",
+      "delete_layers": "Удаление слоёв",
+      "delete_pages": "Удаление страниц",
+      "detect": "Обнаружение",
+      "edit_frame": "Изменение рамки",
+      "erase": "Стирание",
+      "import": "Импорт страниц",
+      "inpaint": "Восстановление",
+      "move": "Перемещение",
+      "move_layer": "Перемещение слоёв",
+      "move_page": "Перемещение страницы",
+      "paint": "Рисование",
+      "recognize": "OCR",
+      "resize": "Изменение размера",
+      "rotate": "Поворот",
+      "set_locked": "Блокировка",
+      "set_source_text": "Изменение исходного текста",
+      "set_style": "Изменение стиля текста",
+      "set_text": "Изменение текста",
+      "set_visibility": "Показ или скрытие",
+      "translate": "Перевод",
+      "update_layer": "Изменение слоя"
+    },
+    "title": "История"
+  },
   "inference": {
     "currentPage": "Текущая страница",
     "currentPageDescription": "Обработать только страницу на холсте.",
@@ -139,15 +166,11 @@
     "borderColor": "Цвет обводки",
     "borderWidth": "Ширина обводки",
     "chooseFontSize": "Выбрать размер шрифта",
-    "color": "Цвет",
     "decreaseBorderWidth": "Уменьшить ширину обводки",
-    "direction": "Направление",
     "font": "Шрифт",
     "fontSize": "Размер шрифта",
-    "fontStyle": "Начертание шрифта",
     "fontStyles": {
       "italic": "Курсив",
-      "normal": "Обычный",
       "oblique": "Наклонный"
     },
     "fontWeight": "Насыщенность шрифта",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "Увеличить ширину обводки",
     "opacity": "Непрозрачность",
     "selectPage": "Выберите страницу для просмотра её слоёв.",
-    "size": "Размер",
     "source": "Исходный текст",
-    "style": "Стиль",
     "text": "Текст",
     "textColor": "Цвет текста",
     "textDirection": "Направление текста",
     "translation": "Перевод",
     "type": "Типографика",
-    "vertical": "Вертикально",
-    "weight": "Насыщенность",
-    "width": "Ширина"
+    "vertical": "Вертикально"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "Заблокировать {{name}}",
     "locked": "Заблокировано",
-    "moveDown": "Переместить {{name}} вниз",
-    "moveUp": "Переместить {{name}} вверх",
     "opacityLabel": "Непрозрачность {{name}}",
+    "parts": {
+      "cleanup": "Очистка",
+      "mask": "Маска",
+      "pick": "{{part}}: {{name}}",
+      "toggle": "Shift+щелчок — показать или скрыть"
+    },
     "show": "Показать {{name}}",
     "sourceLabel": "Исходный текст {{name}}",
     "textLabel": "Текст {{name}}",
@@ -223,6 +246,7 @@
     "fit": "Вписать в окно",
     "github": "GitHub",
     "help": "Справка",
+    "history": "История",
     "import": "Импортировать страницы",
     "process": "Обработка",
     "processLayers": "Обработать выбранные слои",
@@ -373,17 +397,10 @@
       "subscription": "Подписка",
       "title": "Провайдеры"
     },
-    "shortcuts": {
-      "description": "Одноклавишные сочетания доступны, когда поле ввода текста не в фокусе.",
-      "inputLabel": "Сочетание для «{{action}}»",
-      "title": "Сочетания клавиш",
-      "tools": "Инструменты"
-    },
     "tabs": {
       "appearance": "Оформление",
       "pipeline": "Конвейер",
       "providers": "Провайдеры",
-      "shortcuts": "Сочетания клавиш",
       "typesetting": "Рендерер"
     },
     "title": "Настройки",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "Масштаб"
   },
+  "story": {
+    "noText": "На этой странице нет текста.",
+    "sfx": "Звуковой эффект",
+    "title": "Сценарий"
+  },
   "tools": {
     "brushSize": "Размер кисти",
     "brushSizeInput": "Размер кисти",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} пкс",
     "color_picker": "Пипетка",
     "decreaseBrushSize": "Уменьшить размер кисти",
+    "direct_select": "Стрелка",
     "draw": "Рисование",
     "eraser": "Ластик",
     "increaseBrushSize": "Увеличить размер кисти",

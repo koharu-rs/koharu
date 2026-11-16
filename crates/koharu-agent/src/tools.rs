@@ -1,6 +1,6 @@
 //! Koharu's tools on the open project, as rig's own tools: the scene's
-//! queries, an edit of the scene's ops, the pipeline's run, stop, and
-//! history, and a look at a page. The in-app agent registers them with rig,
+//! queries but its undo history, which an agent can't act on, an edit of the
+//! scene's ops, the pipeline's run, wait, and stop, and a look at a page. The in-app agent registers them with rig,
 //! and the MCP server serves the same set to outside agents. A call finds
 //! the open project in the tool context it runs with.
 
@@ -24,7 +24,7 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Deserialize;
 use serde_json::Value;
 
-/// How long `history` waits for a run to end, so an agent following a run
+/// How long `wait` waits for a run to end, so an agent following a run
 /// doesn't spend a turn on every look, as Codex waits on a long command for
 /// up to 30 seconds before it answers.
 const WAIT: Duration = Duration::from_secs(30);
@@ -58,11 +58,10 @@ impl Tools {
         tools.add_tool(GetProject);
         tools.add_tool(GetPage);
         tools.add_tool(GetLayer);
-        tools.add_tool(GetHistory);
         tools.add_tool(Edit);
         tools.add_tool(Run);
+        tools.add_tool(Wait);
         tools.add_tool(Stop);
-        tools.add_tool(History);
         tools.add_tool(ViewPage);
         tools
     }
@@ -115,7 +114,7 @@ struct RunArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-struct HistoryArgs {
+struct WaitArgs {
     /// The run, as `run` answered it.
     run: RunId,
 }
@@ -205,31 +204,6 @@ impl Tool for GetLayer {
     }
 }
 
-struct GetHistory;
-
-impl Tool for GetHistory {
-    const NAME: &'static str = "get_history";
-    type Args = NoArgs;
-    type Output = Answer;
-    type Error = ToolExecutionError;
-
-    fn description(&self) -> String {
-        "The project's undo steps, oldest first, and how many of them are done.".to_owned()
-    }
-
-    fn parameters(&self) -> Value {
-        schema::<NoArgs>()
-    }
-
-    fn annotations(&self) -> ToolAnnotations {
-        ToolAnnotations::default().with_read_only(true)
-    }
-
-    async fn call(&self, context: &mut ToolContext, _: NoArgs) -> Result<Answer, Self::Error> {
-        query(context, Query::GetHistory).await
-    }
-}
-
 struct Edit;
 
 impl Tool for Edit {
@@ -273,7 +247,7 @@ impl Tool for Run {
     fn description(&self) -> String {
         "Run the pipeline's stages on the project, some pages, some blocks, or a painted area, \
          replacing what they wrote before. Answers the run's id at once; the run goes on in the \
-         background, and history follows it."
+         background, and wait follows it."
             .to_owned()
     }
 
@@ -318,23 +292,23 @@ impl Tool for Stop {
     }
 }
 
-struct History;
+struct Wait;
 
-impl Tool for History {
-    const NAME: &'static str = "history";
-    type Args = HistoryArgs;
+impl Tool for Wait {
+    const NAME: &'static str = "wait";
+    type Args = WaitArgs;
     type Output = Vec<Event>;
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "What a run told so far, in order: how many page stages it does, each page's stages as \
-         they started and finished, and last, once it ended, how: done, failed with its reason, \
-         or stopped. Waits up to 30 seconds for the run to end first."
+        "Wait up to 30 seconds for a run to end, then answer what it told so far, in order: how \
+         many page stages it does, each page's stages as they started and finished, and last, \
+         once it ended, how: done, failed with its reason, or stopped."
             .to_owned()
     }
 
     fn parameters(&self) -> Value {
-        schema::<HistoryArgs>()
+        schema::<WaitArgs>()
     }
 
     fn annotations(&self) -> ToolAnnotations {
@@ -344,7 +318,7 @@ impl Tool for History {
     async fn call(
         &self,
         context: &mut ToolContext,
-        args: HistoryArgs,
+        args: WaitArgs,
     ) -> Result<Vec<Event>, Self::Error> {
         let tools = project(context)?;
         tools.pipeline.history(args.run, WAIT).await.map_err(failed)
@@ -541,7 +515,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_run_is_followed_through_its_history() {
+    async fn a_run_is_waited_for_to_its_end() {
         // The project has no pages, so detection loads no model.
         let (_dir, tools) = open();
         let args = json!({"target": "project", "stages": ["detect"]});
@@ -553,10 +527,10 @@ mod tests {
             .await
             .expect("the run starts");
         let run = RunId(started.parse().expect("the run's id"));
-        let events = History
-            .call(&mut tools.tool_context(), HistoryArgs { run })
+        let events = Wait
+            .call(&mut tools.tool_context(), WaitArgs { run })
             .await
-            .expect("a history");
+            .expect("the run's events");
         assert_eq!(
             events.last().map(|event| json!(event)),
             Some(json!({"kind": "ended", "run": run, "outcome": {"kind": "done"}}))

@@ -16,7 +16,7 @@ pub fn list_projects(app: State<'_, Arc<App>>) -> Result<Vec<String>> {
 /// Creates a project and opens it.
 #[tauri::command]
 #[specta::specta]
-pub async fn create_project(app: State<'_, Arc<App>>, name: String) -> Result<()> {
+pub async fn create(app: State<'_, Arc<App>>, name: String) -> Result<()> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || {
         let session = app.library.create(&name)?;
@@ -27,7 +27,7 @@ pub async fn create_project(app: State<'_, Arc<App>>, name: String) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
-pub async fn open_project(app: State<'_, Arc<App>>, name: String) -> Result<()> {
+pub async fn open(app: State<'_, Arc<App>>, name: String) -> Result<()> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || {
         let session = app.library.open(&name)?;
@@ -53,7 +53,7 @@ pub fn delete_project(app: State<'_, Arc<App>>, name: String) -> Result<()> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn close_project(app: State<'_, Arc<App>>) {
+pub fn close(app: State<'_, Arc<App>>) {
     app.close();
 }
 

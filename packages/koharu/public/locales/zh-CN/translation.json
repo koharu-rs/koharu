@@ -29,7 +29,6 @@
     "message": "向 Koharu 智能体发送消息",
     "model": "模型",
     "placeholder": "让 Koharu 处理此项目…",
-    "properties": "属性",
     "reasoning": "推理",
     "send": "发送",
     "thinking": "正在思考…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "请选择页面以开始。",
-    "fit": "适应窗口",
     "notice": {
       "eraser_needs_raster": "请先选择栅格图层再擦除。"
     },
@@ -93,6 +91,35 @@
     "noResults": "没有与此搜索匹配的字体",
     "search": "搜索字体"
   },
+  "history": {
+    "close": "关闭历史记录",
+    "opened": "打开时",
+    "steps": {
+      "add_text": "添加文字",
+      "delete_layers": "删除图层",
+      "delete_pages": "删除页面",
+      "detect": "检测",
+      "edit_frame": "编辑文本框",
+      "erase": "擦除",
+      "import": "导入页面",
+      "inpaint": "修补",
+      "move": "移动",
+      "move_layer": "移动图层",
+      "move_page": "移动页面",
+      "paint": "绘画",
+      "recognize": "OCR",
+      "resize": "调整大小",
+      "rotate": "旋转",
+      "set_locked": "锁定或解锁",
+      "set_source_text": "编辑原文",
+      "set_style": "更改文字样式",
+      "set_text": "编辑文字",
+      "set_visibility": "显示或隐藏",
+      "translate": "翻译",
+      "update_layer": "更改图层"
+    },
+    "title": "历史记录"
+  },
   "inference": {
     "currentPage": "当前页面",
     "currentPageDescription": "仅处理画布中的页面。",
@@ -139,15 +166,11 @@
     "borderColor": "描边颜色",
     "borderWidth": "描边宽度",
     "chooseFontSize": "选择字体大小",
-    "color": "颜色",
     "decreaseBorderWidth": "减小描边宽度",
-    "direction": "方向",
     "font": "字体",
     "fontSize": "字体大小",
-    "fontStyle": "字体样式",
     "fontStyles": {
       "italic": "斜体",
-      "normal": "常规",
       "oblique": "倾斜"
     },
     "fontWeight": "字体粗细",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "增大描边宽度",
     "opacity": "不透明度",
     "selectPage": "选择一个页面以检查其图层。",
-    "size": "字号",
     "source": "原文",
-    "style": "样式",
     "text": "文本",
     "textColor": "文本颜色",
     "textDirection": "文本方向",
     "translation": "译文",
     "type": "排版",
-    "vertical": "竖排",
-    "weight": "字重",
-    "width": "宽度"
+    "vertical": "竖排"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "锁定 {{name}}",
     "locked": "已锁定",
-    "moveDown": "下移 {{name}}",
-    "moveUp": "上移 {{name}}",
     "opacityLabel": "{{name}} 不透明度",
+    "parts": {
+      "cleanup": "清理",
+      "mask": "蒙版",
+      "pick": "{{name}}的{{part}}",
+      "toggle": "按住 Shift 单击以显示或隐藏"
+    },
     "show": "显示 {{name}}",
     "sourceLabel": "{{name}} 的原文",
     "textLabel": "{{name}} 的文本",
@@ -223,6 +246,7 @@
     "fit": "适应窗口",
     "github": "GitHub",
     "help": "帮助",
+    "history": "历史记录",
     "import": "导入页面",
     "process": "处理",
     "processLayers": "处理所选图层",
@@ -373,17 +397,10 @@
       "subscription": "订阅",
       "title": "提供商"
     },
-    "shortcuts": {
-      "description": "当文本字段未获得焦点时，可以使用单键快捷键。",
-      "inputLabel": "{{action}} 快捷键",
-      "title": "快捷键",
-      "tools": "工具"
-    },
     "tabs": {
       "appearance": "外观",
       "pipeline": "流水线",
       "providers": "提供商",
-      "shortcuts": "快捷键",
       "typesetting": "渲染器"
     },
     "title": "设置",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "缩放"
   },
+  "story": {
+    "noText": "此页面上没有文字。",
+    "sfx": "音效",
+    "title": "故事"
+  },
   "tools": {
     "brushSize": "画笔大小",
     "brushSizeInput": "画笔大小",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} 像素",
     "color_picker": "取色器",
     "decreaseBrushSize": "减小画笔大小",
+    "direct_select": "直接选择",
     "draw": "绘画",
     "eraser": "橡皮擦",
     "increaseBrushSize": "增大画笔大小",

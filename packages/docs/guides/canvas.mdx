@@ -4,17 +4,23 @@ description: 'Navigate the page and choose the right tool for text, artwork, and
 icon: 'arrow-pointer'
 ---
 
-The toolbar on the canvas picks the tool. **Properties** edits the selected layers' saved values.
+The toolbar on the canvas picks the tool. **Layers** and **Story** on the right edit the shown page's layers and text, and a bar beside selected text sets its type.
 
 ## Navigate and select
 
-Use **Pan** to move the view and the zoom slider in the status bar to change zoom. **View → Fit Window**, or `0` by default, fits the active page. Switching pages fits the new page.
+Use **Pan** to move the view and the zoom slider in the status bar to change zoom. **View → Fit Window**, `Ctrl+0` or `Command+0`, fits the active page. Switching pages fits the new page.
 
 Use **Select** to pick layers. Click a layer, hold `Shift`, `Ctrl`, or `Command` to add or remove one, or drag from an empty spot to select with a marquee. Drag a selection to move it. Resize and rotate handles appear for a single selection; a multiple selection can only be moved. Locked layers do not move.
 
 ## Choose an editing tool
 
 <Tabs>
+  <Tab title='Direct Selection'>
+    Select a text block or text layer with **Direct Selection** to show the anchors of its frame.
+    Drag an anchor or a segment to reshape the frame, `Shift`-click to pick more anchors, or drag
+    from an empty spot to pick the anchors inside a marquee. `Delete` or `Backspace` removes the
+    picked anchors, keeping at least three. The text fits the new shape when the drag ends.
+  </Tab>
   <Tab title='Text'>
     Click with **Text** to create point text, or drag to create a text box. Type the text in place,
     then adjust [typography](/guides/typesetting). With a text block or text layer selected, the
@@ -23,7 +29,9 @@ Use **Select** to pick layers. Click a layer, hold `Shift`, `Ctrl`, or `Command`
   <Tab title='Brush and Eraser'>
     **Brush** paints with the chosen color and size on the selected raster layer, or creates a new
     raster layer at the top of the page when none is selected. **Eraser** needs a selected raster
-    layer. Both skip hidden or locked layers. Hold `Alt` and scroll to change the size.
+    layer. Both also paint a text block's clean-up or mask selected in **Layers**; on a mask,
+    **Brush** shows more of the clean-up and **Eraser** hides it. Both skip hidden or locked layers.
+    Hold `Alt` and scroll to change the size.
   </Tab>
   <Tab title='Color picker'>
     Click with **Color picker** to sample the page's own pixel under the pointer. The sampled color

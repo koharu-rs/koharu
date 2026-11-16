@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { queryClient } from '@/lib/queries'
-import { defaultShortcuts, useKoharuStore } from '@/lib/store'
+import { useKoharuStore } from '@/lib/store'
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>()
@@ -82,11 +82,12 @@ beforeEach(() => {
     selectedPages: [],
     tool: 'select',
     brush: { diameter: 48, color: '#FFFFFF' },
-    inspector: 'copy',
+    panel: 'layers',
+    storyHover: null,
     processingScope: 'selected-pages',
     processingStages: ['detect', 'recognize', 'inpaint', 'translate'],
     settingsOpen: false,
-    shortcuts: defaultShortcuts,
+    historyOpen: false,
   })
 })
 

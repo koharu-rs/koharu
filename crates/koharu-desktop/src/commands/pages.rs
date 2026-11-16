@@ -41,7 +41,7 @@ pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
 /// Shows `page` on the canvas.
 #[tauri::command]
 #[specta::specta]
-pub async fn show_page(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
+pub async fn show(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         {

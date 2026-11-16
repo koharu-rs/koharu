@@ -14,7 +14,14 @@ use crate::{
     draw::overlay::Overlay,
     selection::Selection,
     snapshot::Snapshot,
-    tools::{brush::Stroke, pan::Pan, select::Marquee, text::Draft, transform::Transform},
+    tools::{
+        brush::Stroke,
+        direct::{Pick, Reshape},
+        pan::Pan,
+        select::Marquee,
+        text::Draft,
+        transform::Transform,
+    },
     view::{Sample, View},
 };
 
@@ -30,25 +37,27 @@ pub(crate) struct Context<'a> {
     pub session: &'a Mutex<Session>,
 }
 
-/// What a press starts, and what it answers at once.
+/// What a press starts, what it answers at once, and the anchors it picks
+/// on the selected text's frame, which the canvas keeps.
 #[derive(Default)]
 pub(crate) struct Press {
     pub gesture: Option<Gesture>,
     pub effects: Vec<Effect>,
+    pub anchors: Option<Vec<usize>>,
 }
 
 impl Press {
     pub fn starts(gesture: Gesture) -> Self {
         Self {
             gesture: Some(gesture),
-            effects: Vec::new(),
+            ..Self::default()
         }
     }
 
     pub fn answers(effects: Vec<Effect>) -> Self {
         Self {
-            gesture: None,
             effects,
+            ..Self::default()
         }
     }
 }
@@ -73,6 +82,8 @@ pub(crate) enum Gesture {
     Draft(Draft),
     Pan(Pan),
     Stroke(Stroke),
+    Reshape(Reshape),
+    Pick(Pick),
 }
 
 impl Gesture {
@@ -84,6 +95,8 @@ impl Gesture {
             Self::Draft(draft) => draft.moved(samples),
             Self::Pan(pan) => return pan.moved(samples),
             Self::Stroke(stroke) => return stroke.moved(cx, samples),
+            Self::Reshape(reshape) => reshape.moved(samples),
+            Self::Pick(pick) => pick.moved(samples),
         }
         Vec::new()
     }
@@ -96,6 +109,8 @@ impl Gesture {
             Self::Draft(draft) => Ok(draft.finish(cx)),
             Self::Pan(_) => Ok(Vec::new()),
             Self::Stroke(stroke) => stroke.finish(cx),
+            Self::Reshape(reshape) => Ok(reshape.finish()),
+            Self::Pick(pick) => Ok(pick.finish(cx.view)),
         }
     }
 
@@ -106,6 +121,8 @@ impl Gesture {
             Self::Draft(draft) => draft.preview(overlay),
             Self::Pan(_) => {}
             Self::Stroke(stroke) => stroke.preview(cx, overlay),
+            Self::Reshape(reshape) => reshape.preview(overlay),
+            Self::Pick(pick) => pick.preview(overlay),
         }
         Ok(())
     }
@@ -118,7 +135,23 @@ impl Gesture {
             Self::Draft(_) => Some(CursorIcon::Text),
             Self::Pan(_) => Some(CursorIcon::Grabbing),
             Self::Stroke(_) => None,
+            Self::Reshape(reshape) => Some(reshape.cursor()),
+            Self::Pick(_) => Some(CursorIcon::Default),
         }
+    }
+
+    /// The anchors it picks on the selected text's frame, as its pointer
+    /// lifts.
+    pub fn picked(&self) -> Option<Vec<usize>> {
+        match self {
+            Self::Pick(pick) => Some(pick.picked()),
+            _ => None,
+        }
+    }
+
+    /// Whether it drags a frame's anchors, whose preview draws the frame.
+    pub fn reshapes(&self) -> bool {
+        matches!(self, Self::Reshape(_))
     }
 
     /// The layers its preview draws instead of the page.
@@ -136,6 +169,8 @@ impl Gesture {
             Self::Draft(draft) => GestureLook::Rect(draft.rect()),
             Self::Pan(_) => GestureLook::None,
             Self::Stroke(stroke) => stroke.look(),
+            Self::Reshape(reshape) => GestureLook::Pointer(reshape.current()),
+            Self::Pick(pick) => GestureLook::Rect(pick.rect()),
         }
     }
 

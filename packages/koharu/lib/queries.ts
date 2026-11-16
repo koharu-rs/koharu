@@ -13,6 +13,7 @@ import {
   commands,
   type FontFamily,
   type History,
+  type LayerId,
   type Page,
   type PageId,
   type PageSummary,
@@ -45,8 +46,8 @@ const projectQuery = queryOptions({
     if (name === null) return null
     const [page, project, history] = await Promise.all([
       call(commands.getShownPage),
-      call(commands.queryScene, { query: 'get_project' }),
-      call(commands.queryScene, { query: 'get_history' }),
+      call(commands.query, { query: 'get_project' }),
+      call(commands.query, { query: 'get_history' }),
     ])
     const known = queryClient.getQueryData<ProjectView | null>(projectKey)
     return {
@@ -64,7 +65,17 @@ const pageQuery = queryOptions({
   queryFn: async (): Promise<Page | null> => {
     const page = await call(commands.getShownPage)
     if (page === null) return null
-    return (await call(commands.queryScene, { query: 'get_page', page })) as Page
+    return (await call(commands.query, { query: 'get_page', page })) as Page
+  },
+})
+
+// Under the page's key, so whatever reads the page again reads its story again too.
+const storyQuery = queryOptions({
+  queryKey: [...pageKey, 'story'],
+  queryFn: async (): Promise<LayerId[]> => {
+    const page = await call(commands.getShownPage)
+    if (page === null) return []
+    return (await call(commands.query, { query: 'get_story', page })) as LayerId[]
   },
 })
 
@@ -97,6 +108,12 @@ export function usePages(enabled = true) {
 /** The page the editor shows, with its layers. */
 export function usePage(enabled = true) {
   return useQuery({ ...pageQuery, enabled })
+}
+
+/** The shown page's texts in the scene's reading order, as Story lists and the canvas numbers
+ * them. */
+export function useStory(enabled = true) {
+  return useQuery({ ...storyQuery, enabled })
 }
 
 export function useFonts(enabled = true) {
@@ -137,7 +154,7 @@ export function useCommand<Args extends unknown[], Result>(
 
 /** Imports pages; the project's change arrives as an event. */
 export function useImportPages() {
-  const { run, busy } = useCommand(['import-pages'], commands.importPages, 'navigator.importing')
+  const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing')
   return { importPages: run, importing: busy }
 }
 

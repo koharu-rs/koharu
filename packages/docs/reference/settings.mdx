@@ -1,6 +1,6 @@
 ---
 title: 'Settings'
-description: 'Find the controls for appearance, models, providers, translation, fonts, and shortcuts.'
+description: 'Find the controls for appearance, models, providers, translation, and fonts.'
 icon: 'gear'
 ---
 
@@ -21,10 +21,6 @@ Add API keys, sign in to subscriptions, and set base URLs for the connections li
 ## Renderer
 
 Set the ordered preferred fonts, CCWildWords and then Adobe 黑体 Std unless you change them. Koharu uses them for a text with no font of its own and when a font cannot supply a glyph, then falls back to system fonts. Individual text layers still own their typography.
-
-## Shortcuts
-
-Assign one character to Select, Text, Brush, Eraser, Color picker, Remove, Pan, and Fit Window. Custom bindings apply to the running session only; they are not saved and reset to the defaults when Koharu restarts.
 
 <Note>
   Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]` (including

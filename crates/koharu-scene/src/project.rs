@@ -252,6 +252,23 @@ impl Project {
         Ok(depth_first(&self.page(page)?.layers))
     }
 
+    /// The texts of `page` a reader sees, in reading order: each block and
+    /// text layer that shows, with every layer it's in. Story lists them
+    /// and the canvas numbers them in this order.
+    pub fn story(&self, page: PageId) -> Result<Vec<LayerId>> {
+        fn walk(layers: &[Layer], texts: &mut Vec<LayerId>) {
+            for layer in layers.iter().filter(|layer| layer.visible) {
+                if matches!(layer.content, Content::Block(_) | Content::Text(_)) {
+                    texts.push(layer.id);
+                }
+                walk(&layer.children, texts);
+            }
+        }
+        let mut texts = Vec::new();
+        walk(&self.page(page)?.layers, &mut texts);
+        Ok(texts)
+    }
+
     /// The blocks of `page`, in reading order.
     pub fn blocks(&self, page: PageId) -> Result<Vec<(LayerId, &Block)>> {
         Ok(self

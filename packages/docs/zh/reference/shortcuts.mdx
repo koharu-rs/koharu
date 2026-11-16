@@ -1,6 +1,6 @@
 ---
 title: '键盘快捷键'
-description: '默认工具键、导航手势、选择和撤销命令。'
+description: '工具键、导航手势、选择和撤销命令。'
 icon: 'keyboard'
 ---
 
@@ -11,15 +11,15 @@ icon: 'keyboard'
 | 工具     | 按键 |
 | -------- | ---- |
 | 选择     | `V`  |
+| 直接选择 | `A`  |
 | 文本     | `T`  |
 | 绘画     | `B`  |
 | 橡皮擦   | `E`  |
 | 取色器   | `I`  |
 | 移除     | `J`  |
 | 平移     | `H`  |
-| 适应窗口 | `0`  |
 
-可在**设置 → 快捷键**中修改工具按键。
+每个按键都与 Photoshop 中同一工具的按键相同。
 
 ## 导航
 
@@ -30,23 +30,18 @@ icon: 'keyboard'
 | 围绕指针缩放 | `Ctrl` 或 `Command` + 滚动，或双指捏合    |
 | 调整画笔大小 | 在绘画、橡皮擦或移除工具下按 `Alt` + 滚动 |
 | 清除选择     | `Escape`                                  |
-| 适应当前页面 | 默认 `0`                                  |
+| 适应当前页面 | `Ctrl+0` 或 `Command+0`                   |
 
 松开 `Space` 后会回到原来使用的工具。
 
 ## 编辑
 
-| 操作                   | Windows / Linux         | macOS                   |
-| ---------------------- | ----------------------- | ----------------------- |
-| 撤销                   | `Ctrl+Z`                | `Command+Z`             |
-| 重做                   | `Ctrl+Shift+Z`          | `Command+Shift+Z`       |
-| 选择页面上的所有图层   | `Ctrl+A`                | `Command+A`             |
-| 删除所选图层           | `Delete` 或 `Backspace` | `Delete` 或 `Backspace` |
-| 提交在画布上输入的文字 | `Ctrl+Enter`            | `Command+Enter`         |
-
-<Tip>
-  请为每个工具设置不同字符。如有冲突，会先检查“适应窗口”按键，再按工具栏顺序选中第一个匹配的工具。自定义按键会在
-  Koharu 重启后重置。
-</Tip>
+| 操作                                 | Windows / Linux         | macOS                   |
+| ------------------------------------ | ----------------------- | ----------------------- |
+| 撤销                                 | `Ctrl+Z`                | `Command+Z`             |
+| 重做                                 | `Ctrl+Shift+Z`          | `Command+Shift+Z`       |
+| 选择页面上的所有图层                 | `Ctrl+A`                | `Command+A`             |
+| 删除所选图层，或用直接选择选中的锚点 | `Delete` 或 `Backspace` | `Delete` 或 `Backspace` |
+| 提交在画布上输入的文字               | `Ctrl+Enter`            | `Command+Enter`         |
 
 快捷键只影响桌面界面，不影响导出的页面。

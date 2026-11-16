@@ -41,6 +41,88 @@ export function findLayer(layers: Layer[], id: LayerId): Placed | undefined {
   return walkLayers(layers).find((placed) => placed.layer.id === id)
 }
 
+/** A block's own picture layers: its clean-up, and the mask it shows through. */
+export type Part = 'cleanup' | 'mask'
+
+/** The block whose part `id` names, and which part it is. */
+export function findPart(
+  layers: Layer[],
+  id: LayerId,
+): { block: BlockLayer; part: Part } | undefined {
+  for (const { layer } of walkLayers(layers)) {
+    if (!isBlockLayer(layer)) continue
+    if (layer.cleanup?.id === id) return { block: layer, part: 'cleanup' }
+    if (layer.mask?.id === id) return { block: layer, part: 'mask' }
+  }
+  return undefined
+}
+
+/** Where a drag over a Layers row puts what it carries: before the row, after it, or into it,
+ * as its last children. */
+export interface Drop {
+  target: LayerId
+  zone: 'before' | 'after' | 'inside'
+}
+
+/** One `move_layer`: the layer under `parent`, or the page's top level, at `index` counted after
+ * it's taken out. */
+export interface Move {
+  layer: LayerId
+  parent: LayerId | null
+  index: number
+}
+
+/** Whether a layer of the kind `child` may sit in one of the kind `parent`, or on the page for
+ * `null`, as the scene allows: a page, a group, and a panel hold any layer but a mask, and a
+ * balloon holds blocks and text layers. */
+export function mayHold(parent: Layer['kind'] | null, child: Layer['kind']): boolean {
+  if (child === 'mask') return false
+  if (parent === null || parent === 'group' || parent === 'panel') return true
+  return parent === 'balloon' && (child === 'block' || child === 'text')
+}
+
+/** The moves putting `dragged`, in their order, at `drop`, one after another; `null` where the
+ * scene wouldn't let them go: into themselves, under a locked layer, into a kind that can't hold
+ * them, or a locked one moving. Each move's index counts the parent's children as the moves
+ * before it left them. */
+export function dropMoves(layers: Layer[], dragged: LayerId[], drop: Drop): Move[] | null {
+  const target = findLayer(layers, drop.target)
+  if (!target) return null
+  const chain = [...target.ancestors, target.layer].map((layer) => layer.id)
+  if (dragged.some((id) => chain.includes(id))) return null
+  const parentPlaced =
+    drop.zone === 'inside'
+      ? target
+      : target.ancestors.length
+        ? { layer: target.ancestors.at(-1)!, ancestors: target.ancestors.slice(0, -1) }
+        : null
+  if (parentPlaced && isLockedLayer(parentPlaced)) return null
+  const parent = parentPlaced?.layer ?? null
+  for (const id of dragged) {
+    const placed = findLayer(layers, id)
+    if (!placed || isLockedLayer(placed) || !mayHold(parent?.kind ?? null, placed.layer.kind)) {
+      return null
+    }
+  }
+  const before = (parent ? (parent.children ?? []) : layers).map((layer) => layer.id)
+  let children = [...before]
+  const moves: Move[] = []
+  for (const [order, id] of dragged.entries()) {
+    children = children.filter((child) => child !== id)
+    const index =
+      order > 0
+        ? children.indexOf(dragged[order - 1]!) + 1
+        : drop.zone === 'inside'
+          ? children.length
+          : children.indexOf(drop.target) + (drop.zone === 'after' ? 1 : 0)
+    children.splice(index, 0, id)
+    moves.push({ layer: id, parent: parent?.id ?? null, index })
+  }
+  const unchanged =
+    children.length === before.length && children.every((id, at) => id === before[at])
+  return unchanged ? [] : moves
+}
+
 /** A layer's own children, or none. */
 export function layerChildren(layer: Layer): Layer[] {
   return layer.children ?? []

@@ -29,7 +29,6 @@
     "message": "Enviar mensagem ao agente do Koharu",
     "model": "Modelo",
     "placeholder": "Peça ao Koharu para trabalhar neste projeto…",
-    "properties": "Propriedades",
     "reasoning": "Raciocínio",
     "send": "Enviar",
     "thinking": "Pensando…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "Selecione uma página para começar.",
-    "fit": "Ajustar à janela",
     "notice": {
       "eraser_needs_raster": "Selecione uma camada raster para apagar."
     },
@@ -93,6 +91,35 @@
     "noResults": "Nenhuma fonte corresponde à busca",
     "search": "Buscar fontes"
   },
+  "history": {
+    "close": "Fechar histórico",
+    "opened": "Ao abrir",
+    "steps": {
+      "add_text": "Adicionar texto",
+      "delete_layers": "Excluir camadas",
+      "delete_pages": "Excluir páginas",
+      "detect": "Detecção",
+      "edit_frame": "Editar quadro",
+      "erase": "Apagar",
+      "import": "Importar páginas",
+      "inpaint": "Preenchimento",
+      "move": "Mover",
+      "move_layer": "Mover camadas",
+      "move_page": "Mover página",
+      "paint": "Pintar",
+      "recognize": "OCR",
+      "resize": "Redimensionar",
+      "rotate": "Girar",
+      "set_locked": "Bloquear ou desbloquear",
+      "set_source_text": "Editar texto original",
+      "set_style": "Alterar estilo do texto",
+      "set_text": "Editar texto",
+      "set_visibility": "Mostrar ou ocultar",
+      "translate": "Tradução",
+      "update_layer": "Alterar camada"
+    },
+    "title": "Histórico"
+  },
   "inference": {
     "currentPage": "Página atual",
     "currentPageDescription": "Processa somente a página na tela.",
@@ -139,15 +166,11 @@
     "borderColor": "Cor do contorno",
     "borderWidth": "Largura do contorno",
     "chooseFontSize": "Escolher tamanho da fonte",
-    "color": "Cor",
     "decreaseBorderWidth": "Diminuir largura do contorno",
-    "direction": "Direção",
     "font": "Fonte",
     "fontSize": "Tamanho da fonte",
-    "fontStyle": "Estilo da fonte",
     "fontStyles": {
       "italic": "Itálico",
-      "normal": "Regular",
       "oblique": "Oblíquo"
     },
     "fontWeight": "Peso da fonte",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "Aumentar largura do contorno",
     "opacity": "Opacidade",
     "selectPage": "Selecione uma página para inspecionar suas camadas.",
-    "size": "Tamanho",
     "source": "Texto original",
-    "style": "Estilo",
     "text": "Texto",
     "textColor": "Cor do texto",
     "textDirection": "Direção do texto",
     "translation": "Tradução",
     "type": "Tipografia",
-    "vertical": "Vertical",
-    "weight": "Peso",
-    "width": "Largura"
+    "vertical": "Vertical"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "Bloquear {{name}}",
     "locked": "Bloqueada",
-    "moveDown": "Mover {{name}} para baixo",
-    "moveUp": "Mover {{name}} para cima",
     "opacityLabel": "Opacidade de {{name}}",
+    "parts": {
+      "cleanup": "Limpeza",
+      "mask": "Máscara",
+      "pick": "{{part}} de {{name}}",
+      "toggle": "Shift+clique para mostrar ou ocultar"
+    },
     "show": "Mostrar {{name}}",
     "sourceLabel": "Texto de origem de {{name}}",
     "textLabel": "Texto de {{name}}",
@@ -223,6 +246,7 @@
     "fit": "Ajustar à janela",
     "github": "GitHub",
     "help": "Ajuda",
+    "history": "Histórico",
     "import": "Importar páginas",
     "process": "Processar",
     "processLayers": "Processar camadas selecionadas",
@@ -373,17 +397,10 @@
       "subscription": "Assinatura",
       "title": "Provedores"
     },
-    "shortcuts": {
-      "description": "Atalhos de uma tecla ficam disponíveis quando nenhum campo de texto está em foco.",
-      "inputLabel": "Atalho de {{action}}",
-      "title": "Atalhos",
-      "tools": "Ferramentas"
-    },
     "tabs": {
       "appearance": "Aparência",
       "pipeline": "Pipeline",
       "providers": "Provedores",
-      "shortcuts": "Atalhos",
       "typesetting": "Renderizador"
     },
     "title": "Configurações",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "Zoom"
   },
+  "story": {
+    "noText": "Não há texto nesta página.",
+    "sfx": "Efeito sonoro",
+    "title": "História"
+  },
   "tools": {
     "brushSize": "Tamanho do pincel",
     "brushSizeInput": "Tamanho do pincel",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "Seletor de cores",
     "decreaseBrushSize": "Diminuir tamanho do pincel",
+    "direct_select": "Seleção direta",
     "draw": "Desenhar",
     "eraser": "Borracha",
     "increaseBrushSize": "Aumentar tamanho do pincel",

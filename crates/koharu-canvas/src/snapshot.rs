@@ -6,7 +6,8 @@ use std::{collections::HashMap, io::Cursor, sync::LazyLock};
 
 use koharu_renderer::Frame;
 use koharu_scene::{
-    Content, Frame as TextFrame, Hash, Layer, LayerId, Offset, Page, Project, Session, Text,
+    Content, Frame as TextFrame, Hash, Layer, LayerId, Offset, Page, PixelFormat, Project, Role,
+    Session, Text,
 };
 use kurbo::{Affine, BezPath, Point, Rect, Shape as _, Size};
 
@@ -22,6 +23,9 @@ pub struct Snapshot {
     controls: Vec<Control>,
     /// Every panel's and balloon's outline, parsed once.
     outlines: HashMap<LayerId, BezPath>,
+    /// The page's texts in the scene's reading order, each with whether
+    /// it's a sound effect, which Story numbers apart.
+    story: Vec<(LayerId, bool)>,
 }
 
 impl Snapshot {
@@ -38,13 +42,29 @@ impl Snapshot {
         let controls = walk.controls;
         let mut outlines = HashMap::new();
         outlines_of(&page.layers, &mut outlines);
+        let story = project
+            .story(page.id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|id| {
+                let sfx = project.layer(id).is_ok_and(|layer| {
+                    matches!(&layer.content, Content::Block(block) if block.role == Role::Sfx)
+                });
+                (id, sfx)
+            })
+            .collect();
         Some(Self {
             frame,
             page,
             project,
             controls,
             outlines,
+            story,
         })
+    }
+
+    pub(crate) fn story(&self) -> &[(LayerId, bool)] {
+        &self.story
     }
 
     pub(crate) fn frame(&self) -> &Frame {
@@ -92,21 +112,29 @@ impl Snapshot {
         self.outlines.get(&id)
     }
 
-    /// The offset of `id` when it's a raster or a block's clean-up a brush
-    /// can write to: shown and unlocked, with every layer it's in.
-    pub(crate) fn writable(&self, id: LayerId) -> Option<Offset> {
-        fn find(layers: &[Layer], id: LayerId) -> Option<Offset> {
+    /// The offset and format of `id` when it's a raster, or a block's
+    /// clean-up or mask, a brush can write to: shown and unlocked, with
+    /// every layer it's in.
+    pub(crate) fn writable(&self, id: LayerId) -> Option<(Offset, PixelFormat)> {
+        fn find(layers: &[Layer], id: LayerId) -> Option<(Offset, PixelFormat)> {
             layers
                 .iter()
                 .filter(|layer| layer.visible && !layer.locked)
                 .find_map(|layer| match &layer.content {
-                    Content::Raster(raster) if layer.id == id => Some(raster.offset),
+                    Content::Raster(raster) if layer.id == id => {
+                        Some((raster.offset, PixelFormat::Rgba8))
+                    }
                     Content::Block(block)
                         if block.cleanup.id == id
                             && block.cleanup.visible
                             && !block.cleanup.locked =>
                     {
-                        Some(block.cleanup.content.offset)
+                        Some((block.cleanup.content.offset, PixelFormat::Rgba8))
+                    }
+                    Content::Block(block)
+                        if block.mask.id == id && block.mask.visible && !block.mask.locked =>
+                    {
+                        Some((block.mask.content.offset, PixelFormat::Gray8))
                     }
                     _ => find(&layer.children, id),
                 })
@@ -215,19 +243,37 @@ impl Walk<'_> {
 }
 
 /// Every panel's and balloon's outline in `layers`, hidden ones too, which
-/// the Layers panel can still select.
+/// the Layers panel can still select, and every block's mask's: its
+/// source's frame, where the mask was made, since a mask draws nothing to
+/// outline.
 fn outlines_of(layers: &[Layer], outlines: &mut HashMap<LayerId, BezPath>) {
     for layer in layers {
         let path = match &layer.content {
-            Content::Panel(panel) => Some(panel.outline.as_str()),
-            Content::Balloon(balloon) => Some(balloon.outline.as_str()),
+            Content::Panel(panel) => BezPath::from_svg(panel.outline.as_str()).ok(),
+            Content::Balloon(balloon) => BezPath::from_svg(balloon.outline.as_str()).ok(),
+            Content::Block(block) => {
+                if let Some(frame) = frame_outline(&block.source) {
+                    outlines.insert(block.mask.id, frame);
+                }
+                None
+            }
             _ => None,
         };
-        if let Some(Ok(path)) = path.map(BezPath::from_svg) {
+        if let Some(path) = path {
             outlines.insert(layer.id, path);
         }
         outlines_of(&layer.children, outlines);
     }
+}
+
+/// `text`'s frame on the page, its transform applied; `None` for point text.
+fn frame_outline(text: &Text) -> Option<BezPath> {
+    let path = match &text.frame {
+        TextFrame::Point => return None,
+        TextFrame::Box { bounds, .. } => Rect::from(*bounds).to_path(0.1),
+        TextFrame::Path { path, .. } => BezPath::from_svg(path.as_str()).ok()?,
+    };
+    Some(Affine::from(text.transform) * path)
 }
 
 /// A text's control: the box it laid out in, or for one that drew nothing,

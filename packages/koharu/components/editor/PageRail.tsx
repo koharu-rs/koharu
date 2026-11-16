@@ -1,5 +1,14 @@
 'use client'
 
+import {
+  DndContext,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
 import { useQuery } from '@tanstack/react-query'
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import {
@@ -11,7 +20,7 @@ import {
   Settings,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call, dispatch } from '@/lib/backend'
@@ -33,19 +42,6 @@ import { cn } from '@koharu/ui/lib/utils'
 
 const emptyPages: PageSummary[] = []
 
-/** How far the pointer moves before a press on a page becomes its drag. */
-const DRAG_DISTANCE = 4
-
-/** A page being reordered by the pointer, which HTML drag and drop can't do under off-screen
- * rendering: the page, where the press began, and the page it's over. */
-interface Reorder {
-  page: string
-  pointer: number
-  start: { x: number; y: number }
-  moved: boolean
-  target: number | null
-}
-
 export function PageRail() {
   const { t } = useTranslation()
   const project = useProject().data
@@ -57,8 +53,9 @@ export function PageRail() {
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
   const anchor = useRef<number | null>(null)
-  const reorder = useRef<Reorder | null>(null)
+  // A page being dragged, and the place of the page it's over.
   const [dragged, setDragged] = useState<{ page: string; target: number | null } | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const [query, setQuery] = useState('')
   const normalized = query.trim()
   const visiblePages = useMemo(
@@ -83,16 +80,6 @@ export function PageRail() {
       ),
   })
 
-  useEffect(() => {
-    const cancel = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !reorder.current) return
-      reorder.current = null
-      setDragged(null)
-    }
-    window.addEventListener('keydown', cancel)
-    return () => window.removeEventListener('keydown', cancel)
-  }, [])
-
   const select = (index: number, additive: boolean, range: boolean) => {
     const page = pages[index]
     if (!page) return
@@ -114,7 +101,7 @@ export function PageRail() {
     selectPages(next)
     if (page.id !== active) {
       selectLayers([])
-      dispatch(commands.showPage, page.id)
+      dispatch(commands.show, page.id)
     }
   }
 
@@ -126,53 +113,14 @@ export function PageRail() {
       })
       .catch(() => undefined)
 
-  /** The pointer's press, move, and release on the list, as a reorder once it has moved; the page
-   * goes where it's released, and Escape or a cancelled pointer leaves it. */
-  const pointer = {
-    onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
-      const page = (event.target as HTMLElement).closest<HTMLElement>('[data-page]')?.dataset.page
-      if (event.button !== 0 || !page) return
-      if ((event.target as HTMLElement).closest('button,[role="menuitem"]')) return
-      reorder.current = {
-        page,
-        pointer: event.pointerId,
-        start: { x: event.clientX, y: event.clientY },
-        moved: false,
-        target: null,
-      }
-    },
-    onPointerMove: (event: PointerEvent<HTMLDivElement>) => {
-      const current = reorder.current
-      if (!current || current.pointer !== event.pointerId) return
-      if (
-        !current.moved &&
-        Math.hypot(event.clientX - current.start.x, event.clientY - current.start.y) < DRAG_DISTANCE
-      )
-        return
-      if (!current.moved) event.currentTarget.setPointerCapture(event.pointerId)
-      current.moved = true
-      const over = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>('[data-page-index]')?.dataset.pageIndex
-      current.target = over === undefined ? null : Number(over)
-      setDragged({ page: current.page, target: current.target })
-    },
-    onPointerUp: (event: PointerEvent<HTMLDivElement>) => {
-      const current = reorder.current
-      if (!current || current.pointer !== event.pointerId) return
-      reorder.current = null
-      setDragged(null)
-      if (!current.moved || current.target === null) return
-      // The page takes the place of the one it's dropped on; `move_page` counts its index after
-      // the page is taken out, which is that place either way.
-      if (pages[current.target]?.id !== current.page) {
-        dispatch(movePage, current.page, current.target)
-      }
-    },
-    onPointerCancel: () => {
-      reorder.current = null
-      setDragged(null)
-    },
+  /** A page dropped on another takes its place; `move_page` counts its index after the page is
+   * taken out, which is that place either way. */
+  const drop = (target: number | null) => {
+    const page = dragged?.page
+    setDragged(null)
+    if (page !== undefined && target !== null && pages[target]?.id !== page) {
+      dispatch(movePage, page, target)
+    }
   }
 
   return (
@@ -228,43 +176,61 @@ export function PageRail() {
             {t('navigator.noResults')}
           </div>
         ) : (
-          <ScrollArea
-            className='min-h-0 flex-1'
-            viewportClassName='px-1.5 py-1.5'
-            viewportRef={pageList}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={pointerWithin}
+            onDragStart={({ active }) => setDragged({ page: String(active.id), target: null })}
+            onDragOver={({ over }) =>
+              setDragged(
+                (current) =>
+                  current && {
+                    ...current,
+                    target: over ? pages.findIndex((page) => page.id === over.id) : null,
+                  },
+              )
+            }
+            onDragCancel={() => setDragged(null)}
+            onDragEnd={({ over }) =>
+              drop(over ? pages.findIndex((page) => page.id === over.id) : null)
+            }
           >
-            <div
-              className='relative w-full touch-none'
-              style={{ height: pageVirtualizer.getTotalSize() }}
-              {...pointer}
+            <ScrollArea
+              className='min-h-0 flex-1'
+              viewportClassName='px-1.5 py-1.5'
+              viewportRef={pageList}
             >
-              {pageVirtualizer.getVirtualItems().map((virtualRow) => {
-                const item = visiblePages[virtualRow.index]
-                if (!item) return null
-                const { page, index } = item
-                return (
-                  <div
-                    key={virtualRow.key}
-                    data-index={virtualRow.index}
-                    className='absolute top-0 left-0 w-full'
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
-                  >
-                    <PageItem
-                      page={page}
-                      index={index}
-                      revision={project?.revisions[page.id]}
-                      active={active === page.id}
-                      selected={selected.includes(page.id)}
-                      dragged={dragged?.page === page.id}
-                      target={dragged !== null && dragged.target === index}
-                      onSelect={(additive, range) => select(index, additive, range)}
-                      onDelete={() => deletePage(page.id)}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          </ScrollArea>
+              <div
+                className='relative w-full touch-none'
+                style={{ height: pageVirtualizer.getTotalSize() }}
+              >
+                {pageVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = visiblePages[virtualRow.index]
+                  if (!item) return null
+                  const { page, index } = item
+                  return (
+                    <div
+                      key={virtualRow.key}
+                      data-index={virtualRow.index}
+                      className='absolute top-0 left-0 w-full'
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                      <PageItem
+                        page={page}
+                        index={index}
+                        revision={project?.revisions[page.id]}
+                        active={active === page.id}
+                        selected={selected.includes(page.id)}
+                        dragged={dragged?.page === page.id}
+                        target={dragged !== null && dragged.target === index}
+                        onSelect={(additive, range) => select(index, additive, range)}
+                        onDelete={() => deletePage(page.id)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+          </DndContext>
         )}
 
         <div className='mt-auto flex shrink-0 items-center gap-2 px-2 py-2'>
@@ -359,8 +325,8 @@ function PageItem({
 }: {
   page: PageSummary
   index: number
-  /** The project's revision when this page was last edited while shown, so its thumbnail follows
-   * its edits and keeps that once another page is shown. */
+  /** The project's revision when a change last named this page, so its thumbnail follows its
+   * edits. */
   revision: string | undefined
   active: boolean
   selected: boolean
@@ -371,9 +337,23 @@ function PageItem({
 }) {
   const { t } = useTranslation()
   const name = t('navigator.pageNumber', { number: index + 1 })
+  const handle = useDraggable({ id: page.id })
+  const { setNodeRef } = useDroppable({ id: page.id })
+  // A press on the page's own buttons and menus doesn't drag it.
+  const { onPointerDown, ...listeners } = handle.listeners ?? {}
 
   return (
     <article
+      ref={(element) => {
+        handle.setNodeRef(element)
+        setNodeRef(element)
+      }}
+      {...listeners}
+      onPointerDown={(event) => {
+        if (!(event.target as HTMLElement).closest('button,[role="menuitem"]')) {
+          onPointerDown?.(event)
+        }
+      }}
       data-page={page.id}
       data-page-index={index}
       data-active={active}

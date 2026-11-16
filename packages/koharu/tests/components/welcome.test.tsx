@@ -15,7 +15,7 @@ function ProjectFlow() {
 function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
-  vi.spyOn(commands, 'queryScene').mockImplementation(async (query) =>
+  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
     query.query === 'get_project'
       ? { id: 'project', version: '1', pages: [] }
       : { steps: [], current: 0 },
@@ -37,7 +37,7 @@ describe('StartView', () => {
     let opened = false
     desktop(() => (opened ? 'Volume 1' : null))
     vi.spyOn(commands, 'listProjects').mockResolvedValue([])
-    const create = vi.spyOn(commands, 'createProject').mockImplementation(async () => {
+    const create = vi.spyOn(commands, 'create').mockImplementation(async () => {
       opened = true
       return null
     })
@@ -57,7 +57,7 @@ describe('StartView', () => {
     let opened = false
     desktop(() => (opened ? 'Blue Archive' : null))
     vi.spyOn(commands, 'listProjects').mockResolvedValue(['Blue Archive'])
-    const open = vi.spyOn(commands, 'openProject').mockImplementation(async () => {
+    const open = vi.spyOn(commands, 'open').mockImplementation(async () => {
       opened = true
       return null
     })

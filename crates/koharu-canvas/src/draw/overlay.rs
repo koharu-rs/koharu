@@ -2,9 +2,9 @@
 //! handles, the marquee, and what gestures preview. Callers give page
 //! geometry; lines and handles keep their size on screen at any zoom.
 
-use koharu_renderer::{Drawing, Frame};
+use koharu_renderer::{Drawing, Frame, Label};
 use koharu_scene::Rgba;
-use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Shape, Stroke};
+use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Shape, Stroke};
 use vello_gpu::peniko::{Color, Fill};
 
 use crate::{
@@ -16,6 +16,10 @@ use crate::{
 
 /// A handle's side, in device-independent pixels.
 const HANDLE: f64 = 6.0;
+
+/// A Story number's height, in device-independent pixels, as the Story
+/// panel's.
+const NUMBER: f64 = 16.0;
 
 /// How finely a curve is flattened, in viewport pixels.
 const TOLERANCE: f64 = 0.1;
@@ -64,6 +68,48 @@ impl<'a, 'g> Overlay<'a, 'g> {
         self.outline(control.outline());
     }
 
+    /// A text's frame while Story shows: faint, or full and wider when its
+    /// entry is pointed at.
+    pub fn story_frame(&mut self, control: &Control, pointed: bool) {
+        let path = self.view.to_screen() * control.outline().clone();
+        let selection = color(self.colors.selection);
+        let (width, alpha) = match pointed {
+            true => (2.0, 1.0),
+            false => (1.0, 0.5),
+        };
+        let stroke = Stroke::new(width * self.view.scale());
+        self.stroked(stroke, selection.with_alpha(alpha), &path);
+    }
+
+    /// A text's place in reading order in a pill centred on the frame's
+    /// top-left `corner`, a page point: filled for dialogue and outlined for
+    /// a sound effect, as Story's numbers are. `label` is the number laid out
+    /// in the colour that shows on the pill.
+    pub fn story_number(&mut self, corner: Point, label: &Label, sfx: bool) -> anyhow::Result<()> {
+        let scale = self.view.scale();
+        let corner = self.view.to_screen() * corner;
+        let text = label.bounds();
+        let height = NUMBER * scale;
+        let width = ((text.width() + 8.0) * scale).max(height);
+        let pill = RoundedRect::from_rect(
+            Rect::from_center_size(corner, (width, height)),
+            height * 0.5,
+        );
+        let selection = color(self.colors.selection);
+        match sfx {
+            true => {
+                self.filled(Affine::IDENTITY, Color::WHITE, &pill);
+                self.stroked(Stroke::new(scale), selection, &pill);
+            }
+            false => self.filled(Affine::IDENTITY, selection, &pill),
+        }
+        let middle = pill.rect().center().to_vec2();
+        let at = Affine::translate(middle)
+            * Affine::scale(scale)
+            * Affine::translate(-text.center().to_vec2());
+        label.draw(self.drawing, at)
+    }
+
     /// The corner squares of a control resizing by them, and the rotate
     /// handle on its stem; a control resizing by its edges catches them
     /// along its sides, which draw nothing more, as the editor's did.
@@ -87,6 +133,25 @@ impl<'a, 'g> Overlay<'a, 'g> {
             let square = Rect::from_center_size(at, (side, side));
             self.filled(Affine::IDENTITY, selection, &square);
             self.stroked(line.clone(), Color::WHITE, &square);
+        }
+    }
+
+    /// A frame's page `outline` and its `anchors`, as Photoshop draws a
+    /// path's: hollow squares, and the `picked` ones filled.
+    pub fn anchors(&mut self, outline: &BezPath, anchors: &[Point], picked: &[usize]) {
+        self.outline(outline);
+        let to_screen = self.view.to_screen();
+        let selection = color(self.colors.selection);
+        let side = (HANDLE - 1.0) * self.view.scale();
+        let line = Stroke::new(self.view.scale());
+        for (index, &anchor) in anchors.iter().enumerate() {
+            let square = Rect::from_center_size(to_screen * anchor, (side, side));
+            let fill = match picked.contains(&index) {
+                true => selection,
+                false => Color::WHITE,
+            };
+            self.filled(Affine::IDENTITY, fill, &square);
+            self.stroked(line.clone(), selection, &square);
         }
     }
 

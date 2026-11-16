@@ -26,7 +26,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Snapshot, Tool};
+use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Snapshot, Story, Tool};
 use koharu_renderer::Gpu;
 use koharu_scene::LayerId;
 use tauri::{
@@ -147,6 +147,15 @@ impl Screen {
         });
     }
 
+    pub fn set_story(&self, story: Story) {
+        self.change(move |main| {
+            main.settings.story = story;
+            if let Some(canvas) = &mut main.canvas {
+                canvas.set_story(story);
+            }
+        });
+    }
+
     /// Fits the page in the canvas.
     pub fn fit(&self) {
         self.change(|main| {
@@ -257,6 +266,7 @@ struct Settings {
     tool: Tool,
     brush: Brush,
     colors: Colors,
+    story: Story,
 }
 
 impl Main {
@@ -293,6 +303,7 @@ impl Main {
             canvas.set_tool(settings.tool);
             canvas.set_brush(settings.brush);
             canvas.set_colors(settings.colors);
+            canvas.set_story(settings.story);
             canvas
         });
         if self.canvas.is_none() {
@@ -707,12 +718,7 @@ pub fn on_window_event(app: &Arc<App>, label: &str, window: Arc<dyn Window>, eve
         WindowEvent::ModifiersChanged(modifiers) => {
             with(|main| main.input.modifiers = modifiers.state());
         }
-        WindowEvent::KeyboardInput { event, .. } => {
-            let held = with(|main| Some((main.host()?, main.input.modifiers))).flatten();
-            if let Some((host, modifiers)) = held {
-                keys::send_key(&host, event, modifiers);
-            }
-        }
+        WindowEvent::KeyboardInput { event, .. } => input::key(app, event),
         WindowEvent::Ime(ime) => {
             if let Some(host) = with(|main| main.host()).flatten() {
                 keys::send_ime(&host, ime);

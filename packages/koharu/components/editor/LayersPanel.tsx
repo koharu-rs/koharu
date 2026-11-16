@@ -1,463 +1,62 @@
 'use client'
 
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragMoveEvent,
+  type Modifier,
+} from '@dnd-kit/core'
 import type { TFunction } from 'i18next'
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  ArrowDown,
-  ArrowUp,
   Brush,
-  ChevronDown,
   Eye,
   EyeOff,
   Folder,
   Image as ImageIcon,
-  Layers3,
   Lock,
   LockOpen,
-  Minus,
   MessageCircle,
   PanelsTopLeft,
-  Plus,
   Shapes,
   SquareDashed,
   Trash2,
   Type,
+  X,
 } from 'lucide-react'
-import { type MouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { ColorWell } from '@/components/controls/ColorWell'
-import { CommitTextarea } from '@/components/controls/CommitTextarea'
-import { FontPicker } from '@/components/controls/FontPicker'
 import { call, dispatch } from '@/lib/backend'
 import {
-  expandLayerSelection,
+  dropMoves,
   findLayer,
   isBlockLayer,
+  isContainer,
+  isLockedLayer,
   isTextLayer,
-  letteringOf,
   plainText,
-  walkLayers,
+  type BlockLayer,
+  type Drop,
+  type Part,
   type Placed,
 } from '@/lib/document'
-import { useFonts, usePage } from '@/lib/queries'
-import {
-  deleteLayers,
-  moveLayer,
-  setLocked,
-  setSourceText,
-  setStyle,
-  setText,
-  setVisibility,
-  updateLayer,
-} from '@/lib/scene'
-import { hexToRgba, rgbaToHex, useKoharuStore } from '@/lib/store'
-import {
-  type Align,
-  type Direction,
-  type FontFamily,
-  type Layer,
-  type LayerId,
-  type Text,
-  type TextStyle,
-  type Value,
-} from '@koharu/ipc/protocol'
+import { usePage } from '@/lib/queries'
+import { deleteLayers, moveLayers, setLocked, setPartVisibility, setVisibility } from '@/lib/scene'
+import { useKoharuStore } from '@/lib/store'
+import { type Layer, type LayerId } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@koharu/ui/components/dropdown-menu'
-import {
-  NumberField,
-  NumberFieldDecrement,
-  NumberFieldGroup,
-  NumberFieldIncrement,
-  NumberFieldInput,
-} from '@koharu/ui/components/number-field'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@koharu/ui/components/select'
 import { Slider } from '@koharu/ui/components/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
-/** The renderer's own default when `[renderer]` names no font. */
-const FALLBACK_FONT = 'CCWildWords'
-const BLACK = '#000000'
-const WHITE = '#FFFFFF'
-
-export function Inspector() {
-  const { t } = useTranslation()
-  return (
-    <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-panel)]'>
-      <div className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
-        <Type className='size-3 text-primary' />
-        <h2 className='text-[10px] font-semibold'>{t('inspector.type')}</h2>
-      </div>
-
-      <section className='h-48 min-w-0 shrink-0 overflow-hidden border-b'>
-        <TypeInspector />
-      </section>
-
-      <section className='flex min-h-0 flex-1 flex-col'>
-        <LayersInspector />
-      </section>
-    </aside>
-  )
-}
-
-/** A text's or a block's translation's lettering: the style it draws with, its direction, and
- * its box's fit. A change goes to every text and block selected. */
-function TypeInspector() {
-  const { t } = useTranslation()
-  const borderWidthId = useId()
-  const page = usePage().data
-  const selectedIds = useKoharuStore((state) => state.selectedLayers)
-  const defaultFont = useKoharuStore(
-    (state) => state.preferences?.renderer.font_families?.[0] ?? FALLBACK_FONT,
-  )
-  const availableFonts = useFonts().data
-  const targets = useMemo(() => {
-    if (!page) return []
-    const leaves = expandLayerSelection(page.layers, selectedIds)
-    return walkLayers(page.layers)
-      .map(({ layer }) => layer)
-      .filter((layer) => leaves.includes(layer.id) && (isTextLayer(layer) || isBlockLayer(layer)))
-  }, [page, selectedIds])
-  const current = targets[0]
-  const lettering: Text | null = current ? letteringOf(current) : null
-  const [draft, setDraft] = useState<{ layer: LayerId; style: TextStyle } | null>(null)
-  const sequence = useRef(0)
-
-  useEffect(() => setDraft(null), [current?.id])
-
-  const style = current && draft?.layer === current.id ? draft.style : (lettering?.style ?? {})
-  const chars = style.chars ?? {}
-  const disabled = !current
-  const frame = lettering?.frame ?? 'point'
-  const box = typeof frame === 'object' && 'box' in frame ? frame.box : null
-  const autoFit = box?.fit === 'best'
-
-  /** Merges `patch` into each target's style, shown at once on the first. */
-  const apply = (patch: TextStyle) => {
-    if (!current) return
-    setDraft({
-      layer: current.id,
-      style: { ...style, ...patch, chars: { ...chars, ...patch.chars } },
-    })
-    const request = ++sequence.current
-    void call(setStyle, targets, patch)
-      .catch(() => undefined)
-      .finally(() => {
-        if (sequence.current === request) setDraft(null)
-      })
-  }
-
-  /** Merges `patch` into each target's lettering: a text's own values, a block's translation's. */
-  const update = (patch: { [key in string]: Value }) => {
-    for (const layer of targets) {
-      dispatch(updateLayer, layer.id, isBlockLayer(layer) ? { translation: patch } : patch)
-    }
-  }
-
-  const families = useMemo(() => {
-    const available = availableFonts ?? []
-    return available.some((family) => sameFont(family.name, defaultFont))
-      ? available
-      : [...available, placeholderFamily(defaultFont)]
-  }, [availableFonts, defaultFont])
-  const family = chars.family ?? defaultFont
-  const selectedFamily = families.find((candidate) => sameFont(candidate.name, family))
-  const italics = hasItalic(selectedFamily)
-  const italic = Boolean(chars.italic) && italics
-  const weight = chars.weight ?? 400
-  const weights = usableFontWeights(selectedFamily, italic)
-  const size = Math.round((chars.size ?? 24) * 100) / 100
-  const strokeWidth = chars.stroke_width ?? 0
-  const stroke = chars.stroke ?? null
-  const strokeEnabled = stroke !== null && stroke[3] > 0 && strokeWidth > 0
-  const direction: Direction = lettering?.direction ?? 'horizontal'
-  const align: Align = style.align ?? (direction === 'vertical' ? 'start' : 'center')
-
-  return (
-    <div className='min-w-0 p-2' data-testid='type-inspector' aria-disabled={disabled}>
-      <div className='grid min-w-0 gap-1.5'>
-        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5'>
-          <InspectorField label={t('inspector.font')}>
-            <FontPicker
-              value={family}
-              families={families}
-              disabled={disabled}
-              size='sm'
-              onChange={(next) => {
-                const nextFamily = families.find((candidate) => sameFont(candidate.name, next))
-                const nextItalic = italic && hasItalic(nextFamily)
-                apply({
-                  chars: {
-                    family: next,
-                    italic: nextItalic,
-                    weight: nearestFontWeight(usableFontWeights(nextFamily, nextItalic), weight),
-                  },
-                })
-              }}
-            />
-          </InspectorField>
-          <InspectorField label={t('inspector.color')}>
-            <ColorWell
-              label={t('inspector.textColor')}
-              size='sm'
-              disabled={disabled}
-              value={chars.fill ? rgbaToHex(chars.fill) : BLACK}
-              onChange={(color) => color && apply({ chars: { fill: hexToRgba(color) } })}
-            />
-          </InspectorField>
-        </div>
-
-        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_4.25rem_4.75rem] gap-1.5'>
-          <InspectorField label={t('inspector.size')}>
-            <FontSizeField
-              disabled={disabled}
-              value={size}
-              autoFit={autoFit}
-              canAutoFit={box !== null}
-              onChange={(next) => {
-                apply({ chars: { size: next } })
-                // A set size is the most the text takes, as the box's best fit would grow it.
-                if (autoFit) update({ frame: { box: { fit: 'shrink' } } })
-              }}
-              onAutoFit={() => update({ frame: { box: { fit: 'best' } } })}
-            />
-          </InspectorField>
-          <InspectorField label={t('inspector.weight')}>
-            <Select
-              disabled={disabled}
-              value={String(weight)}
-              onValueChange={(next) => next && apply({ chars: { weight: Number(next) } })}
-            >
-              <SelectTrigger
-                size='sm'
-                aria-label={t('inspector.fontWeight')}
-                className='w-full min-w-0'
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {weights.map((value) => (
-                  <SelectItem key={value} value={String(value)}>
-                    {value}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </InspectorField>
-          <InspectorField label={t('inspector.style')}>
-            <Select
-              disabled={disabled || !italics}
-              value={italic ? 'italic' : 'normal'}
-              onValueChange={(next) => {
-                const nextItalic = next === 'italic'
-                apply({
-                  chars: {
-                    italic: nextItalic,
-                    weight: nearestFontWeight(
-                      usableFontWeights(selectedFamily, nextItalic),
-                      weight,
-                    ),
-                  },
-                })
-              }}
-            >
-              <SelectTrigger
-                size='sm'
-                aria-label={t('inspector.fontStyle')}
-                className='w-full min-w-0'
-              >
-                <SelectValue>
-                  {t(`inspector.fontStyles.${italic ? 'italic' : 'normal'}`)}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent align='end'>
-                <SelectItem value='normal'>{t('inspector.fontStyles.normal')}</SelectItem>
-                {italics && (
-                  <SelectItem value='italic'>{t('inspector.fontStyles.italic')}</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </InspectorField>
-        </div>
-
-        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(6.5rem,1fr)] gap-1.5'>
-          <InspectorField label={t('inspector.alignment')}>
-            <div className='grid h-6 grid-cols-3 rounded-md border border-input bg-background p-px'>
-              {(
-                [
-                  [
-                    'start',
-                    AlignLeft,
-                    direction === 'vertical' ? t('inspector.alignTop') : t('inspector.alignLeft'),
-                  ],
-                  [
-                    'center',
-                    AlignCenter,
-                    direction === 'vertical'
-                      ? t('inspector.alignMiddle')
-                      : t('inspector.alignCenter'),
-                  ],
-                  [
-                    'end',
-                    AlignRight,
-                    direction === 'vertical'
-                      ? t('inspector.alignBottom')
-                      : t('inspector.alignRight'),
-                  ],
-                ] as const
-              ).map(([value, Icon, label]) => (
-                <button
-                  key={value}
-                  type='button'
-                  aria-label={label}
-                  aria-pressed={align === value}
-                  disabled={disabled}
-                  data-active={align === value}
-                  className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
-                  onClick={() => apply({ align: value })}
-                >
-                  <Icon className='size-3' />
-                </button>
-              ))}
-            </div>
-          </InspectorField>
-          <InspectorField label={t('inspector.direction')}>
-            <Select
-              disabled={disabled}
-              value={direction}
-              items={{
-                horizontal: t('inspector.horizontal'),
-                vertical: t('inspector.vertical'),
-              }}
-              onValueChange={(next) => next && update({ direction: next })}
-            >
-              <SelectTrigger size='sm' aria-label={t('inspector.textDirection')} className='w-full'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='horizontal'>{t('inspector.horizontal')}</SelectItem>
-                <SelectItem value='vertical'>{t('inspector.vertical')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </InspectorField>
-        </div>
-
-        <div className='grid min-w-0 grid-cols-[2.75rem_minmax(5.5rem,1fr)] items-end gap-1.5'>
-          <InspectorField label={t('inspector.border')}>
-            <ColorWell
-              label={t('inspector.borderColor')}
-              size='sm'
-              disabled={disabled}
-              allowTransparent
-              value={strokeEnabled && stroke ? rgbaToHex(stroke) : null}
-              onChange={(color) =>
-                apply({
-                  chars:
-                    color === null
-                      ? { stroke: null }
-                      : {
-                          stroke: hexToRgba(color),
-                          stroke_width: strokeWidth > 0 ? strokeWidth : 1.5,
-                        },
-                })
-              }
-            />
-          </InspectorField>
-          <InspectorField label={t('inspector.width')}>
-            <NumberField
-              id={borderWidthId}
-              name='border-width'
-              className='min-w-0'
-              disabled={disabled}
-              value={strokeWidth > 0 ? strokeWidth : 1.5}
-              min={0.5}
-              max={32}
-              step={0.5}
-              onValueChange={(next) => {
-                if (next !== null && next >= 0.5 && next <= 32) {
-                  apply({
-                    chars: { stroke_width: next, stroke: stroke ?? hexToRgba(WHITE) },
-                  })
-                }
-              }}
-            >
-              <NumberFieldGroup>
-                <NumberFieldDecrement aria-label={t('inspector.decreaseBorderWidth')}>
-                  <Minus />
-                </NumberFieldDecrement>
-                <NumberFieldInput aria-label={t('inspector.borderWidth')} />
-                <NumberFieldIncrement aria-label={t('inspector.increaseBorderWidth')}>
-                  <Plus />
-                </NumberFieldIncrement>
-              </NumberFieldGroup>
-            </NumberField>
-          </InspectorField>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** A family the font list hasn't loaded, so the default still shows. */
-function placeholderFamily(name: string): FontFamily {
-  return {
-    name,
-    faces: [{ post_script_name: name, weight: 400, weight_range: null, italic: false }],
-  }
-}
-
-function hasItalic(family: FontFamily | undefined): boolean {
-  return Boolean(family?.faces.some((face) => face.italic))
-}
-
-function usableFontWeights(family: FontFamily | undefined, italic: boolean): number[] {
-  if (!family) return [400]
-  const styled = family.faces.filter((face) => face.italic === italic)
-  const faces = styled.length ? styled : family.faces
-  const weights = new Set(faces.map((face) => face.weight))
-  for (const face of faces) {
-    if (!face.weight_range) continue
-    const { start, end } = face.weight_range
-    weights.add(start)
-    weights.add(end)
-    for (let weight = 100; weight <= 900; weight += 100) {
-      if (weight >= start && weight <= end) weights.add(weight)
-    }
-  }
-  return [...weights].sort((left, right) => left - right)
-}
-
-function nearestFontWeight(weights: number[], target: number): number {
-  return weights.reduce(
-    (nearest, weight) =>
-      Math.abs(weight - target) < Math.abs(nearest - target) ? weight : nearest,
-    weights[0] ?? target,
-  )
-}
-
-function sameFont(left: string, right: string): boolean {
-  const normalize = (value: string) =>
-    value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
-  return normalize(left) === normalize(right)
-}
-
 /** The page's layers first to last, which is reading order, each with its depth; the last
- * draws on top. A block's mask and clean-up are its own and aren't listed. */
+ * draws on top. A block's clean-up and mask are its own, shown on its row, not listed. */
 function displayedLayers(layers: Layer[], depth = 0): { placed: Placed; depth: number }[] {
   return layers.flatMap((layer) => {
     const placed = { layer, ancestors: [] as Layer[] }
@@ -471,7 +70,9 @@ function displayedLayers(layers: Layer[], depth = 0): { placed: Placed; depth: n
   })
 }
 
-function LayersInspector() {
+/** The shown page's layers in reading order, each a row to select, show, lock, fade, or delete,
+ * a block's with its clean-up and mask. */
+export function LayersPanel() {
   const { t } = useTranslation()
   const page = usePage().data
   const selected = useKoharuStore((state) => state.selectedLayers)
@@ -486,23 +87,62 @@ function LayersInspector() {
   }, [selected])
 
   const rows = useMemo(() => (page ? displayedLayers(page.layers) : []), [page])
+  // A drag of rows: the layers it carries, in reading order, and where it would put them now.
+  const [drag, setDrag] = useState<{ layers: LayerId[]; drop: Drop | null } | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
-  /** The layer's siblings in drawing order, and its parent. */
-  const siblingsOf = (layer: Layer) => {
-    const parent = findLayer(page.layers, layer.id)?.ancestors.at(-1) ?? null
-    return { parent, siblings: parent ? (parent.children ?? []) : page.layers }
+  /** What a drag shows under the pointer: its first layer's name, and how many more it carries. */
+  const draggedName = (layers: LayerId[]) => {
+    const index = rows.findIndex((row) => row.placed.layer.id === layers[0])
+    const first = rows[index]?.placed.layer
+    const name = first ? localizedLayerName(first, index, t) : ''
+    return layers.length > 1 ? `${name} +${layers.length - 1}` : name
   }
 
-  /** Moves a layer toward the front (`1`) or the back (`-1`) among its siblings. */
-  const move = (layer: Layer, toward: 1 | -1) => {
-    const { parent, siblings } = siblingsOf(layer)
-    const index = siblings.findIndex((sibling) => sibling.id === layer.id)
-    const target = index + toward
-    if (index < 0 || target < 0 || target >= siblings.length) return
-    // `move_layer` counts the index after the layer is taken out, which is `target` either way.
-    dispatch(moveLayer, layer.id, parent?.id ?? null, target)
+  /** A drag carries every selected layer when it starts on a selected row, else that row's. */
+  const carried = (layer: LayerId) =>
+    selected.includes(layer)
+      ? rows.map((row) => row.placed.layer.id).filter((id) => selected.includes(id))
+      : [layer]
+
+  /** Where the pointer is over the row under it: its top or bottom quarter puts the layers
+   * before or after it, and a container's middle into it; another row's halves, before or after.
+   * Only a place the scene allows. */
+  const follow = ({ active, over, activatorEvent, delta }: DragMoveEvent) => {
+    const layers = drag?.layers ?? carried(String(active.id))
+    const target = over ? findLayer(page.layers, String(over.id))?.layer : undefined
+    const start = activatorEvent as PointerEvent
+    let drop: Drop | null = null
+    if (over && target && 'clientY' in start) {
+      const at = (start.clientY + delta.y - over.rect.top) / over.rect.height
+      const zone: Drop['zone'] = isContainer(target)
+        ? at < 0.25
+          ? 'before'
+          : at > 0.75
+            ? 'after'
+            : 'inside'
+        : at < 0.5
+          ? 'before'
+          : 'after'
+      const candidate = { target: target.id, zone }
+      if (dropMoves(page.layers, layers, candidate)) drop = candidate
+    }
+    setDrag({ layers, drop })
+  }
+
+  /** A click on a block's part picks it for the brush, and Shift shows or hides it, as a click
+   * and a Shift-click on a layer mask's thumbnail do. */
+  const pickPart = (block: BlockLayer, part: Part, toggle: boolean) => {
+    const layer = block[part]
+    if (!layer) return
+    if (toggle) {
+      dispatch(setPartVisibility, block.id, part, !layer.visible)
+      return
+    }
+    anchor.current = block.id
+    selectLayers([layer.id])
   }
 
   const deleteLayer = (layer: LayerId) =>
@@ -548,41 +188,61 @@ function LayersInspector() {
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <header className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
-        <Layers3 className='size-3 text-primary' />
-        <h2 className='text-[10px] font-semibold'>{t('layers.title')}</h2>
-        <span className='text-[9px] text-muted-foreground tabular-nums'>{rows.length}</span>
-      </header>
-
-      <ScrollArea className='min-h-0 flex-1'>
-        <div className='py-0.5'>
-          {rows.map(({ placed, depth }, index) => {
-            const { layer } = placed
-            const { siblings } = siblingsOf(layer)
-            const position = siblings.findIndex((sibling) => sibling.id === layer.id)
-            return (
-              <LayerRow
-                key={layer.id}
-                layer={layer}
-                index={index}
-                depth={depth}
-                selected={selected.includes(layer.id)}
-                expanded={expandedLayer === layer.id}
-                onSelect={(event) =>
-                  selectLayer(layer.id, event.ctrlKey || event.metaKey, event.shiftKey)
-                }
-                onToggle={() => dispatch(setVisibility, [layer.id], !layer.visible, null)}
-                onLock={() => dispatch(setLocked, [layer.id], !layer.locked)}
-                onMove={(toward) => move(layer, toward)}
-                canMoveUp={!layer.locked && position > 0}
-                canMoveDown={!layer.locked && position < siblings.length - 1}
-                onDelete={() => deleteLayer(layer.id)}
-              />
-            )
-          })}
-          {rows.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
-        </div>
-      </ScrollArea>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={({ active }) => setDrag({ layers: carried(String(active.id)), drop: null })}
+        onDragMove={follow}
+        onDragCancel={() => setDrag(null)}
+        onDragEnd={() => {
+          const moves = drag?.drop ? dropMoves(page.layers, drag.layers, drag.drop) : null
+          setDrag(null)
+          if (moves?.length) dispatch(moveLayers, moves)
+        }}
+      >
+        <ScrollArea className='min-h-0 flex-1'>
+          <div className='py-0.5'>
+            {rows.map(({ placed, depth }, index) => {
+              const { layer } = placed
+              return (
+                <LayerRow
+                  key={layer.id}
+                  layer={layer}
+                  index={index}
+                  depth={depth}
+                  selected={selected.includes(layer.id)}
+                  picked={
+                    isBlockLayer(layer)
+                      ? (['cleanup', 'mask'] as const).find((part) =>
+                          selected.includes(layer[part]?.id ?? ''),
+                        )
+                      : undefined
+                  }
+                  onPick={(part, toggle) => isBlockLayer(layer) && pickPart(layer, part, toggle)}
+                  expanded={expandedLayer === layer.id}
+                  onSelect={(event) =>
+                    selectLayer(layer.id, event.ctrlKey || event.metaKey, event.shiftKey)
+                  }
+                  onToggle={() => dispatch(setVisibility, [layer.id], !layer.visible, null)}
+                  onLock={() => dispatch(setLocked, [layer.id], !layer.locked)}
+                  movable={!isLockedLayer(placed)}
+                  carried={drag?.layers.includes(layer.id) ?? false}
+                  drop={drag?.drop?.target === layer.id ? drag.drop.zone : undefined}
+                  onDelete={() => deleteLayer(layer.id)}
+                />
+              )
+            })}
+            {rows.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
+          </div>
+        </ScrollArea>
+        <DragOverlay dropAnimation={null} modifiers={[besidePointer]}>
+          {drag && (
+            <div className='w-fit max-w-56 truncate rounded-md border border-border bg-popover px-2 py-1 text-[11px] font-medium shadow-sm'>
+              {draggedName(drag.layers)}
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
     </div>
   )
 }
@@ -592,40 +252,66 @@ function LayerRow({
   index,
   depth,
   selected,
+  picked,
   expanded,
   onSelect,
+  onPick,
   onToggle,
   onLock,
-  onMove,
-  canMoveUp,
-  canMoveDown,
+  movable,
+  carried,
+  drop,
   onDelete,
 }: {
   layer: Layer
   index: number
   depth: number
   selected: boolean
+  /** The block's part selected for the brush, if one is. */
+  picked: Part | undefined
   expanded: boolean
   onSelect: (event: MouseEvent<HTMLButtonElement>) => void
+  onPick: (part: Part, toggle: boolean) => void
   onToggle: () => void
   onLock: () => void
-  onMove: (toward: 1 | -1) => void
-  canMoveUp: boolean
-  canMoveDown: boolean
+  /** Whether it can be dragged: not locked, nor in a locked layer. */
+  movable: boolean
+  /** Whether the drag in progress carries it. */
+  carried: boolean
+  /** Where the drag in progress would put its layers relative to this row. */
+  drop: Drop['zone'] | undefined
   onDelete: () => void
 }) {
   const { t } = useTranslation()
   const name = localizedLayerName(layer, index, t)
   const detail = t(`layers.kinds.${layer.kind}`)
   const Icon = layerIcon(layer)
+  const block = isBlockLayer(layer) ? layer : null
+  const handle = useDraggable({ id: layer.id, disabled: !movable })
+  const target = useDroppable({ id: layer.id })
   return (
     <div className='group min-w-0 px-1 py-px' style={{ paddingLeft: `${depth * 10 + 4}px` }}>
       <div
-        data-selected={selected}
+        data-selected={selected || picked !== undefined}
         data-expanded={expanded}
-        className='min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none'
+        data-carried={carried}
+        data-drop={drop === 'inside'}
+        className='min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[carried=true]:opacity-50 data-[drop=true]:bg-primary/10 data-[drop=true]:ring-1 data-[drop=true]:ring-primary data-[selected=true]:bg-accent motion-reduce:transition-none'
       >
-        <div className='relative flex min-w-0 items-center gap-0.5'>
+        <div
+          ref={(element) => {
+            handle.setNodeRef(element)
+            target.setNodeRef(element)
+          }}
+          {...handle.listeners}
+          className='relative flex min-w-0 items-center gap-0.5'
+        >
+          {(drop === 'before' || drop === 'after') && (
+            <span
+              aria-hidden='true'
+              className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-primary ${drop === 'before' ? '-top-px' : '-bottom-px'}`}
+            />
+          )}
           <button
             type='button'
             aria-label={t('layers.edit', { name })}
@@ -641,28 +327,17 @@ function LayerRow({
               </span>
             </span>
           </button>
-          <div
-            className={`pointer-events-none absolute top-1/2 z-10 flex -translate-y-1/2 rounded-md bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/40 backdrop-blur-md transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 motion-reduce:transition-none ${expanded ? 'right-[3.25rem]' : 'right-[4.75rem]'}`}
-          >
-            <button
-              type='button'
-              aria-label={t('layers.moveUp', { name })}
-              disabled={!canMoveUp}
-              className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
-              onClick={() => onMove(-1)}
-            >
-              <ArrowUp className='size-3' />
-            </button>
-            <button
-              type='button'
-              aria-label={t('layers.moveDown', { name })}
-              disabled={!canMoveDown}
-              className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
-              onClick={() => onMove(1)}
-            >
-              <ArrowDown className='size-3' />
-            </button>
-          </div>
+          {block &&
+            (['cleanup', 'mask'] as const).map((part) => (
+              <PartButton
+                key={part}
+                block={block}
+                part={part}
+                name={name}
+                picked={picked === part}
+                onPick={(toggle) => onPick(part, toggle)}
+              />
+            ))}
           {!expanded && (
             <span className='w-7 shrink-0 text-right text-[9px] text-muted-foreground tabular-nums'>
               {Math.round(layer.opacity * 100)}%
@@ -767,160 +442,68 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
           </Tooltip>
         )}
       </div>
-      {isBlockLayer(layer) && (
-        <>
-          <InspectorField label={t('inspector.source')}>
-            <CommitTextarea
-              data-testid={`edit-source-${layer.id}`}
-              aria-label={t('layers.sourceLabel', { name })}
-              wrap='soft'
-              disabled={layer.locked}
-              className='max-h-14 min-h-8 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
-              value={plainText(layer.source)}
-              onCommit={(text) => dispatch(setSourceText, layer.id, text)}
-            />
-          </InspectorField>
-          <InspectorField label={t('inspector.translation')}>
-            <CommitTextarea
-              data-testid={`edit-translation-${layer.id}`}
-              aria-label={t('layers.translationLabel', { name })}
-              wrap='soft'
-              disabled={layer.locked}
-              className='max-h-16 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md border-primary/25 bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
-              value={plainText(layer.translation)}
-              onCommit={(text) => dispatch(setText, layer.id, text)}
-            />
-          </InspectorField>
-        </>
-      )}
-      {isTextLayer(layer) && (
-        <InspectorField label={t('inspector.text')}>
-          <CommitTextarea
-            data-testid={`edit-text-${layer.id}`}
-            aria-label={t('layers.textLabel', { name })}
-            wrap='soft'
-            disabled={layer.locked}
-            className='max-h-16 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
-            value={plainText(layer)}
-            onCommit={(text) => dispatch(setText, layer.id, text)}
-          />
-        </InspectorField>
-      )}
     </div>
   )
 }
 
-function InspectorField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className='grid min-w-0 gap-0.5'>
-      <span className='text-[8px] font-medium tracking-[0.06em] text-muted-foreground uppercase'>
-        {label}
-      </span>
-      {children}
-    </div>
-  )
-}
-
-const fontSizePresets = [8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
-
-function FontSizeField({
-  value,
-  autoFit,
-  canAutoFit,
-  disabled,
-  onChange,
-  onAutoFit,
+/** A block's clean-up or mask on its row, by the icon its kind has in the list: ringed while the
+ * brush paints it and crossed out in red while hidden, as a layer mask's thumbnail is. */
+function PartButton({
+  block,
+  part,
+  name,
+  picked,
+  onPick,
 }: {
-  value: number
-  autoFit: boolean
-  canAutoFit: boolean
-  disabled: boolean
-  onChange: (value: number) => void
-  onAutoFit: () => void
+  block: BlockLayer
+  part: Part
+  name: string
+  picked: boolean
+  onPick: (toggle: boolean) => void
 }) {
   const { t } = useTranslation()
-  const id = useId()
-  const [draft, setDraft] = useState<number | null>(value)
-
-  useEffect(() => {
-    setDraft(autoFit ? null : value)
-  }, [autoFit, value])
-
-  const select = (choice: string) => {
-    if (choice === 'auto') {
-      setDraft(null)
-      onAutoFit()
-      return
-    }
-    const size = Number(choice)
-    if (Number.isFinite(size) && size > 0 && size <= 300) {
-      setDraft(size)
-      onChange(size)
-    }
-  }
-
-  const commit = (next: number | null) => {
-    if (next !== null && next > 0 && next <= 300) {
-      onChange(next)
-    } else {
-      setDraft(autoFit ? null : value)
-    }
-  }
-
+  const layer = block[part]
+  if (!layer) return null
+  const label = t(`layers.parts.${part}`)
+  const Icon = part === 'cleanup' ? Brush : SquareDashed
   return (
-    <NumberField
-      id={id}
-      name='font-size'
-      className='min-w-0'
-      disabled={disabled}
-      value={draft}
-      min={0.5}
-      max={300}
-      step={0.5}
-      onValueChange={setDraft}
-      onValueCommitted={commit}
-    >
-      <NumberFieldGroup>
-        <NumberFieldInput
-          data-testid='type-size'
-          aria-label={t('inspector.fontSize')}
-          placeholder={t('inspector.auto')}
-          className='px-2 text-left'
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={disabled}
-            aria-label={t('inspector.chooseFontSize')}
-            className='grid size-6 shrink-0 place-items-center border-l border-input text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-40'
-          >
-            <ChevronDown className='size-3' />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align='end'
-            className='w-28 min-w-28 border border-border/50 p-0.5 shadow-sm ring-0'
-          >
-            <DropdownMenuRadioGroup value={autoFit ? 'auto' : String(value)} onValueChange={select}>
-              {canAutoFit && (
-                <DropdownMenuRadioItem value='auto' className='min-h-6 py-0.5 text-[10px]'>
-                  {t('inspector.auto')}
-                </DropdownMenuRadioItem>
-              )}
-              {fontSizePresets.map((size) => (
-                <DropdownMenuRadioItem
-                  key={size}
-                  value={String(size)}
-                  className='min-h-6 py-0.5 text-[10px] tabular-nums'
-                >
-                  {size}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </NumberFieldGroup>
-    </NumberField>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type='button'
+            aria-label={t('layers.parts.pick', { part: label, name })}
+            aria-pressed={picked}
+            data-part={part}
+            data-picked={picked}
+            className='relative grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-[picked=true]:bg-primary/15 data-[picked=true]:text-primary data-[picked=true]:ring-1 data-[picked=true]:ring-primary'
+            onClick={(event) => onPick(event.shiftKey)}
+          />
+        }
+      >
+        <Icon className={layer.visible ? 'size-3.5' : 'size-3.5 opacity-40'} />
+        {!layer.visible && (
+          <X className='absolute inset-0 m-auto size-4 text-destructive' strokeWidth={2.5} />
+        )}
+      </TooltipTrigger>
+      <TooltipContent side='left'>
+        {label}
+        <span className='ml-2 opacity-60'>{t('layers.parts.toggle')}</span>
+      </TooltipContent>
+    </Tooltip>
   )
 }
+
+/** A drag's chip below and right of the pointer, as a system drag image sits, rather than over
+ * its row's place, so the row under the pointer stays readable. */
+const besidePointer: Modifier = ({ transform, activatorEvent, activeNodeRect }) =>
+  activatorEvent instanceof PointerEvent && activeNodeRect
+    ? {
+        ...transform,
+        x: transform.x + activatorEvent.clientX - activeNodeRect.left + 12,
+        y: transform.y + activatorEvent.clientY - activeNodeRect.top + 12,
+      }
+    : transform
 
 function EmptyInspector({ children }: { children: React.ReactNode }) {
   return (

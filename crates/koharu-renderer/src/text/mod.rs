@@ -17,11 +17,13 @@ mod breaks;
 mod draw;
 mod fit;
 mod itemize;
+mod label;
 mod lines;
 mod room;
 mod shape;
 mod style;
 
+pub use self::label::Label;
 pub(crate) use self::{arrange::TextLayout, breaks::preload_dictionary, draw::draw};
 
 /// Laid-out text, as a run of one face at one size and paint.

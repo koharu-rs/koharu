@@ -1,6 +1,7 @@
-//! The selected layers, in the order they were picked, and the one the
-//! select tool would pick under the pointer. Tools read it and answer the
-//! next ids; only the canvas sets them.
+//! The selected layers, in the order they were picked, the one the select
+//! tool would pick under the pointer, and the anchors the direct selection
+//! tool picked on the one selected text's frame. Tools read it and answer
+//! the next ids; only the canvas sets them.
 
 use koharu_scene::LayerId;
 
@@ -8,6 +9,9 @@ use koharu_scene::LayerId;
 pub(crate) struct Selection {
     ids: Vec<LayerId>,
     hover: Option<LayerId>,
+    /// Indices into the selected text's frame's anchors, ring by ring;
+    /// another selection drops them.
+    anchors: Vec<usize>,
 }
 
 impl Selection {
@@ -54,8 +58,19 @@ impl Selection {
     /// Whether `ids` changed the selection.
     pub fn set(&mut self, ids: Vec<LayerId>) -> bool {
         let changed = ids != self.ids;
+        if changed {
+            self.anchors.clear();
+        }
         self.ids = ids;
         changed
+    }
+
+    pub fn anchors(&self) -> &[usize] {
+        &self.anchors
+    }
+
+    pub fn set_anchors(&mut self, anchors: Vec<usize>) {
+        self.anchors = anchors;
     }
 
     pub fn hover(&self) -> Option<LayerId> {

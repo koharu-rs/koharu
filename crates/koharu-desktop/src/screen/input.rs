@@ -1,6 +1,6 @@
 //! The window's pointer, routed to the canvas where CEF painted nothing over
 //! its viewport and to the web interface everywhere else, as each side's
-//! own events.
+//! own events, and its keys, routed to the side a press last landed on.
 
 use std::{
     sync::{Arc, LazyLock},
@@ -13,15 +13,15 @@ use specta::Type;
 use tauri_runtime_cef::cef::{BrowserHost, ImplBrowserHost as _, MouseButtonType, MouseEvent};
 use ui_events::{
     ScrollDelta,
-    keyboard::Modifiers,
+    keyboard::{Code, Key, KeyState, KeyboardEvent, Modifiers, NamedKey},
     pointer::{
         PointerButton, PointerButtonEvent, PointerButtons, PointerEvent, PointerId, PointerInfo,
         PointerScrollEvent, PointerState, PointerType, PointerUpdate,
     },
 };
 use winit::{
-    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
-    keyboard::ModifiersState,
+    event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent},
+    keyboard::{Key as WinitKey, ModifiersState, PhysicalKey},
     window::Window,
 };
 
@@ -200,6 +200,8 @@ pub struct Input {
     drag: Drag,
     /// The side the pointer was last over.
     hover: Side,
+    /// The side holding the keyboard: the one a press last landed on.
+    keyboard: Side,
 }
 
 /// A press, to count the clicks of a double or triple click.
@@ -220,6 +222,22 @@ static START: LazyLock<Instant> = LazyLock::new(Instant::now);
 impl Input {
     pub fn over_web(&self) -> bool {
         self.hover == Side::Web
+    }
+
+    /// The modifiers held, as both sides' events carry them.
+    fn modifiers(&self) -> Modifiers {
+        let mut modifiers = Modifiers::empty();
+        for (held, modifier) in [
+            (self.modifiers.shift_key(), Modifiers::SHIFT),
+            (self.modifiers.control_key(), Modifiers::CONTROL),
+            (self.modifiers.alt_key(), Modifiers::ALT),
+            (self.modifiers.meta_key(), Modifiers::META),
+        ] {
+            if held {
+                modifiers |= modifier;
+            }
+        }
+        modifiers
     }
 
     /// Records a press of `flag`, and answers how many clicks it makes.
@@ -284,6 +302,9 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
                 let under = main.under(at);
                 let first = main.input.drag.side().is_none();
                 let side = main.input.drag.press(button.flag(), under);
+                if first {
+                    main.input.keyboard = side;
+                }
                 (side, main.input.click(button.flag(), scale), first)
             }) else {
                 return;
@@ -418,6 +439,66 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
     }
 }
 
+/// Routes a key: to the canvas first while it holds the keyboard, after a
+/// press on it, as Photoshop's document window takes the keys once clicked,
+/// and on to the page when the canvas leaves the key. Tab passed on moves the
+/// page's focus, so the page holds the keyboard after it.
+pub fn key(app: &Arc<App>, event: &KeyEvent) {
+    let taken = with(|main| {
+        if main.input.keyboard != Side::Canvas {
+            return None;
+        }
+        let key = keyboard_event(event, main.input.modifiers());
+        main.canvas.as_mut()?.key(&key)
+    })
+    .flatten();
+    if let Some(effects) = taken {
+        let edited = app.handle(effects);
+        change(|main| {
+            if let (Some(snapshot), Some(canvas)) = (edited, &mut main.canvas) {
+                canvas.show(snapshot);
+            }
+        });
+        return;
+    }
+    let held = with(|main| {
+        if event.state == ElementState::Pressed
+            && event.logical_key == WinitKey::Named(NamedKey::Tab)
+        {
+            main.input.keyboard = Side::Web;
+        }
+        Some((main.host()?, main.input.modifiers))
+    })
+    .flatten();
+    if let Some((host, modifiers)) = held {
+        keys::send_key(&host, event, modifiers);
+    }
+}
+
+/// `event` as the canvas takes it, a W3C keyboard event; winit's named keys,
+/// codes, and locations are `keyboard-types`' own.
+fn keyboard_event(event: &KeyEvent, modifiers: Modifiers) -> KeyboardEvent {
+    KeyboardEvent {
+        state: match event.state {
+            ElementState::Pressed => KeyState::Down,
+            ElementState::Released => KeyState::Up,
+        },
+        key: match &event.logical_key {
+            WinitKey::Named(named) => Key::Named(*named),
+            WinitKey::Character(text) => Key::Character(text.to_string()),
+            _ => Key::Named(NamedKey::Unidentified),
+        },
+        code: match event.physical_key {
+            PhysicalKey::Code(code) => code,
+            PhysicalKey::Unidentified(_) => Code::Unidentified,
+        },
+        location: event.location,
+        modifiers,
+        repeat: event.repeat,
+        is_composing: false,
+    }
+}
+
 /// Moves the pointer to `side`: the side it leaves hears that it left, and
 /// the cursor becomes the new side's.
 fn hover(app: &Arc<App>, window: &dyn Window, side: Side) {
@@ -510,17 +591,7 @@ impl Main {
                 buttons.insert(button.ui());
             }
         }
-        let mut modifiers = Modifiers::empty();
-        for (held, modifier) in [
-            (input.modifiers.shift_key(), Modifiers::SHIFT),
-            (input.modifiers.control_key(), Modifiers::CONTROL),
-            (input.modifiers.alt_key(), Modifiers::ALT),
-            (input.modifiers.meta_key(), Modifiers::META),
-        ] {
-            if held {
-                modifiers |= modifier;
-            }
-        }
+        let modifiers = input.modifiers();
         PointerState {
             time: START.elapsed().as_nanos() as u64,
             position: (input.position.x, input.position.y).into(),

@@ -17,6 +17,9 @@ pub enum Query {
     GetPage { page: PageId },
     /// Get one layer with everything inside it.
     GetLayer { layer: LayerId },
+    /// List the texts a reader sees on a page, in reading order: each block
+    /// and text layer that shows.
+    GetStory { page: PageId },
     /// Get the undo and redo labels.
     GetHistory,
 }
@@ -27,6 +30,7 @@ pub enum Answer {
     Project(ProjectAnswer),
     Page(Page),
     Layer(Box<Layer>),
+    Story(Vec<LayerId>),
     History(History),
 }
 
@@ -64,6 +68,7 @@ impl Session {
             }),
             Query::GetPage { page } => Answer::Page(project.page(page)?.clone()),
             Query::GetLayer { layer } => Answer::Layer(Box::new(project.layer(layer)?.clone())),
+            Query::GetStory { page } => Answer::Story(project.story(page)?),
             Query::GetHistory => Answer::History(self.history()),
         })
     }

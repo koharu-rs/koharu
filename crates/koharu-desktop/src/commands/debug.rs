@@ -14,7 +14,7 @@ use crate::{
 /// The window as it's composited, as PNG bytes: the canvas and CEF's paint
 /// together, which a CDP screenshot of the page alone can't show.
 #[tauri::command]
-pub async fn capture_window(app: State<'_, Arc<App>>) -> Result<Response, String> {
+pub async fn capture(app: State<'_, Arc<App>>) -> Result<Response, String> {
     let image = app
         .screen
         .capture()

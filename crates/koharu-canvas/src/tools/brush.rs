@@ -3,7 +3,7 @@
 //! straight-alpha pixels.
 
 use image::{RgbaImage, imageops};
-use koharu_scene::{Content, Edit, LayerId, Op, Raster, Ref, Rgba};
+use koharu_scene::{Content, Edit, LayerId, Op, PixelFormat, Raster, Ref, Rgba};
 use kurbo::{
     Affine, BezPath, Cap, Circle, Join, Point, Shape as _, Size, Stroke as Style, StrokeOpts,
     stroke,
@@ -86,8 +86,13 @@ impl Stroke {
     }
 
     pub fn preview(&self, cx: &Context, overlay: &mut Overlay) {
+        // A mask takes coverage, not colour.
+        let colored = self
+            .target
+            .and_then(|layer| cx.snapshot.writable(layer))
+            .is_none_or(|(_, format)| format == PixelFormat::Rgba8);
         let tint = match self.tool {
-            Tool::Draw => cx.brush.color,
+            Tool::Draw if colored => cx.brush.color,
             _ => {
                 let Rgba([r, g, b, _]) = cx.colors.selection;
                 Rgba([r, g, b, 0.4])
@@ -104,9 +109,11 @@ impl Stroke {
     }
 
     /// A paint or erase stroke's coverage over the page pixels `rect` as one
-    /// write to its raster, read and composited in the raster's own
-    /// coordinates; painting with no raster adds one at the top of the page,
-    /// selected.
+    /// write to its raster, clean-up, or mask, read and composited in its own
+    /// coordinates; painting with no target adds a raster at the top of the
+    /// page, selected. A mask takes coverage on an alpha scale, as Clip Studio
+    /// Paint's does: a stroke of any colour uncovers the clean-up, and the
+    /// eraser hides it.
     fn stroked(
         &self,
         cx: &Context,
@@ -121,21 +128,25 @@ impl Stroke {
             .target
             .and_then(|layer| Some((layer, cx.snapshot.writable(layer)?)));
         let (ops, created) = match target {
-            Some((layer, offset)) => {
+            Some((layer, (offset, format))) => {
                 let own = koharu_scene::Rect {
                     x: rect.x - offset.x,
                     y: rect.y - offset.y,
                     ..rect
                 };
                 let mut pixels = cx.session.lock().pixels(layer, own)?;
-                match self.tool {
-                    Tool::Draw => {
+                match (self.tool, format) {
+                    (Tool::Draw, PixelFormat::Rgba8) => {
                         let mut under = RgbaImage::from_raw(own.width, own.height, pixels)
                             .ok_or_else(|| anyhow::anyhow!("a raster's pixels are RGBA"))?;
                         imageops::overlay(&mut under, &paint(rect, coverage, cx.brush.color), 0, 0);
                         pixels = under.into_raw();
                     }
-                    _ => erased(&mut pixels, coverage),
+                    (Tool::Draw, PixelFormat::Gray8) => {
+                        uncovered(&mut pixels, coverage, cx.brush.color.0[3]);
+                    }
+                    (_, PixelFormat::Rgba8) => erased(&mut pixels, coverage, 4),
+                    (_, PixelFormat::Gray8) => erased(&mut pixels, coverage, 1),
                 }
                 let write = Op::WritePixels {
                     layer: Ref::from(layer),
@@ -217,11 +228,21 @@ fn paint(rect: koharu_scene::Rect, coverage: &[u8], Rgba([r, g, b, a]): Rgba) ->
     RgbaImage::from_raw(rect.width, rect.height, pixels).expect("coverage covers `rect`")
 }
 
-/// Straight-alpha RGBA `pixels` with their alpha taken away where
-/// `coverage` says.
-fn erased(pixels: &mut [u8], coverage: &[u8]) {
-    for (pixel, &covered) in pixels.as_chunks_mut::<4>().0.iter_mut().zip(coverage) {
+/// `pixels`, `bytes` to a pixel, with their last channel, a raster's alpha
+/// or a mask's grey, taken away where `coverage` says.
+fn erased(pixels: &mut [u8], coverage: &[u8], bytes: usize) {
+    for (pixel, &covered) in pixels.chunks_exact_mut(bytes).zip(coverage) {
         let kept = 1.0 - f32::from(covered) / 255.0;
-        pixel[3] = (f32::from(pixel[3]) * kept).round() as u8;
+        pixel[bytes - 1] = (f32::from(pixel[bytes - 1]) * kept).round() as u8;
+    }
+}
+
+/// A mask's grey `pixels` raised toward white where `coverage` says, as
+/// opaque as the brush's `alpha`.
+fn uncovered(pixels: &mut [u8], coverage: &[u8], alpha: f32) {
+    for (pixel, &covered) in pixels.iter_mut().zip(coverage) {
+        let added = f32::from(covered) / 255.0 * alpha;
+        let grey = f32::from(*pixel);
+        *pixel = (grey + (255.0 - grey) * added).round() as u8;
     }
 }

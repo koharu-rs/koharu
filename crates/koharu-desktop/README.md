@@ -24,7 +24,7 @@ whoever changed it last: the user, a model's run, or an agent.
 | canvas | `koharu-canvas` draws the page with the process's GPU | |
 | frame | the canvas, then the interface over it, then the interface's popup, such as an open `<select>`, on the window's own surface | |
 | pointer | goes to the canvas where the interface painted nothing over it, and to the interface everywhere else | |
-| keys | go to the interface, the input method's composition included | |
+| keys | go to the side a press last landed on: after a press on the canvas, to the canvas first, and on to the interface when the canvas doesn't take the key; Tab passed on hands the keys back, as it moves the interface's focus. The input method's composition always goes to the interface | Photoshop's document window takes the keys once clicked |
 
 The page shows through wherever the interface's page is transparent, so the
 interface lays out panels and leaves the middle empty, and the canvas never

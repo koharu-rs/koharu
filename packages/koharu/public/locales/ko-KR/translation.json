@@ -29,7 +29,6 @@
     "message": "Koharu 에이전트에게 메시지 보내기",
     "model": "모델",
     "placeholder": "Koharu에게 이 프로젝트 작업 요청…",
-    "properties": "속성",
     "reasoning": "추론",
     "send": "보내기",
     "thinking": "생각 중…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "시작할 페이지를 선택하세요.",
-    "fit": "창에 맞춤",
     "notice": {
       "eraser_needs_raster": "지우려면 래스터 레이어를 선택하세요."
     },
@@ -93,6 +91,35 @@
     "noResults": "검색과 일치하는 글꼴이 없습니다",
     "search": "글꼴 검색"
   },
+  "history": {
+    "close": "작업 내역 닫기",
+    "opened": "열었을 때",
+    "steps": {
+      "add_text": "텍스트 추가",
+      "delete_layers": "레이어 삭제",
+      "delete_pages": "페이지 삭제",
+      "detect": "감지",
+      "edit_frame": "프레임 편집",
+      "erase": "지우기",
+      "import": "페이지 가져오기",
+      "inpaint": "인페인팅",
+      "move": "이동",
+      "move_layer": "레이어 이동",
+      "move_page": "페이지 이동",
+      "paint": "칠하기",
+      "recognize": "OCR",
+      "resize": "크기 조정",
+      "rotate": "회전",
+      "set_locked": "잠금/잠금 해제",
+      "set_source_text": "원문 편집",
+      "set_style": "글꼴 서식 변경",
+      "set_text": "텍스트 편집",
+      "set_visibility": "표시/숨기기",
+      "translate": "번역",
+      "update_layer": "레이어 변경"
+    },
+    "title": "작업 내역"
+  },
   "inference": {
     "currentPage": "현재 페이지",
     "currentPageDescription": "캔버스의 페이지만 처리합니다.",
@@ -139,15 +166,11 @@
     "borderColor": "테두리 색상",
     "borderWidth": "테두리 너비",
     "chooseFontSize": "글꼴 크기 선택",
-    "color": "색상",
     "decreaseBorderWidth": "테두리 너비 줄이기",
-    "direction": "방향",
     "font": "글꼴",
     "fontSize": "글꼴 크기",
-    "fontStyle": "글꼴 스타일",
     "fontStyles": {
       "italic": "기울임꼴",
-      "normal": "보통",
       "oblique": "기울임"
     },
     "fontWeight": "글꼴 굵기",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "테두리 너비 늘리기",
     "opacity": "불투명도",
     "selectPage": "레이어를 확인할 페이지를 선택하세요.",
-    "size": "크기",
     "source": "원문",
-    "style": "스타일",
     "text": "텍스트",
     "textColor": "텍스트 색상",
     "textDirection": "텍스트 방향",
     "translation": "번역",
     "type": "타이포그래피",
-    "vertical": "세로쓰기",
-    "weight": "굵기",
-    "width": "너비"
+    "vertical": "세로쓰기"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "{{name}} 잠그기",
     "locked": "잠김",
-    "moveDown": "{{name}} 아래로 이동",
-    "moveUp": "{{name}} 위로 이동",
     "opacityLabel": "{{name}} 불투명도",
+    "parts": {
+      "cleanup": "정리",
+      "mask": "마스크",
+      "pick": "{{name}}의 {{part}}",
+      "toggle": "Shift+클릭하여 표시하거나 숨기기"
+    },
     "show": "{{name}} 표시",
     "sourceLabel": "{{name}} 원문",
     "textLabel": "{{name}} 텍스트",
@@ -223,6 +246,7 @@
     "fit": "창에 맞춤",
     "github": "GitHub",
     "help": "도움말",
+    "history": "작업 내역",
     "import": "페이지 가져오기",
     "process": "처리",
     "processLayers": "선택한 레이어 처리",
@@ -373,17 +397,10 @@
       "subscription": "구독",
       "title": "제공자"
     },
-    "shortcuts": {
-      "description": "텍스트 필드에 포커스가 없을 때 단일 키 단축키를 사용할 수 있습니다.",
-      "inputLabel": "{{action}} 단축키",
-      "title": "단축키",
-      "tools": "도구"
-    },
     "tabs": {
       "appearance": "모양",
       "pipeline": "파이프라인",
       "providers": "제공자",
-      "shortcuts": "단축키",
       "typesetting": "렌더러"
     },
     "title": "설정",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "확대/축소"
   },
+  "story": {
+    "noText": "이 페이지에는 텍스트가 없습니다.",
+    "sfx": "효과음",
+    "title": "스토리"
+  },
   "tools": {
     "brushSize": "브러시 크기",
     "brushSizeInput": "브러시 크기",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "색상 선택기",
     "decreaseBrushSize": "브러시 크기 줄이기",
+    "direct_select": "직접 선택",
     "draw": "그리기",
     "eraser": "지우개",
     "increaseBrushSize": "브러시 크기 늘리기",

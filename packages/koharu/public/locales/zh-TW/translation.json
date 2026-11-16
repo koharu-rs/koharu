@@ -29,7 +29,6 @@
     "message": "傳送訊息給 Koharu 代理",
     "model": "模型",
     "placeholder": "讓 Koharu 處理此專案…",
-    "properties": "屬性",
     "reasoning": "推理",
     "send": "傳送",
     "thinking": "正在思考…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "請選擇頁面以開始。",
-    "fit": "適應視窗",
     "notice": {
       "eraser_needs_raster": "請先選擇點陣圖層再擦除。"
     },
@@ -93,6 +91,35 @@
     "noResults": "沒有符合此搜尋的字型",
     "search": "搜尋字型"
   },
+  "history": {
+    "close": "關閉步驟記錄",
+    "opened": "開啟時",
+    "steps": {
+      "add_text": "新增文字",
+      "delete_layers": "刪除圖層",
+      "delete_pages": "刪除頁面",
+      "detect": "偵測",
+      "edit_frame": "編輯文字框",
+      "erase": "擦除",
+      "import": "匯入頁面",
+      "inpaint": "修補",
+      "move": "移動",
+      "move_layer": "移動圖層",
+      "move_page": "移動頁面",
+      "paint": "繪製",
+      "recognize": "OCR",
+      "resize": "調整大小",
+      "rotate": "旋轉",
+      "set_locked": "鎖定或解鎖",
+      "set_source_text": "編輯原文",
+      "set_style": "變更文字樣式",
+      "set_text": "編輯文字",
+      "set_visibility": "顯示或隱藏",
+      "translate": "翻譯",
+      "update_layer": "變更圖層"
+    },
+    "title": "步驟記錄"
+  },
   "inference": {
     "currentPage": "目前頁面",
     "currentPageDescription": "只處理畫布中的頁面。",
@@ -139,15 +166,11 @@
     "borderColor": "描邊色彩",
     "borderWidth": "描邊寬度",
     "chooseFontSize": "選擇字型大小",
-    "color": "顏色",
     "decreaseBorderWidth": "減少描邊寬度",
-    "direction": "方向",
     "font": "字體",
     "fontSize": "字型大小",
-    "fontStyle": "字型樣式",
     "fontStyles": {
       "italic": "斜體",
-      "normal": "正規",
       "oblique": "傾斜"
     },
     "fontWeight": "字型粗細",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "增加描邊寬度",
     "opacity": "不透明度",
     "selectPage": "選擇頁面以檢查其圖層。",
-    "size": "字級",
     "source": "原文",
-    "style": "樣式",
     "text": "文字",
     "textColor": "文字色彩",
     "textDirection": "文字方向",
     "translation": "譯文",
     "type": "排版",
-    "vertical": "直排",
-    "weight": "字重",
-    "width": "寬度"
+    "vertical": "直排"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "鎖定 {{name}}",
     "locked": "已鎖定",
-    "moveDown": "下移 {{name}}",
-    "moveUp": "上移 {{name}}",
     "opacityLabel": "{{name}} 不透明度",
+    "parts": {
+      "cleanup": "清理",
+      "mask": "遮色片",
+      "pick": "{{name}}的{{part}}",
+      "toggle": "按住 Shift 並按一下以顯示或隱藏"
+    },
     "show": "顯示 {{name}}",
     "sourceLabel": "{{name}} 的原文",
     "textLabel": "{{name}} 的文字",
@@ -223,6 +246,7 @@
     "fit": "適應視窗",
     "github": "GitHub",
     "help": "說明",
+    "history": "步驟記錄",
     "import": "匯入頁面",
     "process": "處理",
     "processLayers": "處理所選圖層",
@@ -373,17 +397,10 @@
       "subscription": "訂閱",
       "title": "提供者"
     },
-    "shortcuts": {
-      "description": "當文字欄位未取得焦點時，可以使用單鍵快捷鍵。",
-      "inputLabel": "{{action}} 快速鍵",
-      "title": "快捷鍵",
-      "tools": "工具"
-    },
     "tabs": {
       "appearance": "外觀",
       "pipeline": "流程",
       "providers": "提供者",
-      "shortcuts": "快捷鍵",
       "typesetting": "渲染器"
     },
     "title": "設定",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "縮放"
   },
+  "story": {
+    "noText": "此頁面沒有文字。",
+    "sfx": "音效",
+    "title": "故事"
+  },
   "tools": {
     "brushSize": "筆刷大小",
     "brushSizeInput": "筆刷大小",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} 像素",
     "color_picker": "取色器",
     "decreaseBrushSize": "減少筆刷大小",
+    "direct_select": "直接選取",
     "draw": "繪圖",
     "eraser": "橡皮擦",
     "increaseBrushSize": "增加筆刷大小",

@@ -3,15 +3,20 @@
 //! the tool or the gesture, applies what they answer about its own state,
 //! and draws.
 
-use std::sync::Arc;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, hash_map::Entry},
+    sync::Arc,
+};
 
 use anyhow::Context as _;
 use cursor_icon::CursorIcon;
 use image::RgbaImage;
-use koharu_renderer::{Drawing, Gpu};
-use koharu_scene::{LayerId, Session};
+use koharu_renderer::{Drawing, Gpu, Label};
+use koharu_scene::{LayerId, Rgba, Session};
 use kurbo::{Affine, Point, Rect, Size, TranslateScale, Vec2};
 use parking_lot::Mutex;
+use ui_events::keyboard::{Code, Key, KeyState, KeyboardEvent, NamedKey};
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerEvent, PointerGesture, PointerGestureEvent,
     PointerInfo, PointerScrollEvent, PointerType, PointerUpdate,
@@ -19,7 +24,7 @@ use ui_events::pointer::{
 use vello_gpu::peniko::Color;
 
 use crate::{
-    Brush, Camera, Colors, Effect, Tool,
+    Brush, Camera, Colors, Effect, Story, Tool,
     control::Control,
     draw::{Target, color, overlay::Overlay},
     gesture::{Context, Gesture, GestureLook, Press},
@@ -39,10 +44,16 @@ pub struct Canvas {
     snapshot: Option<Snapshot>,
     tool: Tool,
     brush: Brush,
+    story: Story,
+    /// Story's numbers laid out, by number and whether it's a sound
+    /// effect's, until the colours change.
+    numbers: RefCell<HashMap<(usize, bool), Label>>,
     selection: Selection,
     gesture: Option<Active>,
     /// The pointer's last place, while it's over the canvas.
     pointer: Option<Sample>,
+    /// The key whose press the canvas took, until it's released.
+    held: Option<Code>,
     /// Bumped by every `show`.
     generation: u64,
     target: Option<Target>,
@@ -67,8 +78,10 @@ struct Look {
     colors: Colors,
     tool: Tool,
     brush: Brush,
+    story: Story,
     selection: Vec<LayerId>,
     hover: Option<LayerId>,
+    anchors: Vec<usize>,
     /// Where the brush's ring is, in the viewport.
     ring: Option<Point>,
     gesture: GestureLook,
@@ -90,9 +103,12 @@ impl Canvas {
             snapshot: None,
             tool: Tool::default(),
             brush: Brush::default(),
+            story: Story::default(),
+            numbers: RefCell::new(HashMap::new()),
             selection: Selection::default(),
             gesture: None,
             pointer: None,
+            held: None,
             generation: 0,
             target: None,
             drawn: None,
@@ -128,6 +144,12 @@ impl Canvas {
 
     pub fn set_colors(&mut self, colors: Colors) {
         self.colors = colors;
+        self.numbers.get_mut().clear();
+    }
+
+    /// What the Story panel shows, which the canvas numbers the texts for.
+    pub fn set_story(&mut self, story: Story) {
+        self.story = story;
     }
 
     pub fn camera(&self) -> TranslateScale {
@@ -179,6 +201,41 @@ impl Canvas {
 
     pub fn selection(&self) -> &[LayerId] {
         self.selection.ids()
+    }
+
+    /// A key the host passes while the canvas holds the keyboard, after a
+    /// press on it, as Photoshop's document window takes the keys once
+    /// clicked: what it does, or `None` for a key the canvas leaves to the
+    /// host. Delete and Backspace remove the direct selection tool's picked
+    /// anchors. A key whose press it took is its own until released, its
+    /// repeats included, so a held key never reaches the host halfway.
+    pub fn key(&mut self, event: &KeyboardEvent) -> Option<Vec<Effect>> {
+        if self.held == Some(event.code) {
+            if event.state == KeyState::Up {
+                self.held = None;
+            }
+            return Some(Vec::new());
+        }
+        if event.state != KeyState::Down {
+            return None;
+        }
+        let effects = match event.key {
+            Key::Named(NamedKey::Delete | NamedKey::Backspace) => self.delete_anchors()?,
+            _ => return None,
+        };
+        self.held = Some(event.code);
+        Some(effects)
+    }
+
+    /// Removes the direct selection tool's picked anchors from the selected
+    /// text's frame; `None` with another tool or no anchor picked.
+    fn delete_anchors(&mut self) -> Option<Vec<Effect>> {
+        if self.tool != Tool::DirectSelect || self.selection.anchors().is_empty() {
+            return None;
+        }
+        let effects = tools::direct::delete(&self.context()?);
+        self.selection.set_anchors(Vec::new());
+        Some(self.apply(effects))
     }
 
     /// Drops a gesture in progress; it writes nothing.
@@ -307,6 +364,7 @@ impl Canvas {
                 Press::starts(Gesture::Pan(Pan::new(sample, self.view.camera())))
             }
             (Tool::Select, Some(PointerButton::Primary)) => tools::select::press(&cx, sample),
+            (Tool::DirectSelect, Some(PointerButton::Primary)) => tools::direct::press(&cx, sample),
             (Tool::Text, Some(PointerButton::Primary)) => {
                 Press::starts(Gesture::Draft(Draft::new(sample)))
             }
@@ -320,6 +378,9 @@ impl Canvas {
         };
         if let Some(gesture) = press.gesture {
             self.gesture = Some(Active { pointer, gesture });
+        }
+        if let Some(anchors) = press.anchors {
+            self.selection.set_anchors(anchors);
         }
         Ok(press.effects)
     }
@@ -371,7 +432,11 @@ impl Canvas {
             return Ok(Vec::new());
         };
         let mut effects = active.gesture.moved(&cx, &[sample]);
+        let picked = active.gesture.picked();
         effects.extend(active.gesture.finish(&cx)?);
+        if let Some(anchors) = picked {
+            self.selection.set_anchors(anchors);
+        }
         Ok(effects)
     }
 
@@ -438,8 +503,10 @@ impl Canvas {
             colors: self.colors,
             tool: self.tool,
             brush: self.brush,
+            story: self.story,
             selection: self.selection.ids().to_vec(),
             hover: self.selection.hover(),
+            anchors: self.selection.anchors().to_vec(),
             ring: self
                 .pointer
                 .filter(|_| self.tool.is_brush())
@@ -470,13 +537,17 @@ impl Canvas {
         self.gpu.read_texture(&target.texture)
     }
 
-    /// The overlay: the gesture's preview, then the selection's outlines and
-    /// handles, following a drag, the hover, and the brush's ring.
+    /// The overlay: Story's frames and numbers, the gesture's preview, then
+    /// the selection's outlines and handles, following a drag, the hover,
+    /// and the brush's ring.
     fn overlay(&self, drawing: &mut Drawing) -> anyhow::Result<()> {
         let mut overlay = Overlay::new(drawing, &self.view, self.colors);
         let Some(cx) = self.context() else {
             return Ok(());
         };
+        if self.story.shown {
+            self.story(&cx, &mut overlay)?;
+        }
         let gesture = self.gesture.as_ref().map(|active| &active.gesture);
         if let Some(gesture) = gesture {
             gesture.preview(&cx, &mut overlay)?;
@@ -508,13 +579,53 @@ impl Canvas {
         {
             overlay.control(control);
         }
-        if let [control] = selected[..] {
+        if self.tool == Tool::DirectSelect {
+            // The selected text's frame and its anchors in place of its
+            // handles; a drag's preview draws them where it puts them.
+            if !gesture.is_some_and(Gesture::reshapes)
+                && let Some(shape) = self
+                    .selection
+                    .single()
+                    .and_then(|layer| tools::direct::Shape::of(&cx, layer))
+            {
+                overlay.anchors(&shape.outline(), &shape.anchors(), self.selection.anchors());
+            }
+        } else if let [control] = selected[..] {
             overlay.handles(control);
         }
         if self.tool.is_brush()
             && let Some(sample) = self.pointer
         {
             overlay.ring(sample.screen, self.brush.diameter);
+        }
+        Ok(())
+    }
+
+    /// Each text's frame and its number in the scene's reading order, under
+    /// the selection's handles, so they never take a handle's place.
+    fn story(&self, cx: &Context, overlay: &mut Overlay) -> anyhow::Result<()> {
+        let mut numbers = self.numbers.borrow_mut();
+        for (index, &(layer, sfx)) in cx.snapshot.story().iter().enumerate() {
+            let Some(control) = cx.snapshot.control(layer) else {
+                continue;
+            };
+            overlay.story_frame(control, self.story.hovered == Some(layer));
+            let label = match numbers.entry((index + 1, sfx)) {
+                Entry::Occupied(laid) => laid.into_mut(),
+                Entry::Vacant(place) => {
+                    // White on a filled pill, the theme's colour on an
+                    // outlined one.
+                    let fill = match sfx {
+                        true => self.colors.selection,
+                        false => Rgba([1.0, 1.0, 1.0, 1.0]),
+                    };
+                    match Label::new(&(index + 1).to_string(), 9.0, 600, fill)? {
+                        Some(label) => place.insert(label),
+                        None => continue,
+                    }
+                }
+            };
+            overlay.story_number(control.corners()[0], label, sfx)?;
         }
         Ok(())
     }

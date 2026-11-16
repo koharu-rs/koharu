@@ -11,11 +11,12 @@ import { AboutDialog } from '@/components/app/AboutDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call, dispatch } from '@/lib/backend'
 import { useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
-import { deleteLayers } from '@/lib/scene'
+import { deleteSelection } from '@/lib/scene'
 import { pipelineStages, useKoharuStore } from '@/lib/store'
 import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
 import {
   Menubar,
+  MenubarCheckboxItem,
   MenubarContent as UiMenubarContent,
   MenubarItem as UiMenubarItem,
   MenubarMenu,
@@ -38,6 +39,8 @@ export function TitleBar() {
   const page = project ? (pageQuery.data ?? null) : null
   const pageNumber = page ? pages.findIndex((candidate) => candidate.id === page.id) + 1 : 0
   const history = project?.history
+  const historyOpen = useKoharuStore((state) => state.historyOpen)
+  const setHistoryOpen = useKoharuStore((state) => state.setHistoryOpen)
   const selectedPages = useKoharuStore((state) => state.selectedPages)
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
@@ -45,7 +48,7 @@ export function TitleBar() {
   const { importPages, importing } = useImportPages()
   const { run: exportProject, busy: exporting } = useCommand(
     ['export-project'],
-    commands.exportPages,
+    commands.export,
     'menu.export',
   )
 
@@ -57,7 +60,7 @@ export function TitleBar() {
     outline: t('psd.outline'),
   }
 
-  const closeProject = () => void call(commands.closeProject).catch(() => undefined)
+  const closeProject = () => void call(commands.close).catch(() => undefined)
 
   /** Sentry's feedback form, in the interface's language; it leaves the page when it closes. */
   const sendFeedback = async () => {
@@ -175,14 +178,14 @@ export function TitleBar() {
             <MenubarContent>
               <MenubarItem
                 disabled={!history || history.current === 0}
-                onClick={() => dispatch(commands.undoEdit)}
+                onClick={() => dispatch(commands.undo)}
               >
                 {t('menu.undo')}
                 <MenubarShortcut>Ctrl+Z</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
                 disabled={!history || history.current >= history.steps.length}
-                onClick={() => dispatch(commands.redoEdit)}
+                onClick={() => dispatch(commands.redo)}
               >
                 {t('menu.redo')}
                 <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>
@@ -198,7 +201,7 @@ export function TitleBar() {
               <MenubarItem
                 disabled={selectedLayers.length === 0}
                 variant='destructive'
-                onClick={() => dispatch(deleteLayers, selectedLayers)}
+                onClick={() => dispatch(deleteSelection, selectedLayers, page?.layers ?? [])}
               >
                 {t('menu.delete')}
                 <MenubarShortcut>Del</MenubarShortcut>
@@ -242,9 +245,19 @@ export function TitleBar() {
           <MenubarMenu>
             <MenubarTrigger>{t('menu.view')}</MenubarTrigger>
             <MenubarContent>
-              <MenubarItem disabled={!page} onClick={() => dispatch(commands.fitCanvas)}>
+              <MenubarItem disabled={!page} onClick={() => dispatch(commands.fit)}>
                 {t('menu.fit')}
+                <MenubarShortcut>Ctrl+0</MenubarShortcut>
               </MenubarItem>
+              <MenubarCheckboxItem
+                disabled={!page}
+                checked={historyOpen}
+                onCheckedChange={setHistoryOpen}
+                closeOnClick
+                className='min-h-8 text-xs'
+              >
+                {t('menu.history')}
+              </MenubarCheckboxItem>
             </MenubarContent>
           </MenubarMenu>
 

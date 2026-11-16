@@ -29,7 +29,6 @@
     "message": "Koharu Ajanına mesaj gönder",
     "model": "Model",
     "placeholder": "Koharu’dan bu proje üzerinde çalışmasını isteyin…",
-    "properties": "Özellikler",
     "reasoning": "Akıl yürütme",
     "send": "Gönder",
     "thinking": "Düşünüyor…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "Başlamak için bir sayfa seçin.",
-    "fit": "Pencereye Sığdır",
     "notice": {
       "eraser_needs_raster": "Silmek için bir raster katman seçin."
     },
@@ -93,6 +91,35 @@
     "noResults": "Bu aramayla eşleşen yazı tipi yok",
     "search": "Yazı tipi ara"
   },
+  "history": {
+    "close": "Geçmişi kapat",
+    "opened": "Açıldığında",
+    "steps": {
+      "add_text": "Metin ekle",
+      "delete_layers": "Katmanları sil",
+      "delete_pages": "Sayfaları sil",
+      "detect": "Algılama",
+      "edit_frame": "Çerçeveyi düzenle",
+      "erase": "Sil",
+      "import": "Sayfaları içe aktar",
+      "inpaint": "Doldurma",
+      "move": "Taşı",
+      "move_layer": "Katmanları taşı",
+      "move_page": "Sayfayı taşı",
+      "paint": "Boya",
+      "recognize": "OCR",
+      "resize": "Yeniden boyutlandır",
+      "rotate": "Döndür",
+      "set_locked": "Kilitle veya kilidi aç",
+      "set_source_text": "Kaynak metni düzenle",
+      "set_style": "Metin stilini değiştir",
+      "set_text": "Metni düzenle",
+      "set_visibility": "Göster veya gizle",
+      "translate": "Çeviri",
+      "update_layer": "Katmanı değiştir"
+    },
+    "title": "Geçmiş"
+  },
   "inference": {
     "currentPage": "Geçerli sayfa",
     "currentPageDescription": "Yalnızca tuvaldeki sayfayı işler.",
@@ -139,15 +166,11 @@
     "borderColor": "Kenarlık rengi",
     "borderWidth": "Kenarlık genişliği",
     "chooseFontSize": "Yazı tipi boyutunu seç",
-    "color": "Renk",
     "decreaseBorderWidth": "Kenarlık genişliğini azalt",
-    "direction": "Yön",
     "font": "Yazı tipi",
     "fontSize": "Yazı tipi boyutu",
-    "fontStyle": "Yazı tipi stili",
     "fontStyles": {
       "italic": "İtalik",
-      "normal": "Normal",
       "oblique": "Eğik"
     },
     "fontWeight": "Yazı tipi kalınlığı",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "Kenarlık genişliğini artır",
     "opacity": "Opaklık",
     "selectPage": "Katmanlarını incelemek için bir sayfa seçin.",
-    "size": "Boyut",
     "source": "Kaynak metin",
-    "style": "Stil",
     "text": "Metin",
     "textColor": "Metin rengi",
     "textDirection": "Metin yönü",
     "translation": "Çeviri",
     "type": "Tipografi",
-    "vertical": "Dikey",
-    "weight": "Kalınlık",
-    "width": "Genişlik"
+    "vertical": "Dikey"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "{{name}} öğesini kilitle",
     "locked": "Kilitli",
-    "moveDown": "{{name}} öğesini aşağı taşı",
-    "moveUp": "{{name}} öğesini yukarı taşı",
     "opacityLabel": "{{name}} opaklığı",
+    "parts": {
+      "cleanup": "Temizleme",
+      "mask": "Maske",
+      "pick": "{{name}} {{part}}",
+      "toggle": "Göstermek veya gizlemek için Shift+tıklayın"
+    },
     "show": "{{name}} öğesini göster",
     "sourceLabel": "{{name}} kaynak metni",
     "textLabel": "{{name}} metni",
@@ -223,6 +246,7 @@
     "fit": "Pencereye Sığdır",
     "github": "GitHub",
     "help": "Yardım",
+    "history": "Geçmiş",
     "import": "Sayfaları İçe Aktar",
     "process": "İşle",
     "processLayers": "Seçili Katmanları İşle",
@@ -373,17 +397,10 @@
       "subscription": "Abonelik",
       "title": "Sağlayıcılar"
     },
-    "shortcuts": {
-      "description": "Tek tuşlu kısayollar, bir metin alanına odaklanılmadığında kullanılabilir.",
-      "inputLabel": "{{action}} kısayolu",
-      "title": "Kısayollar",
-      "tools": "Araçlar"
-    },
     "tabs": {
       "appearance": "Görünüm",
       "pipeline": "İşlem hattı",
       "providers": "Sağlayıcılar",
-      "shortcuts": "Kısayollar",
       "typesetting": "Oluşturucu"
     },
     "title": "Ayarlar",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "Yakınlaştırma"
   },
+  "story": {
+    "noText": "Bu sayfada metin yok.",
+    "sfx": "Ses efekti",
+    "title": "Hikâye"
+  },
   "tools": {
     "brushSize": "Fırça boyutu",
     "brushSizeInput": "Fırça boyutu",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "Renk seçici",
     "decreaseBrushSize": "Fırça boyutunu azalt",
+    "direct_select": "Doğrudan Seçim",
     "draw": "Çizim",
     "eraser": "Silgi",
     "increaseBrushSize": "Fırça boyutunu artır",

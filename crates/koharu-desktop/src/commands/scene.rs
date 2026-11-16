@@ -12,7 +12,7 @@ use crate::app::App;
 
 #[tauri::command]
 #[specta::specta]
-pub async fn query_scene(app: State<'_, Arc<App>>, query: Query) -> Result<Answer> {
+pub async fn query(app: State<'_, Arc<App>>, query: Query) -> Result<Answer> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         Ok(app.session()?.lock().query(query)?)
@@ -22,14 +22,14 @@ pub async fn query_scene(app: State<'_, Arc<App>>, query: Query) -> Result<Answe
 
 #[tauri::command]
 #[specta::specta]
-pub async fn edit_scene(app: State<'_, Arc<App>>, edit: Edit) -> Result<Change> {
+pub async fn edit(app: State<'_, Arc<App>>, edit: Edit) -> Result<Change> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || app.edit(edit)).await??)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn undo_edit(app: State<'_, Arc<App>>) -> Result<()> {
+pub async fn undo(app: State<'_, Arc<App>>) -> Result<()> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         app.session()?.lock().undo()?;
@@ -40,7 +40,7 @@ pub async fn undo_edit(app: State<'_, Arc<App>>) -> Result<()> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn redo_edit(app: State<'_, Arc<App>>) -> Result<()> {
+pub async fn redo(app: State<'_, Arc<App>>) -> Result<()> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         app.session()?.lock().redo()?;
@@ -53,7 +53,7 @@ pub async fn redo_edit(app: State<'_, Arc<App>>) -> Result<()> {
 /// Photoshop's History panel does; 0 is the project as it opened.
 #[tauri::command]
 #[specta::specta]
-pub async fn go_to_step(app: State<'_, Arc<App>>, step: usize) -> Result<()> {
+pub async fn go_to(app: State<'_, Arc<App>>, step: usize) -> Result<()> {
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         app.session()?.lock().go_to(step)?;

@@ -152,7 +152,7 @@ function SignInField({ vendor }: { vendor: Vendor }) {
       if (!asked.opened) void openUrl(asked.url).catch(() => undefined)
     }
     try {
-      await call(commands.signInVendor, vendor.name, channel)
+      await call(commands.signIn, vendor.name, channel)
       await vendorsChanged()
     } catch {
       // `call` reports the failure.
@@ -163,7 +163,7 @@ function SignInField({ vendor }: { vendor: Vendor }) {
   }
 
   const signOut = () =>
-    void call(commands.signOutVendor, vendor.name)
+    void call(commands.signOut, vendor.name)
       .then(vendorsChanged)
       .catch(() => undefined)
 

@@ -9,6 +9,7 @@ import {
   Pipette,
   Plus,
   Sparkles,
+  SplinePointer,
   Type,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +20,7 @@ import {
   isBrushTool,
   maxBrushDiameter,
   MIN_BRUSH_DIAMETER,
+  toolKeys,
   useKoharuStore,
   type CanvasTool,
 } from '@/lib/store'
@@ -41,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/t
 
 const tools = [
   ['select', MousePointer2],
+  ['direct_select', SplinePointer],
   ['text', Type],
   ['draw', Brush],
   ['eraser', Eraser],
@@ -56,7 +59,6 @@ export function ToolBar() {
   const brush = useKoharuStore((state) => state.brush)
   const setTool = useKoharuStore((state) => state.setTool)
   const setBrush = useKoharuStore((state) => state.setBrush)
-  const shortcuts = useKoharuStore((state) => state.shortcuts)
   const hasBrush = isBrushTool(active)
 
   return (
@@ -84,7 +86,7 @@ export function ToolBar() {
               </TooltipTrigger>
               <TooltipContent side='right'>
                 {t(`tools.${tool}`)}
-                <span className='ml-2 opacity-60'>{shortcuts[tool].toUpperCase()}</span>
+                <span className='ml-2 opacity-60'>{toolKeys[tool].toUpperCase()}</span>
               </TooltipContent>
             </Tooltip>
           </div>

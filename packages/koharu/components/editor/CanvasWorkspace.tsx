@@ -5,17 +5,17 @@ import { useTranslation } from 'react-i18next'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
+import { HistoryWindow } from '@/components/editor/HistoryWindow'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
+import { TypeBar } from '@/components/editor/TypeBar'
 import { call, dispatch } from '@/lib/backend'
 import { findLayer, isBlockLayer, isTextLayer, plainText } from '@/lib/document'
 import { cssBox, textBounds } from '@/lib/geometry'
 import { usePage } from '@/lib/queries'
-import { deleteLayers, setText } from '@/lib/scene'
-import { hexToRgba, useKoharuStore, type CanvasTool } from '@/lib/store'
+import { deleteSelection, setText } from '@/lib/scene'
+import { hexToRgba, toolKeys, useKoharuStore, type CanvasTool } from '@/lib/store'
 import { commands, type Layer, type Rgba, type Text } from '@koharu/ipc/protocol'
-
-const TOOLS = ['select', 'text', 'draw', 'eraser', 'color_picker', 'remove', 'pan'] as const
 
 /** The canvas's place in the window. The native canvas draws the page under the web interface
  * wherever this element and its ancestors paint nothing, and takes the pointer there; the
@@ -34,7 +34,7 @@ export function CanvasWorkspace() {
     if (!element) return
     const report = () => {
       const { x, y, width, height } = element.getBoundingClientRect()
-      dispatch(commands.setCanvasViewport, x, y, width, height)
+      dispatch(commands.setViewport, x, y, width, height)
     }
     report()
     const resize = new ResizeObserver(report)
@@ -46,20 +46,31 @@ export function CanvasWorkspace() {
       window.removeEventListener('resize', report)
       window.visualViewport?.removeEventListener('resize', report)
       // Nothing to draw while the editor is away, as under the preferences.
-      dispatch(commands.setCanvasViewport, 0, 0, 0, 0)
+      dispatch(commands.setViewport, 0, 0, 0, 0)
     }
   }, [])
 
-  useEffect(() => dispatch(commands.setCanvasTool, tool), [tool])
+  useEffect(() => dispatch(commands.setTool, tool), [tool])
+  // The canvas numbers the texts and outlines their frames while Story shows.
+  const panel = useKoharuStore((state) => state.panel)
+  const storyHover = useKoharuStore((state) => state.storyHover)
+  useEffect(
+    () => dispatch(commands.setStory, { shown: panel === 'story', hovered: storyHover }),
+    [panel, storyHover],
+  )
 
   useEffect(
-    () => dispatch(commands.setCanvasBrush, { diameter: brush.diameter, color: hexToRgba(brush.color) }),
+    () =>
+      dispatch(commands.setBrush, {
+        diameter: brush.diameter,
+        color: hexToRgba(brush.color),
+      }),
     [brush],
   )
 
   useEffect(() => {
     const send = () =>
-      dispatch(commands.setCanvasColors, {
+      dispatch(commands.setColors, {
         workspace: cssColor('--surface-canvas'),
         selection: cssColor('--canvas-selection'),
       })
@@ -76,7 +87,7 @@ export function CanvasWorkspace() {
         if (state.selectedLayers === previous.selectedLayers) return
         if (sameLayers(state.selectedLayers, state.canvasSelection)) return
         useKoharuStore.setState({ canvasSelection: state.selectedLayers })
-        dispatch(commands.selectLayers, state.selectedLayers)
+        dispatch(commands.select, state.selectedLayers)
       }),
     [],
   )
@@ -107,7 +118,7 @@ export function CanvasWorkspace() {
       const command = event.ctrlKey || event.metaKey
       if (command && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        dispatch(event.shiftKey ? commands.redoEdit : commands.undoEdit)
+        dispatch(event.shiftKey ? commands.redo : commands.undo)
         return
       }
       if (command && event.key.toLowerCase() === 'a' && page) {
@@ -117,11 +128,13 @@ export function CanvasWorkspace() {
       }
       if ((event.key === 'Delete' || event.key === 'Backspace') && state.selectedLayers.length) {
         event.preventDefault()
-        dispatch(deleteLayers, state.selectedLayers)
+        dispatch(deleteSelection, state.selectedLayers, page?.layers ?? [])
         return
       }
-      if (event.key.toLowerCase() === state.shortcuts.fit) {
-        dispatch(commands.fitCanvas)
+      // Photoshop's Fit on Screen.
+      if (command && event.key === '0') {
+        event.preventDefault()
+        dispatch(commands.fit)
         return
       }
       if (event.key === 'Escape') {
@@ -129,7 +142,9 @@ export function CanvasWorkspace() {
         state.selectLayers([])
         return
       }
-      const next = TOOLS.find((action) => state.shortcuts[action] === event.key.toLowerCase())
+      if (command || event.altKey) return
+      const key = event.key.toLowerCase()
+      const next = (Object.keys(toolKeys) as CanvasTool[]).find((tool) => toolKeys[tool] === key)
       if (next) state.setTool(next)
     }
 
@@ -174,6 +189,8 @@ export function CanvasWorkspace() {
           {typed && (isTextLayer(typed) || isBlockLayer(typed)) && (
             <TextBox key={typed.id} layer={typed} />
           )}
+          {page && <TypeBar />}
+          {page && <HistoryWindow />}
           {!page && (
             <div className='pointer-events-none absolute inset-0 grid place-items-center'>
               <p className='text-[12px] text-muted-foreground'>{t('canvas.empty')}</p>
@@ -181,7 +198,7 @@ export function CanvasWorkspace() {
           )}
         </div>
       </div>
-      <StatusBar onZoomChange={(zoom) => dispatch(commands.setCanvasZoom, zoom)} />
+      <StatusBar onZoomChange={(zoom) => dispatch(commands.setZoom, zoom)} />
     </main>
   )
 }

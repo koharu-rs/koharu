@@ -27,14 +27,14 @@ flowchart TB
 
 ## Interface and application
 
-| Component         | Responsibility                                                                                                    |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `packages/koharu` | Start view, page list, processing selector, properties and layers, Agent panel, settings, and the activity center |
-| `packages/ui`     | Shared React primitives and styling                                                                               |
-| `packages/ipc`    | The TypeScript protocol generated from the desktop's commands and events                                          |
-| `crates/koharu`   | The process: crash reporting, logs, panics, and the order the app starts in                                       |
-| `koharu-desktop`  | The window, the commands, the projects folder, import and export, preferences, and the MCP server                 |
-| `koharu-sentry`   | Sentry for the interface and the native side as one app                                                           |
+| Component         | Responsibility                                                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `packages/koharu` | Start view, page list, processing selector, layers, story, type bar, history, Agent panel, settings, and the activity center |
+| `packages/ui`     | Shared React primitives and styling                                                                                          |
+| `packages/ipc`    | The TypeScript protocol generated from the desktop's commands and events                                                     |
+| `crates/koharu`   | The process: crash reporting, logs, panics, and the order the app starts in                                                  |
+| `koharu-desktop`  | The window, the commands, the projects folder, import and export, preferences, and the MCP server                            |
+| `koharu-sentry`   | Sentry for the interface and the native side as one app                                                                      |
 
 The interface renders off-screen in CEF, and the window composites it over the native canvas, which draws the page. The interface reads and edits the open project through the scene's queries and edits, the same protocol the agent and MCP clients use. Every change is broadcast to the window, whichever writer made it, so the canvas and the panels redraw without polling. Preferences are `config.toml` sections, each handed to the component that owns it when saved.
 

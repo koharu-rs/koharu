@@ -139,7 +139,7 @@ static SIGNING_IN: Mutex<Option<AbortHandle>> = Mutex::new(None);
 /// without one.
 #[tauri::command]
 #[specta::specta]
-pub async fn sign_in_vendor(vendor: String, on_prompt: Channel<SignInPrompt>) -> Result<()> {
+pub async fn sign_in(vendor: String, on_prompt: Channel<SignInPrompt>) -> Result<()> {
     let (stop, stopped) = AbortHandle::new_pair();
     if let Some(waiting) = SIGNING_IN.lock().replace(stop) {
         waiting.abort();
@@ -163,6 +163,6 @@ pub fn stop_sign_in() {
 /// deletes it.
 #[tauri::command]
 #[specta::specta]
-pub async fn sign_out_vendor(vendor: String) -> Result<()> {
+pub async fn sign_out(vendor: String) -> Result<()> {
     Ok(koharu_llm::sign_out(&vendor).await?)
 }

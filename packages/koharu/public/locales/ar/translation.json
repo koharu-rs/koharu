@@ -29,7 +29,6 @@
     "message": "راسل Koharu Agent",
     "model": "النموذج",
     "placeholder": "اطلب من Koharu العمل على هذا المشروع...",
-    "properties": "الخصائص",
     "reasoning": "التفكير",
     "send": "إرسال",
     "thinking": "جارٍ التفكير...",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "اختر صفحة للبدء.",
-    "fit": "ملاءمة النافذة",
     "notice": {
       "eraser_needs_raster": "حدد طبقة نقطية للمسح."
     },
@@ -93,6 +91,35 @@
     "noResults": "لا توجد خطوط تطابق هذا البحث",
     "search": "ابحث عن خطوط"
   },
+  "history": {
+    "close": "إغلاق السجل",
+    "opened": "عند الفتح",
+    "steps": {
+      "add_text": "إضافة نص",
+      "delete_layers": "حذف الطبقات",
+      "delete_pages": "حذف الصفحات",
+      "detect": "الكشف",
+      "edit_frame": "تحرير الإطار",
+      "erase": "مسح",
+      "import": "استيراد الصفحات",
+      "inpaint": "الترميم",
+      "move": "نقل",
+      "move_layer": "نقل الطبقات",
+      "move_page": "نقل الصفحة",
+      "paint": "رسم",
+      "recognize": "OCR",
+      "resize": "تغيير الحجم",
+      "rotate": "تدوير",
+      "set_locked": "قفل أو إلغاء القفل",
+      "set_source_text": "تحرير النص الأصلي",
+      "set_style": "تغيير نمط النص",
+      "set_text": "تحرير النص",
+      "set_visibility": "إظهار أو إخفاء",
+      "translate": "الترجمة",
+      "update_layer": "تغيير الطبقة"
+    },
+    "title": "السجل"
+  },
   "inference": {
     "currentPage": "الصفحة الحالية",
     "currentPageDescription": "معالجة الصفحة المعروضة في اللوحة فقط.",
@@ -139,15 +166,11 @@
     "borderColor": "لون الحدود",
     "borderWidth": "عرض الحدود",
     "chooseFontSize": "اختر حجم الخط",
-    "color": "اللون",
     "decreaseBorderWidth": "تقليل عرض الحدود",
-    "direction": "الاتجاه",
     "font": "الخط",
     "fontSize": "حجم الخط",
-    "fontStyle": "نمط الخط",
     "fontStyles": {
       "italic": "مائل",
-      "normal": "عادي",
       "oblique": "منحرف"
     },
     "fontWeight": "وزن الخط",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "زيادة عرض الحدود",
     "opacity": "العتامة",
     "selectPage": "اختر صفحة لعرض طبقاتها.",
-    "size": "الحجم",
     "source": "النص المصدر",
-    "style": "النمط",
     "text": "نص",
     "textColor": "لون النص",
     "textDirection": "اتجاه النص",
     "translation": "الترجمة",
     "type": "النوع",
-    "vertical": "عمودي",
-    "weight": "الوزن",
-    "width": "العرض"
+    "vertical": "عمودي"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "قفل {{name}}",
     "locked": "مقفل",
-    "moveDown": "نقل {{name}} لأسفل",
-    "moveUp": "نقل {{name}} لأعلى",
     "opacityLabel": "عتامة {{name}}",
+    "parts": {
+      "cleanup": "تنظيف",
+      "mask": "قناع",
+      "pick": "{{part}} {{name}}",
+      "toggle": "Shift+نقر للإظهار أو الإخفاء"
+    },
     "show": "إظهار {{name}}",
     "sourceLabel": "النص المصدر لـ {{name}}",
     "textLabel": "نص {{name}}",
@@ -223,6 +246,7 @@
     "fit": "ملاءمة النافذة",
     "github": "GitHub",
     "help": "مساعدة",
+    "history": "السجل",
     "import": "استيراد الصفحات",
     "process": "معالجة",
     "processLayers": "معالجة الطبقات المحدّدة",
@@ -373,17 +397,10 @@
       "subscription": "الاشتراك",
       "title": "المزوّدون"
     },
-    "shortcuts": {
-      "description": "تتوفّر اختصارات المفتاح الواحد عندما لا يكون حقل النص قيد التركيز.",
-      "inputLabel": "اختصار {{action}}",
-      "title": "الاختصارات",
-      "tools": "الأدوات"
-    },
     "tabs": {
       "appearance": "المظهر",
       "pipeline": "خط المعالجة",
       "providers": "المزوّدون",
-      "shortcuts": "الاختصارات",
       "typesetting": "محرك العرض"
     },
     "title": "الإعدادات",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "تكبير"
   },
+  "story": {
+    "noText": "لا يوجد نص في هذه الصفحة.",
+    "sfx": "مؤثر صوتي",
+    "title": "القصة"
+  },
   "tools": {
     "brushSize": "حجم الفرشاة",
     "brushSizeInput": "حجم الفرشاة",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} بكسل",
     "color_picker": "منتقي الألوان",
     "decreaseBrushSize": "تقليل حجم الفرشاة",
+    "direct_select": "التحديد المباشر",
     "draw": "فرشاة",
     "eraser": "ممحاة",
     "increaseBrushSize": "زيادة حجم الفرشاة",

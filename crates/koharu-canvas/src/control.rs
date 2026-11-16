@@ -9,7 +9,7 @@ use crate::view::View;
 
 /// A handle's reach, in device-independent pixels, as the editor's handles
 /// took a 14-pixel square.
-const REACH: f64 = 7.0;
+pub(crate) const REACH: f64 = 7.0;
 
 /// How far the rotate handle stands above the top, in device-independent
 /// pixels.

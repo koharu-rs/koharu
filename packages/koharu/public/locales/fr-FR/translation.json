@@ -29,7 +29,6 @@
     "message": "Message à l’agent Koharu",
     "model": "Modèle",
     "placeholder": "Demandez à Koharu de travailler sur ce projet…",
-    "properties": "Propriétés",
     "reasoning": "Raisonnement",
     "send": "Envoyer",
     "thinking": "Réflexion…",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "Sélectionnez une page pour commencer.",
-    "fit": "Ajuster à la fenêtre",
     "notice": {
       "eraser_needs_raster": "Sélectionnez un calque matriciel pour effacer."
     },
@@ -93,6 +91,35 @@
     "noResults": "Aucune police ne correspond à cette recherche",
     "search": "Rechercher des polices"
   },
+  "history": {
+    "close": "Fermer l’historique",
+    "opened": "À l’ouverture",
+    "steps": {
+      "add_text": "Ajouter du texte",
+      "delete_layers": "Supprimer des calques",
+      "delete_pages": "Supprimer des pages",
+      "detect": "Détection",
+      "edit_frame": "Modifier le cadre",
+      "erase": "Effacer",
+      "import": "Importer des pages",
+      "inpaint": "Inpainting",
+      "move": "Déplacer",
+      "move_layer": "Déplacer des calques",
+      "move_page": "Déplacer la page",
+      "paint": "Peindre",
+      "recognize": "OCR",
+      "resize": "Redimensionner",
+      "rotate": "Faire pivoter",
+      "set_locked": "Verrouiller ou déverrouiller",
+      "set_source_text": "Modifier le texte source",
+      "set_style": "Modifier le style du texte",
+      "set_text": "Modifier le texte",
+      "set_visibility": "Afficher ou masquer",
+      "translate": "Traduction",
+      "update_layer": "Modifier le calque"
+    },
+    "title": "Historique"
+  },
   "inference": {
     "currentPage": "Page actuelle",
     "currentPageDescription": "Traiter uniquement la page affichée sur le canevas.",
@@ -139,15 +166,11 @@
     "borderColor": "Couleur du contour",
     "borderWidth": "Épaisseur du contour",
     "chooseFontSize": "Choisir la taille de police",
-    "color": "Couleur",
     "decreaseBorderWidth": "Réduire l’épaisseur du contour",
-    "direction": "Direction",
     "font": "Police",
     "fontSize": "Taille de police",
-    "fontStyle": "Style de police",
     "fontStyles": {
       "italic": "Italique",
-      "normal": "Normal",
       "oblique": "Oblique"
     },
     "fontWeight": "Graisse",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "Augmenter l’épaisseur du contour",
     "opacity": "Opacité",
     "selectPage": "Sélectionnez une page pour inspecter ses calques.",
-    "size": "Taille",
     "source": "Texte source",
-    "style": "Style",
     "text": "Texte",
     "textColor": "Couleur du texte",
     "textDirection": "Sens du texte",
     "translation": "Traduction",
     "type": "Type",
-    "vertical": "Vertical",
-    "weight": "Graisse",
-    "width": "Largeur"
+    "vertical": "Vertical"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "Verrouiller {{name}}",
     "locked": "Verrouillé",
-    "moveDown": "Descendre {{name}}",
-    "moveUp": "Monter {{name}}",
     "opacityLabel": "Opacité de {{name}}",
+    "parts": {
+      "cleanup": "Nettoyage",
+      "mask": "Masque",
+      "pick": "{{part}} de {{name}}",
+      "toggle": "Maj+clic pour afficher ou masquer"
+    },
     "show": "Afficher {{name}}",
     "sourceLabel": "Texte source de {{name}}",
     "textLabel": "Texte de {{name}}",
@@ -223,6 +246,7 @@
     "fit": "Ajuster à la fenêtre",
     "github": "GitHub",
     "help": "Aide",
+    "history": "Historique",
     "import": "Importer des pages",
     "process": "Traitement",
     "processLayers": "Traiter les calques sélectionnés",
@@ -373,17 +397,10 @@
       "subscription": "Abonnement",
       "title": "Fournisseurs"
     },
-    "shortcuts": {
-      "description": "Les raccourcis à une touche sont disponibles lorsqu’aucun champ de texte n’a le focus.",
-      "inputLabel": "Raccourci : {{action}}",
-      "title": "Raccourcis",
-      "tools": "Outils"
-    },
     "tabs": {
       "appearance": "Apparence",
       "pipeline": "Pipeline",
       "providers": "Fournisseurs",
-      "shortcuts": "Raccourcis",
       "typesetting": "Moteur de rendu"
     },
     "title": "Paramètres",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "Zoom"
   },
+  "story": {
+    "noText": "Aucun texte sur cette page.",
+    "sfx": "Effet sonore",
+    "title": "Histoire"
+  },
   "tools": {
     "brushSize": "Taille du pinceau",
     "brushSizeInput": "Taille du pinceau",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "Pipette",
     "decreaseBrushSize": "Réduire la taille du pinceau",
+    "direct_select": "Sélection directe",
     "draw": "Pinceau",
     "eraser": "Gomme",
     "increaseBrushSize": "Augmenter la taille du pinceau",

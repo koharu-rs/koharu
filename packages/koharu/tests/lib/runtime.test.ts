@@ -32,7 +32,7 @@ const preferences: Preferences = {
 function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
-  vi.spyOn(commands, 'queryScene').mockImplementation(async (query) =>
+  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
     query.query === 'get_project'
       ? { id: 'project', version: '1', pages: [] }
       : { steps: [], current: 0 },
@@ -92,8 +92,8 @@ describe('Tauri runtime', () => {
   })
 
   it('passes the managed project name to open', async () => {
-    const open = vi.spyOn(commands, 'openProject').mockResolvedValue(null)
-    await expect(call(commands.openProject, 'Volume 1')).resolves.toBeNull()
+    const open = vi.spyOn(commands, 'open').mockResolvedValue(null)
+    await expect(call(commands.open, 'Volume 1')).resolves.toBeNull()
     expect(open).toHaveBeenCalledWith('Volume 1')
   })
 

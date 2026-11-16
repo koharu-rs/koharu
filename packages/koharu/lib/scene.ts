@@ -10,13 +10,13 @@ import {
   type Value,
 } from '@koharu/ipc/protocol'
 
-import { isBlockLayer, isTextLayer } from './document'
+import { findPart, isBlockLayer, isTextLayer, type Move, type Part } from './document'
 
 /** The panels' edits, each one undo step through the scene's own `edit`, labelled by a key the
  * History panel translates. */
 
 function edit(label: string, ops: Op[]): Promise<Change> {
-  return commands.editScene({ label, ops })
+  return commands.edit({ label, ops })
 }
 
 /** Shows, hides, or fades layers. */
@@ -34,6 +34,14 @@ export function setVisibility(
   )
 }
 
+/** Shows or hides a block's part: a hidden mask stops limiting the clean-up, and a hidden clean-up
+ * shows the original. */
+export function setPartVisibility(block: LayerId, part: Part, visible: boolean): Promise<Change> {
+  return edit('set_visibility', [
+    { op: 'update_layer', layer: block, patch: { [part]: { visible } } },
+  ])
+}
+
 export function setLocked(layers: LayerId[], locked: boolean): Promise<Change> {
   return edit(
     'set_locked',
@@ -48,10 +56,21 @@ export function deleteLayers(layers: LayerId[]): Promise<Change> {
   )
 }
 
-/** Moves a layer under `parent`, or to the page's top level, at `index` counted after it's taken
- * out. */
-export function moveLayer(layer: LayerId, parent: LayerId | null, index: number): Promise<Change> {
-  return edit('move_layer', [{ op: 'move_layer', layer, parent, index }])
+/** What Delete does when the page has the keys: deletes the selected layers, skipping a block's
+ * selected part, which goes only with its block; the eraser clears a clean-up, and hiding a mask
+ * stops it limiting the clean-up. */
+export async function deleteSelection(selected: LayerId[], layers: Layer[]): Promise<void> {
+  const whole = selected.filter((id) => !findPart(layers, id))
+  if (whole.length) await deleteLayers(whole)
+}
+
+/** Moves layers in one undo step, each under its parent, or to the page's top level, at its
+ * index counted after it's taken out, in order, as a drop in the Layers panel places them. */
+export function moveLayers(moves: Move[]): Promise<Change> {
+  return edit(
+    'move_layer',
+    moves.map(({ layer, parent, index }) => ({ op: 'move_layer', layer, parent, index })),
+  )
 }
 
 /** A text layer's text, or a block's translation. */

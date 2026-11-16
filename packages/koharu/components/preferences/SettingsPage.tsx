@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft, Cpu, KeyRound, Keyboard, Monitor, Moon, Palette, Sun, Type } from 'lucide-react'
+import { ArrowLeft, Cpu, KeyRound, Monitor, Moon, Palette, Sun, Type } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,10 +15,9 @@ import { ProviderPreferences } from '@/components/preferences/ProviderPreference
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
 import { refreshModels, refreshPreferences, savePreferences } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
-import { useKoharuStore, type ShortcutAction } from '@/lib/store'
+import { useKoharuStore } from '@/lib/store'
 import type { Preferences } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
-import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import {
   Select,
@@ -33,7 +32,6 @@ const tabs = [
   ['pipeline', Cpu],
   ['providers', KeyRound],
   ['typesetting', Type],
-  ['shortcuts', Keyboard],
 ] as const
 type Tab = (typeof tabs)[number][0]
 
@@ -128,7 +126,7 @@ export function SettingsPage() {
         <ScrollArea className='min-h-0 flex-1'>
           <div className='mx-auto w-full max-w-4xl px-10 py-10'>
             {tab === 'appearance' && <AppearancePreferences />}
-            {tab !== 'appearance' && tab !== 'shortcuts' && !draft && <LoadingPreferences />}
+            {tab !== 'appearance' && !draft && <LoadingPreferences />}
             {tab === 'pipeline' && draft && (
               <PipelinePreferences
                 value={draft.pipeline}
@@ -148,7 +146,6 @@ export function SettingsPage() {
                 onChange={(renderer) => setDraft({ ...draft, renderer })}
               />
             )}
-            {tab === 'shortcuts' && <ShortcutPreferences />}
           </div>
         </ScrollArea>
       </main>
@@ -224,54 +221,7 @@ function AppearancePreferences() {
   )
 }
 
-function ShortcutPreferences() {
-  const { t } = useTranslation()
-  const shortcuts = useKoharuStore((state) => state.shortcuts)
-  const setShortcut = useKoharuStore((state) => state.setShortcut)
-  const actions: ShortcutAction[] = [
-    'select',
-    'text',
-    'draw',
-    'eraser',
-    'color_picker',
-    'remove',
-    'pan',
-    'fit',
-  ]
-  return (
-    <PreferencePage
-      title={t('settings.shortcuts.title')}
-      description={t('settings.shortcuts.description')}
-    >
-      <PreferenceSection title={t('settings.shortcuts.tools')}>
-        {actions.map((action) => (
-          <PreferenceRow key={action} title={t(shortcutKeys[action])}>
-            <Input
-              aria-label={t('settings.shortcuts.inputLabel', { action: t(shortcutKeys[action]) })}
-              maxLength={1}
-              value={shortcuts[action]}
-              className='ml-auto h-8 w-14 text-center text-[12px] uppercase'
-              onChange={(event) => setShortcut(action, event.currentTarget.value)}
-            />
-          </PreferenceRow>
-        ))}
-      </PreferenceSection>
-    </PreferencePage>
-  )
-}
-
 function LoadingPreferences() {
   const { t } = useTranslation()
   return <p className='py-10 text-[12px] text-muted-foreground'>{t('settings.loading')}</p>
-}
-
-const shortcutKeys: Record<ShortcutAction, string> = {
-  select: 'tools.select',
-  text: 'tools.text',
-  draw: 'tools.draw',
-  eraser: 'tools.eraser',
-  color_picker: 'tools.color_picker',
-  remove: 'tools.remove',
-  pan: 'tools.pan',
-  fit: 'canvas.fit',
 }

@@ -4,11 +4,11 @@ description: "Correct source text and translation without losing the page's edit
 icon: 'spell-check'
 ---
 
-Select a text block on the canvas or in **Properties → Layers**. A text block keeps its source text, its translation, the mask over its source glyphs, and its clean-up together, so you can correct OCR without rebuilding the text box.
+Select a text block on the canvas, in **Layers**, or in **Story**. A text block keeps its source text, its translation, the mask over its source glyphs, and its clean-up together, so you can correct OCR without rebuilding the text box.
 
 ## Correct the text
 
-Expand a text block's row in the layer list to edit it. Edit **Source text** when OCR is wrong. Edit **Translation** for meaning, tone, names, or line breaks. A field commits when it loses focus.
+**Story** lists the shown page's text blocks and text layers in reading order, the hidden ones left out. While it's open, the canvas outlines each text's frame with its number at the top-left corner, outlined for a sound effect, and pointing at an entry draws its frame stronger. Edit **Source text** when OCR is wrong. Edit **Translation** for meaning, tone, names, or line breaks. A field commits when it loses focus.
 
 With the **Text** tool, select a text block or text layer on the canvas to type its translation in place. Click away or press `Ctrl+Enter` to commit; `Escape` leaves the text as it was.
 
@@ -19,7 +19,7 @@ With the **Text** tool, select a text block or text layer on the canvas to type 
 
 ## Manage layers
 
-The layer list shows the page's tree frontmost first: panels, balloons, text blocks, text, rasters, and other layers, nested as they are. Select several with `Ctrl`, `Command`, or `Shift`, or with **Edit → Select All Layers**. Each row can show or hide, lock or unlock, and move its layer up or down among its siblings; an expanded row sets opacity and deletes the layer with everything inside it.
+The layer list shows the page's tree frontmost first: panels, balloons, text blocks, text, rasters, and other layers, nested as they are. Select several with `Ctrl`, `Command`, or `Shift`, or with **Edit → Select All Layers**. Each row can show or hide and lock or unlock its layer; an expanded row sets opacity and deletes the layer with everything inside it. Drag rows to reorder them, or onto a panel, group, or balloon to put them inside it; a balloon holds only text blocks and text layers. A text block's row has a button for its clean-up and one for its mask: click one to select it for painting, or `Shift`-click it to show or hide it.
 
 Deleting a text block removes its clean-up too, so the original lettering shows again. A locked layer cannot be moved, and detection leaves it in place on a rerun.
 
@@ -42,6 +42,8 @@ Deleting a text block removes its clean-up too, so the original lettering shows 
 
 ## Undo and redo
 
-Use **Edit → Undo** or **Redo**. The defaults are `Ctrl+Z` and `Ctrl+Shift+Z` on Windows/Linux, or `Command+Z` and `Command+Shift+Z` on macOS.
+Use **Edit → Undo** or **Redo**. The shortcuts are `Ctrl+Z` and `Ctrl+Shift+Z` on Windows/Linux, or `Command+Z` and `Command+Shift+Z` on macOS.
 
 Each page-stage result that a run writes is its own undo step, so undoing a project run takes one step per page and stage. History keeps the 20 most recent steps and is cleared when the project closes.
+
+**View → History** lists the steps in a small window over the canvas, after the project as it opened. Click a step to go back or forward to it.

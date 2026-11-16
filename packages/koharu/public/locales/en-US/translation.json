@@ -29,7 +29,6 @@
     "message": "Message Koharu Agent",
     "model": "Model",
     "placeholder": "Ask Koharu to work on this project...",
-    "properties": "Properties",
     "reasoning": "Reasoning",
     "send": "Send",
     "thinking": "Thinking...",
@@ -38,7 +37,6 @@
   },
   "canvas": {
     "empty": "Select a page to begin.",
-    "fit": "Fit Window",
     "notice": {
       "eraser_needs_raster": "Select a raster layer to erase."
     },
@@ -93,6 +91,35 @@
     "noResults": "No fonts match this search",
     "search": "Search fonts"
   },
+  "history": {
+    "close": "Close history",
+    "opened": "Opened",
+    "steps": {
+      "add_text": "Add text",
+      "delete_layers": "Delete layers",
+      "delete_pages": "Delete pages",
+      "detect": "Detection",
+      "edit_frame": "Edit frame",
+      "erase": "Erase",
+      "import": "Import pages",
+      "inpaint": "Inpainting",
+      "move": "Move",
+      "move_layer": "Move layers",
+      "move_page": "Move page",
+      "paint": "Paint",
+      "recognize": "OCR",
+      "resize": "Resize",
+      "rotate": "Rotate",
+      "set_locked": "Lock or unlock",
+      "set_source_text": "Edit source text",
+      "set_style": "Change type",
+      "set_text": "Edit text",
+      "set_visibility": "Show or hide",
+      "translate": "Translation",
+      "update_layer": "Change layer"
+    },
+    "title": "History"
+  },
   "inference": {
     "currentPage": "Current page",
     "currentPageDescription": "Process only the page in the canvas.",
@@ -139,15 +166,11 @@
     "borderColor": "Border color",
     "borderWidth": "Border width",
     "chooseFontSize": "Choose font size",
-    "color": "Color",
     "decreaseBorderWidth": "Decrease border width",
-    "direction": "Direction",
     "font": "Font",
     "fontSize": "Font size",
-    "fontStyle": "Font style",
     "fontStyles": {
       "italic": "Italic",
-      "normal": "Regular",
       "oblique": "Oblique"
     },
     "fontWeight": "Font weight",
@@ -155,17 +178,13 @@
     "increaseBorderWidth": "Increase border width",
     "opacity": "Opacity",
     "selectPage": "Select a page to inspect its layers.",
-    "size": "Size",
     "source": "Source text",
-    "style": "Style",
     "text": "Text",
     "textColor": "Text color",
     "textDirection": "Text direction",
     "translation": "Translation",
     "type": "Type",
-    "vertical": "Vertical",
-    "weight": "Weight",
-    "width": "Width"
+    "vertical": "Vertical"
   },
   "languages": {
     "ar": "العربية",
@@ -199,9 +218,13 @@
     },
     "lock": "Lock {{name}}",
     "locked": "Locked",
-    "moveDown": "Move {{name}} down",
-    "moveUp": "Move {{name}} up",
     "opacityLabel": "{{name}} opacity",
+    "parts": {
+      "cleanup": "Cleanup",
+      "mask": "Mask",
+      "pick": "{{part}} of {{name}}",
+      "toggle": "Shift-click to show or hide"
+    },
     "show": "Show {{name}}",
     "sourceLabel": "{{name}} source text",
     "textLabel": "{{name}} text",
@@ -223,6 +246,7 @@
     "fit": "Fit Window",
     "github": "GitHub",
     "help": "Help",
+    "history": "History",
     "import": "Import Pages",
     "process": "Process",
     "processLayers": "Process Selected Layers",
@@ -373,17 +397,10 @@
       "subscription": "Subscription",
       "title": "Providers"
     },
-    "shortcuts": {
-      "description": "Single-key shortcuts are available whenever a text field is not focused.",
-      "inputLabel": "{{action}} shortcut",
-      "title": "Shortcuts",
-      "tools": "Tools"
-    },
     "tabs": {
       "appearance": "Appearance",
       "pipeline": "Pipeline",
       "providers": "Providers",
-      "shortcuts": "Shortcuts",
       "typesetting": "Renderer"
     },
     "title": "Settings",
@@ -431,6 +448,11 @@
   "status": {
     "zoom": "Zoom"
   },
+  "story": {
+    "noText": "No text on this page.",
+    "sfx": "Sound effect",
+    "title": "Story"
+  },
   "tools": {
     "brushSize": "Brush size",
     "brushSizeInput": "Brush size",
@@ -438,6 +460,7 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "Color picker",
     "decreaseBrushSize": "Decrease brush size",
+    "direct_select": "Direct Selection",
     "draw": "Brush",
     "eraser": "Eraser",
     "increaseBrushSize": "Increase brush size",

@@ -1,6 +1,7 @@
 //! Each tool's presses and the gestures they start.
 
 pub(crate) mod brush;
+pub(crate) mod direct;
 pub(crate) mod pan;
 pub(crate) mod picker;
 pub(crate) mod select;

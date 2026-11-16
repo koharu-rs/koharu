@@ -29,6 +29,20 @@ export function isBrushTool(tool: CanvasTool): boolean {
   return tool === 'draw' || tool === 'eraser' || tool === 'remove'
 }
 
+/** Each tool's key, Photoshop's for its counterpart: the Move tool's V, the Direct Selection
+ * tool's A, the Type tool's T, the Brush's B, the Eraser's E, the Eyedropper's I, the Remove
+ * tool's J, and the Hand's H. */
+export const toolKeys: Record<CanvasTool, string> = {
+  select: 'v',
+  direct_select: 'a',
+  text: 't',
+  draw: 'b',
+  eraser: 'e',
+  color_picker: 'i',
+  remove: 'j',
+  pan: 'h',
+}
+
 export interface CanvasBrush {
   diameter: number
   color: string
@@ -42,9 +56,8 @@ export interface Camera {
   y: number
 }
 
-export type InspectorSection = 'copy' | 'type' | 'layers'
-export type ShortcutAction = CanvasTool | 'fit'
-export type Shortcuts = Record<ShortcutAction, string>
+/** The right pane's tabs. */
+export type Panel = 'layers' | 'story' | 'agent'
 export type PipelineScope = 'page' | 'selected-pages' | 'project'
 export const pipelineStages: readonly Stage[] = ['detect', 'recognize', 'inpaint', 'translate']
 
@@ -76,33 +89,27 @@ interface KoharuStore {
   selectedPages: PageId[]
   tool: CanvasTool
   brush: CanvasBrush
-  inspector: InspectorSection
+  /** The right pane's tab, which the canvas numbers the texts for while it's Story. */
+  panel: Panel
+  /** The text whose Story entry the pointer is over, outlined on the canvas. */
+  storyHover: LayerId | null
   processingScope: PipelineScope
   processingStages: Stage[]
   settingsOpen: boolean
-  shortcuts: Shortcuts
+  /** Whether the History window shows over the canvas. */
+  historyOpen: boolean
   selectPages: (pages: PageId[]) => void
-  showInspector: (section: InspectorSection) => void
+  showPanel: (panel: Panel) => void
+  setStoryHover: (layer: LayerId | null) => void
   setProcessingScope: (scope: PipelineScope) => void
   setProcessingStages: (stages: Stage[]) => void
   setSettingsOpen: (open: boolean) => void
+  setHistoryOpen: (open: boolean) => void
   selectLayers: (layers: LayerId[]) => void
   setTool: (tool: CanvasTool) => void
   setBrush: (brush: CanvasBrush) => void
-  setShortcut: (action: ShortcutAction, key: string) => void
   dismissJob: (id: string) => void
   dismissDownload: (id: number) => void
-}
-
-export const defaultShortcuts: Shortcuts = {
-  select: 'v',
-  text: 't',
-  draw: 'b',
-  eraser: 'e',
-  color_picker: 'i',
-  remove: 'j',
-  pan: 'h',
-  fit: '0',
 }
 
 export const useKoharuStore = create<KoharuStore>()((set) => ({
@@ -118,23 +125,22 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   selectedPages: [],
   tool: 'select',
   brush: { diameter: 48, color: '#FFFFFF' },
-  inspector: 'copy',
+  panel: 'layers',
+  storyHover: null,
   processingScope: 'selected-pages',
   processingStages: [...pipelineStages],
   settingsOpen: false,
-  shortcuts: defaultShortcuts,
+  historyOpen: false,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
-  showInspector: (inspector) => set({ inspector }),
+  showPanel: (panel) => set({ panel, storyHover: null }),
+  setStoryHover: (storyHover) => set({ storyHover }),
   setProcessingScope: (processingScope) => set({ processingScope }),
   setProcessingStages: (processingStages) => set({ processingStages }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  setHistoryOpen: (historyOpen) => set({ historyOpen }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),
   setBrush: (brush) => set({ brush }),
-  setShortcut: (action, key) =>
-    set((state) => ({
-      shortcuts: { ...state.shortcuts, [action]: key.toLowerCase().slice(0, 1) },
-    })),
   dismissJob: (id) =>
     set((state) => {
       const jobs = { ...state.jobs }

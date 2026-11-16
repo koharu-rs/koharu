@@ -55,6 +55,7 @@ pub(crate) fn press(cx: &Context, sample: Sample) -> Press {
     Press {
         gesture: next.contains(&target).then(|| drag(cx, &next, page)),
         effects: vec![Effect::Selection(next)],
+        anchors: None,
     }
 }
 

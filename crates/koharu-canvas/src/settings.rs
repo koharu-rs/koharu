@@ -1,8 +1,9 @@
-//! What the host sets on the canvas: the tool, the brush, and the theme's
-//! colours. The host owns them; the canvas only reads them.
+//! What the host sets on the canvas: the tool, the brush, the theme's
+//! colours, and the Story panel's state. The host owns them; the canvas only
+//! reads them.
 
 use cursor_icon::CursorIcon;
-use koharu_scene::Rgba;
+use koharu_scene::{LayerId, Rgba};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -11,6 +12,7 @@ use specta::Type;
 pub enum Tool {
     #[default]
     Select,
+    DirectSelect,
     Text,
     Draw,
     Eraser,
@@ -29,7 +31,7 @@ impl Tool {
     /// names; `None` hides it, as the brush tools draw their own ring.
     pub(crate) fn cursor(self) -> Option<CursorIcon> {
         match self {
-            Self::Select => Some(CursorIcon::Default),
+            Self::Select | Self::DirectSelect => Some(CursorIcon::Default),
             Self::Text => Some(CursorIcon::Text),
             Self::Draw | Self::Eraser | Self::Remove => None,
             Self::ColorPicker => Some(CursorIcon::Crosshair),
@@ -53,6 +55,15 @@ impl Default for Brush {
             color: Rgba([0.0, 0.0, 0.0, 1.0]),
         }
     }
+}
+
+/// The Story panel as the canvas follows it: while it shows, every text's
+/// frame and its number in the scene's reading order, and the frame of the
+/// text whose entry the pointer is on drawn stronger.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct Story {
+    pub shown: bool,
+    pub hovered: Option<LayerId>,
 }
 
 /// The app's theme colours the canvas draws with.
