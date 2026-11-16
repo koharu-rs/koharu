@@ -179,31 +179,37 @@ export function StartView() {
                   </span>
                 </header>
 
-                <ScrollArea
-                  className='min-h-0 flex-1'
-                  viewportClassName='p-2'
-                  aria-busy={busy === 'list'}
-                >
-                  {busy === 'list' && projects.length === 0 ? (
-                    <p className='grid min-h-full place-items-center text-[11px] text-muted-foreground'>
-                      {t('start.loadingProjects')}
-                    </p>
-                  ) : projects.length === 0 ? (
-                    <div
-                      className='grid min-h-full place-items-center px-6 text-center'
-                      role='status'
-                    >
-                      <div>
-                        <span className='mx-auto grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground'>
-                          <Folder className='size-[18px]' />
-                        </span>
-                        <p className='mt-3 text-[12px] font-medium'>{t('start.emptyTitle')}</p>
-                        <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
-                          {t('start.emptyDescription')}
-                        </p>
-                      </div>
+                {/* Outside the scroll area, whose content takes only its children's
+                    height, so these fill the space under the header; a bottom padding
+                    as tall as the header centres them on the whole panel. */}
+                {busy === 'list' && projects.length === 0 ? (
+                  <p
+                    className='grid flex-1 place-items-center pb-14 text-[11px] text-muted-foreground'
+                    aria-busy
+                  >
+                    {t('start.loadingProjects')}
+                  </p>
+                ) : projects.length === 0 ? (
+                  <div
+                    className='grid flex-1 place-items-center px-6 pb-14 text-center'
+                    role='status'
+                  >
+                    <div>
+                      <span className='mx-auto grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground'>
+                        <Folder className='size-[18px]' />
+                      </span>
+                      <p className='mt-3 text-[12px] font-medium'>{t('start.emptyTitle')}</p>
+                      <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
+                        {t('start.emptyDescription')}
+                      </p>
                     </div>
-                  ) : (
+                  </div>
+                ) : (
+                  <ScrollArea
+                    className='min-h-0 flex-1'
+                    viewportClassName='p-2'
+                    aria-busy={busy === 'list'}
+                  >
                     <ul className='grid gap-0.5' aria-label={t('start.projectList')}>
                       {projects.map((project) => (
                         <li
@@ -242,8 +248,8 @@ export function StartView() {
                         </li>
                       ))}
                     </ul>
-                  )}
-                </ScrollArea>
+                  </ScrollArea>
+                )}
               </section>
             </div>
           </section>
