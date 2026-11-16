@@ -29,7 +29,10 @@ use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::Filter
 use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Snapshot, Tool};
 use koharu_renderer::Gpu;
 use koharu_scene::LayerId;
-use tauri::{AppHandle, LogicalPosition, Manager as _, WebviewUrl, webview::WebviewBuilder};
+use tauri::{
+    AppHandle, LogicalPosition, Manager as _, WebviewUrl,
+    webview::{PageLoadEvent, WebviewBuilder},
+};
 use tauri_runtime_cef::{
     AsCefWebviewAttributes as _, CefRuntime, Offscreen, OffscreenView, WebviewBuilderCefExt as _,
     cef::{
@@ -467,6 +470,22 @@ fn remember(browser: Option<&mut Browser>) {
     }
 }
 
+/// Gives the page that just started the window's focus. CEF renders each
+/// document with a widget of its own that starts unfocused, so the focus the
+/// window last gave left with the document before, the placeholder the
+/// runtime opens first included, and an unfocused page takes keys but draws
+/// no caret.
+fn focus_page() {
+    let host = with(|main| {
+        let focused = main.window().is_some_and(|window| window.has_focus());
+        focused.then(|| main.host()).flatten()
+    })
+    .flatten();
+    if let Some(host) = host {
+        host.set_focus(1);
+    }
+}
+
 /// Takes the keyboard focus from the page's focused field, as a press on
 /// the canvas would in a browser.
 fn blur() {
@@ -572,6 +591,11 @@ fn add_webview(window: &tauri::Window<CefRuntime>, url: WebviewUrl, shared: bool
         .size(size)
         // The canvas shows through where the page paints nothing.
         .transparent(true)
+        .on_page_load(|_, payload| {
+            if payload.event() == PageLoadEvent::Started {
+                focus_page();
+            }
+        })
         .with_browser_settings(|settings| settings.windowless_frame_rate = FRAME_RATE);
     webview
         .runtime_specific_attributes_mut()
