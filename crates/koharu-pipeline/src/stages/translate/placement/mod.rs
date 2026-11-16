@@ -1,5 +1,5 @@
-//! Where a block's translation goes. Translation writes it, and the editor asks
-//! again when a balloon or a source frame changes, so the text reflows.
+//! Where a block's translation goes, written when the block is translated. Its
+//! frame is a copy of its room, so a later edit of the balloon leaves it as is.
 
 mod room;
 
