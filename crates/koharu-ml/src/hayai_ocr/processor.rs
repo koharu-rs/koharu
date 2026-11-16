@@ -1,9 +1,10 @@
 //! Hayai OCR image and text processing.
 //!
 //! Image preprocessing is Hayai's own `HayaiImageProcessor` with its released
-//! settings:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/517bdeeb64b68c08939e12f7211e99943c1e1640/processing_hayai.py
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/517bdeeb64b68c08939e12f7211e99943c1e1640/preprocessor_config.json
+//! settings and the patch budget `HayaiModel.ocr` asks for by default,
+//! `max_patches="auto"`, which picks one per crop:
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/5289b2cfdfd375dd651611b27ea87d21b5877008/processing_hayai.py
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/5289b2cfdfd375dd651611b27ea87d21b5877008/preprocessor_config.json
 
 use std::path::Path;
 
@@ -17,8 +18,6 @@ use super::config::siglip2;
 
 /// Pillow's bilinear filter, as convolution.
 const RESIZE: ResizeAlg = ResizeAlg::Convolution(FilterType::Bilinear);
-/// The patch budget, which the model card recommends.
-const MAX_PATCHES: i64 = 256;
 /// The fewest patches a crop is upscaled to.
 const MIN_PATCHES: i64 = 64;
 /// How far a crop is upscaled toward the budget before `MIN_PATCHES` rules.
@@ -50,7 +49,8 @@ impl ImageProcessor {
         }
 
         let patch_size = siglip2::PATCH_SIZE;
-        let (height, width) = target_size(i64::from(image.height()), i64::from(image.width()));
+        let (height, width) = (i64::from(image.height()), i64::from(image.width()));
+        let (height, width) = target_size(height, width, budget(height, width));
         let patch_height = height / patch_size;
         let patch_width = width / patch_size;
         let (height, width) = (height as u32, width as u32);
@@ -85,10 +85,67 @@ impl ImageProcessor {
     }
 }
 
+/// Upstream `_select_best_max_patches`: the patch budget, of 128, 192, 256,
+/// and 384, that suits a crop's size and shape, with upstream's thresholds.
+/// The smallest budget wins when a larger one gives the same patches, as
+/// `MAX_SCALE` caps the crop; a short crop takes 128 or 192 while it's still
+/// upscaled enough; and a crop the 256 budget would leave small, by its
+/// shape, takes 384.
+fn budget(height: i64, width: i64) -> i64 {
+    let patch_size = siglip2::PATCH_SIZE;
+    let (crop_height, crop_width) = (height.max(1) as f64, width.max(1) as f64);
+    // Each budget's patches, and the scale it upsizes the crop by.
+    let tier = |budget: i64| -> (i64, f64) {
+        let (height, width) = target_size(height, width, budget);
+        let patches = height / patch_size * (width / patch_size);
+        let scale = (height as f64 / crop_height).min(width as f64 / crop_width);
+        (patches, scale)
+    };
+    let (n128, s128) = tier(128);
+    let (n192, s192) = tier(192);
+    let (n256, s256) = tier(256);
+    let (n384, _) = tier(384);
+    if n128 == n384 {
+        return 128;
+    }
+    let aspect = crop_height.max(crop_width) / crop_height.min(crop_width);
+    let wide = crop_width / crop_height;
+    let square = (0.77..=1.30).contains(&wide);
+    let horizontal = wide > 1.30;
+    if !square
+        && ((!horizontal && s128 >= 1.65 && aspect < 3.8)
+            || (horizontal && s128 >= 2.35 && aspect < 3.2))
+    {
+        return 128;
+    }
+    if n384 > n256
+        && (s256 < 1.28
+            || (square && s256 < 2.20)
+            || (horizontal && s256 < 1.45)
+            || (aspect >= 3.8 && s256 < 1.75)
+            || (aspect >= 5.0 && s256 < 2.20))
+    {
+        return 384;
+    }
+    if n192 == n128 {
+        return 128;
+    }
+    if n256 == n192 {
+        return 192;
+    }
+    if !square
+        && ((!horizontal && s192 >= 1.55 && aspect < 3.6)
+            || (horizontal && s192 >= 1.85 && aspect < 3.0))
+    {
+        return 192;
+    }
+    256
+}
+
 /// Upstream `_naflex_target_size`: the largest scale, up to `MAX_SCALE`,
-/// whose size rounded up to whole patches fits `MAX_PATCHES`, and for a crop
-/// that leaves under `MIN_PATCHES`, the largest that fits `MIN_PATCHES`.
-fn target_size(height: i64, width: i64) -> (i64, i64) {
+/// whose size rounded up to whole patches fits `budget` patches, and for a
+/// crop that leaves under `MIN_PATCHES`, the largest that fits `MIN_PATCHES`.
+fn target_size(height: i64, width: i64, budget: i64) -> (i64, i64) {
     const EPS: f64 = 1e-5;
     let patch_size = siglip2::PATCH_SIZE;
     let scaled = |scale: f64, size: i64| -> i64 {
@@ -107,9 +164,9 @@ fn target_size(height: i64, width: i64) -> (i64, i64) {
         low
     };
 
-    let mut scale = search(EPS, MAX_SCALE, MAX_PATCHES);
+    let mut scale = search(EPS, MAX_SCALE, budget);
     if scaled(scale, height) / patch_size * (scaled(scale, width) / patch_size) < MIN_PATCHES {
-        scale = search(scale, 100.0, MIN_PATCHES.min(MAX_PATCHES));
+        scale = search(scale, 100.0, MIN_PATCHES.min(budget));
     }
     (scaled(scale, height), scaled(scale, width))
 }
@@ -176,24 +233,53 @@ impl Tokenizer {
 mod tests {
     use super::*;
 
-    // Expected sizes are upstream `_naflex_target_size`'s on the same inputs.
+    // Expected sizes are upstream `_naflex_target_size`'s, and budgets
+    // `_select_best_max_patches`'s, on the same inputs.
 
     #[test]
     fn resize_budget_matches_upstream_binary_search() {
         // A square image fills the 256-patch budget with a 16x16 patch grid.
-        assert_eq!(target_size(1024, 1024), (256, 256));
+        assert_eq!(target_size(1024, 1024, 256), (256, 256));
         // A wide line keeps its rough aspect ratio while rounding up to patch
         // size and staying within the patch budget.
-        assert_eq!(target_size(120, 900), (96, 672));
+        assert_eq!(target_size(120, 900, 256), (96, 672));
     }
 
     #[test]
     fn upscaling_stops_at_four_times() {
-        assert_eq!(target_size(32, 32), (128, 128));
+        assert_eq!(target_size(32, 32, 256), (128, 128));
     }
 
     #[test]
     fn tiny_images_are_upscaled_to_the_minimum_patch_count() {
-        assert_eq!(target_size(4, 4), (128, 128));
+        assert_eq!(target_size(4, 4, 256), (128, 128));
+    }
+
+    #[test]
+    fn each_crop_takes_the_budget_upstream_picks_for_it() {
+        // (height, width, budget, resized height, resized width)
+        let crops = [
+            // Capped at four times either way, so the smallest budget.
+            (32, 32, 128, 128, 128),
+            // Short vertical dialogue, still well upscaled at 128.
+            (150, 50, 128, 288, 96),
+            (200, 60, 192, 384, 128),
+            (64, 180, 192, 128, 368),
+            (60, 200, 256, 144, 448),
+            (300, 80, 256, 480, 128),
+            // A dense square block, a wide line, and a long strip.
+            (1024, 1024, 384, 304, 304),
+            (120, 900, 384, 112, 848),
+            (400, 100, 384, 608, 160),
+        ];
+        for (height, width, budget_expected, resized_height, resized_width) in crops {
+            let picked = budget(height, width);
+            assert_eq!(picked, budget_expected, "{height}x{width}");
+            assert_eq!(
+                target_size(height, width, picked),
+                (resized_height, resized_width),
+                "{height}x{width}"
+            );
+        }
     }
 }
