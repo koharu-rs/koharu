@@ -18,21 +18,24 @@
     "title": "النشاط"
   },
   "agent": {
-    "applying": "جارٍ تطبيق تغييرات المشروع...",
     "cancel": "إلغاء",
     "cancelled": "أُلغي.",
     "emptyDescription": "اطلب من Agent فحص هذا المشروع أو ترجمته أو تعديله أو معالجته. لن يعرض صور الصفحات إلا عند الحاجة.",
     "emptyTitle": "ماذا ينبغي أن يفعل Koharu؟",
     "failed": "فشل طلب Agent.",
     "loading": "جارٍ تحميل الوكيل…",
-    "mcp": "خادم MCP",
     "message": "راسل Koharu Agent",
     "model": "النموذج",
+    "newChat": "محادثة جديدة",
     "placeholder": "اطلب من Koharu العمل على هذا المشروع...",
     "reasoning": "التفكير",
     "send": "إرسال",
     "thinking": "جارٍ التفكير...",
+    "thought": "فكّر لمدة {{seconds}} ث",
     "title": "Agent",
+    "toolFailed": "فشل {{tool}}",
+    "used": "استخدم {{tool}}",
+    "using": "يستخدم {{tool}}",
     "working": "جارٍ العمل..."
   },
   "canvas": {

@@ -18,21 +18,24 @@
     "title": "アクティビティ"
   },
   "agent": {
-    "applying": "プロジェクトの変更を適用中…",
     "cancel": "キャンセル",
     "cancelled": "キャンセルしました。",
     "emptyDescription": "エージェントにこのプロジェクトの確認、翻訳、編集、処理を依頼できます。ページ画像は必要な場合にのみ表示されます。",
     "emptyTitle": "Koharuに何をさせますか？",
     "failed": "エージェントのリクエストに失敗しました。",
     "loading": "エージェントを読み込み中…",
-    "mcp": "MCPサーバー",
     "message": "Koharuエージェントにメッセージを送信",
     "model": "モデル",
+    "newChat": "新しいチャット",
     "placeholder": "Koharuにこのプロジェクトの作業を依頼…",
     "reasoning": "推論",
     "send": "送信",
     "thinking": "思考中…",
+    "thought": "{{seconds}}秒考えました",
     "title": "エージェント",
+    "toolFailed": "{{tool}} が失敗しました",
+    "used": "{{tool}} を使用しました",
+    "using": "{{tool}} を使用中",
     "working": "作業中…"
   },
   "canvas": {

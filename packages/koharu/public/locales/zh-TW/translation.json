@@ -18,21 +18,24 @@
     "title": "活動"
   },
   "agent": {
-    "applying": "正在套用專案變更…",
     "cancel": "取消",
     "cancelled": "已取消。",
     "emptyDescription": "讓代理檢查、翻譯、編輯或處理此專案。它只會在需要時查看頁面影像。",
     "emptyTitle": "要讓 Koharu 做什麼？",
     "failed": "代理要求失敗。",
     "loading": "正在載入代理…",
-    "mcp": "MCP 伺服器",
     "message": "傳送訊息給 Koharu 代理",
     "model": "模型",
+    "newChat": "新對話",
     "placeholder": "讓 Koharu 處理此專案…",
     "reasoning": "推理",
     "send": "傳送",
     "thinking": "正在思考…",
+    "thought": "思考了 {{seconds}} 秒",
     "title": "代理",
+    "toolFailed": "{{tool}} 失敗",
+    "used": "已使用 {{tool}}",
+    "using": "正在使用 {{tool}}",
     "working": "正在工作…"
   },
   "canvas": {

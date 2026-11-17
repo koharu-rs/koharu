@@ -18,21 +18,24 @@
     "title": "활동"
   },
   "agent": {
-    "applying": "프로젝트 변경 사항 적용 중…",
     "cancel": "취소",
     "cancelled": "취소되었습니다.",
     "emptyDescription": "에이전트에게 이 프로젝트의 검사, 번역, 편집 또는 처리를 요청하세요. 페이지 이미지는 필요할 때만 확인합니다.",
     "emptyTitle": "Koharu에게 무엇을 시킬까요?",
     "failed": "에이전트 요청에 실패했습니다.",
     "loading": "에이전트 불러오는 중…",
-    "mcp": "MCP 서버",
     "message": "Koharu 에이전트에게 메시지 보내기",
     "model": "모델",
+    "newChat": "새 채팅",
     "placeholder": "Koharu에게 이 프로젝트 작업 요청…",
     "reasoning": "추론",
     "send": "보내기",
     "thinking": "생각 중…",
+    "thought": "{{seconds}}초 동안 생각함",
     "title": "에이전트",
+    "toolFailed": "{{tool}} 실패",
+    "used": "{{tool}} 사용함",
+    "using": "{{tool}} 사용 중",
     "working": "작업 중…"
   },
   "canvas": {

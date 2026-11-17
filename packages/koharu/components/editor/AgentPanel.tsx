@@ -1,16 +1,23 @@
 'use client'
 
 import { Channel } from '@tauri-apps/api/core'
-import { Bot, CircleStop, Send } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowUp, Bot, Check, ChevronDown, ChevronRight, Square, SquarePen, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Markdown } from '@/components/controls/Markdown'
+import { ModelPicker } from '@/components/controls/ModelPicker'
 import { call, savePreferences } from '@/lib/backend'
 import { useKoharuStore } from '@/lib/store'
 import { modelName, REASONING } from '@/lib/translation'
-import { commands, type AgentConfig, type AgentEvent } from '@koharu/ipc/protocol'
-import { Badge } from '@koharu/ui/components/badge'
+import { commands, type AgentConfig, type AgentEvent, type Event } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@koharu/ui/components/collapsible'
+import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import {
   Select,
@@ -19,28 +26,54 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@koharu/ui/components/select'
+import { Spinner } from '@koharu/ui/components/spinner'
 import { Textarea } from '@koharu/ui/components/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
+import { cn } from '@koharu/ui/lib/utils'
 
-/** The desktop's MCP server, which serves the open project from launch. */
-const MCP_URL = 'http://127.0.0.1:7878/mcp'
+/** What a turn of the agent's showed, in the order it came. */
+type Part =
+  | { type: 'text'; text: string }
+  /** Its reasoning, with when it began and, once text or a tool follows, ended. */
+  | { type: 'thinking'; text: string; started: number; ended: number | null }
+  | {
+      type: 'tool'
+      tool: string
+      arguments: unknown
+      state: 'running' | 'done' | 'failed'
+      error: string | null
+    }
 
-interface ConversationMessage {
-  id: string
-  role: 'user' | 'assistant'
-  text: string
-  error?: boolean
-}
+type Turn =
+  | { id: string; role: 'user'; text: string }
+  | {
+      id: string
+      role: 'assistant'
+      parts: Part[]
+      state: 'running' | 'done' | 'failed' | 'cancelled'
+      error?: string
+    }
 
-/** The in-app agent's conversation about the open project, its model, and the MCP server that
- * serves the same tools to agents in other programs. */
+/** The in-app agent's conversation about the open project, as Claude Desktop and Codex lay a chat
+ * out: the user's messages in bubbles, the agent's replies as plain text with its thinking and
+ * tool calls folded beside them, and a composer holding the model, its reasoning, and New chat. */
 export function AgentPanel() {
   const { t } = useTranslation()
-  const [messages, setMessages] = useState<ConversationMessage[]>([])
+  const [turns, setTurns] = useState<Turn[]>([])
   const [prompt, setPrompt] = useState('')
   const [running, setRunning] = useState<number | null>(null)
-  const [activity, setActivity] = useState<string | null>(null)
+  const [choosing, setChoosing] = useState(false)
+  const busy = turns.some((turn) => turn.role === 'assistant' && turn.state === 'running')
   const models = useKoharuStore((state) => state.models).filter((model) => model.tools)
   const preferences = useKoharuStore((state) => state.preferences)
+  const list = useRef<HTMLDivElement>(null)
+  // Whether the transcript follows what arrives: until the user scrolls up from its end.
+  const following = useRef(true)
+
+  useEffect(() => {
+    const viewport = list.current
+    if (viewport && following.current) viewport.scrollTop = viewport.scrollHeight
+  }, [turns])
 
   if (!preferences) {
     return (
@@ -52,91 +85,44 @@ export function AgentPanel() {
 
   const config = preferences.agent
   const model = config.model ?? null
+  const picker =
+    'h-6 w-auto max-w-36 min-w-0 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-muted-foreground shadow-none hover:bg-muted hover:text-foreground dark:bg-transparent dark:hover:bg-muted'
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <div className='grid shrink-0 gap-2 border-b px-3 py-2.5'>
-        <div className='grid grid-cols-[minmax(0,1fr)_7rem] gap-1.5'>
-          <Select
-            value={model ?? ''}
-            items={Object.fromEntries(models.map((choice) => [choice.reference, choice.name]))}
-            onValueChange={(next) => next && void saveConfig({ ...config, model: next })}
-          >
-            <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.model')}>
-              <SelectValue placeholder={t('inference.noModel')} />
-            </SelectTrigger>
-            <SelectContent align='start'>
-              {models.map((choice) => (
-                <SelectItem key={choice.reference} value={choice.reference}>
-                  {choice.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={config.reasoning ?? 'default'}
-            items={Object.fromEntries([
-              ['default', t('inference.providerDefault')],
-              ...REASONING.map((level) => [level, t(`reasoning.${level}`)]),
-            ])}
-            onValueChange={(reasoning) =>
-              reasoning &&
-              void saveConfig({
-                ...config,
-                reasoning: reasoning === 'default' ? null : reasoning,
-              })
-            }
-          >
-            <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.reasoning')}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent align='end'>
-              <SelectItem value='default'>{t('inference.providerDefault')}</SelectItem>
-              {REASONING.map((level) => (
-                <SelectItem key={level} value={level}>
-                  {t(`reasoning.${level}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className='flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground'>
-          <span className='shrink-0'>{t('agent.mcp')}</span>
-          <span className='min-w-0 truncate font-mono text-foreground select-text'>{MCP_URL}</span>
-        </div>
-      </div>
-
-      <ScrollArea className='min-h-0 flex-1'>
-        {messages.length ? (
-          <div className='grid gap-3 p-3'>
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                data-role={message.role}
-                className='flex data-[role=user]:justify-end'
-              >
+      <ScrollArea
+        className='min-h-0 flex-1'
+        viewportRef={list}
+        viewportClassName='px-3 pt-3'
+        onScrollCapture={() => {
+          const viewport = list.current
+          if (viewport) {
+            following.current =
+              viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 40
+          }
+        }}
+      >
+        {turns.length ? (
+          <div className='grid gap-4 pb-3'>
+            {turns.map((turn) =>
+              turn.role === 'user' ? (
                 <div
-                  data-role={message.role}
-                  data-error={message.error || undefined}
-                  className='max-w-[90%] rounded-xl bg-muted px-3 py-2 text-[11px] leading-5 whitespace-pre-wrap select-text data-[error=true]:bg-destructive/10 data-[error=true]:text-destructive data-[role=user]:bg-primary data-[role=user]:text-primary-foreground'
+                  key={turn.id}
+                  className='ml-auto max-w-[85%] rounded-2xl bg-muted px-3 py-2 text-xs leading-5 whitespace-pre-wrap select-text'
                 >
-                  {message.text || (message.role === 'assistant' ? t('agent.working') : '')}
+                  {turn.text}
                 </div>
-              </div>
-            ))}
-            {activity ? (
-              <div className='flex items-center gap-1.5 text-[10px] text-muted-foreground'>
-                <span className='size-1.5 rounded-full bg-primary' />
-                {activity}
-              </div>
-            ) : null}
+              ) : (
+                <AssistantTurn key={turn.id} turn={turn} />
+              ),
+            )}
           </div>
         ) : (
-          <div className='grid min-h-64 place-items-center p-6 text-center'>
+          <div className='grid min-h-72 place-items-center px-6 text-center'>
             <div>
               <Bot className='mx-auto size-6 text-primary' />
-              <h3 className='mt-3 text-xs font-semibold'>{t('agent.emptyTitle')}</h3>
-              <p className='mt-1 max-w-56 text-[10px] leading-4 text-muted-foreground'>
+              <h3 className='mt-3 text-sm font-semibold'>{t('agent.emptyTitle')}</h3>
+              <p className='mx-auto mt-1.5 max-w-60 text-[11px] leading-4 text-muted-foreground'>
                 {t('agent.emptyDescription')}
               </p>
             </div>
@@ -144,49 +130,121 @@ export function AgentPanel() {
         )}
       </ScrollArea>
 
-      <div className='shrink-0 border-t p-2.5'>
-        <div className='rounded-xl border bg-background p-1.5 focus-within:border-ring'>
+      <div className='shrink-0 p-2.5'>
+        <div className='rounded-2xl border border-input bg-background p-2 shadow-xs transition-colors focus-within:border-ring'>
           <Textarea
             id='agent-message'
             value={prompt}
-            disabled={running !== null}
             aria-label={t('agent.message')}
             placeholder={t('agent.placeholder')}
-            className='max-h-36 min-h-16 resize-none border-0 bg-transparent px-1.5 py-1 text-[11px] leading-5 shadow-none focus-visible:ring-0'
+            className='max-h-40 min-h-10 resize-none border-0 bg-transparent px-1 py-0.5 text-xs leading-5 shadow-none focus-visible:ring-0 dark:bg-transparent'
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault()
                 void send()
               }
             }}
           />
-          <div className='flex items-center justify-between gap-2 pt-1'>
-            <Badge
-              variant='outline'
-              className='h-5 max-w-44 truncate px-1.5 text-[9px] font-normal'
+          <div className='flex min-w-0 items-center gap-0.5 pt-1'>
+            <Popover open={choosing} onOpenChange={setChoosing}>
+              <PopoverTrigger
+                type='button'
+                aria-label={t('agent.model')}
+                className={cn(
+                  'flex items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-open:bg-muted data-open:text-foreground',
+                  picker,
+                )}
+              >
+                <span className='truncate'>
+                  {(model && modelName(models, model)) || t('inference.noModel')}
+                </span>
+                <ChevronDown className='size-3.5 shrink-0' />
+              </PopoverTrigger>
+              <PopoverContent
+                side='top'
+                align='start'
+                sideOffset={6}
+                className='w-64 min-w-0 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
+              >
+                <ModelPicker
+                  value={model}
+                  models={models}
+                  onSelect={(next) => {
+                    setChoosing(false)
+                    void saveConfig({ ...config, model: next })
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            <Select
+              value={config.reasoning ?? 'default'}
+              items={Object.fromEntries([
+                ['default', t('inference.providerDefault')],
+                ...REASONING.map((level) => [level, t(`reasoning.${level}`)]),
+              ])}
+              onValueChange={(reasoning) =>
+                reasoning &&
+                void saveConfig({
+                  ...config,
+                  reasoning: reasoning === 'default' ? null : reasoning,
+                })
+              }
             >
-              {model ? modelName(models, model) : t('inference.noModel')}
-            </Badge>
-            {running !== null ? (
-              <Button
-                variant='outline'
-                size='icon-sm'
-                aria-label={t('agent.cancel')}
-                onClick={cancel}
-              >
-                <CircleStop />
-              </Button>
-            ) : (
-              <Button
-                size='icon-sm'
-                aria-label={t('agent.send')}
-                disabled={!prompt.trim() || !model}
-                onClick={() => void send()}
-              >
-                <Send />
-              </Button>
-            )}
+              <SelectTrigger size='sm' className={picker} aria-label={t('agent.reasoning')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align='start'>
+                <SelectItem value='default'>{t('inference.providerDefault')}</SelectItem>
+                {REASONING.map((level) => (
+                  <SelectItem key={level} value={level}>
+                    {t(`reasoning.${level}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className='ml-auto flex shrink-0 items-center gap-1'>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon-sm'
+                      aria-label={t('agent.newChat')}
+                      disabled={busy || turns.length === 0}
+                      className='size-7 rounded-full text-muted-foreground hover:text-foreground'
+                      onClick={() => void newChat()}
+                    />
+                  }
+                >
+                  <SquarePen className='size-3.5' />
+                </TooltipTrigger>
+                <TooltipContent side='top'>{t('agent.newChat')}</TooltipContent>
+              </Tooltip>
+              {busy ? (
+                <Button
+                  type='button'
+                  size='icon-sm'
+                  aria-label={t('agent.cancel')}
+                  className='size-7 rounded-full'
+                  onClick={cancel}
+                >
+                  <Square className='size-3 fill-current' />
+                </Button>
+              ) : (
+                <Button
+                  type='button'
+                  size='icon-sm'
+                  aria-label={t('agent.send')}
+                  disabled={!prompt.trim() || !model}
+                  className='size-7 rounded-full'
+                  onClick={() => void send()}
+                >
+                  <ArrowUp className='size-4' />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -197,85 +255,235 @@ export function AgentPanel() {
     if (preferences) await savePreferences({ ...preferences, agent })
   }
 
+  async function newChat() {
+    await call(commands.resetAgent).catch(() => undefined)
+    setTurns([])
+    following.current = true
+  }
+
   function cancel() {
-    if (running === null) return
-    void call(commands.stopAgent, running).catch(() => undefined)
+    if (running !== null) void call(commands.stopAgent, running).catch(() => undefined)
     // A cancelled run tells nothing more.
     setRunning(null)
-    setActivity(null)
-    setMessages((current) =>
-      current.map((item, index) =>
-        index === current.length - 1 && item.role === 'assistant'
-          ? { ...item, text: item.text || t('agent.cancelled') }
-          : item,
+    setTurns((current) =>
+      current.map((turn) =>
+        turn.role === 'assistant' && turn.state === 'running'
+          ? { ...turn, parts: settle(turn.parts), state: 'cancelled' }
+          : turn,
       ),
     )
   }
 
   async function send() {
     const message = prompt.trim()
-    if (!message || running !== null) return
-    const id = crypto.randomUUID()
+    if (!message || busy || !model) return
     const assistant = crypto.randomUUID()
     setPrompt('')
-    setMessages((current) => [
+    following.current = true
+    setTurns((current) => [
       ...current,
-      { id, role: 'user', text: message },
-      { id: assistant, role: 'assistant', text: '' },
+      { id: crypto.randomUUID(), role: 'user', text: message },
+      { id: assistant, role: 'assistant', parts: [], state: 'running' },
     ])
-    setActivity(t('agent.working'))
     // A run can end before its id arrives.
     let settled = false
 
     const channel = new Channel<AgentEvent>()
     channel.onmessage = (update) => {
-      if (update.type === 'completed') {
-        settled = true
-        updateAssistant(() => update.answer)
-        setRunning(null)
-        setActivity(null)
+      if (update.type === 'event') {
+        updateAssistant((turn) => ({ ...turn, parts: told(turn.parts, update.event) }))
         return
       }
-      if (update.type === 'failed') {
-        settled = true
-        updateAssistant(() => update.error, true)
-        setRunning(null)
-        setActivity(null)
-        return
-      }
-      const { event } = update
-      switch (event.type) {
-        case 'text':
-          updateAssistant((text) => text + event.delta)
-          break
-        case 'reasoning':
-          setActivity(t('agent.thinking'))
-          break
-        case 'tool_started':
-          setActivity(t('agent.applying'))
-          break
-        case 'tool_finished':
-          setActivity(t('agent.working'))
-          break
-      }
+      settled = true
+      setRunning(null)
+      updateAssistant((turn) =>
+        update.type === 'completed'
+          ? {
+              ...turn,
+              // A provider that doesn't stream tells its answer only at the end.
+              parts: turn.parts.some((part) => part.type === 'text')
+                ? settle(turn.parts)
+                : [...settle(turn.parts), { type: 'text', text: update.answer }],
+              state: 'done',
+            }
+          : { ...turn, parts: settle(turn.parts), state: 'failed', error: update.error },
+      )
     }
     try {
       const run = await call(commands.runAgent, message, channel)
       if (!settled) setRunning(run)
     } catch (error) {
-      updateAssistant(() => (error instanceof Error ? error.message : t('agent.failed')), true)
+      updateAssistant((turn) => ({
+        ...turn,
+        parts: settle(turn.parts),
+        state: 'failed',
+        error: error instanceof Error ? error.message : t('agent.failed'),
+      }))
       setRunning(null)
-      setActivity(null)
     }
 
-    function updateAssistant(update: (text: string) => string, error = false) {
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === assistant
-            ? { ...item, text: update(item.text), error: error || item.error }
-            : item,
+    function updateAssistant(
+      update: (turn: Extract<Turn, { role: 'assistant' }>) => Extract<Turn, { role: 'assistant' }>,
+    ) {
+      setTurns((current) =>
+        current.map((turn) =>
+          turn.id === assistant && turn.role === 'assistant' && turn.state === 'running'
+            ? update(turn)
+            : turn,
         ),
       )
     }
   }
+}
+
+/** `parts` with `event` told: text and reasoning run on in their part, and a tool's end settles
+ * its call. Text or a tool ends the thinking before it. */
+function told(parts: Part[], event: Event): Part[] {
+  const last = parts.at(-1)
+  switch (event.type) {
+    case 'text':
+      return last?.type === 'text'
+        ? [...parts.slice(0, -1), { ...last, text: last.text + event.delta }]
+        : [...settle(parts), { type: 'text', text: event.delta }]
+    case 'reasoning':
+      return last?.type === 'thinking' && last.ended === null
+        ? [...parts.slice(0, -1), { ...last, text: last.text + event.delta }]
+        : [...parts, { type: 'thinking', text: event.delta, started: Date.now(), ended: null }]
+    case 'tool_started':
+      return [
+        ...settle(parts),
+        {
+          type: 'tool',
+          tool: event.tool,
+          arguments: event.arguments,
+          state: 'running',
+          error: null,
+        },
+      ]
+    case 'tool_finished': {
+      const at = parts.findLastIndex(
+        (part) => part.type === 'tool' && part.tool === event.tool && part.state === 'running',
+      )
+      return at < 0
+        ? parts
+        : parts.map((part, index) =>
+            index === at && part.type === 'tool'
+              ? { ...part, state: event.error ? 'failed' : 'done', error: event.error }
+              : part,
+          )
+    }
+  }
+}
+
+/** `parts` with their thinking ended, as when the run moves on from it or ends. */
+function settle(parts: Part[]): Part[] {
+  return parts.map((part) =>
+    part.type === 'thinking' && part.ended === null ? { ...part, ended: Date.now() } : part,
+  )
+}
+
+/** The agent's turn: its parts in order, then how it ended when not with its answer. */
+function AssistantTurn({ turn }: { turn: Extract<Turn, { role: 'assistant' }> }) {
+  const { t } = useTranslation()
+  const last = turn.parts.at(-1)
+  // Something is on its way when nothing shows going on already.
+  const waiting =
+    turn.state === 'running' &&
+    (last === undefined ||
+      (last.type === 'tool' && last.state !== 'running') ||
+      (last.type === 'thinking' && last.ended !== null))
+  return (
+    <div className='grid min-w-0 gap-2'>
+      {turn.parts.map((part, index) =>
+        part.type === 'text' ? (
+          <Markdown key={index} className='text-foreground select-text'>
+            {part.text}
+          </Markdown>
+        ) : part.type === 'thinking' ? (
+          <Fold
+            key={index}
+            label={
+              part.ended === null
+                ? t('agent.thinking')
+                : t('agent.thought', {
+                    seconds: Math.max(1, Math.round((part.ended - part.started) / 1000)),
+                  })
+            }
+            active={part.ended === null}
+          >
+            <p className='text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground select-text'>
+              {part.text}
+            </p>
+          </Fold>
+        ) : (
+          <Fold
+            key={index}
+            icon={
+              part.state === 'running' ? (
+                <Spinner className='size-3' />
+              ) : part.state === 'done' ? (
+                <Check className='size-3 text-emerald-600 dark:text-emerald-400' />
+              ) : (
+                <X className='size-3 text-destructive' />
+              )
+            }
+            label={t(
+              part.state === 'running'
+                ? 'agent.using'
+                : part.state === 'done'
+                  ? 'agent.used'
+                  : 'agent.toolFailed',
+              { tool: part.tool },
+            )}
+          >
+            <pre className='max-h-40 overflow-auto rounded-md bg-muted p-2 font-mono text-[10px] leading-4 whitespace-pre-wrap text-muted-foreground select-text'>
+              {JSON.stringify(part.arguments, null, 2)}
+            </pre>
+            {part.error && (
+              <p className='mt-1 text-[11px] leading-4 text-destructive select-text'>
+                {part.error}
+              </p>
+            )}
+          </Fold>
+        ),
+      )}
+      {waiting && (
+        <p className='animate-pulse text-[11px] text-muted-foreground'>{t('agent.working')}</p>
+      )}
+      {turn.state === 'failed' && (
+        <p className='text-xs leading-5 text-destructive select-text'>
+          {turn.error || t('agent.failed')}
+        </p>
+      )}
+      {turn.state === 'cancelled' && (
+        <p className='text-[11px] text-muted-foreground'>{t('agent.cancelled')}</p>
+      )}
+    </div>
+  )
+}
+
+/** A folded row of the agent's turn, as Claude folds its thinking and tool calls: its label, and
+ * what it holds once opened. */
+function Fold({
+  icon,
+  label,
+  active = false,
+  children,
+}: {
+  icon?: ReactNode
+  label: string
+  /** Still going, which its label shimmers to show. */
+  active?: boolean
+  children: ReactNode
+}) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className='group flex max-w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-[11px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40'>
+        {icon}
+        <span className={active ? 'animate-pulse truncate' : 'truncate'}>{label}</span>
+        <ChevronRight className='size-3 shrink-0 transition-transform group-data-[panel-open]:rotate-90' />
+      </CollapsibleTrigger>
+      <CollapsibleContent className='pt-1 pl-4'>{children}</CollapsibleContent>
+    </Collapsible>
+  )
 }

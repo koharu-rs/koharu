@@ -18,21 +18,24 @@
     "title": "活动"
   },
   "agent": {
-    "applying": "来勒拿改动应用到项目里向…",
     "cancel": "取消",
     "cancelled": "取消哉。",
     "emptyDescription": "让智能体检查、翻译、编辑或者处理箇个项目。有需要个辰光，伊才会查看页面图像。",
     "emptyTitle": "侬想让 Koharu 做啥？",
     "failed": "智能体个请求失败哉。",
     "loading": "来勒加载智能体…",
-    "mcp": "MCP 服务器",
     "message": "发消息畀 Koharu 智能体",
     "model": "模型",
+    "newChat": "新对话",
     "placeholder": "让 Koharu 帮侬处理箇个项目…",
     "reasoning": "推理",
     "send": "发送",
     "thinking": "来勒忖…",
+    "thought": "想了 {{seconds}} 秒",
     "title": "智能体",
+    "toolFailed": "{{tool}} 失败",
+    "used": "用过 {{tool}}",
+    "using": "正在用 {{tool}}",
     "working": "来勒处理任务…"
   },
   "canvas": {

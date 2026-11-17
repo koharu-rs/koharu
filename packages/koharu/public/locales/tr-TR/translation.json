@@ -18,21 +18,24 @@
     "title": "Etkinlik"
   },
   "agent": {
-    "applying": "Proje değişiklikleri uygulanıyor…",
     "cancel": "İptal",
     "cancelled": "İptal edildi.",
     "emptyDescription": "Ajandan bu projeyi incelemesini, çevirmesini, düzenlemesini veya işlemesini isteyin. Sayfa görüntülerini yalnızca gerektiğinde görür.",
     "emptyTitle": "Koharu ne yapsın?",
     "failed": "Ajan isteği başarısız oldu.",
     "loading": "Ajan yükleniyor…",
-    "mcp": "MCP sunucusu",
     "message": "Koharu Ajanına mesaj gönder",
     "model": "Model",
+    "newChat": "Yeni sohbet",
     "placeholder": "Koharu’dan bu proje üzerinde çalışmasını isteyin…",
     "reasoning": "Akıl yürütme",
     "send": "Gönder",
     "thinking": "Düşünüyor…",
+    "thought": "{{seconds}} sn düşündü",
     "title": "Ajan",
+    "toolFailed": "{{tool}} başarısız",
+    "used": "{{tool}} kullanıldı",
+    "using": "{{tool}} kullanılıyor",
     "working": "Çalışıyor…"
   },
   "canvas": {

@@ -18,21 +18,24 @@
     "title": "Actividad"
   },
   "agent": {
-    "applying": "Aplicando cambios al proyecto…",
     "cancel": "Cancelar",
     "cancelled": "Cancelado.",
     "emptyDescription": "Pide al agente que inspeccione, traduzca, edite o procese este proyecto. Solo verá las imágenes de las páginas cuando sea necesario.",
     "emptyTitle": "¿Qué debería hacer Koharu?",
     "failed": "La solicitud del agente falló.",
     "loading": "Cargando el agente…",
-    "mcp": "Servidor MCP",
     "message": "Enviar mensaje al agente de Koharu",
     "model": "Modelo",
+    "newChat": "Nuevo chat",
     "placeholder": "Pide a Koharu que trabaje en este proyecto…",
     "reasoning": "Razonamiento",
     "send": "Enviar",
     "thinking": "Pensando…",
+    "thought": "Pensó durante {{seconds}} s",
     "title": "Agente",
+    "toolFailed": "{{tool}} falló",
+    "used": "Usó {{tool}}",
+    "using": "Usando {{tool}}",
     "working": "Trabajando…"
   },
   "canvas": {

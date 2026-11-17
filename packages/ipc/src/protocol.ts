@@ -969,6 +969,8 @@ export const commands = {
   runAgent: (prompt: string, onEvent: Channel<AgentEvent>) =>
     invoke<number>('run_agent', { prompt, onEvent }, { headers: headers() }),
   stopAgent: (run: number) => invoke<null>('stop_agent', { run }, { headers: headers() }),
+  /** Starts the open project's conversation over, as a chat app's new chat does: the run going stops, and the next run begins a new conversation. */
+  resetAgent: () => invoke<null>('reset_agent', {}, { headers: headers() }),
   getPreferences: () => invoke<Preferences>('get_preferences', {}, { headers: headers() }),
   /** Saves every section, hands each to its owner, and answers them as the file holds them now. */
   savePreferences: (preferences: Preferences) =>

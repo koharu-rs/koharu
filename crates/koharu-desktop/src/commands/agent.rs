@@ -99,6 +99,17 @@ pub fn stop_agent(app: State<'_, Arc<App>>, run: u64) {
     }
 }
 
+/// Starts the open project's conversation over, as a chat app's new chat
+/// does: the run going stops, and the next run begins a new conversation.
+#[tauri::command]
+#[specta::specta]
+pub fn reset_agent(app: State<'_, Arc<App>>) {
+    if let Some(project) = app.project.lock().as_mut() {
+        project.run = None;
+        project.conversation = None;
+    }
+}
+
 /// The open project's conversation with the agent on `model`, made on its
 /// first run.
 async fn conversation(app: &App, model: &str) -> anyhow::Result<Arc<tokio::sync::Mutex<Agent>>> {
