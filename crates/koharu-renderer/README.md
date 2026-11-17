@@ -64,12 +64,14 @@ lines centred on one axis in a balloon, or started together on it.
 
 A path frame centres every line on one axis, where Photoshop centres each line
 in its own span of the shape [Photoshop text in shapes], so the lines of a
-lopsided balloon don't wander along its outline. Lines aligned to an edge
-start together, or end together, where Photoshop starts each where the shape
-does, so a balloon's Japanese or Chinese columns hang from one line as JLREQ
-aligns lines to their head [JLREQ]: the block is centred on the axis, and each
-line reaches from its edge to the outline, the edge as near the axis as the
-longest line allows and no further out than the narrowest line's span.
+lopsided balloon don't wander along its outline; the axis is one every line
+reaches where there is one, so no line is left without room. Lines aligned to
+an edge start together, or end together, where Photoshop starts each where the
+shape does, so a balloon's Japanese or Chinese columns hang from one line as
+JLREQ aligns lines to their head [JLREQ]: they share the edge every line's span
+reaches, each runs from it to its own span's far end, so a balloon cut away on
+one side still fills its longer side, and the block is centred on the axis as
+far as that allows.
 
 ## 3. Fonts
 

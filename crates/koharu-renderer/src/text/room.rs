@@ -197,34 +197,45 @@ impl Outline {
 }
 
 /// The inline position lines in `bands` are centred on: of their spans'
-/// middles, the one they reach furthest on both sides of, all together, so a
-/// tail or a wide corner of a single band can't pull it aside. Photoshop's
-/// area type centres each line in its own span, so the lines of a lopsided
-/// shape, such as a balloon's share beside another text, wander from side to
-/// side; a letterer keeps a balloon's lines on one axis, and so does Koharu.
+/// middles, the one the most bands hold, then the one they reach furthest on
+/// both sides of, all together, so a tail or a wide corner of a single band
+/// can't pull it aside, nor can one long band pull it past a short one's
+/// reach and leave that line no room. Photoshop's area type centres each line
+/// in its own span, so the lines of a lopsided shape, such as a balloon's
+/// share beside another text, wander from side to side; a letterer keeps a
+/// balloon's lines on one axis, and so does Koharu.
 pub(super) fn axis(bands: &[Spans]) -> Option<f64> {
-    let room = |axis: f64| -> f64 {
-        bands
+    let room = |axis: f64| -> (usize, f64) {
+        let reaches: Vec<(f64, f64)> = bands
             .iter()
             .filter_map(|spans| reach(spans, axis))
-            .map(|(start, end)| end - start)
-            .sum()
+            .collect();
+        let length = reaches.iter().map(|(start, end)| end - start).sum();
+        (reaches.len(), length)
     };
     bands
         .iter()
         .flatten()
         .map(|(start, end)| (start + end) / 2.0)
         .map(|axis| (room(axis), axis))
-        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .max_by(|((a, a_length), _), ((b, b_length), _)| {
+            a.cmp(b).then(a_length.total_cmp(b_length))
+        })
         .map(|(_, axis)| axis)
+}
+
+/// The span of `spans` holding `axis`; `None` where none holds it.
+pub(super) fn holding(spans: &[(f64, f64)], axis: f64) -> Option<(f64, f64)> {
+    spans
+        .iter()
+        .find(|(start, end)| (*start..=*end).contains(&axis))
+        .copied()
 }
 
 /// The span of `spans` holding `axis`, cut to reach as far on each side of
 /// it; `None` where none holds it.
 pub(super) fn reach(spans: &[(f64, f64)], axis: f64) -> Option<(f64, f64)> {
-    let (start, end) = spans
-        .iter()
-        .find(|(start, end)| (*start..=*end).contains(&axis))?;
+    let (start, end) = holding(spans, axis)?;
     let reach = (axis - start).min(end - axis);
     (reach > 0.0).then_some((axis - reach, axis + reach))
 }
