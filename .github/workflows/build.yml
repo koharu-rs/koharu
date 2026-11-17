@@ -16,7 +16,9 @@ jobs:
     name: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest, ubuntu-24.04-arm]
+        # Linux builds on the oldest Ubuntu Koharu supports, since a binary
+        # needs the glibc it was linked against or a newer one.
+        os: [macos-latest, windows-latest, ubuntu-24.04, ubuntu-24.04-arm]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:

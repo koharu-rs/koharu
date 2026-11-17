@@ -2,6 +2,14 @@
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/17a527316d3aee46f7185c178d3b3122d8ebfd7b/crates/tauri-schema-generator/schemas/config.schema.json",
   "identifier": "Koharu",
   "bundle": {
-    "targets": ["deb", "rpm"]
+    "targets": ["deb", "rpm"],
+    "linux": {
+      "deb": {
+        "depends": ["libgtk-4-1"]
+      },
+      "rpm": {
+        "depends": ["libgtk-4.so.1()(64bit)"]
+      }
+    }
   }
 }
