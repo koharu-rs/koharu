@@ -126,7 +126,8 @@ function receiveProject(name: string | null): void {
   }
 }
 
-/** The page the canvas shows. */
+/** The page the canvas shows. The project is read again too: a read already under way, which a
+ * change starts, answers the page shown before, and would land over this one. */
 function receivePage(page: PageId | null): void {
   queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
     project ? { ...project, page } : project,
@@ -134,7 +135,7 @@ function receivePage(page: PageId | null): void {
   if (page !== null && useKoharuStore.getState().selectedPages.length === 0) {
     useKoharuStore.getState().selectPages([page])
   }
-  void refresh(pageKey).catch(() => undefined)
+  void refresh(projectKey, pageKey).catch(() => undefined)
 }
 
 /** An edit, undo, or redo, from whichever writer: the project and its shown page are read again. */
