@@ -79,7 +79,7 @@ function Window({ history, offset }: { history: Steps; offset: { x: number; y: n
           <X className='size-3.5' />
         </button>
       </header>
-      <ScrollArea className='max-h-72'>
+      <ScrollArea viewportClassName='max-h-72'>
         <ol className='grid gap-px p-1'>
           {states.map((label, step) => (
             <li key={step}>
