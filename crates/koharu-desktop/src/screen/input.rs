@@ -118,11 +118,19 @@ impl Pointer {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
-                MouseScrollDelta::LineDelta(dx, dy) => Self::Wheel {
-                    dx: *dx,
-                    dy: *dy,
-                    lines: true,
-                },
+                MouseScrollDelta::LineDelta(dx, dy) => {
+                    // winit's GTK 4 backend, which tauri-runtime-cef runs on
+                    // Linux, passes GTK's deltas on as they are, positive
+                    // scrolling down or right, against winit's sign and its
+                    // X11 backend's (tauri-winit-gtk4 0.31.0-beta.3,
+                    // `window/pointers.rs`).
+                    let sign = if cfg!(target_os = "linux") { -1.0 } else { 1.0 };
+                    Self::Wheel {
+                        dx: dx * sign,
+                        dy: dy * sign,
+                        lines: true,
+                    }
+                }
                 MouseScrollDelta::PixelDelta(delta) => Self::Wheel {
                     dx: delta.x as f32,
                     dy: delta.y as f32,
