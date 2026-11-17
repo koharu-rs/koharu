@@ -2,6 +2,7 @@
 
 import {
   Brush,
+  createLucideIcon,
   Eraser,
   Hand,
   Lasso,
@@ -9,7 +10,6 @@ import {
   MousePointer2,
   Pipette,
   Plus,
-  Sparkles,
   SplinePointer,
   SquareDashed,
   Type,
@@ -42,6 +42,33 @@ import {
 import { Slider } from '@koharu/ui/components/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
+/** Photoshop's Remove tool icon, the Spot Healing Brush's band-aid across the corner with a
+ * sparkle, drawn from Lucide's band-aid and its sparkles' plus. */
+const Remove = createLucideIcon('remove-tool', [
+  [
+    'rect',
+    {
+      x: '5',
+      y: '9',
+      width: '17',
+      height: '9',
+      rx: '2',
+      transform: 'rotate(-45 13.5 13.5)',
+      key: 'band',
+    },
+  ],
+  ['path', { d: 'M10.5 9v9M16.5 9v9', transform: 'rotate(-45 13.5 13.5)', key: 'pad' }],
+  [
+    'path',
+    {
+      d: 'M12.5 12.5h.01M14.5 12.5h.01M12.5 14.5h.01M14.5 14.5h.01',
+      transform: 'rotate(-45 13.5 13.5)',
+      key: 'holes',
+    },
+  ],
+  ['path', { d: 'M5 1.5v5M2.5 4h5', key: 'sparkle' }],
+])
+
 const tools = [
   ['select', MousePointer2],
   ['direct_select', SplinePointer],
@@ -51,7 +78,7 @@ const tools = [
   ['draw', Brush],
   ['eraser', Eraser],
   ['color_picker', Pipette],
-  ['remove', Sparkles],
+  ['remove', Remove],
   ['pan', Hand],
 ] as const satisfies ReadonlyArray<readonly [CanvasTool, typeof MousePointer2]>
 
