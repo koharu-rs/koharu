@@ -210,11 +210,22 @@ fn parse(index: &[u8]) -> Result<HashMap<String, Family>> {
     Ok(families)
 }
 
-/// A file of the dataset, downloaded on this thread the first time.
-fn download(file: &str) -> Result<Vec<u8>> {
-    let [path] = tokio::runtime::Builder::new_current_thread()
+/// The runtime the dataset's downloads run on, for as long as the process.
+/// The Hub's client is one for the process, and each connection it pools
+/// is driven from the runtime that opened it, so a runtime made for one
+/// download and dropped after it leaves the next download a dead connection.
+/// Downloads come from render threads with no runtime of their own.
+static DOWNLOADS: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .thread_name("koharu-fonts")
         .enable_all()
-        .build()?
-        .block_on(DATASET.resolve([file]))?;
+        .build()
+        .expect("the font downloads' runtime starts")
+});
+
+/// A file of the dataset, downloaded the first time.
+fn download(file: &str) -> Result<Vec<u8>> {
+    let [path] = DOWNLOADS.block_on(DATASET.resolve([file]))?;
     Ok(fs_err::read(path)?)
 }
