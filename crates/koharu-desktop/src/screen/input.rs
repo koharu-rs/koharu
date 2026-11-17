@@ -410,12 +410,16 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
                 }
                 Side::Canvas => {
                     // The canvas takes a browser's sign, where a positive
-                    // delta moves the view down, against winit's.
-                    let delta = if lines {
-                        ScrollDelta::LineDelta(-dx, -dy)
-                    } else {
-                        ScrollDelta::PixelDelta((-f64::from(dx), -f64::from(dy)).into())
-                    };
+                    // delta moves the view down, against winit's, and a
+                    // line as far as the interface scrolls one above:
+                    // Chrome's 100/3 px on Windows, where winit counts the
+                    // system's lines a notch, and a notch's 100 px
+                    // elsewhere.
+                    const LINE: f64 = if cfg!(windows) { 100.0 / 3.0 } else { 100.0 };
+                    let line = if lines { LINE * scale } else { 1.0 };
+                    let delta = ScrollDelta::PixelDelta(
+                        (-f64::from(dx) * line, -f64::from(dy) * line).into(),
+                    );
                     let Some(state) = with(|main| main.pointer_state(scale, 0)) else {
                         return;
                     };
