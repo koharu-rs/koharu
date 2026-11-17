@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "{{page}} 的操作",
     "delete": "刪除",
+    "deleteDescription": "這將刪除「{{page}}」及其圖層。此操作可以復原。",
+    "deleteTitle": "刪除頁面？",
     "emptyDescription": "匯入影像檔案或資料夾以新增頁面。",
     "emptyTitle": "尚無頁面",
     "filter": "篩選頁面",
@@ -278,6 +280,12 @@
     "noResults": "沒有符合此篩選條件的頁面。",
     "pageNumber": "第 {{number}} 頁",
     "pages": "頁面",
+    "run": {
+      "detect": "偵測",
+      "inpaint": "修補",
+      "recognize": "辨識",
+      "translate": "翻譯"
+    },
     "selected": "已選擇 {{count}}"
   },
   "outputPicker": {

@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "Actions pour {{page}}",
     "delete": "Supprimer",
+    "deleteDescription": "Cette action supprime « {{page}} » et ses calques. Vous pouvez l’annuler.",
+    "deleteTitle": "Supprimer la page ?",
     "emptyDescription": "Importez des fichiers image ou un dossier pour ajouter des pages.",
     "emptyTitle": "Aucune page pour l’instant",
     "filter": "Filtrer les pages",
@@ -278,6 +280,12 @@
     "noResults": "Aucune page ne correspond à ce filtre.",
     "pageNumber": "Page {{number}}",
     "pages": "Pages",
+    "run": {
+      "detect": "Détecter",
+      "inpaint": "Retoucher",
+      "recognize": "Reconnaître",
+      "translate": "Traduire"
+    },
     "selected": "Sélection : {{count}}"
   },
   "outputPicker": {

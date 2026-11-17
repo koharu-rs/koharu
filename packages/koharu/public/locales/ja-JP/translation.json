@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "{{page}}の操作",
     "delete": "削除",
+    "deleteDescription": "「{{page}}」とそのレイヤーを削除します。元に戻せます。",
+    "deleteTitle": "ページを削除しますか？",
     "emptyDescription": "画像ファイルまたはフォルダーを読み込んでページを追加します。",
     "emptyTitle": "ページがまだありません",
     "filter": "ページを絞り込む",
@@ -278,6 +280,12 @@
     "noResults": "このフィルターに一致するページはありません。",
     "pageNumber": "{{number}}ページ目",
     "pages": "ページ",
+    "run": {
+      "detect": "検出",
+      "inpaint": "インペイント",
+      "recognize": "文字認識",
+      "translate": "翻訳"
+    },
     "selected": "{{count}}件選択中"
   },
   "outputPicker": {

@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "{{page}} için eylemler",
     "delete": "Sil",
+    "deleteDescription": "“{{page}}” ve katmanları silinir. Bu işlemi geri alabilirsiniz.",
+    "deleteTitle": "Sayfa silinsin mi?",
     "emptyDescription": "Sayfa eklemek için görüntü dosyalarını veya bir klasörü içe aktarın.",
     "emptyTitle": "Henüz sayfa yok",
     "filter": "Sayfaları filtrele",
@@ -278,6 +280,12 @@
     "noResults": "Bu filtreyle eşleşen sayfa yok.",
     "pageNumber": "Sayfa {{number}}",
     "pages": "Sayfalar",
+    "run": {
+      "detect": "Algıla",
+      "inpaint": "Doldur",
+      "recognize": "Tanı",
+      "translate": "Çevir"
+    },
     "selected": "{{count}} seçili"
   },
   "outputPicker": {

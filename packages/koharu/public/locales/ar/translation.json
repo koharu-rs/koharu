@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "إجراءات {{page}}",
     "delete": "حذف",
+    "deleteDescription": "يؤدي هذا إلى حذف «{{page}}» وطبقاتها. يمكنك التراجع عن ذلك.",
+    "deleteTitle": "حذف الصفحة؟",
     "emptyDescription": "استورد ملفات صور أو مجلدًا لإضافة صفحات.",
     "emptyTitle": "لا توجد صفحات بعد",
     "filter": "تصفية الصفحات",
@@ -278,6 +280,12 @@
     "noResults": "لا توجد صفحات تطابق هذا المرشّح.",
     "pageNumber": "الصفحة {{number}}",
     "pages": "الصفحات",
+    "run": {
+      "detect": "كشف",
+      "inpaint": "ترميم",
+      "recognize": "التعرّف على النص",
+      "translate": "ترجمة"
+    },
     "selected": "{{count}} محدّد"
   },
   "outputPicker": {

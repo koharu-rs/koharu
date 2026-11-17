@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "Acciones para {{page}}",
     "delete": "Eliminar",
+    "deleteDescription": "Esto elimina “{{page}}” y sus capas. Puedes deshacerlo.",
+    "deleteTitle": "¿Eliminar página?",
     "emptyDescription": "Importa archivos de imagen o una carpeta para añadir páginas.",
     "emptyTitle": "Aún no hay páginas",
     "filter": "Filtrar páginas",
@@ -278,6 +280,12 @@
     "noResults": "Ninguna página coincide con este filtro.",
     "pageNumber": "Página {{number}}",
     "pages": "Páginas",
+    "run": {
+      "detect": "Detectar",
+      "inpaint": "Rellenar",
+      "recognize": "Reconocer",
+      "translate": "Traducir"
+    },
     "selected": "{{count}} seleccionadas"
   },
   "outputPicker": {

@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "{{page}} 个操作",
     "delete": "删除",
+    "deleteDescription": "“{{page}}”搭伊个图层会删除。箇个操作好撤销。",
+    "deleteTitle": "要删除页面？",
     "emptyDescription": "要添加页面，先导入图像文件或者文件夹。",
     "emptyTitle": "还呒没页面",
     "filter": "筛选页面",
@@ -278,6 +280,12 @@
     "noResults": "呒没符合箇个筛选条件个页面。",
     "pageNumber": "第 {{number}} 页",
     "pages": "页面",
+    "run": {
+      "detect": "检测",
+      "inpaint": "修补",
+      "recognize": "识别",
+      "translate": "翻译"
+    },
     "selected": "拣中个页面：{{count}} 页"
   },
   "outputPicker": {

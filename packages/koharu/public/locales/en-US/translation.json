@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "Actions for {{page}}",
     "delete": "Delete",
+    "deleteDescription": "This deletes “{{page}}” and its layers. You can undo it.",
+    "deleteTitle": "Delete page?",
     "emptyDescription": "Import image files or a folder to add pages.",
     "emptyTitle": "No pages yet",
     "filter": "Filter pages",
@@ -278,6 +280,12 @@
     "noResults": "No pages match this filter.",
     "pageNumber": "Page {{number}}",
     "pages": "Pages",
+    "run": {
+      "detect": "Detect",
+      "inpaint": "Inpaint",
+      "recognize": "Recognize",
+      "translate": "Translate"
+    },
     "selected": "{{count}} selected"
   },
   "outputPicker": {

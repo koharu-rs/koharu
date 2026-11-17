@@ -266,6 +266,8 @@
   "navigator": {
     "actionsFor": "{{page}} 작업",
     "delete": "삭제",
+    "deleteDescription": "“{{page}}” 및 해당 레이어를 삭제합니다. 실행 취소할 수 있습니다.",
+    "deleteTitle": "페이지를 삭제할까요?",
     "emptyDescription": "이미지 파일이나 폴더를 가져와 페이지를 추가하세요.",
     "emptyTitle": "아직 페이지가 없습니다",
     "filter": "페이지 필터링",
@@ -278,6 +280,12 @@
     "noResults": "필터와 일치하는 페이지가 없습니다.",
     "pageNumber": "{{number}}페이지",
     "pages": "페이지",
+    "run": {
+      "detect": "감지",
+      "inpaint": "인페인팅",
+      "recognize": "인식",
+      "translate": "번역"
+    },
     "selected": "{{count}}개 선택됨"
   },
   "outputPicker": {
