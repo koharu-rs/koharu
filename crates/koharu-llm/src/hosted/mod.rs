@@ -174,12 +174,15 @@ fn spec(vendor: ProviderId, id: &str) -> ModelSpec {
     }
 }
 
-/// A model rig's catalog doesn't know: rig refuses nothing it might do, and its
-/// limits are unknown.
+/// A model rig's catalog doesn't know: rig refuses nothing it might do, such
+/// as calling tools or reading an image, which its provider refuses itself if
+/// it can't, and its limits are unknown.
 fn unlisted(vendor: ProviderId, id: &str) -> ModelSpec {
-    ModelSpec::new(vendor, id)
+    let mut spec = ModelSpec::new(vendor, id)
         .with_tools(true)
-        .with_reasoning(ReasoningSupport::Unknown { default: None })
+        .with_reasoning(ReasoningSupport::Unknown { default: None });
+    spec.input.image = true;
+    spec
 }
 
 /// The models `vendor` lists, or none when it needs a key and has none, as
@@ -257,6 +260,14 @@ mod tests {
             let model = Catalog::builtin().connect_with(&spec, options).unwrap();
             assert_eq!(model.spec().unwrap().id, "a-model-from-next-year");
         }
+    }
+
+    /// A model newer than rig's catalog, such as a new Gemini, isn't refused
+    /// a page image before its provider has a say.
+    #[test]
+    fn a_model_the_catalog_does_not_list_may_read_images() {
+        let vendor = catalog_id(gemini::PROVIDER_NAME).unwrap();
+        assert!(spec(vendor, "a-model-from-next-year").input.image);
     }
 
     #[test]
