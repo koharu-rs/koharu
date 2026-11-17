@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.84.0"
+version = "0.85.0"
 edition = "2024"
 description = "Manga translation tools"
 license = "MIT OR Apache-2.0"
