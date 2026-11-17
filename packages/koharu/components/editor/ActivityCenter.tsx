@@ -113,6 +113,7 @@ function JobItem({ job }: { job: Job }) {
     return (
       <Failure
         message={job.error || t('activity.processingFailed')}
+        detail={pageLabel}
         onDismiss={() => dismiss(String(job.id))}
       />
     )
@@ -184,12 +185,26 @@ function DownloadItem({ download }: { download: Transfer }) {
   )
 }
 
-function Failure({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+/** A failure's row: why, and under it where, as a running row names its page. */
+function Failure({
+  message,
+  detail,
+  onDismiss,
+}: {
+  message: string
+  detail?: string
+  onDismiss: () => void
+}) {
   const { t } = useTranslation()
   return (
     <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5 border-b p-3 text-[11px] last:border-b-0'>
       <CircleAlert className='mt-0.5 size-3.5 justify-self-center text-destructive' />
-      <span className='col-start-2 col-end-4 min-w-0 text-destructive'>{message}</span>
+      <div className='col-start-2 col-end-4 min-w-0'>
+        <p className='text-destructive'>{message}</p>
+        {detail ? (
+          <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>{detail}</p>
+        ) : null}
+      </div>
       <Button
         size='icon-xs'
         variant='ghost'
