@@ -84,7 +84,7 @@ beforeEach(() => {
     brush: { diameter: 48, color: '#FFFFFF' },
     panel: 'layers',
     storyHover: null,
-    processingScope: 'selected-pages',
+    processingScope: 'project',
     processingStages: ['detect', 'recognize', 'inpaint', 'translate'],
     settingsOpen: false,
     historyOpen: false,

@@ -127,7 +127,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   brush: { diameter: 48, color: '#FFFFFF' },
   panel: 'layers',
   storyHover: null,
-  processingScope: 'selected-pages',
+  processingScope: 'project',
   processingStages: [...pipelineStages],
   settingsOpen: false,
   historyOpen: false,
