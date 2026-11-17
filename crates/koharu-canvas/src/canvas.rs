@@ -804,8 +804,10 @@ impl Canvas {
         let Some(cx) = self.context() else {
             return Ok(());
         };
+        let gesture = self.gesture.as_ref().map(|active| &active.gesture);
+        let dragged = gesture.map(Gesture::dragged).unwrap_or_default();
         if self.story.shown {
-            self.story(&cx, &mut overlay)?;
+            self.story(&cx, &dragged, &mut overlay)?;
         }
         // A selected clean-up or mask is seen on its own in place of its
         // bounds: a mask as Photoshop's rubylith, half red over what it
@@ -831,7 +833,6 @@ impl Canvas {
         let isolated = part.map(|(id, _)| id);
         // The text typed into shows as typed, not as the page last drew it.
         let typed = self.typing.as_ref().and_then(Typing::target);
-        let gesture = self.gesture.as_ref().map(|active| &active.gesture);
         if let Some(area) = &self.area {
             overlay.ants(area.edge());
         }
@@ -848,7 +849,6 @@ impl Canvas {
                 overlay.outline(path);
             }
         }
-        let dragged = gesture.map(Gesture::dragged).unwrap_or_default();
         let selected: Vec<&Control> = cx
             .snapshot
             .controls()
@@ -907,11 +907,18 @@ impl Canvas {
     }
 
     /// Each text's frame and its number in the scene's reading order, under
-    /// the selection's handles, so they never take a handle's place.
-    fn story(&self, cx: &Context, overlay: &mut Overlay) -> anyhow::Result<()> {
+    /// the selection's handles, so they never take a handle's place; a text
+    /// being dragged has them where the drag puts it, as its handles do.
+    fn story(
+        &self,
+        cx: &Context,
+        dragged: &[Control],
+        overlay: &mut Overlay,
+    ) -> anyhow::Result<()> {
         let mut numbers = self.numbers.borrow_mut();
         for (index, &(layer, sfx)) in cx.snapshot.story().iter().enumerate() {
-            let Some(control) = cx.snapshot.control(layer) else {
+            let control = dragged.iter().find(|moved| moved.layer == layer);
+            let Some(control) = control.or_else(|| cx.snapshot.control(layer)) else {
                 continue;
             };
             overlay.story_frame(control, self.story.hovered == Some(layer));
