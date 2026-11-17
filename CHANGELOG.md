@@ -1,3 +1,15 @@
+## [0.85.0](https://github.com/koharu-rs/koharu/compare/0.84.0..0.85.0) - 2026-11-17
+
+### ⛰️  Features
+
+- Turn reasoning off from the translator's and the agent's reasoning menus - ([19f487e](https://github.com/koharu-rs/koharu/commit/19f487ecb29387800ea5175380257f1fc2c608c8))
+
+### 🐛 Bug Fixes
+
+- *(canvas)* Move Story's frame and number with a dragged text - ([bfc85ac](https://github.com/koharu-rs/koharu/commit/bfc85ac2404c017df3329f2b2807fe4db468172c))
+- *(llm)* Let a hosted model newer than rig's catalog read page images - ([f1518cf](https://github.com/koharu-rs/koharu/commit/f1518cf7a5508beefad169392ebab500071f0cc5))
+- Shrink Auto-sized text past half its size until it fits, and show and set Auto on balloon text - ([234c5e6](https://github.com/koharu-rs/koharu/commit/234c5e6e0e9aec5fa0bff51ca2b3dc36191eb550))
+
 ## [0.84.0](https://github.com/koharu-rs/koharu/compare/0.83.5..0.84.0) - 2026-11-17
 
 ### ⚠️ Breaking Changes
