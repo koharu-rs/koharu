@@ -43,6 +43,7 @@ use tauri_runtime_cef::{
 use tokio::sync::oneshot::{self, error::TryRecvError};
 use winit::{
     cursor::CursorIcon,
+    dpi::LogicalSize,
     event::WindowEvent,
     window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData, Window},
 };
@@ -517,18 +518,19 @@ fn blur() {
 }
 
 /// Lets the input method compose text for the page, with its candidate
-/// window placed from CEF's composition bounds as they arrive.
+/// window placed from CEF's composition bounds as they arrive. winit takes
+/// the cursor area only with a first one, which those bounds replace.
 fn enable_ime(window: &dyn Window) {
     if with(|main| std::mem::replace(&mut main.ime, true)) != Some(false) {
         return;
     }
-    let request = ImeEnableRequest::new(
-        ImeCapabilities::new().with_cursor_area(),
-        ImeRequestData::default(),
+    let first = ImeRequestData::default().with_cursor_area(
+        LogicalPosition::new(0, 0).into(),
+        LogicalSize::new(1, 1).into(),
     );
-    if let Some(request) = request
-        && let Err(error) = window.request_ime_update(ImeRequest::Enable(request))
-    {
+    let request = ImeEnableRequest::new(ImeCapabilities::new().with_cursor_area(), first)
+        .expect("the request carries the cursor area it asks for");
+    if let Err(error) = window.request_ime_update(ImeRequest::Enable(request)) {
         tracing::warn!("the window has no input method: {error}");
     }
 }
