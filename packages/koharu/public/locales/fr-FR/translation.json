@@ -244,12 +244,7 @@
     "help": "Aide",
     "history": "Historique",
     "import": "Importer des pages",
-    "process": "Traitement",
-    "processLayers": "Traiter les calques sélectionnés",
-    "processPages": "Traiter les pages sélectionnées",
-    "processProject": "Traiter le projet",
     "redo": "Rétablir",
-    "runPhase": "Lancer : {{phase}}",
     "selectAllLayers": "Sélectionner tous les calques",
     "settings": "Paramètres",
     "undo": "Annuler",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "Aucun texte sur cette page.",
     "sfx": "Effet sonore",
-    "title": "Histoire"
+    "title": "Histoire",
+    "translate": "Traduire {{name}}"
   },
   "tools": {
     "brushSize": "Taille du pinceau",

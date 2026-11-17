@@ -244,12 +244,7 @@
     "help": "ヘルプ",
     "history": "ヒストリー",
     "import": "ページを読み込む",
-    "process": "処理",
-    "processLayers": "選択したレイヤーを処理",
-    "processPages": "選択ページを処理",
-    "processProject": "プロジェクトを処理",
     "redo": "やり直す",
-    "runPhase": "{{phase}}を実行",
     "selectAllLayers": "すべてのレイヤーを選択",
     "settings": "設定",
     "undo": "元に戻す",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "このページにはテキストがありません。",
     "sfx": "効果音",
-    "title": "ストーリー"
+    "title": "ストーリー",
+    "translate": "{{name}}を翻訳"
   },
   "tools": {
     "brushSize": "ブラシサイズ",

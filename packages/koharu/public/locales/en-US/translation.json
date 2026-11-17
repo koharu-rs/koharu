@@ -244,12 +244,7 @@
     "help": "Help",
     "history": "History",
     "import": "Import Pages",
-    "process": "Process",
-    "processLayers": "Process Selected Layers",
-    "processPages": "Process Selected Pages",
-    "processProject": "Process Project",
     "redo": "Redo",
-    "runPhase": "Run {{phase}}",
     "selectAllLayers": "Select All Layers",
     "settings": "Settings",
     "undo": "Undo",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "No text on this page.",
     "sfx": "Sound effect",
-    "title": "Story"
+    "title": "Story",
+    "translate": "Translate {{name}}"
   },
   "tools": {
     "brushSize": "Brush size",

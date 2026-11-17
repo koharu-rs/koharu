@@ -244,12 +244,7 @@
     "help": "مساعدة",
     "history": "السجل",
     "import": "استيراد الصفحات",
-    "process": "معالجة",
-    "processLayers": "معالجة الطبقات المحدّدة",
-    "processPages": "معالجة الصفحات المحدّدة",
-    "processProject": "معالجة المشروع",
     "redo": "إعادة",
-    "runPhase": "تشغيل {{phase}}",
     "selectAllLayers": "تحديد كل الطبقات",
     "settings": "الإعدادات",
     "undo": "تراجع",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "لا يوجد نص في هذه الصفحة.",
     "sfx": "مؤثر صوتي",
-    "title": "القصة"
+    "title": "القصة",
+    "translate": "ترجمة {{name}}"
   },
   "tools": {
     "brushSize": "حجم الفرشاة",

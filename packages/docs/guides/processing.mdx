@@ -11,9 +11,9 @@ The processing selector above the canvas sets the model, page scope, stages, and
 <Tabs>
   <Tab title='Selected pages'>Process the pages selected in the page list.</Tab>
   <Tab title='Entire project'>Process every page in project order.</Tab>
-  <Tab title='Selected layers'>
-    Choose **Process → Process Selected Layers** after correcting or adding a few text blocks. It
-    runs OCR and translation on the selected text blocks only.
+  <Tab title='One text'>
+    In **Story**, point at a text block or select it, then click the translate button under its
+    number. It translates that text block alone.
   </Tab>
 </Tabs>
 
@@ -32,8 +32,6 @@ Detection finds panels, speech bubbles, and text blocks, with a mask over each b
 <Note>
   Omitted stages are not added. Include detection or OCR when a later stage needs fresh input.
 </Note>
-
-The **Process** menu also offers **Process Project** and **Process Selected Pages**, which run all four stages, and **Run Detection**, **Run OCR**, **Run Inpainting**, and **Run Translation**. A **Run** item runs the named stage and every stage before it in the order Detection, OCR, Inpainting, Translation, and always covers the entire project, regardless of the scope selector.
 
 ## Follow progress and stop work
 

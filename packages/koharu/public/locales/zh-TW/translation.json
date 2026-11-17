@@ -244,12 +244,7 @@
     "help": "說明",
     "history": "步驟記錄",
     "import": "匯入頁面",
-    "process": "處理",
-    "processLayers": "處理所選圖層",
-    "processPages": "處理所選頁面",
-    "processProject": "處理專案",
     "redo": "重做",
-    "runPhase": "執行{{phase}}",
     "selectAllLayers": "選取所有圖層",
     "settings": "設定",
     "undo": "復原",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "此頁面沒有文字。",
     "sfx": "音效",
-    "title": "故事"
+    "title": "故事",
+    "translate": "翻譯 {{name}}"
   },
   "tools": {
     "brushSize": "筆刷大小",

@@ -244,12 +244,7 @@
     "help": "Ajuda",
     "history": "Histórico",
     "import": "Importar páginas",
-    "process": "Processar",
-    "processLayers": "Processar camadas selecionadas",
-    "processPages": "Processar páginas selecionadas",
-    "processProject": "Processar projeto",
     "redo": "Refazer",
-    "runPhase": "Executar {{phase}}",
     "selectAllLayers": "Selecionar todas as camadas",
     "settings": "Configurações",
     "undo": "Desfazer",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "Não há texto nesta página.",
     "sfx": "Efeito sonoro",
-    "title": "História"
+    "title": "História",
+    "translate": "Traduzir {{name}}"
   },
   "tools": {
     "brushSize": "Tamanho do pincel",

@@ -1,10 +1,11 @@
 'use client'
 
+import { Languages } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
-import { dispatch } from '@/lib/backend'
+import { call, dispatch } from '@/lib/backend'
 import {
   findLayer,
   isBlockLayer,
@@ -17,8 +18,10 @@ import {
 import { usePage, useStory } from '@/lib/queries'
 import { setSourceText, setText } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
-import type { LayerId } from '@koharu/ipc/protocol'
+import { commands, type LayerId } from '@koharu/ipc/protocol'
+import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
 
 /** The shown page's texts in the scene's reading order, as Clip Studio Paint's Story Editor shows
@@ -76,7 +79,8 @@ function ReadingNumber({ number, sfx }: { number: number; sfx: boolean }) {
 }
 
 /** A text's number and fields, highlighted while its layer, or one of a block's parts, is
- * selected, and scrolled into view when the canvas or Layers selects it. */
+ * selected, and scrolled into view when the canvas or Layers selects it. A block shows a button
+ * under its number, while the pointer is on it or it's selected, that translates it alone. */
 function StoryText({
   number,
   layer,
@@ -115,12 +119,40 @@ function StoryText({
     <div
       ref={row}
       data-selected={selected}
-      className='grid grid-cols-[auto_minmax(0,1fr)] gap-1 rounded-md p-1 data-[selected=true]:bg-accent'
+      className='group grid grid-cols-[auto_minmax(0,1fr)] gap-1 rounded-md p-1 data-[selected=true]:bg-accent'
       onFocus={focus}
       onPointerEnter={() => setStoryHover(layer.id)}
       onPointerLeave={() => setStoryHover(null)}
     >
-      <ReadingNumber number={number} sfx={isBlockLayer(layer) && layer.role === 'sfx'} />
+      <div className='flex flex-col items-center gap-1'>
+        <ReadingNumber number={number} sfx={isBlockLayer(layer) && layer.role === 'sfx'} />
+        {isBlockLayer(layer) && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='icon-xs'
+                  aria-label={t('story.translate', { name: plainText(layer.source) })}
+                  disabled={locked}
+                  className='size-5 rounded-md border-primary/20 bg-primary/15 text-accent-foreground opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100 hover:bg-primary/25 hover:text-accent-foreground focus-visible:opacity-100 dark:border-primary/30 dark:bg-primary/25 dark:hover:bg-primary/35'
+                  onClick={() =>
+                    void call(commands.runPipeline, { blocks: [layer.id] }, ['translate']).catch(
+                      () => undefined,
+                    )
+                  }
+                />
+              }
+            >
+              <Languages className='size-3' />
+            </TooltipTrigger>
+            <TooltipContent side='left'>
+              {t('story.translate', { name: plainText(layer.source) })}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <div className='grid min-w-0 gap-1'>
         {isBlockLayer(layer) ? (
           <>

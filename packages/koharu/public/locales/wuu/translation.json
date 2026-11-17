@@ -244,12 +244,7 @@
     "help": "帮助",
     "history": "历史记录",
     "import": "导入页面",
-    "process": "处理",
-    "processLayers": "处理拣中个图层",
-    "processPages": "处理拣中个页面",
-    "processProject": "处理项目",
     "redo": "重做",
-    "runPhase": "运行{{phase}}",
     "selectAllLayers": "图层侪选",
     "settings": "设置",
     "undo": "撤销",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "箇页浪呒没文字。",
     "sfx": "音效",
-    "title": "故事"
+    "title": "故事",
+    "translate": "翻译 {{name}}"
   },
   "tools": {
     "brushSize": "笔刷大小",

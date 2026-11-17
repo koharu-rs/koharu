@@ -244,12 +244,7 @@
     "help": "Yardım",
     "history": "Geçmiş",
     "import": "Sayfaları İçe Aktar",
-    "process": "İşle",
-    "processLayers": "Seçili Katmanları İşle",
-    "processPages": "Seçili Sayfaları İşle",
-    "processProject": "Projeyi İşle",
     "redo": "Yinele",
-    "runPhase": "{{phase}} çalıştır",
     "selectAllLayers": "Tüm Katmanları Seç",
     "settings": "Ayarlar",
     "undo": "Geri Al",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "Bu sayfada metin yok.",
     "sfx": "Ses efekti",
-    "title": "Hikâye"
+    "title": "Hikâye",
+    "translate": "{{name}} öğesini çevir"
   },
   "tools": {
     "brushSize": "Fırça boyutu",

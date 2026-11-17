@@ -12,8 +12,8 @@ import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call, dispatch } from '@/lib/backend'
 import { useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
 import { deleteSelection } from '@/lib/scene'
-import { pipelineStages, useKoharuStore } from '@/lib/store'
-import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
+import { useKoharuStore } from '@/lib/store'
+import { commands } from '@koharu/ipc/protocol'
 import {
   Menubar,
   MenubarCheckboxItem as UiMenubarCheckboxItem,
@@ -41,7 +41,6 @@ export function TitleBar() {
   const history = project?.history
   const historyOpen = useKoharuStore((state) => state.historyOpen)
   const setHistoryOpen = useKoharuStore((state) => state.setHistoryOpen)
-  const selectedPages = useKoharuStore((state) => state.selectedPages)
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
@@ -52,8 +51,6 @@ export function TitleBar() {
     'menu.export',
   )
 
-  const run = (target: Target, stages: Stage[] = [...pipelineStages]) =>
-    void call(commands.runPipeline, target, stages).catch(() => undefined)
   const psdLabels = {
     background: t('psd.background'),
     cleanup: t('psd.cleanup'),
@@ -206,39 +203,6 @@ export function TitleBar() {
                 {t('menu.delete')}
                 <MenubarShortcut>Del</MenubarShortcut>
               </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
-
-          <MenubarMenu>
-            <MenubarTrigger>{t('menu.process')}</MenubarTrigger>
-            <MenubarContent>
-              <MenubarItem disabled={!project || pages.length === 0} onClick={() => run('project')}>
-                {t('menu.processProject')}
-              </MenubarItem>
-              <MenubarItem
-                disabled={selectedPages.length === 0}
-                onClick={() => run({ pages: selectedPages })}
-              >
-                {t('menu.processPages')}
-              </MenubarItem>
-              <MenubarItem
-                disabled={selectedLayers.length === 0}
-                onClick={() => run({ blocks: selectedLayers }, ['recognize', 'translate'])}
-              >
-                {t('menu.processLayers')}
-              </MenubarItem>
-              <MenubarSeparator />
-              {pipelineStages.map((stage, index) => (
-                <MenubarItem
-                  key={stage}
-                  disabled={!project || pages.length === 0}
-                  onClick={() => run('project', pipelineStages.slice(0, index + 1))}
-                >
-                  {t('menu.runPhase', {
-                    phase: t(`phase.${stage}`),
-                  })}
-                </MenubarItem>
-              ))}
             </MenubarContent>
           </MenubarMenu>
 

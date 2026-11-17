@@ -244,12 +244,7 @@
     "help": "도움말",
     "history": "작업 내역",
     "import": "페이지 가져오기",
-    "process": "처리",
-    "processLayers": "선택한 레이어 처리",
-    "processPages": "선택한 페이지 처리",
-    "processProject": "프로젝트 처리",
     "redo": "다시 실행",
-    "runPhase": "{{phase}} 실행",
     "selectAllLayers": "모든 레이어 선택",
     "settings": "설정",
     "undo": "실행 취소",
@@ -447,7 +442,8 @@
   "story": {
     "noText": "이 페이지에는 텍스트가 없습니다.",
     "sfx": "효과음",
-    "title": "스토리"
+    "title": "스토리",
+    "translate": "{{name}} 번역"
   },
   "tools": {
     "brushSize": "브러시 크기",
