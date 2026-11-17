@@ -1,3 +1,10 @@
+## [0.85.1](https://github.com/koharu-rs/koharu/compare/0.85.0..0.85.1) - 2026-11-17
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Scroll the wheel the right way on Linux - ([a86d415](https://github.com/koharu-rs/koharu/commit/a86d41566baa3fd8528b652adf2fed4648724a9f))
+- *(linux)* Build the packages on Ubuntu 24.04 and depend on GTK 4 - ([aebe705](https://github.com/koharu-rs/koharu/commit/aebe70539de9bfe14c26055f8358caa9668f853d))
+
 ## [0.85.0](https://github.com/koharu-rs/koharu/compare/0.84.0..0.85.0) - 2026-11-17
 
 ### ⛰️  Features
