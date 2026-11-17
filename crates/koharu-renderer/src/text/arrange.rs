@@ -232,7 +232,11 @@ fn position(
     let styled = shaped.styled;
     let vertical = styled.vertical;
     let hang = visible.end;
-    let (mut pen, justify) = spacing(shaped, line, &pieces, used, visible);
+    // The line is aligned and starts without the space an opening bracket
+    // leads it with.
+    let lead = opening_space(shaped, &pieces, scale, visible.start);
+    let (pen, justify) = spacing(shaped, line, &pieces, used - lead, visible);
+    let mut pen = pen - lead;
     let start = pen;
     let block_center = line.top + line.pitch * 0.5;
     let mut first = None;
@@ -435,6 +439,48 @@ fn centred(text: &str, offset: usize, chinese: bool) -> bool {
         })
 }
 
+/// The space before the ink of an opening bracket (JLREQ's cl-01) that
+/// starts a left-to-right or vertical line at `head`: JLREQ counts the
+/// bracket half an em wide with half an em of space before it, and starts
+/// every line with no space, as JIS X 4051 does, so a full-width bracket's
+/// first half em goes. A proportional bracket has none.
+fn opening_space(shaped: &ShapedText, pieces: &[Piece<'_>], scale: f32, head: usize) -> f32 {
+    let Some((run, glyphs)) = pieces.first() else {
+        return 0.0;
+    };
+    let opening = matches!(
+        shaped.styled.text[head..].chars().next(),
+        Some(
+            '‘' | '“'
+                | '('
+                | '（'
+                | '〔'
+                | '['
+                | '［'
+                | '{'
+                | '｛'
+                | '〈'
+                | '《'
+                | '「'
+                | '『'
+                | '【'
+                | '⦅'
+                | '｟'
+                | '〘'
+                | '〖'
+                | '«'
+                | '〝'
+        )
+    );
+    match glyphs.first() {
+        Some(glyph) if opening && glyph.cluster == head && !shaped.rtl_at(head) => {
+            let em = shaped.styled.spans[run.span].size * scale;
+            (glyph.advance * scale - em * 0.5).clamp(0.0, em * 0.5)
+        }
+        _ => 0.0,
+    }
+}
+
 /// Whether the character at `offset` is a full stop (cl-06) or a comma
 /// (cl-07), which Chinese sets in the middle of its cell, as CLREQ describes
 /// Taiwan and Hong Kong setting every stop mark.
@@ -591,11 +637,10 @@ mod tests {
         Ok(())
     }
 
-    /// Where each glyph of `content` in `language`, set vertically in one
-    /// column in the renderer's default fonts, inks on the page, from the
-    /// top, with the cell along the column its character takes; and the
-    /// column's centre line.
-    fn inks(content: &str, language: &str) -> Result<(Vec<(Rect, Range<f32>)>, f32)> {
+    /// Where each glyph of `content` in `language`, set vertically in the
+    /// renderer's default fonts, inks on the page, from the top; and the
+    /// layout.
+    fn inks(content: &str, language: &str) -> Result<(Vec<Rect>, TextLayout)> {
         let families = crate::RendererConfig::default().font_families;
         let text = koharu_scene::Text {
             content: content.into(),
@@ -623,28 +668,22 @@ mod tests {
             }
         }
         inks.sort_by(|a, b| a.center().y.total_cmp(&b.center().y));
-        let cells = layout.lines[0]
-            .clusters
-            .iter()
-            .map(|cluster| cluster.along.clone());
-        Ok((
-            inks.into_iter().zip(cells).collect(),
-            layout.resolved.baseline,
-        ))
+        Ok((inks, layout))
     }
 
     #[test]
     fn a_wave_dash_runs_down_its_column() -> Result<()> {
         let (inks, _) = inks("吗\u{301c}？", "zh-Hans")?;
-        let (wave, _) = &inks[1];
+        let wave = inks[1];
         assert!(wave.height() > wave.width(), "{wave:?}");
         Ok(())
     }
 
     #[test]
     fn a_japanese_comma_sits_in_the_top_right_of_its_cell() -> Result<()> {
-        let (inks, centre) = inks("雨、雪", "ja")?;
-        let (comma, cell) = &inks[1];
+        let (inks, layout) = inks("雨、雪", "ja")?;
+        let (comma, cell) = (inks[1], &layout.lines[0].clusters[1].along);
+        let centre = layout.resolved.baseline;
         let middle = f64::from(cell.start + cell.end) * 0.5;
         assert!(
             comma.center().x > f64::from(centre),
@@ -656,8 +695,9 @@ mod tests {
 
     #[test]
     fn a_chinese_comma_sits_in_the_middle_of_its_cell() -> Result<()> {
-        let (inks, centre) = inks("了，哥", "zh-Hans")?;
-        let (comma, cell) = &inks[1];
+        let (inks, layout) = inks("了，哥", "zh-Hans")?;
+        let (comma, cell) = (inks[1], &layout.lines[0].clusters[1].along);
+        let centre = layout.resolved.baseline;
         let middle = f64::from(cell.start + cell.end) * 0.5;
         assert!(
             (comma.center().x - f64::from(centre)).abs() < 0.01,
@@ -666,6 +706,27 @@ mod tests {
         assert!(
             (comma.center().y - middle).abs() < 0.01,
             "{comma:?} against {middle}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_column_opening_with_a_bracket_starts_level_with_the_others() -> Result<()> {
+        let (inks, layout) = inks("能继承\n『毒师』", "zh-Hans")?;
+        // The right column's first ink, 能, and the left one's, 『.
+        let middle = inks.iter().map(|ink| ink.center().x).sum::<f64>() / inks.len() as f64;
+        let top = |right: bool| {
+            inks.iter()
+                .filter(|ink| (ink.center().x > middle) == right)
+                .map(|ink| ink.y0)
+                .fold(f64::MAX, f64::min)
+        };
+        let em = f64::from(layout.lines[0].pitch) / 1.2;
+        assert!(
+            (top(false) - top(true)).abs() < em * 0.15,
+            "{} against {}",
+            top(false),
+            top(true)
         );
         Ok(())
     }
