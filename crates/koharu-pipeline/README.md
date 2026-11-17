@@ -57,7 +57,7 @@ more. Only a stage knows its models.
 
 Every stage also records its C2PA action on the layers it wrote, and detection
 its scores in its own namespace. Detection records each source's size, line
-width, and outline as its stroke.
+width, ink as its fill, and outline as its stroke.
 
 There's no typesetting stage. Placement puts a translation in its room in its
 balloon, or in its source's frame when it's free or a sound effect, and fits it
@@ -65,7 +65,7 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
 
 - **Size.** A new translation starts at the page's lettering size, the median
   of its sources', as a letterer keeps one size for a page's dialogue [Manga
-  balloon basics], with its lines centred and its source's stroke.
+  balloon basics], with its lines centred and its source's fill and stroke.
 - **Direction.** It's vertical only when its source is and the target is
   Japanese or Chinese; any other language runs horizontally, turned by its
   source's tilt.

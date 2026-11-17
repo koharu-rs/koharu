@@ -183,18 +183,21 @@ fn grown(
 }
 
 /// A block whose source is the lettering: its box turned back by its tilt,
-/// and the turn, in its direction, at its size, its outline as its stroke.
+/// and the turn, in its direction, at its size, its ink as its fill and its
+/// outline as its stroke.
 fn block(lettering: &Lettering, typography: Option<&Typography>) -> Value {
     let [x0, y0, x1, y1] = lettering.bbox;
     let (vertical, tilt) = typography.map_or((y1 - y0 > x1 - x0, 0.0), |found| {
         (found.vertical, found.tilt)
     });
     let (bounds, transform) = turned(lettering.bbox, tilt);
-    let outline = typography.and_then(|found| found.outline);
-    let stroke = outline.map(|outline| {
-        let [red, green, blue] = outline.color.map(|channel| f32::from(channel) / 255.0);
+    let opaque = |color: [u8; 3]| {
+        let [red, green, blue] = color.map(|channel| f32::from(channel) / 255.0);
         Rgba([red, green, blue, 1.0])
-    });
+    };
+    let fill = typography.and_then(|found| found.ink).map(opaque);
+    let outline = typography.and_then(|found| found.outline);
+    let stroke = outline.map(|outline| opaque(outline.color));
     json!({
         "kind": "block",
         "role": match lettering.kind {
@@ -207,6 +210,7 @@ fn block(lettering: &Lettering, typography: Option<&Typography>) -> Value {
             "transform": transform,
             "style": {"chars": {
                 "size": typography.map(|found| found.size),
+                "fill": fill,
                 "stroke": stroke,
                 "stroke_width": outline.map(|outline| outline.width),
             }},

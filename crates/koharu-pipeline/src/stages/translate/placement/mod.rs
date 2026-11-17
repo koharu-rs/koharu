@@ -71,6 +71,11 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
         chars.insert("size".to_owned(), json!(size));
     }
     let source = &this.source.style.chars;
+    if given.and_then(|style| style.chars.fill).is_none()
+        && let Some(fill) = source.fill
+    {
+        chars.insert("fill".to_owned(), json!(fill));
+    }
     if given.and_then(|style| style.chars.stroke).is_none()
         && let (Some(stroke), Some(width)) = (source.stroke, source.stroke_width)
     {
@@ -323,10 +328,12 @@ mod tests {
     }
 
     #[test]
-    fn a_new_translation_is_centred_with_its_source_outline_scaled_to_its_size() -> Result<()> {
+    fn a_new_translation_is_centred_in_its_source_colours_with_the_outline_scaled_to_its_size()
+    -> Result<()> {
         let source = |x: f64, size: f64, outline: bool| {
             let mut chars = json!({"size": size});
             if outline {
+                chars["fill"] = json!([1.0, 0.0, 0.0, 1.0]);
                 chars["stroke"] = json!([1.0, 1.0, 1.0, 1.0]);
                 chars["stroke_width"] = json!(4.0);
             }
@@ -349,9 +356,14 @@ mod tests {
         let text = placed(&mut session, ids[0], &langid!("en"))?;
         assert_eq!(text.style.align, Some(Align::Center));
         assert_eq!(text.style.chars.size, Some(20.0));
+        assert_eq!(
+            text.style.chars.fill,
+            Some(koharu_scene::Rgba([1.0, 0.0, 0.0, 1.0]))
+        );
         assert_eq!(text.style.chars.stroke, Some(koharu_scene::Rgba([1.0; 4])));
         assert_eq!(text.style.chars.stroke_width, Some(2.0));
         let text = placed(&mut session, ids[1], &langid!("en"))?;
+        assert_eq!(text.style.chars.fill, None);
         assert_eq!(text.style.chars.stroke, None);
         Ok(())
     }
