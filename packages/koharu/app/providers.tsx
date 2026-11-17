@@ -9,7 +9,14 @@ import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
 import { refreshModels, refreshPreferences } from '@/lib/backend'
 import i18n from '@/lib/i18n'
-import { pageKey, projectKey, queryClient, refresh, type ProjectView } from '@/lib/queries'
+import {
+  pageKey,
+  pagesKey,
+  projectKey,
+  queryClient,
+  refresh,
+  type ProjectView,
+} from '@/lib/queries'
 import {
   receiveCanvasSelection,
   receiveDownload,
@@ -138,7 +145,8 @@ function receivePage(page: PageId | null): void {
   void refresh(projectKey, pageKey).catch(() => undefined)
 }
 
-/** An edit, undo, or redo, from whichever writer: the project and its shown page are read again. */
+/** An edit, undo, or redo, from whichever writer: the project and its shown page are read again,
+ * and so are the pages Story lists, which a change to one of their layers doesn't name. */
 function receiveChange(change: Change): void {
   queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
     project
@@ -151,7 +159,7 @@ function receiveChange(change: Change): void {
         }
       : project,
   )
-  void refresh(projectKey, pageKey).catch(() => undefined)
+  void refresh(projectKey, pageKey, pagesKey).catch(() => undefined)
 }
 
 function StartupBoundary({ children }: { children: ReactNode }) {

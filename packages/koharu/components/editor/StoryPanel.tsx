@@ -1,7 +1,8 @@
 'use client'
 
+import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { Languages } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
@@ -15,51 +16,147 @@ import {
   type BlockLayer,
   type TextLayer,
 } from '@/lib/document'
-import { usePage, useStory } from '@/lib/queries'
+import { usePageStory, useProject } from '@/lib/queries'
 import { setSourceText, setText } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type LayerId } from '@koharu/ipc/protocol'
+import { commands, type LayerId, type PageId } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
 
-/** The shown page's texts in the scene's reading order, as Clip Studio Paint's Story Editor shows
- * a page's text: a block's source and translation, and a text layer's text, the hidden ones left
- * out, each numbered as the canvas numbers it while Story shows. It follows the canvas to another page, as
- * Layers beside it does. Editing a field edits its layer, and focusing it selects the layer. */
+/** Every page's texts in page order, each page's in the scene's reading order, as Clip Studio
+ * Paint EX's Story Editor shows a work's text: a block's source and translation, and a text
+ * layer's text, the hidden ones left out, each numbered as the canvas numbers it while Story shows.
+ * A page's texts load as the list reaches them. Editing a field edits its layer; focusing it
+ * selects the layer, showing its page first when the canvas shows another, as the page rail does.
+ * Scrolling only browses: the list scrolls to the page the canvas shows when that changes, unless
+ * the change came from the list itself. */
 export function StoryPanel() {
   const { t } = useTranslation()
-  const page = usePage().data
-  const order = useStory().data
+  const project = useProject().data
+  const pages = project?.pages ?? []
+  const shown = project?.page ?? null
+  const list = useRef<HTMLDivElement>(null)
+  // The page holding the focused field, kept mounted while it scrolls away, so an edit in
+  // progress, or a composition, isn't lost with its field.
+  const [focused, setFocused] = useState<number | null>(null)
+  const virtualizer = useVirtualizer({
+    count: pages.length,
+    getScrollElement: () => list.current,
+    getItemKey: (index) => pages[index]?.id ?? index,
+    estimateSize: () => 160,
+    overscan: 2,
+    rangeExtractor: (range) => {
+      const indexes = defaultRangeExtractor(range)
+      return focused === null || indexes.includes(focused)
+        ? indexes
+        : [...indexes, focused].sort((a, b) => a - b)
+    },
+    initialRect: { width: 280, height: 600 },
+    observeElementRect: (instance, callback) =>
+      observeElementRect(instance, (rect) =>
+        callback({ width: rect.width || 280, height: rect.height || 600 }),
+      ),
+  })
+
+  const shownIndex = pages.findIndex((page) => page.id === shown)
+  useEffect(() => {
+    if (shownIndex < 0 || list.current?.contains(document.activeElement)) return
+    virtualizer.scrollToIndex(shownIndex, { align: 'start' })
+  }, [shownIndex, virtualizer])
+
+  if (pages.length === 0) {
+    return (
+      <p className='px-4 py-8 text-center text-[10px] leading-4 text-muted-foreground'>
+        {t('inspector.selectPage')}
+      </p>
+    )
+  }
+  return (
+    <ScrollArea className='min-h-0 flex-1' viewportClassName='p-1' viewportRef={list}>
+      <div className='relative w-full' style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((item) => {
+          const page = pages[item.index]
+          if (!page) return null
+          return (
+            <div
+              key={item.key}
+              ref={virtualizer.measureElement}
+              data-index={item.index}
+              className='absolute top-0 left-0 w-full'
+              style={{ transform: `translateY(${item.start}px)` }}
+              onFocus={() => setFocused(item.index)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setFocused(null)
+              }}
+            >
+              <StoryPage page={page.id} number={item.index + 1} shown={page.id === shown} />
+            </div>
+          )
+        })}
+      </div>
+    </ScrollArea>
+  )
+}
+
+/** Shows `page` on the canvas as clicking it in the page rail does: it alone selected among the
+ * pages, and no layer. */
+function showPage(page: PageId): Promise<null> {
+  const { selectPages, selectLayers } = useKoharuStore.getState()
+  selectPages([page])
+  selectLayers([])
+  return call(commands.show, page)
+}
+
+/** A page's heading, which shows the page, and its texts, read when the list first reaches it. */
+function StoryPage({ page, number, shown }: { page: PageId; number: number; shown: boolean }) {
+  const { t } = useTranslation()
+  const data = usePageStory(page).data
   // The scene's order, each text found in the page as it shows; one the page doesn't have yet,
   // between the two reads of a change, waits for the next.
   const texts = useMemo(
     () =>
-      page && order
-        ? order.flatMap((id) => {
-            const placed = findLayer(page.layers, id)
+      data
+        ? data.story.flatMap((id) => {
+            const placed = findLayer(data.page.layers, id)
             return placed && (isBlockLayer(placed.layer) || isTextLayer(placed.layer))
               ? [{ layer: placed.layer, locked: isLockedLayer(placed) }]
               : []
           })
         : [],
-    [page, order],
+    [data],
   )
 
   return (
-    <ScrollArea className='min-h-0 flex-1'>
-      <div className='grid gap-1 p-1'>
-        {texts.map(({ layer, locked }, index) => (
-          <StoryText key={layer.id} number={index + 1} layer={layer} locked={locked} />
-        ))}
-        {(!page || texts.length === 0) && (
-          <p className='px-4 py-8 text-center text-[10px] leading-4 text-muted-foreground'>
-            {t(page ? 'story.noText' : 'inspector.selectPage')}
-          </p>
-        )}
-      </div>
-    </ScrollArea>
+    <section className='grid gap-1 pb-3'>
+      <h3 data-shown={shown} className='pt-1'>
+        <Button
+          type='button'
+          variant='ghost'
+          size='xs'
+          className='h-5 px-1 text-[10px] font-semibold text-muted-foreground hover:bg-primary/10 hover:text-foreground in-data-[shown=true]:text-primary'
+          onClick={() => {
+            if (!shown) void showPage(page).catch(() => undefined)
+          }}
+        >
+          {t('navigator.pageNumber', { number })}
+        </Button>
+      </h3>
+      {texts.map(({ layer, locked }, index) => (
+        <StoryText
+          key={layer.id}
+          page={page}
+          shown={shown}
+          number={index + 1}
+          layer={layer}
+          locked={locked}
+        />
+      ))}
+      {data && texts.length === 0 && (
+        <p className='px-1 text-[10px] leading-4 text-muted-foreground'>{t('story.noText')}</p>
+      )}
+    </section>
   )
 }
 
@@ -82,10 +179,15 @@ function ReadingNumber({ number, sfx }: { number: number; sfx: boolean }) {
  * selected, and scrolled into view when the canvas or Layers selects it. A block shows a button
  * under its number, while the pointer is on it or it's selected, that translates it alone. */
 function StoryText({
+  page,
+  shown,
   number,
   layer,
   locked,
 }: {
+  page: PageId
+  /** Its page is the one the canvas shows. */
+  shown: boolean
   number: number
   layer: BlockLayer | TextLayer
   locked: boolean
@@ -109,7 +211,14 @@ function StoryText({
 
   const focus = () => {
     const { selectedLayers, selectLayers } = useKoharuStore.getState()
-    if (!selectedLayers.includes(layer.id)) selectLayers([layer.id])
+    if (shown) {
+      if (!selectedLayers.includes(layer.id)) selectLayers([layer.id])
+      return
+    }
+    // Then the text, once the canvas shows its page.
+    void showPage(page)
+      .then(() => selectLayers([layer.id]))
+      .catch(() => undefined)
   }
 
   const name = plainText(isBlockLayer(layer) ? (layer.translation ?? layer.source) : layer)
@@ -121,7 +230,8 @@ function StoryText({
       data-selected={selected}
       className='group grid grid-cols-[auto_minmax(0,1fr)] gap-1 rounded-md p-1 data-[selected=true]:bg-accent'
       onFocus={focus}
-      onPointerEnter={() => setStoryHover(layer.id)}
+      // The canvas outlines only the texts of the page it shows.
+      onPointerEnter={() => shown && setStoryHover(layer.id)}
       onPointerLeave={() => setStoryHover(null)}
     >
       <div className='flex flex-col items-center gap-1'>
