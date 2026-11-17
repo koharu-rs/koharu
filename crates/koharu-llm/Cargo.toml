@@ -43,3 +43,4 @@ url = { workspace = true }
 
 [dev-dependencies]
 indoc = { workspace = true }
+toml = { workspace = true }

@@ -70,7 +70,7 @@ can't. The scene and the pipeline know nothing of tools.
 | `[agent]` | Default | Does |
 |---|---|---|
 | `model` | none | the agent's model, a `vendor/model` reference |
-| `reasoning` | the model's own | how much the model reasons |
+| `reasoning` | the model's own | how much the model reasons: `off` or an effort level, one word |
 | `max_turns` | 20 | model calls a run makes at most |
 | `corrections` | 2 | how many times a call the agent can't take goes back to the model before the run fails |
 

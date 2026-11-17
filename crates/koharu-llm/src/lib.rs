@@ -6,6 +6,7 @@ mod context;
 mod hosted;
 mod local;
 mod model;
+pub mod reasoning;
 
 use anyhow::{Context as _, Result};
 use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};

@@ -118,8 +118,9 @@ model, the target, or the instructions starts a new one.
   lettering: its clean-up is hidden and it gets no translation.
 - **Vision** shows the model the scan, 1,280 pixels on its longer side, ahead
   of the texts. **Reasoning** lets it think first, and the answer is held to the
-  schema once the thinking ends. On 16 pages with Index-Translate 9B, neither
-  read better and both cost time, so both are off unless set.
+  schema once the thinking ends, at the model's own level unless set, or off.
+  On 16 pages with Index-Translate 9B, neither read better and both cost time,
+  so vision is off and reasoning the model's own unless set.
 - **The history** keeps each page's texts and answer, not its image or the
   model's reasoning, so it grows as it does without them, and a local model
   reuses it from turn to turn.
@@ -173,7 +174,7 @@ is a language CLDR doesn't name in English.
 | `translator.target` | `en` |
 | `translator.instructions` | none |
 | `translator.vision` | `false` |
-| `translator.reasoning` | the model's own |
+| `translator.reasoning` | the model's own, or `off` or an effort level, one word |
 
 Manga OCR AR is CC BY-NC-SA 4.0, so a user keeping the default is held to
 non-commercial use. Telea's port keeps OpenCV's BSD-style license, so this

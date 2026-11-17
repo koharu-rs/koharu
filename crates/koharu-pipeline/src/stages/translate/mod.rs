@@ -21,7 +21,7 @@ use icu_experimental::displaynames::{
 use icu_locale::LocaleExpander;
 use icu_locale_core::{LanguageIdentifier, Locale, langid, subtags::language};
 use indoc::formatdoc;
-use koharu_llm::rig::{completion::Effort, driver::DynModel};
+use koharu_llm::rig::{completion::Reasoning, driver::DynModel};
 use koharu_scene::{Content, LayerId, Op, Project};
 use rayon::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
@@ -53,10 +53,13 @@ pub struct TranslatorConfig {
     /// texts, as an image goes with a chat message to OpenAI's and Gemini's
     /// models; only for a model that reads images.
     pub vision: bool,
-    /// How much the model reasons before it answers, by rig's portable levels
-    /// after OpenAI's `reasoning_effort`; the model's own default when unset.
+    /// How much the model reasons before it answers: off, or one of rig's
+    /// portable levels after OpenAI's `reasoning_effort`, written as one word;
+    /// the model's own default when unset. rig refuses off for a model that
+    /// can't stop reasoning.
+    #[serde(with = "koharu_llm::reasoning")]
     #[specta(type = Option<String>)]
-    pub reasoning: Option<Effort>,
+    pub reasoning: Option<Reasoning>,
 }
 
 impl Default for TranslatorConfig {

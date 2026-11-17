@@ -35,8 +35,8 @@ export function orderedLanguageChoices(display: string): Array<{ tag: string; na
   )
 }
 
-/** rig's portable reasoning levels, lowest first. */
-export const REASONING = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+/** Off, then rig's portable reasoning levels, lowest first, as the settings write them. */
+export const REASONING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
 /** A model's name, or its reference when the list doesn't have it. */
 export function modelName(models: Model[], reference: string | null | undefined): string {

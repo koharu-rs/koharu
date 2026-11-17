@@ -23,7 +23,7 @@ use rig_agent::{
 };
 use rig_core::{
     catalog::ModelSpec,
-    completion::{Document, Effort, GenerationOptions, Message, Usage},
+    completion::{Document, GenerationOptions, Message, Reasoning, Usage},
     driver::DynModel,
     effect::{Answered, EffectKind},
     operation::Completion,
@@ -54,10 +54,13 @@ const PROMPT: &str = indoc! {"
 pub struct AgentConfig {
     /// A `vendor/model` reference, as koharu-llm connects one.
     pub model: Option<String>,
-    /// How much the model reasons before it answers, by rig's portable levels
-    /// after OpenAI's `reasoning_effort`; the model's own default when unset.
+    /// How much the model reasons before it answers: off, or one of rig's
+    /// portable levels after OpenAI's `reasoning_effort`, written as one word;
+    /// the model's own default when unset. rig refuses off for a model that
+    /// can't stop reasoning.
+    #[serde(with = "koharu_llm::reasoning")]
     #[specta(type = Option<String>)]
-    pub reasoning: Option<Effort>,
+    pub reasoning: Option<Reasoning>,
     /// How many model calls a run makes at most.
     pub max_turns: usize,
     /// How many times a run lets the model correct a call it wrote wrong.
@@ -179,8 +182,8 @@ impl Agent {
             .tool_server_handle(tools)
             .add_hook(Window::new(self.context.policy(&spec), spec.clone()))
             .add_hook(calls);
-        if let Some(effort) = self.config.reasoning {
-            agent = agent.options(GenerationOptions::default().reasoning(effort));
+        if let Some(reasoning) = self.config.reasoning {
+            agent = agent.options(GenerationOptions::default().reasoning(reasoning));
         }
         if spec.provider.vendor() == KOHARU {
             // The catalog's settings are for translation: a repeat penalty

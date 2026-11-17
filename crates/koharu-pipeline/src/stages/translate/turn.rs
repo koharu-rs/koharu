@@ -5,7 +5,7 @@ use std::future::IntoFuture;
 use anyhow::{Context as _, Result, bail, ensure};
 use koharu_llm::rig::{
     completion::{
-        AssistantContent, Effort, GenerationOptions, Message, Usage,
+        AssistantContent, GenerationOptions, Message, Reasoning, Usage,
         message::{DocumentSourceKind, Image, ImageMediaType, UserContent},
     },
     driver::DynModel,
@@ -23,7 +23,7 @@ pub(super) struct Turn<'a> {
     texts: &'a [String],
     /// The page, which the model sees with its texts.
     image: Option<&'a str>,
-    reasoning: Option<Effort>,
+    reasoning: Option<Reasoning>,
     cancel: &'a CancellationToken,
 }
 
@@ -32,7 +32,7 @@ impl<'a> Turn<'a> {
         system: String,
         texts: &'a [String],
         image: Option<&'a str>,
-        reasoning: Option<Effort>,
+        reasoning: Option<Reasoning>,
         cancel: &'a CancellationToken,
     ) -> Self {
         let keys = keys(texts.len());
@@ -102,8 +102,8 @@ impl<'a> Turn<'a> {
         }
         content.push(UserContent::text(self.page.clone()));
         let mut options = GenerationOptions::default();
-        if let Some(effort) = self.reasoning {
-            options = options.reasoning(effort);
+        if let Some(reasoning) = self.reasoning {
+            options = options.reasoning(reasoning);
         }
         let request = koharu_llm::answers(model, schema(&self.keys)?)
             .preamble(&self.system)

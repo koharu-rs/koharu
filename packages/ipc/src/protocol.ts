@@ -20,8 +20,10 @@ export type AgentConfig = {
   /**  A `vendor/model` reference, as koharu-llm connects one. */
   model?: string | null
   /**
-   *  How much the model reasons before it answers, by rig's portable levels
-   *  after OpenAI's `reasoning_effort`; the model's own default when unset.
+   *  How much the model reasons before it answers: off, or one of rig's
+   *  portable levels after OpenAI's `reasoning_effort`, written as one word;
+   *  the model's own default when unset. rig refuses off for a model that
+   *  can't stop reasoning.
    */
   reasoning?: string | null
   /**  How many model calls a run makes at most. */
@@ -912,8 +914,10 @@ export type TranslatorConfig = {
    */
   vision?: boolean
   /**
-   *  How much the model reasons before it answers, by rig's portable levels
-   *  after OpenAI's `reasoning_effort`; the model's own default when unset.
+   *  How much the model reasons before it answers: off, or one of rig's
+   *  portable levels after OpenAI's `reasoning_effort`, written as one word;
+   *  the model's own default when unset. rig refuses off for a model that
+   *  can't stop reasoning.
    */
   reasoning?: string | null
 }

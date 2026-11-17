@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
         config.inpainter.model = inpainter;
     }
     config.translator.vision = cli.vision;
-    config.translator.reasoning = cli.reasoning;
+    config.translator.reasoning = cli.reasoning.map(Into::into);
     let pipeline = Pipeline::new(config);
     let mut events = pipeline.events();
     let request = Request {
