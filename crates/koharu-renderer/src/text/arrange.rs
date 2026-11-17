@@ -15,7 +15,7 @@ use super::{
     breaks::{Break, Segment},
     fit::{Placed, PlacedLine},
     itemize::{Orientation, Run},
-    lettering::LineMap,
+    lettering::{LineMap, PlacedGlyph},
     lines,
     room::physical,
     shape::{Glyph, ShapedText, shape_run},
@@ -227,7 +227,7 @@ fn position(
     used: f32,
     visible: Range<usize>,
     pieces: Vec<Piece<'_>>,
-    (glyphs, clusters): (&mut Vec<Positioned>, &mut Vec<(usize, Range<f32>, bool)>),
+    (glyphs, clusters): (&mut Vec<Positioned>, &mut Vec<PlacedGlyph>),
 ) -> (Option<f32>, f32) {
     let styled = shaped.styled;
     let vertical = styled.vertical;

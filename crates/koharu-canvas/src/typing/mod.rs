@@ -155,7 +155,7 @@ impl Typing {
     /// Whether the caret shows at `now`: it blinks, and shows for a while
     /// after each change.
     pub fn caret_shows(&self, now: Instant) -> bool {
-        now.duration_since(self.since).as_millis() / BLINK % 2 == 0
+        (now.duration_since(self.since).as_millis() / BLINK).is_multiple_of(2)
     }
 
     /// The caret, in the text's own coordinates: after the composition's

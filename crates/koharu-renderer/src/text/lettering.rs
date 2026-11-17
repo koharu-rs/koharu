@@ -38,15 +38,18 @@ pub(crate) struct Cluster {
     pub rtl: bool,
 }
 
+/// A glyph as placing its line gave it: its cluster offset, where it lies
+/// along the line, and whether its run is right to left.
+pub(crate) type PlacedGlyph = (usize, Range<f32>, bool);
+
 impl LineMap {
-    /// A line from what placing it gave: each glyph's cluster offset, where it
-    /// lies along the line, and whether its run is right to left.
+    /// A line from the glyphs placing it gave.
     pub(crate) fn new(
         text: Range<usize>,
         visible: usize,
         start: f32,
         (top, pitch): (f32, f32),
-        mut glyphs: Vec<(usize, Range<f32>, bool)>,
+        mut glyphs: Vec<PlacedGlyph>,
     ) -> Self {
         glyphs.sort_by_key(|glyph| glyph.0);
         let mut clusters: Vec<Cluster> = Vec::new();
