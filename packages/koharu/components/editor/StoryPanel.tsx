@@ -1,7 +1,7 @@
 'use client'
 
 import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
-import { Languages } from 'lucide-react'
+import { Languages, MoreHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -17,10 +17,16 @@ import {
   type TextLayer,
 } from '@/lib/document'
 import { usePageStory, useProject } from '@/lib/queries'
-import { setSourceText, setText } from '@/lib/scene'
+import { deleteLayers, setSourceText, setText } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type LayerId, type PageId } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@koharu/ui/components/dropdown-menu'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
@@ -176,8 +182,9 @@ function ReadingNumber({ number, sfx }: { number: number; sfx: boolean }) {
 }
 
 /** A text's number and fields, highlighted while its layer, or one of a block's parts, is
- * selected, and scrolled into view when the canvas or Layers selects it. A block shows a button
- * under its number, while the pointer is on it or it's selected, that translates it alone. */
+ * selected, and scrolled into view when the canvas or Layers selects it. Under its number, while
+ * the pointer is on it or it's selected, a block shows a button that translates it alone, and
+ * every text a menu that deletes it. */
 function StoryText({
   page,
   shown,
@@ -221,6 +228,15 @@ function StoryText({
       .catch(() => undefined)
   }
 
+  // As Layers deletes a layer: Undo brings it back, so nothing asks first.
+  const remove = () =>
+    void call(deleteLayers, [layer.id])
+      .then(() => {
+        const { selectedLayers, selectLayers } = useKoharuStore.getState()
+        selectLayers(selectedLayers.filter((selected) => !ids.includes(selected)))
+      })
+      .catch(() => undefined)
+
   const name = plainText(isBlockLayer(layer) ? (layer.translation ?? layer.source) : layer)
   const field =
     'min-h-8 w-full max-w-full min-w-0 resize-none overflow-hidden rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
@@ -262,6 +278,34 @@ function StoryText({
             </TooltipContent>
           </Tooltip>
         )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type='button'
+                variant='outline'
+                size='icon-xs'
+                aria-label={t('navigator.actionsFor', { page: name })}
+                className='size-5 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100'
+              />
+            }
+          >
+            <MoreHorizontal className='size-3' />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align='start'
+            className='w-auto min-w-20 border border-border/50 p-0.5 shadow-sm ring-0'
+          >
+            <DropdownMenuItem
+              variant='destructive'
+              disabled={locked}
+              className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px]'
+              onClick={remove}
+            >
+              {t('navigator.delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className='grid min-w-0 gap-1'>
         {isBlockLayer(layer) ? (
