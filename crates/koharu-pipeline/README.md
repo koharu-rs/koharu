@@ -52,7 +52,7 @@ more. Only a stage knows its models.
 |---|---|---|---|
 | detect | Koharu Layout HighRes | the scan | panels, balloons with outlines, and blocks in reading order, in place of the ones there; each block's source frame, tilt, direction, and mask |
 | recognize | Manga OCR AR | the scan inside each block's source frame, with other blocks' glyphs blanked | the source's wording and its language |
-| inpaint | LaMa | the scan, each block's mask, its balloon, and its panel | the block's clean-up under its mask; for an area, a new raster limited to it by a layer mask |
+| inpaint | LaMa | the scan, each block's mask, its balloon, and its panel; for an area, the page as drawn without its lettering | the block's clean-up under its mask; for an area, a new raster limited to it by a layer mask |
 | translate | Index-Translate 9B | the page's sources in reading order, and with vision the scan | each block's translation: wording, language, and placement |
 
 Every stage also records its C2PA action on the layers it wrote, and detection

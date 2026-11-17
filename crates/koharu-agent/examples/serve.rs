@@ -40,7 +40,9 @@ async fn main() -> Result<()> {
     };
     let session = Arc::new(Mutex::new(session));
     let pipeline = Pipeline::new(koharu_config::get::<PipelineConfig>()?);
-    let renderer = Renderer::new(koharu_config::get::<RendererConfig>()?);
+    // The process's, which the pipeline draws a painted area's page with.
+    let renderer = Renderer::get().clone();
+    renderer.set_config(koharu_config::get::<RendererConfig>()?);
     let server = McpServer::start(cli.port).await?;
     server.open(Some(Tools::new(session, pipeline, renderer)));
     println!("http://{}/mcp", server.address());

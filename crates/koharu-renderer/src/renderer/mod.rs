@@ -1,7 +1,7 @@
 //! The renderer: a page's frame from the scene, each layer's node drawing
 //! content retained for the next render.
 
-use std::sync::{Arc, Once};
+use std::sync::{Arc, LazyLock, Once};
 
 use anyhow::{Result, bail};
 use koharu_scene::{Block, Content as SceneContent, Layer, LayerId, PageId, Session, Text};
@@ -18,6 +18,10 @@ use crate::{
 
 mod retained;
 
+/// The process's renderer, with the default preference until the app sets
+/// its own.
+static RENDERER: LazyLock<Renderer> = LazyLock::new(|| Renderer::new(RendererConfig::default()));
+
 /// Renders pages. Cloning it shares its retained content.
 #[derive(Clone)]
 pub struct Renderer(Arc<Inner>);
@@ -28,6 +32,13 @@ struct Inner {
 }
 
 impl Renderer {
+    /// The process's renderer, as `Gpu::get` is its GPU: what the app's
+    /// canvas, exports, and pipeline draw with, so they share one retained
+    /// cache. A test or a tool with a preference of its own makes its own.
+    pub fn get() -> &'static Self {
+        &RENDERER
+    }
+
     /// What the first text would otherwise wait for loads in the background:
     /// Chinese line breaking's dictionary, the installed fonts, and the
     /// bundled font catalog. They load once, on a thread of their own rather

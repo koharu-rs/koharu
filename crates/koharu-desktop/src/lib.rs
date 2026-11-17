@@ -40,7 +40,9 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     };
     let library = Library::new(folder.join("projects"))?;
 
-    let renderer = Renderer::new(koharu_config::get::<RendererConfig>()?);
+    // The process's, which the pipeline draws a painted area's page with.
+    let renderer = Renderer::get().clone();
+    renderer.set_config(koharu_config::get::<RendererConfig>()?);
     // The window composites with it from its first frame.
     let gpu = Gpu::get()?;
     let adapter = gpu.adapter.get_info();
