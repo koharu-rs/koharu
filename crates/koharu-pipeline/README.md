@@ -65,7 +65,9 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
 
 - **Size.** A new translation starts at the page's lettering size, the median
   of its sources', as a letterer keeps one size for a page's dialogue [Manga
-  balloon basics], with its lines centred and its source's fill and stroke. A
+  balloon basics], with its lines centred, or in Japanese and Chinese
+  started together at the top or the left, as JLREQ aligns a line to its head
+  [JLREQ], and with its source's fill and stroke. A
   sound effect whose source has no outline gets a stroke a sixteenth of its
   size, black around a light fill and white around any other, which keeps it
   legible over art.
@@ -177,7 +179,7 @@ crate's license is `MIT OR Apache-2.0 AND BSD-3-Clause`.
 Read in November 2026.
 
 - Adobe: [Photoshop Content-Aware Fill], [Photoshop Generative Fill]
-- [ComfyUI routes], [OpenCV inpaint], [CLDR], [Index-Translate]
+- [ComfyUI routes], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ]
 - Lettering: [Manga balloon basics]
 
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
@@ -187,3 +189,4 @@ Read in November 2026.
 [CLDR]: https://cldr.unicode.org/
 [Index-Translate]: https://huggingface.co/IndexTeam/Index-Translate-9B
 [Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie
+[JLREQ]: https://www.w3.org/TR/jlreq/

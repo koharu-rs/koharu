@@ -363,6 +363,7 @@ struct InPath<'a> {
     scale: f32,
     outline: &'a Outline,
     anchor: Anchor,
+    align: Align,
     pitch: f32,
     air: f32,
     frame: Rect,
@@ -382,6 +383,7 @@ fn in_path<'a>(
         scale,
         outline,
         anchor,
+        align: styled.align,
         pitch: pitch(segments, scale, styled.line_height).max(0.01),
         air: size * scale * inset,
         frame: physical(
@@ -452,10 +454,14 @@ impl InPath<'_> {
         best
     }
 
-    /// The text in `count` lines, all centred on one axis, each as long as
-    /// the outline reaches on both sides of it all along its band widened by
-    /// the air, less the air at both ends; and what they cost. `None` when
-    /// `count` lines can't hold it.
+    /// The text in `count` lines about one axis, and what they cost. A
+    /// centred line is as long as the outline reaches on both sides of the
+    /// axis all along its band widened by the air, less the air at both ends.
+    /// Lines aligned to an edge start together, or end together, in one box
+    /// centred on the axis, where Photoshop starts each where the shape does:
+    /// each reaches from the box's near edge to its own span's far end, the
+    /// box as wide as the longest line, or as the narrowest span when that
+    /// line is longer. `None` when `count` lines can't hold it.
     fn lines(&self, count: usize) -> Option<(f32, Placed)> {
         let (bounds, pitch, air) = (self.outline.bounds, self.pitch, self.air);
         let total = pitch * count as f32;
@@ -486,22 +492,37 @@ impl InPath<'_> {
                 })
             })
             .collect();
+        // Half the narrowest span, how far the box's near edge can be from
+        // the axis with every line still inside its own span.
+        let edge = (self.align != Align::Center).then(|| {
+            spans
+                .iter()
+                .map(|(_, room)| room * 0.5)
+                .fold(f32::INFINITY, f32::min)
+        });
+        let rooms: Vec<f32> = spans
+            .iter()
+            .map(|(_, room)| edge.map_or(*room, |edge| room * 0.5 + edge))
+            .collect();
         let lines = lines::break_lines(
             self.segments,
             self.scale,
             Balance::Even,
             Some(count),
-            |line| spans[line].1,
+            |line| rooms[line],
         )?;
-        // The lines' unfilled shares squared, and far more for one longer
-        // than its room, to compare line counts.
-        let cost = lines
+        let used: Vec<f32> = lines
             .lines
             .iter()
+            .map(|range| lines::length(self.segments, range.clone(), self.scale))
+            .collect();
+        // The lines' unfilled shares squared, and far more for one longer
+        // than its room, to compare line counts.
+        let cost = used
+            .iter()
             .enumerate()
-            .map(|(line, range)| {
-                let room = spans[line].1;
-                let used = lines::length(self.segments, range.clone(), self.scale);
+            .map(|(line, &used)| {
+                let room = rooms[line];
                 if used > room {
                     1e6 * (1.0 + used - room)
                 } else if room > 0.0 {
@@ -512,12 +533,13 @@ impl InPath<'_> {
                 }
             })
             .sum();
+        let half = edge.map(|edge| edge.min(used.iter().copied().fold(0.0, f32::max) * 0.5));
         let placed = lines
             .lines
             .into_iter()
             .enumerate()
             .map(|(at, range)| {
-                let (start, room) = spans[at];
+                let (start, room) = half.map_or(spans[at], |half| (axis as f32 - half, 2.0 * half));
                 line(
                     self.segments,
                     range,
@@ -655,6 +677,45 @@ mod tests {
         let (_, placed) = fit(&styled, &room, |_| vec![word(40.0, Break::End)]);
         assert!(!placed.overflowed);
         assert!((2.45..=2.5).contains(&placed.scale), "{}", placed.scale);
+        Ok(())
+    }
+
+    #[test]
+    fn lines_aligned_to_a_balloon_s_edge_start_together_inside_it() -> Result<()> {
+        // Twelve words 30 long in a circle 200 across.
+        let frame: Frame = serde_json::from_value(serde_json::json!({
+            "path": {"path": "M0 100 A100 100 0 1 0 200 100 A100 100 0 1 0 0 100 Z", "anchor": "center"}
+        }))?;
+        let styled = Styled {
+            text: String::new(),
+            spans: Vec::new(),
+            vertical: false,
+            align: Align::Start,
+            line_height: 1.2,
+            hyphenation: None,
+            frame: frame.clone(),
+        };
+        let mut words = vec![word(30.0, Break::Normal); 11];
+        words.push(word(30.0, Break::End));
+        let (segments, placed) = fit(&styled, &Room::new(&frame, false), |_| words.clone());
+        assert!(!placed.overflowed);
+        assert!(placed.lines.len() > 2, "{}", placed.lines.len());
+        let start = placed.lines[0].start;
+        for line in &placed.lines {
+            let used = lines::length(&segments, line.segments.clone(), placed.scale);
+            // The circle's half width where the line's band is narrowest.
+            let far = (line.top - 100.0)
+                .abs()
+                .max((line.top + line.pitch - 100.0).abs());
+            let half = (100.0f32 * 100.0 - far * far).sqrt();
+            assert_eq!(line.start, start);
+            assert!(
+                start >= 100.0 - half && start + used <= 100.0 + half,
+                "{start}..{} past {half} at {}",
+                start + used,
+                line.top
+            );
+        }
         Ok(())
     }
 

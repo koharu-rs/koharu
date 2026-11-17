@@ -279,11 +279,28 @@ fn position(
                 continue;
             }
             let (x_offset, y_offset) = (glyph.x_offset * scale, glyph.y_offset * scale);
+            // A mark on a column's centre line is centred across it by its
+            // ink, whichever way it stands, as JLREQ centres `！`, `？`, `…`,
+            // and dashes; its font centres its em box, which a Western `…`
+            // or a Chinese `！` inks off the middle of.
+            let ink = (vertical && centred(&styled.text, glyph.cluster))
+                .then(|| shaped.font(run).ink(glyph.id, size))
+                .flatten();
             match (vertical, sideways) {
                 (false, _) => push(pen + x_offset, baseline - y_offset, glyph),
-                (true, false) => push(-block_center + x_offset, pen - y_offset, glyph),
+                (true, false) => {
+                    let x = ink.map_or(-block_center + x_offset, |ink| {
+                        -block_center - ((ink.x0 + ink.x1) * 0.5) as f32
+                    });
+                    push(x, pen - y_offset, glyph);
+                }
                 // Turned clockwise, a glyph's up is the page's right.
-                (true, true) => push(sideways_baseline + y_offset, pen + x_offset, glyph),
+                (true, true) => {
+                    let x = ink.map_or(sideways_baseline + y_offset, |ink| {
+                        -block_center - ((ink.y0 + ink.y1) * 0.5) as f32
+                    });
+                    push(x, pen + x_offset, glyph);
+                }
             }
             placed(glyph.cluster, pen..pen + glyph.advance * scale);
             pen += glyph.advance * scale;
@@ -376,6 +393,35 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
         });
     }
     (glyph_runs, text_runs)
+}
+
+/// Whether the character at `offset` sits on a vertical column's centre
+/// line, as JLREQ's hyphens (cl-03), dividing punctuation (cl-04), middle
+/// dots (cl-05), and inseparable characters (cl-08) do, and as CLREQ sets
+/// Chinese's interpunct, midline ellipsis, and connector.
+///
+/// Deliberately left out: cl-08's vertical kana repeat marks, whose halves
+/// join only as their font draws them; ASCII `:`, `;`, and `~`, which JLREQ
+/// classes as Western characters (cl-27) on a sideways run's baseline; and
+/// full stops (cl-06) and commas (cl-07), which keep their fonts' vertical
+/// forms in the column's top right corner. ASCII `!` and `?` count as cl-04,
+/// since vertical text sets them upright and full width.
+fn centred(text: &str, offset: usize) -> bool {
+    text[offset..].chars().next().is_some_and(|ch| {
+        matches!(
+            ch,
+            // cl-03
+            '‐' | '〜' | '゠' | '–'
+            // cl-04
+            | '!' | '?' | '！' | '？' | '‼' | '⁇' | '⁈' | '⁉'
+            // cl-05
+            | '・' | '：' | '；'
+            // cl-08, with `―`, which JLREQ notes some systems treat as `—`
+            | '—' | '―' | '…' | '‥'
+            // CLREQ's interpunct, midline ellipsis, and connector
+            | '·' | '⋯' | '～'
+        )
+    })
 }
 
 fn is_space(text: &str, offset: usize) -> bool {
@@ -483,6 +529,43 @@ mod tests {
         let pieces = line_runs(&shaped, &mut Buffer::new(), english..text.len())?;
         let (pen, _) = spacing(&shaped, &line, &pieces, 40.0, english..text.len());
         assert_eq!(pen, 0.0);
+        Ok(())
+    }
+
+    #[test]
+    fn a_mark_on_the_centre_line_centres_its_ink_across_the_column() -> Result<()> {
+        let font = [
+            "Microsoft YaHei",
+            "Yu Gothic",
+            "MS Gothic",
+            "Noto Sans CJK SC",
+            "PingFang SC",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed CJK font");
+        let text = koharu_scene::Text {
+            content: "已…！".into(),
+            direction: koharu_scene::Direction::Vertical,
+            ..koharu_scene::Text::default()
+        };
+        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let centre = layout.resolved.baseline;
+        // The ellipsis turns sideways and the exclamation stands upright;
+        // either way its ink sits across the column's centre line.
+        for (glyphs, run) in layout.runs.iter().zip(&layout.resolved.runs) {
+            if run.range.start == 0 {
+                continue;
+            }
+            for glyph in &glyphs.glyphs {
+                let ink = glyphs.font.ink(glyph.id, run.size).expect("a mark has ink");
+                let across = match glyphs.sideways {
+                    true => glyph.x + (ink.y0 + ink.y1) as f32 * 0.5,
+                    false => glyph.x + (ink.x0 + ink.x1) as f32 * 0.5,
+                };
+                assert!((across - centre).abs() < 0.01, "{across} against {centre}");
+            }
+        }
         Ok(())
     }
 

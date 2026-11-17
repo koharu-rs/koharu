@@ -10,6 +10,7 @@ use icu_properties::{CodePointSetData, props::DefaultIgnorableCodePoint};
 use skrifa::{
     GlyphId, MetadataProvider,
     instance::{LocationRef, NormalizedCoord, Size},
+    outline::{DrawSettings, OutlinePen},
     string::StringId,
 };
 use smallvec::SmallVec;
@@ -158,6 +159,57 @@ impl Font {
         ));
         self.plans.insert(key, plan.clone());
         plan
+    }
+
+    /// Where `glyph` inks at `size`, from its outline's points, with y up
+    /// from the baseline as the font has it; `None` for one that inks
+    /// nothing.
+    pub(crate) fn ink(&self, glyph: u32, size: f32) -> Option<kurbo::Rect> {
+        /// The rectangle around every point an outline draws through.
+        struct Ink(Option<kurbo::Rect>);
+        impl Ink {
+            fn take(&mut self, x: f32, y: f32) {
+                let point = kurbo::Point::new(f64::from(x), f64::from(y));
+                self.0 = Some(match self.0 {
+                    Some(rect) => rect.union_pt(point),
+                    None => kurbo::Rect::from_points(point, point),
+                });
+            }
+        }
+        impl OutlinePen for Ink {
+            fn move_to(&mut self, x: f32, y: f32) {
+                self.take(x, y);
+            }
+            fn line_to(&mut self, x: f32, y: f32) {
+                self.take(x, y);
+            }
+            fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+                self.take(cx, cy);
+                self.take(x, y);
+            }
+            fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+                self.take(cx0, cy0);
+                self.take(cx1, cy1);
+                self.take(x, y);
+            }
+            fn close(&mut self) {}
+        }
+        let face = skrifa::FontRef::from_index(self.data.data.as_ref(), self.data.index).ok()?;
+        let coords: Vec<NormalizedCoord> = self
+            .coords
+            .iter()
+            .map(|bits| NormalizedCoord::from_bits(*bits))
+            .collect();
+        let outline = face.outline_glyphs().get(GlyphId::new(glyph))?;
+        let mut ink = Ink(None);
+        outline
+            .draw(
+                DrawSettings::unhinted(Size::new(size), LocationRef::new(&coords)),
+                &mut ink,
+            )
+            .ok()?;
+        ink.0
+            .filter(|rect| rect.width() > 0.0 || rect.height() > 0.0)
     }
 
     /// Whether the face has a glyph for every visible character of `text`.

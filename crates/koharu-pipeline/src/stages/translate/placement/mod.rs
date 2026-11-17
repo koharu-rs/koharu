@@ -19,7 +19,9 @@ use crate::{Error, Result};
 /// frame's block axis. A new translation starts at the page's lettering
 /// size, the median of its texts' sources, as a letterer keeps one size for a
 /// page's dialogue and fits each balloon from it; its lines centred, as a
-/// balloon's are lettered; and with its source's ink as its fill and outline
+/// Western balloon's are lettered, or in Japanese and Chinese started
+/// together at the top or the left, as JLREQ aligns a line to its head; and
+/// with its source's ink as its fill and outline
 /// as its stroke, the width scaled from the source's size to its own, or a
 /// sound effect without one a stroke a sixteenth of its size, unlike its
 /// fill. What its style already
@@ -61,8 +63,10 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
         .map(|translation| &translation.style);
     let sized = given.and_then(|style| style.chars.size);
     let size = sized.or_else(|| lettering(&page.layers));
-    let vertical = this.source.direction == Direction::Vertical
-        && [language!("ja"), language!("zh")].contains(&target.language);
+    // Japanese and Chinese are written vertically, and their lines start
+    // together, as JLREQ aligns them to the line head.
+    let cjk = [language!("ja"), language!("zh")].contains(&target.language);
+    let vertical = this.source.direction == Direction::Vertical && cjk;
     let mut translation = json!({
         "frame": frame,
         "transform": transform,
@@ -108,7 +112,7 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
     }
     let mut style = json!({"chars": chars});
     if given.and_then(|style| style.align).is_none() {
-        style["align"] = json!(Align::Center);
+        style["align"] = json!(if cjk { Align::Start } else { Align::Center });
     }
     translation["style"] = style;
     Ok(Op::UpdateLayer {
@@ -309,6 +313,26 @@ mod tests {
             let chinese = placed(&mut session, block, &langid!("zh-Hans"))?;
             assert_eq!(chinese.direction, Direction::Vertical);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn japanese_and_chinese_start_their_lines_and_others_centre_them() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("ja", None, block(20.0, "text")),
+                ("zh", None, block(120.0, "text")),
+                ("en", None, block(220.0, "text")),
+            ],
+        )?;
+        let japanese = placed(&mut session, ids[0], &langid!("ja"))?;
+        assert_eq!(japanese.style.align, Some(Align::Start));
+        let chinese = placed(&mut session, ids[1], &langid!("zh-Hans"))?;
+        assert_eq!(chinese.style.align, Some(Align::Start));
+        let english = placed(&mut session, ids[2], &langid!("en"))?;
+        assert_eq!(english.style.align, Some(Align::Center));
         Ok(())
     }
 
