@@ -120,8 +120,6 @@
     "title": "작업 내역"
   },
   "inference": {
-    "currentPage": "현재 페이지",
-    "currentPageDescription": "캔버스의 페이지만 처리합니다.",
     "entireProject": "전체 프로젝트",
     "entireProjectDescription": "이 프로젝트의 모든 페이지를 처리합니다.",
     "model": "모델",
@@ -134,7 +132,6 @@
     "runProcessing": "처리 실행",
     "scope": "범위",
     "scopeShort": {
-      "page": "페이지",
       "project": "프로젝트",
       "selected-pages": "선택 항목"
     },

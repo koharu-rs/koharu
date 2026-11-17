@@ -120,8 +120,6 @@
     "title": "История"
   },
   "inference": {
-    "currentPage": "Текущая страница",
-    "currentPageDescription": "Обработать только страницу на холсте.",
     "entireProject": "Весь проект",
     "entireProjectDescription": "Обработать все страницы проекта.",
     "model": "Модель",
@@ -134,7 +132,6 @@
     "runProcessing": "Запустить обработку",
     "scope": "Область",
     "scopeShort": {
-      "page": "Страница",
       "project": "Проект",
       "selected-pages": "Выбранное"
     },

@@ -120,8 +120,6 @@
     "title": "Histórico"
   },
   "inference": {
-    "currentPage": "Página atual",
-    "currentPageDescription": "Processa somente a página na tela.",
     "entireProject": "Projeto inteiro",
     "entireProjectDescription": "Processa todas as páginas deste projeto.",
     "model": "Modelo",
@@ -134,7 +132,6 @@
     "runProcessing": "Executar processamento",
     "scope": "Escopo",
     "scopeShort": {
-      "page": "Página",
       "project": "Projeto",
       "selected-pages": "Seleção"
     },

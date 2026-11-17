@@ -120,8 +120,6 @@
     "title": "السجل"
   },
   "inference": {
-    "currentPage": "الصفحة الحالية",
-    "currentPageDescription": "معالجة الصفحة المعروضة في اللوحة فقط.",
     "entireProject": "المشروع كاملًا",
     "entireProjectDescription": "معالجة كل صفحة في هذا المشروع.",
     "model": "النموذج",
@@ -134,7 +132,6 @@
     "runProcessing": "تشغيل المعالجة",
     "scope": "النطاق",
     "scopeShort": {
-      "page": "صفحة",
       "project": "مشروع",
       "selected-pages": "التحديد"
     },

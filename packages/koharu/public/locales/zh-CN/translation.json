@@ -120,8 +120,6 @@
     "title": "历史记录"
   },
   "inference": {
-    "currentPage": "当前页面",
-    "currentPageDescription": "仅处理画布中的页面。",
     "entireProject": "整个项目",
     "entireProjectDescription": "处理此项目中的每个页面。",
     "model": "模型",
@@ -134,7 +132,6 @@
     "runProcessing": "运行处理",
     "scope": "范围",
     "scopeShort": {
-      "page": "页面",
       "project": "项目",
       "selected-pages": "所选内容"
     },

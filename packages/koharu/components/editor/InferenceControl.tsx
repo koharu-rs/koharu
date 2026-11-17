@@ -243,13 +243,6 @@ function RuntimeSelector({
         {view === 'scope' && (
           <SelectorPanel title={t('inference.scope')} onBack={() => setView('root')}>
             <SelectorOption
-              value='page'
-              label={t('inference.currentPage')}
-              detail={t('inference.currentPageDescription')}
-              selected={scope === 'page'}
-              onSelect={chooseScope}
-            />
-            <SelectorOption
               value='selected-pages'
               label={t('inference.selectedPages')}
               detail={

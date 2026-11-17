@@ -120,8 +120,6 @@
     "title": "步驟記錄"
   },
   "inference": {
-    "currentPage": "目前頁面",
-    "currentPageDescription": "只處理畫布中的頁面。",
     "entireProject": "整個專案",
     "entireProjectDescription": "處理此專案中的每個頁面。",
     "model": "模型",
@@ -134,7 +132,6 @@
     "runProcessing": "執行處理",
     "scope": "範圍",
     "scopeShort": {
-      "page": "頁面",
       "project": "專案",
       "selected-pages": "選取範圍"
     },

@@ -120,8 +120,6 @@
     "title": "History"
   },
   "inference": {
-    "currentPage": "Current page",
-    "currentPageDescription": "Process only the page in the canvas.",
     "entireProject": "Entire project",
     "entireProjectDescription": "Process every page in this project.",
     "model": "Model",
@@ -134,7 +132,6 @@
     "runProcessing": "Run processing",
     "scope": "Scope",
     "scopeShort": {
-      "page": "Page",
       "project": "Project",
       "selected-pages": "Selection"
     },

@@ -120,8 +120,6 @@
     "title": "Historique"
   },
   "inference": {
-    "currentPage": "Page actuelle",
-    "currentPageDescription": "Traiter uniquement la page affichée sur le canevas.",
     "entireProject": "Projet entier",
     "entireProjectDescription": "Traiter toutes les pages de ce projet.",
     "model": "Modèle",
@@ -134,7 +132,6 @@
     "runProcessing": "Lancer le traitement",
     "scope": "Portée",
     "scopeShort": {
-      "page": "Page",
       "project": "Projet",
       "selected-pages": "Sélection"
     },

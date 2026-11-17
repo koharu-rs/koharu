@@ -120,8 +120,6 @@
     "title": "Historia"
   },
   "inference": {
-    "currentPage": "Página actual",
-    "currentPageDescription": "Procesa solo la página del lienzo.",
     "entireProject": "Proyecto completo",
     "entireProjectDescription": "Procesa todas las páginas de este proyecto.",
     "model": "Modelo",
@@ -134,7 +132,6 @@
     "runProcessing": "Ejecutar procesamiento",
     "scope": "Ámbito",
     "scopeShort": {
-      "page": "Página",
       "project": "Proyecto",
       "selected-pages": "Selección"
     },

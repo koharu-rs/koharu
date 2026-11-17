@@ -120,8 +120,6 @@
     "title": "Geçmiş"
   },
   "inference": {
-    "currentPage": "Geçerli sayfa",
-    "currentPageDescription": "Yalnızca tuvaldeki sayfayı işler.",
     "entireProject": "Tüm proje",
     "entireProjectDescription": "Bu projedeki tüm sayfaları işler.",
     "model": "Model",
@@ -134,7 +132,6 @@
     "runProcessing": "İşlemeyi çalıştır",
     "scope": "Kapsam",
     "scopeShort": {
-      "page": "Sayfa",
       "project": "Proje",
       "selected-pages": "Seçim"
     },

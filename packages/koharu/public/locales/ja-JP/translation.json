@@ -120,8 +120,6 @@
     "title": "ヒストリー"
   },
   "inference": {
-    "currentPage": "現在のページ",
-    "currentPageDescription": "キャンバスに表示中のページだけを処理します。",
     "entireProject": "プロジェクト全体",
     "entireProjectDescription": "このプロジェクトの全ページを処理します。",
     "model": "モデル",
@@ -134,7 +132,6 @@
     "runProcessing": "処理を実行",
     "scope": "範囲",
     "scopeShort": {
-      "page": "ページ",
       "project": "プロジェクト",
       "selected-pages": "選択範囲"
     },

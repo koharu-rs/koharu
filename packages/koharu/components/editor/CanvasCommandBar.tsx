@@ -13,13 +13,7 @@ export function CanvasCommandBar() {
   const running = Object.values(jobs).find((job) => job.state === 'running')
 
   const run = (selection: PipelineScope, stages: Stage[]) => {
-    if (!page) return
-    const target: Target =
-      selection === 'project'
-        ? 'project'
-        : selection === 'selected-pages'
-          ? { pages: selectedPages }
-          : { pages: [page.id] }
+    const target: Target = selection === 'project' ? 'project' : { pages: selectedPages }
     // A run takes its stages in the pipeline's order, whichever order they were picked in.
     const ordered = pipelineStages.filter((stage) => stages.includes(stage))
     void call(commands.runPipeline, target, ordered).catch(() => undefined)
