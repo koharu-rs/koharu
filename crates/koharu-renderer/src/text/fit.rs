@@ -1,8 +1,9 @@
 //! Lines fitted to a text's room: at its size when they fit, or in a best-fit
 //! frame at the largest scale above it that fits; else, as the frame allows,
 //! at the largest scale down to half that fits with whole words, then at half
-//! with a path's inset halved, then hyphenated. A word is never split without
-//! a hyphen: what still doesn't fit runs past its room whole.
+//! with a path's inset halved, then hyphenated, and a best-fit text below half
+//! as it last broke until it fits. A word is never split without a hyphen:
+//! what still doesn't fit runs past its room whole.
 
 use std::ops::{Range, RangeInclusive};
 
@@ -16,8 +17,9 @@ use super::{
     style::Styled,
 };
 
-/// The largest scale a best-fit text grows to, a bound that only text no
-/// room limits, such as one with no line height, reaches.
+/// The largest scale a best-fit text grows to, and its inverse the smallest
+/// it shrinks to, bounds that only text no room limits, such as one with no
+/// line height, or a room too small for anything, reaches.
 const CEILING: f32 = 256.0;
 
 /// Lines placed at one scale.
@@ -93,17 +95,42 @@ pub(super) fn fit(
         }
         Room::Point | Room::Box { .. } => (placed, None),
     };
-    if styled.hyphenation.is_some() {
-        let hyphens = segments(Breaking::Hyphens);
-        let hyphenated = match inset {
-            Some((outline, anchor, inset)) => {
-                in_path(styled, &hyphens, floor, outline, anchor, inset).place()
-            }
-            None => place(styled, room, &hyphens, floor),
-        };
-        if !hyphenated.overflowed {
-            return (hyphens, hyphenated);
+    let at = |segments: &[Segment], scale: f32| match inset {
+        Some((outline, anchor, inset)) => {
+            in_path(styled, segments, scale, outline, anchor, inset).place()
         }
+        None => place(styled, room, segments, scale),
+    };
+    let hyphens = match styled.hyphenation {
+        Some(_) => {
+            let hyphens = segments(Breaking::Hyphens);
+            let hyphenated = at(&hyphens, floor);
+            if !hyphenated.overflowed {
+                return (hyphens, hyphenated);
+            }
+            Some(hyphens)
+        }
+        None => None,
+    };
+    // A best-fit text has no floor of its own: as Publisher's Best Fit, it
+    // shrinks on, as it last broke, until its room holds it, as far below
+    // its size as it may grow above.
+    if fills(&styled.frame) {
+        let segments = hyphens.unwrap_or(words);
+        let sure = |scale: f32| match inset {
+            Some((outline, anchor, inset)) => {
+                let (fewest, most) =
+                    in_path(styled, &segments, scale, outline, anchor, inset).counts();
+                fewest > most
+            }
+            None => overflows(styled, room, &segments, scale),
+        };
+        let shrunk = largest_fit(
+            1.0 / CEILING,
+            |scale| sure(scale * floor),
+            |scale| at(&segments, scale * floor),
+        );
+        return (segments, shrunk);
     }
     // Nothing fits: the words run past their room whole, centred, into its
     // margin first.
@@ -729,6 +756,20 @@ mod tests {
         let (_, placed) = fit(&styled, &room, |_| vec![word(40.0, Break::End)]);
         assert!(!placed.overflowed);
         assert!((2.45..=2.5).contains(&placed.scale), "{}", placed.scale);
+        Ok(())
+    }
+
+    #[test]
+    fn a_best_fit_text_too_big_at_half_its_size_shrinks_on_until_it_fits() -> Result<()> {
+        // Two words 60 long, with no hyphen in either, in a box 25 wide and
+        // 12 tall: at half size a word is 30 long, and on two lines the
+        // words fit up to 25 / 60 of their size.
+        let (styled, room) = in_box(25.0, 12.0, "best")?;
+        let (_, placed) = fit(&styled, &room, |_| {
+            vec![word(60.0, Break::Normal), word(60.0, Break::End)]
+        });
+        assert!(!placed.overflowed);
+        assert!((0.4..=0.417).contains(&placed.scale), "{}", placed.scale);
         Ok(())
     }
 

@@ -119,8 +119,9 @@ export function TypeBar() {
   const chars = style.chars ?? {}
   const mixed = new Set(shared.mixed.filter((key) => drafted?.chars?.[key] === undefined))
   const frame = lettering?.frame ?? 'point'
-  const box = typeof frame === 'object' && 'box' in frame ? frame.box : null
-  const autoFit = box?.fit === 'best'
+  // A box and a path fit their text alike, a balloon's translation in a path; point text has no fit.
+  const fitted = typeof frame !== 'object' ? null : frame.box ? 'box' : 'path'
+  const autoFit = typeof frame === 'object' && (frame.box ?? frame.path)?.fit === 'best'
 
   /** Merges `patch` into each target's style, shown at once on the first. */
   const apply = (patch: TextStyle) => {
@@ -250,13 +251,13 @@ export function TypeBar() {
           disabled={false}
           value={size}
           autoFit={autoFit}
-          canAutoFit={box !== null}
+          canAutoFit={fitted !== null}
           onChange={(next) => {
             applyChars({ size: next })
-            // A set size is the most the text takes, as the box's best fit would grow it.
-            if (autoFit) update({ frame: { box: { fit: 'shrink' } } })
+            // A set size is the most the text takes, as the frame's best fit would grow it.
+            if (autoFit && fitted) update({ frame: { [fitted]: { fit: 'shrink' } } })
           }}
-          onAutoFit={() => update({ frame: { box: { fit: 'best' } } })}
+          onAutoFit={() => fitted && update({ frame: { [fitted]: { fit: 'best' } } })}
         />
       </div>
       <ColorWell
