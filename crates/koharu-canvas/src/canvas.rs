@@ -26,7 +26,7 @@ use vello_gpu::peniko::Color;
 
 use crate::{
     Brush, Camera, Colors, Effect, Story, Tool,
-    control::Control,
+    control::{Control, REACH},
     draw::{Target, color, overlay::Overlay},
     gesture::{Context, Gesture, GestureLook, Press},
     selection::Selection,
@@ -246,10 +246,11 @@ impl Canvas {
         self.selection.ids()
     }
 
-    /// Where the selection lies on the page, in page pixels: its layers as
-    /// they're laid out, a point text's lines included, which the host
-    /// places its own controls beside; `None` while nothing selected shows.
-    /// While typing, the text as typed.
+    /// Where the selection lies on the page, in page pixels, which the host
+    /// places its own controls beside: its layers as they're laid out, a
+    /// point text's lines included, and the handles drawn on them as far as
+    /// a pointer reaches them, so the host's controls keep off those; `None`
+    /// while nothing selected shows. While typing, the text as typed.
     pub fn selection_bounds(&self) -> Option<Rect> {
         if let Some(typing) = &self.typing {
             return Some(
@@ -258,12 +259,21 @@ impl Canvas {
                     .transform_rect_bbox(typing.lettering().bounds()),
             );
         }
+        let reach = self.view.page_length(REACH);
         self.snapshot
             .as_ref()?
             .controls()
             .iter()
             .filter(|control| self.selection.contains(control.layer))
-            .map(|control| control.outline().bounding_box())
+            .map(|control| {
+                control
+                    .handles()
+                    .into_iter()
+                    .map(|handle| control.handle_point(handle, &self.view))
+                    .fold(control.outline().bounding_box(), |bounds, point| {
+                        bounds.union(Rect::from_center_size(point, (2.0 * reach, 2.0 * reach)))
+                    })
+            })
             .reduce(|all, bounds| all.union(bounds))
     }
 

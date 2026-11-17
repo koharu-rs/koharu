@@ -830,6 +830,25 @@ fn the_selection_bounds_hold_a_point_texts_laid_out_lines() {
     );
 }
 
+#[test]
+fn the_selection_bounds_hold_the_handles_drawn_on_it() {
+    let Some(mut fixture) = unscaled(vec![
+        json!({"op": "add_layer", "page": "$page", "index": 0, "layer": {
+            "kind": "text", "content": "Hello",
+            "frame": {"box": {"bounds": {"x": 0, "y": 0, "width": 100, "height": 30}}},
+            "transform": [[1.0, 0.0, 100.0], [0.0, 1.0, 200.0]],
+        }}),
+    ]) else {
+        return;
+    };
+    let text = layers(&fixture)[0];
+    fixture.canvas.select(vec![text]);
+    let bounds = fixture.canvas.selection_bounds().expect("bounds");
+    // The rotate handle stands 16 pixels above the top, reached 7 around,
+    // so the host's own controls keep off it.
+    assert!(bounds.y0 <= 200.0 - 16.0 - 7.0 + 0.01, "{bounds:?}");
+}
+
 /// The wheel at `at`, held with `modifiers`.
 fn scroll(at: (f64, f64), delta: ScrollDelta, modifiers: Modifiers) -> PointerEvent {
     PointerEvent::Scroll(PointerScrollEvent {
