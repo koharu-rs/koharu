@@ -5,7 +5,10 @@ use std::{fmt, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
 use fontique::{CharmapIndex, QueryFont, Synthesis};
-use harfrust::{Direction, Feature, Language, Script, ShapePlan, Tag, font::Variation};
+use harfrust::{
+    Buffer, Direction, Feature, Language, Script, ShapeOptions, ShapePlan, ShaperFont, Tag,
+    font::Variation,
+};
 use icu_properties::{CodePointSetData, props::DefaultIgnorableCodePoint};
 use skrifa::{
     GlyphId, MetadataProvider,
@@ -30,6 +33,8 @@ pub(crate) struct Font {
     pub shaper: harfrust::Font,
     /// Shape plans, shared by the font's clones.
     plans: Arc<quick_cache::sync::Cache<PlanKey, Arc<ShapePlan>>>,
+    /// Whether it has a vertical form for a character, as it was asked.
+    vertical_forms: Arc<quick_cache::sync::Cache<char, bool>>,
     /// The instance's normalized variation coordinates, as glyph runs take
     /// them.
     pub coords: Vec<glifo::NormalizedCoord>,
@@ -103,6 +108,7 @@ impl Font {
             charmap: found.charmap_index,
             shaper,
             plans: Arc::new(quick_cache::sync::Cache::new(64)),
+            vertical_forms: Arc::new(quick_cache::sync::Cache::new(256)),
             coords: location
                 .coords()
                 .iter()
@@ -159,6 +165,44 @@ impl Font {
         ));
         self.plans.insert(key, plan.clone());
         plan
+    }
+
+    /// Whether the face sets `ch` in vertical text in a form of its own: its
+    /// `vert` or `vrt2` features substitute another glyph for it.
+    pub(crate) fn has_vertical_form(&self, ch: char) -> bool {
+        if let Some(known) = self.vertical_forms.get(&ch) {
+            return known;
+        }
+        let horizontal = self
+            .charmap
+            .charmap(self.data.data.as_ref())
+            .and_then(|charmap| charmap.map(ch));
+        let features = [
+            Feature::new(Tag::new(b"vert"), 1, ..),
+            Feature::new(Tag::new(b"vrt2"), 1, ..),
+        ];
+        let mut buffer = Buffer::new();
+        buffer.push_str(ch.encode_utf8(&mut [0; 4]));
+        buffer.guess_segment_properties();
+        buffer.set_direction(Direction::TopToBottom);
+        let plan = self.shape_plan(
+            buffer.direction(),
+            buffer.script(),
+            buffer.language(),
+            &features,
+        );
+        let shaped = harfrust::shape(
+            &ShaperFont::new(&self.shaper),
+            &mut buffer,
+            ShapeOptions::new().plan(Some(&plan)).features(&features),
+        );
+        let vertical = shaped.is_ok()
+            && buffer
+                .glyph_infos()
+                .first()
+                .is_some_and(|info| Some(info.glyph_id) != horizontal);
+        self.vertical_forms.insert(ch, vertical);
+        vertical
     }
 
     /// Where `glyph` inks at `size`, from its outline's points, with y up

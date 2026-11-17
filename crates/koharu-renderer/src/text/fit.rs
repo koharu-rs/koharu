@@ -641,6 +641,7 @@ mod tests {
                 align: Align::Start,
                 line_height: 1.2,
                 hyphenation: Some(Lang::English),
+                chinese: false,
                 frame,
             },
             room,
@@ -693,6 +694,7 @@ mod tests {
             align: Align::Start,
             line_height: 1.2,
             hyphenation: None,
+            chinese: false,
             frame: frame.clone(),
         };
         let mut words = vec![word(30.0, Break::Normal); 11];

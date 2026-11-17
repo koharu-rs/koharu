@@ -11,7 +11,7 @@ use icu_segmenter::GraphemeClusterSegmenter;
 use unicode_bidi::Level;
 
 use super::{breaks::LINE_ENDS, style::Styled};
-use crate::script::harfrust_script;
+use crate::{fonts::Font, script::harfrust_script};
 
 /// Text HarfRust shapes at once: one span, font, bidi level and script.
 #[derive(Clone, Debug)]
@@ -52,12 +52,16 @@ pub(super) fn itemize(styled: &Styled, levels: &[Level]) -> (Vec<Run>, Vec<char>
     let mut uncovered = Vec::new();
     for (piece, span) in pieces(styled, levels) {
         let fonts = fall_back(styled, piece.clone(), span, &mut uncovered);
+        let font_at = |at: usize| {
+            let (_, font) = fonts.iter().find(|(cut, _)| cut.contains(&at))?;
+            styled.spans[span].fonts.get(*font)
+        };
         let parts = match styled.vertical {
             true => upright_groups(&styled.text, piece)
                 .into_iter()
                 .flat_map(|(part, group)| match group {
                     true => vec![(part, Orientation::TateChuYoko)],
-                    false => orientations(&styled.text, part),
+                    false => orientations(&styled.text, part, font_at),
                 })
                 .collect(),
             false => vec![(piece, Orientation::Upright)],
@@ -208,14 +212,21 @@ fn script_runs(text: &str, range: Range<usize>) -> Vec<(Range<usize>, IcuScript)
     runs
 }
 
-/// `range` of vertical text cut where it turns, grapheme by grapheme. What
-/// Unicode's Vertical_Orientation (UAX #50) rotates, such as Latin letters
-/// and digits, is set sideways, as Photoshop and CSS's `text-orientation:
-/// mixed` set it; the rest stands upright, `vert` giving the characters it
-/// transforms their vertical forms. `!` and `?` stand upright in full width,
-/// as manga sets them, and so does an emoji: a grapheme with the emoji
-/// variation selector or a keycap, which UAX #50 keeps upright.
-fn orientations(text: &str, range: Range<usize>) -> Vec<(Range<usize>, Orientation)> {
+/// `range` of vertical text cut where it turns, grapheme by grapheme, each
+/// set in the font `font_at` its offset. What Unicode's Vertical_Orientation
+/// (UAX #50) rotates, such as Latin letters and digits, is set sideways, as
+/// Photoshop and CSS's `text-orientation: mixed` set it; the rest stands
+/// upright, `vert` giving the characters it transforms their vertical forms.
+/// What it transforms or else rotates (`Tr`), such as `〜` or a bracket,
+/// turns sideways in a font without a vertical form for it. `!` and `?`
+/// stand upright in full width, as manga sets them, and so does an emoji: a
+/// grapheme with the emoji variation selector or a keycap, which UAX #50
+/// keeps upright.
+fn orientations<'a>(
+    text: &str,
+    range: Range<usize>,
+    font_at: impl Fn(usize) -> Option<&'a Font>,
+) -> Vec<(Range<usize>, Orientation)> {
     let orientation = CodePointMapData::<VerticalOrientation>::new();
     let part = &text[range.clone()];
     let boundaries: Vec<usize> = GraphemeClusterSegmenter::new().segment_str(part).collect();
@@ -223,13 +234,19 @@ fn orientations(text: &str, range: Range<usize>) -> Vec<(Range<usize>, Orientati
     for pair in boundaries.windows(2) {
         let grapheme = &part[pair[0]..pair[1]];
         let first = grapheme.chars().next().expect("a grapheme has a character");
-        let turned = match orientation.get(first) == VerticalOrientation::Rotated
-            && !is_exclamation(first)
-            && !grapheme.contains(['\u{fe0f}', '\u{20e3}'])
-        {
-            true => Orientation::Sideways,
-            false => Orientation::Upright,
+        let rotated = match orientation.get(first) {
+            VerticalOrientation::Rotated => true,
+            VerticalOrientation::TransformedRotated => {
+                font_at(range.start + pair[0]).is_some_and(|font| !font.has_vertical_form(first))
+            }
+            _ => false,
         };
+        let turned =
+            match rotated && !is_exclamation(first) && !grapheme.contains(['\u{fe0f}', '\u{20e3}'])
+            {
+                true => Orientation::Sideways,
+                false => Orientation::Upright,
+            };
         let end = range.start + pair[1];
         match parts.last_mut() {
             Some((last, at)) if *at == turned => last.end = end,
@@ -333,6 +350,7 @@ mod tests {
             align: Align::Start,
             line_height: 1.2,
             hyphenation: None,
+            chinese: false,
             frame: Frame::Point,
         }
     }
@@ -370,7 +388,7 @@ mod tests {
     #[test]
     fn vertical_text_turns_latin_and_digits_sideways() {
         let text = "東京Tokyo Tower、高さ333!";
-        let parts: Vec<(&str, Orientation)> = orientations(text, 0..text.len())
+        let parts: Vec<(&str, Orientation)> = orientations(text, 0..text.len(), |_| None)
             .into_iter()
             .map(|(range, orientation)| (&text[range], orientation))
             .collect();
@@ -387,7 +405,7 @@ mod tests {
         // An emoji keycap starts with a digit but shows as an emoji.
         let keycap = "1\u{fe0f}\u{20e3}";
         assert_eq!(
-            orientations(keycap, 0..keycap.len()),
+            orientations(keycap, 0..keycap.len(), |_| None),
             [(0..keycap.len(), Orientation::Upright)]
         );
     }

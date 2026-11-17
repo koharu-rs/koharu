@@ -19,6 +19,9 @@ pub(super) struct Styled {
     pub line_height: f32,
     /// The patterns that hyphenate the text's language, when it has some.
     pub hyphenation: Option<Lang>,
+    /// Its language is Chinese, whose vertical stop marks sit in the middle
+    /// of their cells.
+    pub chinese: bool,
     /// Where the text sets, in its own coordinates.
     pub frame: Frame,
 }
@@ -77,6 +80,7 @@ impl Styled {
                 .try_into()
                 .ok()
                 .and_then(Lang::from_iso),
+            chinese: text.language.language.as_str() == "zh",
             frame: text.frame.clone(),
         })
     }

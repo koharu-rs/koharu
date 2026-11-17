@@ -283,16 +283,25 @@ fn position(
             // ink, whichever way it stands, as JLREQ centres `！`, `？`, `…`,
             // and dashes; its font centres its em box, which a Western `…`
             // or a Chinese `！` inks off the middle of.
-            let ink = (vertical && centred(&styled.text, glyph.cluster))
+            let ink = (vertical && centred(&styled.text, glyph.cluster, styled.chinese))
                 .then(|| shaped.font(run).ink(glyph.id, size))
                 .flatten();
+            // Chinese centres a stop along its cell too, which its font's
+            // vertical form sets in the corner.
+            let middle = styled.chinese && stop(&styled.text, glyph.cluster);
             match (vertical, sideways) {
                 (false, _) => push(pen + x_offset, baseline - y_offset, glyph),
                 (true, false) => {
                     let x = ink.map_or(-block_center + x_offset, |ink| {
                         -block_center - ((ink.x0 + ink.x1) * 0.5) as f32
                     });
-                    push(x, pen - y_offset, glyph);
+                    let y = match ink {
+                        Some(ink) if middle => {
+                            pen + glyph.advance * scale * 0.5 + ((ink.y0 + ink.y1) * 0.5) as f32
+                        }
+                        _ => pen - y_offset,
+                    };
+                    push(x, y, glyph);
                 }
                 // Turned clockwise, a glyph's up is the page's right.
                 (true, true) => {
@@ -398,30 +407,42 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
 /// Whether the character at `offset` sits on a vertical column's centre
 /// line, as JLREQ's hyphens (cl-03), dividing punctuation (cl-04), middle
 /// dots (cl-05), and inseparable characters (cl-08) do, and as CLREQ sets
-/// Chinese's interpunct, midline ellipsis, and connector.
+/// Chinese's interpunct, midline ellipsis, and connector; in `chinese`, its
+/// stops too.
 ///
 /// Deliberately left out: cl-08's vertical kana repeat marks, whose halves
 /// join only as their font draws them; ASCII `:`, `;`, and `~`, which JLREQ
-/// classes as Western characters (cl-27) on a sideways run's baseline; and
-/// full stops (cl-06) and commas (cl-07), which keep their fonts' vertical
-/// forms in the column's top right corner. ASCII `!` and `?` count as cl-04,
-/// since vertical text sets them upright and full width.
-fn centred(text: &str, offset: usize) -> bool {
-    text[offset..].chars().next().is_some_and(|ch| {
-        matches!(
-            ch,
-            // cl-03
-            '‐' | '〜' | '゠' | '–'
-            // cl-04
-            | '!' | '?' | '！' | '？' | '‼' | '⁇' | '⁈' | '⁉'
-            // cl-05
-            | '・' | '：' | '；'
-            // cl-08, with `―`, which JLREQ notes some systems treat as `—`
-            | '—' | '―' | '…' | '‥'
-            // CLREQ's interpunct, midline ellipsis, and connector
-            | '·' | '⋯' | '～'
-        )
-    })
+/// classes as Western characters (cl-27) on a sideways run's baseline; and,
+/// but in Chinese, full stops (cl-06) and commas (cl-07), which keep their
+/// fonts' vertical forms in the column's top right corner. ASCII `!` and `?`
+/// count as cl-04, since vertical text sets them upright and full width.
+fn centred(text: &str, offset: usize, chinese: bool) -> bool {
+    (chinese && stop(text, offset))
+        || text[offset..].chars().next().is_some_and(|ch| {
+            matches!(
+                ch,
+                // cl-03
+                '‐' | '〜' | '゠' | '–'
+                // cl-04
+                | '!' | '?' | '！' | '？' | '‼' | '⁇' | '⁈' | '⁉'
+                // cl-05
+                | '・' | '：' | '；'
+                // cl-08, with `―`, which JLREQ notes some systems treat as `—`
+                | '—' | '―' | '…' | '‥'
+                // CLREQ's interpunct, midline ellipsis, and connector
+                | '·' | '⋯' | '～'
+            )
+        })
+}
+
+/// Whether the character at `offset` is a full stop (cl-06) or a comma
+/// (cl-07), which Chinese sets in the middle of its cell, as CLREQ describes
+/// Taiwan and Hong Kong setting every stop mark.
+fn stop(text: &str, offset: usize) -> bool {
+    matches!(
+        text[offset..].chars().next(),
+        Some('，' | '、' | '。' | '．')
+    )
 }
 
 fn is_space(text: &str, offset: usize) -> bool {
@@ -474,6 +495,7 @@ mod tests {
             align: Align::Start,
             line_height: 1.2,
             hyphenation: None,
+            chinese: false,
             frame: Frame::Point,
         }
     }
@@ -566,6 +588,85 @@ mod tests {
                 assert!((across - centre).abs() < 0.01, "{across} against {centre}");
             }
         }
+        Ok(())
+    }
+
+    /// Where each glyph of `content` in `language`, set vertically in one
+    /// column in the renderer's default fonts, inks on the page, from the
+    /// top, with the cell along the column its character takes; and the
+    /// column's centre line.
+    fn inks(content: &str, language: &str) -> Result<(Vec<(Rect, Range<f32>)>, f32)> {
+        let families = crate::RendererConfig::default().font_families;
+        let text = koharu_scene::Text {
+            content: content.into(),
+            direction: koharu_scene::Direction::Vertical,
+            language: language.parse()?,
+            ..koharu_scene::Text::default()
+        };
+        let layout = crate::text::layout(&text, |style, characters| {
+            crate::fonts::chain(style, &families, characters, &text.language)
+        })?
+        .expect("a layout");
+        let mut inks = Vec::new();
+        for (glyphs, run) in layout.runs.iter().zip(&layout.resolved.runs) {
+            for glyph in &glyphs.glyphs {
+                let Some(ink) = glyphs.font.ink(glyph.id, run.size) else {
+                    continue;
+                };
+                // Font units run y up; a sideways glyph turns a quarter
+                // clockwise about its origin.
+                let (x, y) = (f64::from(glyph.x), f64::from(glyph.y));
+                inks.push(match glyphs.sideways {
+                    true => Rect::new(x + ink.y0, y + ink.x0, x + ink.y1, y + ink.x1),
+                    false => Rect::new(x + ink.x0, y - ink.y1, x + ink.x1, y - ink.y0),
+                });
+            }
+        }
+        inks.sort_by(|a, b| a.center().y.total_cmp(&b.center().y));
+        let cells = layout.lines[0]
+            .clusters
+            .iter()
+            .map(|cluster| cluster.along.clone());
+        Ok((
+            inks.into_iter().zip(cells).collect(),
+            layout.resolved.baseline,
+        ))
+    }
+
+    #[test]
+    fn a_wave_dash_runs_down_its_column() -> Result<()> {
+        let (inks, _) = inks("吗\u{301c}？", "zh-Hans")?;
+        let (wave, _) = &inks[1];
+        assert!(wave.height() > wave.width(), "{wave:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_japanese_comma_sits_in_the_top_right_of_its_cell() -> Result<()> {
+        let (inks, centre) = inks("雨、雪", "ja")?;
+        let (comma, cell) = &inks[1];
+        let middle = f64::from(cell.start + cell.end) * 0.5;
+        assert!(
+            comma.center().x > f64::from(centre),
+            "{comma:?} against {centre}"
+        );
+        assert!(comma.center().y < middle, "{comma:?} against {middle}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_chinese_comma_sits_in_the_middle_of_its_cell() -> Result<()> {
+        let (inks, centre) = inks("了，哥", "zh-Hans")?;
+        let (comma, cell) = &inks[1];
+        let middle = f64::from(cell.start + cell.end) * 0.5;
+        assert!(
+            (comma.center().x - f64::from(centre)).abs() < 0.01,
+            "{comma:?} against {centre}"
+        );
+        assert!(
+            (comma.center().y - middle).abs() < 0.01,
+            "{comma:?} against {middle}"
+        );
         Ok(())
     }
 
