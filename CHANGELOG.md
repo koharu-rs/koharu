@@ -1,3 +1,9 @@
+## [0.85.2](https://github.com/koharu-rs/koharu/compare/0.85.1..0.85.2) - 2026-11-17
+
+### 🐛 Bug Fixes
+
+- Let Remove and Generative Fill sample the page as drawn, without its lettering - ([654050e](https://github.com/koharu-rs/koharu/commit/654050e4af3234d3f265c107460a9e88b474b6c9))
+
 ## [0.85.1](https://github.com/koharu-rs/koharu/compare/0.85.0..0.85.1) - 2026-11-17
 
 ### 🐛 Bug Fixes
