@@ -664,6 +664,45 @@ fn a_remove_stroke_asks_to_inpaint_what_it_covered() {
 }
 
 #[test]
+fn the_marquee_marks_an_area_shift_adds_to_alt_takes_from_and_a_click_drops() {
+    let Some(mut fixture) = unscaled_of((100, 100), Vec::new()) else {
+        return;
+    };
+    let canvas = &mut fixture.canvas;
+    canvas.set_tool(Tool::Marquee);
+    let mark = |canvas: &mut Canvas, from, to, modifiers| {
+        let mut effects = canvas.input(down(from, modifiers)).expect("input");
+        effects.extend(canvas.input(drag(1, to)).expect("input"));
+        effects.extend(canvas.input(up(1, to)).expect("input"));
+        assert!(effects.is_empty(), "{effects:?}");
+    };
+    mark(canvas, (10.0, 10.0), (50.0, 50.0), Modifiers::default());
+    assert_eq!(
+        canvas.area_bounds(),
+        Some(Rect::new(10.0, 10.0, 50.0, 50.0))
+    );
+    mark(canvas, (60.0, 60.0), (80.0, 80.0), SHIFT);
+    assert_eq!(
+        canvas.area_bounds(),
+        Some(Rect::new(10.0, 10.0, 80.0, 80.0))
+    );
+    mark(canvas, (40.0, 40.0), (90.0, 90.0), Modifiers::ALT);
+    assert_eq!(
+        canvas.area_bounds(),
+        Some(Rect::new(10.0, 10.0, 50.0, 50.0))
+    );
+
+    let (page, rect, mask) = canvas.area().expect("the marked area");
+    assert_eq!(page, fixture.page);
+    let at = |x: i32, y: i32| mask[((y - rect.y) * rect.width as i32 + (x - rect.x)) as usize];
+    assert_eq!((at(20, 20), at(45, 45)), (255, 0));
+
+    mark(canvas, (5.0, 5.0), (5.0, 5.0), Modifiers::default());
+    assert_eq!(canvas.area_bounds(), None);
+    assert!(canvas.area().is_none());
+}
+
+#[test]
 fn a_click_types_point_text_and_a_drag_box_text_each_added_on_commit() {
     let Some(mut fixture) = unscaled(Vec::new()) else {
         return;

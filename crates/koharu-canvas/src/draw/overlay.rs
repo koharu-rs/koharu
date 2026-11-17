@@ -234,6 +234,16 @@ impl<'a, 'g> Overlay<'a, 'g> {
         self.stroked(Stroke::new(self.view.scale()), selection, &rect);
     }
 
+    /// A page path as marching ants, as Photoshop draws a selection's edge:
+    /// black dashes over white, a device pixel wide, so it shows on any page.
+    pub fn ants(&mut self, path: &BezPath) {
+        let path = self.view.to_screen() * path.clone();
+        let scale = self.view.scale();
+        let dashed = Stroke::new(scale).with_dashes(0.0, [4.0 * scale, 4.0 * scale]);
+        self.stroked(Stroke::new(scale), Color::WHITE, &path);
+        self.stroked(dashed, Color::BLACK, &path);
+    }
+
     /// A page rectangle outlined in dashes, as a frame being dragged out.
     pub fn dashed(&mut self, rect: Rect) {
         let rect = self.view.to_screen().transform_rect_bbox(rect);

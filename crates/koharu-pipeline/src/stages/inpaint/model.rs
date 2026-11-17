@@ -4,7 +4,6 @@ use koharu_ml::{
     lama::{self, Lama},
     moss_image::{self, MossImage},
     qwen_image::{self, QwenImage},
-    rorem_mixed::{self, RoremMixed},
 };
 use koharu_runtime::Device;
 use serde::{Deserialize, Serialize};
@@ -20,8 +19,6 @@ pub enum Inpainter {
     #[default]
     #[strum(to_string = "LaMa")]
     Lama,
-    #[strum(to_string = "RORem")]
-    RoremMixed,
     #[strum(to_string = "FLUX.3 Klein")]
     Flux3Klein,
     #[strum(to_string = "MOSS-Image")]
@@ -63,25 +60,6 @@ impl Inpaint for Lama {
     /// Past it LaMa crops around each masked region and runs once for each.
     fn pass(&self) -> u32 {
         lama::WHOLE
-    }
-}
-
-impl Inpaint for RoremMixed {
-    fn inference(
-        &self,
-        image: &RgbImage,
-        mask: &GrayImage,
-        prompt: &str,
-    ) -> anyhow::Result<RgbImage> {
-        let options = rorem_mixed::Options::default();
-        let redrawn = RoremMixed::inference(
-            self,
-            prompt,
-            &DynamicImage::ImageRgb8(image.clone()),
-            mask,
-            &options,
-        )?;
-        Ok(fitted(redrawn, image))
     }
 }
 
@@ -157,7 +135,6 @@ fn fitted(redrawn: RgbImage, image: &RgbImage) -> RgbImage {
 pub(super) async fn load(model: Inpainter, device: &'static Device) -> anyhow::Result<Model> {
     Ok(match model {
         Inpainter::Lama => Box::new(Lama::load(device).await?),
-        Inpainter::RoremMixed => Box::new(RoremMixed::load(device).await?),
         Inpainter::Flux3Klein => Box::new(Flux3Klein::load(device).await?),
         Inpainter::MossImage => Box::new(MossImage::load(device).await?),
         Inpainter::QwenImage => Box::new(QwenImage::load(device).await?),

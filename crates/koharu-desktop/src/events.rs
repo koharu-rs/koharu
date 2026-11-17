@@ -52,6 +52,9 @@ pub const SELECTION: Event<Vec<LayerId>> = Event::new("selection");
 /// Where the selection lies on the page as it's laid out, once that
 /// changes; none while nothing selected shows.
 pub const SELECTION_BOUNDS: Event<Option<Bounds>> = Event::new("selection_bounds");
+/// Where the area the marquee and the lasso marked lies on the page, once
+/// that changes; none while there's none.
+pub const AREA: Event<Option<Bounds>> = Event::new("area");
 pub const CAMERA: Event<Camera> = Event::new("camera");
 /// The text being typed into on the canvas and its selection's character
 /// style, once either changes; none when typing stops.
@@ -73,6 +76,7 @@ pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
         PAGE.binding(types),
         SELECTION.binding(types),
         SELECTION_BOUNDS.binding(types),
+        AREA.binding(types),
         CAMERA.binding(types),
         TYPING.binding(types),
         COLOR.binding(types),

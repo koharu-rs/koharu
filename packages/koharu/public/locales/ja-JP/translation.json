@@ -84,6 +84,13 @@
     "timeout": "送信がタイムアウトしました。もう一度お試しください。",
     "title": "フィードバックを送信"
   },
+  "fill": {
+    "deselect": "選択を解除",
+    "generate": "生成",
+    "model": "塗りつぶしのモデル",
+    "prompt": "追加する内容を入力（任意）",
+    "title": "生成塗りつぶし"
+  },
   "fontPicker": {
     "choose": "フォントを選択",
     "fontCount": "{{count}}個のフォント",
@@ -467,6 +474,8 @@
     "draw": "描画",
     "eraser": "消しゴム",
     "increaseBrushSize": "ブラシサイズを拡大",
+    "lasso": "なげなわ",
+    "marquee": "長方形選択",
     "pan": "移動",
     "remove": "削除",
     "select": "選択",

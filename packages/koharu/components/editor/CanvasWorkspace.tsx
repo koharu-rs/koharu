@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
+import { FillBar } from '@/components/editor/FillBar'
 import { HistoryWindow } from '@/components/editor/HistoryWindow'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
@@ -123,6 +124,12 @@ export function CanvasWorkspace() {
         state.selectLayers(page.layers.map((layer) => layer.id))
         return
       }
+      // Photoshop's Deselect, of the area the marquee and the lasso marked.
+      if (command && event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        dispatch(commands.deselect)
+        return
+      }
       if ((event.key === 'Delete' || event.key === 'Backspace') && state.selectedLayers.length) {
         event.preventDefault()
         dispatch(deleteSelection, state.selectedLayers, page?.layers ?? [])
@@ -181,6 +188,7 @@ export function CanvasWorkspace() {
           className='relative min-h-0 min-w-0 flex-1 overflow-clip'
         >
           {page && <TypeBar />}
+          {page && <FillBar />}
           {page && <HistoryWindow />}
           {!page && (
             <div className='pointer-events-none absolute inset-0 grid place-items-center'>

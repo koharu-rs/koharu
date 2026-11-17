@@ -370,10 +370,17 @@ export type ImportSource =
   | 'folder'
 
 /**  The inpainters, by id in the section and by name. */
-export type Inpainter = 'lama' | 'rorem-mixed' | 'flux3-klein' | 'moss-image' | 'qwen-image'
+export type Inpainter = 'lama' | 'flux3-klein' | 'moss-image' | 'qwen-image'
 
 export type InpainterConfig = {
+  /**  What cleans pages and the Remove brush's areas. */
   model?: Inpainter
+  /**
+   *  What Generative Fill's bar picks and keeps for the next fill, as
+   *  Photoshop's Generative Fill keeps its own model; a fill brings the one
+   *  its bar shows, in `model`'s place for its run.
+   */
+  fill?: Inpainter
   /**
    *  What the model is asked when a run brings no prompt of its own, as an
    *  area's can; LaMa, which takes none, ignores it.
@@ -855,6 +862,13 @@ export type TextStyle = {
 export type Tool =
   | 'select'
   | 'direct_select'
+  /**
+   *  Photoshop's Rectangular Marquee: marks a rectangle of the page's
+   *  pixels.
+   */
+  | 'marquee'
+  /**  Photoshop's Lasso: marks a freehand shape of the page's pixels. */
+  | 'lasso'
   | 'text'
   | 'draw'
   | 'eraser'
@@ -1015,6 +1029,11 @@ export const commands = {
   setZoom: (zoom: number) => invoke<null>('set_zoom', { zoom }, { headers: headers() }),
   /** The selection the Layers panel made. */
   select: (layers: LayerId[]) => invoke<null>('select', { layers }, { headers: headers() }),
+  /** Fills the area the marquee and the lasso marked with `model` after `prompt`, or the inpainter's own prompt when there's none, as Photoshop's Generative Fill does with the model its bar shows; `None` while no area is marked. The model is this run's only, in the settings' place. */
+  fill: (prompt: string | null, model: Inpainter) =>
+    invoke<RunId | null>('fill', { prompt, model }, { headers: headers() }),
+  /** Drops the area the marquee and the lasso marked, as Photoshop's Deselect does. */
+  deselect: () => invoke<null>('deselect', {}, { headers: headers() }),
 }
 
 export const events = {
@@ -1028,6 +1047,8 @@ export const events = {
     listen<LayerId[]>('selection', (event) => handler(event.payload)),
   selectionBounds: (handler: (payload: Bounds | null) => void): Promise<UnlistenFn> =>
     listen<Bounds | null>('selection_bounds', (event) => handler(event.payload)),
+  area: (handler: (payload: Bounds | null) => void): Promise<UnlistenFn> =>
+    listen<Bounds | null>('area', (event) => handler(event.payload)),
   camera: (handler: (payload: Camera) => void): Promise<UnlistenFn> =>
     listen<Camera>('camera', (event) => handler(event.payload)),
   typing: (handler: (payload: Typed | null) => void): Promise<UnlistenFn> =>

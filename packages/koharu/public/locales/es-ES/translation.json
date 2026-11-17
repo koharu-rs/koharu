@@ -84,6 +84,13 @@
     "timeout": "Se agotó el tiempo de envío. Inténtalo de nuevo.",
     "title": "Enviar comentarios"
   },
+  "fill": {
+    "deselect": "Deseleccionar",
+    "generate": "Generar",
+    "model": "Modelo de relleno",
+    "prompt": "Describe qué añadir (opcional)",
+    "title": "Relleno generativo"
+  },
   "fontPicker": {
     "choose": "Elegir una fuente",
     "fontCount": "{{count}} fuentes",
@@ -467,6 +474,8 @@
     "draw": "Dibujar",
     "eraser": "Borrador",
     "increaseBrushSize": "Aumentar tamaño del pincel",
+    "lasso": "Lazo",
+    "marquee": "Marco rectangular",
     "pan": "Desplazar",
     "remove": "Eliminar",
     "select": "Seleccionar",

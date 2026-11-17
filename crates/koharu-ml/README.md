@@ -23,7 +23,6 @@ to the code that makes it.
 | Baberu OCR, with DINOv2 | Japanese OCR | libtorch | [Baberu OCR] |
 | Hayai OCR v2.7 Supernova, with SigLIP2 | Japanese, Chinese, Korean, and English OCR | libtorch | [Hayai OCR] |
 | LaMa, fine-tuned on manga | inpainting | libtorch | [LaMa], as [IOPaint] runs it |
-| RORem | inpainting | stable-diffusion.cpp | [RORem] |
 | FLUX.3 Image Klein | inpainting and generation | stable-diffusion.cpp | [FLUX.3 Klein] |
 | MOSS-Image SFT, with Qwen3.5 9B | inpainting and generation | stable-diffusion.cpp | [MOSS-Image] |
 | Qwen-Image 2.1, with Qwen3-VL 8B | inpainting, generation, and editing | stable-diffusion.cpp | [Qwen-Image] |
@@ -70,7 +69,7 @@ Read in November 2026.
 
 - Layout: [RF-DETR], [Koharu Layout]
 - OCR: [manga-ocr-ar], [Baberu OCR], [Hayai OCR]
-- Inpainting and generation: [LaMa], [IOPaint], [RORem], [FLUX.3 Klein],
+- Inpainting and generation: [LaMa], [IOPaint], [FLUX.3 Klein],
   [MOSS-Image], [Qwen-Image], [diffusers Flux2 Klein inpaint], [diffusers
   Qwen-Image inpaint]
 
@@ -81,7 +80,6 @@ Read in November 2026.
 [Hayai OCR]: https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova
 [LaMa]: https://github.com/advimman/lama/tree/786f5936b27fb3dacd2b1ad799e4de968ea697e7
 [IOPaint]: https://github.com/Sanster/IOPaint/tree/61a759fb3f332bacdce8b2813f4837495c9b86e0
-[RORem]: https://github.com/leeruibin/RORem/tree/891ab8a17bbcfb16a773c078cb256aae8cb30468
 [FLUX.3 Klein]: https://github.com/black-forest-labs/flux-3-image-klein/tree/62e90b9278b73ecc52927770c6965dc6b1966498
 [MOSS-Image]: https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT
 [Qwen-Image]: https://huggingface.co/Qwen/Qwen-Image-2.1

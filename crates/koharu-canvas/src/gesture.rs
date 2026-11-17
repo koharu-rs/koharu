@@ -17,6 +17,7 @@ use crate::{
     tools::{
         brush::Stroke,
         direct::{Pick, Reshape},
+        mark::Mark,
         pan::Pan,
         select::Marquee,
         text::Draft,
@@ -84,6 +85,7 @@ pub(crate) enum Gesture {
     Stroke(Stroke),
     Reshape(Reshape),
     Pick(Pick),
+    Mark(Mark),
 }
 
 impl Gesture {
@@ -97,6 +99,7 @@ impl Gesture {
             Self::Stroke(stroke) => return stroke.moved(cx, samples),
             Self::Reshape(reshape) => reshape.moved(samples),
             Self::Pick(pick) => pick.moved(samples),
+            Self::Mark(mark) => mark.moved(samples),
         }
         Vec::new()
     }
@@ -112,6 +115,8 @@ impl Gesture {
             Self::Stroke(stroke) => stroke.finish(cx),
             Self::Reshape(reshape) => Ok(reshape.finish()),
             Self::Pick(pick) => Ok(pick.finish(cx.view)),
+            // The canvas joins a mark to its area itself.
+            Self::Mark(_) => Ok(Vec::new()),
         }
     }
 
@@ -124,6 +129,7 @@ impl Gesture {
             Self::Stroke(stroke) => stroke.preview(cx, overlay),
             Self::Reshape(reshape) => reshape.preview(overlay),
             Self::Pick(pick) => pick.preview(overlay),
+            Self::Mark(mark) => mark.preview(overlay),
         }
         Ok(())
     }
@@ -138,6 +144,7 @@ impl Gesture {
             Self::Stroke(_) => None,
             Self::Reshape(reshape) => Some(reshape.cursor()),
             Self::Pick(_) => Some(CursorIcon::Default),
+            Self::Mark(_) => Some(CursorIcon::Crosshair),
         }
     }
 
@@ -172,6 +179,7 @@ impl Gesture {
             Self::Stroke(stroke) => stroke.look(),
             Self::Reshape(reshape) => GestureLook::Pointer(reshape.current()),
             Self::Pick(pick) => GestureLook::Rect(pick.rect()),
+            Self::Mark(mark) => mark.look(),
         }
     }
 

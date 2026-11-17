@@ -198,7 +198,7 @@ fn outline(points: &[Point], diameter: f64) -> BezPath {
 }
 
 /// `outline`'s antialiased 8-bit coverage over the page pixels it touches.
-fn coverage(outline: &BezPath, page: Size) -> Option<(koharu_scene::Rect, Vec<u8>)> {
+pub(crate) fn coverage(outline: &BezPath, page: Size) -> Option<(koharu_scene::Rect, Vec<u8>)> {
     let rect = koharu_scene::Rect::covering(
         outline.bounding_box(),
         page.width as u32,

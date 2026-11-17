@@ -84,6 +84,13 @@
     "timeout": "Sending timed out. Please try again.",
     "title": "Send Feedback"
   },
+  "fill": {
+    "deselect": "Deselect",
+    "generate": "Generate",
+    "model": "Fill model",
+    "prompt": "Describe what to add (optional)",
+    "title": "Generative Fill"
+  },
   "fontPicker": {
     "choose": "Choose a font",
     "fontCount": "{{count}} fonts",
@@ -467,6 +474,8 @@
     "draw": "Brush",
     "eraser": "Eraser",
     "increaseBrushSize": "Increase brush size",
+    "lasso": "Lasso",
+    "marquee": "Rectangular Marquee",
     "pan": "Pan",
     "remove": "Remove",
     "select": "Select",

@@ -101,7 +101,7 @@ masked pixels come back.
 | Inpainter | Takes a prompt |
 |---|---|
 | LaMa | no |
-| RORem, FLUX.3 Klein, MOSS-Image, Qwen-Image 2.1 | yes: an area's own, or else the settings' |
+| FLUX.3 Klein, MOSS-Image, Qwen-Image 2.1 | yes: an area's own, or else the settings' |
 
 ## 4. Translation
 
@@ -137,6 +137,10 @@ model, the target, or the instructions starts a new one.
   them, so each load sees the memory actually free. Nothing is unloaded to make
   room: a model that doesn't fit fails, naming the free memory. A model leaves
   when the settings switch away from it, when asked, or when the pipeline ends.
+  One no setting uses, which a run brought as Generative Fill's does, leaves
+  five minutes after a run last ended, as Ollama keeps a model five minutes
+  after its last request [Ollama keep_alive], so filling again doesn't load it
+  again.
 - **One call at a time** on that thread, so peak memory is every loaded model
   plus the largest working set, and running out never depends on timing. A
   local language model decodes on its own thread beside it.
@@ -162,7 +166,8 @@ is a language CLDR doesn't name in English.
 | `detector.model` | `koharu-layout-highres` |
 | `detector.text`, `onomatopoeia`, `bubble`, `panel` | the model's own thresholds |
 | `recognizer.model` | `manga-ocr-ar`, or `baberu-ocr` or `hayai-ocr` |
-| `inpainter.model` | `lama`, or `rorem-mixed`, `flux3-klein`, `moss-image`, or `qwen-image` |
+| `inpainter.model` | `lama`, or `flux3-klein`, `moss-image`, or `qwen-image` |
+| `inpainter.fill` | `flux3-klein`, or another inpainter, the one Generative Fill's bar picks and keeps, as Photoshop's Generative Fill keeps its own model [Photoshop Generative Fill] |
 | `inpainter.prompt` | asks the model to remove all text and keep everything else, for a run that brings none |
 | `translator.model` | `koharu/index-translate-9b` |
 | `translator.target` | `en` |
@@ -179,12 +184,13 @@ crate's license is `MIT OR Apache-2.0 AND BSD-3-Clause`.
 Read in November 2026.
 
 - Adobe: [Photoshop Content-Aware Fill], [Photoshop Generative Fill]
-- [ComfyUI routes], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ]
+- [ComfyUI routes], [Ollama keep_alive], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ]
 - Lettering: [Manga balloon basics]
 
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
 [ComfyUI routes]: https://docs.comfy.org/development/comfyui-server/comms_routes
+[Ollama keep_alive]: https://docs.ollama.com/faq
 [OpenCV inpaint]: https://github.com/opencv/opencv/blob/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/photo/src/inpaint.cpp
 [CLDR]: https://cldr.unicode.org/
 [Index-Translate]: https://huggingface.co/IndexTeam/Index-Translate-9B

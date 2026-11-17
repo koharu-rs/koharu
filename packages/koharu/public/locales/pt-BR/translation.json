@@ -84,6 +84,13 @@
     "timeout": "O envio expirou. Tente novamente.",
     "title": "Enviar feedback"
   },
+  "fill": {
+    "deselect": "Desmarcar",
+    "generate": "Gerar",
+    "model": "Modelo de preenchimento",
+    "prompt": "Descreva o que adicionar (opcional)",
+    "title": "Preenchimento generativo"
+  },
   "fontPicker": {
     "choose": "Escolher uma fonte",
     "fontCount": "{{count}} fontes",
@@ -467,6 +474,8 @@
     "draw": "Desenhar",
     "eraser": "Borracha",
     "increaseBrushSize": "Aumentar tamanho do pincel",
+    "lasso": "Laço",
+    "marquee": "Letreiro retangular",
     "pan": "Mover",
     "remove": "Remover",
     "select": "Selecionar",

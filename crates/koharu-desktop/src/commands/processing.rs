@@ -1,8 +1,8 @@
 //! The pipeline's runs on the open project.
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
-use koharu_pipeline::{Event, RunId, Stage, Target};
+use koharu_pipeline::{Area, Event, Inpainter, PipelineConfig, RunId, Stage, Target};
 use tauri::State;
 
 use super::Result;
@@ -12,7 +12,36 @@ use crate::app::App;
 #[tauri::command]
 #[specta::specta]
 pub fn run_pipeline(app: State<'_, Arc<App>>, target: Target, stages: Vec<Stage>) -> Result<RunId> {
-    Ok(app.process(target, stages.into_iter().collect())?)
+    Ok(app.process(target, stages.into_iter().collect(), None)?)
+}
+
+/// Fills the area the marquee and the lasso marked with `model` after
+/// `prompt`, or the inpainter's own prompt when there's none, as Photoshop's
+/// Generative Fill does with the model its bar shows; `None` while no area is
+/// marked. The model is this run's only, in the settings' place.
+#[tauri::command]
+#[specta::specta]
+pub async fn fill(
+    app: State<'_, Arc<App>>,
+    prompt: Option<String>,
+    model: Inpainter,
+) -> Result<Option<RunId>> {
+    tracing::info!(prompted = prompt.is_some(), %model, "fill");
+    let Some((page, rect, pixels)) = app.screen.area().await.ok().flatten() else {
+        return Ok(None);
+    };
+    let mut config = koharu_config::get::<PipelineConfig>()?;
+    config.inpainter.model = model;
+    let target = Target::Area {
+        page,
+        area: Area { rect, pixels },
+        prompt,
+    };
+    Ok(Some(app.process(
+        target,
+        BTreeSet::from([Stage::Inpaint]),
+        Some(config),
+    )?))
 }
 
 /// Stops every run, running and queued; what they finished stays.

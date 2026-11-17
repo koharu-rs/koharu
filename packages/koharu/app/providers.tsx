@@ -59,6 +59,7 @@ export function Providers({ children }: { children: ReactNode }) {
         listen(events.selectionBounds, (selectionBounds) =>
           useKoharuStore.setState({ selectionBounds }),
         ),
+        listen(events.area, (area) => useKoharuStore.setState({ area })),
         listen(events.typing, (typing) => useKoharuStore.setState({ typing })),
         listen(events.color, (color) => receivePickedColor(rgbaToHex(color))),
         listen(events.brushDiameter, (diameter) => {

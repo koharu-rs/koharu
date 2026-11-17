@@ -15,7 +15,6 @@ export const recognizers: Record<Recognizer, string> = {
 
 export const inpainters: Record<Inpainter, string> = {
   lama: 'LaMa',
-  'rorem-mixed': 'RORem',
   'flux3-klein': 'FLUX.3 Klein',
   'moss-image': 'MOSS-Image',
   'qwen-image': 'Qwen-Image 2.1',

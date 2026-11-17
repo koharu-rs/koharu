@@ -21,9 +21,22 @@ Use **Select** to pick layers. Click a layer, hold `Shift`, `Ctrl`, or `Command`
     from an empty spot to pick the anchors inside a marquee. `Delete` or `Backspace` removes the
     picked anchors, keeping at least three. The text fits the new shape when the drag ends.
   </Tab>
+  <Tab title='Marquee and Lasso'>
+    Drag with **Rectangular Marquee** to mark a rectangle of the page, or with **Lasso** to mark a
+    freehand shape, as in Photoshop. Hold `Shift` as you start a drag to add to the marked area, or
+    `Alt` to take from it. A click without a drag, or `Ctrl+D` or `Command+D`, deselects it. The bar
+    below the area is **Generative Fill**. Pick the model it draws with, FLUX.3 Klein unless you
+    pick another: it's the fill's own, apart from the inpainting model in **Settings → Pipeline**,
+    which cleans pages and **Remove**'s strokes. Describe what to draw there and choose
+    **Generate**, or leave the prompt empty to use the **Prompt** in **Settings → Pipeline**. The
+    result is added as a new raster layer limited to the area, named after your prompt. The area
+    stays marked, so you can generate again, and a fill model that Settings doesn't use stays loaded
+    for five minutes after the last run, so generating again doesn't load it again. LaMa takes no
+    prompt, so with it the bar has no prompt field.
+  </Tab>
   <Tab title='Text'>
-    Click with **Text** to start point text, or drag to start a text box, and type on the canvas,
-    as in Photoshop. Click a text with **Text**, or double-click it with **Select**, to type into it
+    Click with **Text** to start point text, or drag to start a text box, and type on the canvas, as
+    in Photoshop. Click a text with **Text**, or double-click it with **Select**, to type into it
     where you clicked; drag across it to select characters, or double-click a word. `Ctrl`+`Enter`
     or `Enter` on the number pad keeps what you typed, as clicking away or choosing another tool
     does, and `Esc` drops it. Each time you type into a text is one undo step, and a new text is

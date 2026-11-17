@@ -84,6 +84,13 @@
     "timeout": "L’envoi a expiré. Veuillez réessayer.",
     "title": "Envoyer un commentaire"
   },
+  "fill": {
+    "deselect": "Désélectionner",
+    "generate": "Générer",
+    "model": "Modèle de remplissage",
+    "prompt": "Décrivez ce qu’il faut ajouter (facultatif)",
+    "title": "Remplissage génératif"
+  },
   "fontPicker": {
     "choose": "Choisir une police",
     "fontCount": "{{count}} polices",
@@ -467,6 +474,8 @@
     "draw": "Pinceau",
     "eraser": "Gomme",
     "increaseBrushSize": "Augmenter la taille du pinceau",
+    "lasso": "Lasso",
+    "marquee": "Rectangle de sélection",
     "pan": "Déplacer",
     "remove": "Retirer",
     "select": "Sélection",

@@ -14,7 +14,7 @@ use anyhow::Context as _;
 use cursor_icon::CursorIcon;
 use image::RgbaImage;
 use koharu_renderer::{Drawing, Gpu, Label, Renderer};
-use koharu_scene::{CharStyle, Content, Layer, LayerId, Rgba, Session, Text};
+use koharu_scene::{CharStyle, Content, Layer, LayerId, PageId, Rgba, Session, Text};
 use kurbo::{Affine, Point, Rect, Shape as _, Size, TranslateScale, Vec2};
 use parking_lot::Mutex;
 use ui_events::keyboard::{Code, Key, KeyState, KeyboardEvent, NamedKey};
@@ -26,6 +26,7 @@ use vello_gpu::peniko::Color;
 
 use crate::{
     Brush, Camera, Colors, Effect, Story, Tool,
+    area::Area,
     control::{Control, REACH},
     draw::{Target, color, overlay::Overlay},
     gesture::{Context, Gesture, GestureLook, Press},
@@ -57,6 +58,11 @@ pub struct Canvas {
     /// effect's, until the colours change.
     numbers: RefCell<HashMap<(usize, bool), Label>>,
     selection: Selection,
+    /// What the marquee and the lasso marked of the page's pixels, as
+    /// Photoshop's selection; another page drops it.
+    area: Option<Area>,
+    /// Bumped whenever the area changes.
+    marked: u64,
     gesture: Option<Active>,
     /// The text being typed into, as Photoshop's Type tool types.
     typing: Option<Typing>,
@@ -92,6 +98,8 @@ struct Look {
     selection: Vec<LayerId>,
     hover: Option<LayerId>,
     anchors: Vec<usize>,
+    /// A count every change of the area bumps.
+    area: u64,
     /// Where the brush's ring is, in the viewport.
     ring: Option<Point>,
     gesture: GestureLook,
@@ -119,6 +127,8 @@ impl Canvas {
             story: Story::default(),
             numbers: RefCell::new(HashMap::new()),
             selection: Selection::default(),
+            area: None,
+            marked: 0,
             gesture: None,
             typing: None,
             pointer: None,
@@ -168,6 +178,9 @@ impl Canvas {
                 None => self.typing = None,
             },
             _ => {}
+        }
+        if other {
+            self.deselect();
         }
         self.snapshot = Some(snapshot);
         self.generation += 1;
@@ -275,6 +288,28 @@ impl Canvas {
                     })
             })
             .reduce(|all, bounds| all.union(bounds))
+    }
+
+    /// Where the area the marquee and the lasso marked lies on the page, in
+    /// page pixels, which the host places its fill's controls beside; `None`
+    /// while there's none.
+    pub fn area_bounds(&self) -> Option<Rect> {
+        self.area.as_ref().map(Area::bounds)
+    }
+
+    /// The area for the host to fill, as Photoshop's Generative Fill fills a
+    /// selection: its page, its bounds, and its coverage over them, a byte a
+    /// pixel. The area stays, to fill again.
+    pub fn area(&self) -> Option<(PageId, koharu_scene::Rect, Vec<u8>)> {
+        let (rect, mask) = self.area.as_ref()?.cropped();
+        Some((self.snapshot.as_ref()?.page().id, rect, mask))
+    }
+
+    /// Drops the area, as Photoshop's Deselect does.
+    pub fn deselect(&mut self) {
+        if self.area.take().is_some() {
+            self.marked += 1;
+        }
     }
 
     pub fn is_typing(&self) -> bool {
@@ -554,6 +589,9 @@ impl Canvas {
             }
             (Tool::Select, Some(PointerButton::Primary)) => tools::select::press(&cx, sample),
             (Tool::DirectSelect, Some(PointerButton::Primary)) => tools::direct::press(&cx, sample),
+            (Tool::Marquee | Tool::Lasso, Some(PointerButton::Primary)) => {
+                tools::mark::press(&cx, sample)
+            }
             (Tool::Text, Some(PointerButton::Primary)) => {
                 Press::starts(Gesture::Draft(Draft::new(sample)))
             }
@@ -642,6 +680,12 @@ impl Canvas {
             effects.push(Effect::Selection(Vec::new()));
             return Ok(effects);
         }
+        if let Gesture::Mark(mark) = &active.gesture {
+            let (shape, size) = (mark.shape(), cx.snapshot.size());
+            self.area = Area::marked(self.area.take(), &shape, mark.mode, size);
+            self.marked += 1;
+            return Ok(effects);
+        }
         let picked = active.gesture.picked();
         effects.extend(active.gesture.finish(&cx)?);
         if let Some(anchors) = picked {
@@ -717,6 +761,7 @@ impl Canvas {
             selection: self.selection.ids().to_vec(),
             hover: self.selection.hover(),
             anchors: self.selection.anchors().to_vec(),
+            area: self.marked,
             ring: self
                 .pointer
                 .filter(|_| self.tool.is_brush())
@@ -787,6 +832,9 @@ impl Canvas {
         // The text typed into shows as typed, not as the page last drew it.
         let typed = self.typing.as_ref().and_then(Typing::target);
         let gesture = self.gesture.as_ref().map(|active| &active.gesture);
+        if let Some(area) = &self.area {
+            overlay.ants(area.edge());
+        }
         if let Some(gesture) = gesture {
             gesture.preview(&cx, &mut overlay)?;
         }

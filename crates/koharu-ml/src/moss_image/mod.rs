@@ -103,7 +103,7 @@ impl MossImage {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let paths = async {
             // 4-bit, as Koharu's other diffusion models load, and a k-quant,
-            // as RORem's is.
+            // as Qwen-Image 2.1's is.
             let [transformer] = TRANSFORMER.resolve(["MOSS-Image-SFT-Q4_K.gguf"]).await?;
             // koharu-llm's default quantization of the same model.
             let [text_encoder] = TEXT_ENCODER.resolve(["Qwen3.5-9B-UD-Q4_K_XL.gguf"]).await?;

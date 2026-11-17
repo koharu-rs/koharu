@@ -84,6 +84,13 @@
     "timeout": "전송 시간이 초과되었습니다. 다시 시도해 주세요.",
     "title": "피드백 보내기"
   },
+  "fill": {
+    "deselect": "선택 해제",
+    "generate": "생성",
+    "model": "채우기 모델",
+    "prompt": "추가할 내용 설명(선택 사항)",
+    "title": "생성형 채우기"
+  },
   "fontPicker": {
     "choose": "글꼴 선택",
     "fontCount": "글꼴 {{count}}개",
@@ -467,6 +474,8 @@
     "draw": "그리기",
     "eraser": "지우개",
     "increaseBrushSize": "브러시 크기 늘리기",
+    "lasso": "올가미",
+    "marquee": "사각형 선택 윤곽",
     "pan": "이동",
     "remove": "제거",
     "select": "선택",

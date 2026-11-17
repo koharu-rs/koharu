@@ -28,7 +28,7 @@ use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use koharu_canvas::{Brush, Camera, Canvas, Colors, Effect, Rect, Snapshot, Story, Tool, Typed};
 use koharu_renderer::Gpu;
-use koharu_scene::{Bounds, CharStyle, LayerId};
+use koharu_scene::{Bounds, CharStyle, LayerId, PageId};
 use tauri::{
     AppHandle, LogicalPosition, Manager as _, WebviewUrl,
     webview::{PageLoadEvent, WebviewBuilder},
@@ -81,10 +81,11 @@ fn change(change: impl FnOnce(&mut Main)) {
             main.handle.clone(),
             main.moved(),
             main.selection_moved(),
+            main.area_moved(),
             main.typing_moved(),
         )
     });
-    let Some((handle, camera, selection, typing)) = moved else {
+    let Some((handle, camera, selection, area, typing)) = moved else {
         return;
     };
     if let Some(camera) = camera {
@@ -92,6 +93,9 @@ fn change(change: impl FnOnce(&mut Main)) {
     }
     if let Some(bounds) = selection {
         events::SELECTION_BOUNDS.tell(&handle, bounds);
+    }
+    if let Some(bounds) = area {
+        events::AREA.tell(&handle, bounds);
     }
     if let Some(typed) = typing {
         events::TYPING.tell(&handle, typed);
@@ -248,6 +252,25 @@ impl Screen {
         });
     }
 
+    /// The canvas's area, for a fill: its page, its bounds, and its coverage.
+    pub fn area(&self) -> oneshot::Receiver<Option<(PageId, koharu_scene::Rect, Vec<u8>)>> {
+        let (sender, receiver) = oneshot::channel();
+        self.change(move |main| {
+            // The command waiting for it may be gone.
+            let _ = sender.send(main.canvas.as_ref().and_then(Canvas::area));
+        });
+        receiver
+    }
+
+    /// Drops the canvas's area.
+    pub fn deselect(&self) {
+        self.change(|main| {
+            if let Some(canvas) = &mut main.canvas {
+                canvas.deselect();
+            }
+        });
+    }
+
     /// The window as its next composited frame shows it: the canvas and
     /// CEF's paint together.
     pub fn capture(&self) -> oneshot::Receiver<RgbaImage> {
@@ -309,6 +332,9 @@ struct Main {
     camera: Option<Camera>,
     /// Where the selection lies on the page, as the interface last heard it.
     selection: Option<Bounds>,
+    /// Where the canvas's area lies on the page, as the interface last heard
+    /// it.
+    area: Option<Bounds>,
     /// What's being typed, as the interface last heard it.
     typed: Option<Typed>,
     /// The typing caret where the input method's candidate window was last
@@ -410,15 +436,24 @@ impl Main {
             .canvas
             .as_ref()
             .and_then(Canvas::selection_bounds)
-            .map(|rect| Bounds {
-                x: rect.x0,
-                y: rect.y0,
-                width: rect.width(),
-                height: rect.height(),
-            });
+            .map(bounds);
         (self.selection != bounds).then(|| {
             self.selection = bounds;
             bounds
+        })
+    }
+
+    /// Where the canvas's area lies on the page, if that moved since the
+    /// interface last heard it.
+    fn area_moved(&mut self) -> Option<Option<Bounds>> {
+        let area = self
+            .canvas
+            .as_ref()
+            .and_then(Canvas::area_bounds)
+            .map(bounds);
+        (self.area != area).then(|| {
+            self.area = area;
+            area
         })
     }
 
@@ -701,6 +736,7 @@ pub fn open(
         settings: Settings::default(),
         camera: None,
         selection: None,
+        area: None,
         typed: None,
         caret: None,
         blink: None,
@@ -903,5 +939,15 @@ pub fn on_window_event(app: &Arc<App>, label: &str, window: Arc<dyn Window>, eve
                 input::pointer(app, window.as_ref(), pointer);
             }
         }
+    }
+}
+
+/// A page rectangle as the interface takes it.
+fn bounds(rect: Rect) -> Bounds {
+    Bounds {
+        x: rect.x0,
+        y: rect.y0,
+        width: rect.width(),
+        height: rect.height(),
     }
 }

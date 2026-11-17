@@ -10,11 +10,12 @@ import {
   Plus,
   SquareSlash,
 } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ColorWell } from '@/components/controls/ColorWell'
 import { FontPicker } from '@/components/controls/FontPicker'
+import { ContextBar } from '@/components/editor/ContextBar'
 import { call, dispatch } from '@/lib/backend'
 import {
   expandLayerSelection,
@@ -68,14 +69,6 @@ const FALLBACK_FONT = 'CCWildWords'
 const BLACK = '#000000'
 const WHITE = '#FFFFFF'
 
-interface Size {
-  width: number
-  height: number
-}
-
-/** The space between the bar and the texts, and the canvas's edges, in CSS pixels. */
-const GAP = 8
-
 /** The tools whose selection the bar follows; a brush's settings are on the tool rail. */
 const TOOLS: CanvasTool[] = ['select', 'direct_select', 'text']
 
@@ -88,7 +81,6 @@ const TOOLS: CanvasTool[] = ['select', 'direct_select', 'text']
  * and block selected. A value the characters don't share shows empty. */
 export function TypeBar() {
   const { t } = useTranslation()
-  const camera = useKoharuStore((state) => state.camera)
   const tool = useKoharuStore((state) => state.tool)
   const borderWidthId = useId()
   const page = usePage().data
@@ -180,59 +172,12 @@ export function TypeBar() {
   const direction: Direction = lettering?.direction ?? 'horizontal'
   const align: Align = style.align ?? (direction === 'vertical' ? 'start' : 'center')
 
-  // Where the bar goes: below the selection as the canvas lays it out, a point text's lines and
-  // the text being typed included, or above when there's no room below, inside the canvas.
+  // The bar sits by the selection as the canvas lays it out, a point text's lines and the text
+  // being typed included.
   const selectionBounds = useKoharuStore((state) => state.selectionBounds)
-  const area =
-    selectionBounds && (targets.length || typing)
-      ? {
-          x: selectionBounds.x * camera.zoom + camera.x,
-          y: selectionBounds.y * camera.zoom + camera.y,
-          width: selectionBounds.width * camera.zoom,
-          height: selectionBounds.height * camera.zoom,
-        }
-      : null
   // A new text being typed has no layer yet for its paragraph to go to.
   const paragraph = targets.length > 0
-  const shown = area !== null && TOOLS.includes(tool)
-  const bar = useRef<HTMLDivElement>(null)
-  // The bar's size and the canvas's, measured again whenever either changes, as when the bar
-  // wraps to a second row or the window is resized.
-  const [sizes, setSizes] = useState<{ bar: Size; room: Size } | null>(null)
-
-  useLayoutEffect(() => {
-    const element = bar.current
-    const room = element?.parentElement
-    if (!shown || !element || !room) return
-    const measure = () =>
-      setSizes({
-        bar: { width: element.offsetWidth, height: element.offsetHeight },
-        room: { width: room.clientWidth, height: room.clientHeight },
-      })
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    observer.observe(room)
-    return () => observer.disconnect()
-  }, [shown])
-
-  if (!shown) return null
-  const place = sizes && {
-    top:
-      area.y + area.height + GAP + sizes.bar.height <= sizes.room.height - GAP
-        ? area.y + area.height + GAP
-        : Math.max(
-            GAP,
-            Math.min(area.y - GAP - sizes.bar.height, sizes.room.height - GAP - sizes.bar.height),
-          ),
-    left: Math.max(
-      GAP,
-      Math.min(
-        area.x + area.width / 2 - sizes.bar.width / 2,
-        sizes.room.width - GAP - sizes.bar.width,
-      ),
-    ),
-  }
+  if (!selectionBounds || !(targets.length || typing) || !TOOLS.includes(tool)) return null
 
   // One row, as Photoshop's type options bar, at the user's choice: the face, its size, and its
   // colour, then the paragraph; italic and vertical text are toggles, and the border sits behind
@@ -240,17 +185,11 @@ export function TypeBar() {
   const toggle =
     'h-6 w-6 min-w-6 rounded-md bg-background px-0 text-muted-foreground data-[pressed]:border-primary data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary/90'
   return (
-    <div
-      ref={bar}
-      role='toolbar'
+    <ContextBar
+      bounds={selectionBounds}
       aria-label={t('inspector.type')}
       data-testid='type-bar'
-      className='absolute z-20 flex max-w-[calc(100%-16px)] flex-wrap items-center gap-1 rounded-xl border border-border bg-[var(--surface-floating)] p-1.5 shadow-[var(--shadow-toolrail)]'
-      style={{
-        left: place?.left ?? 0,
-        top: place?.top ?? 0,
-        visibility: place ? 'visible' : 'hidden',
-      }}
+      className='flex-wrap'
     >
       <div className='w-28'>
         <FontPicker
@@ -468,7 +407,7 @@ export function TypeBar() {
           </div>
         </PopoverContent>
       </Popover>
-    </div>
+    </ContextBar>
   )
 }
 

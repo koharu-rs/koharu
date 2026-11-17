@@ -2,6 +2,7 @@
 
 pub(crate) mod brush;
 pub(crate) mod direct;
+pub(crate) mod mark;
 pub(crate) mod pan;
 pub(crate) mod picker;
 pub(crate) mod select;

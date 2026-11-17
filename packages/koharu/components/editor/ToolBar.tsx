@@ -4,12 +4,14 @@ import {
   Brush,
   Eraser,
   Hand,
+  Lasso,
   Minus,
   MousePointer2,
   Pipette,
   Plus,
   Sparkles,
   SplinePointer,
+  SquareDashed,
   Type,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -43,6 +45,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/t
 const tools = [
   ['select', MousePointer2],
   ['direct_select', SplinePointer],
+  ['marquee', SquareDashed],
+  ['lasso', Lasso],
   ['text', Type],
   ['draw', Brush],
   ['eraser', Eraser],

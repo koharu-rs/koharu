@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use futures::StreamExt as _;
 use koharu_agent::{Agent, McpServer, Tools};
 use koharu_canvas::{Canvas, Effect, Snapshot};
-use koharu_pipeline::{Area, Pipeline, Request, RunId, Stage, Target};
+use koharu_pipeline::{Area, Pipeline, PipelineConfig, Request, RunId, Stage, Target};
 use koharu_renderer::{Gpu, Renderer};
 use koharu_scene::{Change, Edit, PageId, Session};
 use parking_lot::Mutex;
@@ -187,15 +187,21 @@ impl App {
         )
     }
 
-    /// Runs `stages` on `target` in the open project. The pipeline traces the
-    /// run under whatever asked for it.
-    pub fn process(&self, target: Target, stages: BTreeSet<Stage>) -> Result<RunId> {
+    /// Runs `stages` on `target` in the open project, with `config` in the
+    /// pipeline's settings' place when given. The pipeline traces the run
+    /// under whatever asked for it.
+    pub fn process(
+        &self,
+        target: Target,
+        stages: BTreeSet<Stage>,
+        config: Option<PipelineConfig>,
+    ) -> Result<RunId> {
         Ok(self.pipeline.run(
             self.session()?,
             Request {
                 target,
                 stages,
-                config: None,
+                config,
             },
         )?)
     }
@@ -345,6 +351,7 @@ impl App {
                             prompt: None,
                         },
                         BTreeSet::from([Stage::Inpaint]),
+                        None,
                     )
                     .map(drop),
             };

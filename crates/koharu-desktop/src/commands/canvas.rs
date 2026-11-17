@@ -66,6 +66,14 @@ pub fn select(app: State<'_, Arc<App>>, layers: Vec<LayerId>) {
     app.screen.select(Arc::clone(&app), layers);
 }
 
+/// Drops the area the marquee and the lasso marked, as Photoshop's Deselect
+/// does.
+#[tauri::command]
+#[specta::specta]
+pub fn deselect(app: State<'_, Arc<App>>) {
+    app.screen.deselect();
+}
+
 /// The type bar's character settings for the text being typed: the
 /// selected characters take them, or at a caret the next ones typed.
 #[tauri::command]

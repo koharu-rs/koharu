@@ -5589,6 +5589,7 @@ dependencies = [
  "fs-err",
  "icu_segmenter",
  "image",
+ "imageproc",
  "koharu-config",
  "koharu-renderer",
  "koharu-scene",

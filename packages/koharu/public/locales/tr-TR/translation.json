@@ -84,6 +84,13 @@
     "timeout": "Gönderim zaman aşımına uğradı. Lütfen tekrar deneyin.",
     "title": "Geri bildirim gönder"
   },
+  "fill": {
+    "deselect": "Seçimi Kaldır",
+    "generate": "Oluştur",
+    "model": "Dolgu modeli",
+    "prompt": "Ne ekleneceğini açıklayın (isteğe bağlı)",
+    "title": "Üretken Dolgu"
+  },
   "fontPicker": {
     "choose": "Yazı tipi seç",
     "fontCount": "{{count}} yazı tipi",
@@ -467,6 +474,8 @@
     "draw": "Çizim",
     "eraser": "Silgi",
     "increaseBrushSize": "Fırça boyutunu artır",
+    "lasso": "Kement",
+    "marquee": "Dikdörtgen Seçim Çerçevesi",
     "pan": "Kaydır",
     "remove": "Kaldır",
     "select": "Seç",

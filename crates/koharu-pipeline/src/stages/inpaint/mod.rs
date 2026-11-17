@@ -31,7 +31,12 @@ use crate::{Area, PipelineConfig, Stage};
 #[serde(default)]
 #[derive(specta::Type)]
 pub struct InpainterConfig {
+    /// What cleans pages and the Remove brush's areas.
     pub model: Inpainter,
+    /// What Generative Fill's bar picks and keeps for the next fill, as
+    /// Photoshop's Generative Fill keeps its own model; a fill brings the one
+    /// its bar shows, in `model`'s place for its run.
+    pub fill: Inpainter,
     /// What the model is asked when a run brings no prompt of its own, as an
     /// area's can; LaMa, which takes none, ignores it.
     pub prompt: String,
@@ -41,6 +46,9 @@ impl Default for InpainterConfig {
     fn default() -> Self {
         Self {
             model: Inpainter::default(),
+            // A fill draws what its prompt asks, which LaMa, the clean-up's
+            // default, can't.
+            fill: Inpainter::Flux3Klein,
             // The general removal FLUX.3 Klein's masked inpainting was measured
             // with on six Blue Archive pages, where it scored as one naming a
             // panel's own lettering did.
@@ -109,9 +117,11 @@ pub(crate) async fn inpaint(
     };
     let key = key(Stage::Inpaint, config).expect("an inpainter is Koharu's");
     let model = config.inpainter.model;
-    let prompt = area
-        .and_then(|area| area.prompt.clone())
-        .unwrap_or_else(|| config.inpainter.prompt.clone());
+    // An area's own prompt names its layer, as Photoshop names a Generative
+    // Fill's layer after its prompt.
+    let own = area.and_then(|area| area.prompt.clone());
+    let name = own.clone().unwrap_or_default();
+    let prompt = own.unwrap_or_else(|| config.inpainter.prompt.clone());
     let asked = prompt.clone();
     let work = task
         .inference(&[member], move |models| {
@@ -169,7 +179,7 @@ pub(crate) async fn inpaint(
                         "id": "$inpainted",
                         "page": page,
                         "index": at.layers.len(),
-                        "layer": {"kind": "raster", "attributes": {
+                        "layer": {"kind": "raster", "name": name, "attributes": {
                             "c2pa": {"inpainting": action("c2pa.created", &model, parameters)},
                         }},
                     }))?,

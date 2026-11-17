@@ -84,6 +84,13 @@
     "timeout": "发送超时了，请再试一趟。",
     "title": "发送反馈"
   },
+  "fill": {
+    "deselect": "取消选择",
+    "generate": "生成",
+    "model": "填充模型",
+    "prompt": "讲讲要加点啥（可以勿写）",
+    "title": "创成式填充"
+  },
   "fontPicker": {
     "choose": "选字体",
     "fontCount": "{{count}} 种字体",
@@ -467,6 +474,8 @@
     "draw": "笔刷",
     "eraser": "橡皮擦",
     "increaseBrushSize": "拿笔刷调大点",
+    "lasso": "套索",
+    "marquee": "矩形选框",
     "pan": "平移",
     "remove": "移除",
     "select": "选择",

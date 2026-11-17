@@ -1,6 +1,7 @@
 //! The page viewport: draws a page with the renderer and turns window-space
 //! pointer events into edits for the host to apply.
 
+mod area;
 mod canvas;
 mod control;
 mod draw;

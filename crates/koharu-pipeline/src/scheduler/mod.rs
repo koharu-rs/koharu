@@ -9,6 +9,7 @@ mod run;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Duration,
 };
 
 use koharu_scene::{PageId, ProjectId};
@@ -18,6 +19,7 @@ use tokio::{
     runtime::Handle,
     sync::{OwnedSemaphorePermit, Semaphore, mpsc},
     task::{self, JoinError, JoinSet},
+    time::{self, Instant},
 };
 
 pub(crate) use self::run::{Plan, Run};
@@ -34,6 +36,10 @@ use crate::{
 const AHEAD: usize = 3;
 /// The most pages one recognition call reads.
 const RECOGNIZE_PAGES: usize = 8;
+/// How long a model no setting uses, one a run brought as Generative Fill's
+/// does, stays after a run last ended, as Ollama keeps a model five minutes
+/// after its last request, so filling again doesn't load it again.
+const KEEP: Duration = Duration::from_secs(5 * 60);
 
 pub(crate) enum Command {
     Run(Run),
@@ -89,6 +95,8 @@ pub(crate) struct Scheduler {
     tasks: JoinSet<Result<(), String>>,
     running: HashMap<task::Id, Running>,
     conversations: Conversations,
+    /// When the models no setting uses leave: `KEEP` after a run last ended.
+    idle: Option<Instant>,
 }
 
 impl Scheduler {
@@ -109,6 +117,7 @@ impl Scheduler {
             tasks: JoinSet::new(),
             running: HashMap::new(),
             conversations: Conversations::default(),
+            idle: None,
         };
         tokio::spawn(scheduler.run());
         sender
@@ -122,6 +131,12 @@ impl Scheduler {
                     None => break,
                 },
                 Some(joined) = self.tasks.join_next_with_id() => self.done(joined),
+                () = time::sleep_until(self.idle.unwrap_or_else(Instant::now)),
+                    if self.idle.is_some() =>
+                {
+                    self.idle = None;
+                    self.settle();
+                }
             }
             self.admit();
         }
@@ -152,7 +167,7 @@ impl Scheduler {
                         outcome: Outcome::Stopped,
                     });
                 }
-                self.settle();
+                self.rest();
             }
             Command::Unload => self
                 .gpu
@@ -222,8 +237,13 @@ impl Scheduler {
             }
         }
         if ended {
-            self.settle();
+            self.rest();
         }
+    }
+
+    /// A run ended: the models no setting uses leave `KEEP` from now.
+    fn rest(&mut self) {
+        self.idle = Some(Instant::now() + KEEP);
     }
 
     /// Unloads the models neither the settings nor a queued run use, once
