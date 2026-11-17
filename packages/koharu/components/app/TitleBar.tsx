@@ -16,7 +16,7 @@ import { pipelineStages, useKoharuStore } from '@/lib/store'
 import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
 import {
   Menubar,
-  MenubarCheckboxItem,
+  MenubarCheckboxItem as UiMenubarCheckboxItem,
   MenubarContent as UiMenubarContent,
   MenubarItem as UiMenubarItem,
   MenubarMenu,
@@ -254,7 +254,6 @@ export function TitleBar() {
                 checked={historyOpen}
                 onCheckedChange={setHistoryOpen}
                 closeOnClick
-                className='min-h-8 text-xs'
               >
                 {t('menu.history')}
               </MenubarCheckboxItem>
@@ -330,6 +329,22 @@ function MenubarItem({ className, ...props }: ComponentProps<typeof UiMenubarIte
     <UiMenubarItem
       className={cn(
         "min-h-8 gap-1.5 px-2 py-1 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+/** Its text in line with the other items', and its check where their shortcuts go. */
+function MenubarCheckboxItem({
+  className,
+  ...props
+}: ComponentProps<typeof UiMenubarCheckboxItem>) {
+  return (
+    <UiMenubarCheckboxItem
+      className={cn(
+        'min-h-8 pr-7 pl-2 text-xs [&>span:first-child]:right-2 [&>span:first-child]:left-auto',
         className,
       )}
       {...props}
