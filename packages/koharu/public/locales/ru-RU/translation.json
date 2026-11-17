@@ -258,6 +258,7 @@
     "selectAllLayers": "Выбрать все слои",
     "settings": "Настройки",
     "undo": "Отменить",
+    "unloadModels": "Выгрузить модели",
     "view": "Вид"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "Удалить страницу?",
     "emptyDescription": "Импортируйте изображения или папку, чтобы добавить страницы.",
     "emptyTitle": "Страниц пока нет",
-    "filter": "Фильтровать страницы",
     "importAction": "Импорт",
     "importFiles": "Файлы…",
     "importFolder": "Папка…",
     "importing": "Импорт страниц…",
     "importingAction": "Импорт…",
     "noImage": "Нет изображения",
-    "noResults": "Нет страниц, соответствующих фильтру.",
     "pageNumber": "Страница {{number}}",
     "pages": "Страницы",
     "run": {

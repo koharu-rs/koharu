@@ -258,6 +258,7 @@
     "selectAllLayers": "選取所有圖層",
     "settings": "設定",
     "undo": "復原",
+    "unloadModels": "卸載模型",
     "view": "檢視"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "刪除頁面？",
     "emptyDescription": "匯入影像檔案或資料夾以新增頁面。",
     "emptyTitle": "尚無頁面",
-    "filter": "篩選頁面",
     "importAction": "匯入",
     "importFiles": "檔案…",
     "importFolder": "資料夾…",
     "importing": "正在匯入頁面…",
     "importingAction": "正在匯入…",
     "noImage": "無影像",
-    "noResults": "沒有符合此篩選條件的頁面。",
     "pageNumber": "第 {{number}} 頁",
     "pages": "頁面",
     "run": {

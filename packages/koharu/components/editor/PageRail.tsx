@@ -11,8 +11,8 @@ import {
 } from '@dnd-kit/core'
 import { useQuery } from '@tanstack/react-query'
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
-import { FilePlus2, FolderOpen, LoaderCircle, MoreHorizontal, Search, Settings } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { FilePlus2, FolderOpen, LoaderCircle, MoreHorizontal, Settings } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call, dispatch } from '@/lib/backend'
@@ -45,7 +45,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@koharu/ui/components/dropdown-menu'
-import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
@@ -69,20 +68,11 @@ export function PageRail() {
   // The page Delete asks about, kept while its dialog closes so the dialog still names it.
   const [pageToDelete, setPageToDelete] = useState<{ page: string; number: number } | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [query, setQuery] = useState('')
-  const normalized = query.trim()
-  const visiblePages = useMemo(
-    () =>
-      pages
-        .map((page, index) => ({ page, index }))
-        .filter(({ index }) => !normalized || String(index + 1).includes(normalized)),
-    [normalized, pages],
-  )
   const pageList = useRef<HTMLDivElement>(null)
   const pageVirtualizer = useVirtualizer({
-    count: visiblePages.length,
+    count: pages.length,
     getScrollElement: () => pageList.current,
-    getItemKey: (index) => visiblePages[index]?.page.id ?? index,
+    getItemKey: (index) => pages[index]?.id ?? index,
     estimateSize: () => 72,
     gap: 2,
     overscan: 6,
@@ -159,21 +149,6 @@ export function PageRail() {
           )}
         </header>
 
-        {pages.length > 0 && (
-          <div className='border-b px-2 py-1.5'>
-            <label className='flex h-6 items-center gap-1.5 rounded-md border border-input bg-background/70 px-1.5'>
-              <Search className='size-3 text-muted-foreground' />
-              <Input
-                value={query}
-                aria-label={t('navigator.filter')}
-                placeholder={t('navigator.filter')}
-                className='h-5 min-w-0 border-0 bg-transparent p-0 text-[11px] shadow-none focus-visible:ring-0 md:text-[11px]'
-                onChange={(event) => setQuery(event.currentTarget.value)}
-              />
-            </label>
-          </div>
-        )}
-
         {pages.length === 0 ? (
           <div className='flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center'>
             <p className='text-[11px] font-medium'>{t('navigator.emptyTitle')}</p>
@@ -183,10 +158,6 @@ export function PageRail() {
             <div className='mt-3'>
               <PageImportMenu importing={importing} onImport={importPages} />
             </div>
-          </div>
-        ) : visiblePages.length === 0 ? (
-          <div className='grid flex-1 place-items-center px-4 text-center text-[10px] text-muted-foreground'>
-            {t('navigator.noResults')}
           </div>
         ) : (
           <DndContext
@@ -217,9 +188,9 @@ export function PageRail() {
                 style={{ height: pageVirtualizer.getTotalSize() }}
               >
                 {pageVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = visiblePages[virtualRow.index]
-                  if (!item) return null
-                  const { page, index } = item
+                  const page = pages[virtualRow.index]
+                  if (!page) return null
+                  const index = virtualRow.index
                   return (
                     <div
                       key={virtualRow.key}

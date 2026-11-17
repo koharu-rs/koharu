@@ -976,6 +976,8 @@ export const commands = {
     invoke<RunId>('run_pipeline', { target, stages }, { headers: headers() }),
   /** Stops every run, running and queued; what they finished stays. */
   stopPipeline: () => invoke<null>('stop_pipeline', {}, { headers: headers() }),
+  /** Unloads every model the pipeline loaded once the GPU's current call ends, freeing its memory as Photoshop's Edit → Purge frees memory; each loads again when a stage next needs it. */
+  unload: () => invoke<null>('unload', {}, { headers: headers() }),
   /** What every run told so far, for an interface that loaded late. */
   getPipelineEvents: () =>
     invoke<PipelineEvent[]>('get_pipeline_events', {}, { headers: headers() }),

@@ -258,6 +258,7 @@
     "selectAllLayers": "모든 레이어 선택",
     "settings": "설정",
     "undo": "실행 취소",
+    "unloadModels": "모델 언로드",
     "view": "보기"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "페이지를 삭제할까요?",
     "emptyDescription": "이미지 파일이나 폴더를 가져와 페이지를 추가하세요.",
     "emptyTitle": "아직 페이지가 없습니다",
-    "filter": "페이지 필터링",
     "importAction": "가져오기",
     "importFiles": "파일…",
     "importFolder": "폴더…",
     "importing": "페이지 가져오는 중…",
     "importingAction": "가져오는 중…",
     "noImage": "이미지 없음",
-    "noResults": "필터와 일치하는 페이지가 없습니다.",
     "pageNumber": "{{number}}페이지",
     "pages": "페이지",
     "run": {

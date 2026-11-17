@@ -258,6 +258,7 @@
     "selectAllLayers": "Select All Layers",
     "settings": "Settings",
     "undo": "Undo",
+    "unloadModels": "Unload Models",
     "view": "View"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "Delete page?",
     "emptyDescription": "Import image files or a folder to add pages.",
     "emptyTitle": "No pages yet",
-    "filter": "Filter pages",
     "importAction": "Import",
     "importFiles": "Files…",
     "importFolder": "Folder…",
     "importing": "Importing pages…",
     "importingAction": "Importing…",
     "noImage": "No image",
-    "noResults": "No pages match this filter.",
     "pageNumber": "Page {{number}}",
     "pages": "Pages",
     "run": {

@@ -33,7 +33,8 @@ Start with the complete error in the activity center or the error message. Ident
 <Accordion title='A model runs out of memory'>
   Koharu does not unload models to make room, so a model that does not fit fails and names the free
   memory. Choose a smaller model, or switch the other stages to lighter models in **Settings →
-  Pipeline** so the heavier ones unload, then retry.
+  Pipeline** so the heavier ones unload, then retry. **Edit → Unload Models** frees every model
+  Koharu loaded, as before a large fill; each loads again when it's next needed.
 </Accordion>
 
 <Accordion title='Detection or OCR misses text'>

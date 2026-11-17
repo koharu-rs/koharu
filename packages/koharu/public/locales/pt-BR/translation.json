@@ -258,6 +258,7 @@
     "selectAllLayers": "Selecionar todas as camadas",
     "settings": "Configurações",
     "undo": "Desfazer",
+    "unloadModels": "Descarregar modelos",
     "view": "Exibir"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "Excluir página?",
     "emptyDescription": "Importe arquivos de imagem ou uma pasta para adicionar páginas.",
     "emptyTitle": "Ainda não há páginas",
-    "filter": "Filtrar páginas",
     "importAction": "Importar",
     "importFiles": "Arquivos…",
     "importFolder": "Pasta…",
     "importing": "Importando páginas…",
     "importingAction": "Importando…",
     "noImage": "Sem imagem",
-    "noResults": "Nenhuma página corresponde a este filtro.",
     "pageNumber": "Página {{number}}",
     "pages": "Páginas",
     "run": {

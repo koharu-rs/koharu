@@ -258,6 +258,7 @@
     "selectAllLayers": "选择所有图层",
     "settings": "设置",
     "undo": "撤销",
+    "unloadModels": "卸载模型",
     "view": "视图"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "删除页面？",
     "emptyDescription": "导入图像文件或文件夹以添加页面。",
     "emptyTitle": "还没有页面",
-    "filter": "筛选页面",
     "importAction": "导入",
     "importFiles": "文件…",
     "importFolder": "文件夹…",
     "importing": "正在导入页面…",
     "importingAction": "正在导入…",
     "noImage": "无图像",
-    "noResults": "没有与此筛选条件匹配的页面。",
     "pageNumber": "第 {{number}} 页",
     "pages": "页面",
     "run": {

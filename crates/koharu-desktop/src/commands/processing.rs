@@ -51,6 +51,16 @@ pub fn stop_pipeline(app: State<'_, Arc<App>>) {
     app.pipeline.stop();
 }
 
+/// Unloads every model the pipeline loaded once the GPU's current call ends,
+/// freeing its memory as Photoshop's Edit → Purge frees memory; each loads
+/// again when a stage next needs it.
+#[tauri::command]
+#[specta::specta]
+pub fn unload(app: State<'_, Arc<App>>) {
+    tracing::info!("unload");
+    app.pipeline.unload();
+}
+
 /// What every run told so far, for an interface that loaded late.
 #[tauri::command]
 #[specta::specta]

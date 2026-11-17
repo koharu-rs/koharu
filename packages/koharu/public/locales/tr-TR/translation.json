@@ -258,6 +258,7 @@
     "selectAllLayers": "Tüm Katmanları Seç",
     "settings": "Ayarlar",
     "undo": "Geri Al",
+    "unloadModels": "Modelleri bellekten kaldır",
     "view": "Görünüm"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "Sayfa silinsin mi?",
     "emptyDescription": "Sayfa eklemek için görüntü dosyalarını veya bir klasörü içe aktarın.",
     "emptyTitle": "Henüz sayfa yok",
-    "filter": "Sayfaları filtrele",
     "importAction": "İçe Aktar",
     "importFiles": "Dosyalar…",
     "importFolder": "Klasör…",
     "importing": "Sayfalar içe aktarılıyor…",
     "importingAction": "İçe aktarılıyor…",
     "noImage": "Görüntü yok",
-    "noResults": "Bu filtreyle eşleşen sayfa yok.",
     "pageNumber": "Sayfa {{number}}",
     "pages": "Sayfalar",
     "run": {

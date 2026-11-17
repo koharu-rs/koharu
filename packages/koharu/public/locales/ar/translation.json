@@ -258,6 +258,7 @@
     "selectAllLayers": "تحديد كل الطبقات",
     "settings": "الإعدادات",
     "undo": "تراجع",
+    "unloadModels": "إلغاء تحميل النماذج",
     "view": "عرض"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "حذف الصفحة؟",
     "emptyDescription": "استورد ملفات صور أو مجلدًا لإضافة صفحات.",
     "emptyTitle": "لا توجد صفحات بعد",
-    "filter": "تصفية الصفحات",
     "importAction": "استيراد",
     "importFiles": "ملفات…",
     "importFolder": "مجلد…",
     "importing": "جارٍ استيراد الصفحات…",
     "importingAction": "جارٍ الاستيراد…",
     "noImage": "لا توجد صورة",
-    "noResults": "لا توجد صفحات تطابق هذا المرشّح.",
     "pageNumber": "الصفحة {{number}}",
     "pages": "الصفحات",
     "run": {

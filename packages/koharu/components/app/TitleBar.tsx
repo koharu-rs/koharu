@@ -203,6 +203,11 @@ export function TitleBar() {
                 {t('menu.delete')}
                 <MenubarShortcut>Del</MenubarShortcut>
               </MenubarItem>
+              <MenubarSeparator />
+              {/* Frees the GPU, as Photoshop's Edit → Purge frees memory. */}
+              <MenubarItem onClick={() => dispatch(commands.unload)}>
+                {t('menu.unloadModels')}
+              </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 

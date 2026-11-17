@@ -258,6 +258,7 @@
     "selectAllLayers": "Sélectionner tous les calques",
     "settings": "Paramètres",
     "undo": "Annuler",
+    "unloadModels": "Décharger les modèles",
     "view": "Affichage"
   },
   "model": {
@@ -280,14 +281,12 @@
     "deleteTitle": "Supprimer la page ?",
     "emptyDescription": "Importez des fichiers image ou un dossier pour ajouter des pages.",
     "emptyTitle": "Aucune page pour l’instant",
-    "filter": "Filtrer les pages",
     "importAction": "Importer",
     "importFiles": "Fichiers…",
     "importFolder": "Dossier…",
     "importing": "Importation des pages…",
     "importingAction": "Importation…",
     "noImage": "Aucune image",
-    "noResults": "Aucune page ne correspond à ce filtre.",
     "pageNumber": "Page {{number}}",
     "pages": "Pages",
     "run": {
