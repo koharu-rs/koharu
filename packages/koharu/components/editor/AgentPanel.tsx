@@ -87,6 +87,8 @@ export function AgentPanel() {
   const model = config.model ?? null
   const picker =
     'h-6 w-auto max-w-36 min-w-0 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-muted-foreground shadow-none hover:bg-muted hover:text-foreground dark:bg-transparent dark:hover:bg-muted'
+  // A reasoning level's row, sized and checked as the model menu's rows are.
+  const choice = 'min-h-7 pr-7 pl-2 *:[span]:last:right-2'
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
@@ -194,10 +196,18 @@ export function AgentPanel() {
               <SelectTrigger size='sm' className={picker} aria-label={t('agent.reasoning')}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent align='start'>
-                <SelectItem value='default'>{t('inference.providerDefault')}</SelectItem>
+              <SelectContent
+                side='top'
+                align='start'
+                sideOffset={6}
+                alignItemWithTrigger={false}
+                className='w-auto min-w-36 rounded-xl border border-border/50 p-1 shadow-sm ring-0'
+              >
+                <SelectItem value='default' className={choice}>
+                  {t('inference.providerDefault')}
+                </SelectItem>
                 {REASONING.map((level) => (
-                  <SelectItem key={level} value={level}>
+                  <SelectItem key={level} value={level} className={choice}>
                     {t(`reasoning.${level}`)}
                   </SelectItem>
                 ))}

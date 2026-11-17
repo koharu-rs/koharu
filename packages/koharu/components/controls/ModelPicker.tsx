@@ -2,7 +2,7 @@
 
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Check, ChevronLeft, LoaderCircle, Search, X } from 'lucide-react'
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { vendorName } from '@/components/preferences/models'
@@ -13,6 +13,9 @@ import { cn } from '@koharu/ui/lib/utils'
 
 /** A row of the menu: a vendor's heading, or one of its models. */
 type Row = { vendor: string } | { model: Model; option: number }
+
+/** A row's height in pixels: a model's line, or a vendor's heading. */
+const height = (row: Row | undefined) => (row && 'model' in row ? 28 : 24)
 
 /** Picks a model by its `vendor/model` reference, from Koharu's own and each vendor's that has a
  * key or a sign-in, as Claude's and Codex's model menus do: a search line, the models under their
@@ -79,25 +82,22 @@ export function ModelPicker({
       const row = rows[index]
       return row ? ('model' in row ? row.model.reference : `vendor:${row.vendor}`) : index
     },
-    estimateSize: (index) => {
-      const row = rows[index]
-      return row && 'model' in row ? 28 : 24
-    },
+    estimateSize: (index) => height(rows[index]),
     paddingStart: 2,
     paddingEnd: 2,
     overscan: 8,
+    // The menu opens on the model in use, wherever it is in the list, in the middle of its 288 px.
+    // The virtualizer scrolls here each time it takes the list, as a second mount in Strict Mode
+    // does, where a scroll of the list's own would be undone.
+    initialOffset: () =>
+      current < 0
+        ? 0
+        : Math.max(
+            0,
+            rows.slice(0, current).reduce((top, row) => top + height(row), 2) + (28 - 288) / 2,
+          ),
     initialRect: { width: 256, height: 288 },
   })
-  // The menu opens on the model in use, wherever it is in the list, scrolled before it paints. The
-  // list is scrolled itself: the virtualizer's own scroll can be dropped when Strict Mode mounts
-  // it twice, and this runs once.
-  const opened = useRef(false)
-  useLayoutEffect(() => {
-    const viewport = list.current
-    if (opened.current || current < 0 || !viewport) return
-    opened.current = true
-    viewport.scrollTop = virtualizer.getOffsetForIndex(current, 'center')?.[0] ?? 0
-  }, [current, virtualizer])
 
   const move = (by: number) => {
     if (!options.length) return
