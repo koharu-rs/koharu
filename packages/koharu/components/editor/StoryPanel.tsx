@@ -114,7 +114,7 @@ function StoryText({
 
   const name = plainText(isBlockLayer(layer) ? (layer.translation ?? layer.source) : layer)
   const field =
-    'max-h-24 min-h-8 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
+    'min-h-8 w-full max-w-full min-w-0 resize-none overflow-hidden rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
   return (
     <div
       ref={row}
