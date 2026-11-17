@@ -1,3 +1,59 @@
+## [0.84.0](https://github.com/koharu-rs/koharu/compare/0.83.5..0.84.0) - 2026-11-17
+
+### ⚠️ Breaking Changes
+
+- A project is now one `.khr` file. Projects saved by 0.83 and earlier, as `.khrproj` folders, don't open in 0.84 - ([17eadd3](https://github.com/koharu-rs/koharu/commit/17eadd32c619a814dc99832b10384827aca44da7))
+- The models changed: Koharu Layout HighRes replaces Koharu Layout RF-DETR Seg 2XL for detection, and Manga OCR, PaddleOCR-VL, AOT inpainting, FLUX.2 Klein, and RORem are gone - ([15914d7](https://github.com/koharu-rs/koharu/commit/15914d76c868598635f2b3cf58bb4b48ac6ac794), [95e5481](https://github.com/koharu-rs/koharu/commit/95e5481079a74318cf5743f79cc645fbbc491e46), [af76409](https://github.com/koharu-rs/koharu/commit/af7640919ac58f6d43a36d3899649566e94214f1))
+- AppImage packages are no longer built - ([#1192](https://github.com/koharu-rs/koharu/issues/1192))
+
+### ⛰️  Features
+
+#### Editor
+
+- A new desktop app on Tauri 3 draws pages on a native canvas under the interface, so panning, zooming, and scrolling stay smooth - ([08f0f05](https://github.com/koharu-rs/koharu/commit/08f0f0598cf8e4f4ad4eb46640f92722a75dca7e), [021264a](https://github.com/koharu-rs/koharu/commit/021264a2a0cb6198fecbf207784917a76b7b710b))
+- Edit as in Photoshop: type into texts on the canvas and style the selected characters from the type bar beside them, reshape a text's frame with Direct Selection, and step back through a History window - ([6b818fb](https://github.com/koharu-rs/koharu/commit/6b818fb5b95c7f0b0e33900302a33249ffe07292), [03a5ac0](https://github.com/koharu-rs/koharu/commit/03a5ac039543c7a023b3dd239e409243aa6f86e7))
+- Mark areas with the Rectangular Marquee (M) and Lasso (L), and fill them with Generative Fill after a prompt, using its own model, FLUX.3 Klein by default. Edit → Unload Models frees the GPU - ([af76409](https://github.com/koharu-rs/koharu/commit/af7640919ac58f6d43a36d3899649566e94214f1), [7870381](https://github.com/koharu-rs/koharu/commit/7870381442bd9f3a9dd6b9052502b761b2655530))
+- Full-height Layers, Story, and Agent tabs. Story lists every page's texts, numbers them on the canvas in reading order, and translates or deletes a single text - ([03a5ac0](https://github.com/koharu-rs/koharu/commit/03a5ac039543c7a023b3dd239e409243aa6f86e7), [0f787e5](https://github.com/koharu-rs/koharu/commit/0f787e5784d98795aff76851e1203ca62f7052ff), [7325be5](https://github.com/koharu-rs/koharu/commit/7325be5b5acf81e45210314e2e6a6cbc823a44db), [c64e6b6](https://github.com/koharu-rs/koharu/commit/c64e6b6262b961dcfd74de5c8cf23fd43e7b75d6))
+- Run one stage on one page from its menu or a right-click, and confirm before deleting a page - ([2c533c6](https://github.com/koharu-rs/koharu/commit/2c533c6e768168af80a3dc1694bb718f1753cb35))
+- Select layers with a rectangle, size the pen to the image's resolution, and keep the brush colour and size on the tool rail - ([#1148](https://github.com/koharu-rs/koharu/issues/1148), [#1134](https://github.com/koharu-rs/koharu/issues/1134), [6376fca](https://github.com/koharu-rs/koharu/commit/6376fca5ab8a0768b05349cb905a8b234e04b4fa))
+
+#### Agent and providers
+
+- The Agent pane works as a chat, with folded thinking and tool calls, the model and its reasoning in the composer, and New chat - ([dd91356](https://github.com/koharu-rs/koharu/commit/dd91356a649e2cf727fd622b609c459b0be3b060), [db21610](https://github.com/koharu-rs/koharu/commit/db21610dd490d3d3d5d3eb615519c4bdb154a2af))
+- Pick a model from a menu grouped by vendor, with search and the keyboard - ([a1eefdc](https://github.com/koharu-rs/koharu/commit/a1eefdcf824ba5de07ece0083a5d0cade91f9160))
+- Connect any OpenAI-compatible server, and sign in with a ChatGPT or Grok plan - ([7884d06](https://github.com/koharu-rs/koharu/commit/7884d06611fcf3c7aae7ec0dfcf45e556a72b86f), [9c5a2e6](https://github.com/koharu-rs/koharu/commit/9c5a2e6d462029b42a3ebdd2781c370cf6cee164))
+
+#### Pipeline
+
+- The layout model gives each text its balloon and the room it can fill, and lettering fits whole words on one axis - ([e8ea79a](https://github.com/koharu-rs/koharu/commit/e8ea79a194cf28586f7dcd297e0daa7cf835117e), [f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4))
+- Translation can see the page and reason first, adds your instructions to Koharu's own system prompt, and runs locally on Index-Translate - ([f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4), [b0b481c](https://github.com/koharu-rs/koharu/commit/b0b481c65e6ee5c6c578b1c88339e338b6993b1e), [7baa5d1](https://github.com/koharu-rs/koharu/commit/7baa5d10896014704819edef55d2f5c8b2d320e3))
+- OCR runs on manga-ocr-ar, Baberu OCR, or Hayai OCR v2.7, and inpainting on LaMa, FLUX.3 Klein, MOSS-Image, or Qwen-Image 2.1 - ([95e5481](https://github.com/koharu-rs/koharu/commit/95e5481079a74318cf5743f79cc645fbbc491e46), [ff9d1fa](https://github.com/koharu-rs/koharu/commit/ff9d1fae2e9602bebcab5e8dff79971329f3f0ce), [15914d7](https://github.com/koharu-rs/koharu/commit/15914d76c868598635f2b3cf58bb4b48ac6ac794), [f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4))
+- Sound effects are erased with balloon outlines kept, and a translated one without an outline gets a stroke - ([87f1d95](https://github.com/koharu-rs/koharu/commit/87f1d950938a70134f701b6a3d5be6315644bfdc), [d7745c0](https://github.com/koharu-rs/koharu/commit/d7745c02f2a9dc51b2428416d50f6b6db650bb2c))
+
+#### Typesetting
+
+- Pages render with Vello, and vertical Japanese and Chinese follow JLREQ and CLREQ: marks are centred by their ink, numbers of one or two digits stand upright, and a line opening with a bracket starts level with the others - ([ccea15e](https://github.com/koharu-rs/koharu/commit/ccea15e88fa57d335a36a000fe03cf9f8dcd42dd), [91c0b24](https://github.com/koharu-rs/koharu/commit/91c0b241a45b665dd38dc9cd324143315889f0e9), [77955b7](https://github.com/koharu-rs/koharu/commit/77955b7e7ede8aa7721b7f19634543ab83621183))
+- A word too wide for its line is hyphenated before the text shrinks - ([d6d76e7](https://github.com/koharu-rs/koharu/commit/d6d76e7b580d08e499bfbeb6ff6ce2126265f988))
+
+#### Languages
+
+- French, Arabic, and Wu Chinese interface translations - ([#1183](https://github.com/koharu-rs/koharu/issues/1183), [#1275](https://github.com/koharu-rs/koharu/issues/1275), [#1237](https://github.com/koharu-rs/koharu/issues/1237))
+
+### 🐛 Bug Fixes
+
+- Text in a lopsided balloon no longer shrinks into one corner - ([d298173](https://github.com/koharu-rs/koharu/commit/d2981739319d0dd2f77a2b00401893a3aa375f80))
+- A vertical mark whose font has no vertical form turns sideways, and Chinese commas and full stops sit centred in their cells - ([5297507](https://github.com/koharu-rs/koharu/commit/52975072e9c1077984e8e0845e6937370c0b05cc))
+- The input method works on the canvas, a wheel notch scrolls as far as in Chrome, and the window opens at its configured size - ([6fd761f](https://github.com/koharu-rs/koharu/commit/6fd761fadfaf0731f71115f0249cd32900ea50d5), [388fbb8](https://github.com/koharu-rs/koharu/commit/388fbb86b65e4c159f85dd00a393a3f1fbe333f2), [48f9578](https://github.com/koharu-rs/koharu/commit/48f9578d990ffac4f552471e78650e3e99dfde8a))
+- Activity names the page a failed run failed on - ([5cd00d1](https://github.com/koharu-rs/koharu/commit/5cd00d1a8d0319778fd18e2ccd33f990dfad6490))
+
+## New Contributors ❤️
+
+* @roorem10 made their first contribution in [#1288](https://github.com/koharu-rs/koharu/pull/1288)
+* @SwetaKumari7 made their first contribution in [#1148](https://github.com/koharu-rs/koharu/pull/1148)
+* @nekojin116 made their first contribution in [#1275](https://github.com/koharu-rs/koharu/pull/1275)
+* @iliyasalve made their first contribution in [#1183](https://github.com/koharu-rs/koharu/pull/1183)
+* @SevenIndirecto made their first contribution in [#1168](https://github.com/koharu-rs/koharu/pull/1168)
+
 ## [0.83.5](https://github.com/koharu-rs/koharu/compare/0.83.4..0.83.5) - 2026-09-22
 
 ### 🐛 Bug Fixes
