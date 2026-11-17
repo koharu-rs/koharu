@@ -3,7 +3,7 @@
 ### ⚠️ Breaking Changes
 
 - A project is now one `.khr` file. Projects saved by 0.83 and earlier, as `.khrproj` folders, don't open in 0.84 - ([17eadd3](https://github.com/koharu-rs/koharu/commit/17eadd32c619a814dc99832b10384827aca44da7))
-- One layout model finds text, sound effects, balloons, and panels in place of the separate detectors, and the OCR, inpainting, and translation models changed: Manga OCR, PaddleOCR-VL, AOT inpainting, FLUX.2 Klein, and RORem are gone - ([15914d7](https://github.com/koharu-rs/koharu/commit/15914d76c868598635f2b3cf58bb4b48ac6ac794), [95e5481](https://github.com/koharu-rs/koharu/commit/95e5481079a74318cf5743f79cc645fbbc491e46), [af76409](https://github.com/koharu-rs/koharu/commit/af7640919ac58f6d43a36d3899649566e94214f1))
+- The models changed: Koharu Layout HighRes replaces Koharu Layout RF-DETR Seg 2XL for detection, and Manga OCR, PaddleOCR-VL, AOT inpainting, FLUX.2 Klein, and RORem are gone - ([15914d7](https://github.com/koharu-rs/koharu/commit/15914d76c868598635f2b3cf58bb4b48ac6ac794), [95e5481](https://github.com/koharu-rs/koharu/commit/95e5481079a74318cf5743f79cc645fbbc491e46), [af76409](https://github.com/koharu-rs/koharu/commit/af7640919ac58f6d43a36d3899649566e94214f1))
 - AppImage packages are no longer built - ([#1192](https://github.com/koharu-rs/koharu/issues/1192))
 
 ### ⛰️  Features
@@ -25,7 +25,7 @@
 
 #### Pipeline
 
-- One layout model finds each text with its balloon and the room it can fill, and lettering fits whole words on one axis - ([e8ea79a](https://github.com/koharu-rs/koharu/commit/e8ea79a194cf28586f7dcd297e0daa7cf835117e), [f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4))
+- The layout model gives each text its balloon and the room it can fill, and lettering fits whole words on one axis - ([e8ea79a](https://github.com/koharu-rs/koharu/commit/e8ea79a194cf28586f7dcd297e0daa7cf835117e), [f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4))
 - Translation can see the page and reason first, adds your instructions to Koharu's own system prompt, and runs locally on Index-Translate - ([f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4), [b0b481c](https://github.com/koharu-rs/koharu/commit/b0b481c65e6ee5c6c578b1c88339e338b6993b1e), [7baa5d1](https://github.com/koharu-rs/koharu/commit/7baa5d10896014704819edef55d2f5c8b2d320e3))
 - OCR runs on manga-ocr-ar, Baberu OCR, or Hayai OCR v2.7, and inpainting on LaMa, FLUX.3 Klein, MOSS-Image, or Qwen-Image 2.1 - ([95e5481](https://github.com/koharu-rs/koharu/commit/95e5481079a74318cf5743f79cc645fbbc491e46), [ff9d1fa](https://github.com/koharu-rs/koharu/commit/ff9d1fae2e9602bebcab5e8dff79971329f3f0ce), [15914d7](https://github.com/koharu-rs/koharu/commit/15914d76c868598635f2b3cf58bb4b48ac6ac794), [f72997e](https://github.com/koharu-rs/koharu/commit/f72997e45280ee138bae03c483f239f342a074b4))
 - Sound effects are erased with balloon outlines kept, and a translated one without an outline gets a stroke - ([87f1d95](https://github.com/koharu-rs/koharu/commit/87f1d950938a70134f701b6a3d5be6315644bfdc), [d7745c0](https://github.com/koharu-rs/koharu/commit/d7745c02f2a9dc51b2428416d50f6b6db650bb2c))
