@@ -18,13 +18,14 @@ mod draw;
 mod fit;
 mod itemize;
 mod label;
+mod lettering;
 mod lines;
 mod room;
 mod shape;
 mod style;
 
-pub use self::label::Label;
 pub(crate) use self::{arrange::TextLayout, breaks::preload_dictionary, draw::draw};
+pub use self::{label::Label, lettering::Lettering};
 
 /// Laid-out text, as a run of one face at one size and paint.
 #[derive(Clone, Debug, PartialEq)]

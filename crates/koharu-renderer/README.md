@@ -60,6 +60,7 @@ lines centred on one axis in a balloon.
 | right to left | a line's runs show in the order the bidirectional algorithm gives, and a right-to-left paragraph's lines start on the right | [UAX 9] |
 | strokes | under every fill, so a stroke never covers a neighbouring letter | |
 | overflow | text that nothing holds still draws, past its frame | |
+| typing | a text laid out as a render lays it out says where a caret before any character stands, what a selection covers, which character a point lands nearest, and each line's characters; a ligature's characters share its width evenly, and an empty text has a caret a line tall where its first line would start | |
 
 A path frame centres every line on one axis, where Photoshop centres each line
 in its own span of the shape [Photoshop text in shapes], so the lines of a

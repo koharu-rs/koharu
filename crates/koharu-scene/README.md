@@ -124,8 +124,12 @@ Studio Paint's line space can be "a percentage of the character size" [CSP text
 frame]. Photoshop's leading [Photoshop leading] and Figma's line height [Figma
 text properties] are the same setting; manga letterers set it tighter than
 Photoshop's 120% Auto, at the size or 1 pt more, so dialogue reads evenly
-[Manga balloon basics]. Styling with no characters selected writes `style`;
-styling selected characters writes marks.
+[Manga balloon basics]. Styling with no characters selected writes `style` and
+drops that key's marks, so every character takes it, as Photoshop styles a
+selected type layer [Photoshop type]; styling selected characters writes marks.
+A typed character takes the marks of the one before it, or the first one's at
+the start, as typing does in an editor, and spans whose marks end up alike
+join.
 
 A text holds its own values. Nothing is shared between texts, because a
 balloon's text length and size differ from its neighbours', so no one style

@@ -76,6 +76,8 @@ beforeEach(() => {
     jobs: {},
     downloads: {},
     camera: { zoom: 1, x: 0, y: 0 },
+    selectionBounds: null,
+    typing: null,
     picked: null,
     selectedLayers: [],
     canvasSelection: [],

@@ -1,6 +1,8 @@
 //! Text: styled spans in a frame. A text layer holds one, and so do a block's
 //! source and translation.
 
+use std::ops::Range;
+
 use icu_locale_core::LanguageIdentifier;
 use kurbo::{Affine, BezPath, Shape as _};
 use schemars::JsonSchema;
@@ -103,6 +105,99 @@ impl RichText {
     pub fn text(&self) -> String {
         self.0.iter().map(|span| span.insert.as_str()).collect()
     }
+
+    /// `new` carrying these marks on the characters that stayed. A new
+    /// character takes the marks of the one before it, kept or replaced, or of
+    /// the first character at the start, as typing does in a text editor.
+    #[must_use]
+    pub fn replaced(&self, new: &str) -> Self {
+        let plain = self.text();
+        let marks: Vec<&CharStyle> = self
+            .0
+            .iter()
+            .flat_map(|span| span.insert.chars().map(|_| &span.attributes))
+            .collect();
+        let unmarked = CharStyle::default();
+        let mut last = marks.first().copied().unwrap_or(&unmarked);
+        let mut consumed = 0;
+        let mut spans = Vec::new();
+        for change in TextDiff::from_chars(plain.as_str(), new).iter_all_changes() {
+            if change.tag() != ChangeTag::Insert {
+                last = marks[consumed];
+                consumed += 1;
+            }
+            if change.tag() != ChangeTag::Delete {
+                spans.push(Span {
+                    insert: change.value().to_owned(),
+                    attributes: last.clone(),
+                });
+            }
+        }
+        joined(spans)
+    }
+
+    /// `range`, UTF-8 offsets on character boundaries, replaced by `insert`
+    /// carrying `marks`, as typing over a selection does; the other
+    /// characters keep theirs.
+    #[must_use]
+    pub fn spliced(&self, range: Range<usize>, insert: &str, marks: &CharStyle) -> Self {
+        let inserted = Span {
+            insert: insert.to_owned(),
+            attributes: marks.clone(),
+        };
+        joined(
+            self.slice(0..range.start)
+                .chain(std::iter::once(inserted))
+                .chain(self.slice(range.end..usize::MAX)),
+        )
+    }
+
+    /// `range`'s characters with `patch`'s values over their marks.
+    #[must_use]
+    pub fn marked(&self, range: Range<usize>, patch: &CharStyle) -> Self {
+        let restyled = self.slice(range.clone()).map(|span| Span {
+            attributes: patch.or(&span.attributes),
+            ..span
+        });
+        joined(
+            self.slice(0..range.start)
+                .chain(restyled)
+                .chain(self.slice(range.end..usize::MAX)),
+        )
+    }
+
+    /// The marks a character typed at `offset` takes: the one's before it,
+    /// or the first character's at the start, as `replaced` gives them.
+    #[must_use]
+    pub fn marks_at(&self, offset: usize) -> CharStyle {
+        let mut start = 0;
+        for span in &self.0 {
+            let end = start + span.insert.len();
+            if offset <= end {
+                return span.attributes.clone();
+            }
+            start = end;
+        }
+        self.0
+            .last()
+            .map(|span| span.attributes.clone())
+            .unwrap_or_default()
+    }
+
+    /// The spans' parts within `range`, UTF-8 offsets on character
+    /// boundaries.
+    fn slice(&self, range: Range<usize>) -> impl Iterator<Item = Span> + '_ {
+        let mut start = 0;
+        self.0.iter().filter_map(move |span| {
+            let (from, to) = (start, start + span.insert.len());
+            start = to;
+            let (cut_from, cut_to) = (range.start.max(from), range.end.min(to));
+            (cut_from < cut_to).then(|| Span {
+                insert: span.insert[cut_from - from..cut_to - from].to_owned(),
+                attributes: span.attributes.clone(),
+            })
+        })
+    }
 }
 
 impl From<&str> for RichText {
@@ -183,33 +278,4 @@ pub(crate) fn joined(spans: impl IntoIterator<Item = Span>) -> RichText {
         }
     }
     RichText(out)
-}
-
-/// `new` carrying `old`'s marks on the characters that stayed. A new character
-/// takes the marks of the one before it, kept or replaced, or of the first
-/// character at the start, as typing does in a text editor.
-pub(crate) fn replace_keeping_marks(old: &RichText, new: &str) -> RichText {
-    let plain = old.text();
-    let marks: Vec<&CharStyle> = old
-        .0
-        .iter()
-        .flat_map(|span| span.insert.chars().map(|_| &span.attributes))
-        .collect();
-    let unmarked = CharStyle::default();
-    let mut last = marks.first().copied().unwrap_or(&unmarked);
-    let mut consumed = 0;
-    let mut spans = Vec::new();
-    for change in TextDiff::from_chars(plain.as_str(), new).iter_all_changes() {
-        if change.tag() != ChangeTag::Insert {
-            last = marks[consumed];
-            consumed += 1;
-        }
-        if change.tag() != ChangeTag::Delete {
-            spans.push(Span {
-                insert: change.value().to_owned(),
-                attributes: last.clone(),
-            });
-        }
-    }
-    joined(spans)
 }

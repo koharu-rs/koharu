@@ -33,7 +33,7 @@ impl Run<'_, '_> {
 
     /// Styling on the characters that stayed is kept.
     pub(super) fn set_text(&mut self, op: usize, layer: &Ref, new: &str) -> Result<()> {
-        self.write_text(op, layer, |old| text::replace_keeping_marks(old, new))
+        self.write_text(op, layer, |old| old.replaced(new))
     }
 
     pub(super) fn set_rich_text(&mut self, op: usize, layer: &Ref, spans: &[Span]) -> Result<()> {

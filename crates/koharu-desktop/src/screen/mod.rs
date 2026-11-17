@@ -26,9 +26,9 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use koharu_canvas::{Brush, Camera, Canvas, Colors, Rect, Snapshot, Story, Tool};
+use koharu_canvas::{Brush, Camera, Canvas, Colors, Effect, Rect, Snapshot, Story, Tool, Typed};
 use koharu_renderer::Gpu;
-use koharu_scene::LayerId;
+use koharu_scene::{Bounds, CharStyle, LayerId};
 use tauri::{
     AppHandle, LogicalPosition, Manager as _, WebviewUrl,
     webview::{PageLoadEvent, WebviewBuilder},
@@ -43,8 +43,8 @@ use tauri_runtime_cef::{
 use tokio::sync::oneshot::{self, error::TryRecvError};
 use winit::{
     cursor::CursorIcon,
-    dpi::LogicalSize,
-    event::WindowEvent,
+    dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
+    event::{Ime, WindowEvent},
     window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData, Window},
 };
 
@@ -70,16 +70,31 @@ fn with<T>(f: impl FnOnce(&mut Main) -> T) -> Option<T> {
 }
 
 /// Runs `change` on the main window, draws it again, and tells the
-/// interface where the page shows if that moved, once the borrow is over.
+/// interface where the page and the selection show if either moved, once
+/// the borrow is over.
 fn change(change: impl FnOnce(&mut Main)) {
     let moved = with(|main| {
         change(main);
         main.request_redraw();
-        main.moved()
-    })
-    .flatten();
-    if let Some((handle, camera)) = moved {
+        main.follow_typing();
+        (
+            main.handle.clone(),
+            main.moved(),
+            main.selection_moved(),
+            main.typing_moved(),
+        )
+    });
+    let Some((handle, camera, selection, typing)) = moved else {
+        return;
+    };
+    if let Some(camera) = camera {
         events::CAMERA.tell(&handle, camera);
+    }
+    if let Some(bounds) = selection {
+        events::SELECTION_BOUNDS.tell(&handle, bounds);
+    }
+    if let Some(typed) = typing {
+        events::TYPING.tell(&handle, typed);
     }
 }
 
@@ -121,11 +136,60 @@ impl Screen {
         });
     }
 
-    pub fn set_tool(&self, tool: Tool) {
-        self.change(move |main| {
+    /// Like `change`, for a change that answers canvas effects, which `app`
+    /// carries out once the window is free again.
+    fn answer(&self, app: Arc<App>, act: impl FnOnce(&mut Main) -> Vec<Effect> + Send + 'static) {
+        let Some(handle) = self.0.get() else {
+            return;
+        };
+        let run = move || {
+            let mut effects = Vec::new();
+            change(|main| effects = act(main));
+            input::carry(&app, effects);
+        };
+        if let Err(error) = handle.run_on_main_thread(run) {
+            tracing::warn!("failed to change the window: {error}");
+        }
+    }
+
+    /// The interface's tool; another commits typing.
+    pub fn set_tool(&self, app: Arc<App>, tool: Tool) {
+        self.answer(app, move |main| {
             main.settings.tool = tool;
-            if let Some(canvas) = &mut main.canvas {
-                canvas.set_tool(tool);
+            main.canvas
+                .as_mut()
+                .map_or_else(Vec::new, |canvas| canvas.set_tool(tool))
+        });
+    }
+
+    /// Commits typing, as leaving its page does.
+    pub fn finish_typing(&self, app: Arc<App>) {
+        self.answer(app, |main| {
+            main.canvas
+                .as_mut()
+                .map_or_else(Vec::new, Canvas::finish_typing)
+        });
+    }
+
+    /// Styles what's being typed, as the type bar asks: the selected
+    /// characters, or the next ones typed at a caret.
+    pub fn style_typing(&self, patch: CharStyle) {
+        self.change(move |main| {
+            if let Some(canvas) = &mut main.canvas
+                && let Err(error) = canvas.style_typing(&patch)
+            {
+                tracing::error!("the canvas failed to style its typing: {error:#}");
+            }
+        });
+    }
+
+    /// Types `text` into what's being typed, as a paste does.
+    pub fn insert(&self, text: String) {
+        self.change(move |main| {
+            if let Some(canvas) = &mut main.canvas
+                && let Err(error) = canvas.insert(&text)
+            {
+                tracing::error!("the canvas failed to paste: {error:#}");
             }
         });
     }
@@ -175,11 +239,12 @@ impl Screen {
         });
     }
 
-    pub fn select(&self, layers: Vec<LayerId>) {
-        self.change(move |main| {
-            if let Some(canvas) = &mut main.canvas {
-                canvas.select(layers);
-            }
+    /// The interface's selection; another layer commits typing.
+    pub fn select(&self, app: Arc<App>, layers: Vec<LayerId>) {
+        self.answer(app, move |main| {
+            main.canvas
+                .as_mut()
+                .map_or_else(Vec::new, |canvas| canvas.select(layers))
         });
     }
 
@@ -242,6 +307,15 @@ struct Main {
     settings: Settings,
     /// The camera as the interface last heard it.
     camera: Option<Camera>,
+    /// Where the selection lies on the page, as the interface last heard it.
+    selection: Option<Bounds>,
+    /// What's being typed, as the interface last heard it.
+    typed: Option<Typed>,
+    /// The typing caret where the input method's candidate window was last
+    /// placed, in the window's physical pixels.
+    caret: Option<Rect>,
+    /// Redraws the canvas while it types, for its caret's blink.
+    blink: Option<tauri::async_runtime::JoinHandle<()>>,
     /// The browser CEF first paints for, which input reaches through its
     /// host.
     browser: Option<Browser>,
@@ -320,14 +394,67 @@ impl Main {
         }
     }
 
-    /// The camera, with the handle to tell it through, if it moved since
-    /// the interface last heard it.
-    fn moved(&mut self) -> Option<(AppHandle<CefRuntime>, Camera)> {
+    /// The camera, if it moved since the interface last heard it.
+    fn moved(&mut self) -> Option<Camera> {
         let camera = self.canvas.as_ref()?.placement();
         (self.camera != Some(camera)).then(|| {
             self.camera = Some(camera);
-            (self.handle.clone(), camera)
+            camera
         })
+    }
+
+    /// Where the selection lies on the page, if that moved since the
+    /// interface last heard it.
+    fn selection_moved(&mut self) -> Option<Option<Bounds>> {
+        let bounds = self
+            .canvas
+            .as_ref()
+            .and_then(Canvas::selection_bounds)
+            .map(|rect| Bounds {
+                x: rect.x0,
+                y: rect.y0,
+                width: rect.width(),
+                height: rect.height(),
+            });
+        (self.selection != bounds).then(|| {
+            self.selection = bounds;
+            bounds
+        })
+    }
+
+    /// What's being typed, if that changed since the interface last heard
+    /// it.
+    fn typing_moved(&mut self) -> Option<Option<Typed>> {
+        let typed = self.canvas.as_ref().and_then(Canvas::typing);
+        (self.typed != typed).then(|| {
+            self.typed = typed.clone();
+            typed
+        })
+    }
+
+    /// While the canvas types, places the input method's candidate window at
+    /// its caret, as an editor does, and keeps the caret blinking.
+    fn follow_typing(&mut self) {
+        let caret = self.canvas.as_ref().and_then(Canvas::caret_area);
+        if caret != self.caret {
+            self.caret = caret;
+            if let (Some(caret), Some(window)) = (caret, self.window()) {
+                let area = ImeRequestData::default().with_cursor_area(
+                    PhysicalPosition::new(caret.x0, caret.y0).into(),
+                    PhysicalSize::new(caret.width().max(1.0), caret.height().max(1.0)).into(),
+                );
+                let _ = window.request_ime_update(ImeRequest::Update(area));
+            }
+        }
+        match (caret.is_some(), &self.blink) {
+            (true, None) => self.blink = Some(blink(self.handle.clone())),
+            (false, Some(_)) => {
+                if let Some(blink) = self.blink.take() {
+                    blink.abort();
+                }
+            }
+            _ => {}
+        }
     }
 
     fn host(&self) -> Option<BrowserHost> {
@@ -535,6 +662,25 @@ fn enable_ime(window: &dyn Window) {
     }
 }
 
+/// How often the canvas redraws while it types: twice a caret blink, so it
+/// turns on time.
+const BLINK: Duration = Duration::from_millis(265);
+
+/// Redraws the window every `BLINK`, for the typing caret's blink.
+fn blink(handle: AppHandle<CefRuntime>) -> tauri::async_runtime::JoinHandle<()> {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(BLINK).await;
+            let redraw = || {
+                with(|main| main.request_redraw());
+            };
+            if handle.run_on_main_thread(redraw).is_err() {
+                break;
+            }
+        }
+    })
+}
+
 /// Opens the main window from its configuration, with one webview covering
 /// it that renders off-screen into it, as GPU textures when `shared`, and
 /// makes `screen` reach it. Runs on the main thread, in the app's setup.
@@ -554,6 +700,10 @@ pub fn open(
         viewport: Rect::ZERO,
         settings: Settings::default(),
         camera: None,
+        selection: None,
+        typed: None,
+        caret: None,
+        blink: None,
         browser: None,
         input: Input::default(),
         web_cursor: Some(CursorIcon::Default),
@@ -721,8 +871,30 @@ pub fn on_window_event(app: &Arc<App>, label: &str, window: Arc<dyn Window>, eve
             with(|main| main.input.modifiers = modifiers.state());
         }
         WindowEvent::KeyboardInput { event, .. } => input::key(app, event),
+        // While the canvas types, the input method composes into it, as
+        // Photoshop's type composes inline; otherwise into the page.
         WindowEvent::Ime(ime) => {
-            if let Some(host) = with(|main| main.host()).flatten() {
+            let mut typed = false;
+            change(|main| {
+                let field = main.input.field;
+                let Some(canvas) = main
+                    .canvas
+                    .as_mut()
+                    .filter(|canvas| !field && canvas.is_typing())
+                else {
+                    return;
+                };
+                typed = true;
+                let composed = match ime {
+                    Ime::Preedit(text, cursor) => canvas.compose(text, *cursor),
+                    Ime::Commit(text) => canvas.insert(text),
+                    _ => Ok(()),
+                };
+                if let Err(error) = composed {
+                    tracing::error!("the canvas failed the input method: {error:#}");
+                }
+            });
+            if !typed && let Some(host) = with(|main| main.host()).flatten() {
                 keys::send_ime(&host, ime);
             }
         }

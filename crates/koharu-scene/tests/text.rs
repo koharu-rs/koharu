@@ -2,7 +2,7 @@
 
 mod common;
 use common::*;
-use koharu_scene::{Content, Error, LayerId, Op, RichText, Session, Span, Text};
+use koharu_scene::{CharStyle, Content, Error, LayerId, Op, RichText, Session, Span, Text};
 use serde_json::json;
 
 fn text(session: &Session, layer: LayerId) -> Text {
@@ -77,6 +77,48 @@ fn set_text_keeps_marks_on_the_characters_that_stayed() {
     let raster = add(&mut session, page, None, json!({"kind": "raster"}));
     let error = set_text(&mut session, raster, "x").expect_err("a raster has no text");
     assert!(matches!(error, Error::Invalid { .. }), "{error}");
+}
+
+#[test]
+fn typing_splices_and_marks_rich_text_keeping_the_other_characters_marks() {
+    let bold = CharStyle {
+        weight: Some(700),
+        ..CharStyle::default()
+    };
+    let text = RichText(vec![
+        Span {
+            insert: "Hello".to_owned(),
+            attributes: bold.clone(),
+        },
+        Span {
+            insert: " world".to_owned(),
+            attributes: CharStyle::default(),
+        },
+    ]);
+    // A character typed at the bold word's end takes its marks.
+    let typed = text.spliced(5..5, "!", &text.marks_at(5));
+    assert_eq!(marked(&typed), [("Hello!", Some(700)), (" world", None)]);
+    // Typing over a selection replaces it with the given marks.
+    let over = text.spliced(3..8, "p wo", &CharStyle::default());
+    assert_eq!(marked(&over), [("Hel", Some(700)), ("p world", None)]);
+    // Marking a range splits its spans, and alike neighbours join again.
+    let light = CharStyle {
+        weight: Some(300),
+        ..CharStyle::default()
+    };
+    let lightened = text.marked(3..8, &light);
+    assert_eq!(
+        marked(&lightened),
+        [("Hel", Some(700)), ("lo wo", Some(300)), ("rld", None)]
+    );
+    assert_eq!(
+        marked(&lightened.marked(3..5, &bold)),
+        [("Hello", Some(700)), (" wo", Some(300)), ("rld", None)]
+    );
+    // At the start a character takes the first one's marks.
+    assert_eq!(text.marks_at(0), bold);
+    assert_eq!(text.marks_at(6), CharStyle::default());
+    assert_eq!(RichText::default().marks_at(0), CharStyle::default());
 }
 
 #[test]

@@ -23,6 +23,8 @@ pub(crate) struct Sample {
     /// screen rather than the page: a pan, and the brush ring.
     pub screen: Point,
     pub modifiers: Modifiers,
+    /// The press's click count: 2 for a double click.
+    pub clicks: u8,
 }
 
 /// Where the page shows, for the interface over the canvas: a page point `p`
@@ -142,6 +144,7 @@ impl View {
             page: self.page_point(screen),
             screen,
             modifiers: state.modifiers,
+            clicks: state.count,
         }
     }
 
@@ -162,6 +165,11 @@ impl View {
 
     pub fn size(&self) -> Size {
         self.viewport.size()
+    }
+
+    /// Where the canvas sits in the window, in physical pixels.
+    pub fn viewport(&self) -> Rect {
+        self.viewport
     }
 
     pub fn scale(&self) -> f64 {

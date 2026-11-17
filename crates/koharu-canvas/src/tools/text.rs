@@ -1,12 +1,10 @@
-//! The text tool: point text at a click, box text over a drag.
+//! The text tool's draft: point text at a click, box text over a drag,
+//! which typing then fills.
 
-use koharu_scene::{
-    Bounds, Content, Edit, Frame, LanguageIdentifier, RichText, Text, TextStyle, Transform,
-};
+use koharu_scene::{Bounds, Frame, LanguageIdentifier, RichText, Text, TextStyle, Transform};
 use kurbo::{Point, Rect};
 
-use super::added;
-use crate::{Effect, draw::overlay::Overlay, gesture::Context, view::Sample};
+use crate::{draw::overlay::Overlay, gesture::Context, view::Sample};
 
 /// A text drag shorter than this on both sides, in device-independent
 /// pixels, is a click, which makes point text, as the editor's was.
@@ -36,8 +34,9 @@ impl Draft {
         }
     }
 
-    /// Text where the drag went, at the top of the page, selected.
-    pub fn finish(self, cx: &Context) -> Vec<Effect> {
+    /// The new text where the drag went: point text at a click, box text
+    /// over a drag, empty, for typing to fill and add.
+    pub fn text(&self, cx: &Context) -> Text {
         let rect = self.rect();
         let click = cx.view.page_length(CLICK);
         let (origin, frame) = match rect.width() < click && rect.height() < click {
@@ -56,22 +55,14 @@ impl Draft {
                 },
             ),
         };
-        let text = Text {
+        Text {
             content: RichText::default(),
             style: TextStyle::default(),
             frame,
             direction: Default::default(),
             language: LanguageIdentifier::UNKNOWN,
             transform: Transform([[1.0, 0.0, origin.x], [0.0, 1.0, origin.y]]),
-        };
-        let (id, add) = added(cx.snapshot.page(), Content::Text(Box::new(text)));
-        vec![
-            Effect::Edit(Edit {
-                label: "add_text".to_owned(),
-                ops: vec![add],
-            }),
-            Effect::Selection(vec![id]),
-        ]
+        }
     }
 
     pub fn preview(&self, overlay: &mut Overlay) {

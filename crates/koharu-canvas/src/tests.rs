@@ -17,7 +17,7 @@ use ui_events::{
     },
 };
 
-use crate::{Brush, Canvas, Colors, Effect, Notice, Tool};
+use crate::{Brush, Canvas, CharKey, Colors, Effect, Notice, Tool};
 
 /// One renderer for every test, as the app has one, setting text in
 /// installed fonts so no test downloads one.
@@ -74,7 +74,7 @@ fn fixture(size: (u32, u32), ops: Vec<Value>) -> Option<Fixture> {
         _dir: dir,
         session: Arc::clone(&session),
         renderer,
-        canvas: Canvas::new(gpu, session),
+        canvas: Canvas::new(gpu, session, RENDERER.clone()),
         page,
     };
     fixture.render();
@@ -664,16 +664,21 @@ fn a_remove_stroke_asks_to_inpaint_what_it_covered() {
 }
 
 #[test]
-fn a_click_makes_point_text_and_a_drag_makes_box_text() {
+fn a_click_types_point_text_and_a_drag_box_text_each_added_on_commit() {
     let Some(mut fixture) = unscaled(Vec::new()) else {
         return;
     };
     fixture.canvas.set_tool(Tool::Text);
+    // A click starts typing; the text is added only once it's committed.
     let effects = gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    assert!(apply(&mut fixture, effects).is_empty());
+    type_text(&mut fixture.canvas, "Hi");
+    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
     assert_eq!(apply(&mut fixture, effects), ["add_text"]);
     let [point] = layers(&fixture)[..] else {
         panic!("one layer");
     };
+    assert_eq!(layer(&fixture, point)["content"], json!([{"insert": "Hi"}]));
     assert_eq!(fixture.canvas.selection(), [point]);
     let value = layer(&fixture, point);
     assert_eq!(value["frame"], json!("point"));
@@ -683,6 +688,14 @@ fn a_click_makes_point_text_and_a_drag_makes_box_text() {
     );
 
     let effects = gesture(&mut fixture.canvas, (10.0, 10.0), (110.0, 60.0));
+    assert!(apply(&mut fixture, effects).is_empty());
+    type_text(&mut fixture.canvas, "Box");
+    let effects = press_key(
+        &mut fixture.canvas,
+        NamedKey::Enter,
+        Code::NumpadEnter,
+        Modifiers::default(),
+    );
     assert_eq!(apply(&mut fixture, effects), ["add_text"]);
     let [_, boxed] = layers(&fixture)[..] else {
         panic!("two layers");
@@ -789,6 +802,32 @@ fn a_rotated_text_is_hit_inside_its_frame_only() {
     assert_eq!(click(rotated * Point::new(100.0, 20.0)), [vec![text]]);
     // Inside the rotated box's axis-aligned bounds, outside the box.
     assert_eq!(click(Point::new(420.0, 310.0)), [Vec::<LayerId>::new()]);
+}
+
+#[test]
+fn the_selection_bounds_hold_a_point_texts_laid_out_lines() {
+    let Some(mut fixture) = unscaled(vec![
+        json!({"op": "add_layer", "page": "$page", "index": 0, "layer": {
+            "kind": "text", "content": "Hello",
+            "style": {"chars": {"size": 40}},
+            "transform": [[1.0, 0.0, 100.0], [0.0, 1.0, 200.0]],
+        }}),
+    ]) else {
+        return;
+    };
+    let text = layers(&fixture)[0];
+    assert_eq!(fixture.canvas.selection_bounds(), None);
+    fixture.canvas.select(vec![text]);
+    // A point text's frame is its origin; its bounds are where its lines lie.
+    let bounds = fixture.canvas.selection_bounds().expect("bounds");
+    assert!(
+        bounds.width() > 40.0 && bounds.height() > 20.0,
+        "{bounds:?}"
+    );
+    assert!(
+        bounds.contains(Point::new(110.0, bounds.center().y)),
+        "{bounds:?}"
+    );
 }
 
 /// The wheel at `at`, held with `modifiers`.
@@ -1148,7 +1187,9 @@ fn new_text_answers_its_edit_then_its_selection() {
         return;
     };
     fixture.canvas.set_tool(Tool::Text);
-    let effects = gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    type_text(&mut fixture.canvas, "x");
+    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
     let [Effect::Edit(edit), Effect::Selection(ids)] = &effects[..] else {
         panic!("{effects:?}");
     };
@@ -1337,6 +1378,7 @@ fn deleting_anchors_joins_their_neighbours_and_never_opens_a_frame() {
     let effects = fixture
         .canvas
         .key(&delete(KeyState::Down, false))
+        .expect("a key")
         .expect("an anchor is picked");
     assert_eq!(apply(&mut fixture, effects), ["edit_frame"]);
     let (_, anchors) = frame(&fixture, block);
@@ -1346,9 +1388,15 @@ fn deleting_anchors_joins_their_neighbours_and_never_opens_a_frame() {
     );
     // Held on with no anchor left, the key stays the canvas's until it's
     // released, so it never goes on to delete the text.
-    let held = fixture.canvas.key(&delete(KeyState::Down, true));
+    let held = fixture
+        .canvas
+        .key(&delete(KeyState::Down, true))
+        .expect("a key");
     assert!(held.is_some_and(|effects| effects.is_empty()));
-    let released = fixture.canvas.key(&delete(KeyState::Up, false));
+    let released = fixture
+        .canvas
+        .key(&delete(KeyState::Up, false))
+        .expect("a key");
     assert!(released.is_some_and(|effects| effects.is_empty()));
 
     // Three anchors are the fewest a frame keeps.
@@ -1357,12 +1405,22 @@ fn deleting_anchors_joins_their_neighbours_and_never_opens_a_frame() {
     let effects = fixture
         .canvas
         .key(&delete(KeyState::Down, false))
+        .expect("a key")
         .expect("anchors are picked");
     assert!(apply(&mut fixture, effects).is_empty());
     assert_eq!(frame(&fixture, block).1.len(), 3);
-    fixture.canvas.key(&delete(KeyState::Up, false));
+    fixture
+        .canvas
+        .key(&delete(KeyState::Up, false))
+        .expect("a key");
     // With no anchor picked, Delete is the host's.
-    assert!(fixture.canvas.key(&delete(KeyState::Down, false)).is_none());
+    assert!(
+        fixture
+            .canvas
+            .key(&delete(KeyState::Down, false))
+            .expect("a key")
+            .is_none()
+    );
 }
 
 #[test]
@@ -1381,4 +1439,254 @@ fn a_box_frame_becomes_a_path_through_its_corners_at_its_first_edit() {
         anchors,
         [(0.0, 0.0), (60.0, 0.0), (80.0, 50.0), (0.0, 30.0)].map(Point::from)
     );
+}
+
+/// A key pressed with `modifiers`.
+fn key_down(key: Key, code: Code, modifiers: Modifiers) -> KeyboardEvent {
+    KeyboardEvent {
+        state: KeyState::Down,
+        key,
+        code,
+        modifiers,
+        ..KeyboardEvent::default()
+    }
+}
+
+/// `named` pressed with `modifiers` and released; what typing answered.
+fn press_key(
+    canvas: &mut Canvas,
+    named: NamedKey,
+    code: Code,
+    modifiers: Modifiers,
+) -> Vec<Effect> {
+    let pressed = key_down(Key::Named(named), code, modifiers);
+    let effects = canvas
+        .key(&pressed)
+        .expect("a key")
+        .expect("typing takes the key");
+    canvas
+        .key(&KeyboardEvent {
+            state: KeyState::Up,
+            ..pressed
+        })
+        .expect("a key");
+    effects
+}
+
+/// Types `text` a character at a time, as key presses do.
+fn type_text(canvas: &mut Canvas, text: &str) {
+    for character in text.chars() {
+        let pressed = key_down(
+            Key::Character(character.to_string()),
+            Code::Unidentified,
+            Modifiers::default(),
+        );
+        canvas
+            .key(&pressed)
+            .expect("a key")
+            .expect("typing takes the key");
+        canvas
+            .key(&KeyboardEvent {
+                state: KeyState::Up,
+                ..pressed
+            })
+            .expect("a key");
+    }
+}
+
+/// A 40-pixel point text of `content` with its origin at (100, 200).
+fn typed_text(content: Value) -> Vec<Value> {
+    vec![
+        json!({"op": "add_layer", "page": "$page", "index": 0, "layer": {
+            "kind": "text", "content": content,
+            "style": {"chars": {"size": 40}},
+            "transform": [[1.0, 0.0, 100.0], [0.0, 1.0, 200.0]],
+        }}),
+    ]
+}
+
+#[test]
+fn escape_or_an_empty_commit_adds_no_text() {
+    let Some(mut fixture) = unscaled(Vec::new()) else {
+        return;
+    };
+    fixture.canvas.set_tool(Tool::Text);
+    gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    type_text(&mut fixture.canvas, "Gone");
+    let escaped = press_key(
+        &mut fixture.canvas,
+        NamedKey::Escape,
+        Code::Escape,
+        Modifiers::default(),
+    );
+    assert!(escaped.is_empty());
+    assert!(fixture.canvas.typing().is_none());
+    gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
+    assert!(apply(&mut fixture, effects).is_empty());
+    assert!(layers(&fixture).is_empty());
+}
+
+#[test]
+fn typing_into_a_text_edits_it_at_the_click_in_one_step() {
+    let Some(mut fixture) = unscaled(typed_text(json!("Hello"))) else {
+        return;
+    };
+    let text = layers(&fixture)[0];
+    fixture.canvas.set_tool(Tool::Text);
+    // A click on the text types into it, the caret where it landed.
+    let effects = gesture(&mut fixture.canvas, (101.0, 220.0), (101.0, 220.0));
+    assert_eq!(selections(&effects), [vec![text]]);
+    assert_eq!(
+        fixture.canvas.typing().map(|typing| typing.layer),
+        Some(Some(text))
+    );
+    press_key(
+        &mut fixture.canvas,
+        NamedKey::End,
+        Code::End,
+        Modifiers::default(),
+    );
+    type_text(&mut fixture.canvas, "!?");
+    press_key(
+        &mut fixture.canvas,
+        NamedKey::Backspace,
+        Code::Backspace,
+        Modifiers::default(),
+    );
+    press_key(
+        &mut fixture.canvas,
+        NamedKey::Home,
+        Code::Home,
+        Modifiers::default(),
+    );
+    type_text(&mut fixture.canvas, "Oh ");
+    // A click away commits it as one step, and starts the next text.
+    let effects = gesture(&mut fixture.canvas, (300.0, 380.0), (300.0, 380.0));
+    assert_eq!(apply(&mut fixture, effects), ["set_text"]);
+    assert_eq!(
+        layer(&fixture, text)["content"],
+        json!([{"insert": "Oh Hello!"}])
+    );
+    assert!(
+        fixture
+            .canvas
+            .typing()
+            .is_some_and(|typing| typing.layer.is_none())
+    );
+}
+
+#[test]
+fn styling_a_typed_selection_marks_those_characters_and_a_caret_holds_it() {
+    let Some(mut fixture) = unscaled(typed_text(json!("Hello world"))) else {
+        return;
+    };
+    let text = layers(&fixture)[0];
+    fixture.canvas.set_tool(Tool::Text);
+    gesture(&mut fixture.canvas, (101.0, 220.0), (101.0, 220.0));
+    press_key(
+        &mut fixture.canvas,
+        NamedKey::Home,
+        Code::Home,
+        Modifiers::default(),
+    );
+    for _ in 0..5 {
+        press_key(
+            &mut fixture.canvas,
+            NamedKey::ArrowRight,
+            Code::ArrowRight,
+            SHIFT,
+        );
+    }
+    let bold = koharu_scene::CharStyle {
+        weight: Some(700),
+        ..koharu_scene::CharStyle::default()
+    };
+    fixture.canvas.style_typing(&bold).expect("a style");
+    let typing = fixture.canvas.typing().expect("typing");
+    assert_eq!(
+        (typing.chars.weight, typing.chars.size),
+        (Some(700), Some(40.0))
+    );
+    // All of it differs in weight, and shares its size.
+    fixture
+        .canvas
+        .key(&key_down(
+            Key::Character("a".to_owned()),
+            Code::KeyA,
+            CONTROL,
+        ))
+        .expect("a key");
+    let typing = fixture.canvas.typing().expect("typing");
+    assert!(typing.mixed.contains(&CharKey::Weight));
+    assert_eq!(typing.chars.size, Some(40.0));
+    // At the caret, a style waits for what's typed next.
+    press_key(
+        &mut fixture.canvas,
+        NamedKey::End,
+        Code::End,
+        Modifiers::default(),
+    );
+    fixture
+        .canvas
+        .style_typing(&koharu_scene::CharStyle {
+            size: Some(30.0),
+            ..koharu_scene::CharStyle::default()
+        })
+        .expect("a style");
+    type_text(&mut fixture.canvas, "!");
+    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
+    assert_eq!(apply(&mut fixture, effects), ["set_text"]);
+    let content: koharu_scene::RichText =
+        serde_json::from_value(layer(&fixture, text)["content"].clone()).expect("spans");
+    let spans: Vec<_> = content
+        .0
+        .iter()
+        .map(|span| {
+            let marks = &span.attributes;
+            (span.insert.as_str(), marks.weight, marks.size)
+        })
+        .collect();
+    assert_eq!(
+        spans,
+        [
+            ("Hello", Some(700), None),
+            (" world", None, None),
+            ("!", None, Some(30.0))
+        ]
+    );
+}
+
+#[test]
+fn an_input_methods_composition_shows_until_it_commits() {
+    let Some(mut fixture) = unscaled(Vec::new()) else {
+        return;
+    };
+    fixture.canvas.set_tool(Tool::Text);
+    gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    fixture
+        .canvas
+        .compose("ni", Some((2, 2)))
+        .expect("a composition");
+    // Composing types nothing yet; the commit types what it chose.
+    let escaped = press_key(
+        &mut fixture.canvas,
+        NamedKey::Escape,
+        Code::Escape,
+        Modifiers::default(),
+    );
+    assert!(escaped.is_empty());
+    gesture(&mut fixture.canvas, (30.0, 40.0), (30.0, 40.0));
+    fixture
+        .canvas
+        .compose("ni", Some((2, 2)))
+        .expect("a composition");
+    fixture.canvas.compose("", None).expect("a composition");
+    fixture.canvas.insert("你").expect("a commit");
+    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
+    assert_eq!(apply(&mut fixture, effects), ["add_text"]);
+    let [added] = layers(&fixture)[..] else {
+        panic!("one layer");
+    };
+    assert_eq!(layer(&fixture, added)["content"], json!([{"insert": "你"}]));
 }

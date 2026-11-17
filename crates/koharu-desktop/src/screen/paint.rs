@@ -9,7 +9,8 @@ use tauri_runtime_cef::{
     OffscreenView,
     cef::{
         AcceleratedPaintInfo, Browser, ImplRenderHandler, PaintElementType, Range, Rect as CefRect,
-        RenderHandler, ScreenInfo, WrapRenderHandler, rc::Rc as _, wrap_render_handler,
+        RenderHandler, ScreenInfo, TextInputMode, WrapRenderHandler, rc::Rc as _,
+        sys::cef_text_input_mode_t, wrap_render_handler,
     },
 };
 use winit::{
@@ -263,6 +264,18 @@ wrap_render_handler! {
             if type_ == PaintElementType::POPUP {
                 self.view.request_redraw();
             }
+        }
+
+        fn on_virtual_keyboard_requested(
+            &self,
+            _browser: Option<&mut Browser>,
+            input_mode: TextInputMode,
+        ) {
+            // A field of the page's took the focus or gave it up: while one
+            // has it, its keys and the input method are the page's, even
+            // while the canvas types.
+            let field = *input_mode.as_ref() != cef_text_input_mode_t::CEF_TEXT_INPUT_MODE_NONE;
+            with(|main| main.input.field = field);
         }
 
         fn on_ime_composition_range_changed(

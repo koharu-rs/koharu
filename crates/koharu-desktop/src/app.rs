@@ -126,8 +126,11 @@ impl App {
         let page = session.project().pages().next().map(|page| page.id);
         let relay = self.relay(session.subscribe());
         let session = Arc::new(Mutex::new(session));
-        self.screen
-            .set_canvas(Some(Canvas::new(self.gpu, Arc::clone(&session))));
+        self.screen.set_canvas(Some(Canvas::new(
+            self.gpu,
+            Arc::clone(&session),
+            self.renderer.clone(),
+        )));
         {
             let mut project = self.project.lock();
             let opened = project.insert(Project {
@@ -279,7 +282,10 @@ impl App {
     fn show(&self, (session, page): (Arc<Mutex<Session>>, Option<PageId>)) -> Result<()> {
         match page {
             Some(page) => self.screen.show(self.render(&session, page)?),
-            None => self.screen.set_canvas(Some(Canvas::new(self.gpu, session))),
+            None => {
+                self.screen
+                    .set_canvas(Some(Canvas::new(self.gpu, session, self.renderer.clone())))
+            }
         }
         Ok(())
     }
@@ -322,6 +328,15 @@ impl App {
                     self.emit(events::NOTICE, notice);
                     Ok(())
                 }
+                Effect::Copy(text) => arboard::Clipboard::new()
+                    .and_then(|mut clipboard| clipboard.set_text(text))
+                    .context("the clipboard took no text"),
+                // Windows' clipboard ends lines with CR LF; text breaks
+                // lines with LF.
+                Effect::Paste => arboard::Clipboard::new()
+                    .and_then(|mut clipboard| clipboard.get_text())
+                    .map(|text| self.screen.insert(text.replace("\r\n", "\n")))
+                    .context("the clipboard has no text"),
                 Effect::Inpaint { page, rect, mask } => self
                     .process(
                         Target::Area {

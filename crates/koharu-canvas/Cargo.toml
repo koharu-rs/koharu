@@ -14,6 +14,7 @@ publish.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 cursor-icon = { workspace = true }
+icu_segmenter = { workspace = true }
 image = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }

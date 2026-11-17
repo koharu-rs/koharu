@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 
 import type {
+  Bounds,
   LayerId,
   Model,
   PageId,
@@ -14,6 +15,7 @@ import type {
   Stage,
   Tool,
   Transfer,
+  Typed,
 } from '@koharu/ipc/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
@@ -77,6 +79,11 @@ interface KoharuStore {
   jobs: Record<string, Job>
   downloads: Record<string, Transfer>
   camera: Camera
+  /** Where the canvas's selection lies on the page as it's laid out, a point text's lines
+   * included. */
+  selectionBounds: Bounds | null
+  /** The text the canvas is typing into, and its selected characters' style. */
+  typing: Typed | null
   /** The colour the canvas's picker picked last, numbered so a repeat counts. */
   picked: { color: string; serial: number } | null
   selectedLayers: LayerId[]
@@ -115,6 +122,8 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   jobs: {},
   downloads: {},
   camera: { zoom: 1, x: 0, y: 0 },
+  selectionBounds: null,
+  typing: null,
   picked: null,
   selectedLayers: [],
   canvasSelection: [],

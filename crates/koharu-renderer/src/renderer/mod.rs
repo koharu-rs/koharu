@@ -13,7 +13,7 @@ use crate::{
     RendererConfig, fonts,
     frame::{Content, Frame, FrameData, MaskNode, Node},
     pixels::check_size,
-    text::{self, ResolvedText},
+    text::{self, Lettering, ResolvedText},
 };
 
 mod retained;
@@ -104,6 +104,18 @@ impl Renderer {
         Ok(match self.text(layer, text)? {
             Some(Content::Text(layout)) => Some(layout.resolved.clone()),
             _ => None,
+        })
+    }
+
+    /// `text`, which `layer` holds, laid out as a render lays it out, for
+    /// typing into it; a content and style laid out once, as a render keeps
+    /// them.
+    pub fn lettering(&self, layer: LayerId, text: &Text) -> Result<Lettering> {
+        Lettering::of(text, |text| {
+            Ok(match self.text(layer, text)? {
+                Some(Content::Text(layout)) => Some(layout),
+                _ => None,
+            })
         })
     }
 

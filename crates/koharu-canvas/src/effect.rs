@@ -27,6 +27,11 @@ pub enum Effect {
     /// host owns the brush, and sets it with `Canvas::set_brush`.
     BrushDiameter(f64),
     Notice(Notice),
+    /// Text for the host's clipboard, copied or cut while typing.
+    Copy(String),
+    /// Paste while typing: the host gives its clipboard's text to
+    /// `Canvas::insert`.
+    Paste,
 }
 
 /// Why a gesture did nothing, for the app to say in the user's language.

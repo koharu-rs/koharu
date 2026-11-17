@@ -15,6 +15,7 @@ use super::{
     breaks::{Break, Segment},
     fit::{Placed, PlacedLine},
     itemize::{Orientation, Run},
+    lettering::LineMap,
     lines,
     room::physical,
     shape::{Glyph, ShapedText, shape_run},
@@ -26,6 +27,8 @@ use crate::fonts::Font;
 pub(crate) struct TextLayout {
     /// One for each of `resolved.runs`, in order.
     pub runs: Vec<GlyphRun>,
+    /// Where each line's characters lie, for typing into it.
+    pub lines: Vec<LineMap>,
     pub resolved: ResolvedText,
     /// What the text covers, its strokes included, in its own coordinates.
     pub bounds: Rect,
@@ -63,6 +66,7 @@ pub(super) fn arrange(
     let mut hyphens = Vec::new();
     let mut bounds: Option<Rect> = None;
     let mut baseline = None;
+    let mut lines = Vec::new();
     for line in &placed.lines {
         let Some(last) = line.segments.end.checked_sub(1).map(|at| &segments[at]) else {
             continue;
@@ -75,8 +79,24 @@ pub(super) fn arrange(
         let pieces = pieces(shaped, &mut buffer, line, last, text.clone())?;
         // Trailing white space hangs past the line's end.
         let visible = text.start..last.visible_end;
-        let first = position(shaped, line, scale, used, visible, pieces, &mut glyphs);
+        let mut clusters = Vec::new();
+        let (first, start) = position(
+            shaped,
+            line,
+            scale,
+            used,
+            visible.clone(),
+            pieces,
+            (&mut glyphs, &mut clusters),
+        );
         baseline = baseline.or(first);
+        lines.push(LineMap::new(
+            text.clone(),
+            visible.end,
+            start,
+            (line.top, line.pitch),
+            clusters,
+        ));
         let line_box = physical(
             styled.vertical,
             f64::from(line.start),
@@ -96,6 +116,7 @@ pub(super) fn arrange(
     let utf16 = |at: &usize| utf16(&styled.text, *at);
     Ok(TextLayout {
         runs,
+        lines,
         resolved: ResolvedText {
             runs: text_runs,
             frame: placed.frame,
@@ -194,9 +215,11 @@ fn visual_order(pieces: Vec<Piece<'_>>) -> Vec<Piece<'_>> {
 }
 
 /// Positions a line's glyphs at `scale` into `glyphs`, `used` being its
-/// length and `visible` its text before trailing white space. Returns where
-/// its first piece stands: its baseline's y in horizontal text, and its
-/// column's centre's x in vertical text.
+/// length and `visible` its text before trailing white space, and adds each
+/// of its text's glyphs to `clusters`: its cluster offset, where it lies
+/// along the line, and whether its run is right to left. Returns where its
+/// first piece stands, its baseline's y in horizontal text and its column's
+/// centre's x in vertical text, and where its pen started along it.
 fn position(
     shaped: &ShapedText,
     line: &PlacedLine,
@@ -204,15 +227,24 @@ fn position(
     used: f32,
     visible: Range<usize>,
     pieces: Vec<Piece<'_>>,
-    glyphs: &mut Vec<Positioned>,
-) -> Option<f32> {
+    (glyphs, clusters): (&mut Vec<Positioned>, &mut Vec<(usize, Range<f32>, bool)>),
+) -> (Option<f32>, f32) {
     let styled = shaped.styled;
     let vertical = styled.vertical;
     let hang = visible.end;
     let (mut pen, justify) = spacing(shaped, line, &pieces, used, visible);
+    let start = pen;
     let block_center = line.top + line.pitch * 0.5;
     let mut first = None;
     for (run, piece) in pieces {
+        // A hyphen ending the line is no character of the text's.
+        let text = shaped.runs.iter().any(|own| std::ptr::eq(own, run));
+        let rtl = run.level.is_rtl();
+        let mut placed = |cluster: usize, along: Range<f32>| {
+            if text {
+                clusters.push((cluster, along, rtl));
+            }
+        };
         let size = styled.spans[run.span].size * scale;
         let (ascent, descent) = shaped.font(run).extent(size);
         let baseline = line.top + (line.pitch - (ascent + descent)) * 0.5 + ascent;
@@ -232,6 +264,7 @@ fn position(
             for glyph in &piece {
                 let x = -block_center + across + glyph.x_offset * scale;
                 push(x, cell_baseline - glyph.y_offset * scale, glyph);
+                placed(glyph.cluster, pen..pen + size);
                 across += glyph.advance * scale;
             }
             pen += size;
@@ -252,6 +285,7 @@ fn position(
                 // Turned clockwise, a glyph's up is the page's right.
                 (true, true) => push(sideways_baseline + y_offset, pen + x_offset, glyph),
             }
+            placed(glyph.cluster, pen..pen + glyph.advance * scale);
             pen += glyph.advance * scale;
             if let Some((spaces_only, extra)) = justify
                 && (!spaces_only || is_space(&styled.text, glyph.cluster))
@@ -260,7 +294,7 @@ fn position(
             }
         }
     }
-    first
+    (first, start)
 }
 
 /// Where a line's pen starts, and when the line is justified, whether only

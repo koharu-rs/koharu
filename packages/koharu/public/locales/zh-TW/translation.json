@@ -39,8 +39,7 @@
     "empty": "請選擇頁面以開始。",
     "notice": {
       "eraser_needs_raster": "請先選擇點陣圖層再擦除。"
-    },
-    "typeText": "輸入文字"
+    }
   },
   "colorPicker": {
     "brushColor": "筆刷顏色",

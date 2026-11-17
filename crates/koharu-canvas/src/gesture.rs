@@ -106,7 +106,8 @@ impl Gesture {
         match self {
             Self::Marquee(marquee) => Ok(marquee.finish(cx)),
             Self::Transform(transform) => Ok(transform.finish(cx)),
-            Self::Draft(draft) => Ok(draft.finish(cx)),
+            // The canvas types into a draft itself.
+            Self::Draft(_) => Ok(Vec::new()),
             Self::Pan(_) => Ok(Vec::new()),
             Self::Stroke(stroke) => stroke.finish(cx),
             Self::Reshape(reshape) => Ok(reshape.finish()),

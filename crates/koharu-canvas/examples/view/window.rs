@@ -109,6 +109,10 @@ impl App {
     }
 
     fn key(&mut self, event: &KeyboardEvent) -> Result<()> {
+        // The canvas takes the keys it acts on, such as typing's, first.
+        if let Some(effects) = self.host.canvas.key(event)? {
+            return self.host.handle(effects);
+        }
         let canvas = &mut self.host.canvas;
         let pressed = event.state == KeyState::Down;
         if let Key::Character(space) = &event.key
@@ -117,11 +121,13 @@ impl App {
             match (pressed, self.before_space) {
                 (true, None) => {
                     self.before_space = Some(canvas.tool());
-                    canvas.set_tool(Tool::Pan);
+                    let effects = canvas.set_tool(Tool::Pan);
+                    self.host.handle(effects)?;
                 }
                 (false, Some(tool)) => {
                     self.before_space = None;
-                    canvas.set_tool(tool);
+                    let effects = canvas.set_tool(tool);
+                    self.host.handle(effects)?;
                 }
                 _ => {}
             }
@@ -150,7 +156,8 @@ impl App {
                         "h" => Tool::Pan,
                         _ => return Ok(()),
                     };
-                    canvas.set_tool(tool);
+                    let effects = canvas.set_tool(tool);
+                    self.host.handle(effects)?;
                 }
                 _ => {}
             },

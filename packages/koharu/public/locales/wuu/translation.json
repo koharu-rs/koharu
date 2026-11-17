@@ -39,8 +39,7 @@
     "empty": "先选一页，就好开始。",
     "notice": {
       "eraser_needs_raster": "先选一个栅格图层，再好擦。"
-    },
-    "typeText": "输入文本"
+    }
   },
   "colorPicker": {
     "brushColor": "笔刷颜色",

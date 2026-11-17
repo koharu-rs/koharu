@@ -161,6 +161,9 @@ export type Change = {
   history: History
 }
 
+/**  One of the values a character's style holds. */
+export type CharKey = 'family' | 'weight' | 'italic' | 'size' | 'fill' | 'stroke' | 'stroke_width'
+
 /**
  *  Character values; each is also a mark key on a span, and a mark wins for
  *  its span.
@@ -901,6 +904,22 @@ export type TranslatorConfig = {
   reasoning?: string | null
 }
 
+/**  The text being typed into, as the host shows it. */
+export type Typed = {
+  /**  The layer typed into; `None` for a new text the commit adds. */
+  layer: LayerId | null
+  /**
+   *  Each value the selected characters share, the text's style under
+   *  their marks; at a caret, the next character's.
+   */
+  chars: CharStyle
+  /**
+   *  The values the selected characters don't share, which `chars` leaves
+   *  empty.
+   */
+  mixed: CharKey[]
+}
+
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value }
 
 /**
@@ -985,6 +1004,9 @@ export const commands = {
   setColors: (colors: Colors) => invoke<null>('set_colors', { colors }, { headers: headers() }),
   /** Whether the Story panel shows, and the text whose entry the pointer is on, which the canvas numbers and outlines. */
   setStory: (story: Story) => invoke<null>('set_story', { story }, { headers: headers() }),
+  /** The type bar's character settings for the text being typed: the selected characters take them, or at a caret the next ones typed. */
+  styleTyping: (patch: CharStyle) =>
+    invoke<null>('style_typing', { patch }, { headers: headers() }),
   /** Fits the page in the canvas, as the fit shortcut does. */
   fit: () => invoke<null>('fit', {}, { headers: headers() }),
   /** Zooms about the canvas's centre, `zoom` CSS pixels to a page pixel, as the status bar's slider sets it. */
@@ -1002,8 +1024,12 @@ export const events = {
     listen<PageId | null>('page', (event) => handler(event.payload)),
   selection: (handler: (payload: LayerId[]) => void): Promise<UnlistenFn> =>
     listen<LayerId[]>('selection', (event) => handler(event.payload)),
+  selectionBounds: (handler: (payload: Bounds | null) => void): Promise<UnlistenFn> =>
+    listen<Bounds | null>('selection_bounds', (event) => handler(event.payload)),
   camera: (handler: (payload: Camera) => void): Promise<UnlistenFn> =>
     listen<Camera>('camera', (event) => handler(event.payload)),
+  typing: (handler: (payload: Typed | null) => void): Promise<UnlistenFn> =>
+    listen<Typed | null>('typing', (event) => handler(event.payload)),
   color: (handler: (payload: Rgba) => void): Promise<UnlistenFn> =>
     listen<Rgba>('color', (event) => handler(event.payload)),
   brushDiameter: (handler: (payload: number) => void): Promise<UnlistenFn> =>

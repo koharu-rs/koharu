@@ -39,8 +39,7 @@
     "empty": "시작할 페이지를 선택하세요.",
     "notice": {
       "eraser_needs_raster": "지우려면 래스터 레이어를 선택하세요."
-    },
-    "typeText": "텍스트 입력"
+    }
   },
   "colorPicker": {
     "brushColor": "브러시 색상",

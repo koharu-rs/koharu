@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use koharu_canvas::{Point, Rect};
+use koharu_canvas::{Canvas, Effect, Point, Rect};
 use serde::Deserialize;
 use specta::Type;
 use tauri_runtime_cef::cef::{BrowserHost, ImplBrowserHost as _, MouseButtonType, MouseEvent};
@@ -202,6 +202,9 @@ pub struct Input {
     hover: Side,
     /// The side holding the keyboard: the one a press last landed on.
     keyboard: Side,
+    /// A field of the page's has the focus, as CEF tells when it would
+    /// show an on-screen keyboard.
+    pub(super) field: bool,
 }
 
 /// A press, to count the clicks of a double or triple click.
@@ -449,21 +452,24 @@ pub fn pointer(app: &Arc<App>, window: &dyn Window, pointer: Pointer) {
 /// page's focus, so the page holds the keyboard after it.
 pub fn key(app: &Arc<App>, event: &KeyEvent) {
     let taken = with(|main| {
-        if main.input.keyboard != Side::Canvas {
+        // While the canvas types, it takes the keys unless a field of the
+        // page's has them, as Photoshop's type takes them back after its
+        // options bar.
+        let typing = !main.input.field && main.canvas.as_ref().is_some_and(Canvas::is_typing);
+        if main.input.keyboard != Side::Canvas && !typing {
             return None;
         }
         let key = keyboard_event(event, main.input.modifiers());
-        main.canvas.as_mut()?.key(&key)
+        main.canvas.as_mut()?.key(&key).transpose()
     })
     .flatten();
-    if let Some(effects) = taken {
-        let edited = app.handle(effects);
-        change(|main| {
-            if let (Some(snapshot), Some(canvas)) = (edited, &mut main.canvas) {
-                canvas.show(snapshot);
-            }
-        });
-        return;
+    match taken {
+        Some(Ok(effects)) => return carry(app, effects),
+        Some(Err(error)) => {
+            tracing::error!("the canvas failed a key: {error:#}");
+            return;
+        }
+        None => {}
     }
     let held = with(|main| {
         if event.state == ElementState::Pressed
@@ -477,6 +483,17 @@ pub fn key(app: &Arc<App>, event: &KeyEvent) {
     if let Some((host, modifiers)) = held {
         keys::send_key(&host, event, modifiers);
     }
+}
+
+/// Has the app carry out what the canvas answered, once the window is free
+/// again, and draws again, showing the page as its edits left it.
+pub(super) fn carry(app: &Arc<App>, effects: Vec<Effect>) {
+    let edited = app.handle(effects);
+    change(|main| {
+        if let (Some(snapshot), Some(canvas)) = (edited, &mut main.canvas) {
+            canvas.show(snapshot);
+        }
+    });
 }
 
 /// `event` as the canvas takes it, a W3C keyboard event; winit's named keys,
@@ -552,12 +569,7 @@ fn canvas(app: &Arc<App>, window: &dyn Window, event: PointerEvent) {
             if !left {
                 set_cursor(window, cursor);
             }
-            let edited = app.handle(effects);
-            change(|main| {
-                if let (Some(snapshot), Some(canvas)) = (edited, &mut main.canvas) {
-                    canvas.show(snapshot);
-                }
-            });
+            carry(app, effects);
         }
         Some(Err(error)) => tracing::error!("the canvas failed a pointer event: {error:#}"),
         None => {}

@@ -43,6 +43,8 @@ pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
 #[specta::specta]
 pub async fn show(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
     let app = Arc::clone(&app);
+    // Typing on the page shown commits before the page changes.
+    app.screen.finish_typing(Arc::clone(&app));
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         {
             let mut project = app.project.lock();

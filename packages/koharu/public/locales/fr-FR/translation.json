@@ -39,8 +39,7 @@
     "empty": "Sélectionnez une page pour commencer.",
     "notice": {
       "eraser_needs_raster": "Sélectionnez un calque matriciel pour effacer."
-    },
-    "typeText": "Saisir le texte"
+    }
   },
   "colorPicker": {
     "brushColor": "Couleur du pinceau",

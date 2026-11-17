@@ -23,12 +23,14 @@ import {
   letteringOf,
   walkLayers,
 } from '@/lib/document'
-import { cssBox, textBounds } from '@/lib/geometry'
 import { useFonts, usePage } from '@/lib/queries'
 import { setStyle, updateLayer } from '@/lib/scene'
 import { hexToRgba, rgbaToHex, useKoharuStore, type CanvasTool } from '@/lib/store'
 import {
+  commands,
   type Align,
+  type CharKey,
+  type CharStyle,
   type Direction,
   type FontFamily,
   type LayerId,
@@ -81,7 +83,9 @@ const TOOLS: CanvasTool[] = ['select', 'direct_select', 'text']
  * Task Bar shows a selection's type settings on the canvas: centred below the texts, or above when
  * there's no room below, kept inside the canvas, on one row or two when the canvas is narrower.
  * Every setting a text's lettering has: the style it draws with, its direction, and its box's
- * fit. A change goes to every text and block selected. */
+ * fit. As Photoshop's Character panel, while the canvas types, a character setting styles the
+ * selected characters, or the next ones typed at a caret; otherwise every character of every text
+ * and block selected. A value the characters don't share shows empty. */
 export function TypeBar() {
   const { t } = useTranslation()
   const camera = useKoharuStore((state) => state.camera)
@@ -102,13 +106,26 @@ export function TypeBar() {
   }, [page, selectedIds])
   const current = targets[0]
   const lettering: Text | null = current ? letteringOf(current) : null
+  const typing = useKoharuStore((state) => state.typing)
   const [draft, setDraft] = useState<{ layer: LayerId; style: TextStyle } | null>(null)
   const sequence = useRef(0)
 
   useEffect(() => setDraft(null), [current?.id])
 
-  const style = current && draft?.layer === current.id ? draft.style : (lettering?.style ?? {})
+  // While typing, what the canvas says its selected characters share; otherwise what every
+  // character of the selected texts shares.
+  const shared = useMemo(
+    () => typing ?? sharedChars(targets.flatMap((layer) => letteringOf(layer) ?? [])),
+    [typing, targets],
+  )
+  const drafted = current && draft?.layer === current.id ? draft.style : null
+  const style: TextStyle = {
+    ...lettering?.style,
+    ...drafted,
+    chars: { ...shared.chars, ...drafted?.chars },
+  }
   const chars = style.chars ?? {}
+  const mixed = new Set(shared.mixed.filter((key) => drafted?.chars?.[key] === undefined))
   const frame = lettering?.frame ?? 'point'
   const box = typeof frame === 'object' && 'box' in frame ? frame.box : null
   const autoFit = box?.fit === 'best'
@@ -128,6 +145,15 @@ export function TypeBar() {
       })
   }
 
+  /** A character setting: while typing, the canvas styles the selected characters, or holds it
+   * for the next ones typed at a caret; otherwise every character of each target takes it. */
+  const applyChars = (patch: CharStyle) => {
+    if (!typing) return apply({ chars: patch })
+    // A mark can't unset a value, so no border on some characters is a border no wide.
+    const marked = patch.stroke === null ? { ...patch, stroke: undefined, stroke_width: 0 } : patch
+    void call(commands.styleTyping, marked).catch(() => undefined)
+  }
+
   /** Merges `patch` into each target's lettering: a text's own values, a block's translation's. */
   const update = (patch: { [key in string]: Value }) => {
     for (const layer of targets) {
@@ -141,37 +167,33 @@ export function TypeBar() {
       ? available
       : [...available, placeholderFamily(defaultFont)]
   }, [availableFonts, defaultFont])
-  const family = chars.family ?? defaultFont
+  const family = mixed.has('family') ? '' : (chars.family ?? defaultFont)
   const selectedFamily = families.find((candidate) => sameFont(candidate.name, family))
   const italics = hasItalic(selectedFamily)
   const italic = Boolean(chars.italic) && italics
   const weight = chars.weight ?? 400
   const weights = usableFontWeights(selectedFamily, italic)
-  const size = Math.round((chars.size ?? 24) * 100) / 100
+  const size = mixed.has('size') ? null : Math.round((chars.size ?? 24) * 100) / 100
   const strokeWidth = chars.stroke_width ?? 0
   const stroke = chars.stroke ?? null
   const strokeEnabled = stroke !== null && stroke[3] > 0 && strokeWidth > 0
   const direction: Direction = lettering?.direction ?? 'horizontal'
   const align: Align = style.align ?? (direction === 'vertical' ? 'start' : 'center')
 
-  // Where the bar goes: below the texts, or above when there's no room below, inside the canvas.
-  const area = useMemo(() => {
-    const boxes = targets.flatMap((layer) => {
-      const text = isBlockLayer(layer)
-        ? (layer.translation ?? layer.source)
-        : isTextLayer(layer)
-          ? layer
-          : null
-      const bounds = text ? textBounds(text) : null
-      return bounds ? [cssBox(bounds, camera)] : []
-    })
-    if (!boxes.length) return null
-    const left = Math.min(...boxes.map((box) => box.x))
-    const top = Math.min(...boxes.map((box) => box.y))
-    const right = Math.max(...boxes.map((box) => box.x + box.width))
-    const bottom = Math.max(...boxes.map((box) => box.y + box.height))
-    return { x: left, y: top, width: right - left, height: bottom - top }
-  }, [targets, camera])
+  // Where the bar goes: below the selection as the canvas lays it out, a point text's lines and
+  // the text being typed included, or above when there's no room below, inside the canvas.
+  const selectionBounds = useKoharuStore((state) => state.selectionBounds)
+  const area =
+    selectionBounds && (targets.length || typing)
+      ? {
+          x: selectionBounds.x * camera.zoom + camera.x,
+          y: selectionBounds.y * camera.zoom + camera.y,
+          width: selectionBounds.width * camera.zoom,
+          height: selectionBounds.height * camera.zoom,
+        }
+      : null
+  // A new text being typed has no layer yet for its paragraph to go to.
+  const paragraph = targets.length > 0
   const shown = area !== null && TOOLS.includes(tool)
   const bar = useRef<HTMLDivElement>(null)
   // The bar's size and the canvas's, measured again whenever either changes, as when the bar
@@ -238,19 +260,17 @@ export function TypeBar() {
           onChange={(next) => {
             const nextFamily = families.find((candidate) => sameFont(candidate.name, next))
             const nextItalic = italic && hasItalic(nextFamily)
-            apply({
-              chars: {
-                family: next,
-                italic: nextItalic,
-                weight: nearestFontWeight(usableFontWeights(nextFamily, nextItalic), weight),
-              },
+            applyChars({
+              family: next,
+              italic: nextItalic,
+              weight: nearestFontWeight(usableFontWeights(nextFamily, nextItalic), weight),
             })
           }}
         />
       </div>
       <Select
-        value={String(weight)}
-        onValueChange={(next) => next && apply({ chars: { weight: Number(next) } })}
+        value={mixed.has('weight') ? '' : String(weight)}
+        onValueChange={(next) => next && applyChars({ weight: Number(next) })}
       >
         <SelectTrigger size='sm' aria-label={t('inspector.fontWeight')} className='w-16'>
           <SelectValue />
@@ -274,14 +294,9 @@ export function TypeBar() {
               disabled={!italics && !italic}
               pressed={italic}
               onPressedChange={(nextItalic) =>
-                apply({
-                  chars: {
-                    italic: nextItalic,
-                    weight: nearestFontWeight(
-                      usableFontWeights(selectedFamily, nextItalic),
-                      weight,
-                    ),
-                  },
+                applyChars({
+                  italic: nextItalic,
+                  weight: nearestFontWeight(usableFontWeights(selectedFamily, nextItalic), weight),
                 })
               }
             />
@@ -298,7 +313,7 @@ export function TypeBar() {
           autoFit={autoFit}
           canAutoFit={box !== null}
           onChange={(next) => {
-            apply({ chars: { size: next } })
+            applyChars({ size: next })
             // A set size is the most the text takes, as the box's best fit would grow it.
             if (autoFit) update({ frame: { box: { fit: 'shrink' } } })
           }}
@@ -308,8 +323,8 @@ export function TypeBar() {
       <ColorWell
         label={t('inspector.textColor')}
         size='sm'
-        value={chars.fill ? rgbaToHex(chars.fill) : BLACK}
-        onChange={(color) => color && apply({ chars: { fill: hexToRgba(color) } })}
+        value={mixed.has('fill') ? '' : chars.fill ? rgbaToHex(chars.fill) : BLACK}
+        onChange={(color) => color && applyChars({ fill: hexToRgba(color) })}
       />
       <div
         role='group'
@@ -341,6 +356,7 @@ export function TypeBar() {
             aria-label={label}
             aria-pressed={align === value}
             data-active={align === value}
+            disabled={!paragraph}
             className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
             onClick={() => apply({ align: value })}
           >
@@ -356,6 +372,7 @@ export function TypeBar() {
               size='sm'
               aria-label={t('inspector.vertical')}
               className={toggle}
+              disabled={!paragraph}
               pressed={direction === 'vertical'}
               onPressedChange={(vertical) =>
                 update({ direction: vertical ? 'vertical' : 'horizontal' })
@@ -414,15 +431,14 @@ export function TypeBar() {
               allowTransparent
               value={strokeEnabled && stroke ? rgbaToHex(stroke) : null}
               onChange={(color) =>
-                apply({
-                  chars:
-                    color === null
-                      ? { stroke: null }
-                      : {
-                          stroke: hexToRgba(color),
-                          stroke_width: strokeWidth > 0 ? strokeWidth : 1.5,
-                        },
-                })
+                applyChars(
+                  color === null
+                    ? { stroke: null }
+                    : {
+                        stroke: hexToRgba(color),
+                        stroke_width: strokeWidth > 0 ? strokeWidth : 1.5,
+                      },
+                )
               }
             />
             <NumberField
@@ -435,9 +451,7 @@ export function TypeBar() {
               step={0.5}
               onValueChange={(next) => {
                 if (next !== null && next >= 0.5 && next <= 32) {
-                  apply({
-                    chars: { stroke_width: next, stroke: stroke ?? hexToRgba(WHITE) },
-                  })
+                  applyChars({ stroke_width: next, stroke: stroke ?? hexToRgba(WHITE) })
                 }
               }}
             >
@@ -464,6 +478,38 @@ function placeholderFamily(name: string): FontFamily {
     name,
     faces: [{ post_script_name: name, weight: 400, weight_range: null, italic: false }],
   }
+}
+
+const CHAR_KEYS: CharKey[] = [
+  'family',
+  'weight',
+  'italic',
+  'size',
+  'fill',
+  'stroke',
+  'stroke_width',
+]
+
+/** What every character of `texts` shares, each span's marks over its text's style, and the values
+ * they don't, which it leaves empty, as the canvas reports a typed selection's. */
+function sharedChars(texts: Text[]): { chars: CharStyle; mixed: CharKey[] } {
+  const styles: CharStyle[] = texts.flatMap((text) => {
+    const base = text.style?.chars ?? {}
+    const spans = text.content?.length ? text.content : [{ insert: '' }]
+    return spans.map((span) => ({
+      ...base,
+      ...Object.fromEntries(
+        Object.entries(span.attributes ?? {}).filter(([, value]) => value != null),
+      ),
+    }))
+  })
+  const [first, ...rest] = styles
+  if (!first) return { chars: {}, mixed: [] }
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+  const mixed = CHAR_KEYS.filter((key) => rest.some((style) => !same(style[key], first[key])))
+  const chars: CharStyle = { ...first }
+  for (const key of mixed) delete chars[key]
+  return { chars, mixed }
 }
 
 function hasItalic(family: FontFamily | undefined): boolean {
@@ -511,7 +557,8 @@ function FontSizeField({
   onChange,
   onAutoFit,
 }: {
-  value: number
+  /** `null` when the characters don't share one. */
+  value: number | null
   autoFit: boolean
   canAutoFit: boolean
   disabled: boolean
@@ -564,7 +611,7 @@ function FontSizeField({
         <NumberFieldInput
           data-testid='type-size'
           aria-label={t('inspector.fontSize')}
-          placeholder={t('inspector.auto')}
+          placeholder={autoFit ? t('inspector.auto') : undefined}
           className='px-1.5 text-left text-ellipsis'
         />
         <DropdownMenu>

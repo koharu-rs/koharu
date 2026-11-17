@@ -39,8 +39,7 @@
     "empty": "Başlamak için bir sayfa seçin.",
     "notice": {
       "eraser_needs_raster": "Silmek için bir raster katman seçin."
-    },
-    "typeText": "Metin yaz"
+    }
   },
   "colorPicker": {
     "brushColor": "Fırça rengi",

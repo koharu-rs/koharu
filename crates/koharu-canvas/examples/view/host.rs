@@ -25,7 +25,7 @@ pub struct Host {
 impl Host {
     pub fn new(renderer: Renderer, session: Arc<Mutex<Session>>, page: PageId) -> Result<Self> {
         let gpu = Gpu::get()?;
-        let canvas = Canvas::new(gpu, Arc::clone(&session));
+        let canvas = Canvas::new(gpu, Arc::clone(&session), renderer.clone());
         let brush = Brush {
             diameter: 24.0,
             color: Rgba([0.9, 0.1, 0.2, 1.0]),
@@ -79,6 +79,10 @@ impl Host {
                     self.canvas.set_brush(self.brush);
                 }
                 Effect::Notice(notice) => tracing::warn!("{notice:?}"),
+                Effect::Copy(text) => {
+                    tracing::info!("copied {text:?}; the example has no clipboard")
+                }
+                Effect::Paste => tracing::info!("the example has no clipboard to paste from"),
             }
         }
         Ok(())

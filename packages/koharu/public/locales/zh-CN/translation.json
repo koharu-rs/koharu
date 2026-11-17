@@ -39,8 +39,7 @@
     "empty": "请选择页面以开始。",
     "notice": {
       "eraser_needs_raster": "请先选择栅格图层再擦除。"
-    },
-    "typeText": "输入文本"
+    }
   },
   "colorPicker": {
     "brushColor": "笔刷颜色",

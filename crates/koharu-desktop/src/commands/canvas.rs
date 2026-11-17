@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use koharu_canvas::{Brush, Colors, Rect, Story, Tool};
-use koharu_scene::LayerId;
+use koharu_scene::{CharStyle, LayerId};
 use tauri::State;
 
 use crate::app::App;
@@ -21,7 +21,7 @@ pub fn set_viewport(app: State<'_, Arc<App>>, x: f64, y: f64, width: f64, height
 #[specta::specta]
 pub fn set_tool(app: State<'_, Arc<App>>, tool: Tool) {
     tracing::info!(?tool, "tool");
-    app.screen.set_tool(tool);
+    app.screen.set_tool(Arc::clone(&app), tool);
 }
 
 #[tauri::command]
@@ -63,5 +63,13 @@ pub fn set_zoom(app: State<'_, Arc<App>>, zoom: f64) {
 #[tauri::command]
 #[specta::specta]
 pub fn select(app: State<'_, Arc<App>>, layers: Vec<LayerId>) {
-    app.screen.select(layers);
+    app.screen.select(Arc::clone(&app), layers);
+}
+
+/// The type bar's character settings for the text being typed: the
+/// selected characters take them, or at a caret the next ones typed.
+#[tauri::command]
+#[specta::specta]
+pub fn style_typing(app: State<'_, Arc<App>>, patch: CharStyle) {
+    app.screen.style_typing(patch);
 }

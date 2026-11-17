@@ -39,8 +39,7 @@
     "empty": "اختر صفحة للبدء.",
     "notice": {
       "eraser_needs_raster": "حدد طبقة نقطية للمسح."
-    },
-    "typeText": "اكتب النص"
+    }
   },
   "colorPicker": {
     "brushColor": "لون الفرشاة",

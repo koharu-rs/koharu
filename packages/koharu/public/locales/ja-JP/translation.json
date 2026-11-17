@@ -39,8 +39,7 @@
     "empty": "ページを選択して開始します。",
     "notice": {
       "eraser_needs_raster": "消去するにはラスターレイヤーを選択してください。"
-    },
-    "typeText": "テキストを入力"
+    }
   },
   "colorPicker": {
     "brushColor": "ブラシカラー",

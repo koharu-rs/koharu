@@ -39,8 +39,7 @@
     "empty": "Selecciona una página para empezar.",
     "notice": {
       "eraser_needs_raster": "Selecciona una capa ráster para borrar."
-    },
-    "typeText": "Escribir texto"
+    }
   },
   "colorPicker": {
     "brushColor": "Color del pincel",

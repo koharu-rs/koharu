@@ -44,6 +44,7 @@ ab_glyph = "0.2.32"
 age = "0.12.1"
 alphanumeric-sort = "1.5.8"
 anyhow = "1.0.104"
+arboard = "3.7.0"
 atomicwrites = "0.4.4"
 axum = "0.8.9"
 backon = { version = "1.6.0", default-features = false, features = ["std", "tokio-sleep"] }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
@@ -9,13 +9,11 @@ import { HistoryWindow } from '@/components/editor/HistoryWindow'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { TypeBar } from '@/components/editor/TypeBar'
-import { call, dispatch } from '@/lib/backend'
-import { findLayer, isBlockLayer, isTextLayer, plainText } from '@/lib/document'
-import { cssBox, textBounds } from '@/lib/geometry'
+import { dispatch } from '@/lib/backend'
 import { usePage } from '@/lib/queries'
-import { deleteSelection, setText } from '@/lib/scene'
+import { deleteSelection } from '@/lib/scene'
 import { hexToRgba, toolKeys, useKoharuStore, type CanvasTool } from '@/lib/store'
-import { commands, type Layer, type Rgba, type Text } from '@koharu/ipc/protocol'
+import { commands, type Rgba } from '@koharu/ipc/protocol'
 
 /** The canvas's place in the window. The native canvas draws the page under the web interface
  * wherever this element and its ancestors paint nothing, and takes the pointer there; the
@@ -26,7 +24,6 @@ export function CanvasWorkspace() {
   const page = usePage().data
   const tool = useKoharuStore((state) => state.tool)
   const brush = useKoharuStore((state) => state.brush)
-  const selected = useKoharuStore((state) => state.selectedLayers)
   const colorSampling = useColorSampling()
 
   useEffect(() => {
@@ -171,11 +168,6 @@ export function CanvasWorkspace() {
     }
   }, [colorSampling, page])
 
-  const typed =
-    tool === 'text' && selected.length === 1 && page
-      ? findLayer(page.layers, selected[0]!)?.layer
-      : undefined
-
   return (
     <main className='relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tl-2xl'>
       <CanvasCommandBar />
@@ -184,11 +176,10 @@ export function CanvasWorkspace() {
         <div
           ref={surface}
           data-testid='canvas-viewport'
-          className='relative min-h-0 min-w-0 flex-1 overflow-hidden'
+          // Clipped, never scrolled: a focused control past its edge would scroll it, and every
+          // overlay with it, off the canvas the overlays sit on.
+          className='relative min-h-0 min-w-0 flex-1 overflow-clip'
         >
-          {typed && (isTextLayer(typed) || isBlockLayer(typed)) && (
-            <TextBox key={typed.id} layer={typed} />
-          )}
           {page && <TypeBar />}
           {page && <HistoryWindow />}
           {!page && (
@@ -200,58 +191,6 @@ export function CanvasWorkspace() {
       </div>
       <StatusBar onZoomChange={(zoom) => dispatch(commands.setZoom, zoom)} />
     </main>
-  )
-}
-
-/** Typing into a text or a block's translation: an HTML text box over its frame, so the input
- * method composes in Chromium. It commits when it loses the focus, as a press on the canvas
- * takes it, and Escape leaves the text as it was. */
-function TextBox({ layer }: { layer: Layer }) {
-  const { t } = useTranslation()
-  const camera = useKoharuStore((state) => state.camera)
-  const text: Text | null = isTextLayer(layer)
-    ? layer
-    : isBlockLayer(layer)
-      ? (layer.translation ?? layer.source)
-      : null
-  const original = isBlockLayer(layer) ? plainText(layer.translation) : plainText(text)
-  const [value, setValue] = useState(original)
-  const cancelled = useRef(false)
-  const bounds = text ? textBounds(text) : null
-  if (!bounds) return null
-  const box = cssBox(bounds, camera)
-  const size = (text?.style?.chars?.size ?? 16) * camera.zoom
-
-  const commit = () => {
-    if (cancelled.current || value === original) return
-    void call(setText, layer.id, value).catch(() => undefined)
-  }
-
-  return (
-    <textarea
-      autoFocus
-      aria-label={t('canvas.typeText')}
-      value={value}
-      onChange={(event) => setValue(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          cancelled.current = true
-          event.currentTarget.blur()
-        } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-          event.currentTarget.blur()
-        }
-      }}
-      className='absolute z-10 resize-none rounded-sm border border-[var(--canvas-selection)] bg-popover/95 p-1 text-foreground shadow-sm outline-none'
-      style={{
-        left: box.x,
-        top: box.y,
-        width: Math.max(box.width, 160),
-        height: Math.max(box.height, size * 1.6 + 8),
-        fontSize: Math.max(size, 12),
-        lineHeight: 1.3,
-      }}
-    />
   )
 }
 

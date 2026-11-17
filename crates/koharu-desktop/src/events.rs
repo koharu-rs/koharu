@@ -3,10 +3,10 @@
 
 use std::marker::PhantomData;
 
-use koharu_canvas::{Camera, Notice};
+use koharu_canvas::{Camera, Notice, Typed};
 use koharu_pipeline::Event as PipelineEvent;
 use koharu_runtime::Transfer;
-use koharu_scene::{Change, LayerId, PageId, Rgba};
+use koharu_scene::{Bounds, Change, LayerId, PageId, Rgba};
 use serde::Serialize;
 use specta::{Type, Types, datatype::DataType};
 use tauri::{AppHandle, Emitter as _};
@@ -49,7 +49,13 @@ pub const PROJECT: Event<Option<String>> = Event::new("project");
 pub const PAGE: Event<Option<PageId>> = Event::new("page");
 /// The selection a canvas gesture made.
 pub const SELECTION: Event<Vec<LayerId>> = Event::new("selection");
+/// Where the selection lies on the page as it's laid out, once that
+/// changes; none while nothing selected shows.
+pub const SELECTION_BOUNDS: Event<Option<Bounds>> = Event::new("selection_bounds");
 pub const CAMERA: Event<Camera> = Event::new("camera");
+/// The text being typed into on the canvas and its selection's character
+/// style, once either changes; none when typing stops.
+pub const TYPING: Event<Option<Typed>> = Event::new("typing");
 /// The colour the picker picked, for the brush.
 pub const COLOR: Event<Rgba> = Event::new("color");
 /// The brush diameter Alt and the wheel asked for, in page pixels.
@@ -66,7 +72,9 @@ pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
         PROJECT.binding(types),
         PAGE.binding(types),
         SELECTION.binding(types),
+        SELECTION_BOUNDS.binding(types),
         CAMERA.binding(types),
+        TYPING.binding(types),
         COLOR.binding(types),
         BRUSH_DIAMETER.binding(types),
         NOTICE.binding(types),

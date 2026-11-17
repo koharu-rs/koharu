@@ -39,8 +39,7 @@
     "empty": "Select a page to begin.",
     "notice": {
       "eraser_needs_raster": "Select a raster layer to erase."
-    },
-    "typeText": "Type text"
+    }
   },
   "colorPicker": {
     "brushColor": "Brush color",

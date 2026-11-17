@@ -39,8 +39,7 @@
     "empty": "Selecione uma página para começar.",
     "notice": {
       "eraser_needs_raster": "Selecione uma camada raster para apagar."
-    },
-    "typeText": "Digitar texto"
+    }
   },
   "colorPicker": {
     "brushColor": "Cor do pincel",
