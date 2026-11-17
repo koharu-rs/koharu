@@ -17,7 +17,6 @@ import { useTranslation } from 'react-i18next'
 import { ColorWell } from '@/components/controls/ColorWell'
 import { usePage } from '@/lib/queries'
 import {
-  isBrushTool,
   maxBrushDiameter,
   MIN_BRUSH_DIAMETER,
   toolKeys,
@@ -59,7 +58,6 @@ export function ToolBar() {
   const brush = useKoharuStore((state) => state.brush)
   const setTool = useKoharuStore((state) => state.setTool)
   const setBrush = useKoharuStore((state) => state.setBrush)
-  const hasBrush = isBrushTool(active)
 
   return (
     <aside className='absolute top-3 left-3 z-20 flex w-11 flex-col rounded-2xl border border-border bg-[var(--surface-floating)] p-1 shadow-[var(--shadow-toolrail)]'>
@@ -93,17 +91,13 @@ export function ToolBar() {
         ))}
       </div>
 
-      {hasBrush && (
-        <div className='flex flex-col items-center gap-1 border-t border-border/80 py-1.5'>
-          {active === 'draw' && (
-            <ColorWell value={brush.color} onChange={(color) => setBrush({ ...brush, color })} />
-          )}
-          <BrushSize
-            value={brush.diameter}
-            onChange={(diameter) => setBrush({ ...brush, diameter })}
-          />
-        </div>
-      )}
+      <div className='flex flex-col items-center gap-1 border-t border-border/80 py-1.5'>
+        <ColorWell value={brush.color} onChange={(color) => setBrush({ ...brush, color })} />
+        <BrushSize
+          value={brush.diameter}
+          onChange={(diameter) => setBrush({ ...brush, diameter })}
+        />
+      </div>
     </aside>
   )
 }
@@ -113,6 +107,9 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
   const roundedValue = Math.round(value)
   const page = usePage().data
   const maxSize = maxBrushDiameter(page?.size ?? { width: 2048, height: 2048 })
+  // Photoshop's brush picker shows the tip over its size; the tip grows with the size, up to
+  // its box at the page's largest brush.
+  const tip = clamp(2 + (16 * value) / maxSize, 2, 18)
 
   return (
     <Popover>
@@ -126,10 +123,13 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
                   variant='ghost'
                   size='icon'
                   aria-label={t('tools.brushSizePixels', { size: roundedValue })}
-                  className='size-8 rounded-xl font-sans text-[11px] leading-none font-medium tracking-[-0.02em] text-muted-foreground tabular-nums hover:bg-foreground/[0.06] hover:text-foreground'
+                  className='h-auto w-8 flex-col gap-1 rounded-lg py-1.5 font-sans text-[11px] leading-none font-medium tracking-[-0.02em] text-muted-foreground tabular-nums hover:bg-foreground/[0.06] hover:text-foreground'
                 />
               }
             >
+              <span className='grid size-[18px] place-items-center'>
+                <span className='rounded-full bg-current' style={{ width: tip, height: tip }} />
+              </span>
               {roundedValue}
             </TooltipTrigger>
           }

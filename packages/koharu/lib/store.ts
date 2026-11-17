@@ -25,10 +25,6 @@ export function maxBrushDiameter(size: Size): number {
   return Math.round(Math.max(size.width / 2048, 1.0) * 128)
 }
 
-export function isBrushTool(tool: CanvasTool): boolean {
-  return tool === 'draw' || tool === 'eraser' || tool === 'remove'
-}
-
 /** Each tool's key, Photoshop's for its counterpart: the Move tool's V, the Direct Selection
  * tool's A, the Type tool's T, the Brush's B, the Eraser's E, the Eyedropper's I, the Remove
  * tool's J, and the Hand's H. */

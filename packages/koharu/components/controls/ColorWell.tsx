@@ -64,9 +64,13 @@ export function ColorWell(props: ColorWellProps) {
       <PopoverTrigger
         aria-label={accessibleLabel}
         disabled={disabled}
+        // A small well is a field among a bar's fields; a large one is a bare swatch, as
+        // Photoshop's toolbar shows its foreground colour.
         className={cn(
-          'grid place-items-center border border-input bg-background disabled:cursor-not-allowed disabled:opacity-40',
-          size === 'sm' ? 'size-6 rounded-md' : 'size-8 rounded-lg',
+          'grid place-items-center outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40',
+          size === 'sm'
+            ? 'size-6 rounded-md border border-input bg-background'
+            : 'size-8 rounded-md',
         )}
       >
         {transparent ? (
@@ -77,8 +81,9 @@ export function ColorWell(props: ColorWellProps) {
         ) : (
           <span
             className={cn(
-              'rounded-[3px] ring-1 ring-black/15',
-              size === 'sm' ? 'size-3' : 'size-4',
+              size === 'sm'
+                ? 'size-3 rounded-[3px] ring-1 ring-black/15'
+                : 'size-6 rounded-md border border-foreground/40 shadow-[inset_0_0_0_1px_white]',
             )}
             style={{ backgroundColor: draft }}
           />
