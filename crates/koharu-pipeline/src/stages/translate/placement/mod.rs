@@ -5,7 +5,7 @@ mod room;
 
 use icu_locale_core::{LanguageIdentifier, subtags::language};
 use koharu_scene::{
-    Align, Content, Direction, Frame, Layer, LayerId, Op, Project, Role, Transform,
+    Align, Color, Content, Direction, Frame, Layer, LayerId, Op, Project, Rgba, Role, Transform,
 };
 use kurbo::{Affine, Shape as _};
 use serde_json::{Value, json};
@@ -19,8 +19,10 @@ use crate::{Error, Result};
 /// frame's block axis. A new translation starts at the page's lettering
 /// size, the median of its texts' sources, as a letterer keeps one size for a
 /// page's dialogue and fits each balloon from it; its lines centred, as a
-/// balloon's are lettered; and with its source's outline as its stroke, the
-/// width scaled from the source's size to its own. What its style already
+/// balloon's are lettered; and with its source's ink as its fill and outline
+/// as its stroke, the width scaled from the source's size to its own, or a
+/// sound effect without one a stroke a sixteenth of its size, unlike its
+/// fill. What its style already
 /// sets is kept. It is vertical only when its source is and `target` is
 /// Japanese or Chinese, which are written so; any other language runs
 /// horizontally, turned by the source's tilt as the source is.
@@ -76,12 +78,33 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
     {
         chars.insert("fill".to_owned(), json!(fill));
     }
-    if given.and_then(|style| style.chars.stroke).is_none()
-        && let (Some(stroke), Some(width)) = (source.stroke, source.stroke_width)
-    {
-        let scale = size.zip(source.size).map_or(1.0, |(to, from)| to / from);
-        chars.insert("stroke".to_owned(), json!(stroke));
-        chars.insert("stroke_width".to_owned(), json!(width * scale));
+    if given.and_then(|style| style.chars.stroke).is_none() {
+        let outline = match (source.stroke, source.stroke_width) {
+            (Some(stroke), Some(width)) => {
+                let scale = size.zip(source.size).map_or(1.0, |(to, from)| to / from);
+                Some((stroke, width * scale))
+            }
+            // A sound effect lies on art, which an outline unlike its fill,
+            // black around a light one and white around any other, the
+            // renderer's black included, keeps it legible over.
+            _ if this.role == Role::Sfx => size.map(|size| {
+                let fill = given.and_then(|style| style.chars.fill).or(source.fill);
+                let light = fill.is_some_and(|fill| {
+                    Color::from(fill).discard_alpha().relative_luminance() > 0.5
+                });
+                let stroke = if light {
+                    [0.0, 0.0, 0.0, 1.0]
+                } else {
+                    [1.0; 4]
+                };
+                (Rgba(stroke), size / 16.0)
+            }),
+            _ => None,
+        };
+        if let Some((stroke, width)) = outline {
+            chars.insert("stroke".to_owned(), json!(stroke));
+            chars.insert("stroke_width".to_owned(), json!(width));
+        }
     }
     let mut style = json!({"chars": chars});
     if given.and_then(|style| style.align).is_none() {
@@ -365,6 +388,39 @@ mod tests {
         let text = placed(&mut session, ids[1], &langid!("en"))?;
         assert_eq!(text.style.chars.fill, None);
         assert_eq!(text.style.chars.stroke, None);
+        Ok(())
+    }
+
+    #[test]
+    fn a_sound_effect_without_an_outline_gets_a_thin_one_unlike_its_fill() -> Result<()> {
+        let source = |x: f64, role: &str, fill: [f32; 4]| {
+            json!({"kind": "block", "role": role, "source": {
+                "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 120.0, "height": 120.0}}},
+                "style": {"chars": {"size": 32.0, "fill": fill}},
+            }})
+        };
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("dark", None, source(0.0, "sfx", [0.2, 0.2, 0.2, 1.0])),
+                ("light", None, source(130.0, "sfx", [0.97, 0.94, 0.93, 1.0])),
+                ("speech", None, source(260.0, "text", [0.2, 0.2, 0.2, 1.0])),
+            ],
+        )?;
+
+        // A sixteenth of the page's lettering size of 32.
+        let dark = placed(&mut session, ids[0], &langid!("en"))?;
+        assert_eq!(dark.style.chars.stroke, Some(koharu_scene::Rgba([1.0; 4])));
+        assert_eq!(dark.style.chars.stroke_width, Some(2.0));
+        let light = placed(&mut session, ids[1], &langid!("en"))?;
+        assert_eq!(
+            light.style.chars.stroke,
+            Some(koharu_scene::Rgba([0.0, 0.0, 0.0, 1.0]))
+        );
+        assert_eq!(light.style.chars.stroke_width, Some(2.0));
+        let speech = placed(&mut session, ids[2], &langid!("en"))?;
+        assert_eq!(speech.style.chars.stroke, None);
         Ok(())
     }
 }

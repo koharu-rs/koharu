@@ -65,7 +65,10 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
 
 - **Size.** A new translation starts at the page's lettering size, the median
   of its sources', as a letterer keeps one size for a page's dialogue [Manga
-  balloon basics], with its lines centred and its source's fill and stroke.
+  balloon basics], with its lines centred and its source's fill and stroke. A
+  sound effect whose source has no outline gets a stroke a sixteenth of its
+  size, black around a light fill and white around any other, which keeps it
+  legible over art.
 - **Direction.** It's vertical only when its source is and the target is
   Japanese or Chinese; any other language runs horizontally, turned by its
   source's tilt.
