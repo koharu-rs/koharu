@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use backon::{ExponentialBuilder, Retryable};
 use bytes::Bytes;
 use futures::future::BoxFuture;
-use http::request::Parts;
+use http::{HeaderMap, request::Parts};
 use rig_core::{
     error::ProviderError,
     http_client::{self, HttpClientExt, LazyBody, MultipartForm, StreamingResponse},
@@ -31,6 +31,7 @@ pub(crate) trait SignIn: Send + Sync {
 #[derive(Clone, Default)]
 pub(crate) struct Http {
     client: ReqwestClient,
+    headers: HeaderMap,
     sign_in: Option<Arc<dyn SignIn>>,
 }
 
@@ -75,17 +76,25 @@ fn retry_after(error: &http_client::Error, backoff: Option<Duration>) -> Option<
 }
 
 impl Http {
-    /// A client whose requests carry `sign_in`'s credential.
-    pub(crate) fn signed_in(sign_in: impl SignIn + 'static) -> Self {
+    pub(super) fn with_headers(headers: HeaderMap) -> Self {
         Self {
-            client: ReqwestClient::default(),
-            sign_in: Some(Arc::new(sign_in)),
+            headers,
+            ..Self::default()
         }
     }
 
-    /// `parts` as the sign-in authorizes them.
+    /// A client whose requests carry `sign_in`'s credential.
+    pub(crate) fn signed_in(sign_in: impl SignIn + 'static) -> Self {
+        Self {
+            sign_in: Some(Arc::new(sign_in)),
+            ..Self::default()
+        }
+    }
+
+    /// Applies the client's headers and the current sign-in credential.
     #[expect(clippy::result_large_err, reason = "rig's HTTP error is rig's")]
     async fn authorized(&self, mut parts: Parts) -> http_client::Result<Parts> {
+        parts.headers.extend(self.headers.clone());
         if let Some(sign_in) = &self.sign_in {
             sign_in
                 .authorize(&mut parts)

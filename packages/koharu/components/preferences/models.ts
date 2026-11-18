@@ -29,6 +29,7 @@ export const vendorNames: Record<string, string> = {
   deepseek: 'DeepSeek',
   minimax: 'MiniMax',
   openrouter: 'OpenRouter',
+  'opencode-go': 'OpenCode Go',
   chatgpt: 'ChatGPT',
   grok: 'Grok',
   ollama: 'Ollama',

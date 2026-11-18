@@ -9,6 +9,7 @@ pub(crate) mod openai_compatible;
 
 use std::collections::BTreeMap;
 
+use ::http::header::{HeaderName, HeaderValue, USER_AGENT};
 use anyhow::{Context, Result, bail, ensure};
 use rig_core::{
     catalog::{Catalog, ModelSpec, ReasoningSupport},
@@ -25,6 +26,8 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) use http::{Http, SignIn, reqwest};
 
+pub(crate) const OPENCODE_GO: &str = openai::wire::OPENCODE_GO.name;
+
 /// The vendors Koharu lists models from, by rig's names.
 pub const VENDORS: &[&str] = &[
     openai::PROVIDER_NAME,
@@ -34,6 +37,7 @@ pub const VENDORS: &[&str] = &[
     deepseek::PROVIDER_NAME,
     minimax::PROVIDER_NAME,
     openrouter::PROVIDER_NAME,
+    OPENCODE_GO,
     chatgpt::PROVIDER_NAME,
     grok::PROVIDER_NAME,
     ollama::PROVIDER_NAME,
@@ -127,6 +131,27 @@ fn catalog_id(vendor: &str) -> Result<ProviderId> {
     ProviderId::catalog(vendor).with_context(|| format!("rig knows no vendor `{vendor}`"))
 }
 
+fn transport(vendor: &str) -> Http {
+    if vendor != OPENCODE_GO {
+        return Http::default();
+    }
+    // A hosted model is connected once per conversation. Replace rig's
+    // per-request fallback so that all turns share the same Go session.
+    let session =
+        HeaderValue::from_str(&rig_core::id::generate()).expect("rig IDs are header-safe");
+    Http::with_headers(
+        [
+            (HeaderName::from_static("x-opencode-session"), session),
+            (
+                USER_AGENT,
+                HeaderValue::from_static(concat!("Koharu/", env!("CARGO_PKG_VERSION"))),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    )
+}
+
 pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
     let base_url = base_url(vendor)?;
     match vendor {
@@ -151,7 +176,7 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
             );
             ConnectOptions::new()
                 .api_key(key.unwrap_or_default())
-                .http(Http::default())
+                .http(transport(vendor))
         }
     };
     let options = match base_url {
@@ -209,7 +234,7 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
         Some(base_url) => config.with_base_url(base_url),
         None => config,
     };
-    let http = Http::default();
+    let http = transport(vendor);
     let listed = match config {
         ProviderConfig::OpenAi(config) => config.connect(http).list_models().await?,
         ProviderConfig::Anthropic(config) => config.connect(http).list_models().await?,
