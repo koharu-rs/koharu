@@ -1,3 +1,9 @@
+## [0.85.5](https://github.com/koharu-rs/koharu/compare/0.85.4..0.85.5) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Take CEF's shared frames through cef 156's importer, on tauri's CEF 156 bump ([#1414](https://github.com/koharu-rs/koharu/issues/1414)) - ([6a7b994](https://github.com/koharu-rs/koharu/commit/6a7b9948df2ff9e4d5266b0895585a672beaeaef))
+
 ## [0.85.4](https://github.com/koharu-rs/koharu/compare/0.85.3..0.85.4) - 2026-11-18
 
 ### 🐛 Bug Fixes
