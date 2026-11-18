@@ -1496,9 +1496,9 @@ dependencies = [
 
 [[package]]
 name = "cef"
-version = "154.5.0+154.0.34"
+version = "156.6.0+156.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "495579dcbddc7917da3c64d19de23771744743463dc77dddb6bddfd0ce97930b"
+checksum = "ccf965a472527fea5b7fc508ae3dca5115a1d8f8534558fe3aa8d8712fceeec9"
 dependencies = [
  "anyhow",
  "ash",
@@ -1524,9 +1524,9 @@ dependencies = [
 
 [[package]]
 name = "cef-dll-sys"
-version = "154.5.0+154.0.34"
+version = "156.6.0+156.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a52b7101d21b13aaa09e5047510bc6b6720140de0ee2a65d132b9fd70fbf5f69"
+checksum = "d35a4bcb237ea9c8cb88f2e66f63394fd0321ece6f1a74be7c0354f115e1a096"
 dependencies = [
  "anyhow",
  "cc",
@@ -10944,7 +10944,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 [[package]]
 name = "tauri"
 version = "3.0.0-alpha.6"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "anyhow",
  "bytes",
@@ -10992,7 +10992,7 @@ dependencies = [
 [[package]]
 name = "tauri-build"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -11014,7 +11014,7 @@ dependencies = [
 [[package]]
 name = "tauri-codegen"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "base64 0.23.1",
  "brotli 9.1.1",
@@ -11040,7 +11040,7 @@ dependencies = [
 [[package]]
 name = "tauri-macros"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -11053,7 +11053,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "anyhow",
  "glob",
@@ -11180,7 +11180,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime"
 version = "3.0.0-alpha.5"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "cookie",
  "dpi",
@@ -11200,7 +11200,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "3.0.0-alpha.7"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -11238,7 +11238,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=17a527316d3aee46f7185c178d3b3122d8ebfd7b#17a527316d3aee46f7185c178d3b3122d8ebfd7b"
+source = "git+https://github.com/tauri-apps/tauri?rev=3ba04b608679ec5f2bb6af7d60cfd6c644858b7d#3ba04b608679ec5f2bb6af7d60cfd6c644858b7d"
 dependencies = [
  "anyhow",
  "brotli 9.1.1",

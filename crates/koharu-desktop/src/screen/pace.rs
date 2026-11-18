@@ -26,13 +26,10 @@ const PERIOD: i64 = 1_000_000 / FRAME_RATE as i64;
 const DELIVERIES: usize = FRAME_RATE as usize;
 /// The quiet after which a frame is shown at once.
 const PAUSE: Duration = Duration::from_micros(3 * PERIOD as u64);
-/// Textures kept for the frames to come, beyond those held.
-const SPARES: usize = 2;
 
 pub struct Pacer {
-    /// Frames drawn and not yet shown, by when they're due.
+    /// Frames taken and not yet shown, by when they're due.
     pending: VecDeque<Paced>,
-    spares: Vec<wgpu::Texture>,
     /// How long after its capture each recent frame arrived, in
     /// microseconds, on a clock that starts at the first arrival.
     deliveries: VecDeque<i64>,
@@ -44,7 +41,7 @@ pub struct Pacer {
 
 struct Paced {
     texture: wgpu::Texture,
-    mask: Option<Mask>,
+    mask: Mask,
     due: Instant,
 }
 
@@ -67,7 +64,6 @@ impl Pacer {
         }
         Self {
             pending: VecDeque::new(),
-            spares: Vec::new(),
             deliveries: VecDeque::new(),
             epoch: None,
             last: None,
@@ -75,17 +71,12 @@ impl Pacer {
         }
     }
 
-    /// A texture no frame holds, to draw the next frame into, if one's spare.
-    pub fn spare(&mut self) -> Option<wgpu::Texture> {
-        self.spares.pop()
-    }
-
-    /// Takes a frame drawn into `texture`, captured at `timestamp`
+    /// Takes the frame `texture` with its `mask`, captured at `timestamp`
     /// microseconds, and wakes `view`'s window when it's due.
     pub fn arrive(
         &mut self,
         texture: wgpu::Texture,
-        mask: Option<Mask>,
+        mask: Mask,
         timestamp: u64,
         view: &OffscreenView,
     ) {
@@ -117,21 +108,10 @@ impl Pacer {
     pub fn show(&mut self, painted: &mut Painted, now: Instant) {
         let mut shown = None;
         while self.pending.front().is_some_and(|paced| paced.due <= now) {
-            let next = self.pending.pop_front();
-            if let Some(skipped) = std::mem::replace(&mut shown, next) {
-                self.keep(skipped.texture);
-            }
+            shown = self.pending.pop_front();
         }
         let Some(paced) = shown else { return };
-        if let Some(previous) = painted.view_frame.replace(paced.texture) {
-            self.keep(previous);
-        }
-        painted.mask = paced.mask;
-    }
-
-    fn keep(&mut self, texture: wgpu::Texture) {
-        if self.spares.len() < SPARES {
-            self.spares.push(texture);
-        }
+        painted.view_frame = Some(paced.texture);
+        painted.mask = Some(paced.mask);
     }
 }
