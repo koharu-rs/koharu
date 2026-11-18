@@ -143,7 +143,7 @@ pub(super) async fn models(client: &reqwest::Client) -> Result<Vec<ModelSpec>> {
     // and the list offers only the models that release can drive, so this
     // follows Codex's current release.
     let mut request = client
-        .get("https://chatgpt.com/backend-api/codex/models?client_version=0.169.0")
+        .get("https://chatgpt.com/backend-api/codex/models?client_version=0.170.0")
         .bearer_auth(context.api_key.expose());
     if let Some(account) = &context.account_id {
         request = request.header("chatgpt-account-id", account);
