@@ -1,3 +1,10 @@
+## [0.85.6](https://github.com/koharu-rs/koharu/compare/0.85.5..0.85.6) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(ml)* Walk Hayai OCR's decoder layers by iterator, as clippy requires - ([38af15d](https://github.com/koharu-rs/koharu/commit/38af15d679961de0c4892de04a53444239715d68))
+- *(release)* Bundle Windows without CEF's dxil.dll, which CEF 156 no longer ships - ([090cb8f](https://github.com/koharu-rs/koharu/commit/090cb8f7e9269ae9bfc25443be922084f598be9a))
+
 ## [0.85.5](https://github.com/koharu-rs/koharu/compare/0.85.4..0.85.5) - 2026-11-18
 
 ### 🐛 Bug Fixes
