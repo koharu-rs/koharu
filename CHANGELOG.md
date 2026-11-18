@@ -1,3 +1,9 @@
+## [0.85.4](https://github.com/koharu-rs/koharu/compare/0.85.3..0.85.4) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(ui)* Offer the target languages 0.83 did again, Persian among them ([#1418](https://github.com/koharu-rs/koharu/issues/1418)) - ([e8c58d0](https://github.com/koharu-rs/koharu/commit/e8c58d01ed7c4e768bfd796311b44e717fcfa2c1))
+
 ## [0.85.3](https://github.com/koharu-rs/koharu/compare/0.85.2..0.85.3) - 2026-11-18
 
 ### 🐛 Bug Fixes
