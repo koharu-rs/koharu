@@ -1,3 +1,9 @@
+## [0.85.3](https://github.com/koharu-rs/koharu/compare/0.85.2..0.85.3) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(llm)* Ask ChatGPT for the models Codex 0.170.0 offers, so GPT-6.2 Sol and Astra are listed - ([484d5cf](https://github.com/koharu-rs/koharu/commit/484d5cfcb6457336a413d8859f79c8a3ff91a285))
+
 ## [0.85.2](https://github.com/koharu-rs/koharu/compare/0.85.1..0.85.2) - 2026-11-17
 
 ### 🐛 Bug Fixes
