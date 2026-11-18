@@ -142,21 +142,21 @@ static_assertions = "1.1.0"
 strum = { version = "0.28.0", features = ["derive"] }
 syn = { version = "3.0.10", features = ["full"] }
 tar = "0.4.46"
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d", default-features = false, features = [
+tauri = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2", default-features = false, features = [
     "compression",
     "dynamic-acl",
     "specta",
     "tracing",
 ] }
-tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d" }
-tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d", features = ["build"] }
+tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2" }
+tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2", features = ["build"] }
 tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
-tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d", features = ["unstable"] }
+tauri-runtime-cef = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2", features = ["unstable"] }
 # The native window and event types of `Cef::on_window_event`: the runtime's
 # own winit fork, which it does not re-export.
 tauri-winit = { version = "=0.31.0-beta.3", default-features = false }
@@ -196,9 +196,9 @@ windows = { version = "0.62.2", features = [
 zip = { version = "9.5.0", features = ["deflate"] }
 
 [patch.crates-io]
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d" }
-tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d" }
-tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "3ba04b608679ec5f2bb6af7d60cfd6c644858b7d" }
+tauri = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2" }
+tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174e37c1d80d942a9065910d00d01f2" }
 
 [profile.dev]
 # Image decoding and the models' pre- and post-processing ran 10 to 40 times
