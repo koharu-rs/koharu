@@ -1,7 +1,8 @@
 //! A balloon's outline as a closed path, and the room each of its texts has
 //! in it. Conjoined balloons, two balloons drawn overlapping, first part
 //! along the chord between the notches where their outlines cross. Texts
-//! still sharing a part split it by a seeded watershed on the distance from
+//! still sharing a part keep separate columns when their boxes stand side by
+//! side. Other texts split it by a seeded watershed on the distance from
 //! the balloon's edge, so each border falls where it narrows. Alone, the
 //! watershed floods a small lobe from its neighbour's text when the lobe has
 //! no distance peak of its own. Of 24 random Manga109 test bubbles where
@@ -146,7 +147,7 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
     let page = |lx: u32, ly: u32| Point::new(f64::from(x + lx) - 0.5, f64::from(y + ly) - 0.5);
     let outside = outside(outline, width, height, page);
     let distance = euclidean_squared_distance_transform(&outside);
-    let seeds: Vec<Vec<(u32, u32)>> = groups
+    let mut seeds: Vec<Vec<(u32, u32)>> = groups
         .iter()
         .zip(&straddles)
         .map(|(boxes, &straddles)| {
@@ -191,6 +192,24 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
             })
             .collect();
         let Some((start, end, between, side)) = waist(&polygon, &held, width, height) else {
+            if let Some(columns) = columns(groups, &members, &straddles) {
+                let edges: Vec<_> = columns
+                    .windows(2)
+                    .map(|pair| pair[0].1.x1.midpoint(pair[1].1.x0) - origin.x)
+                    .collect();
+                let column = |x: u32| edges.partition_point(|&edge| edge <= f64::from(x));
+                for (index, &(member, _)) in columns.iter().enumerate() {
+                    home[member] = count + index as u32;
+                    // The seeds restored after flooding must keep to the cut too.
+                    seeds[member].retain(|&(x, _)| column(x) == index);
+                }
+                for (lx, _, pixel) in parts.enumerate_pixels_mut() {
+                    if pixel[0] == part {
+                        *pixel = Luma([count + column(lx) as u32]);
+                    }
+                }
+                count += columns.len() as u32;
+            }
             continue;
         };
         for (lx, ly, pixel) in parts.enumerate_pixels_mut() {
@@ -277,6 +296,34 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
                 .unwrap_or_else(|| outline.clone())
         })
         .collect()
+}
+
+/// Separate the vertical columns standing side by side in a balloon part.
+/// Cutting between their boxes keeps a column's room from wrapping around
+/// its neighbour at either end, where a watershed can favour a wider lobe.
+/// Allow their boxes to overlap by a quarter of the narrower one's width,
+/// as close columns' axis-aligned bounds can reach across each other.
+fn columns(
+    groups: &[Vec<Rect>],
+    members: &[usize],
+    straddles: &[bool],
+) -> Option<Vec<(usize, Rect)>> {
+    let mut columns: Vec<_> = members
+        .iter()
+        .map(|&member| match groups[member].as_slice() {
+            [rect] if !straddles[member] && rect.height() > rect.width() => Some((member, *rect)),
+            _ => None,
+        })
+        .collect::<Option<_>>()?;
+    columns.sort_by(|(_, a), (_, b)| a.x0.total_cmp(&b.x0));
+    let side_by_side = columns.windows(2).all(|pair| {
+        let (left, right) = (pair[0].1, pair[1].1);
+        let vertical_overlap = left.y1.min(right.y1) - left.y0.max(right.y0);
+        let horizontal_overlap = left.x1 - right.x0;
+        horizontal_overlap <= left.width().min(right.width()) * 0.25
+            && vertical_overlap >= left.height().min(right.height()) * 0.5
+    });
+    side_by_side.then_some(columns)
 }
 
 /// Each local pixel set where `page` puts it outside `outline`, as
@@ -555,6 +602,58 @@ mod tests {
             // Most of the column's 40 by 180 box.
             let area = found[at].area().abs();
             assert!(area >= 5_500.0, "{area}");
+        }
+    }
+
+    #[test]
+    fn side_by_side_columns_keep_their_width_to_the_bottom_of_a_balloon() {
+        // A shared balloon widens below the right source. The left room
+        // used to extend beneath the right, where its translation wrapped.
+        let outline = BezPath::from_svg(concat!(
+            "M897,497 L891,516 L890,529 L888,535 L886,575 L872,583 L866,589 ",
+            "L858,603 L847,638 L841,666 L837,717 L837,764 L840,787 L841,819 ",
+            "L844,827 L846,847 L848,851 L851,852 L972,852 L975,850 L975,509 ",
+            "L976,500 L974,497 Z",
+        ))
+        .expect("balloon outline");
+        let found = rooms(
+            &outline,
+            &[
+                vec![Rect::new(920.0, 560.0, 956.0, 784.0)],
+                vec![Rect::new(872.0, 636.0, 908.0, 816.0)],
+            ],
+        );
+
+        let (right, left) = (&found[0], &found[1]);
+        let below_right = Point::new(940.0, 820.0);
+        assert!(right.contains(below_right) && !left.contains(below_right));
+        assert!(left.contains(Point::new(890.0, 610.0)));
+        assert!(left.bounding_box().x1 <= right.bounding_box().x0);
+    }
+
+    #[test]
+    fn slightly_overlapping_columns_keep_rooms_on_their_side_of_the_cut() {
+        // The rearmost column's rotated source box reaches six pixels into
+        // its neighbour. Both rooms must keep their lane even at those seeds.
+        let outline = BezPath::from_svg(concat!(
+            "M423,760 L419,763 L416,815 L414,817 L402,816 L399,818 L390,826 ",
+            "L382,838 L376,851 L372,864 L365,901 L363,942 L362,943 L363,1039 ",
+            "L369,1072 L373,1080 L378,1086 L388,1093 L470,1093 L473,1091 ",
+            "L479,1080 L486,1055 L487,1042 L490,1029 L490,1011 L493,1008 ",
+            "L501,1005 L508,997 L514,981 L521,945 L522,911 L523,910 L522,839 ",
+            "L521,838 L521,810 L515,761 L514,760 Z",
+        ))
+        .expect("balloon outline");
+        let right = Rect::new(446.0, 796.0, 504.0, 972.0);
+        let left = Rect::new(392.0, 884.0, 452.0, 1048.0);
+
+        for boxes in [[left, right], [right, left]] {
+            let found = rooms(&outline, &boxes.map(|rect| vec![rect]));
+            let right_at = usize::from(boxes[0] == left);
+            let (left, right) = (&found[1 - right_at], &found[right_at]);
+            assert!(left.contains(Point::new(423.0, 820.0)));
+            assert!(right.contains(Point::new(473.0, 1023.0)));
+            assert!(left.bounding_box().x1 <= 449.0 && right.bounding_box().x0 >= 449.0);
         }
     }
 
