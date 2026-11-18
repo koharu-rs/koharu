@@ -240,7 +240,7 @@ impl Model {
         let sin = Tensor::stack(&sin, 0)?;
 
         let mut caches: Vec<LayerCache> = Vec::with_capacity(self.decoder.layers.len());
-        for index in 0..self.decoder.layers.len() {
+        for (index, layer) in self.decoder.layers.iter().enumerate() {
             // Upstream `_reference_generate` adds each layer's depth
             // residual to the visual tokens before the layer runs.
             hidden = Tensor::cat(
@@ -252,7 +252,7 @@ impl Model {
                 ],
                 1,
             )?;
-            let (next_hidden_states, present) = self.decoder.layers[index].forward(
+            let (next_hidden_states, present) = layer.forward(
                 &hidden,
                 Some(&prefill_mask),
                 (&cos, &sin),
