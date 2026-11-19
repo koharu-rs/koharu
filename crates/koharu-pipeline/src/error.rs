@@ -27,6 +27,9 @@ pub enum Error {
         source: anyhow::Error,
     },
 
+    #[error("the runtime shut down")]
+    Shutdown,
+
     #[error("{stage} failed")]
     Stage {
         stage: Stage,

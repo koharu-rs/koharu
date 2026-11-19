@@ -19,6 +19,7 @@ use bytesize::ByteSize;
 use koharu_runtime::Device;
 use koharu_torch::Cuda;
 use tokio::runtime::Handle;
+use tokio_util::sync::CancellationToken;
 
 use crate::{Error, Result, Stage, scheduler::Priority};
 
@@ -41,11 +42,20 @@ pub(crate) struct Gpu(mpsc::Sender<(Turn, Work)>);
 impl Gpu {
     pub(crate) fn spawn(runtime: Handle) -> Self {
         let (sender, receiver) = mpsc::channel::<(Turn, Work)>();
+        // Cancelled when the runtime shuts down, which drops its tasks before
+        // it stops its timers.
+        let shutdown = CancellationToken::new();
+        let guard = shutdown.clone().drop_guard();
+        runtime.spawn(async move {
+            let _guard = guard;
+            std::future::pending::<()>().await;
+        });
         std::thread::Builder::new()
             .name("koharu-pipeline-gpu".to_owned())
             .spawn(move || {
                 let mut models = Models {
                     runtime,
+                    shutdown,
                     loaded: HashMap::new(),
                 };
                 let mut queue = BinaryHeap::new();
@@ -131,6 +141,7 @@ pub(crate) struct Key {
 /// The loaded models, which the GPU thread owns.
 pub(crate) struct Models {
     runtime: Handle,
+    shutdown: CancellationToken,
     loaded: HashMap<Key, Box<dyn Any + Send>>,
 }
 
@@ -148,7 +159,17 @@ impl Models {
     {
         if !self.loaded.contains_key(key) {
             let _span = tracing::info_span!("load", model = %key.name).entered();
-            let model = self.runtime.block_on(loaded(key, load))?;
+            // This thread isn't the runtime's, so a load here outlives its
+            // shutdown, and Tokio panics on a timer polled after, as a
+            // download waiting to retry polls one.
+            let shutdown = &self.shutdown;
+            let model = self.runtime.block_on(async {
+                tokio::select! {
+                    biased;
+                    () = shutdown.cancelled() => Err(Error::Shutdown),
+                    model = loaded(key, load) => model,
+                }
+            })?;
             self.loaded.insert(key.clone(), Box::new(model));
         }
         Ok(self.loaded[key]
