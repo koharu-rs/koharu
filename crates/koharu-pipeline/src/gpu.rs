@@ -91,10 +91,13 @@ impl Gpu {
     /// Gives back to the device what libtorch's caching allocator keeps of
     /// the tensors calls freed, ahead of the calls queued. The cache grows
     /// page by page, as pages need different sizes, and the device counts
-    /// it as used.
+    /// it as used. It's left while no model is loaded: before the first,
+    /// the runtime hasn't loaded libtorch, as a project opening stops what
+    /// isn't running.
     pub(crate) fn empty_cache(&self) {
-        self.run(Turn::Upkeep, |_| {
-            if Cuda::device_count() > 0
+        self.run(Turn::Upkeep, |models| {
+            if !models.loaded.is_empty()
+                && Cuda::device_count() > 0
                 && let Err(error) = Cuda::empty_cache()
             {
                 tracing::warn!("libtorch's cache wasn't emptied: {error}");
