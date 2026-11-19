@@ -1,3 +1,25 @@
+## [0.86.4](https://github.com/koharu-rs/koharu/compare/0.86.3..0.86.4) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Exit a second launch quietly and bring the open window forward, on a tauri fork pin (RUST-F0) - ([3d7c42a](https://github.com/koharu-rs/koharu/commit/3d7c42afcfe86cc42704664e9c5663e2d9feb30a))
+- *(desktop)* Make the window's surface again once it's lost or left unconfigured, which failed every frame after - ([7ca020b](https://github.com/koharu-rs/koharu/commit/7ca020bd0121c183391823b2281a69ceb03a4f9d))
+- *(diffusion)* Say why stable-diffusion.cpp failed, from what it logged during the call, such as the memory a step needed and the memory free - ([b7fe480](https://github.com/koharu-rs/koharu/commit/b7fe48002cea7e8b8e9dead7bba893d70b2ce50c))
+- *(ml)* Stop layout detection crashing on a 1x1 glyph mask, with imageproc pinned to image-rs/imageproc#824 - ([daaa6b5](https://github.com/koharu-rs/koharu/commit/daaa6b5e78658733ade1b8727b84044c64ed2f50))
+- *(pipeline)* Empty libtorch's cache only while a model is loaded, since opening a project before one panicked calling libtorch unloaded ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([fcfdfb0](https://github.com/koharu-rs/koharu/commit/fcfdfb03fe5ca17f80310d2a5b13046426c567b6))
+- *(pipeline)* Stop a model load when the runtime shuts down, which panicked on exit mid-download (RUST-R8) - ([9564410](https://github.com/koharu-rs/koharu/commit/9564410f366d77d2d8ecadf01528c7074dbf576a))
+- Pin the tauri fork commit that compares CEF's exit code as a c_int, which broke the Linux build - ([bc30f60](https://github.com/koharu-rs/koharu/commit/bc30f600c66dc1af7a93158a145dbc1e9626e28b))
+- Keep projects and the store in the user's local data folder when the install folder isn't writable, as in a per-machine install under Program Files - ([7f6d924](https://github.com/koharu-rs/koharu/commit/7f6d92404f5f9f0e8ec22f1f04fa3ee19db252dd))
+
+### 🚜 Refactor
+
+- *(diffusion)* Move to stable-diffusion.cpp master-1106's C API, failing with its status and reason instead of reading its log - ([c219218](https://github.com/koharu-rs/koharu/commit/c219218ba8a953a4489aac8dfafd50cdbe83200c))
+- Decide Koharu's root once in koharu-runtime, for the store and the projects beside it - ([d3beae7](https://github.com/koharu-rs/koharu/commit/d3beae78acea272bf2a505b02aa70aa8fd45f4e8))
+
+### ⚙️ Miscellaneous Tasks
+
+- Upload to release-please's release by id, which kept tauri-action from emptying its notes - ([4d4251b](https://github.com/koharu-rs/koharu/commit/4d4251b254bfbdfa82f54e1460fb7de50643a46a))
+
 ## [0.86.3](https://github.com/koharu-rs/koharu/compare/0.86.2..0.86.3) - 2026-11-19
 
 ### 🐛 Bug Fixes
