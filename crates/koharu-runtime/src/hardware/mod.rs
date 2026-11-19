@@ -9,11 +9,15 @@ mod hip;
 mod metal;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 mod vulkan;
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+mod xpu;
 
 use std::cmp::Reverse;
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) use cuda::hold_primary_context;
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+pub(crate) use xpu::namesakes_before;
 
 use crate::{Backend, Device};
 
@@ -35,22 +39,26 @@ fn probe() -> Vec<(Device, u64)> {
         devices.extend(cuda::probe());
         #[cfg(target_arch = "x86_64")]
         devices.extend(hip::probe().into_iter().map(|device| (device, 0)));
+        #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+        devices.extend(xpu::probe());
         devices.extend(vulkan::probe().map(|device| (device, 0)));
     }
     devices
 }
 
 /// Where `device` ranks, lowest first: Metal or a discrete NVIDIA GPU, a
-/// discrete AMD GPU, integrated GPUs, then Vulkan. Within a rank, more memory
-/// and then a newer CUDA architecture come first.
+/// discrete AMD GPU, a discrete Intel GPU, integrated GPUs, then Vulkan.
+/// Within a rank, more memory and then a newer CUDA architecture come first.
 fn rank(device: &Device, memory: u64) -> (u8, Reverse<u64>, Reverse<u32>, usize) {
     let (rank, compute_capability) = match (device.backend, device.integrated) {
         (Backend::Metal, _) => (0, 0),
         (Backend::Cuda { compute_capability }, false) => (0, compute_capability),
         (Backend::Rocm { .. }, false) => (1, 0),
-        (Backend::Cuda { compute_capability }, true) => (2, compute_capability),
-        (Backend::Rocm { .. }, true) => (3, 0),
-        (Backend::Vulkan | Backend::Cpu, _) => (4, 0),
+        // The XPU probe lists only discrete GPUs.
+        (Backend::Xpu { .. }, _) => (2, 0),
+        (Backend::Cuda { compute_capability }, true) => (3, compute_capability),
+        (Backend::Rocm { .. }, true) => (4, 0),
+        (Backend::Vulkan | Backend::Cpu, _) => (5, 0),
     };
     (
         rank,

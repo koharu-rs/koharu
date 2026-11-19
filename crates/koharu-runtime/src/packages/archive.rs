@@ -58,9 +58,18 @@ fn extract_wheel(
     let mut archive = zip::ZipArchive::new(File::open(archive)?)?;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index)?;
-        let Some(path) = entry.enclosed_name() else {
+        let Some(mut path) = entry.enclosed_name() else {
             continue;
         };
+        // A wheel's `{name}.data/data/` tree installs at the environment's
+        // root, as pip lays it out, so files from several wheels meet there.
+        let mut components = path.components();
+        if let (Some(first), Some(second)) = (components.next(), components.next())
+            && first.as_os_str().to_string_lossy().ends_with(".data")
+            && second.as_os_str() == "data"
+        {
+            path = components.as_path().to_owned();
+        }
         if entry.is_dir() || !selected(&path) {
             continue;
         }

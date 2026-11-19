@@ -30,6 +30,7 @@ pub(crate) fn torch(device: &Device) -> (koharu_torch::Device, Kind) {
                     || target.starts_with("gfx12"),
             ),
         ),
+        Backend::Xpu { index } => (koharu_torch::Device::Xpu(index), Kind::BFloat16),
         Backend::Metal => (koharu_torch::Device::Mps, Kind::Float),
     }
 }
