@@ -204,6 +204,10 @@ tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "323f9cb94174
 # The published 0.31.0-beta.3 with tauri-apps/winit-gtk4#5, which scales X11
 # windows by the font DPI as KDE's fractional scales set it (#1425).
 tauri-winit-gtk4 = { git = "https://github.com/mayocream/winit-gtk4", rev = "bf2978ad27b8f2d4a04de00afdaa882a4c28ab79" }
+# The published 30.0.2 with a fix for gfx-rs/wgpu#9029: on Windows, Vulkan
+# lost the device when a frame's acquire waited past 1 s, as it does while a
+# model keeps the GPU busy (#1408).
+wgpu = { git = "https://github.com/mayocream/wgpu", rev = "d1a03ed3a2fe5a670d467bae23279372daf66da6" }
 
 [profile.dev]
 # Image decoding and the models' pre- and post-processing ran 10 to 40 times
