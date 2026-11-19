@@ -30,7 +30,7 @@
     "next": "^16.4.6",
     "next-themes": "^0.4.6",
     "react": "^19.3.1",
-    "react-colorful": "^5.8.1",
+    "react-colorful": "github:mayocream/react-colorful#f2f44770cdc41b1ea11784b91131cafa6cfd9cba",
     "react-dom": "^19.3.1",
     "react-i18next": "^18.0.1",
     "react-markdown": "^10.1.0",
