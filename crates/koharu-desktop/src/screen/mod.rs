@@ -14,6 +14,7 @@ mod input;
 mod keys;
 mod pace;
 mod paint;
+mod refresh;
 mod shared;
 
 use std::{
@@ -45,6 +46,7 @@ use winit::{
     cursor::CursorIcon,
     dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
     event::{Ime, WindowEvent},
+    monitor::MonitorHandle,
     window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData, Window},
 };
 
@@ -54,9 +56,6 @@ use crate::{app::App, events};
 
 /// The window's label in `tauri.conf.json`, and its webview's.
 pub const MAIN: &str = "main";
-
-/// The frames a second CEF renders the page at, and paces them by.
-const FRAME_RATE: i32 = 60;
 
 thread_local! {
     /// The main window, on the main thread, from `open` until it's
@@ -355,6 +354,11 @@ struct Main {
     /// Takes CEF's frames and paces them, where it shares them as GPU
     /// textures.
     shared: Option<Shared>,
+    /// The monitor the window was last on.
+    monitor: Option<MonitorHandle>,
+    /// The frames a second CEF renders the page at, and the pacer paces
+    /// by: that monitor's refresh rate.
+    frame_rate: i32,
 }
 
 struct Shared {
@@ -508,9 +512,26 @@ impl Main {
         }
         let mask = shared.importer.mask(self.gpu, &frame)?;
         if let Some(view) = &self.view {
-            shared.pacer.arrive(frame, mask, info.extra.timestamp, view);
+            shared
+                .pacer
+                .arrive(frame, mask, info.extra.timestamp, self.frame_rate, view);
         }
         Ok(())
+    }
+
+    /// Follows the window to the monitor it's on now, rendering at that
+    /// monitor's refresh rate; the new frame rate, if it changed.
+    fn follow_monitor(&mut self) -> Option<i32> {
+        let monitor = self.window()?.current_monitor();
+        if monitor == self.monitor {
+            return None;
+        }
+        let frame_rate = refresh::frame_rate(monitor.as_ref());
+        self.monitor = monitor;
+        (frame_rate != self.frame_rate).then(|| {
+            self.frame_rate = frame_rate;
+            frame_rate
+        })
     }
 
     /// CEF's cursor, over its page.
@@ -639,6 +660,14 @@ fn remember(browser: Option<&mut Browser>) {
     }
 }
 
+/// Renders the page at the refresh rate of the monitor the window moved to.
+fn follow_monitor() {
+    let moved = with(|main| main.follow_monitor().zip(main.host())).flatten();
+    if let Some((frame_rate, host)) = moved {
+        host.set_windowless_frame_rate(frame_rate);
+    }
+}
+
 /// Gives the page that just started the window's focus. CEF renders each
 /// document with a widget of its own that starts unfocused, so the focus the
 /// window last gave left with the document before, the placeholder the
@@ -744,6 +773,8 @@ pub fn open(
             importer: Importer::new(gpu),
             pacer: Pacer::new(),
         }),
+        monitor: None,
+        frame_rate: refresh::FALLBACK,
     }));
     let _ = screen.0.set(handle.clone());
 
@@ -790,7 +821,15 @@ fn add_webview(window: &tauri::Window<CefRuntime>, url: WebviewUrl, shared: bool
                 focus_page();
             }
         })
-        .with_browser_settings(|settings| settings.windowless_frame_rate = FRAME_RATE);
+        // The runtime makes the render handler, which gives the window its
+        // view, before it asks for the settings.
+        .with_browser_settings(|settings| {
+            settings.windowless_frame_rate = with(|main| {
+                main.follow_monitor();
+                main.frame_rate
+            })
+            .unwrap_or(refresh::FALLBACK);
+        });
     webview
         .runtime_specific_attributes_mut()
         .as_cef_webview_attributes_mut()
@@ -889,6 +928,7 @@ pub fn on_window_event(app: &Arc<App>, label: &str, window: Arc<dyn Window>, eve
             with(|main| main.present(&window));
         }
         WindowEvent::SurfaceResized(_) => window.request_redraw(),
+        WindowEvent::Moved(_) => follow_monitor(),
         WindowEvent::ScaleFactorChanged { .. } => change(Main::place),
         WindowEvent::Focused(focused) => {
             if *focused {

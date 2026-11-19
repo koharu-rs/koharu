@@ -187,8 +187,10 @@ wgpu = "30.0.1"
 winit = "0.30.13"
 windows = { version = "0.62.2", features = [
     "Win32",
+    "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Gdi",
     "Win32_System",
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
