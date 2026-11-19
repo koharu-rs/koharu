@@ -241,9 +241,13 @@ impl Scheduler {
         }
     }
 
-    /// A run ended: the models no setting uses leave `KEEP` from now.
+    /// A run ended: the models no setting uses leave `KEEP` from now, and
+    /// libtorch's cache now, if no run is left.
     fn rest(&mut self) {
         self.idle = Some(Instant::now() + KEEP);
+        if self.runs.is_empty() {
+            self.gpu.empty_cache();
+        }
     }
 
     /// Unloads the models neither the settings nor a queued run use, once

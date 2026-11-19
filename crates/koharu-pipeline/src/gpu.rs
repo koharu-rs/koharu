@@ -77,6 +77,20 @@ impl Gpu {
         // The thread ends only once every handle has dropped.
         let _ = self.0.send((turn, Box::new(work)));
     }
+
+    /// Gives back to the device what libtorch's caching allocator keeps of
+    /// the tensors calls freed, ahead of the calls queued. The cache grows
+    /// page by page, as pages need different sizes, and the device counts
+    /// it as used.
+    pub(crate) fn empty_cache(&self) {
+        self.run(Turn::Upkeep, |_| {
+            if Cuda::device_count() > 0
+                && let Err(error) = Cuda::empty_cache()
+            {
+                tracing::warn!("libtorch's cache wasn't emptied: {error}");
+            }
+        });
+    }
 }
 
 /// A queued call; `BinaryHeap` pops the greatest, so the order is reversed:
