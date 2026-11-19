@@ -255,10 +255,15 @@ impl Compositor {
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 return Ok(());
             }
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+            wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&gpu.device, &self.config);
                 return Ok(());
             }
+            // wgpu drops a surface's configuration before applying a new one,
+            // so a configure that failed leaves it unconfigured, and every
+            // frame after fails validation; a lost surface takes a new one,
+            // as wgpu documents. Either way the caller draws on a new one.
+            wgpu::CurrentSurfaceTexture::Lost => bail!("the window's surface was lost"),
             wgpu::CurrentSurfaceTexture::Validation => {
                 bail!("the window's surface failed validation")
             }

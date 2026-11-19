@@ -619,6 +619,9 @@ impl Main {
             std::mem::take(&mut self.captures),
         ) {
             tracing::error!("failed to present the window: {error:#}");
+            // The next frame makes the surface again, and draws what
+            // `painted` still holds on it, as after a lost GPU.
+            self.compositor = None;
         }
     }
 }
