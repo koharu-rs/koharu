@@ -888,7 +888,7 @@ impl Canvas {
         } else if let [control] = selected[..] {
             overlay.handles(control);
         }
-        if let Some(typing) = &self.typing {
+        if let Some(typing) = self.shown_typing(cx.snapshot) {
             let transform = typing.transform();
             let bounds = transform * typing.lettering().bounds().to_path(0.1);
             overlay.outline(&bounds);
@@ -965,13 +965,24 @@ impl Canvas {
             .or(typed.as_ref())
             .unwrap_or(snapshot.frame());
         frame.paint(self.view.to_screen(), self.view.size().to_rect(), drawing)?;
-        if let Some(typing) = &self.typing {
+        if let Some(typing) = self.shown_typing(snapshot) {
             let transform = self.view.to_screen() * typing.transform();
             Overlay::new(drawing, &self.view, self.colors)
                 .highlight(&typing.highlight(), transform);
             typing.lettering().draw(drawing, transform)?;
         }
         Ok(())
+    }
+
+    // Suspend the live text preview too. Keep its editing buffer across a toggle.
+    fn shown_typing(&self, snapshot: &Snapshot) -> Option<&Typing> {
+        self.typing.as_ref().filter(|typing| {
+            !snapshot.page().excluded
+                || !typing
+                    .target()
+                    .and_then(|id| snapshot.layer(id))
+                    .is_some_and(|layer| layer.is_processing_overlay())
+        })
     }
 }
 

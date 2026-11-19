@@ -36,12 +36,13 @@ impl Snapshot {
         let mut walk = Walk {
             frame: &frame,
             session,
+            excluded: page.excluded,
             controls: Vec::new(),
         };
         walk.layers(&page.layers, false);
         let controls = walk.controls;
         let mut outlines = HashMap::new();
-        outlines_of(&page.layers, &mut outlines);
+        outlines_of(&page.layers, page.excluded, &mut outlines);
         let story = project
             .story(page.id)
             .unwrap_or_default()
@@ -115,6 +116,9 @@ impl Snapshot {
     /// Which part of a block `id` is, when it's a block's clean-up or mask,
     /// shown or not.
     pub(crate) fn part(&self, id: LayerId) -> Option<Part> {
+        if self.page.excluded {
+            return None;
+        }
         fn find(layers: &[Layer], id: LayerId) -> Option<Part> {
             layers.iter().find_map(|layer| match &layer.content {
                 Content::Block(block) if block.cleanup.id == id => Some(Part::Cleanup),
@@ -131,10 +135,12 @@ impl Snapshot {
     /// clean-up or mask, a brush can write to: shown and unlocked, with
     /// every layer it's in.
     pub(crate) fn writable(&self, id: LayerId) -> Option<(Offset, PixelFormat)> {
-        fn find(layers: &[Layer], id: LayerId) -> Option<(Offset, PixelFormat)> {
+        fn find(layers: &[Layer], id: LayerId, excluded: bool) -> Option<(Offset, PixelFormat)> {
             layers
                 .iter()
-                .filter(|layer| layer.visible && !layer.locked)
+                .filter(|layer| {
+                    layer.visible && !layer.locked && !(excluded && layer.is_processing_overlay())
+                })
                 .find_map(|layer| match &layer.content {
                     Content::Raster(raster) if layer.id == id => {
                         Some((raster.offset, PixelFormat::Rgba8))
@@ -151,10 +157,10 @@ impl Snapshot {
                     {
                         Some((block.mask.content.offset, PixelFormat::Gray8))
                     }
-                    _ => find(&layer.children, id),
+                    _ => find(&layer.children, id, excluded),
                 })
         }
-        find(&self.page.layers, id)
+        find(&self.page.layers, id, self.page.excluded)
     }
 }
 
@@ -192,6 +198,7 @@ fn image_size(session: &Session, file: Hash) -> Option<(u32, u32)> {
 struct Walk<'a> {
     frame: &'a Frame,
     session: &'a Session,
+    excluded: bool,
     controls: Vec<Control>,
 }
 
@@ -199,6 +206,9 @@ impl Walk<'_> {
     /// Hidden layers draw nothing to hit; a locked group locks what's in it.
     fn layers(&mut self, layers: &[Layer], locked: bool) {
         for layer in layers.iter().filter(|layer| layer.visible) {
+            if self.excluded && layer.is_processing_overlay() {
+                continue;
+            }
             let locked = locked || layer.locked;
             self.layer(layer, locked);
             self.layers(&layer.children, locked);
@@ -274,9 +284,18 @@ impl Walk<'_> {
 /// the Layers panel can still select, and every block's mask's: its
 /// source's frame, where the mask was made, since a mask draws nothing to
 /// outline.
-fn outlines_of(layers: &[Layer], outlines: &mut HashMap<LayerId, BezPath>) {
+fn outlines_of(layers: &[Layer], excluded: bool, outlines: &mut HashMap<LayerId, BezPath>) {
     for layer in layers {
         let path = match &layer.content {
+            _ if excluded
+                && (layer.is_processing_overlay()
+                    || layer
+                        .attributes
+                        .get("c2pa")
+                        .is_some_and(|a| a.contains_key("detection"))) =>
+            {
+                None
+            }
             Content::Panel(panel) => BezPath::from_svg(panel.outline.as_str()).ok(),
             Content::Balloon(balloon) => BezPath::from_svg(balloon.outline.as_str()).ok(),
             Content::Block(block) => {
@@ -290,7 +309,7 @@ fn outlines_of(layers: &[Layer], outlines: &mut HashMap<LayerId, BezPath>) {
         if let Some(path) = path {
             outlines.insert(layer.id, path);
         }
-        outlines_of(&layer.children, outlines);
+        outlines_of(&layer.children, excluded, outlines);
     }
 }
 

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Providers from '@/app/providers'
 import { call } from '@/lib/backend'
-import { useProject } from '@/lib/queries'
+import { projectKey, queryClient, useProject, type ProjectView } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, events, type Preferences } from '@koharu/ipc/protocol'
 
@@ -68,6 +68,28 @@ function ProjectProbe() {
 }
 
 describe('Tauri runtime', () => {
+  it('refreshes the thumbnail of a page toggled while another page is shown', async () => {
+    desktop(() => 'Book')
+    vi.mocked(commands.getShownPage).mockResolvedValue('open-page')
+    const view = render(createElement(Providers, null, createElement(ProjectProbe)))
+    await screen.findByText('Book')
+    act(() => {
+      tell('change', {
+        revision: 'r2',
+        pages: { added: [], changed: ['other-page'], removed: [], reordered: false },
+        layers: [],
+        created: [],
+        history: { current: 1, steps: ['set_page_options'] },
+      })
+    })
+    await waitFor(() =>
+      expect(queryClient.getQueryData<ProjectView>(projectKey)?.revisions).toEqual({
+        'other-page': 'r2',
+      }),
+    )
+    view.unmount()
+  })
+
   it('reads the project that was open before the interface loaded', async () => {
     desktop(() => 'Book')
     const view = render(createElement(Providers, null, createElement(ProjectProbe)))

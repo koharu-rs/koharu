@@ -585,6 +585,61 @@ fn hiding_a_block_shows_the_background_again() {
 }
 
 #[test]
+fn skipping_a_page_temporarily_hides_its_processing_overlays() {
+    let (_dir, mut session, page, change) = cleaned();
+    let block = layer(&change, "block");
+    let change = apply(
+        &mut session,
+        vec![
+            json!({"op":"set_text","layer":block,"text":"Translation"}),
+            json!({"op":"add_layer","id":"$repair","page":page,"index":1,"layer":{"kind":"raster","attributes":{"c2pa":{"inpainting":{"action":"c2pa.created"}}}}}),
+            json!({"op":"write_pixels","layer":"$repair","rect":{"x":48,"y":48,"width":1,"height":1},"pixels":[0,255,0,255]}),
+            json!({"op":"add_layer","id":"$manual","page":page,"index":2,"layer":{"kind":"raster"}}),
+            json!({"op":"write_pixels","layer":"$manual","rect":{"x":63,"y":63,"width":1,"height":1},"pixels":[255,0,0,255]}),
+        ],
+    );
+    let repair = layer(&change, "repair");
+    let manual = layer(&change, "manual");
+    let project = session.project();
+    let koharu_scene::Content::Block(data) = &project.layer(block).unwrap().content else {
+        unreachable!()
+    };
+    let cleanup = data.cleanup.id;
+    let renderer = renderer();
+    let before = renderer.render(&session, page).unwrap();
+    let original_layers = &project.page(page).unwrap().layers;
+    let rasterize = gpu();
+    for excluded in [true, false] {
+        apply(
+            &mut session,
+            vec![json!({"op":"set_page_options","page":page,"excluded":excluded})],
+        );
+        let frame = renderer.render(&session, page).unwrap();
+        assert_eq!(frame.translation(block).unwrap().visible(), !excluded);
+        assert_eq!(frame.layer(cleanup).unwrap().visible(), !excluded);
+        assert_eq!(frame.layer(repair).unwrap().visible(), !excluded);
+        assert!(frame.layer(manual).unwrap().visible());
+        assert_eq!(
+            &session.project().page(page).unwrap().layers,
+            original_layers
+        );
+        if rasterize {
+            let image = frame.rasterize().unwrap().image;
+            if excluded {
+                assert_eq!(image.get_pixel(63, 63).0, [255, 0, 0, 255]);
+                assert!(
+                    image
+                        .enumerate_pixels()
+                        .all(|(x, y, p)| (x, y) == (63, 63) || p.0 == [0, 0, 0, 255])
+                );
+            } else {
+                assert_eq!(image, before.rasterize().unwrap().image);
+            }
+        }
+    }
+}
+
+#[test]
 fn sfx_visibility_hides_the_translation_and_cleanup_together() {
     let (_dir, mut session, page, change) = page(
         64,

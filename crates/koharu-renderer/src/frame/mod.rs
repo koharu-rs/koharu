@@ -59,6 +59,11 @@ impl<'a> Drawn<'a> {
         self.shown
     }
 
+    /// Visibility on the layer itself, before a parent folder hides it.
+    pub fn own_visible(&self) -> bool {
+        self.node.visible
+    }
+
     /// What it draws, in page pixels; `None` when it draws nothing.
     #[must_use]
     pub fn bounds(&self) -> Option<Rect> {

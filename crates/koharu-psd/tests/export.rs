@@ -142,6 +142,38 @@ fn engine_data(record: &LayerRecord) -> String {
 }
 
 #[test]
+fn skipping_a_page_keeps_hidden_translations_editable_in_psd() {
+    let (_dir, mut session, page) = poster();
+    let renderer = Renderer::new(RendererConfig {
+        font_families: Vec::new(),
+    });
+    if let Err(error) = Gpu::get() {
+        eprintln!("skipped without a GPU: {error}");
+        return;
+    }
+    for excluded in [true, false] {
+        session
+            .apply(Edit {
+                label: "toggle page".into(),
+                ops: vec![
+                    serde_json::from_value(
+                        json!({"op":"set_page_options","page":page,"excluded":excluded}),
+                    )
+                    .unwrap(),
+                ],
+            })
+            .unwrap();
+        let file =
+            PsdFile::from_bytes(&export(&session, &renderer, page, &labels()).unwrap()).unwrap();
+        assert_eq!(record(&file, "First").is_visible(), !excluded);
+        assert!(record(&file, "First line").is_visible());
+        assert!(record(&file, "First line").block(b"TySh").is_some());
+        assert!(record(&file, "Paint").is_visible());
+        assert!(!record(&file, "Sign").is_visible());
+    }
+}
+
+#[test]
 fn a_page_exports_as_layers_photoshop_can_edit() {
     let (_dir, session, page) = poster();
     // Installed fonts only, so the test downloads none.

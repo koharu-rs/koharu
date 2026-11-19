@@ -158,20 +158,17 @@ function receivePage(page: PageId | null): void {
   void refresh(projectKey, pageKey).catch(() => undefined)
 }
 
-/** An edit, undo, or redo, from whichever writer: the project and its shown page are read again,
- * and so are the pages Story lists, which a change to one of their layers doesn't name. */
+/** Edits, undo and redo identify the affected pages even when a different page is open. */
 function receiveChange(change: Change): void {
-  queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
-    project
-      ? {
-          ...project,
-          history: change.history,
-          revisions: project.page
-            ? { ...project.revisions, [project.page]: change.revision }
-            : project.revisions,
-        }
-      : project,
-  )
+  queryClient.setQueryData<ProjectView | null>(projectKey, (project) => {
+    if (!project) return project
+    const revisions = { ...project.revisions }
+    for (const id of [...change.pages.changed, ...change.pages.added]) {
+      revisions[id] = change.revision
+    }
+    for (const id of change.pages.removed) delete revisions[id]
+    return { ...project, history: change.history, revisions }
+  })
   void refresh(projectKey, pageKey, pagesKey, glossaryKey).catch(() => undefined)
 }
 

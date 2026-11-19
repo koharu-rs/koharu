@@ -9,7 +9,7 @@ use specta::Type;
 
 use crate::{Blend, Content, LayerId, LayerKind, Opacity, Uuid};
 
-/// Namespace, then key, then value. The renderer never reads attributes.
+/// Namespace, then key, then value.
 pub type Attributes = BTreeMap<String, BTreeMap<String, Value>>;
 
 /// A layer as the project holds it, which is also how it's stored and sent,
@@ -83,6 +83,17 @@ pub(crate) fn part<C: Default>() -> Layer<C> {
 }
 
 impl Layer {
+    /// The page's processed lettering and clean-up. Area inpainting creates
+    /// a separate raster, identified by the same provenance in saved projects.
+    pub fn is_processing_overlay(&self) -> bool {
+        matches!(self.content, Content::Block(_))
+            || (matches!(self.content, Content::Raster(_))
+                && self
+                    .attributes
+                    .get("c2pa")
+                    .is_some_and(|a| a.contains_key("inpainting")))
+    }
+
     pub(crate) fn new(id: LayerId, new: NewLayer) -> Self {
         let container = matches!(
             new.content,

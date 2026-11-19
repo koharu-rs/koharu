@@ -102,7 +102,7 @@ impl Renderer {
             || {
                 view.layers
                     .par_iter()
-                    .map(|layer| self.layer(session, layer))
+                    .map(|layer| self.layer(session, layer, view.excluded))
                     .collect::<Result<Vec<Node>>>()
             },
         );
@@ -142,12 +142,12 @@ impl Renderer {
     }
 
     /// `layer`'s node, its children built across rayon.
-    fn layer(&self, session: &Session, layer: &Layer) -> Result<Node> {
+    fn layer(&self, session: &Session, layer: &Layer, excluded: bool) -> Result<Node> {
         let mut children = layer
             .children
             .par_iter()
             .filter(|child| !child.is_mask())
-            .map(|child| self.layer(session, child))
+            .map(|child| self.layer(session, child, excluded))
             .collect::<Result<Vec<_>>>()?;
         // An empty mask covers nothing.
         let masks = layer
@@ -187,12 +187,13 @@ impl Renderer {
             SceneContent::Mask(_) => bail!("mask {} is drawn only as its parent's", layer.id),
         };
         let container = content.is_none();
+        let visible = layer.visible && !(excluded && layer.is_processing_overlay());
         let mut node = Node {
             opacity: f32::from(layer.opacity),
             blend: layer.blend,
             children,
             masks,
-            ..Node::new(Some(layer.id), layer.visible, content)
+            ..Node::new(Some(layer.id), visible, content)
         };
         if container {
             node.bounds = node

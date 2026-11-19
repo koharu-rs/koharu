@@ -163,9 +163,15 @@ impl Export<'_> {
     }
 
     fn layer(&mut self, layer: &Layer) -> Result<()> {
+        // A mask is its layer's, never one of the drawn children.
+        if let Content::Mask(_) = layer.content {
+            return Ok(());
+        }
+        let drawn = drawn(self.frame.layer(layer.id), || format!("layer {}", layer.id))?;
+        let visible = drawn.own_visible();
         let leaf = Leaf {
             name: &layer.name,
-            visible: layer.visible,
+            visible,
             opacity: alpha(layer.opacity),
             blend: layer.blend,
         };
@@ -173,27 +179,20 @@ impl Export<'_> {
         if layer.locked {
             blocks.push(TaggedBlock::protection(LOCK_ALL));
         }
-        // A mask is its layer's, never one of the drawn children.
-        if let Content::Mask(_) = layer.content {
-            return Ok(());
-        }
-        let drawn = drawn(self.frame.layer(layer.id), || format!("layer {}", layer.id))?;
         match &layer.content {
             Content::Group(_) | Content::Panel(_) => {
-                self.folder(layer, layer.visible, blocks, |export| {
-                    export.children(layer)
-                })?;
+                self.folder(layer, visible, blocks, |export| export.children(layer))?;
                 return Ok(());
             }
             Content::Balloon(balloon) => {
-                self.folder(layer, layer.visible, blocks, |export| {
+                self.folder(layer, visible, blocks, |export| {
                     export.outline(balloon)?;
                     export.children(layer)
                 })?;
                 return Ok(());
             }
             Content::Block(block) => {
-                self.folder(layer, layer.visible, blocks, |export| {
+                self.folder(layer, visible, blocks, |export| {
                     export.block(layer.id, block)
                 })?;
                 return Ok(());
