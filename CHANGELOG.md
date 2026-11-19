@@ -1,3 +1,13 @@
+## [0.86.3](https://github.com/koharu-rs/koharu/compare/0.86.2..0.86.3) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load HIP libtorch with AOTriton's fused attention, from libtorch.2 and koharu.3 ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([c366a12](https://github.com/koharu-rs/koharu/commit/c366a1268ea37515922c01fd02e81777d357425d))
+
+### ⚙️ Miscellaneous Tasks
+
+- Let release-please write the release notes, without the version heading - ([cb5991a](https://github.com/koharu-rs/koharu/commit/cb5991ab96595f45b5c68280df9da1bd9ebc1787))
+
 ## [0.86.2](https://github.com/koharu-rs/koharu/compare/0.86.1..0.86.2) - 2026-11-19
 
 ### 🐛 Bug Fixes
