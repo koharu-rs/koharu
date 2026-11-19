@@ -51,22 +51,22 @@ fn mask(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 /// Windows, and nothing elsewhere.
 pub fn sharing(gpu: &Gpu) -> Option<Option<String>> {
     let adapter = gpu.adapter.get_info();
-    let features = gpu.device.features();
     match adapter.backend {
         #[cfg(windows)]
         wgpu::Backend::Dx12 => pin(&adapter),
         #[cfg(windows)]
         wgpu::Backend::Vulkan
-            if features.contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32) =>
+            if gpu
+                .device
+                .features()
+                .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32) =>
         {
             pin(&adapter)
         }
+        // Copied: radv reads Chromium's DMA-BUF frames with corrupt blocks
+        // along their right and bottom edges (koharu-rs/koharu#1414).
         #[cfg(target_os = "linux")]
-        wgpu::Backend::Vulkan
-            if features.contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF) =>
-        {
-            Some(None)
-        }
+        wgpu::Backend::Vulkan => None,
         #[cfg(target_os = "macos")]
         wgpu::Backend::Metal => Some(None),
         _ => None,
