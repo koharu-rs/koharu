@@ -16,7 +16,7 @@ pub use hosted::{
     Endpoint, Providers, SERVERS, SIGN_INS, SignInPrompt, VENDORS, sign_in, sign_out,
 };
 pub use local::{Local, Quantization, Sampling, Size, local};
-pub use model::{answer, answers, complete, go_deepseek};
+pub use model::{answer, answers, complete, go_deepseek, go_deepseek_id};
 pub use rig_agent::agent::AgentBuilder;
 pub use rig_agent::run::PromptError;
 /// rig, whose requests and streams every model here takes and gives.

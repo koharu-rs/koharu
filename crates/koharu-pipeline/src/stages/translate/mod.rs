@@ -1,12 +1,6 @@
-//! Translation: one conversation per open project, kept in memory, a turn per
-//! page in page order. Changing the model, the target, or the prompt starts a
-//! new one. A page is its texts as a JSON object numbered in reading order, and
-//! its answer must keep the keys, held to a schema; a page that fails never
-//! enters the history, and an answer echoing the page before's is asked again
-//! without the history it copied. A text given back unchanged, such as a
-//! copyright line or a "!?", is in the target's script already, so it keeps
-//! its own lettering.
+//! Translation in project reading order, with one conversation per open project.
 
+mod batch;
 mod conversation;
 pub(super) mod model;
 mod placement;
@@ -78,6 +72,16 @@ impl Default for TranslatorConfig {
     }
 }
 
+impl TranslatorConfig {
+    pub(crate) fn batches_pages(&self) -> bool {
+        !self.vision
+            && self
+                .model
+                .split_once('/')
+                .is_some_and(|(vendor, id)| koharu_llm::go_deepseek_id(vendor, id))
+    }
+}
+
 /// The system prompt: Index-Translate's structured-data template in English,
 /// as bilibili/Index-Translate's `docs/prompts.md` gives it
 /// (93ac63774d1c6939aec05e6f0f191bf90f225365, Apache-2.0), for the JSON the
@@ -122,6 +126,9 @@ pub(crate) async fn translate(
     config: &PipelineConfig,
     mut conversation: OwnedMutexGuard<Conversation>,
 ) -> Result<()> {
+    if config.translator.batches_pages() {
+        return batch::translate(task, config, &mut conversation).await;
+    }
     let member = &task.members[0];
     let translator = config.translator.clone();
     let global = config.glossary.clone();

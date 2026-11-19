@@ -105,7 +105,11 @@ pub fn answers(
 }
 
 pub fn go_deepseek(spec: &ModelSpec) -> bool {
-    spec.provider.vendor() == OPENCODE_GO && spec.id.starts_with("deepseek-v4")
+    go_deepseek_id(spec.provider.vendor(), &spec.id)
+}
+
+pub fn go_deepseek_id(vendor: &str, id: &str) -> bool {
+    vendor == OPENCODE_GO && id.starts_with("deepseek-v4")
 }
 
 fn deepseek_reasoning(reasoning: Reasoning) -> Option<Value> {

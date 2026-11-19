@@ -67,9 +67,14 @@ impl Context {
     /// enough. A model with no known limit is never over; `compact` with
     /// [`CompactReason::Overflow`] answers its refusal.
     pub async fn fit(&mut self, model: &DynModel<Completion>) -> Result<()> {
+        self.fit_request(model, 0).await
+    }
+
+    /// Include the pending request and its estimated reply in the threshold.
+    pub async fn fit_request(&mut self, model: &DynModel<Completion>, pending: u64) -> Result<()> {
         let spec = spec(model)?.clone();
         let policy = policy(&self.prompts, &spec);
-        if !policy.over_threshold(self.tokens(), &spec) {
+        if !policy.over_threshold(self.tokens().saturating_add(pending), &spec) {
             return Ok(());
         }
         let cleared = policy
@@ -78,7 +83,7 @@ impl Context {
         if cleared.results > 0 {
             self.count = None;
         }
-        if !policy.over_threshold(self.tokens(), &spec) {
+        if !policy.over_threshold(self.tokens().saturating_add(pending), &spec) {
             return Ok(());
         }
         self.compact_with(model, &spec, &CompactReason::Threshold)

@@ -105,8 +105,8 @@ impl<'a> Turn<'a> {
             .collect();
 
         if isolated {
-            // Go's DeepSeek can permute the values of a correctly numbered reply.
-            // Each request sees one source block, without earlier numbered turns.
+            // Only the image-enabled route reaches this branch for Go DeepSeek.
+            // Text-only runs use the multi-page batch protocol.
             return Ok(self
                 .independent(&batches, model, INDEPENDENT_HOSTED_WORKERS)
                 .await?

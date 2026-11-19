@@ -264,10 +264,16 @@ impl Scheduler {
             .iter()
             .enumerate()
             .flat_map(|(at, run)| {
+                // Read the selected range together, including pages whose OCR is still queued.
+                let waiting_for_source = run.config.translator.batches_pages()
+                    && run
+                        .graph
+                        .node_weights()
+                        .any(|job| matches!(job.stage, Stage::Recognize | Stage::Detect));
                 run.graph.externals(Incoming).filter_map(move |job| {
                     let node = &run.graph[job];
-                    let held =
-                        node.stage == Stage::Translate && self.conversations.busy(run.project);
+                    let held = node.stage == Stage::Translate
+                        && (waiting_for_source || self.conversations.busy(run.project));
                     (!node.running && !held).then_some(Candidate {
                         run: at,
                         job,
@@ -297,7 +303,20 @@ impl Scheduler {
                 })
                 .min_by_key(|candidate| candidate.priority);
             if let Some(&hosted) = hosted {
-                self.start(vec![hosted], None);
+                let chosen = if hosted.stage == Stage::Translate
+                    && self.runs[hosted.run].config.translator.batches_pages()
+                {
+                    let mut pages: Vec<_> = ready
+                        .iter()
+                        .copied()
+                        .filter(|job| job.run == hosted.run && job.stage == Stage::Translate)
+                        .collect();
+                    pages.sort_by_key(|job| job.priority.page);
+                    pages
+                } else {
+                    vec![hosted]
+                };
+                self.start(chosen, None);
                 continue;
             }
             let Some(&first) = ready.iter().min_by_key(|candidate| candidate.priority) else {

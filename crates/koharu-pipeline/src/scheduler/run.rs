@@ -1,8 +1,7 @@
 //! A run: what it works on, and its graph of jobs, a page's stage each, with
 //! an edge for what each needs: detection before the page's other stages,
-//! recognition before translation, and each page's translation before the
-//! next page's. A job is ready when nothing points at it, and a finished job
-//! leaves the graph.
+//! recognition before translation, and page turns in reading order. Multi-page
+//! translation jobs are admitted together once the run's sources are ready.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -296,7 +295,9 @@ impl Run {
                     graph.add_edge(recognize, inpaint, ());
                 }
             }
-            if let Some(&translate) = jobs.get(&Stage::Translate) {
+            if !config.translator.batches_pages()
+                && let Some(&translate) = jobs.get(&Stage::Translate)
+            {
                 if let Some(before) = translated.replace(translate) {
                     graph.add_edge(before, translate, ());
                 }
