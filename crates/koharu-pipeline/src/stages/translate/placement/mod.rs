@@ -80,7 +80,7 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
     if given.and_then(|style| style.chars.fill).is_none()
         && let Some(fill) = source.fill
     {
-        chars.insert("fill".to_owned(), json!(fill));
+        chars.insert("fill".to_owned(), json!(layer.reviewed_ink(fill)));
     }
     if !given
         .is_some_and(|style| style.chars.stroke.is_some() || style.chars.stroke_width == Some(0.0))
@@ -216,6 +216,76 @@ mod tests {
     }
 
     const BALLOON: &str = "M0 0 L200 0 L200 160 L0 160 Z";
+
+    #[test]
+    fn detected_ink_review_survives_reopening_and_applies_before_or_after_translation() -> Result<()>
+    {
+        use koharu_scene::InkChoice;
+        let detected = |fill| {
+            let mut layer = block(20.0, "text");
+            layer["source"]["style"] = json!({"chars":{"fill":fill}});
+            layer["attributes"] = json!({"c2pa":{"detection":{}}});
+            layer
+        };
+        let mut manual = detected([0.5; 4]);
+        manual["attributes"] = json!({});
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                (
+                    "gray",
+                    None,
+                    detected([167.0 / 255.0, 167.0 / 255.0, 167.0 / 255.0, 1.0]),
+                ),
+                ("nearblack", None, detected([1.0 / 255.0, 0.0, 0.0, 1.0])),
+                ("color", None, detected([0.3, 0.9, 0.8, 1.0])),
+                ("black", None, detected([0.0, 0.0, 0.0, 1.0])),
+                ("white", None, detected([1.0; 4])),
+                ("manual", None, manual),
+            ],
+        )?;
+        placed(&mut session, ids[1], &langid!("zh"))?;
+        let suggestions = session.project().ink_suggestions()?;
+        assert_eq!(suggestions.len(), 3);
+        let resolve = |i: usize, choice| Edit {
+            label: "review_ink".into(),
+            ops: vec![Op::ResolveInk {
+                suggestion: suggestions[i].clone(),
+                choice,
+            }],
+        };
+        session.apply(resolve(0, InkChoice::Black))?;
+        session.apply(resolve(1, InkChoice::White))?;
+        session.apply(resolve(2, InkChoice::Keep))?;
+        assert!(session.apply(resolve(2, InkChoice::Black)).is_err());
+        session.undo()?;
+        assert_eq!(
+            session.project().ink_suggestions()?,
+            vec![suggestions[2].clone()]
+        );
+        session.redo()?;
+        drop(session);
+        let mut session = Session::open(dir.path().join("test.khr"))?;
+        assert!(session.project().ink_suggestions()?.is_empty());
+        for (i, expected) in [
+            Rgba([0.0, 0.0, 0.0, 1.0]),
+            Rgba([1.0; 4]),
+            suggestions[2].detected,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert_eq!(
+                placed(&mut session, ids[i], &langid!("zh"))?
+                    .style
+                    .chars
+                    .fill,
+                Some(expected)
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn vertical_dialogue_uses_the_same_reference_for_new_and_previously_sized_translations()

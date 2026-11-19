@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "İncelenecek metin renkleri",
+    "inkChoice": {
+      "keep": "Rengi koru",
+      "black": "Siyah kullan",
+      "white": "Beyaz kullan"
+    },
     "title": "İnceleme",
     "correction": "Çeviri düzeltmesi",
     "empty": "İncelenecek öneri yok",
@@ -163,6 +169,7 @@
     "close": "Geçmişi kapat",
     "opened": "Açıldığında",
     "steps": {
+      "review_ink": "Metin rengini incele",
       "edit_glossary": "Terim sözlüğünü düzenle",
       "relink_originals": "Özgün görselleri yeniden bağla",
       "add_text": "Metin ekle",

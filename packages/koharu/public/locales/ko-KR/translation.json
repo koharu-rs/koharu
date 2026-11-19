@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "확인할 원문 글자색",
+    "inkChoice": {
+      "keep": "현재 색 유지",
+      "black": "번역문을 검은색으로",
+      "white": "번역문을 흰색으로"
+    },
     "title": "제안 검토",
     "correction": "번역 교정",
     "empty": "검토할 제안이 없습니다",
@@ -163,6 +169,7 @@
     "close": "작업 내역 닫기",
     "opened": "열었을 때",
     "steps": {
+      "review_ink": "글자색 확인",
       "edit_glossary": "용어집 편집",
       "relink_originals": "원본 이미지 다시 연결",
       "add_text": "텍스트 추가",

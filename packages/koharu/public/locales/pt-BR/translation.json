@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "Cores detectadas para revisar",
+    "inkChoice": {
+      "keep": "Manter a cor",
+      "black": "Usar preto",
+      "white": "Usar branco"
+    },
     "title": "Revisão",
     "correction": "Correção de tradução",
     "empty": "Nenhuma sugestão pendente",
@@ -163,6 +169,7 @@
     "close": "Fechar histórico",
     "opened": "Ao abrir",
     "steps": {
+      "review_ink": "Revisar a cor do texto",
       "edit_glossary": "Editar glossário",
       "relink_originals": "Revincular imagens originais",
       "add_text": "Adicionar texto",

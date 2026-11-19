@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "Detected ink to review",
+    "inkChoice": {
+      "keep": "Keep current color",
+      "black": "Use black",
+      "white": "Use white"
+    },
     "title": "Review",
     "correction": "Translation correction",
     "empty": "No suggestions to review",
@@ -163,6 +169,7 @@
     "close": "Close history",
     "opened": "Opened",
     "steps": {
+      "review_ink": "Review ink color",
       "edit_glossary": "Edit glossary",
       "relink_originals": "Relink original images",
       "add_text": "Add text",

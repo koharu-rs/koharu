@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "Couleurs détectées à vérifier",
+    "inkChoice": {
+      "keep": "Garder la couleur",
+      "black": "Mettre en noir",
+      "white": "Mettre en blanc"
+    },
     "title": "Suggestions",
     "correction": "Correction de traduction",
     "empty": "Aucune suggestion à examiner",
@@ -163,6 +169,7 @@
     "close": "Fermer l’historique",
     "opened": "À l’ouverture",
     "steps": {
+      "review_ink": "Vérifier la couleur du texte",
       "edit_glossary": "Modifier le glossaire",
       "relink_originals": "Relier les images originales",
       "add_text": "Ajouter du texte",

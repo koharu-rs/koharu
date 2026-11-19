@@ -22,6 +22,7 @@ pub struct GlossaryView {
     lines: usize,
     suggestions: Vec<AliasSuggestion>,
     corrections: Vec<TextSuggestion>,
+    inks: Vec<koharu_scene::InkSuggestion>,
     candidates: Option<Vec<TermCandidate>>,
 }
 
@@ -71,6 +72,7 @@ pub fn get_glossary(app: State<'_, Arc<App>>) -> Result<GlossaryView> {
         lines: lines.len(),
         suggestions: project.alias_suggestions().to_vec(),
         corrections: project.text_suggestions().to_vec(),
+        inks: project.ink_suggestions()?,
         candidates,
     })
 }
@@ -180,6 +182,17 @@ pub fn resolve_translation(
     )
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn resolve_ink(
+    app: State<'_, Arc<App>>,
+    project: ProjectId,
+    suggestion: koharu_scene::InkSuggestion,
+    choice: koharu_scene::InkChoice,
+) -> Result<()> {
+    resolve_review(&app, project, Op::ResolveInk { suggestion, choice })
+}
+
 fn resolve_review(app: &App, project: ProjectId, op: Op) -> Result<()> {
     let opened = app.project.lock();
     let mut session = opened
@@ -192,6 +205,7 @@ fn resolve_review(app: &App, project: ProjectId, op: Op) -> Result<()> {
     }
     session.apply(Edit {
         label: match op {
+            Op::ResolveInk { .. } => "review_ink",
             Op::ResolveTranslation { .. } => "set_text",
             _ => "edit_glossary",
         }

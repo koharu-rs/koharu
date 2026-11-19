@@ -88,6 +88,41 @@ impl Run<'_, '_> {
         Ok(())
     }
 
+    pub(super) fn resolve_ink(
+        &mut self,
+        index: usize,
+        suggestion: &crate::InkSuggestion,
+        choice: crate::InkChoice,
+    ) -> Result<()> {
+        let id = suggestion.location.layer;
+        let layer = self.project.layer(id)?;
+        if self.project.index.get(&id) != Some(&suggestion.location.page)
+            || layer.pending_ink() != Some((suggestion.detected, suggestion.translation_fill))
+        {
+            return Err(Error::invalid(
+                index,
+                "the ink or translation fill changed or was already reviewed",
+            ));
+        }
+        let has_translation =
+            matches!(&layer.content, crate::Content::Block(b) if b.translation.is_some());
+        let layer = id.into();
+        if has_translation && let Some(fill) = choice.replacement(suggestion.detected) {
+            self.update_layer(
+                index,
+                &layer,
+                &serde_json::json!({"translation":{"style":{"chars":{"fill": fill}}}}),
+            )?;
+        }
+        self.set_attribute(
+            index,
+            &layer,
+            "koharu",
+            "ink_review",
+            Some(&serde_json::json!((suggestion.detected, choice))),
+        )
+    }
+
     pub(super) fn suggest_translation(
         &mut self,
         index: usize,

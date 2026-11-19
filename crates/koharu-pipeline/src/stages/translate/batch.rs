@@ -364,7 +364,6 @@ pub(super) async fn translate(
     let member = &task.members[0];
     let project = member.session.lock().project();
     let lines = lines(&project, &task.members, &config.glossary)?;
-    task.started(&task.members.iter().collect::<Vec<_>>());
     if lines.is_empty() {
         return Ok(());
     }
@@ -401,6 +400,7 @@ pub(super) async fn translate(
         name(&translator.target)?,
         translator.instructions
     );
+    let mut split_page = None;
     let mut remaining = lines.as_slice();
     while !remaining.is_empty() {
         if member.cancel.is_cancelled() {
@@ -408,6 +408,17 @@ pub(super) async fn translate(
         }
         let (end, mut batch, mut request_tokens) = budget.next(remaining, &glossary, &system)?;
         let current = &remaining[..end];
+        let pages: BTreeSet<_> = current.iter().map(|line| line.page).collect();
+        let starting = task
+            .members
+            .iter()
+            .filter(|m| pages.contains(&m.page) && Some(m.page) != split_page)
+            .collect::<Vec<_>>();
+        task.started(&starting);
+        split_page = remaining
+            .get(end)
+            .map(|line| line.page)
+            .filter(|page| pages.contains(page));
         if !batch.fields.is_empty() {
             let reference = story_reference(
                 &project,
@@ -509,6 +520,14 @@ pub(super) async fn translate(
             Ok(())
         })
         .await??;
+        // A page split across requests finishes only after its last rows are committed.
+        for page in pages.into_iter().filter(|page| Some(*page) != split_page) {
+            task.events.send(crate::Event::Finished {
+                run: task.members[0].run,
+                page,
+                stage: Stage::Translate,
+            });
+        }
         conversation.context.record([(messages, usage)]);
         remaining = &remaining[end..];
     }

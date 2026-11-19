@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "検出した文字色の確認",
+    "inkChoice": {
+      "keep": "現在の色を維持",
+      "black": "訳文を黒に",
+      "white": "訳文を白に"
+    },
     "title": "提案の確認",
     "correction": "訳文の校正",
     "empty": "確認する提案はありません",
@@ -163,6 +169,7 @@
     "close": "ヒストリーを閉じる",
     "opened": "開いた状態",
     "steps": {
+      "review_ink": "文字色を確認",
       "edit_glossary": "用語集を編集",
       "relink_originals": "原画像を再リンク",
       "add_text": "テキストを追加",

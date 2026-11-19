@@ -4,7 +4,7 @@
 //! it runs.
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::Arc,
     time::Duration,
 };
@@ -102,6 +102,8 @@ struct Record {
     span: Option<Span>,
     /// Each page stage's span while it runs.
     stages: BTreeMap<(PageId, Stage), Span>,
+    /// A translation batch can finish individual pages before its scheduler job returns.
+    finished: BTreeSet<(PageId, Stage)>,
 }
 
 impl Events {
@@ -125,6 +127,9 @@ impl Events {
         {
             let mut runs = self.runs.lock();
             let record = runs.entry(*run).or_insert_with(Record::new);
+            if *record.ended.borrow() {
+                return;
+            }
             match &event {
                 // Sent by `Pipeline::run`, on its caller's thread.
                 Event::Queued { run, steps } => {
@@ -149,6 +154,9 @@ impl Events {
                     }
                 }
                 Event::Finished { page, stage, .. } => {
+                    if !record.finished.insert((*page, *stage)) {
+                        return;
+                    }
                     record.stages.remove(&(*page, *stage));
                 }
                 Event::GlossaryProgress { .. } => {}
@@ -169,9 +177,9 @@ impl Events {
                 }
             }
             record.events.push(event.clone());
+            // Concurrent stages must reach live listeners in the same order as the history.
+            let _ = self.sender.send(event);
         }
-        // No one listening isn't a failure.
-        let _ = self.sender.send(event);
     }
 
     /// What every run told so far, run by run.
@@ -201,6 +209,39 @@ impl Record {
             ended: watch::channel(false).0,
             span: None,
             stages: BTreeMap::new(),
+            finished: BTreeSet::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn committed_pages_count_once_and_late_completions_cannot_reopen_a_run() {
+        let events = Events::new();
+        let run = RunId(7);
+        let page = PageId(koharu_scene::Uuid::nil());
+        let done = Event::Finished {
+            run,
+            page,
+            stage: Stage::Translate,
+        };
+        let mut live = events.subscribe();
+        events.send(Event::Queued { run, steps: 1 });
+        events.send(done.clone());
+        events.send(done.clone());
+        events.send(Event::Ended {
+            run,
+            outcome: Outcome::Done,
+        });
+        events.send(done);
+        let history = events.told();
+        assert_eq!(history.len(), 3);
+        assert_eq!(
+            std::iter::from_fn(|| live.try_recv().ok()).collect::<Vec<_>>(),
+            history
+        );
     }
 }

@@ -6,11 +6,18 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
-import { glossaryKey, refresh } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
-import { commands, type ProjectId, type TermLocation } from '@koharu/ipc/protocol'
+import { glossaryKey, refresh, useProject } from '@/lib/queries'
+import { rgbaToHex, useKoharuStore } from '@/lib/store'
+import {
+  commands,
+  type InkChoice,
+  type InkSuggestion,
+  type ProjectId,
+  type TermLocation,
+} from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
+import { NativeSelect, NativeSelectOption } from '@koharu/ui/components/native-select'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 
 export async function showEvidence({ page, layer }: Pick<TermLocation, 'page' | 'layer'>) {
@@ -29,7 +36,27 @@ export function ReviewPanel({ project }: { project: ProjectId }) {
   })
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const shownPage = useProject().data?.page
+  const [inkPage, setInkPage] = useState<string>()
   if (!data || data.project !== project) return null
+  const byPage = new Map<string, InkSuggestion[]>()
+  for (const ink of data.inks) {
+    const page = ink.location.page
+    const rows = byPage.get(page)
+    if (rows) rows.push(ink)
+    else byPage.set(page, [ink])
+  }
+  const visibleInks =
+    byPage.get(inkPage ?? '') ?? byPage.get(shownPage ?? '') ?? byPage.values().next().value ?? []
+  const resolveInk = async (ink: InkSuggestion, choice: InkChoice) => {
+    setBusy(true)
+    try {
+      await call(commands.resolveInk, project, ink, choice)
+      await refresh(glossaryKey)
+    } finally {
+      setBusy(false)
+    }
+  }
   const items = [
     ...data.suggestions.map((suggestion) => ({
       id: JSON.stringify(['alias', suggestion.source, suggestion.canonical]),
@@ -59,7 +86,7 @@ export function ReviewPanel({ project }: { project: ProjectId }) {
 
   return (
     <ScrollArea className='h-full min-h-0 flex-1'>
-      {!items.length && (
+      {!items.length && !data.inks.length && (
         <p role='status' className='p-3 text-xs text-muted-foreground'>
           {t('review.empty')}
         </p>
@@ -123,6 +150,68 @@ export function ReviewPanel({ project }: { project: ProjectId }) {
           </section>
         )
       })}
+      {visibleInks.length > 0 && (
+        <section className='space-y-2 p-3 text-xs'>
+          <label className='flex flex-wrap items-center gap-2 font-semibold'>
+            {t('review.ink')}
+            <NativeSelect
+              value={visibleInks[0]!.location.page}
+              onChange={(e) => setInkPage(e.target.value)}
+            >
+              {Array.from(byPage, ([page, rows]) => (
+                <NativeSelectOption key={page} value={page}>
+                  {t('glossary.page', { page: rows[0]!.location.number })} ({rows.length})
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+          {visibleInks.map((ink) => {
+            const color = rgbaToHex(ink.detected)
+            const current = ink.translation_fill && rgbaToHex(ink.translation_fill)
+            return (
+              <article key={ink.location.layer} className='space-y-2 border-b py-2'>
+                <button
+                  type='button'
+                  className='flex items-baseline gap-1 text-start hover:text-primary'
+                  onClick={() => void showEvidence(ink.location).catch(() => undefined)}
+                >
+                  <ArrowUpRight className='size-3 shrink-0' />
+                  {ink.block_number != null && <strong>#{ink.block_number}</strong>}
+                  <span className='wrap-anywhere'>
+                    {ink.location.text || t('layers.kinds.block')}
+                  </span>
+                </button>
+                <div className='flex flex-wrap items-center gap-1.5'>
+                  <span
+                    aria-hidden
+                    className='size-3 rounded-sm border'
+                    style={{ backgroundColor: color }}
+                  />
+                  <code>{color}</code>
+                  {current && current !== color && (
+                    <span>
+                      {t('glossary.translation')} · {current}
+                    </span>
+                  )}
+                </div>
+                <div className='flex flex-wrap gap-1'>
+                  {(['keep', 'black', 'white'] as const).map((choice) => (
+                    <Button
+                      key={choice}
+                      size='xs'
+                      variant='outline'
+                      disabled={busy}
+                      onClick={() => void resolveInk(ink, choice).catch(() => undefined)}
+                    >
+                      {t(`review.inkChoice.${choice}`)}
+                    </Button>
+                  ))}
+                </div>
+              </article>
+            )
+          })}
+        </section>
+      )}
     </ScrollArea>
   )
 }

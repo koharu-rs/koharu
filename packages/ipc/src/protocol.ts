@@ -350,6 +350,7 @@ export type GlossaryView = {
 	lines: number,
 	suggestions: AliasSuggestion[],
 	corrections: TextSuggestion[],
+	inks: InkSuggestion[],
 	candidates: TermCandidate[] | null,
 };
 
@@ -385,6 +386,16 @@ export type Image = {
 export type ImportSource = "files" | 
 /**  Every page file directly in a folder. */
 "folder";
+
+/**  A reader's decision about the detector's ink. The source measurement remains evidence. */
+export type InkChoice = "keep" | "black" | "white";
+
+export type InkSuggestion = {
+	location: TermLocation,
+	block_number: number | null,
+	detected: Rgba,
+	translation_fill: Rgba | null,
+};
 
 /**  The inpainters, by id in the section and by name. */
 export type Inpainter = "lama" | "flux3-klein" | "moss-image" | "qwen-image";
@@ -585,7 +596,7 @@ export type Op =
 /**  Add an imported file, stored once by its content hash. */
 { op: "add_file"; bytes: number[] } | { op: "set_glossary"; previous: GlossaryEntry[]; entries: GlossaryEntry[] } | { op: "set_glossary_candidates"; candidates: GlossaryEntry[][] } | 
 /**  Queue possible readings of names for human confirmation. Cite existing OCR blocks. */
-{ op: "suggest_aliases"; suggestions: AliasSuggestion[] } | { op: "resolve_alias"; suggestion: AliasSuggestion; translation: string | null } | 
+{ op: "suggest_aliases"; suggestions: AliasSuggestion[] } | { op: "resolve_alias"; suggestion: AliasSuggestion; translation: string | null } | { op: "resolve_ink"; suggestion: InkSuggestion; choice: InkChoice } | 
 /**  Queue a proposed correction to the cited block's existing translation for human review. */
 { op: "suggest_translation"; suggestion: TextSuggestion } | { op: "resolve_translation"; suggestion: TextSuggestion; translation: string | null } | { op: "add_external_page"; index: number; file: Hash; source: ExternalImage } | { op: "relink_external_image"; file: Hash; previous: ExternalImage; source: ExternalImage };
 
@@ -1047,6 +1058,7 @@ export: (format: ExportFormat, labels: Labels) => invoke<null>("export", { forma
 getGlossary: () => invoke<GlossaryView>("get_glossary", {  }, { headers: headers() }),
 resolveAlias: (project: ProjectId, suggestion: AliasSuggestion, translation: string | null) => invoke<null>("resolve_alias", { project, suggestion, translation }, { headers: headers() }),
 resolveTranslation: (project: ProjectId, suggestion: TextSuggestion, translation: string | null) => invoke<null>("resolve_translation", { project, suggestion, translation }, { headers: headers() }),
+resolveInk: (project: ProjectId, suggestion: InkSuggestion, choice: InkChoice) => invoke<null>("resolve_ink", { project, suggestion, choice }, { headers: headers() }),
 extractSource: (project: ProjectId) => invoke<RunId[]>("extract_source", { project }, { headers: headers() }),
 saveGlossary: (project: ProjectId, previous: GlossaryEntry[], entries: GlossaryEntry[]) => invoke<null>("save_glossary", { project, previous, entries }, { headers: headers() }),
 exportSource: () => invoke<null>("export_source", {  }, { headers: headers() }),

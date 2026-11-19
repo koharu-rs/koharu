@@ -19,7 +19,7 @@ mod tiles;
 mod values;
 
 pub use change::{Change, Created, History, PageChanges};
-pub use color::{Color, Rgba};
+pub use color::{Color, InkChoice, InkSuggestion, Rgba};
 pub use edit::{Edit, Op};
 pub use error::{Error, Result};
 pub use external::{ArchiveMember, ExternalImage, MAX_SOURCE_BYTES};

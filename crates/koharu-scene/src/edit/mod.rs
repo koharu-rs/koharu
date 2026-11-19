@@ -201,6 +201,11 @@ pub enum Op {
         suggestion: crate::AliasSuggestion,
         translation: Option<String>,
     },
+    #[schemars(skip)]
+    ResolveInk {
+        suggestion: crate::InkSuggestion,
+        choice: crate::InkChoice,
+    },
     /// Queue a proposed correction to the cited block's existing translation for human review.
     SuggestTranslation {
         suggestion: crate::TextSuggestion,
@@ -506,6 +511,7 @@ impl Run<'_, '_> {
                 suggestion,
                 translation,
             } => self.resolve_alias(index, suggestion, translation.as_deref()),
+            Op::ResolveInk { suggestion, choice } => self.resolve_ink(index, suggestion, *choice),
             Op::SuggestTranslation { suggestion } => self.suggest_translation(index, suggestion),
             Op::ResolveTranslation {
                 suggestion,

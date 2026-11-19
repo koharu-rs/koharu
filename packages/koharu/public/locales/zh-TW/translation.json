@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "待確認的原文字色",
+    "inkChoice": {
+      "keep": "保留目前顏色",
+      "black": "譯文改黑",
+      "white": "譯文改白"
+    },
     "title": "建議確認",
     "correction": "譯文校對",
     "empty": "目前沒有待確認建議",
@@ -163,6 +169,7 @@
     "close": "關閉步驟記錄",
     "opened": "開啟時",
     "steps": {
+      "review_ink": "確認字色",
       "edit_glossary": "編輯術語表",
       "relink_originals": "重新定位原圖",
       "add_text": "新增文字",

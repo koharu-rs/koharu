@@ -74,7 +74,8 @@ export interface Job {
   /** The page stages done, of `total`. */
   completed: number
   total: number
-  /** The stage started last, and its page. */
+  /** Concurrent page stages in start order. */
+  active: { stage: Stage; page: PageId }[]
   stage: Stage | null
   page: PageId | null
   glossary?: Pick<
@@ -194,6 +195,7 @@ function fold(job: Job | undefined, event: PipelineEvent): Job {
     state: 'running',
     completed: 0,
     total: 0,
+    active: [],
     stage: null,
     page: null,
     error: null,
@@ -202,32 +204,40 @@ function fold(job: Job | undefined, event: PipelineEvent): Job {
     case 'queued':
       return { ...current, total: event.steps }
     case 'started':
+    case 'finished': {
+      const active = current.active.filter(
+        (step) => step.page !== event.page || step.stage !== event.stage,
+      )
+      if (event.kind === 'started') active.push({ stage: event.stage, page: event.page })
+      const stage = active.at(-1)?.stage ?? null
+      const page = stage === 'glossary' ? null : active.find((step) => step.stage === stage)?.page
       return {
         ...current,
-        stage: event.stage,
-        page: event.stage === 'glossary' ? null : event.page,
+        active,
+        stage,
+        page: page ?? null,
+        completed: current.completed + Number(event.kind === 'finished'),
+        glossary: event.kind === 'finished' && event.stage === 'glossary' ? null : current.glossary,
       }
+    }
     case 'glossary_progress':
       return {
         ...current,
         glossary: { phase: event.phase, completed: event.completed, total: event.total },
       }
-    case 'finished':
-      return event.stage === 'glossary'
-        ? { ...current, completed: current.completed + 1, glossary: null }
-        : { ...current, completed: current.completed + 1 }
     case 'ended':
       // A failure names its own page and stage: the last started may be another page in flight.
       return event.outcome.kind === 'failed'
         ? {
             ...current,
+            active: [],
             state: 'failed',
             glossary: null,
             stage: event.outcome.stage,
             page: event.outcome.stage === 'glossary' ? null : event.outcome.page,
             error: event.outcome.reason,
           }
-        : { ...current, state: event.outcome.kind, glossary: null, error: null }
+        : { ...current, active: [], state: event.outcome.kind, glossary: null, error: null }
   }
 }
 

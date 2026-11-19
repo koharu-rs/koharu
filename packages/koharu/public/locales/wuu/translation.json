@@ -1,5 +1,11 @@
 {
   "review": {
+    "ink": "待确认个原文字色",
+    "inkChoice": {
+      "keep": "保留眼前颜色",
+      "black": "译文改黑",
+      "white": "译文改白"
+    },
     "title": "建议确认",
     "correction": "译文校对",
     "empty": "暂时呒没待确认个建议",
@@ -163,6 +169,7 @@
     "close": "关脱历史记录",
     "opened": "打开辰光",
     "steps": {
+      "review_ink": "确认字色",
       "edit_glossary": "编辑术语表",
       "relink_originals": "重新定位原图",
       "add_text": "加文字",
