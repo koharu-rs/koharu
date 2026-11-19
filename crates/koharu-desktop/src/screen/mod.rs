@@ -312,7 +312,8 @@ impl Screen {
 
 /// The main window as the main thread holds it.
 struct Main {
-    gpu: &'static Gpu,
+    /// The GPU the surface and CEF's frames are on.
+    gpu: Arc<Gpu>,
     /// Tells the interface where the page shows.
     handle: AppHandle<CefRuntime>,
     /// The webview's layout, which the runtime keeps current; set when CEF
@@ -364,6 +365,15 @@ struct Main {
 struct Shared {
     importer: Importer,
     pacer: Pacer,
+}
+
+impl Shared {
+    fn new(gpu: &Gpu) -> Self {
+        Self {
+            importer: Importer::new(gpu),
+            pacer: Pacer::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -502,15 +512,16 @@ impl Main {
 
     /// Takes a frame CEF shared: the page's with its mask, or the popup's.
     fn take_shared(&mut self, type_: PaintElementType, info: &AcceleratedPaintInfo) -> Result<()> {
-        let Some(shared) = self.shared.as_mut() else {
+        // On a lost GPU, frames wait for the window to move to a new one.
+        let Some(shared) = self.shared.as_mut().filter(|_| !self.gpu.lost()) else {
             return Ok(());
         };
-        let frame = shared.importer.take(self.gpu, info)?;
+        let frame = shared.importer.take(&self.gpu, info)?;
         if type_ == PaintElementType::POPUP {
             self.painted.popup_frame = Some(frame);
             return Ok(());
         }
-        let mask = shared.importer.mask(self.gpu, &frame)?;
+        let mask = shared.importer.mask(&self.gpu, &frame)?;
         if let Some(view) = &self.view {
             shared
                 .pacer
@@ -553,11 +564,33 @@ impl Main {
         if size.width == 0 || size.height == 0 {
             return;
         }
+        // What the window made on a lost GPU goes with it, to be made again
+        // on the process's new one: the surface below, and CEF's frames,
+        // which CEF paints again after this call returns.
+        if self.gpu.lost() {
+            self.gpu = match Gpu::get() {
+                Ok(gpu) => gpu,
+                Err(error) => {
+                    tracing::error!("failed to present the window: {error:#}");
+                    return;
+                }
+            };
+            self.compositor = None;
+            self.painted.view_frame = None;
+            self.painted.popup_frame = None;
+            if let Some(shared) = &mut self.shared {
+                *shared = Shared::new(&self.gpu);
+            }
+            if let Some(host) = self.host() {
+                host.invalidate(PaintElementType::VIEW);
+                host.invalidate(PaintElementType::POPUP);
+            }
+        }
         if let Some(shared) = &mut self.shared {
             shared.pacer.show(&mut self.painted, Instant::now());
         }
         if self.compositor.is_none() {
-            match Compositor::new(self.gpu, Arc::clone(window)) {
+            match Compositor::new(&self.gpu, Arc::clone(window)) {
                 Ok(created) => self.compositor = Some(created),
                 Err(error) => {
                     tracing::error!("failed to create the window's surface: {error:#}");
@@ -579,7 +612,7 @@ impl Main {
             })
         });
         if let Err(error) = compositor.present(
-            self.gpu,
+            &self.gpu,
             (size.width, size.height),
             &mut self.painted,
             canvas,
@@ -746,9 +779,10 @@ fn blink(handle: AppHandle<CefRuntime>) -> tauri::async_runtime::JoinHandle<()> 
 pub fn open(
     handle: &AppHandle<CefRuntime>,
     screen: &Screen,
-    gpu: &'static Gpu,
+    gpu: Arc<Gpu>,
     shared: bool,
 ) -> Result<()> {
+    let frames = shared.then(|| Shared::new(&gpu));
     WINDOW.set(Some(Main {
         gpu,
         handle: handle.clone(),
@@ -769,10 +803,7 @@ pub fn open(
         web_cursor: Some(CursorIcon::Default),
         compositor: None,
         ime: false,
-        shared: shared.then(|| Shared {
-            importer: Importer::new(gpu),
-            pacer: Pacer::new(),
-        }),
+        shared: frames,
         monitor: None,
         frame_rate: refresh::FALLBACK,
     }));

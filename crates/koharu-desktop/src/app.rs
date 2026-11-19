@@ -13,7 +13,7 @@ use futures::StreamExt as _;
 use koharu_agent::{Agent, McpServer, Tools};
 use koharu_canvas::{Canvas, Effect, Snapshot};
 use koharu_pipeline::{Area, Pipeline, PipelineConfig, Request, RunId, Stage, Target};
-use koharu_renderer::{Gpu, Renderer};
+use koharu_renderer::Renderer;
 use koharu_scene::{Change, Edit, PageId, Session};
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -31,7 +31,6 @@ use crate::{
 pub struct App {
     pub library: Library,
     pub renderer: Renderer,
-    pub gpu: &'static Gpu,
     pub pipeline: Pipeline,
     pub screen: Screen,
     pub project: Mutex<Option<Project>>,
@@ -56,17 +55,11 @@ pub struct Project {
 }
 
 impl App {
-    pub fn new(
-        library: Library,
-        renderer: Renderer,
-        gpu: &'static Gpu,
-        pipeline: Pipeline,
-    ) -> Self {
+    pub fn new(library: Library, renderer: Renderer, pipeline: Pipeline) -> Self {
         Self {
             library,
             renderer,
             screen: Screen::default(),
-            gpu,
             pipeline,
             project: Mutex::new(None),
             handle: OnceLock::new(),
@@ -127,7 +120,6 @@ impl App {
         let relay = self.relay(session.subscribe());
         let session = Arc::new(Mutex::new(session));
         self.screen.set_canvas(Some(Canvas::new(
-            self.gpu,
             Arc::clone(&session),
             self.renderer.clone(),
         )));
@@ -288,10 +280,9 @@ impl App {
     fn show(&self, (session, page): (Arc<Mutex<Session>>, Option<PageId>)) -> Result<()> {
         match page {
             Some(page) => self.screen.show(self.render(&session, page)?),
-            None => {
-                self.screen
-                    .set_canvas(Some(Canvas::new(self.gpu, session, self.renderer.clone())))
-            }
+            None => self
+                .screen
+                .set_canvas(Some(Canvas::new(session, self.renderer.clone()))),
         }
         Ok(())
     }

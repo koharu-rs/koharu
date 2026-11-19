@@ -44,7 +44,6 @@ const TYPING_SLACK: f64 = 4.0;
 /// The page viewport over one open project. It reads the project, never
 /// writes it: every change leaves as an `Effect::Edit` for the host.
 pub struct Canvas {
-    gpu: &'static Gpu,
     session: Arc<Mutex<Session>>,
     /// Lays out the text being typed, as the host's renders lay it out.
     renderer: Renderer,
@@ -114,9 +113,8 @@ struct Active {
 }
 
 impl Canvas {
-    pub fn new(gpu: &'static Gpu, session: Arc<Mutex<Session>>, renderer: Renderer) -> Self {
+    pub fn new(session: Arc<Mutex<Session>>, renderer: Renderer) -> Self {
         Self {
-            gpu,
             session,
             renderer,
             view: View::default(),
@@ -714,8 +712,9 @@ impl Canvas {
             .collect()
     }
 
-    /// Redraws if what it would show changed, and returns the texture;
-    /// `None` when nothing changed or the viewport is empty.
+    /// Redraws if what it would show changed, or the GPU it drew on was
+    /// lost, and returns the texture; `None` when nothing changed or the
+    /// viewport is empty.
     pub fn draw(&mut self) -> anyhow::Result<Option<&wgpu::Texture>> {
         let size = self.view.size();
         let (width, height) = (size.width as u32, size.height as u32);
@@ -726,17 +725,18 @@ impl Canvas {
         let sized = self
             .target
             .as_ref()
-            .is_some_and(|target| target.size() == (width, height));
+            .is_some_and(|target| target.size() == (width, height) && !target.gpu.lost());
         if sized && self.drawn.as_ref() == Some(&look) {
             return Ok(None);
         }
-        let mut drawing = self.gpu.drawing(width as u16, height as u16);
+        let gpu = Gpu::get()?;
+        let mut drawing = gpu.drawing(width as u16, height as u16);
         self.base(&mut drawing);
         self.page(&mut drawing)?;
         self.overlay(&mut drawing)?;
         let target = match self.target.take() {
             Some(target) if sized => target,
-            _ => Target::new(self.gpu, width, height),
+            _ => Target::new(&gpu, width, height),
         };
         let target = self.target.insert(target);
         drawing.render(&target.view)?;
@@ -793,7 +793,7 @@ impl Canvas {
     /// The texture as last drawn, read back.
     pub fn snapshot(&self) -> anyhow::Result<RgbaImage> {
         let target = self.target.as_ref().context("the canvas hasn't drawn")?;
-        self.gpu.read_texture(&target.texture)
+        target.gpu.read_texture(&target.texture)
     }
 
     /// The overlay: Story's frames and numbers, the gesture's preview, then

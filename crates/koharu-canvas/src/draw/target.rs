@@ -1,16 +1,19 @@
 //! The canvas's texture, which a redraw renders into whole.
 
+use std::sync::Arc;
+
 use koharu_renderer::Gpu;
 use wgpu::{TextureFormat, TextureUsages};
 
-/// The canvas's texture, the viewport's size.
+/// The canvas's texture, the viewport's size, on the GPU that made it.
 pub(crate) struct Target {
+    pub gpu: Arc<Gpu>,
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
 }
 
 impl Target {
-    pub fn new(gpu: &Gpu, width: u32, height: u32) -> Self {
+    pub fn new(gpu: &Arc<Gpu>, width: u32, height: u32) -> Self {
         // Rendered into by vello_gpu, sampled by the host, and copied out
         // for a snapshot.
         let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
@@ -30,7 +33,11 @@ impl Target {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        Self { texture, view }
+        Self {
+            gpu: Arc::clone(gpu),
+            texture,
+            view,
+        }
     }
 
     pub fn size(&self) -> (u32, u32) {

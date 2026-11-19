@@ -3,10 +3,14 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, LazyLock, Weak, mpsc},
+    sync::{
+        Arc, Weak,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use glifo::Glyph;
 use image::RgbaImage;
 use kurbo::{Affine, Stroke};
@@ -22,9 +26,10 @@ use wgpu::{
 
 use crate::fonts::Font;
 
-/// The process's GPU, started the first time it's asked for. One that fails
-/// to start stays failed until Koharu starts again.
-static GPU: LazyLock<Result<Gpu>> = LazyLock::new(Gpu::new);
+/// The process's GPU: started the first time it's asked for, and again the
+/// first time after its device is lost, as a driver reset or a GPU out of
+/// memory loses it.
+static GPU: Mutex<Option<Arc<Gpu>>> = Mutex::new(None);
 
 /// The device and its queue, which the desktop's compositor shares, and
 /// vello_gpu's renderer. The instance and adapter stay, because a window's
@@ -35,6 +40,8 @@ pub struct Gpu {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    /// Set when wgpu reports the device lost.
+    lost: Arc<AtomicBool>,
     /// What one drawing holds at a time.
     vello: Mutex<State>,
 }
@@ -50,10 +57,23 @@ struct State {
 }
 
 impl Gpu {
-    /// The process's GPU, which the canvas and the window draw with.
-    pub fn get() -> Result<&'static Self> {
-        GPU.as_ref()
-            .map_err(|error| anyhow!("the GPU didn't start: {error:#}"))
+    /// The process's GPU, which the canvas and the window draw with: a new
+    /// one once the last was lost, so what a holder made on the last, it
+    /// makes again on this one.
+    pub fn get() -> Result<Arc<Self>> {
+        let mut current = GPU.lock();
+        if let Some(gpu) = current.as_ref().filter(|gpu| !gpu.lost()) {
+            return Ok(Arc::clone(gpu));
+        }
+        let gpu = Arc::new(Self::new().context("the GPU didn't start")?);
+        *current = Some(Arc::clone(&gpu));
+        Ok(gpu)
+    }
+
+    /// Whether wgpu reported the device lost, after which nothing draws on
+    /// it.
+    pub fn lost(&self) -> bool {
+        self.lost.load(Ordering::Acquire)
     }
 
     /// Creates the device with the adapter's texture and buffer limits, rather
@@ -92,8 +112,15 @@ impl Gpu {
         // the middle of a thumbnail. Reads fail through `checked` instead,
         // and the rest is logged.
         device.on_uncaptured_error(Arc::new(|error| tracing::error!("GPU error: {error}")));
-        device.set_device_lost_callback(|reason, message| {
-            tracing::error!("the GPU device was lost ({reason:?}): {message}");
+        // wgpu calls it as it loses the device, before the call that lost it
+        // returns.
+        let lost = Arc::new(AtomicBool::new(false));
+        device.set_device_lost_callback({
+            let lost = Arc::clone(&lost);
+            move |reason, message| {
+                lost.store(true, Ordering::Release);
+                tracing::error!("the GPU device was lost ({reason:?}): {message}");
+            }
         });
         // A render takes its size from its target; this only sizes the
         // renderer's first buffers.
@@ -111,6 +138,7 @@ impl Gpu {
             adapter,
             device,
             queue,
+            lost,
             vello: Mutex::new(State {
                 renderer,
                 resources,
@@ -289,6 +317,11 @@ impl Drawing<'_> {
     /// Renders into `target`, an `Rgba8Unorm` render attachment the drawing's
     /// size, as premultiplied RGBA.
     pub fn render(mut self, target: &TextureView) -> Result<()> {
+        // vello_gpu uploads through wgpu's `create_buffer_init`, which panics
+        // on a lost device's buffers.
+        if self.gpu.lost() {
+            bail!("the GPU device was lost");
+        }
         let mut encoder = self
             .gpu
             .device

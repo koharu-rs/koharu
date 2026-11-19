@@ -48,7 +48,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     let adapter = gpu.adapter.get_info();
     // CEF hands its frames over as GPU textures where Koharu's GPU can take
     // them, and copies them through memory everywhere else.
-    let sharing = screen::sharing(gpu);
+    let sharing = screen::sharing(&gpu);
     let shared = sharing.is_some();
     tracing::info!(
         "CEF's frames: {} on {} ({})",
@@ -69,7 +69,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     );
 
     let pipeline = Pipeline::new(koharu_config::get::<PipelineConfig>()?);
-    let app = Arc::new(App::new(library, renderer, gpu, pipeline));
+    let app = Arc::new(App::new(library, renderer, pipeline));
     koharu_sentry::set_screenshot({
         let screen = app.screen.clone();
         move || screen.screenshot()
@@ -138,7 +138,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .setup(move |tauri| {
             let app = tauri.state::<Arc<App>>();
             app.start(tauri.handle().clone());
-            Ok(screen::open(tauri.handle(), &app.screen, app.gpu, shared)?)
+            Ok(screen::open(tauri.handle(), &app.screen, gpu, shared)?)
         })
         .run(context)?;
     Ok(())
