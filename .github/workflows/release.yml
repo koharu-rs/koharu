@@ -89,18 +89,6 @@ jobs:
           organization: ${{ vars.SENTRY_ORG }}
           project: rust
 
-      - name: Generate release changelog
-        id: release_notes
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          {
-            echo 'release_body<<EOF'
-            bun git-cliff --current --strip all
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -122,7 +110,6 @@ jobs:
           tauriScript: cargo tauri
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
-          releaseBody: ${{ steps.release_notes.outputs.release_body }}
           releaseDraft: false
           prerelease: false
           args: >-
