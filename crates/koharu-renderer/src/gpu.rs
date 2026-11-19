@@ -7,9 +7,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use glifo::{FontEmbolden, Glyph};
+use glifo::Glyph;
 use image::RgbaImage;
-use kurbo::Affine;
+use kurbo::{Affine, Stroke};
 use parking_lot::{Mutex, MutexGuard};
 use vello_gpu::{
     ImageSource, Pixmap, RenderOptions, RenderTarget, RenderTargetConfig, Renderer, Resources,
@@ -318,27 +318,41 @@ impl Drawing<'_> {
     }
 
     /// Fills `glyphs` of `font` at `size` with the current paint and
-    /// transform, each turned by `turn` and grown by `embolden`.
+    /// transform, each turned by `turn`, and strokes them too with `stroke`,
+    /// whose width is in the run's units, when there is one.
     pub(crate) fn glyphs(
         &mut self,
         font: &Font,
         size: f32,
         turn: Option<Affine>,
-        embolden: FontEmbolden,
+        stroke: Option<Stroke>,
         glyphs: &[Glyph],
     ) -> Result<()> {
-        let mut run = self
-            .scene
-            .glyph_run(&mut self.vello.resources, &font.data)
-            .font_size(size)
-            .normalized_coords(&font.coords)
-            .font_embolden(embolden)
-            .hint(false);
-        if let Some(turn) = turn {
-            run = run.glyph_transform(turn);
+        let passes: &[bool] = match stroke {
+            Some(stroke) => {
+                self.scene.set_stroke(stroke);
+                &[false, true]
+            }
+            None => &[false],
+        };
+        for &stroking in passes {
+            let mut run = self
+                .scene
+                .glyph_run(&mut self.vello.resources, &font.data)
+                .font_size(size)
+                .normalized_coords(&font.coords)
+                .hint(false);
+            if let Some(turn) = turn {
+                run = run.glyph_transform(turn);
+            }
+            let glyphs = glyphs.iter().copied();
+            match stroking {
+                true => run.stroke_glyphs(glyphs),
+                false => run.fill_glyphs(glyphs),
+            }
+            .map_err(|error| anyhow!("glyphs couldn't be drawn: {error:?}"))?;
         }
-        run.fill_glyphs(glyphs.iter().copied())
-            .map_err(|error| anyhow!("glyphs couldn't be drawn: {error:?}"))
+        Ok(())
     }
 
     /// `pixmap` as an image the scene samples: uploaded as a texture of its
