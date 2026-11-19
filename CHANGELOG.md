@@ -1,3 +1,22 @@
+## [0.86.0](https://github.com/koharu-rs/koharu/compare/0.85.7..0.86.0) - 2026-11-19
+
+### ⛰️  Features
+
+- *(desktop)* Render the page at its monitor's refresh rate instead of 60 fps - ([87c59d2](https://github.com/koharu-rs/koharu/commit/87c59d2540f74db44e60bcc2c01245b167ce31cc))
+
+### 🐛 Bug Fixes
+
+- Scale Linux windows by the font DPI KDE sets for fractional scales, on a winit-gtk4 pin with tauri-apps/winit-gtk4#5 ([#1425](https://github.com/koharu-rs/koharu/issues/1425)) - ([830755f](https://github.com/koharu-rs/koharu/commit/830755fb0f4b5f869e5c64496c157de83b17d15b))
+
+### 🚜 Refactor
+
+- *(ml)* Keep the layout model's attention chunk size inside attention() - ([73ddb00](https://github.com/koharu-rs/koharu/commit/73ddb008a3898b2d15a7b4a741bc4a808a6b5599))
+
+### ⚙️ Miscellaneous Tasks
+
+- Install LLVM 22.1.8 for Windows bindings instead of Visual Studio's libclang - ([cf9b160](https://github.com/koharu-rs/koharu/commit/cf9b160048e3e7f56364b5a31684a53b96be52e1))
+- Generate Windows bindings with Visual Studio's own libclang - ([fd62692](https://github.com/koharu-rs/koharu/commit/fd626928486fb295ca8126993b43c6396c41549d))
+
 ## [0.85.7](https://github.com/koharu-rs/koharu/compare/0.85.6..0.85.7) - 2026-11-19
 
 ### 🐛 Bug Fixes
