@@ -79,6 +79,11 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .on_window_event({
             let app = Arc::clone(&app);
             move |label, _, window, event| screen::on_window_event(&app, label, window, event)
+        })
+        // A second launch on this profile, which CEF ends before any plugin runs.
+        .on_relaunch({
+            let app = Arc::clone(&app);
+            move || app.bring_forward()
         });
     // A shared texture opens only on the GPU that made it.
     let cef = match sharing.flatten() {
@@ -109,12 +114,9 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
                 .targets([Target::new(TargetKind::LogDir { file_name: None })])
                 .build(),
         )
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_window(screen::MAIN) {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+        // Another build of Koharu, on another CEF profile.
+        .plugin(tauri_plugin_single_instance::init(|tauri, _, _| {
+            tauri.state::<Arc<App>>().bring_forward()
         }))
         .plugin(
             tauri_plugin_window_state::Builder::default()

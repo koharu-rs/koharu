@@ -17,7 +17,7 @@ use koharu_renderer::Renderer;
 use koharu_scene::{Change, Edit, PageId, Session};
 use parking_lot::Mutex;
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager as _};
 use tauri_runtime_cef::CefRuntime;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
 use tokio_util::task::AbortOnDropHandle;
@@ -25,7 +25,7 @@ use tokio_util::task::AbortOnDropHandle;
 use crate::{
     events::{self, Event},
     library::Library,
-    screen::Screen,
+    screen::{self, Screen},
 };
 
 pub struct App {
@@ -110,6 +110,19 @@ impl App {
     pub fn emit<T: Serialize + Clone>(&self, event: Event<T>, payload: T) {
         if let Some(handle) = self.handle.get() {
             event.tell(handle, payload);
+        }
+    }
+
+    /// Brings the window forward, for Koharu launched again while it runs.
+    pub fn bring_forward(&self) {
+        if let Some(window) = self
+            .handle
+            .get()
+            .and_then(|handle| handle.get_window(screen::MAIN))
+        {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
         }
     }
 
