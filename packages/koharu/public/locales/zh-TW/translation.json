@@ -316,6 +316,7 @@
     "unlocked": "未鎖定"
   },
   "menu": {
+    "resizeDialogue": "更新專案對白的自動字級",
     "about": "關於",
     "closeProject": "關閉專案",
     "delete": "刪除所選項目",

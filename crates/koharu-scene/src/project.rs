@@ -134,6 +134,27 @@ pub(crate) fn locked_inside(layer: &Layer) -> Option<LayerId> {
 /// page's top level. Paths come from `position` and are used before the
 /// tree changes, so a bad one is a bug.
 impl Page {
+    /// The two middle detected dialogue ink widths, in page pixels.
+    pub fn dialogue_ink_widths(&self) -> Option<(f64, f64)> {
+        let mut widths: Vec<_> = depth_first(&self.layers)
+            .into_iter()
+            .filter_map(|layer| {
+                let Content::Block(block) = &layer.content else {
+                    return None;
+                };
+                (block.role == crate::Role::Text)
+                    .then_some(block.source.style.chars.size)
+                    .flatten()
+            })
+            .filter(|size| size.is_finite() && *size > 0.0)
+            .collect();
+        widths.sort_unstable_by(f64::total_cmp);
+        Some((
+            *widths.get(widths.len().checked_sub(1)? / 2)?,
+            widths[widths.len() / 2],
+        ))
+    }
+
     pub(crate) fn sfx(&self) -> impl Iterator<Item = &Layer> {
         depth_first(&self.layers).into_iter().filter(|layer| {
             matches!(&layer.content, Content::Block(block) if block.role == crate::Role::Sfx)

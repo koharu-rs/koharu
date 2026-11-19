@@ -316,6 +316,7 @@
     "unlocked": "未锁定"
   },
   "menu": {
+    "resizeDialogue": "更新项目对白的自动字号",
     "about": "关于",
     "closeProject": "关闭项目",
     "delete": "删除所选项",

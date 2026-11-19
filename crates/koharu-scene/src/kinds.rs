@@ -112,6 +112,35 @@ pub struct Block {
     pub cleanup: Layer<Raster>,
 }
 
+impl Block {
+    /// The detector measures the width of visible ink. A Chinese body glyph
+    /// leaves side bearings in its em; allow roughly ten percent for them.
+    pub fn translation_size(
+        &self,
+        target: &crate::LanguageIdentifier,
+        widths: Option<(f64, f64)>,
+    ) -> Option<f64> {
+        let (lower, upper) = widths?;
+        if self.role != Role::Text
+            || self.source.direction != crate::Direction::Vertical
+            || target.language.as_str() != "zh"
+        {
+            return Some(lower);
+        }
+        // A short kana reaction can be much narrower than body type. Share a
+        // reference among nearby sizes, without letting a title set the body size.
+        let reference = if upper <= lower * 1.5 { upper } else { lower };
+        let ink = self
+            .source
+            .style
+            .chars
+            .size
+            .filter(|s| s.is_finite() && *s > 0.0)
+            .unwrap_or(reference);
+        Some((ink.max(reference.min(ink * 1.5)) * 1.10).round().max(1.0))
+    }
+}
+
 /// A block's part, refusing a field it doesn't have. A flattened struct takes
 /// only the fields it knows, unlike a layer's tagged kind, so serde alone
 /// would drop a misspelt one.

@@ -73,6 +73,8 @@ pub enum Op {
         page: Ref,
         excluded: bool,
     },
+    /// Recalculate legacy automatically assigned vertical Chinese dialogue sizes.
+    ResizeDialogue,
     /// Set the visibility of the sound-effect layers on one page, or every page.
     SetSfxVisibility {
         page: Option<Ref>,
@@ -404,6 +406,7 @@ impl Run<'_, '_> {
                 page.excluded = *excluded;
                 Ok(())
             }
+            Op::ResizeDialogue => self.resize_dialogue(index),
             Op::SetSfxVisibility { page, visible } => {
                 let pages = match page {
                     Some(page) => vec![self.page(page)?],

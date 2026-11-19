@@ -316,6 +316,7 @@
     "unlocked": "잠금 해제됨"
   },
   "menu": {
+    "resizeDialogue": "프로젝트 대사의 자동 글자 크기 갱신",
     "about": "정보",
     "closeProject": "프로젝트 닫기",
     "delete": "선택 항목 삭제",

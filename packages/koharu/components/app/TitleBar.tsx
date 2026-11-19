@@ -231,6 +231,17 @@ export function TitleBar() {
                 <MenubarShortcut>Del</MenubarShortcut>
               </MenubarItem>
               <MenubarSeparator />
+              <MenubarItem
+                disabled={!project}
+                onClick={() =>
+                  dispatch(commands.edit, {
+                    label: t('menu.resizeDialogue'),
+                    ops: [{ op: 'resize_dialogue' }],
+                  })
+                }
+              >
+                {t('menu.resizeDialogue')}
+              </MenubarItem>
               {/* Frees the GPU, as Photoshop's Edit → Purge frees memory. */}
               <MenubarItem onClick={() => dispatch(commands.unload)}>
                 {t('menu.unloadModels')}

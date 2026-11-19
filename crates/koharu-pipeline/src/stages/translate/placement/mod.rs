@@ -17,8 +17,8 @@ use crate::{Error, Result};
 /// other texts standing in the balloon, or in its source's frame when it's
 /// free or a sound effect. It fills its frame at every render, centred on the
 /// frame's block axis. A new translation starts at the page's lettering
-/// size, the median of its texts' sources, as a letterer keeps one size for a
-/// page's dialogue and fits each balloon from it; its lines centred, as a
+/// size, adjusted for the block's detected ink in vertical Chinese dialogue.
+/// Its lines are centred, as a
 /// Western balloon's are lettered, or in Japanese and Chinese started
 /// together at the top or the left, as JLREQ aligns a line to its head; and
 /// with its source's ink as its fill and outline
@@ -62,7 +62,7 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
         .as_ref()
         .map(|translation| &translation.style);
     let sized = given.and_then(|style| style.chars.size);
-    let size = sized.or_else(|| lettering(&page.layers));
+    let size = sized.or_else(|| this.translation_size(target, page.dialogue_ink_widths()));
     // Japanese and Chinese are written vertically, and their lines start
     // together, as JLREQ aligns them to the line head.
     let cjk = [language!("ja"), language!("zh")].contains(&target.language);
@@ -122,26 +122,6 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
         layer: block.into(),
         patch: json!({"translation": translation}),
     })
-}
-
-/// The page's lettering size: the median size of its texts' sources, if any
-/// has one.
-fn lettering(layers: &[Layer]) -> Option<f64> {
-    fn sizes(layers: &[Layer], found: &mut Vec<f64>) {
-        for layer in layers {
-            if let Content::Block(block) = &layer.content
-                && block.role == Role::Text
-                && let Some(size) = block.source.style.chars.size
-            {
-                found.push(size);
-            }
-            sizes(&layer.children, found);
-        }
-    }
-    let mut found = Vec::new();
-    sizes(layers, &mut found);
-    found.sort_unstable_by(f64::total_cmp);
-    found.get(found.len().checked_sub(1)? / 2).copied()
 }
 
 /// `frame` filled at every render, centred.
@@ -236,6 +216,57 @@ mod tests {
     }
 
     const BALLOON: &str = "M0 0 L200 0 L200 160 L0 160 Z";
+
+    #[test]
+    fn vertical_dialogue_uses_the_same_reference_for_new_and_previously_sized_translations()
+    -> Result<()> {
+        let mut fresh = block(0.0, "text");
+        fresh["source"]["style"] = json!({"chars":{"size":22}});
+        let mut old = block(60.0, "text");
+        old["source"]["style"] = json!({"chars":{"size":15}});
+        old["attributes"] = json!({"c2pa":{"translation":{}}});
+        old["translation"] = json!({
+            "frame":{"box":{"bounds":{"x":60,"y":0,"width":60,"height":180},"fit":"best"}},
+            "direction":"vertical","language":"zh-Hans","style":{"chars":{"size":15}}
+        });
+        let mut manual = old.clone();
+        manual["source"]["style"]["chars"]["size"] = json!(22);
+        manual["translation"]["style"]["chars"]["size"] = json!(28);
+        let mut locked = old.clone();
+        locked["locked"] = json!(true);
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("fresh", None, fresh),
+                ("old", None, old),
+                ("manual", None, manual),
+                ("locked", None, locked),
+            ],
+        )?;
+        assert_eq!(
+            placed(&mut session, ids[0], &langid!("zh"))?
+                .style
+                .chars
+                .size,
+            Some(24.0)
+        );
+        session.apply(Edit {
+            label: "resize".into(),
+            ops: vec![Op::ResizeDialogue],
+        })?;
+        for (&id, size) in ids.iter().zip([24.0, 24.0, 28.0, 15.0]) {
+            let project = session.project();
+            let Content::Block(block) = &project.layer(id)?.content else {
+                bail!("expected block")
+            };
+            assert_eq!(
+                block.translation.as_ref().and_then(|t| t.style.chars.size),
+                Some(size)
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn a_balloon_text_fills_its_room_and_a_free_one_its_source_box() -> Result<()> {

@@ -316,6 +316,7 @@
     "unlocked": "Desbloqueada"
   },
   "menu": {
+    "resizeDialogue": "Actualizar el tamaño automático de los diálogos",
     "about": "Acerca de",
     "closeProject": "Cerrar proyecto",
     "delete": "Eliminar selección",

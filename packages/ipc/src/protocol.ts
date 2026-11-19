@@ -523,6 +523,8 @@ export type Op =
  *  page's size.
  */
 { op: "set_background"; page: Ref; background: Background | null } | { op: "set_page_options"; page: Ref; excluded: boolean } | 
+/**  Recalculate legacy automatically assigned vertical Chinese dialogue sizes. */
+{ op: "resize_dialogue" } | 
 /**  Set the visibility of the sound-effect layers on one page, or every page. */
 { op: "set_sfx_visibility"; page: Ref | null; visible: boolean } | { op: "mark_page_detected"; page: Ref } | { op: "set_glossary_input"; input: Hash } | 
 /**  Move a page to `index`, counted after the page is taken out. */

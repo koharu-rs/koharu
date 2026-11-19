@@ -316,6 +316,7 @@
     "unlocked": "ロックなし"
   },
   "menu": {
+    "resizeDialogue": "プロジェクトの台詞の自動文字サイズを更新",
     "about": "Koharuについて",
     "closeProject": "プロジェクトを閉じる",
     "delete": "選択項目を削除",

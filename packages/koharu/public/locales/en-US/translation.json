@@ -316,6 +316,7 @@
     "unlocked": "Unlocked"
   },
   "menu": {
+    "resizeDialogue": "Update automatic dialogue sizes",
     "about": "About",
     "closeProject": "Close Project",
     "delete": "Delete Selected",

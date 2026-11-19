@@ -316,6 +316,7 @@
     "unlocked": "Kilitsiz"
   },
   "menu": {
+    "resizeDialogue": "Diyalogların otomatik yazı boyutlarını güncelle",
     "about": "Hakkında",
     "closeProject": "Projeyi Kapat",
     "delete": "Seçilenleri Sil",

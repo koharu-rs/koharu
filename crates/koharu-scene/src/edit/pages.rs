@@ -4,6 +4,62 @@ use super::Run;
 use crate::{Background, Created, Error, Hash, Page, PageId, Ref, Result, Size};
 
 impl Run<'_, '_> {
+    pub(super) fn resize_dialogue(&mut self, index: usize) -> Result<()> {
+        let mut changes = Vec::new();
+        for page in self.project.pages().filter(|p| !p.excluded) {
+            let Some(widths) = page.dialogue_ink_widths() else {
+                continue;
+            };
+            for layer in crate::project::depth_first(&page.layers) {
+                let crate::Content::Block(block) = &layer.content else {
+                    continue;
+                };
+                let Some(text) = &block.translation else {
+                    continue;
+                };
+                // Older generated translations stored the lower median as an
+                // explicit size. Retain other sizes, marked text and custom fits.
+                if text.style.chars.size != Some(widths.0)
+                    || text.direction != crate::Direction::Vertical
+                    || !matches!(
+                        text.frame,
+                        crate::Frame::Box {
+                            fit: crate::Fit::Best,
+                            ..
+                        } | crate::Frame::Path {
+                            fit: crate::PathFit::Best,
+                            ..
+                        }
+                    )
+                    || text
+                        .content
+                        .0
+                        .iter()
+                        .any(|span| span.attributes.size.is_some())
+                    || !layer
+                        .attributes
+                        .get("c2pa")
+                        .is_some_and(|data| data.contains_key("translation"))
+                    || self.project.locked_at(layer.id).is_some()
+                {
+                    continue;
+                }
+                let size = block.translation_size(&text.language, Some(widths));
+                if size != text.style.chars.size {
+                    changes.push((layer.id, size));
+                }
+            }
+        }
+        for (layer, size) in changes {
+            self.update_layer(
+                index,
+                &layer.into(),
+                &serde_json::json!({"translation":{"style":{"chars":{"size":size}}}}),
+            )?;
+        }
+        Ok(())
+    }
+
     pub(super) fn add_page(
         &mut self,
         op: usize,
