@@ -408,9 +408,6 @@ impl DinoAttention {
     }
 }
 
-/// Query rows `attention` takes at a time on libtorch's math fallback.
-const ATTENTION_ROWS: i64 = 1024;
-
 /// Upstream's `scaled_dot_product_attention`, a chunk of query rows at a time
 /// where libtorch has no fused kernel, as on ROCm for RDNA GPUs
 /// (koharu-rs/koharu#1408). Its math fallback holds the whole score matrix:
@@ -422,6 +419,8 @@ const ATTENTION_ROWS: i64 = 1024;
 fn attention(query: &Tensor, key: &Tensor, value: &Tensor) -> koharu_torch::Result<Tensor> {
     // PyTorch's `SDPBackend::math`.
     const MATH: i64 = 0;
+    // Query rows a chunk takes on the math fallback.
+    const ROWS: i64 = 1024;
     let attend = |query: &Tensor| {
         Tensor::scaled_dot_product_attention(query, key, value, None, 0.0, false, None, false)
     };
@@ -431,12 +430,12 @@ fn attention(query: &Tensor, key: &Tensor, value: &Tensor) -> koharu_torch::Resu
     let math = matches!(query.device(), Device::Cuda(_))
         && Tensor::internal_fused_sdp_choice(query, key, value, None, 0.0, false, None, false)?
             == MATH;
-    if !math || rows <= ATTENTION_ROWS {
+    if !math || rows <= ROWS {
         return attend(query);
     }
     let chunks = (0..rows)
-        .step_by(ATTENTION_ROWS as usize)
-        .map(|start| attend(&query.narrow(2, start, ATTENTION_ROWS.min(rows - start))?))
+        .step_by(ROWS as usize)
+        .map(|start| attend(&query.narrow(2, start, ROWS.min(rows - start))?))
         .collect::<koharu_torch::Result<Vec<_>>>()?;
     Tensor::cat(&chunks, 2)
 }
