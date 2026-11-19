@@ -7,7 +7,7 @@ mod events;
 mod library;
 mod screen;
 
-use std::sync::Arc;
+use std::{io::ErrorKind, sync::Arc};
 
 use anyhow::{Context as _, Result};
 use koharu_pipeline::{Pipeline, PipelineConfig};
@@ -27,18 +27,27 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     tauri::async_runtime::set(tokio::runtime::Handle::current());
 
     // The install folder in Windows release builds, where setup puts Koharu
-    // and its store; it's read-only on macOS and Linux, so the app's local
-    // data folder otherwise. That is Tauri's `app_local_data_dir`, which
-    // needs the app this builds.
+    // and its store, unless this user can't write there, as in a per-machine
+    // install under Program Files. Otherwise, and on macOS and Linux, where
+    // it's read-only, the app's local data folder, which is a per-user
+    // install's folder too. That is Tauri's `app_local_data_dir`, which needs
+    // the app this builds.
+    let local = dirs::data_local_dir()
+        .context("the user's local data folder is unknown")?
+        .join(&context.config().identifier)
+        .join("projects");
     let folder = if cfg!(all(windows, not(debug_assertions))) {
-        platform::resource_dir(context.package_info(), &Env::default())
+        let installed = platform::resource_dir(context.package_info(), &Env::default())
             .context("Koharu's install folder is unknown")?
+            .join("projects");
+        let denied = fs_err::create_dir_all(&installed)
+            .and_then(|()| tempfile::tempfile_in(&installed))
+            .is_err_and(|error| error.kind() == ErrorKind::PermissionDenied);
+        if denied { local } else { installed }
     } else {
-        dirs::data_local_dir()
-            .context("the user's local data folder is unknown")?
-            .join(&context.config().identifier)
+        local
     };
-    let library = Library::new(folder.join("projects"))?;
+    let library = Library::new(folder)?;
 
     // The process's, which the pipeline draws a painted area's page with.
     let renderer = Renderer::get().clone();

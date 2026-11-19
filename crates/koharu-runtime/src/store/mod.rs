@@ -15,19 +15,28 @@ use lock::lock;
 pub(crate) use remove::remove_others;
 
 /// The one store everything downloads into: the `store` folder beside the
-/// executable in Windows release builds, where setup puts Koharu, and the OS
-/// cache folder's `koharu/store` otherwise.
+/// executable in Windows release builds, where setup puts Koharu, unless this
+/// user can't write there, as in a per-machine install under Program Files;
+/// the OS cache folder's `koharu/store` otherwise, which is a per-user
+/// install's store too.
 pub(crate) fn root() -> &'static Path {
     static ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
-        if cfg!(all(windows, not(debug_assertions))) {
-            std::env::current_exe()
-                .expect("Koharu knows where its executable is")
-                .with_file_name("store")
-        } else {
+        let cache = || {
             dirs::cache_dir()
                 .unwrap_or_else(std::env::temp_dir)
                 .join("koharu")
                 .join("store")
+        };
+        if cfg!(all(windows, not(debug_assertions))) {
+            let installed = std::env::current_exe()
+                .expect("Koharu knows where its executable is")
+                .with_file_name("store");
+            let denied = fs_err::create_dir_all(&installed)
+                .and_then(|()| tempfile::tempfile_in(&installed))
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied);
+            if denied { cache() } else { installed }
+        } else {
+            cache()
         }
     });
     &ROOT
