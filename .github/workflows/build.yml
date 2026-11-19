@@ -45,6 +45,14 @@ jobs:
       - name: Install macOS CEF helper targets
         if: startsWith(matrix.os, 'macos')
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      # MSVC's standard library accepts only the Clang its own Visual Studio
+      # ships, which can be newer than the runner's standalone LLVM.
+      - name: Use Visual Studio's libclang
+        if: startsWith(matrix.os, 'windows')
+        run: |
+          $libclang = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find 'VC\Tools\Llvm\x64\bin\libclang.dll'
+          if (-not $libclang) { throw "Visual Studio has no libclang" }
+          "LIBCLANG_PATH=$(Split-Path $libclang)" >> $env:GITHUB_ENV
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
