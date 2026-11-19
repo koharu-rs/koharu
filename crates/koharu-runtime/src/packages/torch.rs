@@ -71,6 +71,15 @@ fn libraries(backend: Backend) -> &'static [&'static str] {
             "libtorch_hip.so",
             "libtorch.so",
         ],
+        // Only Windows has Koharu's XPU build.
+        Backend::Xpu { .. } => &[
+            "c10.dll",
+            "c10_xpu.dll",
+            "torch_global_deps.dll",
+            "torch_cpu.dll",
+            "torch_xpu.dll",
+            "torch.dll",
+        ],
         Backend::Metal => &[
             "libtorch.dylib",
             "libtorch_global_deps.dylib",

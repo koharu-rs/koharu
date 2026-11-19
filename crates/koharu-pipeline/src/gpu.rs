@@ -16,8 +16,8 @@ use std::{
 };
 
 use bytesize::ByteSize;
-use koharu_runtime::Device;
-use koharu_torch::Cuda;
+use koharu_runtime::{Backend, Device};
+use koharu_torch::{Cuda, Xpu};
 use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 
@@ -205,6 +205,9 @@ where
     if cuda {
         Cuda::empty_cache().map_err(|source| failure(key, device, cuda, source.into()))?;
     }
+    if let Backend::Xpu { .. } = device.backend {
+        Xpu::empty_cache().map_err(|source| failure(key, device, cuda, source.into()))?;
+    }
     load(device)
         .await
         .map_err(|source| failure(key, device, cuda, source))
@@ -212,9 +215,13 @@ where
 
 /// The load failure, with the memory free on `device` and libtorch's.
 fn failure(key: &Key, device: &Device, cuda: bool, source: anyhow::Error) -> Error {
-    let held = cuda
-        .then(|| Cuda::memory(device.index as i64).ok())
-        .flatten();
+    let held = match device.backend {
+        // libtorch counts Intel GPUs apart from llama.cpp.
+        Backend::Xpu { index } => Xpu::memory(index as i64).ok(),
+        _ => cuda
+            .then(|| Cuda::memory(device.index as i64).ok())
+            .flatten(),
+    };
     Error::Load {
         model: key.name.clone(),
         device: device.description.clone(),

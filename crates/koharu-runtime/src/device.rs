@@ -4,7 +4,7 @@ use serde::Serialize;
 
 /// The API a device computes through, with what a model needs to know of it.
 /// As a `&'static str` it's the name Koharu's native builds give its variant:
-/// `cpu`, `cuda`, `hip`, `metal`, or `vulkan`.
+/// `cpu`, `cuda`, `hip`, `metal`, `vulkan`, or `xpu`.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, strum::IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]
 pub enum Backend {
@@ -20,6 +20,13 @@ pub enum Backend {
     },
     Metal,
     Vulkan,
+    /// An Intel GPU, which libtorch runs on through SYCL and llama.cpp
+    /// through Vulkan.
+    Xpu {
+        /// Its index among the GPUs libtorch lists, which can differ from its
+        /// place in llama.cpp's list.
+        index: usize,
+    },
 }
 
 /// The device models run on, as llama.cpp lists it. libtorch, which has no
@@ -28,8 +35,8 @@ pub enum Backend {
 pub struct Device {
     /// llama.cpp's name for it, such as `CUDA0` or `CPU`.
     pub name: String,
-    /// Its index as CUDA and HIP count devices, which is also a GPU's place
-    /// in llama.cpp's device list; 0 for the CPU.
+    /// Its place in llama.cpp's device list, which is also its index as CUDA
+    /// and HIP count devices; 0 for the CPU.
     pub index: usize,
     /// llama.cpp's description of it, such as `NVIDIA GeForce RTX 5090`.
     pub description: String,

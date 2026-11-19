@@ -24,15 +24,18 @@ which ran first. GPUs rank:
 |---|---|
 | 1 | Metal, or a discrete NVIDIA GPU |
 | 2 | a discrete AMD GPU |
-| 3 | an integrated NVIDIA GPU |
-| 4 | an integrated AMD GPU |
-| 5 | Vulkan |
+| 3 | a discrete Intel GPU, on Windows |
+| 4 | an integrated NVIDIA GPU |
+| 5 | an integrated AMD GPU |
+| 6 | Vulkan |
 
 Within a rank, more memory wins, then a newer CUDA architecture. If the best
 GPU can't be used, starting fails rather than falling back to the next, so a
 model never runs somewhere the user didn't expect. llama.cpp must list the GPU
 too, so a Vulkan loader without a Vulkan device doesn't count. libtorch has no
-Vulkan build, so on Vulkan its models run on the CPU.
+Vulkan build, so on Vulkan its models run on the CPU. An Intel GPU runs
+libtorch's models through its XPU build, which finds it on Level Zero, and
+llama.cpp's on the Vulkan device of the same name.
 
 ## 2. Packages
 
@@ -40,13 +43,14 @@ Vulkan build, so on Vulkan its models run on the CPU.
 |---|---|---|
 | CUDA | NVIDIA's wheels on PyPI | an NVIDIA GPU |
 | ROCm | AMD's wheels, from TheRock [TheRock] | an AMD GPU |
+| oneAPI | Intel's wheels on PyPI, at the versions PyTorch's XPU wheel requires | an Intel GPU, on Windows |
 | libtorch, and Koharu's C shim to it | the koharu-rs/torch releases | every GPU |
 | llama.cpp | the koharu-rs/llama releases | every GPU |
 | stable-diffusion.cpp | the koharu-rs/diffusion releases | every GPU |
 
 - **Pinned.** Each package's version is a constant: the `-sys` crate's for
-  Koharu's own builds, the runtime's for NVIDIA's and AMD's. Koharu's builds are
-  one archive per platform and GPU backend.
+  Koharu's own builds, the runtime's for NVIDIA's, AMD's, and Intel's.
+  Koharu's builds are one archive per platform and GPU backend.
 - **All or nothing.** Every package downloads before any opens, so a failed
   download leaves nothing half loaded.
 - **Open for good.** The libraries stay open for the life of the process, in

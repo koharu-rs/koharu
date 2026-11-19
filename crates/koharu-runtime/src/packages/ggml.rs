@@ -29,13 +29,21 @@ static DIFFUSION: Release = Release {
     tag: koharu_diffusion_sys::RELEASE,
 };
 
+/// The archive ggml comes in for `backend`: an Intel GPU runs it on Vulkan.
+fn variant(backend: Backend) -> Backend {
+    match backend {
+        Backend::Xpu { .. } => Backend::Vulkan,
+        backend => backend,
+    }
+}
+
 impl Package for Llama {
     fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>> {
-        Box::pin(LLAMA.download(host, backend, |_| true))
+        Box::pin(LLAMA.download(host, variant(backend), |_| true))
     }
 
     fn load(&self, host: Host, gpu: &mut Device) -> Result<()> {
-        let folder = LLAMA.folder(host, gpu.backend);
+        let folder = LLAMA.folder(host, variant(gpu.backend));
         let llama = folder.join(libloading::library_filename("llama"));
         let mtmd = folder.join(libloading::library_filename("mtmd"));
         let common = folder.join(libloading::library_filename("llama-common"));
@@ -50,12 +58,12 @@ impl Package for Llama {
 
 impl Package for Diffusion {
     fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>> {
-        Box::pin(DIFFUSION.download(host, backend, |_| true))
+        Box::pin(DIFFUSION.download(host, variant(backend), |_| true))
     }
 
     fn load(&self, host: Host, gpu: &mut Device) -> Result<()> {
         let library = DIFFUSION
-            .folder(host, gpu.backend)
+            .folder(host, variant(gpu.backend))
             .join(libloading::library_filename("stable-diffusion"));
         koharu_diffusion_sys::load(&[&library])?;
         Ok(())
@@ -71,6 +79,10 @@ impl Package for Diffusion {
 /// addresses it by, so a Vulkan loader on disk without a Vulkan device
 /// doesn't count.
 fn listed(gpu: &mut Device) -> Result<()> {
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    if let Backend::Xpu { index } = gpu.backend {
+        return readdress(gpu, crate::hardware::namesakes_before(index));
+    }
     let listed = unsafe {
         (gpu.index < koharu_llama_sys::ggml_backend_dev_count())
             .then(|| describe(koharu_llama_sys::ggml_backend_dev_get(gpu.index)))
@@ -82,6 +94,27 @@ fn listed(gpu: &mut Device) -> Result<()> {
         }
         _ => anyhow::bail!("llama.cpp doesn't list {} at {}", gpu.name, gpu.index),
     }
+}
+
+/// Addresses an Intel GPU, which libtorch found, by the Vulkan device
+/// llama.cpp lists for it: the one with its description after `namesakes`
+/// others with that description.
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+fn readdress(gpu: &mut Device, namesakes: usize) -> Result<()> {
+    use anyhow::Context;
+
+    let count = unsafe { koharu_llama_sys::ggml_backend_dev_count() };
+    let (index, name) = (0..count)
+        .filter_map(|index| {
+            let (name, description) =
+                unsafe { describe(koharu_llama_sys::ggml_backend_dev_get(index)) };
+            (name.starts_with("Vulkan") && description == gpu.description).then_some((index, name))
+        })
+        .nth(namesakes)
+        .with_context(|| format!("llama.cpp lists no Vulkan device for {}", gpu.description))?;
+    gpu.index = index;
+    gpu.name = name;
+    Ok(())
 }
 
 /// A listed device's name and description.

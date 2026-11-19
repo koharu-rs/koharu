@@ -3,7 +3,7 @@ pub use error::Error;
 pub type Result<T> = std::result::Result<T, error::Error>;
 
 pub(crate) mod wrappers;
-pub use wrappers::device::{AllocatorMemory, Cuda, Device};
+pub use wrappers::device::{AllocatorMemory, Cuda, Device, Xpu};
 pub use wrappers::generator::Generator;
 pub use wrappers::kind::{self, Kind};
 pub use wrappers::layout::{Layout, MemoryFormat, QScheme};

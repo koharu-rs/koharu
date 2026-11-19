@@ -5,6 +5,8 @@ mod archive;
 mod cuda;
 mod ggml;
 mod host;
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+mod oneapi;
 mod release;
 #[cfg(all(
     target_arch = "x86_64",
@@ -43,8 +45,8 @@ trait Package: Send + Sync {
     fn versions(&self) -> Vec<PathBuf>;
 }
 
-/// The packages a GPU with `backend` needs, in dependency order: CUDA or ROCm,
-/// libtorch, llama.cpp, then stable-diffusion.cpp.
+/// The packages a GPU with `backend` needs, in dependency order: CUDA, ROCm,
+/// or oneAPI, libtorch, llama.cpp, then stable-diffusion.cpp.
 fn packages(backend: Backend) -> Vec<Box<dyn Package>> {
     let mut packages: Vec<Box<dyn Package>> = Vec::new();
     match backend {
@@ -55,6 +57,8 @@ fn packages(backend: Backend) -> Vec<Box<dyn Package>> {
             any(target_os = "linux", target_os = "windows")
         ))]
         Backend::Rocm { target } => packages.push(Box::new(rocm::Rocm { target })),
+        #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+        Backend::Xpu { .. } => packages.push(Box::new(oneapi::OneApi)),
         _ => {}
     }
     packages.push(Box::new(torch::Torch));

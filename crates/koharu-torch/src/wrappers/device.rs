@@ -13,6 +13,7 @@ use crate::{Error, Result};
 /// libtorch reports its GPUs as CUDA ones.
 const CPU: i32 = 0;
 const CUDA: i32 = 1;
+const XPU: i32 = 12;
 const MPS: i32 = 13;
 
 /// A torch device.
@@ -22,6 +23,8 @@ pub enum Device {
     Cpu,
     /// The main GPU device.
     Cuda(usize),
+    /// An Intel GPU.
+    Xpu(usize),
     /// The main MPS device.
     Mps,
 }
@@ -100,6 +103,28 @@ impl Cuda {
     }
 }
 
+/// Intel GPU helper functions.
+pub enum Xpu {}
+
+impl Xpu {
+    /// What the caching allocator holds on an Intel GPU now.
+    pub fn memory(device_index: i64) -> Result<AllocatorMemory> {
+        let mut stats = unsafe { std::mem::zeroed::<AtenMemoryStats>() };
+        check(unsafe { aten_memory_stats(index(device_index)?, &mut stats) })?;
+        let count = |count: i64| u64::try_from(count).unwrap_or(0);
+        Ok(AllocatorMemory {
+            reserved: count(stats.reserved_bytes.current),
+            active: count(stats.active_bytes.current),
+            ooms: count(stats.num_ooms),
+        })
+    }
+
+    /// Returns the caching allocator's unused Intel GPU memory to the device.
+    pub fn empty_cache() -> Result<()> {
+        check(unsafe { aten_empty_cache() })
+    }
+}
+
 /// The caching allocator's device memory, in bytes: what it holds from the
 /// device, and how much of that tensors use. The rest it keeps for its own next
 /// allocations until `Cuda::empty_cache`. `ooms` counts the allocations it has
@@ -132,6 +157,7 @@ impl Device {
         match self {
             Device::Cpu => (CPU, -1),
             Device::Cuda(index) => (CUDA, index as i32),
+            Device::Xpu(index) => (XPU, index as i32),
             Device::Mps => (MPS, -1),
         }
     }
@@ -140,6 +166,7 @@ impl Device {
         match device_type {
             CPU => Ok(Device::Cpu),
             CUDA => Ok(Device::Cuda(usize::try_from(index).unwrap_or(0))),
+            XPU => Ok(Device::Xpu(usize::try_from(index).unwrap_or(0))),
             MPS => Ok(Device::Mps),
             _ => Err(Error::Convert(format!(
                 "unsupported device type {device_type}"
@@ -159,7 +186,7 @@ impl Device {
     pub fn is_cuda(self) -> bool {
         match self {
             Device::Cuda(_) => true,
-            Device::Cpu | Device::Mps => false,
+            Device::Cpu | Device::Xpu(_) | Device::Mps => false,
         }
     }
 }
