@@ -38,6 +38,14 @@ export type AgentConfig = {
  */
 export type AgentEvent = { type: "event"; event: Event } | { type: "completed"; answer: string } | { type: "failed"; error: string };
 
+export type AliasSuggestion = {
+	source: string,
+	canonical: string,
+	translation: string,
+	reason: string,
+	locations: TermLocation[],
+};
+
 export type Align = "start" | "center" | "end" | "justify";
 
 /**
@@ -324,6 +332,7 @@ export type GlossaryEntry = {
 	translation: string,
 	kind: GlossaryKind,
 	note: string,
+	wiki_url?: string | null,
 	/**  Project text blocks where this rule is ignored. */
 	excluded_layers?: LayerId[],
 };
@@ -339,6 +348,8 @@ export type GlossaryView = {
 	entries: GlossaryEntry[],
 	issues: TermIssue[],
 	lines: number,
+	suggestions: AliasSuggestion[],
+	corrections: TextSuggestion[],
 	candidates: TermCandidate[] | null,
 };
 
@@ -511,7 +522,9 @@ export type Op =
  *  Set or clear a page's background. A new file must be an image of the
  *  page's size.
  */
-{ op: "set_background"; page: Ref; background: Background | null } | { op: "set_page_options"; page: Ref; excluded?: boolean | null; hide_sfx?: boolean | null } | { op: "set_project_sfx"; hide: boolean } | { op: "mark_page_detected"; page: Ref } | { op: "set_glossary_input"; input: Hash } | 
+{ op: "set_background"; page: Ref; background: Background | null } | { op: "set_page_options"; page: Ref; excluded: boolean } | 
+/**  Set the visibility of the sound-effect layers on one page, or every page. */
+{ op: "set_sfx_visibility"; page: Ref | null; visible: boolean } | { op: "mark_page_detected"; page: Ref } | { op: "set_glossary_input"; input: Hash } | 
 /**  Move a page to `index`, counted after the page is taken out. */
 { op: "move_page"; page: Ref; index: number } | 
 /**  Remove a page with its layers. */
@@ -568,7 +581,11 @@ export type Op =
  */
 { op: "write_pixels"; layer: Ref; rect: Rect; pixels: number[] } | 
 /**  Add an imported file, stored once by its content hash. */
-{ op: "add_file"; bytes: number[] } | { op: "set_glossary"; previous: GlossaryEntry[]; entries: GlossaryEntry[] } | { op: "set_glossary_candidates"; candidates: GlossaryEntry[][] } | { op: "add_external_page"; index: number; file: Hash; source: ExternalImage } | { op: "relink_external_image"; file: Hash; previous: ExternalImage; source: ExternalImage };
+{ op: "add_file"; bytes: number[] } | { op: "set_glossary"; previous: GlossaryEntry[]; entries: GlossaryEntry[] } | { op: "set_glossary_candidates"; candidates: GlossaryEntry[][] } | 
+/**  Queue possible readings of names for human confirmation. Cite existing OCR blocks. */
+{ op: "suggest_aliases"; suggestions: AliasSuggestion[] } | { op: "resolve_alias"; suggestion: AliasSuggestion; translation: string | null } | 
+/**  Queue a proposed correction to the cited block's existing translation for human review. */
+{ op: "suggest_translation"; suggestion: TextSuggestion } | { op: "resolve_translation"; suggestion: TextSuggestion; translation: string | null } | { op: "add_external_page"; index: number; file: Hash; source: ExternalImage } | { op: "relink_external_image"; file: Hash; previous: ExternalImage; source: ExternalImage };
 
 /**  An opacity, from 0 to 1. */
 export type Opacity = number;
@@ -586,7 +603,6 @@ export type Page = {
 	size: Size,
 	background: Background | null,
 	excluded?: boolean,
-	hide_sfx?: boolean,
 	detected?: boolean | null,
 	/**  Drawn first to last. */
 	layers: Layer[],
@@ -608,7 +624,8 @@ export type PageSummary = {
 	size: Size,
 	background: Background | null,
 	excluded: boolean,
-	hide_sfx: boolean,
+	sfx_total: number,
+	sfx_visible: number,
 };
 
 /**
@@ -662,7 +679,6 @@ export type ProjectAnswer = {
 	pages: PageSummary[],
 	linked_zip: boolean,
 	linked_folder: boolean,
-	hide_sfx: boolean,
 };
 
 /**  A project, stored once when it is created. */
@@ -875,6 +891,14 @@ export type TextStyle = {
 	line_height?: number | null,
 };
 
+export type TextSuggestion = {
+	location: TermLocation,
+	/**  The exact translation the reviewer saw, for compare-and-set. */
+	previous: string,
+	translation: string,
+	reason: string,
+};
+
 export type Tool = "select" | "direct_select" | 
 /**
  *  Photoshop's Rectangular Marquee: marks a rectangle of the page's
@@ -1019,6 +1043,8 @@ import: (source: ImportSource) => invoke<null>("import", { source }, { headers: 
 /** Picks where the open project's pages go, and writes them there. `labels` names a PSD's layers the scene names nothing, in the interface's language. */
 export: (format: ExportFormat, labels: Labels) => invoke<null>("export", { format, labels }, { headers: headers() }),
 getGlossary: () => invoke<GlossaryView>("get_glossary", {  }, { headers: headers() }),
+resolveAlias: (project: ProjectId, suggestion: AliasSuggestion, translation: string | null) => invoke<null>("resolve_alias", { project, suggestion, translation }, { headers: headers() }),
+resolveTranslation: (project: ProjectId, suggestion: TextSuggestion, translation: string | null) => invoke<null>("resolve_translation", { project, suggestion, translation }, { headers: headers() }),
 extractSource: (project: ProjectId) => invoke<RunId[]>("extract_source", { project }, { headers: headers() }),
 saveGlossary: (project: ProjectId, previous: GlossaryEntry[], entries: GlossaryEntry[]) => invoke<null>("save_glossary", { project, previous, entries }, { headers: headers() }),
 exportSource: () => invoke<null>("export_source", {  }, { headers: headers() }),

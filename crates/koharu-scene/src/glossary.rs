@@ -22,6 +22,8 @@ pub struct GlossaryEntry {
     pub translation: String,
     pub kind: GlossaryKind,
     pub note: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wiki_url: Option<url::Url>,
     /// Project text blocks where this rule is ignored.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub excluded_layers: BTreeSet<LayerId>,
@@ -107,8 +109,79 @@ pub fn valid_glossary(entries: &[GlossaryEntry]) -> bool {
         !entry.source.is_empty()
             && entry.source == entry.source.trim()
             && (entry.is_term() != entry.translation.trim().is_empty())
+            && entry
+                .wiki_url
+                .as_ref()
+                .is_none_or(|url| matches!(url.scheme(), "https" | "http") && url.has_host())
             && sources.insert(&entry.source)
     })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, schemars::JsonSchema)]
+pub struct TermLocation {
+    pub page: PageId,
+    pub number: usize,
+    pub layer: LayerId,
+    pub text: String,
+}
+
+pub const JAPANESE_HONORIFICS: [&str; 6] = ["ちゃん", "さん", "くん", "君", "さま", "様"];
+
+/// The address suffix is not part of the name used as the glossary key.
+pub fn japanese_address(source: &str) -> (&str, &str) {
+    JAPANESE_HONORIFICS
+        .into_iter()
+        .find_map(|suffix| source.strip_suffix(suffix).map(|name| (name, suffix)))
+        .unwrap_or((source, ""))
+}
+
+impl From<&SourceLine> for TermLocation {
+    fn from(line: &SourceLine) -> Self {
+        Self {
+            page: line.page,
+            number: line.number,
+            layer: line.layer,
+            text: line.text.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, schemars::JsonSchema)]
+pub struct AliasSuggestion {
+    pub source: String,
+    pub canonical: String,
+    pub translation: String,
+    pub reason: String,
+    pub locations: Vec<TermLocation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, schemars::JsonSchema)]
+pub struct TextSuggestion {
+    pub location: TermLocation,
+    /// The exact translation the reviewer saw, for compare-and-set.
+    pub previous: String,
+    pub translation: String,
+    pub reason: String,
+}
+
+impl TextSuggestion {
+    pub(crate) fn key(&self) -> (LayerId, String, String, String) {
+        (
+            self.location.layer,
+            self.location.text.clone(),
+            self.previous.clone(),
+            self.translation.clone(),
+        )
+    }
+}
+
+/// Closed pairs survive another analysis, even if the model rephrases its reason.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) struct SuggestionReviews {
+    pub aliases: Vec<AliasSuggestion>,
+    pub closed_aliases: BTreeSet<(String, String)>,
+    pub corrections: Vec<TextSuggestion>,
+    pub closed_corrections: BTreeSet<(LayerId, String, String, String)>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -132,6 +205,34 @@ pub struct TermIssue {
 }
 
 impl Project {
+    pub fn alias_suggestions(&self) -> &[AliasSuggestion] {
+        &self.suggestion_reviews.aliases
+    }
+
+    pub fn text_suggestions(&self) -> &[TextSuggestion] {
+        &self.suggestion_reviews.corrections
+    }
+
+    pub(crate) fn check_translation_evidence(&self, item: &TextSuggestion) -> bool {
+        self.index.get(&item.location.layer) == Some(&item.location.page)
+            && self.layer(item.location.layer).is_ok_and(|layer| {
+                matches!(&layer.content, Content::Block(b)
+                if b.source.content.text() == item.location.text
+                    && b.translation.as_ref().is_some_and(|t| t.content.text() == item.previous))
+            })
+    }
+
+    pub(crate) fn check_alias_evidence(&self, suggestion: &AliasSuggestion) -> bool {
+        let at = &suggestion.locations;
+        let nonempty = |s: &str| !s.is_empty() && s.trim() == s;
+        nonempty(&suggestion.source) && nonempty(&suggestion.canonical)
+            && nonempty(&suggestion.translation) && nonempty(&suggestion.reason)
+            && suggestion.source != suggestion.canonical
+            && at.iter().any(|l| l.text.contains(&suggestion.source))
+            && at.iter().any(|l| l.text.contains(&suggestion.canonical))
+            && at.iter().all(|l| self.index.get(&l.layer) == Some(&l.page)
+                && self.layer(l.layer).is_ok_and(|layer| matches!(&layer.content, Content::Block(b) if b.source.content.text() == l.text)))
+    }
     pub fn glossary(&self) -> &[GlossaryEntry] {
         &self.glossary
     }
@@ -173,6 +274,7 @@ impl Project {
         &self,
         groups: Vec<Vec<GlossaryEntry>>,
         selected: Vec<GlossaryEntry>,
+        suggestions: Vec<AliasSuggestion>,
     ) -> Vec<Op> {
         let mut candidates: BTreeMap<_, _> = self
             .glossary_candidates
@@ -196,11 +298,27 @@ impl Project {
         }
         let mut entries = self.glossary().to_vec();
         let held: BTreeSet<_> = entries.iter().map(|entry| entry.source.clone()).collect();
-        entries.extend(
-            selected
-                .into_iter()
-                .filter(|entry| !held.contains(&entry.source)),
-        );
+        // A later coarse extraction cannot overturn a human decision (or bypass
+        // pending review) even if it includes the honorific with the name.
+        let reviewed: BTreeSet<_> = self
+            .suggestion_reviews
+            .closed_aliases
+            .iter()
+            .map(|(source, _)| source.as_str())
+            .chain(
+                self.suggestion_reviews
+                    .aliases
+                    .iter()
+                    .chain(&suggestions)
+                    .map(|s| s.source.as_str()),
+            )
+            .collect();
+        entries.extend(selected.into_iter().filter(|entry| {
+            let source = entry.source.as_str();
+            !held.contains(source)
+                && !reviewed.contains(source)
+                && !reviewed.contains(japanese_address(source).0)
+        }));
         let candidates: Vec<_> = candidates.into_values().collect();
         let mut ops = Vec::new();
         if candidates.as_slice() != self.glossary_candidates() {
@@ -211,6 +329,9 @@ impl Project {
                 previous: self.glossary().to_vec(),
                 entries,
             });
+        }
+        if !suggestions.is_empty() {
+            ops.push(Op::SuggestAliases { suggestions });
         }
         ops
     }
@@ -319,6 +440,7 @@ mod tests {
             translation: translation.to_owned(),
             kind,
             note: String::new(),
+            wiki_url: None,
             excluded_layers: BTreeSet::new(),
         };
         let entries = [

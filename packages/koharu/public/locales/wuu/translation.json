@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "建议确认",
+    "correction": "译文校对",
+    "empty": "暂时呒没待确认个建议",
+    "alias": "「{{source}}」是指{{canonical}}伐？",
+    "accept": "确认",
+    "dismiss": "驳回",
+    "wiki": "LLM Wiki 链接"
+  },
   "glossary": {
     "manage": "管理项目术语表",
     "globalTitle": "全局术语表",
@@ -182,6 +191,7 @@
     "title": "历史记录"
   },
   "sfxVisibility": {
+    "mixed": "部分显示",
     "page": "搿页拟声词",
     "project": "项目拟声词",
     "hidePage": "隐藏搿页拟声词译文",

@@ -114,5 +114,8 @@ pub(crate) fn glossary_input(
         .iter()
         .map(|line| (line.page, line.layer, &line.text))
         .collect();
-    Hash::of(&serde_json::to_vec(&(target, sources)).expect("OCR input serializes"))
+    // Older analyses stopped after extraction and never reviewed kana against the kanji catalog.
+    Hash::of(
+        &serde_json::to_vec(&("person-readings", target, sources)).expect("OCR input serializes"),
+    )
 }

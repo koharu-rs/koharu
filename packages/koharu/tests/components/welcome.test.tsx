@@ -23,7 +23,6 @@ function desktop(open: () => string | null) {
           pages: [],
           linked_zip: false,
           linked_folder: false,
-          hide_sfx: false,
         }
       : { steps: [], current: 0 },
   )

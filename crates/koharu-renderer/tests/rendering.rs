@@ -608,29 +608,36 @@ fn sfx_visibility_hides_the_translation_and_cleanup_together() {
     let renderer = renderer();
     apply(
         &mut session,
-        vec![
-            json!({"op":"update_layer","layer":sfx,"patch":{"cleanup":{"visible":true}}}),
-            json!({"op":"set_page_options","page":page,"hide_sfx":true}),
-        ],
+        vec![json!({"op":"update_layer","layer":sfx,"patch":{"cleanup":{"visible":true}}})],
     );
-    let frame = renderer.render(&session, page).expect("a frame");
-    assert!(!frame.translation(sfx).expect("a translation").visible());
-    assert!(!frame.layer(cleanup).expect("a cleanup").visible());
-    assert!(
-        frame
-            .translation(dialogue)
-            .expect("a translation")
-            .visible()
-    );
-    apply(
-        &mut session,
-        vec![
-            json!({"op":"set_page_options","page":page,"hide_sfx":false}),
-            json!({"op":"set_project_sfx","hide":true}),
-        ],
-    );
-    let frame = renderer.render(&session, page).expect("a frame");
-    assert!(!frame.translation(sfx).expect("a translation").visible());
+    for (op, visible) in [
+        (
+            json!({"op":"set_sfx_visibility","page":null,"visible":false}),
+            false,
+        ),
+        (
+            json!({"op":"update_layer","layer":sfx,"patch":{"visible":true}}),
+            true,
+        ),
+        (
+            json!({"op":"set_sfx_visibility","page":page,"visible":false}),
+            false,
+        ),
+    ] {
+        apply(&mut session, vec![op]);
+        let frame = renderer.render(&session, page).expect("a frame");
+        assert_eq!(
+            frame.translation(sfx).expect("a translation").visible(),
+            visible
+        );
+        assert_eq!(frame.layer(cleanup).expect("a cleanup").visible(), visible);
+        assert!(
+            frame
+                .translation(dialogue)
+                .expect("a translation")
+                .visible()
+        );
+    }
 }
 
 /// A balloon crossing its panel's border stays in the panel it's read in, so

@@ -11,6 +11,8 @@ pub(super) enum Balance {
     /// Every line, the last included, fills the same share of its room: path
     /// text keeps its outline's shape, and centred text is balanced.
     Even,
+    /// Chinese vertical columns share a target length and prefer ending a phrase.
+    Columns,
     /// Lines fill their room and a paragraph's last line may stop short.
     Ragged,
     /// Lines break only where the text does.
@@ -52,12 +54,13 @@ fn ended(advance: f32, last: &Segment, scale: f32) -> f32 {
 /// The cost of a line `used` long ending with `last`: its unfilled share
 /// squared, plus its break's penalty. A line longer than its room costs far
 /// more, so the least overflowing breaks win when nothing fits.
-fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
+fn line_cost(last: &Segment, used: f32, room: f32, target: f32, balance: Balance) -> f32 {
     let paragraph_end = matches!(last.after, Break::Mandatory | Break::End);
     let mut cost = match last.after {
         Break::Mandatory | Break::End => 0.0,
         Break::Normal if last.punctuation => 0.0,
         // A break inside a phrase rather than after punctuation.
+        Break::Normal if balance == Balance::Columns => 12.0,
         Break::Normal => 2.0,
         // Above any line's slack, so a word hyphenates only where its line
         // can't hold it whole: Comicraft avoids a hyphen whenever it can.
@@ -65,8 +68,8 @@ fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
     };
     if used > room + 0.01 {
         cost += 1_000_000.0 * (1.0 + (used - room) / room.max(1.0));
-    } else if room > 0.0 && !(balance == Balance::Ragged && paragraph_end) {
-        let slack = (room - used) / room;
+    } else if target > 0.0 && !(balance == Balance::Ragged && paragraph_end) {
+        let slack = (target - used) / target;
         cost += 100.0 * slack * slack;
     }
     cost
@@ -111,7 +114,9 @@ pub(super) fn break_lines(
     let lines = match balance {
         _ if segments.is_empty() => Vec::new(),
         Balance::Unbounded => paragraphs(segments),
-        Balance::Even | Balance::Ragged => solve(segments, scale, balance, count, &room)?,
+        Balance::Even | Balance::Ragged | Balance::Columns => {
+            solve(segments, scale, balance, count, &room)?
+        }
     };
     let room_of = |line: usize| room(if count.is_some() { line } else { 0 });
     let overflowed = balance != Balance::Unbounded
@@ -155,6 +160,9 @@ fn solve(
         None => vec![(0, 0)],
         Some(count) => (0..count).map(|line| (line, line + 1)).collect(),
     };
+    let target = count
+        .filter(|&count| balance == Balance::Columns && count > 0)
+        .map(|count| segments.iter().map(|s| s.advance).sum::<f32>() * scale / count as f32);
     for (line, next) in passes {
         let room = room(line).max(0.0);
         for start in 0..n {
@@ -163,7 +171,7 @@ fn solve(
             }
             for (end, used) in ends(segments, start, scale, room) {
                 let last = &segments[end - 1];
-                let line_cost = line_cost(last, used, room, balance);
+                let line_cost = line_cost(last, used, room, target.unwrap_or(room), balance);
                 for run in 0..RUNS {
                     let state = at(line, start, run);
                     let run = match last.after {
@@ -233,6 +241,18 @@ mod tests {
         let even = break_lines(&segments, 1.0, Balance::Even, None, |_| 45.0).expect("lines");
         assert_eq!(even.lines, [0..3, 3..6]);
         assert!(!even.overflowed);
+    }
+
+    #[test]
+    fn chinese_columns_keep_a_phrase_together_in_unequal_spans() {
+        let mut segments = text(&[9.0; 8]);
+        segments[3].punctuation = true;
+        let lines = break_lines(&segments, 1.0, Balance::Columns, Some(2), |line| {
+            [70.0, 45.0][line]
+        })
+        .expect("two columns");
+        assert_eq!(lines.lines, [0..4, 4..8]);
+        assert!(!lines.overflowed);
     }
 
     #[test]

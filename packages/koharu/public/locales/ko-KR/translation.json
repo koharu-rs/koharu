@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "제안 검토",
+    "correction": "번역 교정",
+    "empty": "검토할 제안이 없습니다",
+    "alias": "“{{source}}”은(는) {{canonical}}을(를) 가리키나요?",
+    "accept": "확인",
+    "dismiss": "거절",
+    "wiki": "LLM Wiki 링크"
+  },
   "glossary": {
     "manage": "프로젝트 용어집 관리",
     "globalTitle": "공용 용어집",
@@ -182,6 +191,7 @@
     "title": "작업 내역"
   },
   "sfxVisibility": {
+    "mixed": "일부 표시",
     "page": "이 페이지의 효과음",
     "project": "프로젝트 효과음",
     "hidePage": "이 페이지의 효과음 번역 숨기기",

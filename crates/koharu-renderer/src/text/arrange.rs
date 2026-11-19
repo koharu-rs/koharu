@@ -617,7 +617,8 @@ mod tests {
             direction: koharu_scene::Direction::Vertical,
             ..koharu_scene::Text::default()
         };
-        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let layout =
+            crate::text::layout(&text, false, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
         let centre = layout.resolved.baseline;
         // The ellipsis turns sideways and the exclamation stands upright;
         // either way its ink sits across the column's centre line.
@@ -648,7 +649,7 @@ mod tests {
             language: language.parse()?,
             ..koharu_scene::Text::default()
         };
-        let layout = crate::text::layout(&text, |style, characters| {
+        let layout = crate::text::layout(&text, false, |style, characters| {
             crate::fonts::chain(style, &families, characters, &text.language)
         })?
         .expect("a layout");
@@ -739,7 +740,8 @@ mod tests {
             direction: koharu_scene::Direction::Vertical,
             ..koharu_scene::Text::default()
         };
-        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let layout =
+            crate::text::layout(&text, false, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
         let run = &layout.runs[0];
         assert!(run.sideways);
         let [a, v] = run.glyphs[..] else {

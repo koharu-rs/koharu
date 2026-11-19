@@ -141,7 +141,8 @@ function receiveProject(name: string | null): void {
     queryClient.setQueryData(projectKey, null)
     queryClient.setQueryData(pageKey, null)
   } else {
-    void refresh(projectKey, pageKey).catch(() => undefined)
+    // A project copy can share page and project IDs with the previously open file.
+    void refresh(projectKey, pageKey, pagesKey, glossaryKey).catch(() => undefined)
   }
 }
 

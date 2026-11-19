@@ -28,14 +28,25 @@ use crate::{
 /// on it, so opening refuses any other database before reading its rows.
 const APPLICATION_ID: i32 = 0x4B48_5255;
 /// The format version this build writes.
-const VERSION: Version = Version::new(1, 3, 0);
+const VERSION: Version = Version::new(1, 5, 0);
+const HAS_SUGGESTION_REVIEWS: Version = Version::new(1, 5, 0);
+const SUGGESTION_REVIEWS_TABLE: &str = "CREATE TABLE IF NOT EXISTS suggestion_reviews(id INTEGER PRIMARY KEY CHECK(id = 1), reviews TEXT NOT NULL) STRICT";
 const HAS_PROJECT_DATA: Version = Version::new(1, 1, 0);
 const HAS_GLOSSARY_CANDIDATES: Version = Version::new(1, 2, 0);
 const HAS_PROJECT_OPTIONS: Version = Version::new(1, 3, 0);
-const PROJECT_OPTIONS_TABLE: &str = "CREATE TABLE IF NOT EXISTS project_options(id INTEGER PRIMARY KEY CHECK(id = 1), hide_sfx INTEGER NOT NULL CHECK(hide_sfx IN (0, 1)), glossary_input TEXT) STRICT";
+const LAYER_SFX: Version = Version::new(1, 5, 0);
+const PROJECT_OPTIONS_TABLE: &str = "CREATE TABLE project_options(id INTEGER PRIMARY KEY CHECK(id = 1), glossary_input TEXT) STRICT";
 const GLOSSARY_TABLE: &str = "CREATE TABLE IF NOT EXISTS glossary(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT";
 const CANDIDATES_TABLE: &str = "CREATE TABLE IF NOT EXISTS glossary_candidates(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT";
 const EXTERNAL_TABLE: &str = "CREATE TABLE IF NOT EXISTS external_images(hash TEXT PRIMARY KEY, source TEXT NOT NULL) STRICT";
+// Legacy filters hid the entire block in addition to its layer eye.
+const LEGACY_PAGES: &str = indoc! {"
+    SELECT id, json_remove(page, '$.sfx_visibility', '$.hide_sfx') AS page,
+        CASE json_extract(page, '$.sfx_visibility')
+            WHEN 'show' THEN 0 WHEN 'hide' THEN 1
+            ELSE coalesce(json_extract(page, '$.hide_sfx'), 0) OR ?1
+        END AS hide_sfx
+    FROM pages"};
 /// Most compressed tiles fit on a page of this size, which keeps them out of
 /// overflow chains, each of whose pages is a read of its own.
 const PAGE_SIZE: u32 = 16384;
@@ -56,8 +67,9 @@ const SCHEMA: &str = indoc! {"
     CREATE TABLE blobs(hash TEXT PRIMARY KEY, bytes BLOB NOT NULL) STRICT;
     CREATE TABLE glossary(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT;
     CREATE TABLE glossary_candidates(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT;
+    CREATE TABLE suggestion_reviews(id INTEGER PRIMARY KEY CHECK(id = 1), reviews TEXT NOT NULL) STRICT;
     CREATE TABLE external_images(hash TEXT PRIMARY KEY, source TEXT NOT NULL) STRICT;
-    CREATE TABLE project_options(id INTEGER PRIMARY KEY CHECK(id = 1), hide_sfx INTEGER NOT NULL CHECK(hide_sfx IN (0, 1)), glossary_input TEXT) STRICT;
+    CREATE TABLE project_options(id INTEGER PRIMARY KEY CHECK(id = 1), glossary_input TEXT) STRICT;
 "};
 
 #[serde_as]
@@ -75,6 +87,7 @@ struct PageRow {
     id: PageId,
     #[serde_as(as = "JsonString")]
     page: Page,
+    hide_sfx: bool,
 }
 
 #[derive(Deserialize)]
@@ -113,7 +126,11 @@ const JOURNALS: [&str; 2] = ["-wal", "-journal"];
 /// locked at once rather than after a wait.
 fn configure(conn: &Connection) -> rusqlite::Result<()> {
     conn.busy_timeout(Duration::ZERO)?;
-    conn.execute_batch("PRAGMA locking_mode=EXCLUSIVE; PRAGMA synchronous=NORMAL;")
+    // Schema changes can spill SQLite's temporary data to the OS temp
+    // directory even though the project and its journal are writable.
+    conn.execute_batch(
+        "PRAGMA locking_mode=EXCLUSIVE; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY;",
+    )
 }
 
 fn flags() -> OpenFlags {
@@ -304,9 +321,7 @@ fn load(conn: &Connection) -> Result<Project> {
         from_rows(statement.query([])?).collect::<std::result::Result<_, _>>()?;
     let [row] = <[ProjectRow; 1]>::try_from(rows)
         .map_err(|_| Error::corrupt("a project has one project row"))?;
-    // A reader opens any version up to its own with the same major version,
-    // since an addition needs no decoder. The rows of any other version mean
-    // something this build can't know, so they're never read.
+    // A reader opens any version up to its own with the same major version.
     let stored = Version::parse(&row.version).map_err(|_| Error::Version(row.version.clone()))?;
     let readable = { stored.major == VERSION.major && stored <= VERSION && stored.pre.is_empty() };
     if !readable {
@@ -333,6 +348,19 @@ fn load(conn: &Connection) -> Result<Project> {
             project.external.insert(row.hash, row.source);
         }
     }
+    if stored >= HAS_SUGGESTION_REVIEWS {
+        let data: Option<String> = conn
+            .query_row(
+                "SELECT reviews FROM suggestion_reviews WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(data) = data {
+            project.suggestion_reviews =
+                std::sync::Arc::new(serde_json::from_str(&data).map_err(Error::corrupt)?);
+        }
+    }
     if stored >= HAS_GLOSSARY_CANDIDATES {
         let entries: Option<String> = conn
             .query_row(
@@ -350,25 +378,46 @@ fn load(conn: &Connection) -> Result<Project> {
         }
     }
     if stored >= HAS_PROJECT_OPTIONS {
-        let options: Option<(bool, Option<String>)> = conn
+        let input: Option<String> = conn
             .query_row(
-                "SELECT hide_sfx, glossary_input FROM project_options WHERE id = 1",
+                "SELECT glossary_input FROM project_options WHERE id = 1",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get::<_, Option<String>>(0),
             )
-            .optional()?;
-        if let Some((hide_sfx, input)) = options {
-            project.hide_sfx = hide_sfx;
-            project.glossary_input = input
-                .map(|hash| hash.parse())
-                .transpose()
-                .map_err(Error::corrupt)?;
-        }
+            .optional()?
+            .flatten();
+        project.glossary_input = input
+            .map(|hash| hash.parse())
+            .transpose()
+            .map_err(Error::corrupt)?;
     }
 
-    let mut statement = conn.prepare("SELECT id, page FROM pages")?;
-    for row in from_rows::<PageRow>(statement.query([])?) {
-        let row = row?;
+    let hidden = if stored >= HAS_PROJECT_OPTIONS && stored < LAYER_SFX {
+        conn.query_row(
+            "SELECT hide_sfx FROM project_options WHERE id = 1",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()?
+        .unwrap_or(false)
+    } else {
+        false
+    };
+    let mut statement = conn.prepare(if stored < LAYER_SFX {
+        LEGACY_PAGES
+    } else {
+        "SELECT id, page, 0 AS hide_sfx FROM pages"
+    })?;
+    let rows = if stored < LAYER_SFX {
+        statement.query([hidden])?
+    } else {
+        statement.query([])?
+    };
+    for row in from_rows::<PageRow>(rows) {
+        let mut row = row?;
+        if row.hide_sfx {
+            row.page.set_sfx_visible(false);
+        }
         if row.page.id != row.id {
             return Err(Error::corrupt(format!(
                 "page {} is stored under {}",
@@ -444,18 +493,26 @@ impl Tx<'_> {
             conn.execute_batch(GLOSSARY_TABLE)?;
             conn.execute_batch(EXTERNAL_TABLE)?;
             conn.execute_batch(CANDIDATES_TABLE)?;
+            conn.execute_batch(SUGGESTION_REVIEWS_TABLE)?;
+            conn.execute_batch("DROP TABLE IF EXISTS project_options")?;
             conn.execute_batch(PROJECT_OPTIONS_TABLE)?;
+            // All legacy pages lose their filter, including those untouched by this edit.
+            let mut update = conn.prepare("UPDATE pages SET page = ?1 WHERE id = ?2")?;
+            for (id, page) in &before.pages {
+                update.execute(params![json(page), id.to_string()])?;
+            }
         }
-        if before.hide_sfx != after.hide_sfx || before.glossary_input != after.glossary_input {
-            conn.prepare_cached("INSERT OR REPLACE INTO project_options VALUES (1, ?1, ?2)")?
-                .execute(params![
-                    after.hide_sfx,
-                    after.glossary_input.map(|hash| hash.to_string())
-                ])?;
+        if upgraded != 0 || before.glossary_input != after.glossary_input {
+            conn.prepare_cached("INSERT OR REPLACE INTO project_options VALUES (1, ?1)")?
+                .execute([after.glossary_input.map(|hash| hash.to_string())])?;
         }
         if before.glossary != after.glossary {
             conn.prepare_cached("INSERT OR REPLACE INTO glossary VALUES (1, ?1)")?
                 .execute([json(after.glossary.as_ref())])?;
+        }
+        if before.suggestion_reviews != after.suggestion_reviews {
+            conn.prepare_cached("INSERT OR REPLACE INTO suggestion_reviews VALUES (1, ?1)")?
+                .execute([json(after.suggestion_reviews.as_ref())])?;
         }
         if before.glossary_candidates != after.glossary_candidates {
             conn.prepare_cached("INSERT OR REPLACE INTO glossary_candidates VALUES (1, ?1)")?

@@ -5,7 +5,7 @@ mod room;
 
 use icu_locale_core::{LanguageIdentifier, subtags::language};
 use koharu_scene::{
-    Align, Color, Content, Direction, Frame, Layer, LayerId, Op, Project, Rgba, Role, Transform,
+    Align, Content, Direction, Frame, Layer, LayerId, Op, Project, Rgba, Role, Transform,
 };
 use kurbo::{Affine, Shape as _};
 use serde_json::{Value, json};
@@ -22,15 +22,15 @@ use crate::{Error, Result};
 /// Western balloon's are lettered, or in Japanese and Chinese started
 /// together at the top or the left, as JLREQ aligns a line to its head; and
 /// with its source's ink as its fill and outline
-/// as its stroke, the width scaled from the source's size to its own, or a
-/// sound effect without one a stroke a sixteenth of its size, unlike its
-/// fill. What its style already
+/// as its stroke, scaled to its size, or a white stroke a sixteenth of its
+/// size when it lies outside a white balloon. What its style already
 /// sets is kept. It is vertical only when its source is and `target` is
 /// Japanese or Chinese, which are written so; any other language runs
 /// horizontally, turned by the source's tilt as the source is.
 pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier) -> Result<Op> {
     let (page, holder) = project.parent(block)?;
-    let Content::Block(this) = &project.layer(block)?.content else {
+    let layer = project.layer(block)?;
+    let Content::Block(this) = &layer.content else {
         return Err(Error::invalid(format!("layer {block} isn't a block")));
     };
     let room = match holder {
@@ -82,27 +82,30 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
     {
         chars.insert("fill".to_owned(), json!(fill));
     }
-    if given.and_then(|style| style.chars.stroke).is_none() {
+    if !given
+        .is_some_and(|style| style.chars.stroke.is_some() || style.chars.stroke_width == Some(0.0))
+    {
         let outline = match (source.stroke, source.stroke_width) {
             (Some(stroke), Some(width)) => {
                 let scale = size.zip(source.size).map_or(1.0, |(to, from)| to / from);
                 Some((stroke, width * scale))
             }
-            // A sound effect lies on art, which an outline unlike its fill,
-            // black around a light one and white around any other, the
-            // renderer's black included, keeps it legible over.
-            _ if this.role == Role::Sfx => size.map(|size| {
-                let fill = given.and_then(|style| style.chars.fill).or(source.fill);
-                let light = fill.is_some_and(|fill| {
-                    Color::from(fill).discard_alpha().relative_luminance() > 0.5
-                });
-                let stroke = if light {
-                    [0.0, 0.0, 0.0, 1.0]
-                } else {
-                    [1.0; 4]
-                };
-                (Rgba(stroke), size / 16.0)
-            }),
+            // The detector measures the paper surrounding this block's glyphs.
+            // In older detections with no paper sample, the balloon is the only
+            // evidence available; free lettering still gets its outline.
+            _ if !matches!(
+                holder.map(|layer| &layer.content),
+                Some(Content::Balloon(_))
+            ) || layer
+                .attributes
+                .get("koharu")
+                .and_then(|attrs| attrs.get("detection"))
+                .and_then(|detection| detection.get("paper"))
+                .and_then(|paper| serde_json::from_value::<[u8; 3]>(paper.clone()).ok())
+                .is_some_and(|paper| paper.iter().any(|&channel| channel < 240)) =>
+            {
+                Some((Rgba([1.0; 4]), size.unwrap_or(24.0) / 16.0))
+            }
             _ => None,
         };
         if let Some((stroke, width)) = outline {
@@ -411,40 +414,48 @@ mod tests {
         assert_eq!(text.style.chars.stroke_width, Some(2.0));
         let text = placed(&mut session, ids[1], &langid!("en"))?;
         assert_eq!(text.style.chars.fill, None);
-        assert_eq!(text.style.chars.stroke, None);
+        assert_eq!(text.style.chars.stroke, Some(Rgba([1.0; 4])));
         Ok(())
     }
 
     #[test]
-    fn a_sound_effect_without_an_outline_gets_a_thin_one_unlike_its_fill() -> Result<()> {
-        let source = |x: f64, role: &str, fill: [f32; 4]| {
-            json!({"kind": "block", "role": role, "source": {
-                "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 120.0, "height": 120.0}}},
-                "style": {"chars": {"size": 32.0, "fill": fill}},
-            }})
+    fn lettering_outside_white_balloons_gets_a_white_outline() -> Result<()> {
+        let source = |role: &str, paper: [u8; 3]| {
+            json!({
+                "kind": "block", "role": role, "attributes": {"koharu": {"detection": {"paper": paper}}},
+                "source": {
+                    "frame": {"box": {"bounds": {"x": 20, "y": 20, "width": 32, "height": 100}}},
+                    "style": {"chars": {"size": 32.0}},
+                }
+            })
         };
         let dir = tempfile::tempdir()?;
         let (mut session, ids) = page(
             &dir,
             &[
-                ("dark", None, source(0.0, "sfx", [0.2, 0.2, 0.2, 1.0])),
-                ("light", None, source(130.0, "sfx", [0.97, 0.94, 0.93, 1.0])),
-                ("speech", None, source(260.0, "text", [0.2, 0.2, 0.2, 1.0])),
+                (
+                    "white",
+                    None,
+                    json!({"kind": "balloon", "outline": BALLOON}),
+                ),
+                ("free", None, source("text", [255; 3])),
+                ("effect", None, source("sfx", [0; 3])),
+                ("tinted", Some("white"), source("text", [245, 200, 180])),
+                ("plain", Some("white"), source("text", [250; 3])),
             ],
         )?;
-
-        // A sixteenth of the page's lettering size of 32.
-        let dark = placed(&mut session, ids[0], &langid!("en"))?;
-        assert_eq!(dark.style.chars.stroke, Some(koharu_scene::Rgba([1.0; 4])));
-        assert_eq!(dark.style.chars.stroke_width, Some(2.0));
-        let light = placed(&mut session, ids[1], &langid!("en"))?;
+        for id in &ids[1..4] {
+            let text = placed(&mut session, *id, &langid!("zh"))?;
+            assert_eq!(text.style.chars.stroke, Some(Rgba([1.0; 4])));
+            assert_eq!(text.style.chars.stroke_width, Some(2.0));
+        }
         assert_eq!(
-            light.style.chars.stroke,
-            Some(koharu_scene::Rgba([0.0, 0.0, 0.0, 1.0]))
+            placed(&mut session, ids[4], &langid!("zh"))?
+                .style
+                .chars
+                .stroke,
+            None
         );
-        assert_eq!(light.style.chars.stroke_width, Some(2.0));
-        let speech = placed(&mut session, ids[2], &langid!("en"))?;
-        assert_eq!(speech.style.chars.stroke, None);
         Ok(())
     }
 }

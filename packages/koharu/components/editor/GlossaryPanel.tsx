@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { GlossaryManager } from '@/components/editor/GlossaryManager'
+import { showEvidence } from '@/components/editor/ReviewPanel'
 import { call, dispatch } from '@/lib/backend'
 import { glossaryKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
@@ -59,12 +60,7 @@ export function GlossaryPanel({ project, active }: { project: ProjectId; active:
   ).length
 
   const openLine = (page: PageId, layer: LayerId) => {
-    void call(commands.show, page)
-      .then(() => {
-        useKoharuStore.getState().selectLayers([layer])
-        dispatch(commands.select, [layer])
-      })
-      .catch(() => undefined)
+    void showEvidence({ page, layer }).catch(() => undefined)
   }
 
   const save = async (next: GlossaryEntry[]) => {

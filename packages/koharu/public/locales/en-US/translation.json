@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "Review",
+    "correction": "Translation correction",
+    "empty": "No suggestions to review",
+    "alias": "Does “{{source}}” refer to {{canonical}}?",
+    "accept": "Confirm",
+    "dismiss": "Dismiss",
+    "wiki": "LLM Wiki link"
+  },
   "glossary": {
     "manage": "Manage project glossary",
     "globalTitle": "Global glossary",
@@ -182,6 +191,7 @@
     "title": "History"
   },
   "sfxVisibility": {
+    "mixed": "Partially visible",
     "page": "Page SFX",
     "project": "Project SFX",
     "hidePage": "Hide sound-effect translations on this page",

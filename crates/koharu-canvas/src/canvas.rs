@@ -168,9 +168,9 @@ impl Canvas {
         match typed {
             Some(_) if other => self.typing = None,
             Some(Some(layer)) => match typable(&snapshot.page().layers, layer) {
-                Some((text, _)) => {
+                Some((text, _, role)) => {
                     if let Some(typing) = &mut self.typing
-                        && typing.rebase(&text).is_err()
+                        && typing.rebase(&text, role).is_err()
                     {
                         self.typing = None;
                     }
@@ -570,11 +570,11 @@ impl Canvas {
         // The Type tool types into the text it's pressed on, as a double
         // click with the select tool does.
         let types = self.tool == Tool::Text || (self.tool == Tool::Select && sample.clicks >= 2);
-        if let Some((layer, text, untranslated)) = (primary && types)
+        if let Some((layer, text, untranslated, role)) = (primary && types)
             .then(|| text_at(&cx, sample.page))
             .flatten()
         {
-            let mut typing = Typing::layer(&self.renderer, layer, &text, untranslated)?;
+            let mut typing = Typing::layer(&self.renderer, layer, &text, untranslated, role)?;
             typing.press(sample.page, false, 1);
             typing.dragging = Some(pointer);
             self.typing = Some(typing);
@@ -982,22 +982,22 @@ fn id(pointer: &PointerInfo) -> u64 {
 
 /// The text a press at `page` types into: the topmost text or block it
 /// picks, with what `typable` gives for it.
-fn text_at(cx: &Context, page: Point) -> Option<(LayerId, Text, bool)> {
+fn text_at(cx: &Context, page: Point) -> Option<(LayerId, Text, bool, Option<koharu_scene::Role>)> {
     let layer = cx.snapshot.hit(page)?.layer;
-    let (text, untranslated) = typable(&cx.snapshot.page().layers, layer)?;
-    Some((layer, text, untranslated))
+    let (text, untranslated, role) = typable(&cx.snapshot.page().layers, layer)?;
+    Some((layer, text, untranslated, role))
 }
 
 /// `layer`'s text as typing takes it: a text layer's, or a block's
 /// translation, and its source, standing in, when it has none, which the
 /// flag says.
-fn typable(layers: &[Layer], layer: LayerId) -> Option<(Text, bool)> {
+fn typable(layers: &[Layer], layer: LayerId) -> Option<(Text, bool, Option<koharu_scene::Role>)> {
     layers.iter().find_map(|found| match &found.content {
         _ if found.id != layer => typable(&found.children, layer),
-        Content::Text(text) => Some(((**text).clone(), false)),
+        Content::Text(text) => Some(((**text).clone(), false, None)),
         Content::Block(block) => Some(match &block.translation {
-            Some(translation) => (translation.clone(), false),
-            None => (block.source.clone(), true),
+            Some(translation) => (translation.clone(), false, Some(block.role)),
+            None => (block.source.clone(), true, Some(block.role)),
         }),
         _ => None,
     })

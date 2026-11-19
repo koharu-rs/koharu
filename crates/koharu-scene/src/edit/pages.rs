@@ -59,7 +59,6 @@ impl Run<'_, '_> {
                 size,
                 background,
                 excluded: false,
-                hide_sfx: false,
                 detected: None,
                 layers: Vec::new(),
             },

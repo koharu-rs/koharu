@@ -90,7 +90,10 @@ mod tests {
                 },
                 ..Text::default()
             };
-            Ok(crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout"))
+            Ok(
+                crate::text::layout(&text, false, |_, _| Ok(vec![font.clone()]))?
+                    .expect("a layout"),
+            )
         };
         let (plain, stroked) = (laid(None)?, laid(Some(3.0))?);
         assert_eq!(stroked.bounds, plain.bounds.inflate(3.0, 3.0));
@@ -139,7 +142,8 @@ mod tests {
             direction: koharu_scene::Direction::Vertical,
             ..Text::default()
         };
-        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let layout =
+            crate::text::layout(&text, false, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
         assert!(layout.runs[0].sideways);
         let Ok(gpu) = Gpu::get() else {
             eprintln!("skipped drawing without a GPU");

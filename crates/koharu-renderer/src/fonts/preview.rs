@@ -41,7 +41,7 @@ pub async fn preview(family: &str) -> Result<Vec<u8>> {
             },
             ..Text::default()
         };
-        let layout = text::layout(&name, |_, _| Ok(fonts.clone()))?
+        let layout = text::layout(&name, false, |_, _| Ok(fonts.clone()))?
             .context("a font family with no name has no preview")?;
         let frame = layout.resolved.frame;
         let scale = f64::from(HEIGHT) / frame.height().max(1.0);

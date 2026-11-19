@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "İnceleme",
+    "correction": "Çeviri düzeltmesi",
+    "empty": "İncelenecek öneri yok",
+    "alias": "“{{source}}” ile {{canonical}} mi kastediliyor?",
+    "accept": "Onayla",
+    "dismiss": "Reddet",
+    "wiki": "LLM Wiki bağlantısı"
+  },
   "glossary": {
     "manage": "Proje sözlüğünü yönet",
     "globalTitle": "Genel sözlük",
@@ -182,6 +191,7 @@
     "title": "Geçmiş"
   },
   "sfxVisibility": {
+    "mixed": "Kısmen görünür",
     "page": "Sayfa ses efektleri",
     "project": "Proje ses efektleri",
     "hidePage": "Bu sayfadaki ses efekti çevirilerini gizle",

@@ -24,7 +24,8 @@ pub use edit::{Edit, Op};
 pub use error::{Error, Result};
 pub use external::{ArchiveMember, ExternalImage, MAX_SOURCE_BYTES};
 pub use glossary::{
-    GlossaryEntry, GlossaryKind, SourceLine, TermIssue, matching_terms, valid_glossary,
+    AliasSuggestion, GlossaryEntry, GlossaryKind, JAPANESE_HONORIFICS, SourceLine, TermIssue,
+    TermLocation, TextSuggestion, japanese_address, matching_terms, valid_glossary,
 };
 pub use icu_locale_core::LanguageIdentifier;
 pub use ids::{Hash, LayerId, PageId, ProjectId, Ref, Revision, Uuid};

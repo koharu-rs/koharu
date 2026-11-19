@@ -4,6 +4,7 @@
 mod layers;
 mod pages;
 mod pixels;
+mod reviews;
 mod schema;
 mod text;
 
@@ -70,13 +71,12 @@ pub enum Op {
     },
     SetPageOptions {
         page: Ref,
-        #[serde(default)]
-        excluded: Option<bool>,
-        #[serde(default)]
-        hide_sfx: Option<bool>,
+        excluded: bool,
     },
-    SetProjectSfx {
-        hide: bool,
+    /// Set the visibility of the sound-effect layers on one page, or every page.
+    SetSfxVisibility {
+        page: Option<Ref>,
+        visible: bool,
     },
     #[schemars(skip)]
     MarkPageDetected {
@@ -189,6 +189,24 @@ pub enum Op {
     #[schemars(skip)]
     SetGlossaryCandidates {
         candidates: Vec<Vec<GlossaryEntry>>,
+    },
+    /// Queue possible readings of names for human confirmation. Cite existing OCR blocks.
+    SuggestAliases {
+        suggestions: Vec<crate::AliasSuggestion>,
+    },
+    #[schemars(skip)]
+    ResolveAlias {
+        suggestion: crate::AliasSuggestion,
+        translation: Option<String>,
+    },
+    /// Queue a proposed correction to the cited block's existing translation for human review.
+    SuggestTranslation {
+        suggestion: crate::TextSuggestion,
+    },
+    #[schemars(skip)]
+    ResolveTranslation {
+        suggestion: crate::TextSuggestion,
+        translation: Option<String>,
     },
     #[schemars(skip)]
     AddExternalPage {
@@ -380,23 +398,36 @@ impl Run<'_, '_> {
             Op::SetBackground { page, background } => {
                 self.set_background(index, page, background.as_ref())
             }
-            Op::SetPageOptions {
-                page,
-                excluded,
-                hide_sfx,
-            } => {
+            Op::SetPageOptions { page, excluded } => {
                 let id = self.page(page)?;
                 let page = self.project.pages.get_mut(&id).expect("page exists");
-                if let Some(excluded) = excluded {
-                    page.excluded = *excluded;
-                }
-                if let Some(hide_sfx) = hide_sfx {
-                    page.hide_sfx = *hide_sfx;
-                }
+                page.excluded = *excluded;
                 Ok(())
             }
-            Op::SetProjectSfx { hide } => {
-                self.project.hide_sfx = *hide;
+            Op::SetSfxVisibility { page, visible } => {
+                let pages = match page {
+                    Some(page) => vec![self.page(page)?],
+                    None => self.project.pages().map(|page| page.id).collect(),
+                };
+                for id in pages {
+                    let mut changed = false;
+                    for layer in self
+                        .project
+                        .page(id)?
+                        .sfx()
+                        .filter(|layer| layer.visible != *visible)
+                    {
+                        self.unlocked(index, layer.id)?;
+                        changed = true;
+                    }
+                    if changed {
+                        self.project
+                            .pages
+                            .get_mut(&id)
+                            .expect("page exists")
+                            .set_sfx_visible(*visible);
+                    }
+                }
                 Ok(())
             }
             Op::MarkPageDetected { page } => {
@@ -467,6 +498,16 @@ impl Run<'_, '_> {
                 self.project.glossary_candidates = candidates.clone().into();
                 Ok(())
             }
+            Op::SuggestAliases { suggestions } => self.suggest_aliases(index, suggestions),
+            Op::ResolveAlias {
+                suggestion,
+                translation,
+            } => self.resolve_alias(index, suggestion, translation.as_deref()),
+            Op::SuggestTranslation { suggestion } => self.suggest_translation(index, suggestion),
+            Op::ResolveTranslation {
+                suggestion,
+                translation,
+            } => self.resolve_translation(index, suggestion, translation.as_deref()),
             Op::AddExternalPage {
                 index: at,
                 file,

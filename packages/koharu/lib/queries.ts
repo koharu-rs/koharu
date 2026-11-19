@@ -37,7 +37,6 @@ export interface ProjectView {
   id: ProjectAnswer['id']
   linkedZip: boolean
   linkedFolder: boolean
-  hideSfx: boolean
   page: PageId | null
   pages: PageSummary[]
   history: History
@@ -63,7 +62,6 @@ const projectQuery = queryOptions({
       id: scene.id,
       linkedZip: scene.linked_zip,
       linkedFolder: scene.linked_folder,
-      hideSfx: scene.hide_sfx,
       page,
       pages: scene.pages,
       history: history as History,

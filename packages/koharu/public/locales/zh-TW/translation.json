@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "建議確認",
+    "correction": "譯文校對",
+    "empty": "目前沒有待確認建議",
+    "alias": "「{{source}}」是指{{canonical}}嗎？",
+    "accept": "確認",
+    "dismiss": "駁回",
+    "wiki": "LLM Wiki 連結"
+  },
   "glossary": {
     "manage": "管理專案詞表",
     "globalTitle": "全域詞表",
@@ -182,6 +191,7 @@
     "title": "步驟記錄"
   },
   "sfxVisibility": {
+    "mixed": "部分可見",
     "page": "本頁擬聲詞",
     "project": "專案擬聲詞",
     "hidePage": "隱藏本頁擬聲詞譯文",

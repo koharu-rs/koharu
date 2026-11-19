@@ -47,12 +47,20 @@ import {
   type Placed,
 } from '@/lib/document'
 import { usePage } from '@/lib/queries'
-import { deleteLayers, moveLayers, setLocked, setPartVisibility, setVisibility } from '@/lib/scene'
+import {
+  deleteLayers,
+  moveLayers,
+  setLocked,
+  setPartVisibility,
+  setVisibility,
+  updateLayer,
+} from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
 import { type Layer, type LayerId } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Slider } from '@koharu/ui/components/slider'
+import { Switch } from '@koharu/ui/components/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
 /** The page's layers first to last, which is reading order, each with its depth; the last
@@ -373,7 +381,7 @@ function LayerRow({
         </div>
         {expanded && (
           <div className='animate-in duration-150 fade-in slide-in-from-top-1 motion-reduce:animate-none'>
-            <LayerEditor layer={layer} onDelete={layer.locked ? undefined : onDelete} />
+            <LayerEditor layer={layer} onDelete={movable ? onDelete : undefined} />
           </div>
         )}
       </div>
@@ -397,6 +405,20 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
 
   return (
     <div className='grid min-w-0 gap-1.5 px-1.5 pt-0.5 pb-1.5'>
+      {isBlockLayer(layer) && (
+        <label className='flex items-center gap-2 text-[11px]'>
+          <Switch
+            size='sm'
+            aria-label={t('story.sfx')}
+            checked={layer.role === 'sfx'}
+            disabled={!onDelete}
+            onCheckedChange={(checked) =>
+              dispatch(updateLayer, layer.id, { role: checked ? 'sfx' : 'text' })
+            }
+          />
+          {t('story.sfx')}
+        </label>
+      )}
       <div className='flex min-w-0 items-center gap-1.5'>
         <span className='shrink-0 text-[8px] font-medium text-muted-foreground uppercase'>
           {t('inspector.opacity')}

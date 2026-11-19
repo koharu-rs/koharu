@@ -1,11 +1,12 @@
 'use client'
 
-import { BookA, BookOpenText, Bot, Layers3 } from 'lucide-react'
+import { BookA, BookOpenText, Bot, Layers3, ListChecks } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AgentPanel } from '@/components/editor/AgentPanel'
 import { GlossaryPanel } from '@/components/editor/GlossaryPanel'
 import { LayersPanel } from '@/components/editor/LayersPanel'
+import { ReviewPanel } from '@/components/editor/ReviewPanel'
 import { StoryPanel } from '@/components/editor/StoryPanel'
 import { useProject } from '@/lib/queries'
 import { useKoharuStore, type Panel } from '@/lib/store'
@@ -31,7 +32,7 @@ export function RightSidebar() {
       >
         <TabsList
           variant='line'
-          className='h-10 w-full shrink-0 justify-start rounded-none border-b border-border/80 px-1'
+          className='h-10 w-full shrink-0 justify-start overflow-x-auto rounded-none border-b border-border/80 px-1'
         >
           <TabsTrigger value='layers' className={tab}>
             <Layers3 /> {t('layers.title')}
@@ -41,6 +42,9 @@ export function RightSidebar() {
           </TabsTrigger>
           <TabsTrigger value='glossary' className={tab}>
             <BookA /> {t('glossary.title')}
+          </TabsTrigger>
+          <TabsTrigger value='review' className={tab}>
+            <ListChecks /> {t('review.title')}
           </TabsTrigger>
           <TabsTrigger value='agent' className={tab}>
             <Bot /> {t('agent.title')}
@@ -56,6 +60,9 @@ export function RightSidebar() {
           {project && (
             <GlossaryPanel key={project} project={project} active={panel === 'glossary'} />
           )}
+        </TabsContent>
+        <TabsContent value='review' className='flex min-h-0 flex-col'>
+          {project && <ReviewPanel key={project} project={project} />}
         </TabsContent>
         <TabsContent value='agent' keepMounted className='flex min-h-0 flex-col'>
           <AgentPanel key={project} />

@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "提案の確認",
+    "correction": "訳文の校正",
+    "empty": "確認する提案はありません",
+    "alias": "「{{source}}」は「{{canonical}}」を指しますか？",
+    "accept": "確定",
+    "dismiss": "却下",
+    "wiki": "LLM Wiki リンク"
+  },
   "glossary": {
     "manage": "プロジェクトの用語表を管理",
     "globalTitle": "共通用語表",
@@ -182,6 +191,7 @@
     "title": "ヒストリー"
   },
   "sfxVisibility": {
+    "mixed": "一部表示",
     "page": "このページの効果音",
     "project": "プロジェクトの効果音",
     "hidePage": "このページの効果音訳を非表示",

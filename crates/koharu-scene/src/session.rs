@@ -433,6 +433,7 @@ mod tests {
             translation: "Aoki".to_owned(),
             kind: GlossaryKind::Person,
             note: String::new(),
+            wiki_url: None,
             excluded_layers: Default::default(),
         };
         let mut session = Session::open(&path)?;
@@ -455,6 +456,115 @@ mod tests {
     }
 
     #[test]
+    fn alias_review_keeps_evidence_and_human_decisions_after_reopen()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        use crate::{AliasSuggestion, TermLocation};
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("names.khr");
+        let mut session = Session::create(&path)?;
+        let setup = [
+            json!({"op":"add_page","id":"$p","index":0,"size":{"width":200,"height":200}}),
+            json!({"op":"add_layer","page":"$p","index":0,"layer":{"kind":"block","source":{"content":"望月玲愛"}}}),
+            json!({"op":"add_layer","page":"$p","index":1,"layer":{"kind":"block","source":{"content":"れあちゃん"}}}),
+        ];
+        let edit = |ops| Edit {
+            label: "review".into(),
+            ops,
+        };
+        session.apply(edit(serde_json::from_value(json!(setup))?))?;
+        let suggestion = AliasSuggestion {
+            source: "れあ".into(),
+            canonical: "望月玲愛".into(),
+            translation: "玲爱".into(),
+            reason: "Given-name address".into(),
+            locations: session
+                .project()
+                .transcript()?
+                .iter()
+                .map(TermLocation::from)
+                .collect(),
+        };
+        let propose = || {
+            edit(vec![Op::SuggestAliases {
+                suggestions: vec![suggestion.clone()],
+            }])
+        };
+        let resolve = |translation| {
+            edit(vec![Op::ResolveAlias {
+                suggestion: suggestion.clone(),
+                translation,
+            }])
+        };
+        session.apply(propose())?;
+        assert!(session.project().glossary().is_empty());
+        session.apply(resolve(None))?;
+        session.undo()?;
+        assert_eq!(
+            session.project().alias_suggestions(),
+            std::slice::from_ref(&suggestion)
+        );
+        session.apply(resolve(Some("玲愛".into())))?;
+        drop(session);
+        let mut session = Session::open(&path)?;
+        session.apply(propose())?;
+        assert!(session.project().alias_suggestions().is_empty());
+        assert_eq!(session.project().glossary()[0].translation, "玲愛");
+        Ok(())
+    }
+
+    #[test]
+    fn translation_review_does_not_overwrite_a_later_manual_edit()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        use crate::{TermLocation, TextSuggestion};
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("correction.khr");
+        let mut session = Session::create(&path)?;
+        let setup = [
+            json!({"op":"add_page","id":"$p","index":0,"size":{"width":80,"height":80}}),
+            json!({"op":"add_layer","page":"$p","index":0,"layer":{"kind":"block","source":{"content":"れあちゃん"},"translation":{"content":"蕾亚酱"}}}),
+        ];
+        let edit = |ops| Edit {
+            label: "review".into(),
+            ops,
+        };
+        session.apply(edit(serde_json::from_value(json!(setup))?))?;
+        let line = session.project().transcript()?.remove(0);
+        let suggestion = TextSuggestion {
+            location: TermLocation::from(&line),
+            previous: line.translation.unwrap(),
+            translation: "玲爱酱".into(),
+            reason: "Confirmed character name".into(),
+        };
+        let resolve = |translation| {
+            edit(vec![Op::ResolveTranslation {
+                suggestion: suggestion.clone(),
+                translation,
+            }])
+        };
+        session.apply(edit(vec![Op::SuggestTranslation {
+            suggestion: suggestion.clone(),
+        }]))?;
+        drop(session);
+        let mut session = Session::open(path)?;
+        session.apply(edit(vec![Op::SetText {
+            layer: line.layer.into(),
+            text: "玲爱".into(),
+        }]))?;
+        assert!(
+            session
+                .apply(resolve(Some(suggestion.translation.clone())))
+                .is_err()
+        );
+        session.apply(resolve(None))?;
+        assert!(session.project().text_suggestions().is_empty());
+        assert_eq!(
+            session.project().transcript()?[0].translation.as_deref(),
+            Some("玲爱")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn analyzed_glossary_keeps_alternatives_after_selection_and_reopen()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
         use crate::{GlossaryEntry, GlossaryKind};
@@ -472,6 +582,7 @@ mod tests {
             translation: "Aoki".into(),
             kind: GlossaryKind::Person,
             note: String::new(),
+            wiki_url: None,
             excluded_layers: Default::default(),
         };
         let other = GlossaryEntry {
@@ -483,6 +594,7 @@ mod tests {
             translation: String::new(),
             kind: GlossaryKind::PreserveBlock,
             note: String::new(),
+            wiki_url: None,
             excluded_layers: Default::default(),
         };
         let global = [GlossaryEntry {
@@ -491,9 +603,11 @@ mod tests {
             ..preserve.clone()
         }];
         let groups = vec![vec![preserve.clone()], vec![name.clone(), other.clone()]];
-        let ops = session
-            .project()
-            .analyzed_glossary(groups.clone(), vec![name.clone(), preserve.clone()]);
+        let ops = session.project().analyzed_glossary(
+            groups.clone(),
+            vec![name.clone(), preserve.clone()],
+            vec![],
+        );
         session.apply(Edit {
             label: "analysis".into(),
             ops,
@@ -526,38 +640,55 @@ mod tests {
     }
 
     #[test]
-    fn page_exclusion_and_sfx_visibility_are_persisted()
+    fn sfx_filters_upgrade_to_individually_editable_layer_eyes()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
         let dir = tempfile::tempdir()?;
         let path = dir.path().join("visibility.khr");
         let mut session = Session::create(&path)?;
-        let ops = [
-            serde_json::json!({"op":"add_page","id":"$page","index":0,"size":{"width":50,"height":50}}),
-            serde_json::json!({"op":"set_page_options","page":"$page","excluded":true,"hide_sfx":true}),
-            serde_json::json!({"op":"set_project_sfx","hide":true}),
-        ];
-        session.apply(Edit {
+        let edit = |ops: Vec<serde_json::Value>| Edit {
             label: "visibility".into(),
             ops: ops
                 .into_iter()
-                .map(serde_json::from_value)
-                .collect::<std::result::Result<_, _>>()?,
-        })?;
+                .map(|op| serde_json::from_value(op).unwrap())
+                .collect(),
+        };
+        session.apply(edit(vec![
+            json!({"op":"add_page","id":"$p","index":0,"size":{"width":50,"height":50}}),
+            json!({"op":"add_page","id":"$q","index":1,"size":{"width":50,"height":50}}),
+            json!({"op":"set_page_options","page":"$p","excluded":true}),
+            json!({"op":"add_layer","page":"$p","index":0,"layer":{"kind":"block","role":"sfx","source":{}}}),
+            json!({"op":"add_layer","page":"$p","index":1,"layer":{"kind":"block","role":"sfx","source":{}}}),
+            json!({"op":"add_layer","page":"$q","index":0,"layer":{"kind":"block","role":"sfx","source":{}}}),
+        ]))?;
+        session.store.conn().execute_batch(
+            "UPDATE project SET version = '1.3.0';
+             ALTER TABLE project_options ADD COLUMN hide_sfx INTEGER NOT NULL DEFAULT 0;
+             INSERT OR REPLACE INTO project_options (id, hide_sfx) VALUES (1, 1);
+             UPDATE pages SET page = json_set(page, '$.hide_sfx', json('false'));",
+        )?;
         drop(session);
-        let mut session = Session::open(path)?;
+        let mut session = Session::open(&path)?;
         let project = session.project();
-        let page = project.pages().next().expect("a page");
-        assert!(project.hides_sfx() && page.hide_sfx && page.excluded);
-        session.apply(Edit {
-            label: "show project".into(),
-            ops: vec![Op::SetProjectSfx { hide: false }],
-        })?;
+        let [first, second]: [_; 2] = project.pages().collect::<Vec<_>>().try_into().unwrap();
+        assert!(first.excluded);
+        assert!(first.sfx().chain(second.sfx()).all(|layer| !layer.visible));
+        session.apply(edit(vec![
+            json!({"op":"set_sfx_visibility","page":first.id,"visible":true}),
+        ]))?;
+        let individual = first.layers[0].id;
+        session.apply(edit(vec![
+            json!({"op":"update_layer","layer":individual,"patch":{"visible":false}}),
+        ]))?;
+        assert!(!session.project().layer(individual)?.visible);
+        session.undo()?;
+        assert!(session.project().layer(individual)?.visible);
+        session.redo()?;
+        drop(session);
+        let session = Session::open(path)?;
         let project = session.project();
-        assert!(
-            !project.hides_sfx()
-                && project.page(page.id)?.hide_sfx
-                && project.page(page.id)?.excluded
-        );
+        assert!(!project.layer(individual)?.visible);
+        assert!(project.layer(first.layers[1].id)?.visible);
+        assert!(!project.layer(second.layers[0].id)?.visible);
         Ok(())
     }
 

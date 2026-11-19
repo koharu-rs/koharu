@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "Suggestions",
+    "correction": "Correction de traduction",
+    "empty": "Aucune suggestion à examiner",
+    "alias": "« {{source}} » désigne-t-il {{canonical}} ?",
+    "accept": "Confirmer",
+    "dismiss": "Rejeter",
+    "wiki": "Lien LLM Wiki"
+  },
   "glossary": {
     "manage": "Gérer le glossaire du projet",
     "globalTitle": "Glossaire global",
@@ -182,6 +191,7 @@
     "title": "Historique"
   },
   "sfxVisibility": {
+    "mixed": "Partiellement visible",
     "page": "Onomatopées de la page",
     "project": "Onomatopées du projet",
     "hidePage": "Masquer les onomatopées traduites de cette page",

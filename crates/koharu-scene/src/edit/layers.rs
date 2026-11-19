@@ -227,8 +227,15 @@ impl Run<'_, '_> {
         }
         let mut json = serde_json::to_value(&old).expect("layers serialize");
         json_patch::merge(&mut json, patch);
-        let new: Layer =
+        let mut new: Layer =
             serde_json::from_value(json).map_err(|error| Error::invalid(op, error.to_string()))?;
+        // Detection owns the initial role. An explicit role edit takes precedence
+        // even if it confirms the detector's choice before OCR has run.
+        if fields.contains_key("role")
+            && let Some(data) = new.attributes.get_mut("koharu")
+        {
+            data.remove("sfx_pending_ocr");
+        }
         if new == old {
             return Ok(());
         }

@@ -1,17 +1,86 @@
 'use client'
 
-import { Eye, EyeOff } from 'lucide-react'
+import { ChevronDown, Eye, EyeOff, Minus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { InferenceControl } from '@/components/editor/InferenceControl'
 import { call } from '@/lib/backend'
 import { usePage, useProject } from '@/lib/queries'
 import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
-import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
+import { commands, type PageSummary, type Stage, type Target } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@koharu/ui/components/dropdown-menu'
+
+function SfxMenu({
+  pages,
+  project,
+  disabled,
+}: {
+  pages: PageSummary[]
+  project?: boolean
+  disabled: boolean
+}) {
+  const { t } = useTranslation()
+  const total = pages.reduce((count, page) => count + page.sfx_total, 0)
+  const visible = pages.reduce((count, page) => count + page.sfx_visible, 0)
+  const state = visible === 0 ? 'hide' : visible === total ? 'show' : 'mixed'
+  const Icon = state === 'mixed' ? Minus : visible ? Eye : EyeOff
+  const scope = t(project ? 'sfxVisibility.project' : 'sfxVisibility.page')
+  const show = t(project ? 'sfxVisibility.showProject' : 'sfxVisibility.showPage')
+  const hide = t(project ? 'sfxVisibility.hideProject' : 'sfxVisibility.hidePage')
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant='ghost' size='sm' className='min-w-0 shrink gap-1 px-1.5 text-[11px]' />
+        }
+        disabled={disabled || !total}
+      >
+        <Icon className='size-3.5' />
+        <span className='truncate'>
+          {scope}
+          {state === 'mixed' && ` · ${t('sfxVisibility.mixed')}`}
+        </span>
+        <ChevronDown className='size-3 text-muted-foreground' />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className='w-max'>
+        <DropdownMenuRadioGroup
+          value={state}
+          onValueChange={(value) => {
+            if (value !== state)
+              void call(commands.edit, {
+                label: value === 'show' ? show : hide,
+                ops: [
+                  {
+                    op: 'set_sfx_visibility',
+                    page: project ? null : pages[0]!.id,
+                    visible: value === 'show',
+                  },
+                ],
+              }).catch(() => undefined)
+          }}
+        >
+          <DropdownMenuRadioItem value='show' closeOnClick>
+            <Eye />
+            {show}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value='hide' closeOnClick>
+            <EyeOff />
+            {hide}
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export function CanvasCommandBar() {
-  const { t } = useTranslation()
   const page = usePage().data
   const project = useProject().data
   const pages = project?.pages ?? []
@@ -43,53 +112,11 @@ export function CanvasCommandBar() {
     void call(commands.runPipeline, target, ordered, resume).catch(() => undefined)
   }
 
-  const hidePage = Boolean(page?.hide_sfx)
-  const hideProject = Boolean(project?.hideSfx)
-  const pageLabel = t(hidePage ? 'sfxVisibility.showPage' : 'sfxVisibility.hidePage')
-  const projectLabel = t(hideProject ? 'sfxVisibility.showProject' : 'sfxVisibility.hideProject')
-  const PageIcon = hidePage ? EyeOff : Eye
-  const ProjectIcon = hideProject ? EyeOff : Eye
-
   return (
     <header className='flex h-10 shrink-0 items-center gap-2 border-b border-border/80 bg-[var(--surface-toolbar)] px-2.5'>
       <div className='flex min-w-0 flex-1 items-center gap-1 overflow-hidden'>
-        <Button
-          type='button'
-          variant='ghost'
-          size='sm'
-          className='min-w-0 shrink gap-1 px-1.5 text-[11px]'
-          title={pageLabel}
-          aria-label={pageLabel}
-          disabled={!page || hideProject || Boolean(running)}
-          onClick={() => {
-            if (page)
-              void call(commands.edit, {
-                label: pageLabel,
-                ops: [{ op: 'set_page_options', page: page.id, hide_sfx: !hidePage }],
-              }).catch(() => undefined)
-          }}
-        >
-          <PageIcon className='size-3.5' />
-          <span className='truncate'>{t('sfxVisibility.page')}</span>
-        </Button>
-        <Button
-          type='button'
-          variant='ghost'
-          size='sm'
-          className='min-w-0 shrink gap-1 px-1.5 text-[11px]'
-          title={projectLabel}
-          aria-label={projectLabel}
-          disabled={!project || Boolean(running)}
-          onClick={() =>
-            void call(commands.edit, {
-              label: projectLabel,
-              ops: [{ op: 'set_project_sfx', hide: !hideProject }],
-            }).catch(() => undefined)
-          }
-        >
-          <ProjectIcon className='size-3.5' />
-          <span className='truncate'>{t('sfxVisibility.project')}</span>
-        </Button>
+        <SfxMenu pages={pages.filter((item) => item.id === page?.id)} disabled={Boolean(running)} />
+        <SfxMenu pages={pages} project disabled={Boolean(running)} />
       </div>
       <InferenceControl
         disabled={!page || Boolean(running)}

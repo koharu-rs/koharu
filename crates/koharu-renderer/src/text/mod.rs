@@ -72,6 +72,7 @@ pub struct ResolvedText {
 /// style and characters; `None` when it has no characters.
 pub(crate) fn layout(
     text: &Text,
+    dialogue: bool,
     fonts: impl FnMut(&CharStyle, &str) -> Result<Vec<Font>>,
 ) -> Result<Option<TextLayout>> {
     let styled = Styled::new(text, fonts)?;
@@ -79,8 +80,22 @@ pub(crate) fn layout(
         return Ok(None);
     }
     let shaped = ShapedText::new(&styled)?;
-    let room = Room::new(&styled.frame, styled.vertical);
-    let (segments, placed) = fit::fit(&styled, &room, |breaking| {
+    let mut room = Room::new(&styled.frame, styled.vertical);
+    let dialogue = dialogue && room::fills(&styled.frame);
+    if dialogue && let Room::Path { outline, inset, .. } = &mut room {
+        // A full em on either side of a narrow balloon leaves less space than
+        // the original glyphs. Retain a visible margin without shrinking the
+        // dialogue just to make its default padding fit.
+        let size = styled
+            .spans
+            .iter()
+            .map(|span| span.size)
+            .fold(0.0, f32::max);
+        if *inset == 1.0 && size > 0.0 {
+            *inset = inset.min((outline.bounds.height() as f32 * 0.08) / size);
+        }
+    }
+    let (segments, placed) = fit::fit(&styled, &room, dialogue, |breaking| {
         breaks::segments(&shaped, breaking)
     });
     arrange::arrange(&shaped, &segments, placed).map(Some)

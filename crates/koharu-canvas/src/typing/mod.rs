@@ -12,7 +12,7 @@ use std::{ops::Range, time::Instant};
 
 use icu_segmenter::{GraphemeClusterSegmenter, WordSegmenter, options::WordBreakInvariantOptions};
 use koharu_renderer::{Lettering, Renderer};
-use koharu_scene::{CharStyle, Content, Edit, LayerId, Op, Page, RichText, Text, Uuid};
+use koharu_scene::{CharStyle, Content, Edit, LayerId, Op, Page, RichText, Role, Text, Uuid};
 use kurbo::{Affine, Line, Point, Rect};
 use serde_json::json;
 
@@ -48,6 +48,7 @@ pub(crate) struct Typing {
     /// The text typed into: its frame, transform, and style. Its content is
     /// `content`.
     base: Text,
+    role: Option<Role>,
     /// The content as the session found it, so leaving it unchanged
     /// commits nothing.
     original: RichText,
@@ -76,17 +77,18 @@ impl Typing {
         layer: LayerId,
         text: &Text,
         untranslated: bool,
+        role: Option<Role>,
     ) -> anyhow::Result<Self> {
         let (target, content) = match untranslated {
             true => (Target::Untranslated(layer), RichText::default()),
             false => (Target::Layer(layer), text.content.clone()),
         };
-        Self::start(renderer, target, text.clone(), content)
+        Self::start(renderer, target, text.clone(), content, role)
     }
 
     /// Typing a new text, `text` giving its frame and place.
     pub fn new_text(renderer: &Renderer, text: Text) -> anyhow::Result<Self> {
-        Self::start(renderer, Target::New, text, RichText::default())
+        Self::start(renderer, Target::New, text, RichText::default(), None)
     }
 
     fn start(
@@ -94,6 +96,7 @@ impl Typing {
         target: Target,
         base: Text,
         content: RichText,
+        role: Option<Role>,
     ) -> anyhow::Result<Self> {
         let lettering = renderer.lettering(
             LayerId(Uuid::nil()),
@@ -101,11 +104,13 @@ impl Typing {
                 content: content.clone(),
                 ..base.clone()
             },
+            role,
         )?;
         Ok(Self {
             renderer: renderer.clone(),
             target,
             base,
+            role,
             original: content.clone(),
             content,
             caret: 0,
@@ -130,7 +135,8 @@ impl Typing {
 
     /// Takes the text's frame, place, and style again from `text`, as
     /// another change left them, keeping what's typed.
-    pub fn rebase(&mut self, text: &Text) -> anyhow::Result<()> {
+    pub fn rebase(&mut self, text: &Text, role: Option<Role>) -> anyhow::Result<()> {
+        self.role = role;
         self.base = text.clone();
         self.relay()
     }
@@ -237,7 +243,7 @@ impl Typing {
     fn relay(&mut self) -> anyhow::Result<()> {
         self.lettering = self
             .renderer
-            .lettering(LayerId(Uuid::nil()), &self.shown())?;
+            .lettering(LayerId(Uuid::nil()), &self.shown(), self.role)?;
         self.touch();
         Ok(())
     }

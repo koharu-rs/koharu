@@ -50,12 +50,13 @@ pub(super) struct PlacedLine {
 pub(super) fn fit(
     styled: &Styled,
     room: &Room,
+    dialogue: bool,
     mut segments: impl FnMut(Breaking) -> Vec<Segment>,
 ) -> (Vec<Segment>, Placed) {
     let words = segments(Breaking::Words);
     let set = place(styled, room, &words, 1.0);
     if !set.overflowed {
-        let placed = match fills(&styled.frame) {
+        let placed = match fills(&styled.frame) && !dialogue {
             true => grow(styled, room, &words, set),
             false => set,
         };
@@ -290,6 +291,7 @@ fn boxed(
 ) -> Placed {
     let room = bounds.width() as f32;
     let balance = match styled.align {
+        _ if styled.chinese && styled.vertical => Balance::Columns,
         Align::Center => Balance::Even,
         _ => Balance::Ragged,
     };
@@ -316,15 +318,23 @@ fn boxed(
         Anchor::End => frame_v1 - total,
     };
     let overflowed = lines.overflowed || (!grow && total > bounds.height() as f32 + 0.01);
-    let (lines, _) = stack(
-        styled,
-        segments,
-        scale,
-        lines.lines,
-        bounds.x0 as f32,
-        room,
-        top,
-    );
+    let (start, line_room) = if balance == Balance::Columns
+        && anchor == Anchor::Center
+        && styled.align == Align::Start
+    {
+        let longest = lines
+            .lines
+            .iter()
+            .map(|range| lines::length(segments, range.clone(), scale))
+            .fold(0.0, f32::max);
+        (
+            bounds.x0 as f32 + ((room - longest) * 0.5).max(0.0),
+            longest,
+        )
+    } else {
+        (bounds.x0 as f32, room)
+    };
+    let (lines, _) = stack(styled, segments, scale, lines.lines, start, line_room, top);
     Placed {
         scale,
         lines,
@@ -393,6 +403,7 @@ struct InPath<'a> {
     /// The side along the inline axis the lines share, unless they're
     /// centred.
     edge: Option<Side>,
+    balance: Balance,
     pitch: f32,
     air: f32,
     frame: Rect,
@@ -428,6 +439,11 @@ fn in_path<'a>(
             (Align::Center, _) => None,
             (Align::Start | Align::Justify, false) | (Align::End, true) => Some(Side::Low),
             (Align::End, false) | (Align::Start | Align::Justify, true) => Some(Side::High),
+        },
+        balance: if styled.chinese && styled.vertical {
+            Balance::Columns
+        } else {
+            Balance::Even
         },
         pitch: pitch(segments, scale, styled.line_height).max(0.01),
         air: size * scale * inset,
@@ -516,6 +532,45 @@ impl InPath<'_> {
             Anchor::Center => (bounds.y0 + bounds.y1) as f32 * 0.5 - total * 0.5,
             Anchor::End => bounds.y1 as f32 - air - total,
         };
+        let mut best = self.lines_at(count, top)?;
+        if self.balance != Balance::Columns || self.anchor != Anchor::Center || self.edge.is_none()
+        {
+            return Some(best);
+        }
+        // A sloping edge between adjacent balloons can shorten a column at
+        // the nominal centre. Shift the group sideways within its own outline
+        // when that uses more of its height and brings it closer to the centre.
+        let displacement = |placed: &Placed, offset: f32| {
+            let column = placed.lines.first()?;
+            let along = column.start + column.room * 0.5 - bounds.center().x as f32;
+            Some((along.powi(2) + offset.powi(2)) / pitch.powi(2))
+        };
+        let centre = displacement(&best.1, 0.0)?;
+        best.0 += centre;
+        if !best.1.overflowed && centre < 0.01 {
+            return Some(best);
+        }
+        let limit = ((bounds.height() as f32 - total) * 0.5 - air).max(0.0);
+        for step in [0.25, 0.5, 0.75, 1.0] {
+            let shift = pitch * step;
+            if shift > limit {
+                break;
+            }
+            for offset in [-shift, shift] {
+                if let Some((cost, placed)) = self.lines_at(count, top + offset) {
+                    let score = cost + displacement(&placed, offset)?;
+                    if (placed.overflowed, score) < (best.1.overflowed, best.0) {
+                        best = (score, placed);
+                    }
+                }
+            }
+        }
+        Some(best)
+    }
+
+    fn lines_at(&self, count: usize, top: f32) -> Option<(f32, Placed)> {
+        let (bounds, pitch, air) = (self.outline.bounds, self.pitch, self.air);
+        let total = pitch * count as f32;
         let bands: Vec<Spans> = (0..count)
             .map(|line| {
                 let v0 = top + pitch * line as f32;
@@ -558,7 +613,7 @@ impl InPath<'_> {
         let lines = lines::break_lines(
             self.segments,
             self.scale,
-            Balance::Even,
+            self.balance,
             Some(count),
             |line| rooms[line],
         )?;
@@ -569,27 +624,54 @@ impl InPath<'_> {
             .collect();
         // The lines' unfilled shares squared, and far more for one longer
         // than its room, to compare line counts.
-        let cost = used
-            .iter()
-            .enumerate()
-            .map(|(line, &used)| {
-                let room = rooms[line];
-                if used > room {
-                    1e6 * (1.0 + used - room)
-                } else if room > 0.0 {
-                    let slack = (room - used) / room;
-                    slack * slack
-                } else {
-                    0.0
-                }
-            })
-            .sum();
+        let longest = used.iter().copied().fold(0.0, f32::max);
+        let cost = if self.balance == Balance::Columns && !lines.overflowed && longest > 0.0 {
+            // Match the proportions of the group of columns to the balloon:
+            // a tall, thin room keeps one long column, while a wider room
+            // can set two balanced phrases beside each other at the same size.
+            let along = f64::from(longest) / bounds.width();
+            let across = f64::from(total) / bounds.height();
+            let shape = (along / across).ln().powi(2) as f32;
+            let mean = used.iter().sum::<f32>() / count as f32;
+            let breaks: f32 = lines
+                .lines
+                .iter()
+                .zip(&used)
+                .map(|(range, length)| {
+                    let last = &self.segments[range.end - 1];
+                    let splits_phrase = last.after == Break::Normal && !last.punctuation;
+                    ((length - mean) / mean).powi(2) + if splits_phrase { 0.12 } else { 0.0 }
+                })
+                .sum();
+            shape + breaks
+        } else {
+            used.iter()
+                .enumerate()
+                .map(|(line, &used)| {
+                    let room = rooms[line];
+                    if used > room {
+                        1e6 * (1.0 + used - room)
+                    } else if room > 0.0 {
+                        let slack = (room - used) / room;
+                        slack * slack
+                    } else {
+                        0.0
+                    }
+                })
+                .sum()
+        };
         // Where a block sharing an edge starts: centred on the axis, unless
         // that takes it past the shared edge or a line past its span's far
         // end.
-        let longest = used.iter().copied().fold(0.0, f32::max);
         let block = shared.map(|(side, edge)| {
-            let centred = axis as f32 - longest * 0.5;
+            // Vertically set Chinese dialogue shares a top edge. Centre the
+            // whole group in the frame, then constrain it to each column's span.
+            let middle = if self.balance == Balance::Columns {
+                bounds.center().x
+            } else {
+                axis
+            };
+            let centred = middle as f32 - longest * 0.5;
             match side {
                 Side::Low => {
                     let latest = spans
@@ -730,7 +812,7 @@ mod tests {
     fn a_text_too_big_for_its_box_shrinks_to_the_largest_size_that_fits() -> Result<()> {
         // Two words 121 long together, in a box 100 wide and one line tall.
         let (styled, room) = in_box(100.0, 12.0, "shrink")?;
-        let (_, placed) = fit(&styled, &room, |_| {
+        let (_, placed) = fit(&styled, &room, false, |_| {
             vec![word(60.0, Break::Normal), word(60.0, Break::End)]
         });
         assert!(!placed.overflowed);
@@ -753,7 +835,7 @@ mod tests {
         // A word 40 long in a box 100 wide and 60 tall: its line holds it up
         // to 2.5 times, and the box's height up to 5.
         let (styled, room) = in_box(100.0, 60.0, "best")?;
-        let (_, placed) = fit(&styled, &room, |_| vec![word(40.0, Break::End)]);
+        let (_, placed) = fit(&styled, &room, false, |_| vec![word(40.0, Break::End)]);
         assert!(!placed.overflowed);
         assert!((2.45..=2.5).contains(&placed.scale), "{}", placed.scale);
         Ok(())
@@ -765,7 +847,7 @@ mod tests {
         // 12 tall: at half size a word is 30 long, and on two lines the
         // words fit up to 25 / 60 of their size.
         let (styled, room) = in_box(25.0, 12.0, "best")?;
-        let (_, placed) = fit(&styled, &room, |_| {
+        let (_, placed) = fit(&styled, &room, false, |_| {
             vec![word(60.0, Break::Normal), word(60.0, Break::End)]
         });
         assert!(!placed.overflowed);
@@ -791,7 +873,7 @@ mod tests {
         };
         let mut words = vec![word(30.0, Break::Normal); 11];
         words.push(word(30.0, Break::End));
-        let (segments, placed) = fit(&styled, &Room::new(&frame, false), |_| words.clone());
+        let (segments, placed) = fit(&styled, &Room::new(&frame, false), false, |_| words.clone());
         assert!(!placed.overflowed);
         assert!(placed.lines.len() > 2, "{}", placed.lines.len());
         let start = placed.lines[0].start;
@@ -844,7 +926,9 @@ mod tests {
         };
         let mut characters = vec![character(Break::Normal); 9];
         characters.push(character(Break::End));
-        let (_, placed) = fit(&styled, &Room::new(&frame, true), |_| characters.clone());
+        let (_, placed) = fit(&styled, &Room::new(&frame, true), false, |_| {
+            characters.clone()
+        });
         assert!(!placed.overflowed);
         assert!(placed.scale >= 1.0, "{}", placed.scale);
         assert!(
@@ -865,7 +949,7 @@ mod tests {
             vertical: true,
             ..styled
         };
-        let (segments, placed) = fit(&styled, &room, long);
+        let (segments, placed) = fit(&styled, &room, false, long);
         assert_eq!((segments.len(), placed.scale), (2, 0.5));
         Ok(())
     }

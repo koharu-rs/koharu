@@ -76,7 +76,6 @@ pub fn export(
         renderer,
         frame: &frame,
         labels,
-        hide_sfx: project.hides_sfx() || view.hide_sfx,
         size: (width, height),
         builder: PsdBuilder::new(width, height).resolution(72.0),
         folders: Vec::new(),
@@ -120,7 +119,6 @@ struct Export<'a> {
     renderer: &'a Renderer,
     frame: &'a Frame,
     labels: &'a Labels,
-    hide_sfx: bool,
     size: (u32, u32),
     builder: PsdBuilder,
     /// Each group's blocks and mask, which the builder can't give its folder
@@ -195,9 +193,7 @@ impl Export<'_> {
                 return Ok(());
             }
             Content::Block(block) => {
-                let visible =
-                    layer.visible && !(self.hide_sfx && block.role == koharu_scene::Role::Sfx);
-                self.folder(layer, visible, blocks, |export| {
+                self.folder(layer, layer.visible, blocks, |export| {
                     export.block(layer.id, block)
                 })?;
                 return Ok(());

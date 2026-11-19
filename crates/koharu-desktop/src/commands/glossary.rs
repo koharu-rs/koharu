@@ -2,7 +2,10 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use anyhow::Context as _;
 use koharu_pipeline::{PipelineConfig, Request, RunId, Stage, Target};
-use koharu_scene::{Edit, GlossaryEntry, GlossaryKind, LayerId, Op, PageId, ProjectId, TermIssue};
+use koharu_scene::{
+    AliasSuggestion, Edit, GlossaryEntry, GlossaryKind, Op, ProjectId, TermIssue, TermLocation,
+    TextSuggestion,
+};
 use serde::Serialize;
 use specta::Type;
 use tauri::{State, Window};
@@ -17,6 +20,8 @@ pub struct GlossaryView {
     entries: Vec<GlossaryEntry>,
     issues: Vec<TermIssue>,
     lines: usize,
+    suggestions: Vec<AliasSuggestion>,
+    corrections: Vec<TextSuggestion>,
     candidates: Option<Vec<TermCandidate>>,
 }
 
@@ -64,6 +69,8 @@ pub fn get_glossary(app: State<'_, Arc<App>>) -> Result<GlossaryView> {
         entries: project.glossary().to_vec(),
         issues: project.check_glossary(&koharu_config::get::<PipelineConfig>()?.glossary)?,
         lines: lines.len(),
+        suggestions: project.alias_suggestions().to_vec(),
+        corrections: project.text_suggestions().to_vec(),
         candidates,
     })
 }
@@ -139,6 +146,63 @@ pub fn save_glossary(
 
 #[tauri::command]
 #[specta::specta]
+pub fn resolve_alias(
+    app: State<'_, Arc<App>>,
+    project: ProjectId,
+    suggestion: AliasSuggestion,
+    translation: Option<String>,
+) -> Result<()> {
+    resolve_review(
+        &app,
+        project,
+        Op::ResolveAlias {
+            suggestion,
+            translation,
+        },
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn resolve_translation(
+    app: State<'_, Arc<App>>,
+    project: ProjectId,
+    suggestion: TextSuggestion,
+    translation: Option<String>,
+) -> Result<()> {
+    resolve_review(
+        &app,
+        project,
+        Op::ResolveTranslation {
+            suggestion,
+            translation,
+        },
+    )
+}
+
+fn resolve_review(app: &App, project: ProjectId, op: Op) -> Result<()> {
+    let opened = app.project.lock();
+    let mut session = opened
+        .as_ref()
+        .context("no project is open")?
+        .session
+        .lock();
+    if session.id() != project {
+        return Err(anyhow::anyhow!("the open project changed").into());
+    }
+    session.apply(Edit {
+        label: match op {
+            Op::ResolveTranslation { .. } => "set_text",
+            _ => "edit_glossary",
+        }
+        .to_owned(),
+        ops: vec![op],
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn export_source(app: State<'_, Arc<App>>, window: Window<CefRuntime>) -> Result<()> {
     let session = app.session()?;
     let (project, suggested) = {
@@ -174,14 +238,6 @@ pub async fn export_source(app: State<'_, Arc<App>>, window: Window<CefRuntime>)
         Ok(())
     })
     .await??)
-}
-
-#[derive(Serialize, Type)]
-pub struct TermLocation {
-    page: PageId,
-    number: usize,
-    layer: LayerId,
-    text: String,
 }
 
 #[derive(Serialize, Type)]

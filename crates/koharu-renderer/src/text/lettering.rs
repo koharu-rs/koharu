@@ -365,7 +365,7 @@ mod tests {
             ..Text::default()
         };
         Lettering::of(&text, |text| {
-            Ok(layout(text, |_, _| Ok(vec![font.clone()]))?.map(Arc::new))
+            Ok(layout(text, false, |_, _| Ok(vec![font.clone()]))?.map(Arc::new))
         })
         .expect("a lettering")
     }

@@ -7,7 +7,7 @@
 mod model;
 
 use image::{DynamicImage, GrayImage, Rgb, RgbImage};
-use koharu_scene::{Content, LayerId, Rect};
+use koharu_scene::{Content, Layer, LayerId, Op, Rect, Role};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -73,28 +73,60 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
             .apply(Stage::Recognize, move |project| {
                 let mut ops = Vec::new();
                 for (block, text) in texts {
-                    if !matches!(
-                        project.layer(block).map(|layer| &layer.content),
-                        Ok(Content::Block(_))
-                    ) {
+                    let Ok(layer) = project.layer(block) else {
                         continue;
-                    }
-                    ops.push(koharu_scene::Op::UpdateLayer {
-                        layer: block.into(),
-                        patch: json!({"source": {"content": text, "language": language}}),
-                    });
-                    ops.push(koharu_scene::Op::SetAttribute {
-                        layer: block.into(),
-                        namespace: "c2pa".to_owned(),
-                        key: "ocr".to_owned(),
-                        value: Some(action("c2pa.created", &name, None)),
-                    });
+                    };
+                    ops.extend(
+                        recognized(layer, &text, language, &name)
+                            .into_iter()
+                            .flatten(),
+                    );
                 }
                 Ok(ops)
             })
             .await?;
     }
     Ok(())
+}
+
+fn recognized(layer: &Layer, text: &str, language: &str, model: &str) -> Option<[Op; 2]> {
+    let Content::Block(block) = &layer.content else {
+        return None;
+    };
+    let mut patch = json!({"source": {"content": text, "language": language}});
+    // A standalone Japanese exclamation can be drawn like an effect. Reclassify
+    // only a detector-owned role on first recognition; an existing edit wins.
+    if block.role == Role::Sfx
+        && layer
+            .attributes
+            .get("koharu")
+            .and_then(|data| data.get("sfx_pending_ocr"))
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    {
+        let word = text
+            .trim()
+            .trim_end_matches(['!', '！', '?', '？', '。', '…', '.']);
+        let role = if matches!(word, "すごい" | "スゴイ") && matches!(language, "ja" | "und")
+        {
+            Role::Text
+        } else {
+            Role::Sfx
+        };
+        patch["role"] = json!(role);
+    }
+    Some([
+        Op::UpdateLayer {
+            layer: layer.id.into(),
+            patch,
+        },
+        Op::SetAttribute {
+            layer: layer.id.into(),
+            namespace: "c2pa".into(),
+            key: "ocr".into(),
+            value: Some(action("c2pa.created", model, None)),
+        },
+    ])
 }
 
 /// Each of the page's blocks the task works on, and the scan inside its
@@ -156,5 +188,76 @@ fn blank(crop: &mut RgbImage, rect: Rect, own: LayerId, masks: &[(LayerId, Rect,
         if held(&others, px, py) && !held(&mine, px, py) {
             *pixel = Rgb(median);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use koharu_scene::{Edit, Session};
+
+    #[test]
+    fn first_ocr_corrects_only_the_complete_exclamation_on_detector_owned_roles()
+    -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mut session = Session::create(dir.path().join("sfx.khr"))?;
+        let cases = [
+            ("すごい", true, Role::Text),
+            ("スゴイ！！", true, Role::Text),
+            ("すごい音", true, Role::Sfx),
+            ("ん〜ッ", true, Role::Sfx),
+            ("すごい", false, Role::Sfx),
+            ("すごい", true, Role::Sfx),
+        ];
+        let mut ops =
+            vec![json!({"op":"add_page","id":"$p","index":0,"size":{"width":40,"height":40}})];
+        for (i, (_, pending, _)) in cases.iter().enumerate() {
+            let mut layer = json!({"kind":"block","role":"sfx","source":{}});
+            if *pending {
+                layer["attributes"] = json!({"koharu":{"sfx_pending_ocr":true}});
+            }
+            ops.push(json!({"op":"add_layer","page":"$p","index":i,"layer":layer}));
+        }
+        session.apply(Edit {
+            label: "detect".into(),
+            ops: serde_json::from_value(json!(ops))?,
+        })?;
+        let project = session.project();
+        let page = project.pages().next().unwrap();
+        let recognize = |session: &mut Session, i: usize, text: &str| -> anyhow::Result<Role> {
+            let id = page.layers[i].id;
+            let project = session.project();
+            let ops = recognized(project.layer(id)?, text, "ja", "OCR").unwrap();
+            session.apply(Edit {
+                label: "ocr".into(),
+                ops: ops.into(),
+            })?;
+            let project = session.project();
+            let layer = project.layer(id)?;
+            assert!(
+                !layer
+                    .attributes
+                    .get("koharu")
+                    .is_some_and(|d| d.contains_key("sfx_pending_ocr"))
+            );
+            let Content::Block(block) = &layer.content else {
+                unreachable!()
+            };
+            assert_eq!(block.source.content.text(), text);
+            Ok(block.role)
+        };
+        // Confirm a detected effect before its first OCR; it must remain an effect.
+        let manual = page.layers.last().unwrap().id;
+        session.apply(Edit {
+            label: "role".into(),
+            ops: vec![Op::UpdateLayer {
+                layer: manual.into(),
+                patch: json!({"role":"sfx"}),
+            }],
+        })?;
+        for (i, (text, _, expected)) in cases.into_iter().enumerate() {
+            assert_eq!(recognize(&mut session, i, text)?, expected);
+        }
+        Ok(())
     }
 }

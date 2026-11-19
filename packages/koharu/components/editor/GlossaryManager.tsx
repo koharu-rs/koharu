@@ -1,6 +1,7 @@
 'use client'
 
-import { Check, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { Check, ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -83,6 +84,7 @@ export function GlossaryManager({
       source: draft.source.trim(),
       translation: blocked(draft) ? '' : draft.translation.trim(),
       note: draft.note.trim(),
+      wiki_url: draft.wiki_url?.trim() || undefined,
     }
     void save(replace(editing ?? entry.source, entry), () => {
       setDraft(null)
@@ -106,6 +108,15 @@ export function GlossaryManager({
                 </span>
                 {entry.note && (
                   <p className='text-xs wrap-anywhere text-muted-foreground'>{entry.note}</p>
+                )}
+                {entry.wiki_url && /^https?:\/\//i.test(entry.wiki_url) && (
+                  <button
+                    type='button'
+                    className='inline-flex items-center gap-1 text-xs text-primary underline'
+                    onClick={() => void openUrl(entry.wiki_url!).catch(() => undefined)}
+                  >
+                    <ExternalLink className='size-3' /> {t('review.wiki')}
+                  </button>
                 )}
               </div>
             </div>
@@ -237,6 +248,14 @@ export function GlossaryManager({
             placeholder={t('glossary.note')}
             value={draft.note}
             onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+          />
+          <Input
+            type='url'
+            pattern='[Hh][Tt][Tt][Pp][Ss]?://.+'
+            aria-label={t('review.wiki')}
+            placeholder={t('review.wiki')}
+            value={draft.wiki_url ?? ''}
+            onChange={(event) => setDraft({ ...draft, wiki_url: event.target.value })}
           />
           <div className='flex flex-wrap items-center justify-end gap-2 sm:col-span-2'>
             {duplicate && (

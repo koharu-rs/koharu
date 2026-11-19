@@ -116,9 +116,6 @@ pub(crate) fn changed(before: &Project, after: &Project) -> (PageChanges, BTreeS
             (before.external_image(&hash) != after.external_image(&hash)).then_some(page.id)
         }));
     }
-    if before.hide_sfx != after.hide_sfx {
-        changed.extend(after.pages().map(|page| page.id));
-    }
     let stayed_before = before
         .order
         .iter()

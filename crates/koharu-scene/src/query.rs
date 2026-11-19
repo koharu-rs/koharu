@@ -42,7 +42,6 @@ pub struct ProjectAnswer {
     pub pages: Vec<PageSummary>,
     pub linked_zip: bool,
     pub linked_folder: bool,
-    pub hide_sfx: bool,
 }
 
 /// A page without its layers, which `get_page` answers.
@@ -52,7 +51,8 @@ pub struct PageSummary {
     pub size: Size,
     pub background: Option<Background>,
     pub excluded: bool,
-    pub hide_sfx: bool,
+    pub sfx_total: usize,
+    pub sfx_visible: usize,
 }
 
 impl Session {
@@ -62,7 +62,6 @@ impl Session {
             Query::GetProject => Answer::Project(ProjectAnswer {
                 id: project.id(),
                 version: self.version()?,
-                hide_sfx: project.hides_sfx(),
                 linked_zip: project
                     .external_images()
                     .any(|(_, image)| image.member.is_some()),
@@ -71,12 +70,19 @@ impl Session {
                     .any(|(_, image)| image.member.is_none()),
                 pages: project
                     .pages()
-                    .map(|page| PageSummary {
-                        id: page.id,
-                        size: page.size,
-                        background: page.background,
-                        excluded: page.excluded,
-                        hide_sfx: page.hide_sfx,
+                    .map(|page| {
+                        let (total, visible) =
+                            page.sfx().fold((0, 0), |(total, visible), layer| {
+                                (total + 1, visible + usize::from(layer.visible))
+                            });
+                        PageSummary {
+                            id: page.id,
+                            size: page.size,
+                            background: page.background,
+                            excluded: page.excluded,
+                            sfx_total: total,
+                            sfx_visible: visible,
+                        }
                     })
                     .collect(),
             }),

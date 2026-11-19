@@ -129,6 +129,7 @@ mod tests {
             translation: String::new(),
             kind: GlossaryKind::Preserve,
             note: String::new(),
+            wiki_url: None,
             excluded_layers: [excluded].into(),
         }];
         let texts = ["普通台詞", "甲原文乙原文丙", "第二句原文", "原文"].map(str::to_owned);

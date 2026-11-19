@@ -30,7 +30,7 @@ impl Label {
             },
             ..Text::default()
         };
-        let layout = layout(&text, |style, run| {
+        let layout = layout(&text, false, |style, run| {
             fonts::chain(style, &[], run, &text.language)
         })?;
         Ok(layout.map(Self))

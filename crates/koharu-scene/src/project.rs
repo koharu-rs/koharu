@@ -31,8 +31,8 @@ pub struct Project {
     pub(crate) tiles: OrdMap<LayerId, TileMap>,
     pub(crate) glossary: Arc<Vec<GlossaryEntry>>,
     pub(crate) glossary_candidates: Arc<Vec<Vec<GlossaryEntry>>>,
+    pub(crate) suggestion_reviews: Arc<crate::glossary::SuggestionReviews>,
     pub(crate) external: OrdMap<Hash, ExternalImage>,
-    pub(crate) hide_sfx: bool,
     pub(crate) glossary_input: Option<Hash>,
 }
 
@@ -46,8 +46,6 @@ pub struct Page {
     pub background: Option<Background>,
     #[serde(default)]
     pub excluded: bool,
-    #[serde(default)]
-    pub hide_sfx: bool,
     #[serde(default)]
     pub detected: Option<bool>,
     /// Drawn first to last.
@@ -136,6 +134,25 @@ pub(crate) fn locked_inside(layer: &Layer) -> Option<LayerId> {
 /// page's top level. Paths come from `position` and are used before the
 /// tree changes, so a bad one is a bug.
 impl Page {
+    pub(crate) fn sfx(&self) -> impl Iterator<Item = &Layer> {
+        depth_first(&self.layers).into_iter().filter(|layer| {
+            matches!(&layer.content, Content::Block(block) if block.role == crate::Role::Sfx)
+        })
+    }
+
+    pub(crate) fn set_sfx_visible(&mut self, visible: bool) {
+        fn set(layers: &mut [Layer], visible: bool) {
+            for layer in layers {
+                if matches!(&layer.content, Content::Block(block) if block.role == crate::Role::Sfx)
+                {
+                    layer.visible = visible;
+                }
+                set(&mut layer.children, visible);
+            }
+        }
+        set(&mut self.layers, visible);
+    }
+
     /// The path to `id`, if this page's tree holds it.
     pub(crate) fn position(&self, id: LayerId) -> Option<Vec<usize>> {
         fn search(layers: &[Layer], id: LayerId, path: &mut Vec<usize>) -> bool {
@@ -185,14 +202,10 @@ impl Project {
             tiles: OrdMap::new(),
             glossary: Arc::default(),
             glossary_candidates: Arc::default(),
+            suggestion_reviews: Arc::default(),
             external: OrdMap::new(),
-            hide_sfx: false,
             glossary_input: None,
         }
-    }
-
-    pub fn hides_sfx(&self) -> bool {
-        self.hide_sfx
     }
 
     pub fn glossary_input(&self) -> Option<Hash> {

@@ -1,4 +1,13 @@
 {
+  "review": {
+    "title": "Revisar",
+    "correction": "Corrección de traducción",
+    "empty": "No hay sugerencias pendientes",
+    "alias": "¿«{{source}}» se refiere a {{canonical}}?",
+    "accept": "Confirmar",
+    "dismiss": "Descartar",
+    "wiki": "Enlace a LLM Wiki"
+  },
   "glossary": {
     "manage": "Gestionar glosario del proyecto",
     "globalTitle": "Glosario global",
@@ -182,6 +191,7 @@
     "title": "Historia"
   },
   "sfxVisibility": {
+    "mixed": "Parcialmente visible",
     "page": "Efectos de la página",
     "project": "Efectos del proyecto",
     "hidePage": "Ocultar traducciones de efectos en esta página",

@@ -73,6 +73,14 @@ impl Adding<'_> {
                 "c2pa": {"detection": action("c2pa.created", self.model, None)},
                 "koharu": {"detection": {"score": score}},
             });
+            if layer["role"] == "sfx" {
+                layer["attributes"]["koharu"]["sfx_pending_ocr"] = json!(true);
+            }
+            if let Part::Lettering(at) = node.part
+                && let Some(paper) = self.typography[at].as_ref().and_then(|found| found.paper)
+            {
+                layer["attributes"]["koharu"]["detection"]["paper"] = json!(paper);
+            }
             self.ops.push(serde_json::from_value(json!({
                 "op": "add_layer",
                 "id": format!("${label}"),

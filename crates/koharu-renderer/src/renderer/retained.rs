@@ -83,7 +83,12 @@ impl Renderer {
 
     /// Text layer `id`'s text laid out, falling back on the renderer's
     /// families; `None` when it has no characters.
-    pub(super) fn text(&self, id: LayerId, layer: &Text) -> Result<Option<Content>> {
+    pub(super) fn text(
+        &self,
+        id: LayerId,
+        layer: &Text,
+        role: Option<koharu_scene::Role>,
+    ) -> Result<Option<Content>> {
         // The transform places the layout when it's drawn, so moving a text
         // keeps its layout. Naming every field fails to build when one is
         // added, until the key says whether it counts.
@@ -96,9 +101,12 @@ impl Renderer {
             transform: _,
         } = layer;
         let families = self.0.config.read().font_families.clone();
-        let key = canonical(&(content, style, frame, direction, language, &families))?;
+        let dialogue = role == Some(koharu_scene::Role::Text) && style.chars.size.is_some();
+        let key = canonical(&(
+            content, style, frame, direction, language, &families, dialogue,
+        ))?;
         self.retain(key, || {
-            let layout = text::layout(layer, |style, characters| {
+            let layout = text::layout(layer, dialogue, |style, characters| {
                 fonts::chain(style, &families, characters, language)
             })
             .with_context(|| format!("text layer {id} couldn't be laid out"))?;
