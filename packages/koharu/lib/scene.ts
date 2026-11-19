@@ -9,6 +9,7 @@ import {
   type Op,
   type PageId,
   type TextStyle,
+  type Transform,
   type Value,
 } from '@koharu/ipc/protocol'
 
@@ -72,6 +73,18 @@ export function moveLayers(moves: Move[]): Promise<Change> {
   return edit(
     'move_layer',
     moves.map(({ layer, parent, index }) => ({ op: 'move_layer', layer, parent, index })),
+  )
+}
+
+/** Moves layers by `dx` and `dy` page pixels in one undo step. */
+export function nudgeLayers(layers: LayerId[], dx: number, dy: number): Promise<Change> {
+  const by: Transform = [
+    [1, 0, dx],
+    [0, 1, dy],
+  ]
+  return edit(
+    'move',
+    layers.map((layer) => ({ op: 'transform_layer', layer, transform: by })),
   )
 }
 

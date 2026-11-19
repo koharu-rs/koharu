@@ -161,6 +161,25 @@ export function isLockedLayer({ layer, ancestors }: Placed): boolean {
   return layer.locked || ancestors.some((ancestor) => ancestor.locked)
 }
 
+/** The layers an arrow key moves for `selected`: each one the scene lets move, with the layers
+ * inside a container, since a container's own move leaves them behind. A group has no geometry
+ * of its own, and a locked layer, or one in a locked layer, stays where it is. */
+export function nudgeable(layers: Layer[], selected: LayerId[]): LayerId[] {
+  const result: LayerId[] = []
+  const visit = (placed: Placed) => {
+    const { layer, ancestors } = placed
+    if (isLockedLayer(placed)) return
+    if (layer.kind !== 'group' && !result.includes(layer.id)) result.push(layer.id)
+    for (const child of layerChildren(layer))
+      visit({ layer: child, ancestors: [...ancestors, layer] })
+  }
+  for (const id of selected) {
+    const placed = findLayer(layers, id)
+    if (placed) visit(placed)
+  }
+  return result
+}
+
 /** A rich text's characters. */
 export function plainText(text: Text | null | undefined): string {
   return (text?.content ?? []).map((span) => span.insert).join('')

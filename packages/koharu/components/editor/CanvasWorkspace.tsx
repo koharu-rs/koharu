@@ -11,10 +11,23 @@ import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { TypeBar } from '@/components/editor/TypeBar'
 import { dispatch } from '@/lib/backend'
+import { nudgeable } from '@/lib/document'
 import { usePage } from '@/lib/queries'
-import { deleteSelection } from '@/lib/scene'
+import { deleteSelection, nudgeLayers } from '@/lib/scene'
 import { hexToRgba, toolKeys, useKoharuStore, type CanvasTool } from '@/lib/store'
 import { commands, type Rgba } from '@koharu/ipc/protocol'
+
+/** Each arrow key's direction in page pixels, y growing downward. */
+const nudges: Record<string, [number, number] | undefined> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+}
+
+/** The widgets that read the arrow keys themselves. */
+const arrowControls =
+  '[role="slider"],[role="spinbutton"],[role="tablist"],[role="radiogroup"],[role="menu"],[role="listbox"],[role="combobox"],[role="tree"],[role="grid"],[role="toolbar"],select'
 
 /** The canvas's place in the window. The native canvas draws the page under the web interface
  * wherever this element and its ancestors paint nothing, and takes the pointer there; the
@@ -133,6 +146,18 @@ export function CanvasWorkspace() {
       if ((event.key === 'Delete' || event.key === 'Backspace') && state.selectedLayers.length) {
         event.preventDefault()
         dispatch(deleteSelection, state.selectedLayers, page?.layers ?? [])
+        return
+      }
+      // Photoshop's Move tool: an arrow key moves the selection a pixel, and with Shift ten.
+      const step = nudges[event.key]
+      if (step && state.tool === 'select' && !command && !event.altKey && page) {
+        // A control that takes arrow keys itself, such as a slider or a menu, keeps them.
+        if (event.target instanceof Element && event.target.closest(arrowControls)) return
+        const layers = nudgeable(page.layers, state.selectedLayers)
+        if (!layers.length) return
+        event.preventDefault()
+        const distance = event.shiftKey ? 10 : 1
+        dispatch(nudgeLayers, layers, step[0] * distance, step[1] * distance)
         return
       }
       // Photoshop's Fit on Screen.
