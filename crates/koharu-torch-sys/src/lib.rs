@@ -13,10 +13,10 @@
 )]
 
 /// The koharu-rs/torch shim release the runtime loads.
-pub const SHIM: &str = "2.15.0+koharu.2";
+pub const SHIM: &str = "2.15.0+koharu.3";
 
 /// The koharu-rs/torch libtorch release `SHIM` was built against, which the
 /// runtime loads beside it.
-pub const LIBTORCH: &str = "2.15.0+libtorch.1";
+pub const LIBTORCH: &str = "2.15.0+libtorch.2";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

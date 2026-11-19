@@ -409,7 +409,8 @@ impl DinoAttention {
 }
 
 /// Upstream's `scaled_dot_product_attention`, a chunk of query rows at a time
-/// where libtorch has no fused kernel, as on ROCm for RDNA GPUs
+/// where libtorch has no fused kernel: on AMD GPUs that AOTriton doesn't cover,
+/// such as RDNA2's, or covers only experimentally, such as the RX 9060's
 /// (koharu-rs/koharu#1408). Its math fallback holds the whole score matrix:
 /// for the full-attention layers' 25,604 tokens, 6 × 25,604² scores, 7.9 GB
 /// in BF16 and again for their softmax, past a 16 GB GPU. Each query row's
