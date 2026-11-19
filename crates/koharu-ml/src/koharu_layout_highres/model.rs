@@ -400,14 +400,45 @@ impl DinoAttention {
         let query = project(&self.query)?;
         let key = project(&self.key)?;
         let value = project(&self.value)?;
-        let context = Tensor::scaled_dot_product_attention(
-            &query, &key, &value, None, 0.0, false, None, false,
-        )?
-        .permute([0, 2, 1, 3])?
-        .contiguous(koharu_torch::MemoryFormat::Contiguous)?
-        .view([batch_size, sequence_length, DINO_DIM])?;
+        let context = attention(&query, &key, &value)?
+            .permute([0, 2, 1, 3])?
+            .contiguous(koharu_torch::MemoryFormat::Contiguous)?
+            .view([batch_size, sequence_length, DINO_DIM])?;
         self.dense.forward(&context)
     }
+}
+
+/// Query rows `attention` takes at a time on libtorch's math fallback.
+const ATTENTION_ROWS: i64 = 1024;
+
+/// Upstream's `scaled_dot_product_attention`, a chunk of query rows at a time
+/// where libtorch has no fused kernel, as on ROCm for RDNA GPUs
+/// (koharu-rs/koharu#1408). Its math fallback holds the whole score matrix:
+/// for the full-attention layers' 25,604 tokens, 6 × 25,604² scores, 7.9 GB
+/// in BF16 and again for their softmax, past a 16 GB GPU. Each query row's
+/// softmax is its own, so the chunks give the single call's result. A fused
+/// kernel takes the whole call, as upstream's does: it holds no score matrix,
+/// and it rounds differently by chunk, enough to move this model's scores.
+fn attention(query: &Tensor, key: &Tensor, value: &Tensor) -> koharu_torch::Result<Tensor> {
+    // PyTorch's `SDPBackend::math`.
+    const MATH: i64 = 0;
+    let attend = |query: &Tensor| {
+        Tensor::scaled_dot_product_attention(query, key, value, None, 0.0, false, None, false)
+    };
+    let rows = query.size()[2];
+    // libtorch registers its kernel choice for CUDA devices, which HIP ones
+    // are to it, and not for MPS.
+    let math = matches!(query.device(), Device::Cuda(_))
+        && Tensor::internal_fused_sdp_choice(query, key, value, None, 0.0, false, None, false)?
+            == MATH;
+    if !math || rows <= ATTENTION_ROWS {
+        return attend(query);
+    }
+    let chunks = (0..rows)
+        .step_by(ATTENTION_ROWS as usize)
+        .map(|start| attend(&query.narrow(2, start, ATTENTION_ROWS.min(rows - start))?))
+        .collect::<koharu_torch::Result<Vec<_>>>()?;
+    Tensor::cat(&chunks, 2)
 }
 
 #[derive(Debug)]
