@@ -4986,8 +4986,7 @@ dependencies = [
 [[package]]
 name = "imageproc"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7b27bc0867dc40df08deb53d6e96342db6e0702e7ae33ed09a4eba33e594b05"
+source = "git+https://github.com/mayocream/imageproc?rev=8c64b41c0c715449b250d6c4e06516fe8310a7fa#8c64b41c0c715449b250d6c4e06516fe8310a7fa"
 dependencies = [
  "ab_glyph",
  "approx",
@@ -11394,7 +11393,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
  "windows-sys 0.59.0",

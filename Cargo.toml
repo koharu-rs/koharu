@@ -208,6 +208,10 @@ tauri-winit-gtk4 = { git = "https://github.com/mayocream/winit-gtk4", rev = "bf2
 # lost the device when a frame's acquire waited past 1 s, as it does while a
 # model keeps the GPU busy (#1408).
 wgpu = { git = "https://github.com/mayocream/wgpu", rev = "d1a03ed3a2fe5a670d467bae23279372daf66da6" }
+# The published 0.27.0 with image-rs/imageproc#824: connected_components
+# panicked when every pixel started a component of its own, as a layout
+# detection's 1×1 glyph mask does.
+imageproc = { git = "https://github.com/mayocream/imageproc", rev = "8c64b41c0c715449b250d6c4e06516fe8310a7fa" }
 
 [profile.dev]
 # Image decoding and the models' pre- and post-processing ran 10 to 40 times
