@@ -6,7 +6,7 @@
 //! outlives any one token.
 
 use std::{
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, SystemTime},
 };
 
@@ -76,11 +76,22 @@ fn retry_after(error: &http_client::Error, backoff: Option<Duration>) -> Option<
 }
 
 impl Http {
-    pub(super) fn with_headers(headers: HeaderMap) -> Self {
-        Self {
+    pub(super) fn with_headers(headers: HeaderMap) -> Result<Self> {
+        static CLIENT: LazyLock<reqwest::Result<ReqwestClient>> = LazyLock::new(|| {
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .read_timeout(Duration::from_secs(60))
+                .build()
+                .map(Into::into)
+        });
+        Ok(Self {
+            client: CLIENT
+                .as_ref()
+                .map_err(|error| anyhow::anyhow!("couldn't build the hosted HTTP client: {error}"))?
+                .clone(),
             headers,
-            ..Self::default()
-        }
+            sign_in: None,
+        })
     }
 
     /// A client whose requests carry `sign_in`'s credential.

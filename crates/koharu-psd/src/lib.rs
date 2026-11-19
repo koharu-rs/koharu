@@ -76,6 +76,7 @@ pub fn export(
         renderer,
         frame: &frame,
         labels,
+        hide_sfx: project.hides_sfx() || view.hide_sfx,
         size: (width, height),
         builder: PsdBuilder::new(width, height).resolution(72.0),
         folders: Vec::new(),
@@ -119,6 +120,7 @@ struct Export<'a> {
     renderer: &'a Renderer,
     frame: &'a Frame,
     labels: &'a Labels,
+    hide_sfx: bool,
     size: (u32, u32),
     builder: PsdBuilder,
     /// Each group's blocks and mask, which the builder can't give its folder
@@ -180,18 +182,24 @@ impl Export<'_> {
         let drawn = drawn(self.frame.layer(layer.id), || format!("layer {}", layer.id))?;
         match &layer.content {
             Content::Group(_) | Content::Panel(_) => {
-                self.folder(layer, blocks, |export| export.children(layer))?;
+                self.folder(layer, layer.visible, blocks, |export| {
+                    export.children(layer)
+                })?;
                 return Ok(());
             }
             Content::Balloon(balloon) => {
-                self.folder(layer, blocks, |export| {
+                self.folder(layer, layer.visible, blocks, |export| {
                     export.outline(balloon)?;
                     export.children(layer)
                 })?;
                 return Ok(());
             }
             Content::Block(block) => {
-                self.folder(layer, blocks, |export| export.block(layer.id, block))?;
+                let visible =
+                    layer.visible && !(self.hide_sfx && block.role == koharu_scene::Role::Sfx);
+                self.folder(layer, visible, blocks, |export| {
+                    export.block(layer.id, block)
+                })?;
                 return Ok(());
             }
             Content::Shape(shape) => blocks.extend(blocks::shape(shape, self.size)?),
@@ -223,6 +231,7 @@ impl Export<'_> {
     fn folder(
         &mut self,
         layer: &Layer,
+        visible: bool,
         blocks: Vec<TaggedBlock>,
         inside: impl FnOnce(&mut Self) -> Result<()>,
     ) -> Result<()> {
@@ -230,7 +239,7 @@ impl Export<'_> {
             name: layer.name.clone(),
             blend_mode: blend_mode(layer.blend),
             opacity: alpha(layer.opacity),
-            visible: layer.visible,
+            visible,
             open: true,
         });
         inside(self)?;

@@ -264,9 +264,12 @@ function StoryText({
                   disabled={locked}
                   className='size-5 rounded-md border-primary/20 bg-primary/15 text-accent-foreground opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100 hover:bg-primary/25 hover:text-accent-foreground focus-visible:opacity-100 dark:border-primary/30 dark:bg-primary/25 dark:hover:bg-primary/35'
                   onClick={() =>
-                    void call(commands.runPipeline, { blocks: [layer.id] }, ['translate']).catch(
-                      () => undefined,
-                    )
+                    void call(
+                      commands.runPipeline,
+                      { blocks: [layer.id] },
+                      ['translate'],
+                      false,
+                    ).catch(() => undefined)
                   }
                 />
               }

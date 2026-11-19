@@ -110,6 +110,15 @@ pub(crate) fn changed(before: &Project, after: &Project) -> (PageChanges, BTreeS
         let owner = after.index.get(&layer).or_else(|| before.index.get(&layer));
         changed.extend(owner.copied());
     }
+    if before.external != after.external {
+        changed.extend(after.pages().filter_map(|page| {
+            let hash = page.background?.file;
+            (before.external_image(&hash) != after.external_image(&hash)).then_some(page.id)
+        }));
+    }
+    if before.hide_sfx != after.hide_sfx {
+        changed.extend(after.pages().map(|page| page.id));
+    }
     let stayed_before = before
         .order
         .iter()

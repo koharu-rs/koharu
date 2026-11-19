@@ -78,7 +78,7 @@ fn only_compatible_versions_open() {
     let (_dir, path) = path();
     drop(Session::create(&path).expect("a project"));
     let bytes = fs_err::read(&path).expect("its bytes");
-    for version in ["1.1.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
+    for version in ["1.4.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
         let copy = path.with_extension(format!("v{version}"));
         fs_err::copy(&path, &copy).expect("a copy");
         let conn = rusqlite::Connection::open(&copy).expect("the file opens");
@@ -94,7 +94,7 @@ fn only_compatible_versions_open() {
         assert_eq!(fs_err::read(&copy).expect("its bytes"), before, "{version}");
     }
     assert_eq!(fs_err::read(&path).expect("its bytes"), bytes);
-    Session::open(&path).expect("1.0.0 opens");
+    Session::open(&path).expect("1.1.0 opens");
 }
 
 #[test]

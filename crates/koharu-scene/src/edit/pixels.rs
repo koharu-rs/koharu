@@ -68,12 +68,16 @@ impl Run<'_, '_> {
     }
 
     pub(super) fn add_file(&mut self, bytes: &[u8]) -> Result<()> {
-        self.tx.put_blob(bytes)?;
+        let hash = self.tx.put_blob(bytes)?;
+        self.project.external.remove(&hash);
         Ok(())
     }
 
     /// The size of an added image, which a page made from it takes.
     pub(super) fn image_size(&self, op: usize, file: &Hash) -> Result<Size> {
+        if let Some(source) = self.project.external_image(file) {
+            return Ok(source.size);
+        }
         let bytes = match self.tx.blob(file) {
             Err(Error::NotFound(_)) => {
                 return Err(Error::invalid(op, format!("file {file} was not added")));

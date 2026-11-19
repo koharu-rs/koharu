@@ -131,9 +131,9 @@ fn catalog_id(vendor: &str) -> Result<ProviderId> {
     ProviderId::catalog(vendor).with_context(|| format!("rig knows no vendor `{vendor}`"))
 }
 
-fn transport(vendor: &str) -> Http {
+fn transport(vendor: &str) -> Result<Http> {
     if vendor != OPENCODE_GO {
-        return Http::default();
+        return Ok(Http::default());
     }
     // A hosted model is connected once per conversation. Replace rig's
     // per-request fallback so that all turns share the same Go session.
@@ -176,7 +176,7 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
             );
             ConnectOptions::new()
                 .api_key(key.unwrap_or_default())
-                .http(transport(vendor))
+                .http(transport(vendor)?)
         }
     };
     let options = match base_url {
@@ -234,7 +234,7 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
         Some(base_url) => config.with_base_url(base_url),
         None => config,
     };
-    let http = transport(vendor);
+    let http = transport(vendor)?;
     let listed = match config {
         ProviderConfig::OpenAi(config) => config.connect(http).list_models().await?,
         ProviderConfig::Anthropic(config) => config.connect(http).list_models().await?,

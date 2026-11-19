@@ -57,9 +57,15 @@ export interface Camera {
 }
 
 /** The right pane's tabs. */
-export type Panel = 'layers' | 'story' | 'agent'
-export type PipelineScope = 'selected-pages' | 'project'
-export const pipelineStages: readonly Stage[] = ['detect', 'recognize', 'inpaint', 'translate']
+export type Panel = 'layers' | 'story' | 'glossary' | 'agent'
+export type PipelineScope = 'selected-pages' | 'after-selected-pages' | 'project'
+export const pipelineStages: readonly Stage[] = [
+  'detect',
+  'recognize',
+  'inpaint',
+  'glossary',
+  'translate',
+]
 
 /** A pipeline run as the activity center shows it, from the pipeline's events. */
 export interface Job {
@@ -71,6 +77,10 @@ export interface Job {
   /** The stage started last, and its page. */
   stage: Stage | null
   page: PageId | null
+  glossary?: Pick<
+    Extract<PipelineEvent, { kind: 'glossary_progress' }>,
+    'phase' | 'completed' | 'total'
+  > | null
   error: string | null
 }
 
@@ -138,7 +148,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   panel: 'layers',
   storyHover: null,
   processingScope: 'project',
-  processingStages: [...pipelineStages],
+  processingStages: pipelineStages.filter((stage) => stage !== 'glossary'),
   settingsOpen: false,
   historyOpen: false,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
@@ -192,20 +202,32 @@ function fold(job: Job | undefined, event: PipelineEvent): Job {
     case 'queued':
       return { ...current, total: event.steps }
     case 'started':
-      return { ...current, stage: event.stage, page: event.page }
+      return {
+        ...current,
+        stage: event.stage,
+        page: event.stage === 'glossary' ? null : event.page,
+      }
+    case 'glossary_progress':
+      return {
+        ...current,
+        glossary: { phase: event.phase, completed: event.completed, total: event.total },
+      }
     case 'finished':
-      return { ...current, completed: current.completed + 1 }
+      return event.stage === 'glossary'
+        ? { ...current, completed: current.completed + 1, glossary: null }
+        : { ...current, completed: current.completed + 1 }
     case 'ended':
       // A failure names its own page and stage: the last started may be another page in flight.
       return event.outcome.kind === 'failed'
         ? {
             ...current,
             state: 'failed',
+            glossary: null,
             stage: event.outcome.stage,
-            page: event.outcome.page,
+            page: event.outcome.stage === 'glossary' ? null : event.outcome.page,
             error: event.outcome.reason,
           }
-        : { ...current, state: event.outcome.kind, error: null }
+        : { ...current, state: event.outcome.kind, glossary: null, error: null }
   }
 }
 

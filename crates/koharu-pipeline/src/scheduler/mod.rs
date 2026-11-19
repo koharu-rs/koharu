@@ -340,6 +340,7 @@ impl Scheduler {
                     blocks: job.blocks.clone(),
                     session: Arc::clone(&run.session),
                     cancel: run.cancel.clone(),
+                    resume: run.resume,
                 }
             })
             .collect();
@@ -348,6 +349,7 @@ impl Scheduler {
         let inputs = Inputs {
             config: Arc::clone(&run.config),
             area: run.area.clone(),
+            glossary_pages: Arc::clone(&run.glossary_pages),
             conversation: (first.stage == Stage::Translate).then(|| {
                 self.conversations
                     .lock(run.project)

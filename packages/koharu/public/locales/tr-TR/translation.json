@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "Proje sözlüğünü yönet",
+    "globalTitle": "Genel sözlük",
+    "globalScope": "Tüm projelerde geçerlidir. Kaynak metin aynıysa proje girdisi önceliklidir.",
+    "blockedTable": "Çevrilmeyecekler listesi",
+    "search": "Girdileri ara",
+    "noEntries": "Eşleşen girdi yok.",
+    "edit": "Düzenle",
+    "batchProgress": "Terim analizi {{completed}} / {{total}} grup",
+    "mergeBatchProgress": "Terim grupları inceleniyor {{completed}} / {{total}}",
+    "title": "Terim sözlüğü",
+    "extract": "Tüm metni çıkar",
+    "exportSource": "Kaynak metni dışa aktar",
+    "analyze": "Terimleri incele",
+    "check": "Çevirileri denetle",
+    "noIssues": "Terim sorunu bulunamadı",
+    "page": "Sayfa {{page}}",
+    "kind": "Girdi türü",
+    "source": "Kaynak metin",
+    "translation": "Tercih edilen çeviri",
+    "note": "Not",
+    "duplicate": "Bu kaynak için zaten bir girdi var",
+    "save": "Değişiklikleri kaydet",
+    "add": "Girdi ekle",
+    "cancel": "İptal",
+    "remove": "Kaldır",
+    "candidates": "Terim adayları",
+    "noCandidates": "Yeni aday yok",
+    "occurrences": "Geçiş: {{count}}",
+    "excludeLine": "Bu satırı hariç tut",
+    "restoreLine": "Bu satırı geri ekle",
+    "extractionStarted": "Kaynak metin çıkarılıyor",
+    "extractionCurrent": "Algılanan metnin tamamı çıkarıldı",
+    "analyzing": "Terimler inceleniyor…",
+    "kinds": {
+      "person": "Kişi",
+      "place": "Yer",
+      "term": "Terim",
+      "preserve": "İfadeyi aynen koru",
+      "preserve_block": "Özgün metin bloğunu koru"
+    }
+  },
+  "linked": {
+    "createZip": "ZIP veya CBZ dosyasından oluştur",
+    "createFolder": "Görsel klasöründen oluştur",
+    "open": "Proje dosyasını aç",
+    "relink": "Özgün görselleri yeniden bağla",
+    "zip": "ZIP veya CBZ",
+    "folder": "Görsel klasörü"
+  },
   "about": {
     "author": "Yazar",
     "description": "Manga çeviri araçları",
@@ -104,6 +154,8 @@
     "close": "Geçmişi kapat",
     "opened": "Açıldığında",
     "steps": {
+      "edit_glossary": "Terim sözlüğünü düzenle",
+      "relink_originals": "Özgün görselleri yeniden bağla",
       "add_text": "Metin ekle",
       "delete_layers": "Katmanları sil",
       "delete_pages": "Sayfaları sil",
@@ -129,7 +181,19 @@
     },
     "title": "Geçmiş"
   },
+  "sfxVisibility": {
+    "page": "Sayfa ses efektleri",
+    "project": "Proje ses efektleri",
+    "hidePage": "Bu sayfadaki ses efekti çevirilerini gizle",
+    "showPage": "Bu sayfadaki ses efekti çevirilerini göster",
+    "hideProject": "Tüm projedeki ses efekti çevirilerini gizle",
+    "showProject": "Proje ses efektlerinin görünürlüğünü geri yükle"
+  },
   "inference": {
+    "resume": "Devam et",
+    "resumeDescription": "Yalnızca seçilen aşamalardaki tamamlanmamış işleri yürütür.",
+    "afterSelectedPages": "Seçili sayfalardan sonra",
+    "afterSelectedPagesDescription": "Son seçili sayfadan veya mevcut sayfadan sonra başlar.",
     "entireProject": "Tüm proje",
     "entireProjectDescription": "Bu projedeki tüm sayfaları işler.",
     "model": "Model",
@@ -142,6 +206,7 @@
     "runProcessing": "İşlemeyi çalıştır",
     "scope": "Kapsam",
     "scopeShort": {
+      "after-selected-pages": "Seçimden sonra",
       "project": "Proje",
       "selected-pages": "Seçim"
     },
@@ -275,6 +340,8 @@
     "useModel": "{{provider}} sağlayıcısından {{model}} kullan"
   },
   "navigator": {
+    "excludePage": "{{page}} sayfasını işlem dışında bırak",
+    "includePage": "{{page}} sayfasını işleme dahil et",
     "actionsFor": "{{page}} için eylemler",
     "delete": "Sil",
     "deleteDescription": "“{{page}}” ve katmanları silinir. Bu işlemi geri alabilirsiniz.",
@@ -302,12 +369,14 @@
     "title": "Çeviri çıktısı"
   },
   "phase": {
+    "glossary": "Terim analizi",
     "detect": "Algılama",
     "inpaint": "Doldurma",
     "recognize": "OCR",
     "translate": "Çeviri"
   },
   "phaseDescription": {
+    "glossary": "Çeviriden önce projenin kaynak metnindeki terimleri çıkarır.",
     "detect": "Sayfadaki metni bulur.",
     "inpaint": "Metin kaldırıldıktan sonra çizimi yeniden oluşturur.",
     "recognize": "Her bölgenin içindeki metni okur.",
@@ -344,6 +413,10 @@
     "backToEditor": "Düzenleyiciye dön",
     "loading": "Tercihler yükleniyor…",
     "pipeline": {
+      "followTranslator": "Çeviri modelini kullan",
+      "glossaryReasoning": "Akıl yürütme düzeyi",
+      "glossaryPrompt": "Özel istem",
+      "glossaryPromptDescription": "Terim çıkarımı ve çelişkili adayların incelenmesi için yönergeler ekleyin. Varsayılan yönergeleri kullanmak için boş bırakın.",
       "description": "Her sayfayı işlemek için kullanılan modelleri ve seçenekleri seçin.",
       "model": "Model",
       "modelLabel": "{{stage}} modeli",

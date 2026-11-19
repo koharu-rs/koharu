@@ -117,6 +117,18 @@ impl Hash {
     }
 }
 
+impl Ord for Hash {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_bytes().cmp(other.as_bytes())
+    }
+}
+
+impl PartialOrd for Hash {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// The document's version: new with each edit, and restored by undo and redo.
 /// Within a session, equal revisions are the same document; they have no order,
 /// so they are not compared.

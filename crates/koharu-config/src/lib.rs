@@ -41,7 +41,19 @@ pub fn update<T: Section>(edit: impl FnOnce(&mut T)) -> Result<()> {
     write(&home()?.join("config.toml"), edit)
 }
 
+/// The separate state directory selected by a developer launcher.
+pub fn dev_data_dir() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        std::env::var_os("KOHARU_DEV_DATA_DIR").map(PathBuf::from)
+    } else {
+        None
+    }
+}
+
 fn home() -> Result<PathBuf> {
+    if let Some(path) = dev_data_dir() {
+        return Ok(path);
+    }
     dirs::home_dir()
         .map(|home| home.join(".koharu"))
         .ok_or(Error::NoHome)

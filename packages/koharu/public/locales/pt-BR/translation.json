@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "Gerenciar glossário do projeto",
+    "globalTitle": "Glossário global",
+    "globalScope": "Vale para todos os projetos. A entrada do projeto tem prioridade quando o texto original é igual.",
+    "blockedTable": "Lista de não traduzir",
+    "search": "Buscar entradas",
+    "noEntries": "Nenhuma entrada encontrada.",
+    "edit": "Editar",
+    "batchProgress": "Análise de terminologia {{completed}} / {{total}} lotes",
+    "mergeBatchProgress": "Revisão dos lotes de terminologia {{completed}} / {{total}}",
+    "title": "Glossário",
+    "extract": "Extrair todo o texto",
+    "exportSource": "Exportar texto original",
+    "analyze": "Analisar terminologia",
+    "check": "Verificar traduções",
+    "noIssues": "Nenhum problema de terminologia encontrado",
+    "page": "Página {{page}}",
+    "kind": "Tipo de entrada",
+    "source": "Texto original",
+    "translation": "Tradução preferida",
+    "note": "Observação",
+    "duplicate": "Já existe uma entrada para este original",
+    "save": "Salvar alterações",
+    "add": "Adicionar entrada",
+    "cancel": "Cancelar",
+    "remove": "Remover",
+    "candidates": "Termos candidatos",
+    "noCandidates": "Nenhum candidato novo",
+    "occurrences": "Ocorrências: {{count}}",
+    "excludeLine": "Excluir esta fala",
+    "restoreLine": "Restaurar esta fala",
+    "extractionStarted": "Extração do original iniciada",
+    "extractionCurrent": "Todo o texto detectado foi extraído",
+    "analyzing": "Analisando a terminologia…",
+    "kinds": {
+      "person": "Pessoa",
+      "place": "Lugar",
+      "term": "Termo",
+      "preserve": "Preservar expressão",
+      "preserve_block": "Preservar bloco original"
+    }
+  },
+  "linked": {
+    "createZip": "Criar a partir de ZIP ou CBZ",
+    "createFolder": "Criar a partir de pasta de imagens",
+    "open": "Abrir arquivo de projeto",
+    "relink": "Revincular imagens originais",
+    "zip": "ZIP ou CBZ",
+    "folder": "Pasta de imagens"
+  },
   "about": {
     "author": "Autor",
     "description": "Ferramentas de tradução de mangá",
@@ -104,6 +154,8 @@
     "close": "Fechar histórico",
     "opened": "Ao abrir",
     "steps": {
+      "edit_glossary": "Editar glossário",
+      "relink_originals": "Revincular imagens originais",
       "add_text": "Adicionar texto",
       "delete_layers": "Excluir camadas",
       "delete_pages": "Excluir páginas",
@@ -129,7 +181,19 @@
     },
     "title": "Histórico"
   },
+  "sfxVisibility": {
+    "page": "Efeitos da página",
+    "project": "Efeitos do projeto",
+    "hidePage": "Ocultar traduções de efeitos nesta página",
+    "showPage": "Mostrar traduções de efeitos nesta página",
+    "hideProject": "Ocultar traduções de efeitos em todo o projeto",
+    "showProject": "Restaurar a visibilidade dos efeitos do projeto"
+  },
   "inference": {
+    "resume": "Continuar",
+    "resumeDescription": "Processa apenas o trabalho pendente nas etapas selecionadas.",
+    "afterSelectedPages": "Após as páginas selecionadas",
+    "afterSelectedPagesDescription": "Começa após a última página selecionada ou após a página atual.",
     "entireProject": "Projeto inteiro",
     "entireProjectDescription": "Processa todas as páginas deste projeto.",
     "model": "Modelo",
@@ -142,6 +206,7 @@
     "runProcessing": "Executar processamento",
     "scope": "Escopo",
     "scopeShort": {
+      "after-selected-pages": "Após a seleção",
       "project": "Projeto",
       "selected-pages": "Seleção"
     },
@@ -275,6 +340,8 @@
     "useModel": "Usar {{model}} de {{provider}}"
   },
   "navigator": {
+    "excludePage": "Excluir {{page}} do processamento",
+    "includePage": "Incluir {{page}} no processamento",
     "actionsFor": "Ações para {{page}}",
     "delete": "Excluir",
     "deleteDescription": "Isso exclui “{{page}}” e suas camadas. Você pode desfazer.",
@@ -302,12 +369,14 @@
     "title": "Saída da tradução"
   },
   "phase": {
+    "glossary": "Análise de terminologia",
     "detect": "Detecção",
     "inpaint": "Preenchimento",
     "recognize": "OCR",
     "translate": "Tradução"
   },
   "phaseDescription": {
+    "glossary": "Extrai os termos do texto original do projeto antes da tradução.",
     "detect": "Localiza o texto na página.",
     "inpaint": "Reconstrói a arte após remover o texto.",
     "recognize": "Lê o texto dentro de cada região.",
@@ -344,6 +413,10 @@
     "backToEditor": "Voltar ao editor",
     "loading": "Carregando preferências…",
     "pipeline": {
+      "followTranslator": "Usar o modelo de tradução",
+      "glossaryReasoning": "Nível de raciocínio",
+      "glossaryPrompt": "Prompt personalizado",
+      "glossaryPromptDescription": "Adicione orientações para a extração de termos e a revisão de divergências. Deixe em branco para usar as instruções padrão.",
       "description": "Escolha os modelos e opções usados para processar cada página.",
       "model": "Modelo",
       "modelLabel": "Modelo de {{stage}}",

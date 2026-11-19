@@ -82,7 +82,16 @@ fn write(
     };
     for (index, &page) in pages.iter().enumerate() {
         let number = format!("{:0digits$}", index + 1);
-        let frame = app.renderer.render(&session.lock(), page)?;
+        let frame = {
+            let session = session.lock();
+            let project = session.project();
+            if let Some(background) = project.page(page)?.background
+                && project.external_image(&background.file).is_some()
+            {
+                session.file(&background.file)?;
+            }
+            app.renderer.render(&session, page)?
+        };
         match (format, &mut archive) {
             (ExportFormat::Psd, _) => {
                 let psd = koharu_psd::export(&session.lock(), &app.renderer, page, labels)?;

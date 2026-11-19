@@ -1,25 +1,35 @@
 //! A page's turn of the conversation.
 
-use std::future::IntoFuture;
-
 use anyhow::{Context as _, Result, bail, ensure};
+use futures::future::join_all;
 use koharu_llm::rig::{
     completion::{
-        AssistantContent, GenerationOptions, Message, Reasoning, Usage,
+        AssistantContent, Message, Reasoning, Usage,
         message::{DocumentSourceKind, Image, ImageMediaType, UserContent},
     },
     driver::DynModel,
     operation::Completion,
 };
+use koharu_scene::{GlossaryEntry, GlossaryKind, LayerId};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use super::Conversation;
+use super::{Conversation, rules::Rules};
+
+const PROTECTED_BATCH_LINES: usize = 4;
+const INDEPENDENT_HOSTED_WORKERS: usize = 4;
+
+struct Batch<'a> {
+    system: String,
+    input: String,
+    keys: Vec<String>,
+    rules: Rules<'a>,
+}
 
 pub(super) struct Turn<'a> {
     system: String,
-    page: String,
-    keys: Vec<String>,
+    layers: Vec<LayerId>,
+    glossary: &'a [GlossaryEntry],
     texts: &'a [String],
     /// The page, which the model sees with its texts.
     image: Option<&'a str>,
@@ -31,15 +41,16 @@ impl<'a> Turn<'a> {
     pub(super) fn new(
         system: String,
         texts: &'a [String],
+        layers: impl ExactSizeIterator<Item = LayerId>,
+        glossary: &'a [GlossaryEntry],
         image: Option<&'a str>,
         reasoning: Option<Reasoning>,
         cancel: &'a CancellationToken,
     ) -> Self {
-        let keys = keys(texts.len());
         Self {
             system,
-            page: numbered(&keys, texts.iter().map(String::as_str)),
-            keys,
+            layers: layers.collect(),
+            glossary,
             texts,
             image,
             reasoning,
@@ -47,46 +58,156 @@ impl<'a> Turn<'a> {
         }
     }
 
-    /// The page's translations, recorded in `conversation` once they pass;
-    /// `None` when the run stopped first.
+    /// The page's translations, recorded in `conversation` when its model uses
+    /// history. `None` when the run stopped first.
     pub(super) async fn take(
         self,
         conversation: &mut Conversation,
         model: &DynModel<Completion>,
     ) -> Result<Option<Vec<String>>> {
-        conversation.context.fit(model).await?;
-        let history: Vec<Message> = conversation
-            .context
-            .messages()
-            .iter()
-            .map(|message| Message::clone(message))
-            .collect();
-        let Some(mut asked) = self.ask(model, history).await? else {
-            return Ok(None);
+        let source_keys = keys(self.texts.len());
+        let isolated = model.spec().is_some_and(koharu_llm::go_deepseek);
+        let protected = self.glossary.iter().any(|entry| {
+            entry.kind == GlossaryKind::Preserve
+                && self
+                    .layers
+                    .iter()
+                    .zip(self.texts)
+                    .any(|(&layer, text)| entry.applies_to(layer) && entry.matches(text))
+        });
+        let width = if isolated {
+            1
+        } else if protected {
+            PROTECTED_BATCH_LINES
+        } else {
+            self.texts.len().max(1)
         };
-        // A small model can answer a page with its answer to the page
-        // before, word for word, as Index-Translate 2B did on one of 16
-        // Blue Archive pages; without that answer to copy, it reads the page.
-        if self.echoes(&asked.0, conversation.last.as_ref()) {
-            tracing::info!("the answer echoed the page before's; asking again without the history");
-            let Some(again) = self.ask(model, Vec::new()).await? else {
+        let batches: Vec<_> = self
+            .layers
+            .chunks(width)
+            .zip(source_keys.chunks(width).zip(self.texts.chunks(width)))
+            .map(|(layers, (keys, texts))| {
+                let mut system = self.system.clone();
+                let (rules, fields) = Rules::prepare(
+                    self.glossary,
+                    layers.iter().copied().zip(keys.iter().zip(texts)),
+                    &mut system,
+                );
+                let (keys, values): (Vec<_>, Vec<_>) = fields.into_iter().unzip();
+                let input = numbered(&keys, values.into_iter());
+                Batch {
+                    system,
+                    input,
+                    keys,
+                    rules,
+                }
+            })
+            .collect();
+
+        if isolated {
+            // Go's DeepSeek can permute the values of a correctly numbered reply.
+            // Each request sees one source block, without earlier numbered turns.
+            return Ok(self
+                .independent(&batches, model, INDEPENDENT_HOSTED_WORKERS)
+                .await?
+                .map(|(translations, _)| translations));
+        }
+
+        let (translations, messages, usage) = if protected {
+            // Batches on these pages have their own keys and literal positions.
+            // Keep previous pages' numbered answers out of these requests.
+            let workers = if model
+                .spec()
+                .is_some_and(|spec| spec.provider.vendor() != koharu_llm::KOHARU)
+            {
+                2
+            } else {
+                1
+            };
+            let Some((translations, usage)) = self.independent(&batches, model, workers).await?
+            else {
                 return Ok(None);
             };
-            asked = again;
-        }
-        let (translations, messages, usage) = asked;
-        conversation.context.record([(remembered(messages), usage)]);
+            let messages = vec![
+                Message::user(numbered(
+                    &source_keys,
+                    self.texts.iter().map(String::as_str),
+                )),
+                Message::assistant(numbered(
+                    &source_keys,
+                    translations.iter().map(String::as_str),
+                )),
+            ];
+            (translations, messages, usage)
+        } else {
+            let batch = &batches[0];
+            conversation.context.fit(model).await?;
+            let history = conversation
+                .context
+                .messages()
+                .iter()
+                .map(|message| Message::clone(message))
+                .collect();
+            let Some(mut asked) = self.ask(batch, model, history).await? else {
+                return Ok(None);
+            };
+            // A small model can echo the previous page without reading the new input.
+            if self.echoes(&asked.0, conversation.last.as_ref()) {
+                tracing::info!(
+                    "the answer echoed the page before's; asking again without the history"
+                );
+                let Some(again) = self.ask(batch, model, Vec::new()).await? else {
+                    return Ok(None);
+                };
+                asked = again;
+            }
+            let (translations, messages, usage) = asked;
+            (translations, remembered(messages), usage)
+        };
+        conversation.context.record([(messages, usage)]);
         conversation.last = Some((self.texts.to_vec(), translations.clone()));
         Ok(Some(translations))
+    }
+
+    async fn independent(
+        &self,
+        batches: &[Batch<'_>],
+        model: &DynModel<Completion>,
+        workers: usize,
+    ) -> Result<Option<(Vec<String>, Usage)>> {
+        let mut translations = Vec::with_capacity(self.texts.len());
+        let mut usage = Usage::default();
+        for wave in batches.chunks(workers) {
+            let mut requests = Vec::with_capacity(wave.len());
+            for batch in wave {
+                requests.push(self.ask(batch, model, Vec::new()));
+            }
+            for result in join_all(requests).await {
+                let Some((lines, _, used)) = result? else {
+                    return Ok(None);
+                };
+                translations.extend(lines);
+                usage += used;
+            }
+        }
+        Ok(Some((translations, usage)))
     }
 
     /// The page asked after `history`: its translations, the turn's
     /// messages, and their usage; `None` when the run stopped first.
     async fn ask(
         &self,
+        batch: &Batch<'_>,
         model: &DynModel<Completion>,
-        history: Vec<Message>,
+        mut history: Vec<Message>,
     ) -> Result<Option<(Vec<String>, Vec<Message>, Usage)>> {
+        if batch.keys.is_empty() {
+            return Ok(Some((
+                batch.rules.restore(&[]),
+                Vec::new(),
+                Usage::default(),
+            )));
+        }
         let mut content = Vec::new();
         if let Some(image) = self.image {
             ensure!(
@@ -100,27 +221,43 @@ impl<'a> Turn<'a> {
                 native: None,
             }));
         }
-        content.push(UserContent::text(self.page.clone()));
-        let mut options = GenerationOptions::default();
-        if let Some(reasoning) = self.reasoning {
-            options = options.reasoning(reasoning);
+        content.push(UserContent::text(batch.input.clone()));
+        let prompt = Message::from(content);
+        let schema = schema(&batch.keys)?;
+        let mut system = batch.system.clone();
+        let mut retry = false;
+        loop {
+            let request = koharu_llm::answers(model, schema.clone(), self.reasoning)
+                .preamble(&system)
+                .build()
+                .prompt(prompt.clone())
+                .history(std::mem::take(&mut history));
+            let response = tokio::select! {
+                response = koharu_llm::complete(model, request) => response?,
+                () = self.cancel.cancelled() => return Ok(None),
+            };
+            match answers(&response.output(), &batch.keys) {
+                Ok(fragments) => {
+                    let usage = response
+                        .completion_calls
+                        .last()
+                        .map_or_else(Usage::default, |call| call.usage);
+                    return Ok(Some((
+                        batch.rules.restore(&fragments),
+                        response.messages,
+                        usage,
+                    )));
+                }
+                Err(error) if !retry => {
+                    tracing::warn!(%error, "retrying page after invalid translation output");
+                    system.push_str(&format!(
+                        "\n\nThe previous answer failed validation: {error}. Regenerate the complete JSON from the supplied input. Return a non-empty string for every input key, including each numbered fragment."
+                    ));
+                    retry = true;
+                }
+                Err(error) => return Err(error),
+            }
         }
-        let request = koharu_llm::answers(model, schema(&self.keys)?)
-            .preamble(&self.system)
-            .options(options)
-            .build()
-            .prompt(Message::from(content))
-            .history(history);
-        let response = tokio::select! {
-            response = request.into_future() => response?,
-            () = self.cancel.cancelled() => return Ok(None),
-        };
-        let translations = answers(&response.output(), &self.keys)?;
-        let usage = response
-            .completion_calls
-            .last()
-            .map_or_else(Usage::default, |call| call.usage);
-        Ok(Some((translations, response.messages, usage)))
     }
 
     /// Whether `translations` repeat the `last` page's, in order, for at least
@@ -205,7 +342,7 @@ fn answers(answer: &str, keys: &[String]) -> Result<Vec<String>> {
     let translations = keys
         .iter()
         .map(|key| match answer.remove(key) {
-            Some(Value::String(text)) if !text.trim().is_empty() => Ok(text.trim().to_owned()),
+            Some(Value::String(text)) if !text.trim().is_empty() => Ok(text),
             Some(Value::String(_)) => bail!("the answer leaves text {key} blank"),
             Some(_) => bail!("the answer for text {key} isn't text"),
             None => bail!("the answer leaves text {key} out"),
@@ -259,7 +396,7 @@ mod tests {
         let keys = keys(2);
         assert_eq!(
             answers(r#"{"1": " One ", "2": "Two"}"#, &keys).expect("an answer"),
-            ["One", "Two"]
+            [" One ", "Two"]
         );
         assert!(answers(r#"{"1": "One"}"#, &keys).is_err());
         assert!(answers(r#"{"1": "One", "2": " "}"#, &keys).is_err());

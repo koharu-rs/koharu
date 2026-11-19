@@ -6,6 +6,7 @@ mod canvas;
 mod debug;
 mod export;
 mod fonts;
+mod glossary;
 mod import;
 mod pages;
 mod preferences;
@@ -58,6 +59,9 @@ pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static 
         project::list_projects,
         project::create,
         project::open,
+        project::open_project_file,
+        project::create_linked_project,
+        project::relink_originals,
         project::delete_project,
         project::close,
         project::get_open_project,
@@ -88,6 +92,11 @@ pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static 
         fonts::get_font_preview,
         import::import,
         export::export,
+        glossary::get_glossary,
+        glossary::extract_source,
+        glossary::save_glossary,
+        glossary::export_source,
+        glossary::analyze_glossary,
         canvas::set_viewport,
         canvas::set_tool,
         canvas::set_brush,
@@ -129,6 +138,9 @@ pub fn bindings(types: &mut Types) -> Vec<Function> {
         project::list_projects,
         project::create,
         project::open,
+        project::open_project_file,
+        project::create_linked_project,
+        project::relink_originals,
         project::delete_project,
         project::close,
         project::get_open_project,
@@ -159,6 +171,11 @@ pub fn bindings(types: &mut Types) -> Vec<Function> {
         fonts::get_font_preview,
         import::import,
         export::export,
+        glossary::get_glossary,
+        glossary::extract_source,
+        glossary::save_glossary,
+        glossary::export_source,
+        glossary::analyze_glossary,
         canvas::set_viewport,
         canvas::set_tool,
         canvas::set_brush,

@@ -115,6 +115,7 @@ async fn main() -> Result<()> {
     let request = Request {
         target: Target::Project,
         stages: cli.stages.into_iter().collect(),
+        resume: false,
         config: None,
     };
     let run = pipeline.run(Arc::clone(&session), request)?;

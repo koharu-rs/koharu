@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "プロジェクトの用語表を管理",
+    "globalTitle": "共通用語表",
+    "globalScope": "すべてのプロジェクトに適用されます。同じ原文にはプロジェクトの登録内容が優先されます。",
+    "blockedTable": "翻訳除外リスト",
+    "search": "項目を検索",
+    "noEntries": "該当する項目はありません。",
+    "edit": "編集",
+    "batchProgress": "用語分析 {{completed}} / {{total}} バッチ完了",
+    "mergeBatchProgress": "用語候補の確認 {{completed}} / {{total}} バッチ",
+    "title": "用語集",
+    "extract": "全文を抽出",
+    "exportSource": "原文を書き出す",
+    "analyze": "全ページの用語を分析",
+    "check": "訳文をチェック",
+    "noIssues": "用語の問題は見つかりませんでした",
+    "page": "{{page}} ページ",
+    "kind": "項目の種類",
+    "source": "原文",
+    "translation": "統一訳",
+    "note": "メモ",
+    "duplicate": "同じ原文の項目があります",
+    "save": "変更を保存",
+    "add": "項目を追加",
+    "cancel": "キャンセル",
+    "remove": "削除",
+    "candidates": "用語候補",
+    "noCandidates": "新しい候補はありません",
+    "occurrences": "{{count}} 箇所",
+    "excludeLine": "このセリフを除外",
+    "restoreLine": "このセリフを元に戻す",
+    "extractionStarted": "原文の抽出を開始しました",
+    "extractionCurrent": "検出済みの原文はすべて抽出済みです",
+    "analyzing": "用語を分析中…",
+    "kinds": {
+      "person": "人物",
+      "place": "地名",
+      "term": "用語",
+      "preserve": "語句を原文のまま残す",
+      "preserve_block": "ブロックの原字を残す"
+    }
+  },
+  "linked": {
+    "createZip": "ZIP／CBZ から新規作成",
+    "createFolder": "画像フォルダーから新規作成",
+    "open": "プロジェクトファイルを開く",
+    "relink": "原画像を再リンク",
+    "zip": "ZIP／CBZ",
+    "folder": "画像フォルダー"
+  },
   "about": {
     "author": "作者",
     "description": "漫画翻訳ツール",
@@ -104,6 +154,8 @@
     "close": "ヒストリーを閉じる",
     "opened": "開いた状態",
     "steps": {
+      "edit_glossary": "用語集を編集",
+      "relink_originals": "原画像を再リンク",
       "add_text": "テキストを追加",
       "delete_layers": "レイヤーを削除",
       "delete_pages": "ページを削除",
@@ -129,7 +181,19 @@
     },
     "title": "ヒストリー"
   },
+  "sfxVisibility": {
+    "page": "このページの効果音",
+    "project": "プロジェクトの効果音",
+    "hidePage": "このページの効果音訳を非表示",
+    "showPage": "このページの効果音訳を表示",
+    "hideProject": "プロジェクト全体の効果音訳を非表示",
+    "showProject": "プロジェクトの効果音訳の表示を戻す"
+  },
   "inference": {
+    "resume": "続行",
+    "resumeDescription": "選択した工程の未完了分だけ処理します。",
+    "afterSelectedPages": "選択ページの次から",
+    "afterSelectedPagesDescription": "最後に選択したページの次から開始します。選択がなければ現在のページを基準にします。",
     "entireProject": "プロジェクト全体",
     "entireProjectDescription": "このプロジェクトの全ページを処理します。",
     "model": "モデル",
@@ -142,6 +206,7 @@
     "runProcessing": "処理を実行",
     "scope": "範囲",
     "scopeShort": {
+      "after-selected-pages": "選択の次から",
       "project": "プロジェクト",
       "selected-pages": "選択範囲"
     },
@@ -275,6 +340,8 @@
     "useModel": "{{provider}}の{{model}}を使用"
   },
   "navigator": {
+    "excludePage": "{{page}}を処理から除外",
+    "includePage": "{{page}}を処理に含める",
     "actionsFor": "{{page}}の操作",
     "delete": "削除",
     "deleteDescription": "「{{page}}」とそのレイヤーを削除します。元に戻せます。",
@@ -302,12 +369,14 @@
     "title": "翻訳出力"
   },
   "phase": {
+    "glossary": "用語分析",
     "detect": "検出",
     "inpaint": "インペイント",
     "recognize": "OCR",
     "translate": "翻訳"
   },
   "phaseDescription": {
+    "glossary": "翻訳の前にプロジェクトの原文から用語を抽出します。",
     "detect": "ページ上のテキストを見つけます。",
     "inpaint": "文字を消した部分の絵を復元します。",
     "recognize": "各領域内の原文を読み取ります。",
@@ -344,6 +413,10 @@
     "backToEditor": "エディターに戻る",
     "loading": "設定を読み込み中…",
     "pipeline": {
+      "followTranslator": "翻訳モデルを使用",
+      "glossaryReasoning": "思考の強度",
+      "glossaryPrompt": "カスタムプロンプト",
+      "glossaryPromptDescription": "用語の抽出や候補の不一致を確認する際の指示を追加します。空欄の場合は既定の指示を使用します。",
       "description": "各ページの処理に使用するモデルとオプションを選択します。",
       "model": "モデル",
       "modelLabel": "{{stage}}モデル",

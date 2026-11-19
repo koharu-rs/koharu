@@ -45,6 +45,11 @@ export function TitleBar() {
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
+  const { run: relinkOriginals, busy: relinking } = useCommand(
+    ['relink-originals'],
+    commands.relinkOriginals,
+    'linked.relink',
+  )
   const { run: exportProject, busy: exporting } = useCommand(
     ['export-project'],
     commands.export,
@@ -137,6 +142,28 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
+              {(project?.linkedZip || project?.linkedFolder) && (
+                <MenubarSub>
+                  <MenubarSubTrigger
+                    disabled={relinking}
+                    className='min-h-8 gap-1.5 px-2 py-1 text-xs'
+                  >
+                    {t('linked.relink')}
+                  </MenubarSubTrigger>
+                  <MenubarSubContent className='min-w-40 p-1'>
+                    {project.linkedZip && (
+                      <MenubarItem onClick={() => relinkOriginals('zip')}>
+                        {t('linked.zip')}
+                      </MenubarItem>
+                    )}
+                    {project.linkedFolder && (
+                      <MenubarItem onClick={() => relinkOriginals('folder')}>
+                        {t('linked.folder')}
+                      </MenubarItem>
+                    )}
+                  </MenubarSubContent>
+                </MenubarSub>
+              )}
               <MenubarSub>
                 <MenubarSubTrigger
                   disabled={!project || pages.length === 0 || exporting}

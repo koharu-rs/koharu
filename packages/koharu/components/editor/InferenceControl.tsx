@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FastForward,
   Play,
   Settings,
   Sparkles,
@@ -29,9 +30,15 @@ type SelectorView = 'root' | 'model' | 'scope' | 'stages' | 'output'
 export function InferenceControl({
   onRun,
   disabled,
+  selectedCount,
+  afterCount,
+  projectCount,
 }: {
-  onRun: (scope: PipelineScope, stages: Stage[]) => void
+  onRun: (scope: PipelineScope, stages: Stage[], resume: boolean) => void
   disabled: boolean
+  selectedCount: number
+  afterCount: number
+  projectCount: number
 }) {
   const { t } = useTranslation()
   const scope = useKoharuStore((state) => state.processingScope)
@@ -39,18 +46,23 @@ export function InferenceControl({
   const setScope = useKoharuStore((state) => state.setProcessingScope)
   const setStages = useKoharuStore((state) => state.setProcessingStages)
   const jobs = useKoharuStore((state) => state.jobs)
-  const selectedPages = useKoharuStore((state) => state.selectedPages)
   const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
-  const unavailable = scope === 'selected-pages' && selectedPages.length === 0
+  const counts = {
+    project: projectCount,
+    'selected-pages': selectedCount,
+    'after-selected-pages': afterCount,
+  }
+  const unavailable = disabled || !counts[scope] || !stages.length
 
   const stop = () => void call(commands.stopPipeline).catch(() => undefined)
 
   return (
-    <div className='flex items-center gap-1'>
+    <div className='flex min-w-0 items-center gap-1'>
       <RuntimeSelector
         scope={scope}
         stages={stages}
-        selectionCount={selectedPages.length}
+        selectionCount={selectedCount}
+        afterCount={afterCount}
         running={Boolean(running)}
         onScopeChange={setScope}
         onStagesChange={setStages}
@@ -63,13 +75,27 @@ export function InferenceControl({
           'rounded-lg px-2.5 text-[11px]',
           !running && 'bg-primary/80 hover:bg-primary/90',
         )}
-        disabled={(disabled || unavailable) && !running}
+        disabled={unavailable && !running}
         aria-label={running ? t('inference.stopProcessing') : t('inference.runProcessing')}
-        onClick={running ? stop : () => onRun(scope, stages)}
+        onClick={running ? stop : () => onRun(scope, stages, false)}
       >
         {running ? <Square className='size-3 fill-current' /> : <Play className='size-3' />}
         <span>{running ? t('inference.stop') : t('inference.run')}</span>
       </Button>
+      {!running && (
+        <Button
+          type='button'
+          size='sm'
+          variant='outline'
+          className='rounded-lg px-2.5 text-[11px]'
+          disabled={unavailable}
+          title={t('inference.resumeDescription')}
+          onClick={() => onRun(scope, stages, true)}
+        >
+          <FastForward className='size-3' />
+          <span>{t('inference.resume')}</span>
+        </Button>
+      )}
     </div>
   )
 }
@@ -78,6 +104,7 @@ function RuntimeSelector({
   scope,
   stages,
   selectionCount,
+  afterCount,
   running,
   onScopeChange,
   onStagesChange,
@@ -85,6 +112,7 @@ function RuntimeSelector({
   scope: PipelineScope
   stages: Stage[]
   selectionCount: number
+  afterCount: number
   running: boolean
   onScopeChange: (scope: PipelineScope) => void
   onStagesChange: (stages: Stage[]) => void
@@ -168,7 +196,7 @@ function RuntimeSelector({
         type='button'
         aria-label={t('inference.selector')}
         className={cn(
-          'flex h-7 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
+          'flex h-7 max-w-44 min-w-0 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
           running && 'text-foreground',
         )}
       >
@@ -252,6 +280,14 @@ function RuntimeSelector({
               }
               selected={scope === 'selected-pages'}
               disabled={selectionCount === 0}
+              onSelect={chooseScope}
+            />
+            <SelectorOption
+              value='after-selected-pages'
+              label={t('inference.afterSelectedPages')}
+              detail={t('inference.afterSelectedPagesDescription')}
+              selected={scope === 'after-selected-pages'}
+              disabled={afterCount === 0}
               onSelect={chooseScope}
             />
             <SelectorOption
@@ -393,6 +429,7 @@ function availableModels(selected: string | null, models: Model[]): Model[] {
       vendor: vendorOf(selected),
       images: false,
       tools: false,
+      translation_only: false,
     },
     ...models,
   ]

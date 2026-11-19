@@ -10,6 +10,7 @@ import ClientOnly from '@/components/ClientOnly'
 import { refreshModels, refreshPreferences } from '@/lib/backend'
 import i18n from '@/lib/i18n'
 import {
+  glossaryKey,
   pageKey,
   pagesKey,
   projectKey,
@@ -69,7 +70,17 @@ export function Providers({ children }: { children: ReactNode }) {
         listen(events.notice, (notice) =>
           toast.add({ type: 'info', title: i18n.t(`canvas.notice.${notice}`) }),
         ),
-        listen(events.pipeline, receivePipeline),
+        listen(events.pipeline, (event) => {
+          receivePipeline(event)
+          if (
+            (event.kind === 'finished' && event.stage === 'glossary') ||
+            (event.kind === 'ended' &&
+              event.outcome.kind === 'failed' &&
+              event.outcome.stage === 'glossary')
+          ) {
+            void refresh(glossaryKey).catch(() => undefined)
+          }
+        }),
         listen(events.download, receiveDownload),
       ])
         .then(() => commands.getPipelineEvents())
@@ -160,7 +171,7 @@ function receiveChange(change: Change): void {
         }
       : project,
   )
-  void refresh(projectKey, pageKey, pagesKey).catch(() => undefined)
+  void refresh(projectKey, pageKey, pagesKey, glossaryKey).catch(() => undefined)
 }
 
 function StartupBoundary({ children }: { children: ReactNode }) {

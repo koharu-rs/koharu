@@ -8,8 +8,9 @@
 //! its own lettering.
 
 mod conversation;
-mod model;
+pub(super) mod model;
 mod placement;
+mod rules;
 mod turn;
 
 use anyhow::{Context as _, Result, ensure};
@@ -22,7 +23,7 @@ use icu_locale::LocaleExpander;
 use icu_locale_core::{LanguageIdentifier, Locale, langid, subtags::language};
 use indoc::formatdoc;
 use koharu_llm::rig::{completion::Reasoning, driver::DynModel};
-use koharu_scene::{Content, LayerId, Op, Project};
+use koharu_scene::{Content, GlossaryEntry, LayerId, Op, Project};
 use rayon::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use serde_json::json;
@@ -84,7 +85,7 @@ impl Default for TranslatorConfig {
 /// whatever their form.
 fn system(config: &TranslatorConfig) -> Result<String> {
     let template = formatdoc! {"
-        Translate the manga text in each message into {target}. Each message is a page's texts as a JSON object, numbered in reading order: translate only the values, and never alter the structure or the keys. Output only the translated JSON, without any explanation.",
+        Translate the manga text in each message into {target}. Each message is a page's texts as a JSON object, numbered in reading order: translate only the values, and never alter the structure or the keys. Each output value must translate only the source text at the same key. Use the other values only to understand the context. Keep incomplete sentences, separate dialogue bubbles, and sound effects in their own values, even when several consecutive values are related. Return a non-empty translation for every input value and output only the translated JSON.",
         target = name(&config.target)?,
     };
     Ok(match config.instructions.trim() {
@@ -111,6 +112,9 @@ struct Page {
     blocks: Vec<(LayerId, LanguageIdentifier)>,
     texts: Vec<String>,
     image: Option<String>,
+    glossary: Vec<GlossaryEntry>,
+    effective: Vec<GlossaryEntry>,
+    kept: Vec<(LayerId, LanguageIdentifier, String)>,
 }
 
 pub(crate) async fn translate(
@@ -120,17 +124,38 @@ pub(crate) async fn translate(
 ) -> Result<()> {
     let member = &task.members[0];
     let translator = config.translator.clone();
+    let global = config.glossary.clone();
+    let read_global = global.clone();
     let (read, vision) = (member.clone(), translator.vision);
     let page = tokio::task::spawn_blocking(move || {
         let _span = info_span!("read", stage = %Stage::Translate, page = read.index + 1).entered();
-        page(&read, vision)
+        page(&read, vision, &read_global)
     })
     .await??;
     let Some(page) = page else {
         return Ok(());
     };
+    let Page {
+        blocks,
+        texts,
+        image,
+        glossary,
+        effective,
+        kept,
+    } = page;
+    if texts.is_empty() {
+        return member
+            .apply(Stage::Translate, move |project| {
+                ensure!(
+                    project.glossary() == glossary,
+                    "the project's glossary changed during translation"
+                );
+                written(project, kept, &translator, &global)
+            })
+            .await;
+    }
     let conversation = &mut *conversation;
-    conversation.keep(&translator);
+    conversation.keep(&translator, &effective);
     let model = match key(Stage::Translate, config) {
         // A local model loads on the GPU thread, which only hands it over:
         // its engine runs on a thread of its own, so the turn waits off the
@@ -148,37 +173,42 @@ pub(crate) async fn translate(
             conversation.hosted(&translator).await?
         }
     };
-    let system = system(&translator)?;
     let turn = Turn::new(
-        system,
-        &page.texts,
-        page.image.as_deref(),
+        system(&translator)?,
+        &texts,
+        blocks.iter().map(|(layer, _)| *layer),
+        &effective,
+        image.as_deref(),
         translator.reasoning,
         &member.cancel,
     );
     let Some(translations) = turn
         .take(conversation, &model)
-        .instrument(info_span!("llm", texts = page.texts.len()))
+        .instrument(info_span!("llm", texts = texts.len()))
         .await?
     else {
         return Err(Stopped.into());
     };
-    let translated: Vec<(LayerId, LanguageIdentifier, String)> = page
-        .blocks
+    let translated: Vec<(LayerId, LanguageIdentifier, String)> = blocks
         .into_iter()
         .zip(translations)
         .map(|((block, source), text)| (block, source, text))
+        .chain(kept)
         .collect();
     member
         .apply(Stage::Translate, move |project| {
-            written(project, translated, &translator)
+            ensure!(
+                project.glossary() == glossary,
+                "the project's glossary changed during translation"
+            );
+            written(project, translated, &translator, &global)
         })
         .await
 }
 
 /// The page's texts the task works on, and the page itself when the model
 /// sees it; `None` when it has no text.
-fn page(member: &Member, vision: bool) -> Result<Option<Page>> {
+fn page(member: &Member, vision: bool, global: &[GlossaryEntry]) -> Result<Option<Page>> {
     // A page with no scan, such as a blank one with typed text, goes
     // without its image.
     let seen = if vision { member.scan()? } else { None };
@@ -186,19 +216,34 @@ fn page(member: &Member, vision: bool) -> Result<Option<Page>> {
         Some((project, scan)) => (project, Some(sight(&scan)?)),
         None => (member.session.lock().project(), None),
     };
+    let mut kept = Vec::new();
     let (blocks, texts): (Vec<_>, Vec<_>) = member
         .blocks(&project)
         .into_iter()
-        .map(|(id, block)| {
+        .filter_map(|(id, block)| {
             let text = block.source.content.text();
-            ((id, block.source.language.clone()), text)
+            if text.trim().is_empty() {
+                return None;
+            }
+            let language = block.source.language.clone();
+            if project.keeps_original(global, id, &text) {
+                kept.push((id, language, text));
+                return None;
+            }
+            Some(((id, language), text))
         })
-        .filter(|(_, text)| !text.trim().is_empty())
         .unzip();
-    Ok((!texts.is_empty()).then_some(Page {
+    Ok((!texts.is_empty() || !kept.is_empty()).then_some(Page {
         blocks,
         texts,
         image,
+        glossary: project.glossary().to_vec(),
+        effective: project
+            .effective_glossary(global)
+            .into_iter()
+            .cloned()
+            .collect(),
+        kept,
     }))
 }
 
@@ -226,6 +271,7 @@ fn written(
     project: &Project,
     translated: Vec<(LayerId, LanguageIdentifier, String)>,
     config: &TranslatorConfig,
+    global: &[GlossaryEntry],
 ) -> Result<Vec<Op>> {
     let target = &config.target;
     // Each block's placement reads the project as it is before any of them,
@@ -239,13 +285,23 @@ fn written(
             };
             // Its clean-up would erase the lettering for the translation to
             // redraw it in another hand.
-            let unchanged = text.trim() == found.source.content.text().trim();
+            let source_text = found.source.content.text();
+            let preserved = project.keeps_original(global, block, &source_text);
+            let unchanged = text.trim() == source_text.trim() || preserved;
             let placed = (!unchanged).then(|| placement(project, block, target));
-            Some((block, source, text, placed))
+            let mark = (unchanged && !preserved)
+                .then(|| crate::resume::unchanged_translation(&source_text, target));
+            Some((block, source, text, placed, mark))
         })
         .collect();
     let mut ops = Vec::new();
-    for (block, source, text, placed) in placed {
+    for (block, source, text, placed, mark) in placed {
+        ops.push(Op::SetAttribute {
+            layer: block.into(),
+            namespace: "koharu".to_owned(),
+            key: "translation_unchanged".to_owned(),
+            value: mark,
+        });
         let Some(placed) = placed else {
             ops.push(Op::UpdateLayer {
                 layer: block.into(),

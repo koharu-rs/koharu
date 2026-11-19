@@ -3,7 +3,8 @@
 //! `Pipeline::new` and `set_config`, and a request may bring its own. An
 //! invalid section fails to parse.
 
-use serde::{Deserialize, Serialize};
+use koharu_scene::{GlossaryEntry, valid_glossary};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use crate::{DetectorConfig, InpainterConfig, RecognizerConfig, TranslatorConfig};
 
@@ -15,6 +16,30 @@ pub struct PipelineConfig {
     pub recognizer: RecognizerConfig,
     pub inpainter: InpainterConfig,
     pub translator: TranslatorConfig,
+    pub glossary_analysis: crate::GlossaryAnalysisConfig,
+    #[serde(deserialize_with = "glossary")]
+    #[specta(type = Vec<GlossaryEntry>)]
+    pub glossary: Vec<GlossaryEntry>,
+}
+
+impl PipelineConfig {
+    pub(crate) fn glossary_model(&self) -> &str {
+        self.glossary_analysis
+            .model
+            .as_deref()
+            .filter(|model| !model.is_empty())
+            .unwrap_or(&self.translator.model)
+    }
+}
+
+fn glossary<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<GlossaryEntry>, D::Error> {
+    let entries = Vec::deserialize(deserializer)?;
+    if !valid_glossary(&entries) {
+        return Err(D::Error::custom(
+            "invalid or duplicate global glossary entry",
+        ));
+    }
+    Ok(entries)
 }
 
 impl koharu_config::Section for PipelineConfig {

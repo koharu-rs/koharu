@@ -98,6 +98,9 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
             let mut ops = Vec::new();
             removals(&page.layers, &mut ops);
             ops.extend(additions);
+            ops.push(Op::MarkPageDetected {
+                page: page.id.into(),
+            });
             Ok(ops)
         })
         .await

@@ -11,8 +11,18 @@ use crate::app::App;
 /// Runs `stages` on `target`; each run's events go out as `pipeline`.
 #[tauri::command]
 #[specta::specta]
-pub fn run_pipeline(app: State<'_, Arc<App>>, target: Target, stages: Vec<Stage>) -> Result<RunId> {
-    Ok(app.process(target, stages.into_iter().collect(), None)?)
+pub fn run_pipeline(
+    app: State<'_, Arc<App>>,
+    target: Target,
+    stages: Vec<Stage>,
+    resume: Option<bool>,
+) -> Result<RunId> {
+    Ok(app.process(
+        target,
+        stages.into_iter().collect(),
+        resume.unwrap_or(false),
+        None,
+    )?)
 }
 
 /// Fills the area the marquee and the lasso marked with `model` after
@@ -40,6 +50,7 @@ pub async fn fill(
     Ok(Some(app.process(
         target,
         BTreeSet::from([Stage::Inpaint]),
+        false,
         Some(config),
     )?))
 }

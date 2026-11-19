@@ -1,10 +1,21 @@
 'use client'
 
-import { ArrowLeft, Cpu, KeyRound, Monitor, Moon, Palette, Sun, Type } from 'lucide-react'
+import {
+  ArrowLeft,
+  BookOpenText,
+  Cpu,
+  KeyRound,
+  Monitor,
+  Moon,
+  Palette,
+  Sun,
+  Type,
+} from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { GlossaryManager } from '@/components/editor/GlossaryManager'
 import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
 import {
   PreferencePage,
@@ -15,6 +26,7 @@ import { ProviderPreferences } from '@/components/preferences/ProviderPreference
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
 import { refreshModels, refreshPreferences, savePreferences } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
+import { glossaryKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import type { Preferences } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
@@ -32,6 +44,7 @@ const tabs = [
   ['pipeline', Cpu],
   ['providers', KeyRound],
   ['typesetting', Type],
+  ['glossary', BookOpenText],
 ] as const
 type Tab = (typeof tabs)[number][0]
 
@@ -114,7 +127,8 @@ export function SettingsPage() {
               className='h-10 w-full justify-start gap-3 rounded-lg px-3 text-left text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
               onClick={() => setTab(id)}
             >
-              <Icon className='size-4' /> {t(`settings.tabs.${id}`)}
+              <Icon className='size-4' />{' '}
+              {t(id === 'glossary' ? 'glossary.globalTitle' : `settings.tabs.${id}`)}
             </Button>
           ))}
         </div>
@@ -145,6 +159,25 @@ export function SettingsPage() {
                 value={draft.renderer}
                 onChange={(renderer) => setDraft({ ...draft, renderer })}
               />
+            )}
+            {tab === 'glossary' && draft && (
+              <section className='space-y-4' aria-label={t('glossary.globalTitle')}>
+                <div>
+                  <h2 className='text-base font-semibold'>{t('glossary.globalTitle')}</h2>
+                  <p className='mt-1 text-sm text-muted-foreground'>{t('glossary.globalScope')}</p>
+                </div>
+                <div className='flex h-[min(540px,65dvh)] min-h-72 flex-col'>
+                  <GlossaryManager
+                    entries={draft.pipeline.glossary ?? []}
+                    onSave={async (glossary) => {
+                      const next = { ...draft, pipeline: { ...draft.pipeline, glossary } }
+                      await saveDraft(next)
+                      setDraft(next)
+                      await refresh(glossaryKey)
+                    }}
+                  />
+                </div>
+              </section>
             )}
           </div>
         </ScrollArea>

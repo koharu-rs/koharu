@@ -14,6 +14,9 @@ use crate::PipelineConfig;
 pub struct Request {
     pub target: Target,
     pub stages: BTreeSet<Stage>,
+    /// Keep completed work and schedule only the remaining stages and blocks.
+    #[serde(default)]
+    pub resume: bool,
     /// For this run only; the pipeline's own otherwise.
     #[serde(default)]
     pub config: Option<PipelineConfig>,
@@ -63,6 +66,7 @@ pub enum Target {
 pub enum Stage {
     Detect,
     Recognize,
+    Glossary,
     Inpaint,
     Translate,
 }

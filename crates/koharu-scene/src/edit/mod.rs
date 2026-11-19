@@ -15,8 +15,8 @@ use serde_json::Value;
 use specta::Type;
 
 use crate::{
-    Background, Content, Created, Error, Hash, Layer, LayerId, NewLayer, PageId, Project, Rect,
-    Ref, Result, Size, Span, Text, Transform, Uuid, store::Tx,
+    Background, Content, Created, Error, ExternalImage, GlossaryEntry, Hash, Layer, LayerId,
+    NewLayer, PageId, Project, Rect, Ref, Result, Size, Span, Text, Transform, Uuid, store::Tx,
 };
 
 /// Where an op found a layer: its page and its path there. It holds only
@@ -68,10 +68,33 @@ pub enum Op {
         page: Ref,
         background: Option<Background>,
     },
+    SetPageOptions {
+        page: Ref,
+        #[serde(default)]
+        excluded: Option<bool>,
+        #[serde(default)]
+        hide_sfx: Option<bool>,
+    },
+    SetProjectSfx {
+        hide: bool,
+    },
+    #[schemars(skip)]
+    MarkPageDetected {
+        page: Ref,
+    },
+    #[schemars(skip)]
+    SetGlossaryInput {
+        input: Hash,
+    },
     /// Move a page to `index`, counted after the page is taken out.
-    MovePage { page: Ref, index: usize },
+    MovePage {
+        page: Ref,
+        index: usize,
+    },
     /// Remove a page with its layers.
-    RemovePage { page: Ref },
+    RemovePage {
+        page: Ref,
+    },
     /// Add a layer under `parent`, or at the top level of `page`, at `index`
     /// among the parent's children, masks included, first drawn first.
     AddLayer {
@@ -102,7 +125,9 @@ pub enum Op {
         index: usize,
     },
     /// Remove a layer and everything inside it.
-    RemoveLayer { layer: Ref },
+    RemoveLayer {
+        layer: Ref,
+    },
     /// Change a layer's values with a JSON Merge Patch (RFC 7396): `null`
     /// clears an optional value, and `{"translation": null}` removes a
     /// block's translation.
@@ -116,13 +141,22 @@ pub enum Op {
     /// a block's translation or, without one, its source, a shape's `path`,
     /// a panel's or a balloon's `outline`. A raster, a mask, and a block's
     /// `cleanup` or `mask` only move, by whole pixels. A group fails.
-    TransformLayer { layer: Ref, transform: Transform },
+    TransformLayer {
+        layer: Ref,
+        transform: Transform,
+    },
     /// Replace a text layer's text, or a block's translation, adding one if
     /// the block has none. Styling on unchanged characters is kept.
-    SetText { layer: Ref, text: String },
+    SetText {
+        layer: Ref,
+        text: String,
+    },
     /// Replace a text's spans, from the rich editor.
     #[schemars(skip)]
-    SetRichText { layer: Ref, spans: Vec<Span> },
+    SetRichText {
+        layer: Ref,
+        spans: Vec<Span>,
+    },
     /// Set one attribute of a layer, or remove it when `value` is null.
     /// Attributes are data for tools: provenance goes under `c2pa`, by step.
     SetAttribute {
@@ -144,7 +178,30 @@ pub enum Op {
     },
     /// Add an imported file, stored once by its content hash.
     #[schemars(skip)]
-    AddFile { bytes: Vec<u8> },
+    AddFile {
+        bytes: Vec<u8>,
+    },
+    #[schemars(skip)]
+    SetGlossary {
+        previous: Vec<GlossaryEntry>,
+        entries: Vec<GlossaryEntry>,
+    },
+    #[schemars(skip)]
+    SetGlossaryCandidates {
+        candidates: Vec<Vec<GlossaryEntry>>,
+    },
+    #[schemars(skip)]
+    AddExternalPage {
+        index: usize,
+        file: Hash,
+        source: ExternalImage,
+    },
+    #[schemars(skip)]
+    RelinkExternalImage {
+        file: Hash,
+        previous: ExternalImage,
+        source: ExternalImage,
+    },
 }
 
 pub(crate) struct Run<'a, 'c> {
@@ -323,6 +380,38 @@ impl Run<'_, '_> {
             Op::SetBackground { page, background } => {
                 self.set_background(index, page, background.as_ref())
             }
+            Op::SetPageOptions {
+                page,
+                excluded,
+                hide_sfx,
+            } => {
+                let id = self.page(page)?;
+                let page = self.project.pages.get_mut(&id).expect("page exists");
+                if let Some(excluded) = excluded {
+                    page.excluded = *excluded;
+                }
+                if let Some(hide_sfx) = hide_sfx {
+                    page.hide_sfx = *hide_sfx;
+                }
+                Ok(())
+            }
+            Op::SetProjectSfx { hide } => {
+                self.project.hide_sfx = *hide;
+                Ok(())
+            }
+            Op::MarkPageDetected { page } => {
+                let id = self.page(page)?;
+                self.project
+                    .pages
+                    .get_mut(&id)
+                    .expect("page exists")
+                    .detected = Some(true);
+                Ok(())
+            }
+            Op::SetGlossaryInput { input } => {
+                self.project.glossary_input = Some(*input);
+                Ok(())
+            }
             Op::MovePage { page, index: to } => self.move_page(index, page, *to),
             Op::RemovePage { page } => self.remove_page(page),
             Op::AddLayer {
@@ -361,6 +450,57 @@ impl Run<'_, '_> {
                 pixels,
             } => self.write_pixels(index, layer, *rect, pixels),
             Op::AddFile { bytes } => self.add_file(bytes),
+            Op::SetGlossary { previous, entries } => {
+                if previous != self.project.glossary.as_ref() {
+                    return Err(Error::invalid(index, "the project's glossary changed"));
+                }
+                if !crate::glossary::valid_glossary(entries) {
+                    return Err(Error::invalid(index, "invalid or duplicate glossary entry"));
+                }
+                self.project.glossary = entries.clone().into();
+                Ok(())
+            }
+            Op::SetGlossaryCandidates { candidates } => {
+                if !crate::glossary::valid_candidates(candidates) {
+                    return Err(Error::invalid(index, "invalid glossary candidates"));
+                }
+                self.project.glossary_candidates = candidates.clone().into();
+                Ok(())
+            }
+            Op::AddExternalPage {
+                index: at,
+                file,
+                source,
+            } => {
+                self.create_page(
+                    index,
+                    None,
+                    *at,
+                    source.size,
+                    Some(Background {
+                        file: *file,
+                        visible: true,
+                    }),
+                )?;
+                if !self.tx.has_blob(file)? {
+                    self.project.external.insert(*file, source.clone());
+                }
+                Ok(())
+            }
+            Op::RelinkExternalImage {
+                file,
+                previous,
+                source,
+            } => {
+                if self.project.external.get(file) != Some(previous)
+                    || previous.size != source.size
+                    || previous.bytes != source.bytes
+                {
+                    return Err(Error::invalid(index, "the linked image changed"));
+                }
+                self.project.external.insert(*file, source.clone());
+                Ok(())
+            }
         }
     }
 }

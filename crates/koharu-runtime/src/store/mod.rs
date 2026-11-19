@@ -16,9 +16,19 @@ pub(crate) use remove::remove_others;
 
 /// The one store everything downloads into: the `store` folder beside the
 /// executable in Windows release builds, where setup puts Koharu, and the OS
-/// cache folder's `koharu/store` otherwise.
+/// cache folder's `koharu/store` otherwise. A development launcher can point
+/// at an existing store with `KOHARU_DEV_STORE_DIR`.
 pub(crate) fn root() -> &'static Path {
     static ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
+        if cfg!(debug_assertions)
+            && let Some(path) = std::env::var_os("KOHARU_DEV_STORE_DIR").map(PathBuf::from)
+        {
+            assert!(
+                path.is_absolute(),
+                "KOHARU_DEV_STORE_DIR must be an absolute path"
+            );
+            return path;
+        }
         if cfg!(all(windows, not(debug_assertions))) {
             std::env::current_exe()
                 .expect("Koharu knows where its executable is")

@@ -17,7 +17,14 @@ function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
   vi.spyOn(commands, 'query').mockImplementation(async (query) =>
     query.query === 'get_project'
-      ? { id: 'project', version: '1', pages: [] }
+      ? {
+          id: 'project',
+          version: '1',
+          pages: [],
+          linked_zip: false,
+          linked_folder: false,
+          hide_sfx: false,
+        }
       : { steps: [], current: 0 },
   )
 }
@@ -70,6 +77,38 @@ describe('StartView', () => {
 
     await waitFor(() => expect(open).toHaveBeenCalledWith('Blue Archive'))
     expect(await screen.findByText('Opened Blue Archive')).toBeInTheDocument()
+  })
+
+  it('refreshes the project list when a listed project can no longer be opened', async () => {
+    vi.spyOn(commands, 'listProjects')
+      .mockResolvedValueOnce(['Removed project', 'Available project'])
+      .mockResolvedValueOnce(['Available project'])
+    vi.spyOn(commands, 'open').mockRejectedValue(new Error('project file is missing'))
+    render(<StartView />)
+
+    const row = (await screen.findByText('Removed project')).closest('button')
+    if (!row) throw new Error('project row is not interactive')
+    await waitFor(() => expect(row).toBeEnabled())
+    fireEvent.click(row)
+
+    await waitFor(() => expect(row).not.toBeInTheDocument())
+    expect(screen.getByText('Available project').closest('button')).toBeEnabled()
+  })
+
+  it('opens the newly linked ZIP project without using managed import', async () => {
+    let opened = false
+    desktop(() => (opened ? 'Linked book' : null))
+    vi.spyOn(commands, 'listProjects').mockResolvedValue([])
+    const createLinked = vi.spyOn(commands, 'createLinkedProject').mockImplementation(async () => {
+      opened = true
+      return null
+    })
+    renderProjectFlow()
+    const create = await screen.findByRole('button', { name: 'New from ZIP or CBZ' })
+    await waitFor(() => expect(create).toBeEnabled())
+    fireEvent.click(create)
+    await waitFor(() => expect(createLinked).toHaveBeenCalledWith('zip'))
+    expect(await screen.findByText('Opened Linked book')).toBeInTheDocument()
   })
 
   it('confirms before deleting a managed project', async () => {

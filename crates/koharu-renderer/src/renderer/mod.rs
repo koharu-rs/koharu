@@ -74,12 +74,24 @@ impl Renderer {
     pub fn render(&self, session: &Session, page: PageId) -> Result<Frame> {
         let project = session.project();
         let view = project.page(page)?;
+        let hide_sfx = project.hides_sfx() || view.hide_sfx;
         check_size(view.size.width, view.size.height)?;
         let (background, layers) = rayon::join(
             || {
                 view.background
                     .map(|background| -> Result<Node> {
-                        let content = self.image(session, background.file)?;
+                        let content = match self.image(session, background.file) {
+                            Err(error)
+                                if matches!(
+                                    error.downcast_ref::<koharu_scene::Error>(),
+                                    Some(koharu_scene::Error::ExternalImage { .. })
+                                ) =>
+                            {
+                                tracing::warn!(%page, %error, "linked page background is unavailable");
+                                None
+                            }
+                            result => result?,
+                        };
                         Ok(Node::new(
                             None,
                             background.visible,
@@ -91,7 +103,7 @@ impl Renderer {
             || {
                 view.layers
                     .par_iter()
-                    .map(|layer| self.layer(session, layer))
+                    .map(|layer| self.layer(session, layer, hide_sfx))
                     .collect::<Result<Vec<Node>>>()
             },
         );
@@ -131,12 +143,12 @@ impl Renderer {
     }
 
     /// `layer`'s node, its children built across rayon.
-    fn layer(&self, session: &Session, layer: &Layer) -> Result<Node> {
+    fn layer(&self, session: &Session, layer: &Layer, hide_sfx: bool) -> Result<Node> {
         let mut children = layer
             .children
             .par_iter()
             .filter(|child| !child.is_mask())
-            .map(|child| self.layer(session, child))
+            .map(|child| self.layer(session, child, hide_sfx))
             .collect::<Result<Vec<_>>>()?;
         // An empty mask covers nothing.
         let masks = layer
@@ -176,12 +188,15 @@ impl Renderer {
             SceneContent::Mask(_) => bail!("mask {} is drawn only as its parent's", layer.id),
         };
         let container = content.is_none();
+        let visible = layer.visible
+            && !(hide_sfx
+                && matches!(&layer.content, SceneContent::Block(block) if block.role == koharu_scene::Role::Sfx));
         let mut node = Node {
             opacity: f32::from(layer.opacity),
             blend: layer.blend,
             children,
             masks,
-            ..Node::new(Some(layer.id), layer.visible, content)
+            ..Node::new(Some(layer.id), visible, content)
         };
         if container {
             node.bounds = node

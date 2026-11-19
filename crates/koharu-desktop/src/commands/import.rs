@@ -4,13 +4,13 @@
 
 use std::{
     cell::RefCell,
-    io::{self, Read as _, Write},
+    io::{self, Cursor, Read as _, Write},
     path::{Path, PathBuf},
     rc::Rc,
     sync::{Arc, LazyLock},
 };
 
-use anyhow::{Context as _, bail};
+use anyhow::{Context as _, bail, ensure};
 use fs_err::File;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use hayro::{
@@ -18,7 +18,7 @@ use hayro::{
     hayro_syntax::Pdf, render, vello_cpu::color::palette::css::WHITE,
 };
 use image::ImageFormat;
-use koharu_scene::{Edit, Hash, Op};
+use koharu_scene::{ArchiveMember, Edit, ExternalImage, Hash, MAX_SOURCE_BYTES, Op, Size};
 use rars::ArchiveReader;
 use rayon::prelude::*;
 use serde::Deserialize;
@@ -169,11 +169,23 @@ fn in_name_order(path: &Path, mut images: Members) -> anyhow::Result<Vec<Vec<u8>
 
 /// A ZIP or CBZ archive's images.
 fn extract_zip(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
+    let mut images = Vec::new();
+    visit_zip(path, u64::MAX, |member, bytes| {
+        images.push((member.name, bytes));
+        Ok(())
+    })?;
+    in_name_order(path, images)
+}
+
+fn visit_zip(
+    path: &Path,
+    max_bytes: u64,
+    mut visit: impl FnMut(ArchiveMember, Vec<u8>) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
     let mut archive = zip::ZipArchive::new(File::open(path)?)
         .with_context(|| format!("failed to read the archive {}", path.display()))?;
-    let mut images = Vec::new();
     for index in 0..archive.len() {
-        let mut member = archive
+        let member = archive
             .by_index(index)
             .with_context(|| format!("failed to read member {index} of {}", path.display()))?;
         if member.is_dir() {
@@ -186,13 +198,122 @@ fn extract_zip(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
         if !raster(Path::new(&name)) || METADATA.is_match(&name) {
             continue;
         }
+        let size = member.size();
+        ensure!(
+            size != 0 && size <= max_bytes,
+            "image {name:?} has an invalid size"
+        );
         let mut bytes = Vec::new();
         member
+            .take(size.saturating_add(1))
             .read_to_end(&mut bytes)
             .with_context(|| format!("failed to read {name:?} in {}", path.display()))?;
-        images.push((name, bytes));
+        ensure!(
+            bytes.len() as u64 == size,
+            "archive member {name:?} is truncated"
+        );
+        visit(ArchiveMember { index, name }, bytes)?;
     }
-    in_name_order(path, images)
+    Ok(())
+}
+
+#[derive(Clone, Copy, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkedSource {
+    Zip,
+    Folder,
+}
+
+pub(super) async fn pick_originals(
+    window: &Window<CefRuntime>,
+    kind: LinkedSource,
+) -> Option<PathBuf> {
+    let dialog = rfd::AsyncFileDialog::new().set_parent(window);
+    match kind {
+        LinkedSource::Zip => {
+            dialog
+                .add_filter("ZIP / CBZ", &["zip", "cbz"])
+                .pick_file()
+                .await
+        }
+        LinkedSource::Folder => dialog.pick_folder().await,
+    }
+    .map(|file| file.path().to_owned())
+}
+
+/// Reads each original once for its fingerprint and dimensions. Only the
+/// metadata survives the callback, including the original ZIP member index.
+pub(super) fn linked_images(
+    selected: &Path,
+    project: &Path,
+    kind: LinkedSource,
+) -> anyhow::Result<Vec<(Hash, ExternalImage)>> {
+    let selected = selected.canonicalize()?;
+    let parent = project
+        .parent()
+        .context("the project needs a parent directory")?
+        .canonicalize()?;
+    let mut found = Vec::new();
+    let mut add =
+        |path: &Path, member: Option<ArchiveMember>, bytes: Vec<u8>| -> anyhow::Result<()> {
+            let (width, height) = image::ImageReader::new(Cursor::new(&bytes))
+                .with_guessed_format()?
+                .into_dimensions()
+                .with_context(|| format!("invalid image in {}", path.display()))?;
+            let path = path.strip_prefix(&parent).unwrap_or(path).to_owned();
+            found.push((
+                Hash::of(&bytes),
+                ExternalImage {
+                    path,
+                    member,
+                    size: Size { width, height },
+                    bytes: bytes.len() as u64,
+                },
+            ));
+            Ok(())
+        };
+    match kind {
+        LinkedSource::Zip => visit_zip(&selected, MAX_SOURCE_BYTES, |member, bytes| {
+            add(&selected, Some(member), bytes)
+        })?,
+        LinkedSource::Folder => {
+            for item in fs_err::read_dir(&selected)? {
+                let item = item?;
+                let path = item.path();
+                if !item.file_type()?.is_file() || !raster(&path) {
+                    continue;
+                }
+                let path = path.canonicalize()?;
+                ensure!(
+                    path.starts_with(&selected),
+                    "an image is outside the selected folder"
+                );
+                let file = File::open(&path)?;
+                let length = file.metadata()?.len();
+                ensure!(
+                    length != 0 && length <= MAX_SOURCE_BYTES,
+                    "{} has an invalid size",
+                    path.display()
+                );
+                let mut bytes = Vec::new();
+                file.take(length + 1).read_to_end(&mut bytes)?;
+                ensure!(
+                    bytes.len() as u64 == length,
+                    "{} changed while it was read",
+                    path.display()
+                );
+                add(&path, None, bytes)?;
+            }
+        }
+    }
+    ensure!(!found.is_empty(), "{} holds no images", selected.display());
+    // The selected archive or folder is shared by all the returned paths.
+    found[0].1.check_location()?;
+    alphanumeric_sort::sort_slice_by_os_str_key(&mut found, |(_, image)| match &image.member {
+        Some(member) => std::ffi::OsStr::new(&member.name),
+        None => image.path.file_name().unwrap_or(image.path.as_os_str()),
+    });
+    Ok(found)
 }
 
 /// Writes into the RAR member opened last, which is the one being extracted:

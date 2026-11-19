@@ -15,7 +15,9 @@ use image::{DynamicImage, GrayImage, Luma, RgbImage, imageops};
 use imageproc::{distance_transform::Norm, morphology::dilate};
 use indoc::indoc;
 use koharu_renderer::Renderer;
-use koharu_scene::{Content, Layer, LayerId, Op, PageId, Project, Rect, Ref, Tile, Tiles};
+use koharu_scene::{
+    Content, GlossaryEntry, Layer, LayerId, Op, PageId, Project, Rect, Ref, Tile, Tiles,
+};
 use kurbo::{BezPath, Shape as _};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -77,12 +79,12 @@ struct Work {
 }
 
 enum Target {
-    Blocks(Vec<Cleanup>),
-    /// The area's rectangle and its mask over it.
-    Area {
-        rect: Rect,
-        mask: GrayImage,
+    Blocks {
+        cleanups: Vec<Cleanup>,
+        kept: Vec<LayerId>,
     },
+    /// The area's rectangle and its mask over it.
+    Area { rect: Rect, mask: GrayImage },
 }
 
 /// A block's clean-up: its grown mask over `rect`, the clean-up's tiles now,
@@ -103,13 +105,15 @@ pub(crate) async fn inpaint(
     area: Option<Arc<AreaWork>>,
 ) -> Result<()> {
     let member = &task.members[0];
+    let global = config.glossary.clone();
+    let read_global = global.clone();
     let (read, reading) = (member.clone(), area.clone());
     let work = tokio::task::spawn_blocking(move || {
         let _span =
             tracing::info_span!("read", stage = %Stage::Inpaint, page = read.index + 1).entered();
         match &reading {
             Some(area) => read_area(&read, &area.area),
-            None => read_blocks(&read),
+            None => read_blocks(&read, &read_global),
         }
     })
     .await??;
@@ -159,21 +163,35 @@ pub(crate) async fn inpaint(
     let model = model.to_string();
     member
         .apply(Stage::Inpaint, move |project| match work.target {
-            Target::Blocks(cleanups) => Ok(cleanups
+            Target::Blocks { cleanups, kept } => Ok(cleanups
                 .iter()
                 .filter(|cleanup| {
                     project.layer(cleanup.block).is_ok_and(|layer| {
-                        matches!(&layer.content, Content::Block(block) if block.cleanup.id == cleanup.cleanup)
+                        matches!(&layer.content, Content::Block(block)
+                            if block.cleanup.id == cleanup.cleanup
+                                && !project.keeps_original(&global, cleanup.block, &block.source.content.text()))
                     })
                 })
                 .flat_map(|cleanup| cleaned(cleanup, &work.image, &model, &prompt))
+                .chain(kept.into_iter().filter_map(|id| {
+                    let Content::Block(block) = &project.layer(id).ok()?.content else {
+                        return None;
+                    };
+                    (project.keeps_original(&global, id, &block.source.content.text())
+                        && (block.translation.is_some() || block.cleanup.visible))
+                        .then(|| Op::UpdateLayer {
+                            layer: id.into(),
+                            patch: json!({"translation": null, "cleanup": {"visible": false}}),
+                        })
+                }))
                 .collect()),
             Target::Area { rect, mask } => {
                 let Ok(at) = project.page(page) else {
                     return Ok(Vec::new());
                 };
                 let parameters = (!prompt.trim().is_empty()).then(|| json!({"prompt": prompt}));
-                let label = |label: &str| Ref::try_from(label.to_owned()).map_err(anyhow::Error::msg);
+                let label =
+                    |label: &str| Ref::try_from(label.to_owned()).map_err(anyhow::Error::msg);
                 Ok(vec![
                     serde_json::from_value(json!({
                         "op": "add_layer",
@@ -255,16 +273,21 @@ fn cleaned(cleanup: &Cleanup, image: &RgbImage, model: &str, prompt: &str) -> Ve
 
 /// Every block's mask, the fill tiers run, and the regions they left for the
 /// model.
-fn read_blocks(member: &Member) -> Result<Option<Work>> {
+fn read_blocks(member: &Member, global: &[GlossaryEntry]) -> Result<Option<Work>> {
     let Some((project, scan)) = member.scan()? else {
         return Ok(None);
     };
     let mut image = scan.to_rgb8();
     let (width, height) = image.dimensions();
     let mut cleanups = Vec::new();
+    let mut kept = Vec::new();
     {
         let session = member.session.lock();
         for (id, block) in member.blocks(&project) {
+            if project.keeps_original(global, id, &block.source.content.text()) {
+                kept.push(id);
+                continue;
+            }
             let tiles = session.tiles(block.mask.id, None)?;
             if let Some((rect, mask)) = tiles.coverage(width, height) {
                 cleanups.push(Cleanup {
@@ -279,7 +302,12 @@ fn read_blocks(member: &Member) -> Result<Option<Work>> {
         }
     }
     if cleanups.is_empty() {
-        return Ok(None);
+        return Ok((!kept.is_empty()).then(|| Work {
+            image,
+            mask: GrayImage::new(width, height),
+            regions: Vec::new(),
+            target: Target::Blocks { cleanups, kept },
+        }));
     }
     let mut covered = GrayImage::new(width, height);
     for cleanup in &cleanups {
@@ -315,7 +343,7 @@ fn read_blocks(member: &Member) -> Result<Option<Work>> {
         image,
         mask,
         regions,
-        target: Target::Blocks(cleanups),
+        target: Target::Blocks { cleanups, kept },
     }))
 }
 
@@ -329,13 +357,15 @@ fn read_area(member: &Member, area: &Area) -> Result<Option<Work>> {
     let frame = {
         let session = member.session.lock();
         let project = session.project();
-        let Some(page) = project
-            .page(member.page)
-            .ok()
-            .filter(|page| page.background.is_some())
-        else {
+        let Ok(page) = project.page(member.page) else {
             return Ok(None);
         };
+        let Some(background) = page.background else {
+            return Ok(None);
+        };
+        if project.external_image(&background.file).is_some() {
+            session.file(&background.file)?;
+        }
         let mut lettering = Vec::new();
         letterings(&page.layers, &mut lettering);
         Renderer::get()
@@ -522,6 +552,7 @@ mod tests {
             blocks: None,
             session: Arc::new(Mutex::new(session)),
             cancel: CancellationToken::new(),
+            resume: false,
         };
         let area = Area {
             rect: Rect {

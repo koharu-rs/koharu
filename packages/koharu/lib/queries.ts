@@ -28,11 +28,16 @@ export const pageKey = ['page'] as const
 export const pagesKey = ['pages'] as const
 export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
+export const glossaryKey = ['glossary'] as const
 
 /** The open project as the editor lists it: its name, the page the canvas shows, its pages, and
  * its history, read through the scene's own queries. */
 export interface ProjectView {
   name: string
+  id: ProjectAnswer['id']
+  linkedZip: boolean
+  linkedFolder: boolean
+  hideSfx: boolean
   page: PageId | null
   pages: PageSummary[]
   history: History
@@ -52,12 +57,17 @@ const projectQuery = queryOptions({
       call(commands.query, { query: 'get_history' }),
     ])
     const known = queryClient.getQueryData<ProjectView | null>(projectKey)
+    const scene = project as ProjectAnswer
     return {
       name,
+      id: scene.id,
+      linkedZip: scene.linked_zip,
+      linkedFolder: scene.linked_folder,
+      hideSfx: scene.hide_sfx,
       page,
-      pages: (project as ProjectAnswer).pages,
+      pages: scene.pages,
       history: history as History,
-      revisions: known?.name === name ? known.revisions : {},
+      revisions: known?.id === scene.id ? known.revisions : {},
     }
   },
 })

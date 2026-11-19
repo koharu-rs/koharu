@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "管理專案詞表",
+    "globalTitle": "全域詞表",
+    "globalScope": "適用於所有專案。同一原文以專案詞條為準。",
+    "blockedTable": "禁翻表",
+    "search": "搜尋詞條",
+    "noEntries": "沒有符合的詞條。",
+    "edit": "編輯",
+    "batchProgress": "術語分析已完成 {{completed}} / {{total}} 批",
+    "mergeBatchProgress": "術語候選合併已完成 {{completed}} / {{total}} 批",
+    "title": "術語表",
+    "extract": "擷取全篇原文",
+    "exportSource": "匯出原文",
+    "analyze": "分析全篇術語",
+    "check": "檢查譯文",
+    "noIssues": "未發現術語問題",
+    "page": "第 {{page}} 頁",
+    "kind": "項目類型",
+    "source": "原文",
+    "translation": "統一譯名",
+    "note": "備註",
+    "duplicate": "此原文已有詞條",
+    "save": "儲存修改",
+    "add": "新增詞條",
+    "cancel": "取消",
+    "remove": "移除",
+    "candidates": "候選術語",
+    "noCandidates": "沒有新的候選詞條",
+    "occurrences": "出現 {{count}} 處",
+    "excludeLine": "排除這句",
+    "restoreLine": "恢復這句",
+    "extractionStarted": "已開始擷取原文",
+    "extractionCurrent": "已擷取所有偵測到的文字",
+    "analyzing": "正在分析術語…",
+    "kinds": {
+      "person": "人物",
+      "place": "地點",
+      "term": "術語",
+      "preserve": "禁翻詞句（原樣保留）",
+      "preserve_block": "整塊禁翻（保留原字）"
+    }
+  },
+  "linked": {
+    "createZip": "從 ZIP 或 CBZ 建立",
+    "createFolder": "從圖片資料夾建立",
+    "open": "開啟專案檔案",
+    "relink": "重新定位原圖",
+    "zip": "ZIP 或 CBZ",
+    "folder": "圖片資料夾"
+  },
   "about": {
     "author": "作者",
     "description": "漫畫翻譯工具",
@@ -104,6 +154,8 @@
     "close": "關閉步驟記錄",
     "opened": "開啟時",
     "steps": {
+      "edit_glossary": "編輯術語表",
+      "relink_originals": "重新定位原圖",
       "add_text": "新增文字",
       "delete_layers": "刪除圖層",
       "delete_pages": "刪除頁面",
@@ -129,7 +181,19 @@
     },
     "title": "步驟記錄"
   },
+  "sfxVisibility": {
+    "page": "本頁擬聲詞",
+    "project": "專案擬聲詞",
+    "hidePage": "隱藏本頁擬聲詞譯文",
+    "showPage": "顯示本頁擬聲詞譯文",
+    "hideProject": "隱藏全專案擬聲詞譯文",
+    "showProject": "恢復專案擬聲詞顯示"
+  },
   "inference": {
+    "resume": "繼續",
+    "resumeDescription": "只執行尚未完成的所選階段。",
+    "afterSelectedPages": "從所選頁之後",
+    "afterSelectedPagesDescription": "從最後一個所選頁之後開始，未選取時以目前頁面為準。",
     "entireProject": "整個專案",
     "entireProjectDescription": "處理此專案中的每個頁面。",
     "model": "模型",
@@ -142,6 +206,7 @@
     "runProcessing": "執行處理",
     "scope": "範圍",
     "scopeShort": {
+      "after-selected-pages": "所選頁之後",
       "project": "專案",
       "selected-pages": "選取範圍"
     },
@@ -275,6 +340,8 @@
     "useModel": "使用 {{provider}} 的 {{model}}"
   },
   "navigator": {
+    "excludePage": "將 {{page}} 排除出處理流程",
+    "includePage": "將 {{page}} 重新納入處理流程",
     "actionsFor": "{{page}} 的操作",
     "delete": "刪除",
     "deleteDescription": "這將刪除「{{page}}」及其圖層。此操作可以復原。",
@@ -302,12 +369,14 @@
     "title": "翻譯輸出"
   },
   "phase": {
+    "glossary": "術語分析",
     "detect": "偵測",
     "inpaint": "修補",
     "recognize": "OCR",
     "translate": "翻譯"
   },
   "phaseDescription": {
+    "glossary": "分析專案原文中的術語，供翻譯階段使用。",
     "detect": "找出頁面上的文字。",
     "inpaint": "重建移除文字後的畫面。",
     "recognize": "讀取每個區域中的文字。",
@@ -344,6 +413,10 @@
     "backToEditor": "返回編輯器",
     "loading": "正在載入偏好設定…",
     "pipeline": {
+      "followTranslator": "跟隨翻譯模型",
+      "glossaryReasoning": "思考強度",
+      "glossaryPrompt": "自訂提示詞",
+      "glossaryPromptDescription": "補充術語擷取和衝突審查的指示。留空時使用預設指示。",
       "description": "選擇用於處理每個頁面的模型和選項。",
       "model": "模型",
       "modelLabel": "{{stage}}模型",

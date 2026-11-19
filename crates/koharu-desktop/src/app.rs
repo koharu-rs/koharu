@@ -194,6 +194,7 @@ impl App {
         &self,
         target: Target,
         stages: BTreeSet<Stage>,
+        resume: bool,
         config: Option<PipelineConfig>,
     ) -> Result<RunId> {
         Ok(self.pipeline.run(
@@ -201,6 +202,7 @@ impl App {
             Request {
                 target,
                 stages,
+                resume,
                 config,
             },
         )?)
@@ -351,6 +353,7 @@ impl App {
                             prompt: None,
                         },
                         BTreeSet::from([Stage::Inpaint]),
+                        false,
                         None,
                     )
                     .map(drop),

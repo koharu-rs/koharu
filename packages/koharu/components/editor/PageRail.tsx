@@ -11,7 +11,15 @@ import {
 } from '@dnd-kit/core'
 import { useQuery } from '@tanstack/react-query'
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
-import { FilePlus2, FolderOpen, LoaderCircle, MoreHorizontal, Settings } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  FilePlus2,
+  FolderOpen,
+  LoaderCircle,
+  MoreHorizontal,
+  Settings,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -60,6 +68,9 @@ export function PageRail() {
   const selectPages = useKoharuStore((state) => state.selectPages)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const running = useKoharuStore((state) =>
+    Object.values(state.jobs).some((job) => job.state === 'running'),
+  )
   const { importPages, importing } = useImportPages()
   const anchor = useRef<number | null>(null)
   // A page being dragged, and the place of the page it's over.
@@ -206,11 +217,21 @@ export function PageRail() {
                         selected={selected.includes(page.id)}
                         dragged={dragged?.page === page.id}
                         target={dragged !== null && dragged.target === index}
+                        running={running}
+                        onExclude={(excluded, label) =>
+                          void call(commands.edit, {
+                            label,
+                            ops: [{ op: 'set_page_options', page: page.id, excluded }],
+                          }).catch(() => undefined)
+                        }
                         onSelect={(additive, range) => select(index, additive, range)}
                         onRun={(stage) =>
-                          void call(commands.runPipeline, { pages: [page.id] }, [stage]).catch(
-                            () => undefined,
-                          )
+                          void call(
+                            commands.runPipeline,
+                            { pages: [page.id] },
+                            [stage],
+                            false,
+                          ).catch(() => undefined)
                         }
                         onDelete={() => {
                           setPageToDelete({ page: page.id, number: index + 1 })
@@ -336,7 +357,9 @@ function PageItem({
   selected,
   dragged,
   target,
+  running,
   onSelect,
+  onExclude,
   onRun,
   onDelete,
 }: {
@@ -349,12 +372,18 @@ function PageItem({
   selected: boolean
   dragged: boolean
   target: boolean
+  running: boolean
   onSelect: (additive: boolean, range: boolean) => void
+  onExclude: (excluded: boolean, label: string) => void
   onRun: (stage: Stage) => void
   onDelete: () => void
 }) {
   const { t } = useTranslation()
   const name = t('navigator.pageNumber', { number: index + 1 })
+  const exclusionLabel = t(page.excluded ? 'navigator.includePage' : 'navigator.excludePage', {
+    page: name,
+  })
+  const VisibilityIcon = page.excluded ? EyeOff : Eye
   const handle = useDraggable({ id: page.id })
   const { setNodeRef } = useDroppable({ id: page.id })
   // A press on the page's own buttons and menus doesn't drag it.
@@ -394,7 +423,12 @@ function PageItem({
             onSelect(event.ctrlKey || event.metaKey, event.shiftKey)
           }}
         >
-          <div className='grid h-16 w-12 place-items-center overflow-hidden rounded-lg bg-[var(--surface-well)]'>
+          <div
+            className={cn(
+              'grid h-16 w-12 place-items-center overflow-hidden rounded-lg bg-[var(--surface-well)]',
+              page.excluded && 'opacity-45',
+            )}
+          >
             {page.background ? (
               <PageThumbnail
                 page={page.id}
@@ -425,15 +459,30 @@ function PageItem({
                   <PageActions
                     Item={DropdownMenuItem}
                     Separator={DropdownMenuSeparator}
+                    excluded={page.excluded}
                     onRun={onRun}
                     onDelete={onDelete}
                   />
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <p className='mt-1 text-[9px] text-muted-foreground tabular-nums'>
-              {page.size.width} × {page.size.height}
-            </p>
+            <div className='mt-1 flex items-center justify-between gap-1'>
+              <p className='min-w-0 truncate text-[9px] text-muted-foreground tabular-nums'>
+                {page.size.width} × {page.size.height}
+              </p>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-xs'
+                className='size-5 shrink-0'
+                aria-label={exclusionLabel}
+                title={exclusionLabel}
+                disabled={running}
+                onClick={() => onExclude(!page.excluded, exclusionLabel)}
+              >
+                <VisibilityIcon className='size-3.5' />
+              </Button>
+            </div>
           </div>
         </article>
       </ContextMenuTrigger>
@@ -441,6 +490,7 @@ function PageItem({
         <PageActions
           Item={ContextMenuItem}
           Separator={ContextMenuSeparator}
+          excluded={page.excluded}
           onRun={onRun}
           onDelete={onDelete}
         />
@@ -459,22 +509,31 @@ const pageMenuItem =
 function PageActions({
   Item,
   Separator,
+  excluded,
   onRun,
   onDelete,
 }: {
   Item: typeof DropdownMenuItem | typeof ContextMenuItem
   Separator: typeof DropdownMenuSeparator | typeof ContextMenuSeparator
+  excluded: boolean
   onRun: (stage: Stage) => void
   onDelete: () => void
 }) {
   const { t } = useTranslation()
   return (
     <>
-      {pipelineStages.map((stage) => (
-        <Item key={stage} className={pageMenuItem} onClick={() => onRun(stage)}>
-          {t(`navigator.run.${stage}`)}
-        </Item>
-      ))}
+      {pipelineStages
+        .filter((stage) => stage !== 'glossary')
+        .map((stage) => (
+          <Item
+            key={stage}
+            className={pageMenuItem}
+            disabled={excluded}
+            onClick={() => onRun(stage)}
+          >
+            {t(`navigator.run.${stage}`)}
+          </Item>
+        ))}
       <Separator />
       <Item variant='destructive' className={pageMenuItem} onClick={onDelete}>
         {t('navigator.delete')}

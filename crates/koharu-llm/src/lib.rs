@@ -16,8 +16,9 @@ pub use hosted::{
     Endpoint, Providers, SERVERS, SIGN_INS, SignInPrompt, VENDORS, sign_in, sign_out,
 };
 pub use local::{Local, Quantization, Sampling, Size, local};
-pub use model::answers;
+pub use model::{answer, answers, complete, go_deepseek};
 pub use rig_agent::agent::AgentBuilder;
+pub use rig_agent::run::PromptError;
 /// rig, whose requests and streams every model here takes and gives.
 pub use rig_core as rig;
 pub use rig_memory::{CompactReason, SummaryPrompts};
@@ -56,6 +57,8 @@ pub struct Model {
     pub images: bool,
     /// Whether it calls tools, as the agent needs.
     pub tools: bool,
+    /// A model trained only for sentence translation cannot extract terminology.
+    pub translation_only: bool,
 }
 
 impl From<&ModelSpec> for Model {
@@ -66,6 +69,7 @@ impl From<&ModelSpec> for Model {
             vendor: spec.provider.vendor().to_string(),
             images: spec.input.image,
             tools: spec.tools,
+            translation_only: spec.details.kind.as_deref() == Some(TRANSLATION),
         }
     }
 }

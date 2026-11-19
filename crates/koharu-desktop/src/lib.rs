@@ -26,11 +26,19 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     // scheduler runs on.
     tauri::async_runtime::set(tokio::runtime::Handle::current());
 
+    let dev_data = koharu_config::dev_data_dir();
+
     // The install folder in Windows release builds, where setup puts Koharu
     // and its store; it's read-only on macOS and Linux, so the app's local
     // data folder otherwise. That is Tauri's `app_local_data_dir`, which
     // needs the app this builds.
-    let folder = if cfg!(all(windows, not(debug_assertions))) {
+    let folder = if let Some(folder) = &dev_data {
+        anyhow::ensure!(
+            folder.is_absolute(),
+            "KOHARU_DEV_DATA_DIR must be an absolute path"
+        );
+        folder.clone()
+    } else if cfg!(all(windows, not(debug_assertions))) {
         platform::resource_dir(context.package_info(), &Env::default())
             .context("Koharu's install folder is unknown")?
     } else {
@@ -88,19 +96,38 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         None => cef,
     };
     #[cfg(debug_assertions)]
-    let cef = cef
-        .remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
-            port: 4000,
+    let cef = {
+        let port = match std::env::var("KOHARU_DEVTOOLS_PORT") {
+            Ok(port) => port
+                .parse::<u16>()
+                .context("invalid KOHARU_DEVTOOLS_PORT")?,
+            Err(std::env::VarError::NotPresent) => 4000,
+            Err(error) => return Err(error.into()),
+        };
+        cef.remote_debugging(tauri_runtime_cef::RemoteDebugging::Port {
+            port,
             allowed_origins: Vec::new(),
         })
         // A profile apart from the installed app's, which pins remote
         // debugging off in its local state on every launch.
         .root_cache_path(
-            dirs::cache_dir()
-                .context("the user's cache directory is unknown")?
-                .join(&context.config().identifier)
-                .join("cef-debug"),
-        );
+            match &dev_data {
+                Some(folder) => folder.clone(),
+                None => dirs::cache_dir()
+                    .context("the user's cache directory is unknown")?
+                    .join(&context.config().identifier),
+            }
+            .join("cef-debug"),
+        )
+    };
+
+    let logs = match &dev_data {
+        Some(folder) => TargetKind::Folder {
+            path: folder.join("logs"),
+            file_name: None,
+        },
+        None => TargetKind::LogDir { file_name: None },
+    };
 
     tauri::Builder::<CefRuntime>::new()
         .runtime(cef)
@@ -108,7 +135,7 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
             tauri_plugin_log::Builder::new()
                 .level(LevelFilter::Info)
                 .max_file_size(1_000_000)
-                .targets([Target::new(TargetKind::LogDir { file_name: None })])
+                .targets([Target::new(logs)])
                 .build(),
         )
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {

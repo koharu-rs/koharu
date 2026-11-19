@@ -5,11 +5,12 @@
 //! models; the scheduler sees a stage through `key`.
 
 pub(crate) mod detect;
+pub(crate) mod glossary;
 pub(crate) mod inpaint;
 pub(crate) mod recognize;
 pub(crate) mod translate;
 
-use std::{sync::Arc, time::Instant};
+use std::{collections::BTreeSet, sync::Arc, time::Instant};
 
 use anyhow::anyhow;
 use image::DynamicImage;
@@ -42,6 +43,7 @@ pub(crate) struct Member {
     pub(crate) blocks: Option<Arc<[LayerId]>>,
     pub(crate) session: Arc<Mutex<Session>>,
     pub(crate) cancel: CancellationToken,
+    pub(crate) resume: bool,
 }
 
 impl Member {
@@ -89,7 +91,11 @@ impl Member {
             if member.cancel.is_cancelled() {
                 return Ok(());
             }
-            let ops = write(&session.project())?;
+            let project = session.project();
+            if !project.page(member.page).is_ok_and(|page| !page.excluded) {
+                return Ok(());
+            }
+            let ops = write(&project)?;
             if !ops.is_empty() {
                 session.apply(Edit {
                     label: stage.to_string(),
@@ -181,16 +187,51 @@ impl Task {
 pub(crate) struct Inputs {
     pub(crate) config: Arc<PipelineConfig>,
     pub(crate) area: Option<Arc<inpaint::AreaWork>>,
+    pub(crate) glossary_pages: Arc<BTreeSet<PageId>>,
     pub(crate) conversation: Option<OwnedMutexGuard<translate::Conversation>>,
 }
 
 /// Runs `task`'s stage: its failure, if any, as the run reports it.
-pub(crate) async fn run(task: Task, inputs: Inputs) -> Result<(), String> {
+pub(crate) async fn run(mut task: Task, inputs: Inputs) -> Result<(), String> {
     let stage = task.stage;
     let config = &inputs.config;
+    task.members.retain_mut(|member| {
+        let project = member.session.lock().project();
+        let Ok(page) = project.page(member.page) else {
+            return false;
+        };
+        if page.excluded {
+            return false;
+        }
+        if !member.resume {
+            return true;
+        }
+        match stage {
+            Stage::Detect => !crate::resume::detection_done(page),
+            Stage::Glossary => true,
+            _ => {
+                let pending = crate::resume::pending_blocks(
+                    &project,
+                    member.page,
+                    stage,
+                    config,
+                    member.blocks.as_deref(),
+                );
+                if pending.is_empty() {
+                    return false;
+                }
+                member.blocks = Some(pending.into());
+                true
+            }
+        }
+    });
+    if task.members.is_empty() {
+        return Ok(());
+    }
     let result = match stage {
         Stage::Detect => detect::detect(&task, config).await,
         Stage::Recognize => recognize::recognize(&task, config).await,
+        Stage::Glossary => glossary::analyze(&task, config, inputs.glossary_pages).await,
         Stage::Inpaint => inpaint::inpaint(&task, config, inputs.area).await,
         Stage::Translate => {
             let conversation = inputs
@@ -201,6 +242,9 @@ pub(crate) async fn run(task: Task, inputs: Inputs) -> Result<(), String> {
     };
     match result {
         Err(error) if !error.is::<Stopped>() => {
+            if stage == Stage::Glossary {
+                tracing::warn!(run = task.members[0].run.0, error = %format_args!("{error:#}"), "glossary analysis failed");
+            }
             let error = anyhow::Error::from(Error::Stage {
                 stage,
                 source: error,
@@ -218,20 +262,30 @@ pub(crate) fn key(stage: Stage, config: &PipelineConfig) -> Option<Key> {
         Stage::Detect => config.detector.model.to_string(),
         Stage::Recognize => config.recognizer.model.to_string(),
         Stage::Inpaint => config.inpainter.model.to_string(),
-        Stage::Translate => {
+        Stage::Translate | Stage::Glossary => {
             let translator = &config.translator;
+            let reference = if stage == Stage::Glossary {
+                config.glossary_model()
+            } else {
+                &translator.model
+            };
             // A `vendor/model` reference: koharu-llm runs only its own
             // vendor's models in this process.
-            let (vendor, _) = translator.model.split_once('/')?;
+            let (vendor, _) = reference.split_once('/')?;
             if vendor != koharu_llm::KOHARU {
                 return None;
             }
             // With its projector, it's another load.
-            match translator.vision {
-                true => format!("{} reading images", translator.model),
-                false => translator.model.clone(),
+            match stage == Stage::Translate && translator.vision {
+                true => format!("{reference} reading images"),
+                false => reference.to_owned(),
             }
         }
+    };
+    let stage = if stage == Stage::Glossary {
+        Stage::Translate
+    } else {
+        stage
     };
     Some(Key { stage, name })
 }

@@ -29,6 +29,17 @@ impl Run<'_, '_> {
                 ));
             }
         };
+        self.create_page(op, id, index, size, background)
+    }
+
+    pub(super) fn create_page(
+        &mut self,
+        op: usize,
+        id: Option<&Ref>,
+        index: usize,
+        size: Size,
+        background: Option<Background>,
+    ) -> Result<()> {
         if size.width == 0 || size.height == 0 {
             return Err(Error::invalid(op, "a page needs a nonzero size"));
         }
@@ -47,6 +58,9 @@ impl Run<'_, '_> {
                 id,
                 size,
                 background,
+                excluded: false,
+                hide_sfx: false,
+                detected: None,
                 layers: Vec::new(),
             },
         );
@@ -90,11 +104,15 @@ impl Run<'_, '_> {
                 ));
             }
         }
-        self.project
+        let page = self
+            .project
             .pages
             .get_mut(&id)
-            .expect("the page was just found")
-            .background = background.copied();
+            .expect("the page was just found");
+        if page.background.as_ref().map(|old| old.file) != background.map(|new| new.file) {
+            page.detected = Some(false);
+        }
+        page.background = background.copied();
         Ok(())
     }
 

@@ -65,12 +65,15 @@ impl Pipeline {
             .config
             .unwrap_or_else(|| self.0.config.read().clone());
         let project = session.lock().project();
-        let plan = Plan::new(&project, &request.target, &request.stages)?;
+        let mut plan = Plan::new(&project, &request.target, &request.stages)?;
+        if request.resume {
+            plan.resume(&project, &request.stages, &config)?;
+        }
         let id = RunId(self.0.next.fetch_add(1, Ordering::Relaxed));
         // Told before the scheduler can tell anything of the run.
         self.0.events.send(Event::Queued {
             run: id,
-            steps: plan.pages() * request.stages.len(),
+            steps: plan.steps(&request.stages),
         });
         let run = Run::new(id, session, project.id(), config, plan, &request.stages);
         self.send(Command::Run(run));
@@ -152,6 +155,7 @@ mod tests {
         let request = Request {
             target: Target::Project,
             stages: BTreeSet::from([Stage::Detect]),
+            resume: false,
             config: None,
         };
         let run = pipeline.run(session, request).expect("the run starts");

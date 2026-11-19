@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "프로젝트 용어집 관리",
+    "globalTitle": "공용 용어집",
+    "globalScope": "모든 프로젝트에 적용됩니다. 원문이 같으면 프로젝트 항목이 우선합니다.",
+    "blockedTable": "번역 제외 목록",
+    "search": "항목 검색",
+    "noEntries": "일치하는 항목이 없습니다.",
+    "edit": "편집",
+    "batchProgress": "용어 분석 {{completed}} / {{total}}개 배치 완료",
+    "mergeBatchProgress": "용어 후보 검토 {{completed}} / {{total}} 배치",
+    "title": "용어집",
+    "extract": "전체 원문 추출",
+    "exportSource": "원문 내보내기",
+    "analyze": "전체 용어 분석",
+    "check": "번역 확인",
+    "noIssues": "용어 문제가 없습니다",
+    "page": "{{page}}쪽",
+    "kind": "항목 유형",
+    "source": "원문",
+    "translation": "통일 번역",
+    "note": "메모",
+    "duplicate": "이미 등록된 원문입니다",
+    "save": "변경 사항 저장",
+    "add": "항목 추가",
+    "cancel": "취소",
+    "remove": "삭제",
+    "candidates": "용어 후보",
+    "noCandidates": "새 후보가 없습니다",
+    "occurrences": "{{count}}곳",
+    "excludeLine": "이 대사 제외",
+    "restoreLine": "이 대사 복원",
+    "extractionStarted": "원문 추출을 시작했습니다",
+    "extractionCurrent": "감지된 텍스트를 모두 추출했습니다",
+    "analyzing": "용어 분석 중…",
+    "kinds": {
+      "person": "인물",
+      "place": "장소",
+      "term": "용어",
+      "preserve": "구절을 원문 그대로 유지",
+      "preserve_block": "블록 전체의 원본 글자 유지"
+    }
+  },
+  "linked": {
+    "createZip": "ZIP 또는 CBZ에서 새로 만들기",
+    "createFolder": "이미지 폴더에서 새로 만들기",
+    "open": "프로젝트 파일 열기",
+    "relink": "원본 이미지 다시 연결",
+    "zip": "ZIP 또는 CBZ",
+    "folder": "이미지 폴더"
+  },
   "about": {
     "author": "작성자",
     "description": "만화 번역 도구",
@@ -104,6 +154,8 @@
     "close": "작업 내역 닫기",
     "opened": "열었을 때",
     "steps": {
+      "edit_glossary": "용어집 편집",
+      "relink_originals": "원본 이미지 다시 연결",
       "add_text": "텍스트 추가",
       "delete_layers": "레이어 삭제",
       "delete_pages": "페이지 삭제",
@@ -129,7 +181,19 @@
     },
     "title": "작업 내역"
   },
+  "sfxVisibility": {
+    "page": "이 페이지의 효과음",
+    "project": "프로젝트 효과음",
+    "hidePage": "이 페이지의 효과음 번역 숨기기",
+    "showPage": "이 페이지의 효과음 번역 표시",
+    "hideProject": "프로젝트 전체 효과음 번역 숨기기",
+    "showProject": "프로젝트 효과음 표시 복원"
+  },
   "inference": {
+    "resume": "계속",
+    "resumeDescription": "선택한 단계에서 완료되지 않은 작업만 처리합니다.",
+    "afterSelectedPages": "선택한 페이지 다음부터",
+    "afterSelectedPagesDescription": "마지막으로 선택한 페이지 다음부터 시작합니다. 선택이 없으면 현재 페이지를 기준으로 합니다.",
     "entireProject": "전체 프로젝트",
     "entireProjectDescription": "이 프로젝트의 모든 페이지를 처리합니다.",
     "model": "모델",
@@ -142,6 +206,7 @@
     "runProcessing": "처리 실행",
     "scope": "범위",
     "scopeShort": {
+      "after-selected-pages": "선택 다음부터",
       "project": "프로젝트",
       "selected-pages": "선택 항목"
     },
@@ -275,6 +340,8 @@
     "useModel": "{{provider}}의 {{model}} 사용"
   },
   "navigator": {
+    "excludePage": "{{page}} 처리 제외",
+    "includePage": "{{page}} 처리에 포함",
     "actionsFor": "{{page}} 작업",
     "delete": "삭제",
     "deleteDescription": "“{{page}}” 및 해당 레이어를 삭제합니다. 실행 취소할 수 있습니다.",
@@ -302,12 +369,14 @@
     "title": "번역 출력"
   },
   "phase": {
+    "glossary": "용어 분석",
     "detect": "감지",
     "inpaint": "인페인팅",
     "recognize": "OCR",
     "translate": "번역"
   },
   "phaseDescription": {
+    "glossary": "번역 전에 프로젝트 원문에서 용어를 추출합니다.",
     "detect": "페이지의 텍스트를 찾습니다.",
     "inpaint": "텍스트를 지운 뒤 그림을 복원합니다.",
     "recognize": "각 영역 안의 텍스트를 읽습니다.",
@@ -344,6 +413,10 @@
     "backToEditor": "편집기로 돌아가기",
     "loading": "환경 설정 불러오는 중…",
     "pipeline": {
+      "followTranslator": "번역 모델 사용",
+      "glossaryReasoning": "추론 강도",
+      "glossaryPrompt": "사용자 지정 프롬프트",
+      "glossaryPromptDescription": "용어 추출과 후보 간 불일치 검토에 적용할 지침을 추가합니다. 비워 두면 기본 지침을 사용합니다.",
       "description": "각 페이지 처리에 사용할 모델과 옵션을 선택합니다.",
       "model": "모델",
       "modelLabel": "{{stage}} 모델",

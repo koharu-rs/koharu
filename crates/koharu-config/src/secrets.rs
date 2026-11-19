@@ -68,7 +68,12 @@ impl Keys for CredentialStore {
 }
 
 fn entry() -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, ACCOUNT).map_err(|error| {
+    let service = if crate::dev_data_dir().is_some() {
+        "koharu-dev"
+    } else {
+        SERVICE
+    };
+    keyring::Entry::new(service, ACCOUNT).map_err(|error| {
         match (error, keyring::Entry::store_status()) {
             // keyring sets its store up once, answering every later call
             // with `NoDefaultStore` and keeping why in `store_status`.

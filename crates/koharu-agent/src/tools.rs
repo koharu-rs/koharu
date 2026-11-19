@@ -260,6 +260,7 @@ impl Tool for Run {
         let request = Request {
             target: args.target,
             stages: args.stages,
+            resume: false,
             config: None,
         };
         let run = tools

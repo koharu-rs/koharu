@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "管理项目词表",
+    "globalTitle": "全局词表",
+    "globalScope": "适用于所有项目。同一原文以项目词条为准。",
+    "blockedTable": "禁翻表",
+    "search": "搜索词条",
+    "noEntries": "没有匹配的词条。",
+    "edit": "编辑",
+    "batchProgress": "术语分析已完成 {{completed}} / {{total}} 批",
+    "mergeBatchProgress": "术语候选合并已完成 {{completed}} / {{total}} 批",
+    "title": "术语表",
+    "extract": "提取全篇原文",
+    "exportSource": "导出原文",
+    "analyze": "分析全篇术语",
+    "check": "检查译文",
+    "noIssues": "未发现术语问题",
+    "page": "第 {{page}} 页",
+    "kind": "条目类型",
+    "source": "原文",
+    "translation": "统一译名",
+    "note": "备注",
+    "duplicate": "此原文已有词条",
+    "save": "保存修改",
+    "add": "添加词条",
+    "cancel": "取消",
+    "remove": "移除",
+    "candidates": "术语候选",
+    "noCandidates": "没有新的候选词条",
+    "occurrences": "出现 {{count}} 处",
+    "excludeLine": "排除这句",
+    "restoreLine": "恢复这句",
+    "extractionStarted": "已开始提取原文",
+    "extractionCurrent": "已提取所有检测到的文字",
+    "analyzing": "正在分析术语…",
+    "kinds": {
+      "person": "人物",
+      "place": "地点",
+      "term": "术语",
+      "preserve": "禁翻词句（原样保留）",
+      "preserve_block": "整块禁翻（保留原字）"
+    }
+  },
+  "linked": {
+    "createZip": "从 ZIP 或 CBZ 新建",
+    "createFolder": "从图片目录新建",
+    "open": "打开项目文件",
+    "relink": "重新定位原图",
+    "zip": "ZIP 或 CBZ",
+    "folder": "图片目录"
+  },
   "about": {
     "author": "作者",
     "description": "漫画翻译工具",
@@ -104,6 +154,8 @@
     "close": "关闭历史记录",
     "opened": "打开时",
     "steps": {
+      "edit_glossary": "编辑术语表",
+      "relink_originals": "重新定位原图",
       "add_text": "添加文字",
       "delete_layers": "删除图层",
       "delete_pages": "删除页面",
@@ -129,7 +181,19 @@
     },
     "title": "历史记录"
   },
+  "sfxVisibility": {
+    "page": "本页拟声词",
+    "project": "项目拟声词",
+    "hidePage": "隐藏本页拟声词译文",
+    "showPage": "显示本页拟声词译文",
+    "hideProject": "隐藏全项目拟声词译文",
+    "showProject": "恢复项目拟声词显示"
+  },
   "inference": {
+    "resume": "继续",
+    "resumeDescription": "只运行尚未完成的所选阶段。",
+    "afterSelectedPages": "从所选页之后",
+    "afterSelectedPagesDescription": "从最后一个所选页之后开始，未选择时以当前页为准。",
     "entireProject": "整个项目",
     "entireProjectDescription": "处理此项目中的每个页面。",
     "model": "模型",
@@ -142,6 +206,7 @@
     "runProcessing": "运行处理",
     "scope": "范围",
     "scopeShort": {
+      "after-selected-pages": "所选页之后",
       "project": "项目",
       "selected-pages": "所选内容"
     },
@@ -275,6 +340,8 @@
     "useModel": "使用 {{provider}} 的 {{model}}"
   },
   "navigator": {
+    "excludePage": "将 {{page}} 排除出流水线",
+    "includePage": "将 {{page}} 重新纳入流水线",
     "actionsFor": "{{page}} 的操作",
     "delete": "删除",
     "deleteDescription": "这将删除“{{page}}”及其图层。此操作可以撤销。",
@@ -302,12 +369,14 @@
     "title": "翻译输出"
   },
   "phase": {
+    "glossary": "术语分析",
     "detect": "检测",
     "inpaint": "修补",
     "recognize": "OCR",
     "translate": "翻译"
   },
   "phaseDescription": {
+    "glossary": "分析项目原文中的术语，供翻译阶段使用。",
     "detect": "定位页面上的文本。",
     "inpaint": "重建移除文字后的画面。",
     "recognize": "读取每个区域中的文本。",
@@ -344,6 +413,10 @@
     "backToEditor": "返回编辑器",
     "loading": "正在加载偏好设置…",
     "pipeline": {
+      "followTranslator": "跟随翻译模型",
+      "glossaryReasoning": "思考强度",
+      "glossaryPrompt": "自定义提示词",
+      "glossaryPromptDescription": "补充术语提取和冲突审核的指令。留空时使用默认指令。",
       "description": "选择用于处理每个页面的模型和选项。",
       "model": "模型",
       "modelLabel": "{{stage}}模型",

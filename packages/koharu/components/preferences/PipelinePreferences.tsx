@@ -22,6 +22,7 @@ import type {
   TranslatorConfig,
 } from '@koharu/ipc/protocol'
 import { Badge } from '@koharu/ui/components/badge'
+import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {
   Select,
@@ -33,7 +34,8 @@ import {
 import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
 
-type StageName = 'detect' | 'recognize' | 'inpaint' | 'translate'
+type StageName = 'detect' | 'recognize' | 'inpaint' | 'glossary' | 'translate'
+type ReasoningChoice = 'default' | (typeof REASONING)[number]
 
 /** The `[pipeline]` stages in the order they run, a section each with its model first: the
  * detector with its thresholds, the recognizer, the inpainter with its prompt, and the translator
@@ -51,6 +53,7 @@ export function PipelinePreferences({
   const detector = value.detector ?? {}
   const inpainter = value.inpainter ?? {}
   const translator = value.translator ?? {}
+  const glossary = value.glossary_analysis ?? {}
   const thresholds = ['text', 'onomatopoeia', 'bubble', 'panel'] as const
 
   return (
@@ -130,9 +133,50 @@ export function PipelinePreferences({
         </PreferenceRow>
       </Stage>
       <Stage
+        stage='glossary'
+        model={
+          <TextModel
+            value={glossary.model ?? ''}
+            models={models.filter((model) => !model.translation_only)}
+            label={t('settings.pipeline.modelLabel', { stage: t('phase.glossary') })}
+            onChange={(model) => onChange({ ...value, glossary_analysis: { ...glossary, model } })}
+            onUseTranslator={() =>
+              onChange({ ...value, glossary_analysis: { ...glossary, model: null } })
+            }
+          />
+        }
+      >
+        <PreferenceRow title={t('settings.pipeline.glossaryReasoning')}>
+          <ReasoningSelect
+            label={t('settings.pipeline.glossaryReasoning')}
+            value={glossary.reasoning ?? 'off'}
+            onChange={(reasoning) =>
+              onChange({ ...value, glossary_analysis: { ...glossary, reasoning } })
+            }
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.pipeline.glossaryPrompt')}
+          description={t('settings.pipeline.glossaryPromptDescription')}
+          align='start'
+        >
+          <Textarea
+            aria-label={t('settings.pipeline.glossaryPrompt')}
+            value={glossary.prompt ?? ''}
+            className='field-sizing-fixed min-h-28 resize-y overflow-y-auto text-[12px] leading-5'
+            onChange={(event) =>
+              onChange({
+                ...value,
+                glossary_analysis: { ...glossary, prompt: event.currentTarget.value || null },
+              })
+            }
+          />
+        </PreferenceRow>
+      </Stage>
+      <Stage
         stage='translate'
         model={
-          <TranslatorModel
+          <TextModel
             value={translator.model ?? ''}
             models={models}
             label={t('settings.pipeline.modelLabel', {
@@ -164,8 +208,12 @@ function Stage({
   const { t } = useTranslation()
   return (
     <PreferenceSection
-      title={t(`settings.pipeline.stages.${stage}.title`)}
-      description={t(`settings.pipeline.stages.${stage}.description`)}
+      title={t(stage === 'glossary' ? 'phase.glossary' : `settings.pipeline.stages.${stage}.title`)}
+      description={t(
+        stage === 'glossary'
+          ? 'phaseDescription.glossary'
+          : `settings.pipeline.stages.${stage}.description`,
+      )}
     >
       <PreferenceRow title={t('settings.pipeline.model')}>{model}</PreferenceRow>
       {children}
@@ -179,7 +227,7 @@ function ModelSelect<Model extends Detector | Recognizer | Inpainter>({
   names,
   onChange,
 }: {
-  stage: Exclude<StageName, 'translate'>
+  stage: Exclude<StageName, 'translate' | 'glossary'>
   value: Model
   names: Record<Model, string>
   onChange: (model: Model) => void
@@ -211,17 +259,19 @@ function ModelSelect<Model extends Detector | Recognizer | Inpainter>({
   )
 }
 
-/** The translator's model, any provider's, labelled with where it runs. */
-function TranslatorModel({
+/** A language model, labelled with its provider. */
+function TextModel({
   value,
   models,
   label,
   onChange,
+  onUseTranslator,
 }: {
   value: string
   models: Model[]
   label: string
   onChange: (model: string) => void
+  onUseTranslator?: () => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -238,7 +288,10 @@ function TranslatorModel({
               {vendorName(vendorOf(value), t)}
             </Badge>
           )}
-          <span className='truncate'>{modelName(models, value) || t('inference.noModel')}</span>
+          <span className='truncate'>
+            {modelName(models, value) ||
+              t(onUseTranslator ? 'settings.pipeline.followTranslator' : 'inference.noModel')}
+          </span>
         </span>
         <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
       </PopoverTrigger>
@@ -247,6 +300,20 @@ function TranslatorModel({
         sideOffset={4}
         className='w-(--anchor-width) min-w-64 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
       >
+        {onUseTranslator && (
+          <Button
+            type='button'
+            size='sm'
+            variant='ghost'
+            className='mb-1 justify-start'
+            onClick={() => {
+              onUseTranslator()
+              setOpen(false)
+            }}
+          >
+            {t('settings.pipeline.followTranslator')}
+          </Button>
+        )}
         <ModelPicker
           value={value}
           models={models}
@@ -257,6 +324,45 @@ function TranslatorModel({
         />
       </PopoverContent>
     </Popover>
+  )
+}
+
+function ReasoningSelect({
+  value,
+  label,
+  onChange,
+}: {
+  value: TranslatorConfig['reasoning'] | 'default'
+  label: string
+  onChange: (value: ReasoningChoice) => void
+}) {
+  const { t } = useTranslation()
+  const levels = ['default', ...REASONING] as const
+  const items = Object.fromEntries(
+    levels.map((level) => [
+      level,
+      t(level === 'default' ? 'inference.providerDefault' : `reasoning.${level}`),
+    ]),
+  )
+  return (
+    <Select
+      value={value}
+      items={items}
+      onValueChange={(level) => {
+        if (levels.some((choice) => choice === level)) onChange(level as ReasoningChoice)
+      }}
+    >
+      <SelectTrigger aria-label={label} className='h-8 w-full text-[11px]'>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {levels.map((level) => (
+          <SelectItem key={level} value={level}>
+            {items[level]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -290,31 +396,13 @@ function TranslatorOptions({
         title={t('settings.pipeline.translator.reasoning')}
         description={t('settings.pipeline.translator.reasoningDescription')}
       >
-        <Select
+        <ReasoningSelect
           value={reasoning}
-          items={Object.fromEntries([
-            ['default', t('inference.providerDefault')],
-            ...REASONING.map((level) => [level, t(`reasoning.${level}`)]),
-          ])}
-          onValueChange={(level) =>
-            level && onChange({ ...value, reasoning: level === 'default' ? null : level })
+          label={t('settings.pipeline.translator.reasoning')}
+          onChange={(level) =>
+            onChange({ ...value, reasoning: level === 'default' ? null : level })
           }
-        >
-          <SelectTrigger
-            aria-label={t('settings.pipeline.translator.reasoning')}
-            className='h-8 w-full text-[11px]'
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='default'>{t('inference.providerDefault')}</SelectItem>
-            {REASONING.map((level) => (
-              <SelectItem key={level} value={level}>
-                {t(`reasoning.${level}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </PreferenceRow>
       <PreferenceRow
         title={t('model.targetLanguage')}

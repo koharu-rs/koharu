@@ -584,6 +584,55 @@ fn hiding_a_block_shows_the_background_again() {
     );
 }
 
+#[test]
+fn sfx_visibility_hides_the_translation_and_cleanup_together() {
+    let (_dir, mut session, page, change) = page(
+        64,
+        64,
+        vec![
+            json!({"op":"add_layer","id":"$sfx","page":"$page","index":0,"layer":{
+                "kind":"block","role":"sfx","source":{},"translation":{}
+            }}),
+            json!({"op":"add_layer","id":"$dialogue","page":"$page","index":1,"layer":{
+                "kind":"block","role":"text","source":{},"translation":{}
+            }}),
+        ],
+    );
+    let sfx = layer(&change, "sfx");
+    let dialogue = layer(&change, "dialogue");
+    let project = session.project();
+    let koharu_scene::Content::Block(block) = &project.layer(sfx).expect("a block").content else {
+        panic!("expected a block");
+    };
+    let cleanup = block.cleanup.id;
+    let renderer = renderer();
+    apply(
+        &mut session,
+        vec![
+            json!({"op":"update_layer","layer":sfx,"patch":{"cleanup":{"visible":true}}}),
+            json!({"op":"set_page_options","page":page,"hide_sfx":true}),
+        ],
+    );
+    let frame = renderer.render(&session, page).expect("a frame");
+    assert!(!frame.translation(sfx).expect("a translation").visible());
+    assert!(!frame.layer(cleanup).expect("a cleanup").visible());
+    assert!(
+        frame
+            .translation(dialogue)
+            .expect("a translation")
+            .visible()
+    );
+    apply(
+        &mut session,
+        vec![
+            json!({"op":"set_page_options","page":page,"hide_sfx":false}),
+            json!({"op":"set_project_sfx","hide":true}),
+        ],
+    );
+    let frame = renderer.render(&session, page).expect("a frame");
+    assert!(!frame.translation(sfx).expect("a translation").visible());
+}
+
 /// A balloon crossing its panel's border stays in the panel it's read in, so
 /// a panel draws its children past its outline.
 #[test]

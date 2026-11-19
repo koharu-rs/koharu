@@ -3,7 +3,7 @@
 //! and a layer its children, as values, so the tree can't disagree with
 //! itself; an index of which page holds each layer is derived from them.
 
-use std::slice;
+use std::{slice, sync::Arc};
 
 use imbl::{OrdMap, Vector};
 use schemars::JsonSchema;
@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Block, Content, Error, Hash, Layer, LayerId, LayerKind, Offset, PageId, PixelFormat, ProjectId,
-    Result, Size,
+    Block, Content, Error, ExternalImage, GlossaryEntry, Hash, Layer, LayerId, LayerKind, Offset,
+    PageId, PixelFormat, ProjectId, Result, Size,
 };
 
 /// A picture's stored tiles: tile position, then the hash of its compressed
@@ -29,6 +29,11 @@ pub struct Project {
     pub(crate) index: OrdMap<LayerId, PageId>,
     /// Each picture's tiles, under the id of the layer that owns it.
     pub(crate) tiles: OrdMap<LayerId, TileMap>,
+    pub(crate) glossary: Arc<Vec<GlossaryEntry>>,
+    pub(crate) glossary_candidates: Arc<Vec<Vec<GlossaryEntry>>>,
+    pub(crate) external: OrdMap<Hash, ExternalImage>,
+    pub(crate) hide_sfx: bool,
+    pub(crate) glossary_input: Option<Hash>,
 }
 
 /// A page: its size, the scan under it, and its layers with everything
@@ -39,6 +44,12 @@ pub struct Page {
     pub id: PageId,
     pub size: Size,
     pub background: Option<Background>,
+    #[serde(default)]
+    pub excluded: bool,
+    #[serde(default)]
+    pub hide_sfx: bool,
+    #[serde(default)]
+    pub detected: Option<bool>,
     /// Drawn first to last.
     pub layers: Vec<Layer>,
 }
@@ -172,7 +183,26 @@ impl Project {
             pages: OrdMap::new(),
             index: OrdMap::new(),
             tiles: OrdMap::new(),
+            glossary: Arc::default(),
+            glossary_candidates: Arc::default(),
+            external: OrdMap::new(),
+            hide_sfx: false,
+            glossary_input: None,
         }
+    }
+
+    pub fn hides_sfx(&self) -> bool {
+        self.hide_sfx
+    }
+
+    pub fn glossary_input(&self) -> Option<Hash> {
+        self.glossary_input
+    }
+
+    pub fn has_pixels(&self, layer: LayerId) -> bool {
+        self.tiles
+            .get(&layer)
+            .is_some_and(|tiles| !tiles.is_empty())
     }
 
     #[must_use]

@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "Manage project glossary",
+    "globalTitle": "Global glossary",
+    "globalScope": "Applies across projects. A project entry takes precedence when the source text is the same.",
+    "blockedTable": "Do-not-translate list",
+    "search": "Search entries",
+    "noEntries": "No matching entries.",
+    "edit": "Edit",
+    "batchProgress": "Terminology batches {{completed}} / {{total}}",
+    "mergeBatchProgress": "Reviewing terminology batches {{completed}} / {{total}}",
+    "title": "Glossary",
+    "extract": "Extract full text",
+    "exportSource": "Export source text",
+    "analyze": "Analyze terminology",
+    "check": "Check translations",
+    "noIssues": "No terminology issues found",
+    "page": "Page {{page}}",
+    "kind": "Entry type",
+    "source": "Source text",
+    "translation": "Preferred translation",
+    "note": "Note",
+    "duplicate": "This source already has an entry",
+    "save": "Save changes",
+    "add": "Add entry",
+    "cancel": "Cancel",
+    "remove": "Remove",
+    "candidates": "Terminology candidates",
+    "noCandidates": "No new candidates",
+    "occurrences": "Occurrences: {{count}}",
+    "excludeLine": "Exclude this line",
+    "restoreLine": "Restore this line",
+    "extractionStarted": "Source extraction started",
+    "extractionCurrent": "All detected text has been extracted",
+    "analyzing": "Analyzing terminology…",
+    "kinds": {
+      "person": "Person",
+      "place": "Place",
+      "term": "Term",
+      "preserve": "Preserve phrase",
+      "preserve_block": "Preserve original block"
+    }
+  },
+  "linked": {
+    "createZip": "New from ZIP or CBZ",
+    "createFolder": "New from image folder",
+    "open": "Open project file",
+    "relink": "Relink original images",
+    "zip": "ZIP or CBZ",
+    "folder": "Image folder"
+  },
   "about": {
     "author": "Author",
     "description": "Manga translation tools",
@@ -104,6 +154,8 @@
     "close": "Close history",
     "opened": "Opened",
     "steps": {
+      "edit_glossary": "Edit glossary",
+      "relink_originals": "Relink original images",
       "add_text": "Add text",
       "delete_layers": "Delete layers",
       "delete_pages": "Delete pages",
@@ -129,7 +181,19 @@
     },
     "title": "History"
   },
+  "sfxVisibility": {
+    "page": "Page SFX",
+    "project": "Project SFX",
+    "hidePage": "Hide sound-effect translations on this page",
+    "showPage": "Show sound-effect translations on this page",
+    "hideProject": "Hide sound-effect translations throughout the project",
+    "showProject": "Restore project sound-effect visibility"
+  },
   "inference": {
+    "resume": "Continue",
+    "resumeDescription": "Run only unfinished work in the selected stages.",
+    "afterSelectedPages": "After selected pages",
+    "afterSelectedPagesDescription": "Start after the last selected page, or after the current page if there is no selection.",
     "entireProject": "Entire project",
     "entireProjectDescription": "Process every page in this project.",
     "model": "Model",
@@ -142,6 +206,7 @@
     "runProcessing": "Run processing",
     "scope": "Scope",
     "scopeShort": {
+      "after-selected-pages": "After selection",
       "project": "Project",
       "selected-pages": "Selection"
     },
@@ -275,6 +340,8 @@
     "useModel": "Use {{model}} from {{provider}}"
   },
   "navigator": {
+    "excludePage": "Exclude {{page}} from processing",
+    "includePage": "Include {{page}} in processing",
     "actionsFor": "Actions for {{page}}",
     "delete": "Delete",
     "deleteDescription": "This deletes “{{page}}” and its layers. You can undo it.",
@@ -302,12 +369,14 @@
     "title": "Translation output"
   },
   "phase": {
+    "glossary": "Terminology analysis",
     "detect": "Detection",
     "inpaint": "Inpainting",
     "recognize": "OCR",
     "translate": "Translation"
   },
   "phaseDescription": {
+    "glossary": "Extract terminology from the project's source text before translation.",
     "detect": "Locate text on the page.",
     "inpaint": "Rebuild the artwork behind removed text.",
     "recognize": "Read the text inside each region.",
@@ -344,6 +413,10 @@
     "backToEditor": "Back to editor",
     "loading": "Loading preferences…",
     "pipeline": {
+      "followTranslator": "Use translation model",
+      "glossaryReasoning": "Reasoning effort",
+      "glossaryPrompt": "Custom prompt",
+      "glossaryPromptDescription": "Add guidance for term extraction and conflict review. Leave blank to use the default instructions.",
       "description": "Choose the models and options used to process each page.",
       "model": "Model",
       "modelLabel": "{{stage}} model",

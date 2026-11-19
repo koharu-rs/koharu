@@ -1,13 +1,13 @@
 'use client'
 
-import { Folder, FolderPlus, Plus, Settings, Trash2 } from 'lucide-react'
+import { FileArchive, Folder, FolderOpen, FolderPlus, Plus, Settings, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
 import { pageKey, projectKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands } from '@koharu/ipc/protocol'
+import { commands, type LinkedSource } from '@koharu/ipc/protocol'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,6 +64,20 @@ export function StartView() {
     setBusy(projectName)
     try {
       await call(commands.open, projectName)
+      await refresh(projectKey, pageKey)
+    } catch {
+      await reload()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const linkedProject = async (kind?: LinkedSource) => {
+    if (busy) return
+    setBusy(kind ?? 'open-file')
+    try {
+      if (kind) await call(commands.createLinkedProject, kind)
+      else await call(commands.openProjectFile)
       await refresh(projectKey, pageKey)
     } finally {
       setBusy(null)
@@ -160,6 +174,39 @@ export function StartView() {
                     {t('start.create')}
                   </Button>
                 </form>
+
+                <div className='mt-4 grid gap-1.5'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    disabled={busy !== null}
+                    onClick={() => void linkedProject('zip').catch(() => undefined)}
+                  >
+                    <FileArchive />
+                    {t('linked.createZip')}
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    disabled={busy !== null}
+                    onClick={() => void linkedProject('folder').catch(() => undefined)}
+                  >
+                    <Folder />
+                    {t('linked.createFolder')}
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='ghost'
+                    disabled={busy !== null}
+                    onClick={() => void linkedProject().catch(() => undefined)}
+                  >
+                    <FolderOpen />
+                    {t('linked.open')}
+                  </Button>
+                </div>
 
                 <p className='mt-auto pt-8 text-[10px] leading-4 text-muted-foreground'>
                   {t('start.storageHint')}

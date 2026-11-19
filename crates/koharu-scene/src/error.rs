@@ -22,6 +22,8 @@ pub enum Error {
     Corrupt(String),
     #[error("{} is open in another window", .0.display())]
     ProjectLocked(PathBuf),
+    #[error("linked original {} is unavailable: {reason}", path.display())]
+    ExternalImage { path: PathBuf, reason: String },
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]

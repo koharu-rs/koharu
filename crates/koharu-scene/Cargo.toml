@@ -38,6 +38,10 @@ strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
+zip = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_NetworkManagement_WNet", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 criterion = { workspace = true }

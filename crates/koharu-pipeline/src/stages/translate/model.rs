@@ -13,6 +13,9 @@ const LANGUAGE: Size = Size {
 
 /// The model `reference` names, connected, with its projector when it reads
 /// `images`; a hosted model has no room to size.
-pub(super) async fn load(reference: &str, images: bool) -> anyhow::Result<DynModel<Completion>> {
+pub(in crate::stages) async fn load(
+    reference: &str,
+    images: bool,
+) -> anyhow::Result<DynModel<Completion>> {
     koharu_llm::connect(reference, Size { images, ..LANGUAGE }).await
 }

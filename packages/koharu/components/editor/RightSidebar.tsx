@@ -1,9 +1,10 @@
 'use client'
 
-import { BookOpenText, Bot, Layers3 } from 'lucide-react'
+import { BookA, BookOpenText, Bot, Layers3 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AgentPanel } from '@/components/editor/AgentPanel'
+import { GlossaryPanel } from '@/components/editor/GlossaryPanel'
 import { LayersPanel } from '@/components/editor/LayersPanel'
 import { StoryPanel } from '@/components/editor/StoryPanel'
 import { useProject } from '@/lib/queries'
@@ -15,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@koharu/ui/components/
  * with another project, as the desktop's conversation does. */
 export function RightSidebar() {
   const { t } = useTranslation()
-  const project = useProject().data?.name ?? null
+  const project = useProject().data?.id ?? null
   const panel = useKoharuStore((state) => state.panel)
   const showPanel = useKoharuStore((state) => state.showPanel)
   // The shown tab in the accent colour, hovered or not, its underline too.
@@ -38,6 +39,9 @@ export function RightSidebar() {
           <TabsTrigger value='story' className={tab}>
             <BookOpenText /> {t('story.title')}
           </TabsTrigger>
+          <TabsTrigger value='glossary' className={tab}>
+            <BookA /> {t('glossary.title')}
+          </TabsTrigger>
           <TabsTrigger value='agent' className={tab}>
             <Bot /> {t('agent.title')}
           </TabsTrigger>
@@ -47,6 +51,11 @@ export function RightSidebar() {
         </TabsContent>
         <TabsContent value='story' className='flex min-h-0 flex-col'>
           <StoryPanel />
+        </TabsContent>
+        <TabsContent value='glossary' keepMounted className='flex min-h-0 flex-col'>
+          {project && (
+            <GlossaryPanel key={project} project={project} active={panel === 'glossary'} />
+          )}
         </TabsContent>
         <TabsContent value='agent' keepMounted className='flex min-h-0 flex-col'>
           <AgentPanel key={project} />

@@ -8,16 +8,18 @@ mod event;
 mod gpu;
 mod pipeline;
 mod request;
+mod resume;
 mod scheduler;
 mod stages;
 
 pub use config::PipelineConfig;
 pub use error::{Error, Result};
-pub use event::{Event, Outcome, RunId};
+pub use event::{Event, GlossaryPhase, Outcome, RunId};
 pub use pipeline::Pipeline;
 pub use request::{Area, Request, Stage, Target};
 pub use stages::{
     detect::{Detector, DetectorConfig},
+    glossary::{GlossaryAnalysisConfig, GlossaryReasoning},
     inpaint::{Inpainter, InpainterConfig},
     recognize::{Recognizer, RecognizerConfig},
     translate::{TranslatorConfig, placement},

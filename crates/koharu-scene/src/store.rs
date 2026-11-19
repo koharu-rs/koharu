@@ -19,7 +19,7 @@ use serde_rusqlite::from_rows;
 use serde_with::{json::JsonString, serde_as};
 
 use crate::{
-    Content, Error, Hash, LayerId, Page, PageId, Project, ProjectId, Result, Uuid,
+    Content, Error, ExternalImage, Hash, LayerId, Page, PageId, Project, ProjectId, Result, Uuid,
     project::{TileMap, depth_first, ids},
     tiles,
 };
@@ -28,7 +28,14 @@ use crate::{
 /// on it, so opening refuses any other database before reading its rows.
 const APPLICATION_ID: i32 = 0x4B48_5255;
 /// The format version this build writes.
-const VERSION: Version = Version::new(1, 0, 0);
+const VERSION: Version = Version::new(1, 3, 0);
+const HAS_PROJECT_DATA: Version = Version::new(1, 1, 0);
+const HAS_GLOSSARY_CANDIDATES: Version = Version::new(1, 2, 0);
+const HAS_PROJECT_OPTIONS: Version = Version::new(1, 3, 0);
+const PROJECT_OPTIONS_TABLE: &str = "CREATE TABLE IF NOT EXISTS project_options(id INTEGER PRIMARY KEY CHECK(id = 1), hide_sfx INTEGER NOT NULL CHECK(hide_sfx IN (0, 1)), glossary_input TEXT) STRICT";
+const GLOSSARY_TABLE: &str = "CREATE TABLE IF NOT EXISTS glossary(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT";
+const CANDIDATES_TABLE: &str = "CREATE TABLE IF NOT EXISTS glossary_candidates(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT";
+const EXTERNAL_TABLE: &str = "CREATE TABLE IF NOT EXISTS external_images(hash TEXT PRIMARY KEY, source TEXT NOT NULL) STRICT";
 /// Most compressed tiles fit on a page of this size, which keeps them out of
 /// overflow chains, each of whose pages is a read of its own.
 const PAGE_SIZE: u32 = 16384;
@@ -47,6 +54,10 @@ const SCHEMA: &str = indoc! {"
       PRIMARY KEY(layer, x, y)
     ) STRICT, WITHOUT ROWID;
     CREATE TABLE blobs(hash TEXT PRIMARY KEY, bytes BLOB NOT NULL) STRICT;
+    CREATE TABLE glossary(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT;
+    CREATE TABLE glossary_candidates(id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL) STRICT;
+    CREATE TABLE external_images(hash TEXT PRIMARY KEY, source TEXT NOT NULL) STRICT;
+    CREATE TABLE project_options(id INTEGER PRIMARY KEY CHECK(id = 1), hide_sfx INTEGER NOT NULL CHECK(hide_sfx IN (0, 1)), glossary_input TEXT) STRICT;
 "};
 
 #[serde_as]
@@ -72,6 +83,14 @@ struct TileRow {
     x: i32,
     y: i32,
     hash: Hash,
+}
+
+#[serde_as]
+#[derive(Deserialize)]
+struct ExternalRow {
+    hash: Hash,
+    #[serde_as(as = "JsonString")]
+    source: ExternalImage,
 }
 
 impl From<serde_rusqlite::Error> for Error {
@@ -237,7 +256,8 @@ fn named(project: &Project) -> HashSet<Hash> {
     let backgrounds = project
         .pages
         .values()
-        .filter_map(|page| page.background.map(|background| background.file));
+        .filter_map(|page| page.background.map(|background| background.file))
+        .filter(|hash| project.external_image(hash).is_none());
     tiles.chain(files).chain(backgrounds).collect()
 }
 
@@ -287,14 +307,64 @@ fn load(conn: &Connection) -> Result<Project> {
     // A reader opens any version up to its own with the same major version,
     // since an addition needs no decoder. The rows of any other version mean
     // something this build can't know, so they're never read.
-    let readable = Version::parse(&row.version).is_ok_and(|stored| {
-        stored.major == VERSION.major && stored <= VERSION && stored.pre.is_empty()
-    });
+    let stored = Version::parse(&row.version).map_err(|_| Error::Version(row.version.clone()))?;
+    let readable = { stored.major == VERSION.major && stored <= VERSION && stored.pre.is_empty() };
     if !readable {
         return Err(Error::Version(row.version));
     }
     let mut project = Project::new(row.id);
     project.order = row.pages;
+    if stored >= HAS_PROJECT_DATA {
+        let entries: Option<String> = conn
+            .query_row("SELECT entries FROM glossary WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        if let Some(entries) = entries {
+            let entries: Vec<_> = serde_json::from_str(&entries).map_err(Error::corrupt)?;
+            if !crate::glossary::valid_glossary(&entries) {
+                return Err(Error::corrupt("invalid glossary entries"));
+            }
+            project.glossary = entries.into();
+        }
+        let mut statement = conn.prepare("SELECT hash, source FROM external_images")?;
+        for row in from_rows::<ExternalRow>(statement.query([])?) {
+            let row = row?;
+            project.external.insert(row.hash, row.source);
+        }
+    }
+    if stored >= HAS_GLOSSARY_CANDIDATES {
+        let entries: Option<String> = conn
+            .query_row(
+                "SELECT entries FROM glossary_candidates WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(entries) = entries {
+            let candidates: Vec<_> = serde_json::from_str(&entries).map_err(Error::corrupt)?;
+            if !crate::glossary::valid_candidates(&candidates) {
+                return Err(Error::corrupt("invalid glossary candidates"));
+            }
+            project.glossary_candidates = candidates.into();
+        }
+    }
+    if stored >= HAS_PROJECT_OPTIONS {
+        let options: Option<(bool, Option<String>)> = conn
+            .query_row(
+                "SELECT hide_sfx, glossary_input FROM project_options WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if let Some((hide_sfx, input)) = options {
+            project.hide_sfx = hide_sfx;
+            project.glossary_input = input
+                .map(|hash| hash.parse())
+                .transpose()
+                .map_err(Error::corrupt)?;
+        }
+    }
 
     let mut statement = conn.prepare("SELECT id, page FROM pages")?;
     for row in from_rows::<PageRow>(statement.query([])?) {
@@ -367,8 +437,46 @@ impl Tx<'_> {
         let conn = &self.0;
         // The rows written are this build's version, so the file becomes it,
         // and an older build refuses it as too new rather than as corrupt.
-        conn.prepare_cached("UPDATE project SET version = ?1 WHERE version <> ?1")?
+        let upgraded = conn
+            .prepare_cached("UPDATE project SET version = ?1 WHERE version <> ?1")?
             .execute([VERSION.to_string()])?;
+        if upgraded != 0 {
+            conn.execute_batch(GLOSSARY_TABLE)?;
+            conn.execute_batch(EXTERNAL_TABLE)?;
+            conn.execute_batch(CANDIDATES_TABLE)?;
+            conn.execute_batch(PROJECT_OPTIONS_TABLE)?;
+        }
+        if before.hide_sfx != after.hide_sfx || before.glossary_input != after.glossary_input {
+            conn.prepare_cached("INSERT OR REPLACE INTO project_options VALUES (1, ?1, ?2)")?
+                .execute(params![
+                    after.hide_sfx,
+                    after.glossary_input.map(|hash| hash.to_string())
+                ])?;
+        }
+        if before.glossary != after.glossary {
+            conn.prepare_cached("INSERT OR REPLACE INTO glossary VALUES (1, ?1)")?
+                .execute([json(after.glossary.as_ref())])?;
+        }
+        if before.glossary_candidates != after.glossary_candidates {
+            conn.prepare_cached("INSERT OR REPLACE INTO glossary_candidates VALUES (1, ?1)")?
+                .execute([json(after.glossary_candidates.as_ref())])?;
+        }
+        for item in before.external.diff(&after.external) {
+            match item {
+                DiffItem::Add(hash, source)
+                | DiffItem::Update {
+                    new: (hash, source),
+                    ..
+                } => {
+                    conn.prepare_cached("INSERT OR REPLACE INTO external_images VALUES (?1, ?2)")?
+                        .execute([hash.to_string(), json(source)])?;
+                }
+                DiffItem::Remove(hash, _) => {
+                    conn.prepare_cached("DELETE FROM external_images WHERE hash = ?1")?
+                        .execute([hash.to_string()])?;
+                }
+            }
+        }
         if before.order != after.order {
             conn.prepare_cached("UPDATE project SET pages = ?1")?
                 .execute([json(&after.order)])?;

@@ -6,7 +6,7 @@ use koharu_llm::{
     Context, SummaryPrompts,
     rig::{driver::DynModel, operation::Completion},
 };
-use koharu_scene::ProjectId;
+use koharu_scene::{GlossaryEntry, ProjectId};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::{TranslatorConfig, model};
@@ -18,6 +18,7 @@ pub(crate) struct Conversation {
     pub(super) context: Context,
     /// A hosted model, connected for its first page.
     hosted: Option<DynModel<Completion>>,
+    glossary: Vec<GlossaryEntry>,
     /// The last page's texts and their translations.
     pub(super) last: Option<(Vec<String>, Vec<String>)>,
 }
@@ -28,21 +29,23 @@ impl Conversation {
             with: None,
             context: Context::new(prompts()),
             hosted: None,
+            glossary: Vec::new(),
             last: None,
         }
     }
 
     /// Starts again unless its history was written with `config`'s model,
     /// target, and instructions.
-    pub(super) fn keep(&mut self, config: &TranslatorConfig) {
+    pub(super) fn keep(&mut self, config: &TranslatorConfig, glossary: &[GlossaryEntry]) {
         let with = (
             config.model.clone(),
             config.target.clone(),
             config.instructions.clone(),
         );
-        if self.with.as_ref() != Some(&with) {
+        if self.with.as_ref() != Some(&with) || self.glossary != glossary {
             *self = Self::new();
             self.with = Some(with);
+            self.glossary = glossary.to_vec();
         }
     }
 

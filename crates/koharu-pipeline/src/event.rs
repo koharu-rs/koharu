@@ -53,10 +53,23 @@ pub enum Event {
         page: PageId,
         stage: Stage,
     },
+    GlossaryProgress {
+        run: RunId,
+        phase: GlossaryPhase,
+        completed: usize,
+        total: usize,
+    },
     Ended {
         run: RunId,
         outcome: Outcome,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum GlossaryPhase {
+    Extract,
+    Merge,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
@@ -107,6 +120,7 @@ impl Events {
         let (Event::Queued { run, .. }
         | Event::Started { run, .. }
         | Event::Finished { run, .. }
+        | Event::GlossaryProgress { run, .. }
         | Event::Ended { run, .. }) = &event;
         {
             let mut runs = self.runs.lock();
@@ -137,6 +151,7 @@ impl Events {
                 Event::Finished { page, stage, .. } => {
                     record.stages.remove(&(*page, *stage));
                 }
+                Event::GlossaryProgress { .. } => {}
                 Event::Ended { outcome, .. } => {
                     record.ended.send_replace(true);
                     // A failed or stopped run leaves stages it never finished.

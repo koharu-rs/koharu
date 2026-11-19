@@ -1,4 +1,54 @@
 {
+  "glossary": {
+    "manage": "إدارة مصطلحات المشروع",
+    "globalTitle": "المصطلحات العامة",
+    "globalScope": "تسري على جميع المشاريع. تحظى مصطلحات المشروع بالأولوية عند تطابق النص الأصلي.",
+    "blockedTable": "قائمة عدم الترجمة",
+    "search": "بحث في المصطلحات",
+    "noEntries": "لا توجد مدخلات مطابقة.",
+    "edit": "تعديل",
+    "batchProgress": "تحليل المصطلحات {{completed}} / {{total}} دفعة",
+    "mergeBatchProgress": "مراجعة دفعات المصطلحات {{completed}} / {{total}}",
+    "title": "مسرد المصطلحات",
+    "extract": "استخراج النص كاملاً",
+    "exportSource": "تصدير النص الأصلي",
+    "analyze": "تحليل المصطلحات",
+    "check": "مراجعة الترجمات",
+    "noIssues": "لم يُعثر على مشكلات في المصطلحات",
+    "page": "الصفحة {{page}}",
+    "kind": "نوع المدخل",
+    "source": "النص الأصلي",
+    "translation": "الترجمة المفضلة",
+    "note": "ملاحظة",
+    "duplicate": "يوجد مدخل لهذا النص بالفعل",
+    "save": "حفظ التغييرات",
+    "add": "إضافة مدخل",
+    "cancel": "إلغاء",
+    "remove": "إزالة",
+    "candidates": "مصطلحات مقترحة",
+    "noCandidates": "لا توجد مقترحات جديدة",
+    "occurrences": "مرات الظهور: {{count}}",
+    "excludeLine": "استبعاد هذا السطر",
+    "restoreLine": "استعادة هذا السطر",
+    "extractionStarted": "بدأ استخراج النص الأصلي",
+    "extractionCurrent": "استُخرج كل النص المكتشف",
+    "analyzing": "جارٍ تحليل المصطلحات…",
+    "kinds": {
+      "person": "شخص",
+      "place": "مكان",
+      "term": "مصطلح",
+      "preserve": "إبقاء العبارة كما هي",
+      "preserve_block": "إبقاء المقطع الأصلي"
+    }
+  },
+  "linked": {
+    "createZip": "مشروع جديد من ZIP أو CBZ",
+    "createFolder": "مشروع جديد من مجلد الصور",
+    "open": "فتح ملف المشروع",
+    "relink": "إعادة ربط الصور الأصلية",
+    "zip": "ZIP أو CBZ",
+    "folder": "مجلد الصور"
+  },
   "about": {
     "author": "المؤلف",
     "description": "أدوات ترجمة المانغا",
@@ -104,6 +154,8 @@
     "close": "إغلاق السجل",
     "opened": "عند الفتح",
     "steps": {
+      "edit_glossary": "تحرير المسرد",
+      "relink_originals": "إعادة ربط الصور الأصلية",
       "add_text": "إضافة نص",
       "delete_layers": "حذف الطبقات",
       "delete_pages": "حذف الصفحات",
@@ -129,7 +181,19 @@
     },
     "title": "السجل"
   },
+  "sfxVisibility": {
+    "page": "مؤثرات الصفحة",
+    "project": "مؤثرات المشروع",
+    "hidePage": "إخفاء ترجمات المؤثرات الصوتية في هذه الصفحة",
+    "showPage": "إظهار ترجمات المؤثرات الصوتية في هذه الصفحة",
+    "hideProject": "إخفاء ترجمات المؤثرات الصوتية في كل المشروع",
+    "showProject": "استعادة ظهور المؤثرات الصوتية في المشروع"
+  },
   "inference": {
+    "resume": "متابعة",
+    "resumeDescription": "تشغيل العمل غير المكتمل فقط في المراحل المحددة.",
+    "afterSelectedPages": "بعد الصفحات المحددة",
+    "afterSelectedPagesDescription": "ابدأ بعد آخر صفحة محددة، أو بعد الصفحة الحالية.",
     "entireProject": "المشروع كاملًا",
     "entireProjectDescription": "معالجة كل صفحة في هذا المشروع.",
     "model": "النموذج",
@@ -142,6 +206,7 @@
     "runProcessing": "تشغيل المعالجة",
     "scope": "النطاق",
     "scopeShort": {
+      "after-selected-pages": "بعد التحديد",
       "project": "مشروع",
       "selected-pages": "التحديد"
     },
@@ -275,6 +340,8 @@
     "useModel": "استخدام {{model}} من {{provider}}"
   },
   "navigator": {
+    "excludePage": "استبعاد {{page}} من المعالجة",
+    "includePage": "تضمين {{page}} في المعالجة",
     "actionsFor": "إجراءات {{page}}",
     "delete": "حذف",
     "deleteDescription": "يؤدي هذا إلى حذف «{{page}}» وطبقاتها. يمكنك التراجع عن ذلك.",
@@ -302,12 +369,14 @@
     "title": "مخرجات الترجمة"
   },
   "phase": {
+    "glossary": "تحليل المصطلحات",
     "detect": "الكشف",
     "inpaint": "الترميم",
     "recognize": "OCR",
     "translate": "الترجمة"
   },
   "phaseDescription": {
+    "glossary": "يستخرج المصطلحات من النص الأصلي للمشروع قبل الترجمة.",
     "detect": "تحديد موقع النص على الصفحة.",
     "inpaint": "إعادة بناء الرسم خلف النص المُزال.",
     "recognize": "قراءة النص داخل كل منطقة.",
@@ -344,6 +413,10 @@
     "backToEditor": "العودة إلى المحرّر",
     "loading": "جارٍ تحميل التفضيلات…",
     "pipeline": {
+      "followTranslator": "استخدام نموذج الترجمة",
+      "glossaryReasoning": "قوة التفكير",
+      "glossaryPrompt": "مطالبة مخصصة",
+      "glossaryPromptDescription": "تُضاف إلى تعليمات استخراج المصطلحات ومراجعة الاختلافات. اتركها فارغة لاستخدام التعليمات الافتراضية.",
       "description": "اختر النماذج والخيارات المستخدمة لمعالجة كل صفحة.",
       "model": "النموذج",
       "modelLabel": "نموذج {{stage}}",

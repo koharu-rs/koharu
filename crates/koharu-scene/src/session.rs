@@ -252,6 +252,9 @@ impl Session {
 
     /// An imported file's bytes.
     pub fn file(&self, hash: &Hash) -> Result<Vec<u8>> {
+        if let Some(source) = self.project.external_image(hash) {
+            return source.read(&self.path, hash);
+        }
         let mut bytes = self.store.blobs([hash])?;
         Ok(bytes.pop().expect("one hash reads one blob"))
     }
@@ -340,6 +343,223 @@ mod tests {
 
     use super::*;
     use crate::{Created, Op};
+
+    #[test]
+    fn a_linked_zip_reopens_and_relinks_without_storing_original_bytes()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        use crate::{ArchiveMember, ExternalImage, Size};
+        use std::io::{Cursor, Write as _};
+
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("test.khr");
+        let zip = dir.path().join("originals.zip");
+        let moved = dir.path().join("moved.zip");
+        let image = image::DynamicImage::new_rgb8(4, 4);
+        let mut encoded = Cursor::new(Vec::new());
+        image.write_to(&mut encoded, image::ImageFormat::Png)?;
+        let encoded = encoded.into_inner();
+        let file = Hash::of(&encoded);
+        let mut archive = zip::ZipWriter::new(std::fs::File::create(&zip)?);
+        archive.start_file("chapter/1.png", zip::write::SimpleFileOptions::default())?;
+        archive.write_all(&encoded)?;
+        archive.finish()?;
+        let source = ExternalImage {
+            path: "originals.zip".into(),
+            member: Some(ArchiveMember {
+                index: 0,
+                name: "chapter/1.png".to_owned(),
+            }),
+            size: Size {
+                width: 4,
+                height: 4,
+            },
+            bytes: encoded.len() as u64,
+        };
+        let mut session = Session::create(&path)?;
+        session.apply(Edit {
+            label: "import".to_owned(),
+            ops: vec![Op::AddExternalPage {
+                index: 0,
+                file,
+                source: source.clone(),
+            }],
+        })?;
+        assert!(matches!(
+            session.store.blobs([&file]),
+            Err(Error::NotFound(_))
+        ));
+        drop(session);
+        let mut session = Session::open(&path)?;
+        assert_eq!(session.file(&file)?, encoded);
+        std::fs::rename(&zip, &moved)?;
+        assert!(matches!(
+            session.file(&file),
+            Err(Error::ExternalImage { .. })
+        ));
+        assert_eq!(session.project().pages().count(), 1);
+        session.apply(Edit {
+            label: "relink_originals".to_owned(),
+            ops: vec![Op::RelinkExternalImage {
+                file,
+                previous: source.clone(),
+                source: ExternalImage {
+                    path: "moved.zip".into(),
+                    ..source
+                },
+            }],
+        })?;
+        assert_eq!(session.file(&file)?, encoded);
+        assert!(matches!(
+            session.store.blobs([&file]),
+            Err(Error::NotFound(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn glossary_upgrade_persists_and_obeys_undo()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        use crate::{GlossaryEntry, GlossaryKind};
+
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("old.khr");
+        let session = Session::create(&path)?;
+        session.store.conn().execute_batch(
+            "DROP TABLE glossary; DROP TABLE external_images; UPDATE project SET version = '1.0.0';",
+        )?;
+        drop(session);
+        let entry = GlossaryEntry {
+            source: "青木".to_owned(),
+            translation: "Aoki".to_owned(),
+            kind: GlossaryKind::Person,
+            note: String::new(),
+            excluded_layers: Default::default(),
+        };
+        let mut session = Session::open(&path)?;
+        assert!(session.project().glossary().is_empty());
+        session.apply(Edit {
+            label: "edit_glossary".to_owned(),
+            ops: vec![Op::SetGlossary {
+                previous: Vec::new(),
+                entries: vec![entry.clone()],
+            }],
+        })?;
+        assert_eq!(session.project().glossary(), &[entry.clone()]);
+        session.undo()?;
+        assert!(session.project().glossary().is_empty());
+        session.redo()?;
+        drop(session);
+        let session = Session::open(&path)?;
+        assert_eq!(session.project().glossary(), &[entry]);
+        Ok(())
+    }
+
+    #[test]
+    fn analyzed_glossary_keeps_alternatives_after_selection_and_reopen()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        use crate::{GlossaryEntry, GlossaryKind};
+
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("analysis.khr");
+        let session = Session::create(&path)?;
+        session.store.conn().execute_batch(
+            "DROP TABLE glossary_candidates; UPDATE project SET version = '1.1.0';",
+        )?;
+        drop(session);
+        let mut session = Session::open(&path)?;
+        let name = GlossaryEntry {
+            source: "青木".into(),
+            translation: "Aoki".into(),
+            kind: GlossaryKind::Person,
+            note: String::new(),
+            excluded_layers: Default::default(),
+        };
+        let other = GlossaryEntry {
+            translation: "Aouki".into(),
+            ..name.clone()
+        };
+        let preserve = GlossaryEntry {
+            source: "KEY".into(),
+            translation: String::new(),
+            kind: GlossaryKind::PreserveBlock,
+            note: String::new(),
+            excluded_layers: Default::default(),
+        };
+        let global = [GlossaryEntry {
+            kind: GlossaryKind::Term,
+            translation: "key".into(),
+            ..preserve.clone()
+        }];
+        let groups = vec![vec![preserve.clone()], vec![name.clone(), other.clone()]];
+        let ops = session
+            .project()
+            .analyzed_glossary(groups.clone(), vec![name.clone(), preserve.clone()]);
+        session.apply(Edit {
+            label: "analysis".into(),
+            ops,
+        })?;
+        let except = crate::LayerId(crate::Uuid::nil());
+        let kept = crate::LayerId(crate::Uuid::max());
+        assert!(session.project().keeps_original(&global, except, "KEY"));
+        assert_eq!(
+            session.project().effective_glossary(&global),
+            [&name, &preserve]
+        );
+        let excluded = GlossaryEntry {
+            excluded_layers: [except].into(),
+            ..preserve.clone()
+        };
+        session.apply(Edit {
+            label: "choose".into(),
+            ops: vec![Op::SetGlossary {
+                previous: vec![name, preserve.clone()],
+                entries: vec![other.clone(), excluded.clone()],
+            }],
+        })?;
+        drop(session);
+        let session = Session::open(path)?;
+        assert_eq!(session.project().glossary(), &[other, excluded]);
+        assert!(!session.project().keeps_original(&global, except, "KEY"));
+        assert!(session.project().keeps_original(&global, kept, "KEY"));
+        assert_eq!(session.project().glossary_candidates(), groups);
+        Ok(())
+    }
+
+    #[test]
+    fn page_exclusion_and_sfx_visibility_are_persisted()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("visibility.khr");
+        let mut session = Session::create(&path)?;
+        let ops = [
+            serde_json::json!({"op":"add_page","id":"$page","index":0,"size":{"width":50,"height":50}}),
+            serde_json::json!({"op":"set_page_options","page":"$page","excluded":true,"hide_sfx":true}),
+            serde_json::json!({"op":"set_project_sfx","hide":true}),
+        ];
+        session.apply(Edit {
+            label: "visibility".into(),
+            ops: ops
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<std::result::Result<_, _>>()?,
+        })?;
+        drop(session);
+        let mut session = Session::open(path)?;
+        let project = session.project();
+        let page = project.pages().next().expect("a page");
+        assert!(project.hides_sfx() && page.hide_sfx && page.excluded);
+        session.apply(Edit {
+            label: "show project".into(),
+            ops: vec![Op::SetProjectSfx { hide: false }],
+        })?;
+        let project = session.project();
+        assert!(
+            !project.hides_sfx()
+                && project.page(page.id)?.hide_sfx
+                && project.page(page.id)?.excluded
+        );
+        Ok(())
+    }
 
     #[test]
     fn an_edit_that_runs_out_of_space_changes_nothing() {
