@@ -1,223 +1,170 @@
 use std::{
-    ffi::{CString, c_char},
-    mem::MaybeUninit,
-    path::Path,
+    ffi::{CStr, c_char, c_void},
     ptr::{self, NonNull},
     slice,
+    sync::Once,
 };
 
 use image::{DynamicImage, RgbImage, RgbaImage};
 use koharu_diffusion_sys as sys;
 
-use crate::{
-    ContextParams, Error, ImageParams, Result, SampleMethod, Scheduler, VaeFormat, logging,
-};
+use crate::{ContextParams, GenerateError, ImageParams, LoadError, StatusError, options::Options};
+
+/// sd.cpp's log goes to `tracing` from the first model loaded on: sd.cpp
+/// keeps one log callback for the process.
+static LOG: Once = Once::new();
 
 /// A loaded model. sd.cpp keeps its last few prompt encodings
 /// (`conditioning_cache_size`, 4 by default), so the same prompt for every
 /// crop is encoded once.
 #[derive(Debug)]
 pub struct Context {
-    pointer: NonNull<sys::sd_ctx_t>,
+    context: NonNull<sys::sd_ctx_t>,
 }
 
 // A context may move between threads; every call takes `&mut self`.
 unsafe impl Send for Context {}
 
 impl Context {
-    pub fn new(params: &ContextParams) -> Result<Self> {
-        logging::install();
-        let mut raw = unsafe {
-            let mut raw = MaybeUninit::<sys::sd_ctx_params_t>::zeroed();
-            sys::sd_ctx_params_init(raw.as_mut_ptr());
-            raw.assume_init()
-        };
-        // The strings sd.cpp reads while it loads.
-        let mut strings = Vec::new();
-        let mut path = |path: Option<&Path>, field: &'static str| -> Result<*const c_char> {
-            let Some(path) = path else {
-                return Ok(ptr::null());
-            };
-            let text = path
-                .to_str()
-                .ok_or_else(|| Error::NonUnicodePath(path.to_owned()))?;
-            strings.push(CString::new(text).map_err(|_| Error::Nul(field))?);
-            Ok(strings.last().map_or(ptr::null(), |text| text.as_ptr()))
-        };
-        raw.model_path = path(params.model, "the model path")?;
-        raw.diffusion_model_path = path(params.diffusion_model, "the diffusion model path")?;
-        raw.vae_path = path(params.vae, "the VAE path")?;
-        raw.clip_l_path = path(params.clip_l, "the CLIP-L path")?;
-        raw.clip_g_path = path(params.clip_g, "the CLIP-G path")?;
-        raw.llm_path = path(params.llm, "the text encoder path")?;
-        raw.llm_vision_path = path(params.llm_vision, "the vision projector path")?;
-        raw.tokenizer = path(params.tokenizer, "the tokenizer path")?;
-        let device = params
-            .device
-            .map(|device| CString::new(device).map_err(|_| Error::Nul("the device")))
-            .transpose()?;
-        if let Some(device) = &device {
-            raw.backend = device.as_ptr();
-        }
-        if params.vae_format == Some(VaeFormat::Flux2) {
-            raw.vae_format = sys::SD_VAE_FORMAT_FLUX2;
-        }
-        raw.enable_mmap = params.mmap;
-        raw.flash_attn = params.flash_attention;
-        raw.diffusion_flash_attn = params.flash_attention;
-        raw.diffusion_conv_direct = params.conv_direct;
-        raw.vae_conv_direct = params.conv_direct;
+    pub fn new(params: &ContextParams) -> Result<Self, LoadError> {
+        LOG.call_once(|| unsafe { sys::sd_set_log_callback(Some(log), ptr::null_mut()) });
+        let options = Options::context().ok_or(LoadError::NullResult)?;
+        options.set("model_path", params.model)?;
+        options.set("diffusion_model_path", params.diffusion_model)?;
+        options.set("vae_path", params.vae)?;
+        options.set("clip_l_path", params.clip_l)?;
+        options.set("clip_g_path", params.clip_g)?;
+        options.set("llm_path", params.llm)?;
+        options.set("llm_vision_path", params.llm_vision)?;
+        options.set("tokenizer", params.tokenizer)?;
+        options.set("vae_format", params.vae_format)?;
+        options.set("backend", params.device)?;
+        options.set("enable_mmap", params.mmap)?;
+        options.set("flash_attn", params.flash_attention)?;
+        options.set("diffusion_flash_attn", params.flash_attention)?;
+        options.set("diffusion_conv_direct", params.conv_direct)?;
+        options.set("vae_conv_direct", params.conv_direct)?;
         // Weights load now, so a model that doesn't fit fails here rather
         // than partway through a page.
-        raw.eager_load = true;
+        options.set("eager_load", true)?;
 
-        let (pointer, reason) = logging::explained(|| unsafe { sys::new_sd_ctx(&raw) });
-        let pointer = NonNull::new(pointer).ok_or(Error::Load(reason))?;
-        let context = Self { pointer };
-        if !unsafe { sys::sd_ctx_supports_image_generation(pointer.as_ptr()) } {
-            return Err(Error::Load("the model doesn't generate images".to_owned()));
+        let mut context = ptr::null_mut();
+        match unsafe { sys::sd_ctx_create(options.as_ptr(), &mut context) } {
+            sys::SD_STATUS_OK => {}
+            status => return Err(StatusError::from(status).into()),
+        }
+        let context = Self {
+            context: NonNull::new(context).ok_or(LoadError::NullResult)?,
+        };
+        if !unsafe { sys::sd_ctx_supports_image_generation(context.context.as_ptr()) } {
+            return Err(LoadError::NoImages);
         }
         Ok(context)
     }
 
     /// The images generated, RGB or RGBA as the model makes them.
-    pub fn generate_image(&mut self, params: &ImageParams) -> Result<Vec<DynamicImage>> {
-        let mut raw = unsafe {
-            let mut raw = MaybeUninit::<sys::sd_img_gen_params_t>::zeroed();
-            sys::sd_img_gen_params_init(raw.as_mut_ptr());
-            raw.assume_init()
-        };
-        let prompt = CString::new(params.prompt).map_err(|_| Error::Nul("the prompt"))?;
-        raw.prompt = prompt.as_ptr();
-        let negative_prompt =
-            CString::new(params.negative_prompt).map_err(|_| Error::Nul("the negative prompt"))?;
-        raw.negative_prompt = negative_prompt.as_ptr();
-        let reference_args = params
-            .reference_args
-            .map(|args| CString::new(args).map_err(|_| Error::Nul("the reference arguments")))
-            .transpose()?;
-        if let Some(args) = &reference_args {
-            raw.ref_image_args = args.as_ptr();
-        }
-        if let Some(width) = params.width {
-            raw.width = int(width, "the width")?;
-        }
-        if let Some(height) = params.height {
-            raw.height = int(height, "the height")?;
-        }
-        if let Some(init) = params.init {
-            raw.init_image = image(init.width(), init.height(), 3, init.as_raw());
-        }
-        if let Some(mask) = params.mask {
-            raw.mask_image = image(mask.width(), mask.height(), 1, mask.as_raw());
-        }
-        let mut references = params
-            .references
-            .iter()
-            .map(|reference| image(reference.width(), reference.height(), 3, reference.as_raw()))
-            .collect::<Vec<_>>();
-        if !references.is_empty() {
-            raw.ref_images = references.as_mut_ptr();
-            raw.ref_images_count = int(references.len(), "the reference count")?;
-        }
-        if let Some(cfg) = params.cfg {
-            raw.sample_params.guidance.txt_cfg = cfg;
-        }
-        if let Some(scheduler) = params.scheduler {
-            raw.sample_params.scheduler = match scheduler {
-                Scheduler::Discrete => sys::DISCRETE_SCHEDULER,
-            };
-        }
-        if let Some(flow_shift) = params.flow_shift {
-            raw.sample_params.flow_shift = flow_shift;
-        }
-        if let Some(SampleMethod::Euler) = params.sample_method {
-            raw.sample_params.sample_method = sys::EULER_SAMPLE_METHOD;
-        }
-        if let Some(steps) = params.steps {
-            raw.sample_params.sample_steps = int(steps, "the step count")?;
-        }
-        if let Some(strength) = params.strength {
-            raw.strength = strength;
-        }
-        if let Some(seed) = params.seed {
-            raw.seed = seed;
-        }
-        if let Some(count) = params.count {
-            raw.batch_count = int(count, "the image count")?;
-        }
+    pub fn generate_image(
+        &mut self,
+        params: &ImageParams,
+    ) -> Result<Vec<DynamicImage>, GenerateError> {
+        let options = Options::image().ok_or(GenerateError::NullResult)?;
+        options.set("prompt", params.prompt)?;
+        options.set("negative_prompt", params.negative_prompt)?;
+        options.set("width", params.width)?;
+        options.set("height", params.height)?;
+        options.set("init_image", params.init)?;
+        options.set("mask_image", params.mask)?;
+        options.set("ref_images", params.references)?;
+        options.set("ref_image_args", params.reference_args)?;
+        options.set("sample.guidance.txt_cfg", params.cfg)?;
+        options.set("sample.scheduler", params.scheduler)?;
+        options.set("sample.flow_shift", params.flow_shift)?;
+        options.set("sample.method", params.sample_method)?;
+        options.set("sample.steps", params.steps)?;
+        options.set("strength", params.strength)?;
+        options.set("seed", params.seed)?;
+        options.set("batch_count", params.count)?;
 
-        let mut output = Images(ptr::null_mut());
-        let (generated, reason) = logging::explained(|| unsafe {
-            sys::generate_image(self.pointer.as_ptr(), &raw, &mut output.0)
-        });
-        if !generated {
-            return Err(Error::Generate(reason));
+        let mut result = ptr::null_mut();
+        match unsafe {
+            sys::sd_generate_image(self.context.as_ptr(), options.as_ptr(), &mut result)
+        } {
+            sys::SD_STATUS_OK => {}
+            status => return Err(StatusError::from(status).into()),
         }
-        output.copy()
+        Generated(NonNull::new(result).ok_or(GenerateError::NullResult)?).images()
     }
 }
 
 impl Drop for Context {
     fn drop(&mut self) {
-        unsafe { sys::free_sd_ctx(self.pointer.as_ptr()) };
+        unsafe { sys::sd_ctx_free(self.context.as_ptr()) };
     }
 }
 
-fn int(value: impl TryInto<i32>, field: &'static str) -> Result<i32> {
-    value.try_into().map_err(|_| Error::OutOfRange(field))
-}
+/// A generation's result, which owns its images until it's freed.
+struct Generated(NonNull<sys::sd_result_t>);
 
-/// An input image, borrowed: sd.cpp only reads its pixels, though the C
-/// struct predates `const` data.
-fn image(width: u32, height: u32, channel: u32, pixels: &[u8]) -> sys::sd_image_t {
-    sys::sd_image_t {
-        width,
-        height,
-        channel,
-        data: pixels.as_ptr().cast_mut(),
-    }
-}
-
-/// The images sd.cpp allocated, freed by sd.cpp's own function so the C
-/// runtime that allocated them frees them.
-struct Images(*mut sys::sd_image_generation_result_t);
-
-impl Images {
-    fn copy(&self) -> Result<Vec<DynamicImage>> {
-        // sd.cpp sets the result when it succeeds.
-        let result = unsafe { self.0.as_ref() }.ok_or(Error::Output)?;
-        let count = usize::try_from(result.count).map_err(|_| Error::Output)?;
-        if result.items.is_null() || count == 0 {
-            return Err(Error::Output);
+impl Generated {
+    /// Its images, copied out.
+    fn images(&self) -> Result<Vec<DynamicImage>, GenerateError> {
+        let count = unsafe { sys::sd_result_get_image_count(self.0.as_ptr()) };
+        if count == 0 {
+            return Err(GenerateError::Output);
         }
-        unsafe { slice::from_raw_parts(result.items, count) }
-            .iter()
-            .map(|item| {
-                let image = &item.image;
-                if !matches!(image.channel, 3 | 4) || image.data.is_null() {
-                    return Err(Error::Output);
-                }
-                let length = (image.width as usize)
-                    .checked_mul(image.height as usize)
-                    .and_then(|pixels| pixels.checked_mul(image.channel as usize))
-                    .ok_or(Error::Output)?;
-                let pixels = unsafe { slice::from_raw_parts(image.data, length) }.to_vec();
-                let (width, height) = (image.width, image.height);
-                match image.channel {
-                    3 => RgbImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgb8),
-                    _ => RgbaImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgba8),
-                }
-                .ok_or(Error::Output)
+        (0..count)
+            .map(|index| {
+                copied(unsafe { sys::sd_result_get_image(self.0.as_ptr(), index) })
+                    .ok_or(GenerateError::Output)
             })
             .collect()
     }
 }
 
-impl Drop for Images {
+impl Drop for Generated {
     fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe { sys::free_sd_image_generation_result(self.0) };
-        }
+        unsafe { sys::sd_result_free(self.0.as_ptr()) };
     }
+}
+
+/// A result's image, copied out; `None` when it isn't the `[channels, width,
+/// height]` RGB or RGBA image sd.cpp makes.
+fn copied(tensor: *const sys::sd_tensor_t) -> Option<DynamicImage> {
+    if tensor.is_null()
+        || unsafe { sys::sd_tensor_type(tensor) } != sys::SD_TENSOR_U8 as sys::sd_tensor_type_t
+        || unsafe { sys::sd_tensor_rank(tensor) } != 3
+    {
+        return None;
+    }
+    let [channels, width, height] =
+        [0, 1, 2].map(|axis| u32::try_from(unsafe { sys::sd_tensor_dim(tensor, axis) }).ok());
+    let (channels, width, height) = (channels?, width?, height?);
+    let data = unsafe { sys::sd_tensor_data(tensor) }.cast::<u8>();
+    if data.is_null() {
+        return None;
+    }
+    let length = unsafe { sys::sd_tensor_byte_size(tensor) };
+    let pixels = unsafe { slice::from_raw_parts(data, length) }.to_vec();
+    match channels {
+        3 => RgbImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgb8),
+        4 => RgbaImage::from_raw(width, height, pixels).map(DynamicImage::ImageRgba8),
+        _ => None,
+    }
+}
+
+unsafe extern "C" fn log(level: sys::sd_log_level_t, text: *const c_char, _: *mut c_void) {
+    // A panic never unwinds into C.
+    let _ = std::panic::catch_unwind(|| {
+        if text.is_null() {
+            return;
+        }
+        let text = unsafe { CStr::from_ptr(text) }.to_string_lossy();
+        let text = text.trim_end();
+        match level {
+            sys::SD_LOG_ERROR => tracing::error!(target: "stable-diffusion.cpp", "{text}"),
+            sys::SD_LOG_WARN => tracing::warn!(target: "stable-diffusion.cpp", "{text}"),
+            sys::SD_LOG_INFO => tracing::info!(target: "stable-diffusion.cpp", "{text}"),
+            _ => tracing::debug!(target: "stable-diffusion.cpp", "{text}"),
+        }
+    });
 }

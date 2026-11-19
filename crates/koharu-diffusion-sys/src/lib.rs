@@ -10,9 +10,9 @@
 )]
 
 /// The koharu-rs/diffusion release built from `COMMIT`.
-pub const RELEASE: &str = "master-1091-b9d7176";
+pub const RELEASE: &str = "master-1106-532d2c1";
 
 /// The stable-diffusion.cpp commit the header comes from.
-pub const COMMIT: &str = "b9d7176";
+pub const COMMIT: &str = "532d2c1";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

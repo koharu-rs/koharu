@@ -19,7 +19,7 @@ pub enum SampleMethod {
 }
 
 /// A model's files and Koharu's settings for it. Whatever is left unset keeps
-/// sd.cpp's own default, from `sd_ctx_params_init`.
+/// sd.cpp's own default.
 #[derive(Clone, Debug, Default)]
 pub struct ContextParams<'a> {
     pub model: Option<&'a Path>,
@@ -45,8 +45,7 @@ pub struct ContextParams<'a> {
     pub conv_direct: bool,
 }
 
-/// One generation. Whatever is left unset keeps sd.cpp's own default, from
-/// `sd_img_gen_params_init`.
+/// One generation. Whatever is left unset keeps sd.cpp's own default.
 #[derive(Clone, Debug, Default)]
 pub struct ImageParams<'a> {
     pub prompt: &'a str,
