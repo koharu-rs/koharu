@@ -89,6 +89,22 @@ jobs:
           organization: ${{ vars.SENTRY_ORG }}
           project: rust
 
+      # release-please creates the release and writes its notes. tauri-action rewrites
+      # the body of a release it finds by tag, so it gets the id instead, and the notes
+      # only for the updater's latest.json.
+      - name: Read release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json databaseId -q '"id=\(.databaseId)"' >> "$GITHUB_OUTPUT"
+          {
+            echo 'body<<EOF'
+            gh release view "$GITHUB_REF_NAME" --json body -q .body
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -108,10 +124,8 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
           tauriScript: cargo tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ steps.release.outputs.id }}
+          releaseBody: ${{ steps.release.outputs.body }}
           args: >-
             ${{ matrix.args }}
             --config '{"build":{"beforeBundleCommand":"bash .github/sentry.sh"}}'
