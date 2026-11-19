@@ -92,6 +92,8 @@ jsonptr = "0.8.2"
 keyring = "4.2.0"
 kurbo = "0.13.1"
 libloading = "0.9.0"
+# ChatGPT signs its ID tokens, which aws-lc-rs, already here for rustls, verifies.
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["aws_lc_rs"] }
 llguidance = "1.9.1"
 machine-uid = "0.6.0"
 memmap2 = "0.9.12"

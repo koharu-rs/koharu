@@ -24,7 +24,7 @@ provider only when the user picked that provider.
 | a server's address | `[providers]` holds a vendor's `base_url` by its rig name, such as a remote Ollama; the interface offers it for the servers the user names: Ollama, LM Studio, and an OpenAI-compatible one | Codex's `[model_providers]` [Codex config] |
 | OpenAI-compatible | one server at the base URL the user gives, such as a relay, spoken to in Chat Completions, which such servers speak far more widely than Responses; its `/models` list says nothing of what a model can do | Zed's OpenAI-compatible provider [Zed providers] |
 | credentials | API keys and sign-ins live in Koharu's encrypted secrets, under the vendor's name; no environment variable is read | |
-| sign-in | `chatgpt` and `grok` sign in with the user's plan in place of a key: ChatGPT through rig's sign-in, the route Codex takes, and Grok, a SuperGrok or X Premium plan, with xAI's device code through xAI's shared client, its requests going to the endpoint the Grok CLI uses | Hermes Agent and OpenClaw sign in to xAI so [Hermes xAI] [OpenClaw xAI] |
+| sign-in | `chatgpt` and `grok` sign in with the user's plan in place of a key: ChatGPT as OpenAI documents it for open-source apps, a client OpenAI registers on the first sign-in, an authorization code answered on a loopback port, and the public Responses API, and Grok, a SuperGrok or X Premium plan, with xAI's device code through xAI's shared client, its requests going to the endpoint the Grok CLI uses | OpenAI's plan usage for open-source apps [OpenAI plan usage]; Hermes Agent and OpenClaw sign in to xAI so [Hermes xAI] [OpenClaw xAI] |
 | listing | every model the user can pick, from each vendor with a key; one that needs a key and has none lists nothing, and a list that fails is left out | LM Studio's own list says what its models can do [LM Studio list] |
 | what a model can do | rig's catalog says; a model it knows as neither calling tools nor keeping to a schema, such as an embedding model, is dropped, and one it doesn't know is offered with its limits unknown | |
 | retries | a 429 or 5xx reply is sent again up to 3 times, after the wait the reply names or a growing one | |
@@ -80,6 +80,7 @@ A conversation keeps inside its model's window:
 Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
+- OpenAI's sign-in: [OpenAI plan usage]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel]
 
@@ -89,6 +90,7 @@ Read in November 2026.
 [OpenAI structured outputs]: https://developers.openai.com/api/docs/guides/structured-outputs
 [LM Studio list]: https://lmstudio.ai/docs/developer/rest/list
 [Zed providers]: https://zed.dev/docs/ai/llm-providers#openai-api-compatible
+[OpenAI plan usage]: https://developers.openai.com/siwc/token-sharing-open-source
 [Hermes xAI]: https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth_xai.py
 [OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
 [llama.cpp fit]: https://github.com/ggml-org/llama.cpp/blob/785322d17f2d/common/fit.h

@@ -137,9 +137,11 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
     }
     let selection = catalog_id(vendor)?;
     let options = match vendor {
-        // The HTTP client puts the sign-in's credential on each request.
+        // The HTTP client puts the sign-in's credential on each request, and
+        // the plan's requests go to OpenAI's public API.
         chatgpt::PROVIDER_NAME => ConnectOptions::new()
             .api_key(String::new())
+            .base_url(chatgpt::RESOURCE)
             .http(chatgpt::http()?),
         _ => {
             // Given a key, even an empty one, rig reads no environment
