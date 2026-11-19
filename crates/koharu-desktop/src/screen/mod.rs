@@ -501,19 +501,14 @@ impl Main {
         let Some(shared) = self.shared.as_mut() else {
             return Ok(());
         };
+        let frame = shared.importer.take(self.gpu, info)?;
         if type_ == PaintElementType::POPUP {
-            return shared
-                .importer
-                .take(self.gpu, info, &mut self.painted.popup_frame, None);
+            self.painted.popup_frame = Some(frame);
+            return Ok(());
         }
-        let (mut frame, mut mask) = (shared.pacer.spare(), None);
-        shared
-            .importer
-            .take(self.gpu, info, &mut frame, Some(&mut mask))?;
-        if let (Some(texture), Some(view)) = (frame, &self.view) {
-            shared
-                .pacer
-                .arrive(texture, mask, info.extra.timestamp, view);
+        let mask = shared.importer.mask(self.gpu, &frame)?;
+        if let Some(view) = &self.view {
+            shared.pacer.arrive(frame, mask, info.extra.timestamp, view);
         }
         Ok(())
     }

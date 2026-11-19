@@ -1,3 +1,5 @@
+based on https://github.com/koharu-rs/koharu
+中文翻译排版特化
 <h1 align="center">Koharu</h1>
 
 <p align="center">ML-powered manga translator, written in <b>Rust</b>.</p>

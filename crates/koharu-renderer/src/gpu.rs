@@ -60,16 +60,15 @@ impl Gpu {
     /// than `Limits::default()`, which caps a texture at 8192 pixels whatever
     /// the GPU supports.
     fn new() -> Result<Self> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            display: None,
-            backends: wgpu::Backends::from_env().unwrap_or_default(),
-            flags: wgpu::InstanceFlags::from_build_config().with_env(),
-            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-            backend_options: wgpu::BackendOptions::from_env_or_default(),
-        });
-        let adapter = pollster::block_on(wgpu::util::initialize_adapter_from_env_or_default(
-            &instance, None,
-        ))
+        // An instance of every backend sets GL up for each window's surface
+        // too, whichever adapter draws, and on Linux EGL fails there against
+        // the context GTK or CEF holds, which wgpu-hal panics on
+        // (koharu-rs/koharu#1414). So GL is only for a machine with no
+        // Vulkan, Metal, or DX12 adapter; `WGPU_BACKEND` still decides.
+        let (instance, adapter) = match wgpu::Backends::from_env() {
+            Some(backends) => open(backends),
+            None => open(wgpu::Backends::PRIMARY).or_else(|_| open(wgpu::Backends::GL)),
+        }
         .context("no GPU adapter is available")?;
         let supported = adapter.limits();
         let required_limits = wgpu::Limits {
@@ -80,8 +79,7 @@ impl Gpu {
         // External memory lets the window import the frames CEF shares.
         let optional = wgpu::Features::CLEAR_TEXTURE
             | wgpu::Features::PIPELINE_CACHE
-            | wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32
-            | wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
+            | wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("koharu renderer"),
             required_features: adapter.features() & optional,
@@ -89,6 +87,14 @@ impl Gpu {
             ..Default::default()
         }))
         .context("no GPU adapter supports vello_gpu's features")?;
+        // wgpu panics on an error no scope catches, and Koharu's panic hook
+        // closes the app, so a GPU short of memory, or lost, ended Koharu in
+        // the middle of a thumbnail. Reads fail through `checked` instead,
+        // and the rest is logged.
+        device.on_uncaptured_error(Arc::new(|error| tracing::error!("GPU error: {error}")));
+        device.set_device_lost_callback(|reason, message| {
+            tracing::error!("the GPU device was lost ({reason:?}): {message}");
+        });
         // A render takes its size from its target; this only sizes the
         // renderer's first buffers.
         let (renderer, resources) = Renderer::new(
@@ -138,79 +144,112 @@ impl Gpu {
         }
     }
 
+    /// Runs `work`, which records its GPU work and waits for it on this
+    /// thread, inside error scopes, so a GPU error fails it rather than
+    /// leaving what it reads back blank.
+    fn checked<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
+        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let result = work();
+        let invalid = pollster::block_on(validation.pop());
+        let short = pollster::block_on(memory.pop());
+        match invalid.or(short) {
+            Some(error) => Err(anyhow!("the GPU failed: {error}")),
+            None => result,
+        }
+    }
+
     /// `texture`, an `Rgba8Unorm` texture made with `COPY_SRC` that holds
     /// premultiplied RGBA, as vello_gpu draws it, read back as straight
     /// alpha.
     pub fn read_texture(&self, texture: &Texture) -> Result<RgbaImage> {
-        let (width, height) = (texture.width(), texture.height());
-        let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
-            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let readback = self.device.create_buffer(&BufferDescriptor {
-            label: Some("koharu readback buffer"),
-            size: u64::from(padded_width) * u64::from(height),
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("koharu readback"),
+        self.checked(|| {
+            let (width, height) = (texture.width(), texture.height());
+            let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+                * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+            let readback = self.device.create_buffer(&BufferDescriptor {
+                label: Some("koharu readback buffer"),
+                size: u64::from(padded_width) * u64::from(height),
+                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
             });
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            TexelCopyBufferInfo {
-                buffer: &readback,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_width),
-                    rows_per_image: None,
+            let mut encoder = self
+                .device
+                .create_command_encoder(&CommandEncoderDescriptor {
+                    label: Some("koharu readback"),
+                });
+            encoder.copy_texture_to_buffer(
+                texture.as_image_copy(),
+                TexelCopyBufferInfo {
+                    buffer: &readback,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded_width),
+                        rows_per_image: None,
+                    },
                 },
-            },
-            Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-        let submission = self.queue.submit([encoder.finish()]);
-        let slice = readback.slice(..);
-        let (sender, receiver) = mpsc::sync_channel(1);
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-        self.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: Some(submission),
-                timeout: None,
-            })
-            .map_err(|error| anyhow!("waiting for the GPU failed: {error:?}"))?;
-        receiver
-            .recv()
-            .context("the GPU closed the readback")?
-            .context("failed to map the readback buffer")?;
-        let mapped = slice
-            .get_mapped_range()
-            .context("failed to read the readback buffer")?;
-        let row = (width * 4) as usize;
-        let mut pixels = Vec::with_capacity(row * height as usize);
-        for line in mapped
-            .chunks_exact(padded_width as usize)
-            .take(height as usize)
-        {
-            pixels.extend_from_slice(&line[..row]);
-        }
-        drop(mapped);
-        readback.unmap();
-        for pixel in pixels.as_chunks_mut::<4>().0 {
-            let alpha = u32::from(pixel[3]);
-            if alpha != 0 && alpha != 255 {
-                for channel in &mut pixel[..3] {
-                    *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            let submission = self.queue.submit([encoder.finish()]);
+            let slice = readback.slice(..);
+            let (sender, receiver) = mpsc::sync_channel(1);
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                let _ = sender.send(result);
+            });
+            self.device
+                .poll(wgpu::PollType::Wait {
+                    submission_index: Some(submission),
+                    timeout: None,
+                })
+                .map_err(|error| anyhow!("waiting for the GPU failed: {error:?}"))?;
+            receiver
+                .recv()
+                .context("the GPU closed the readback")?
+                .context("failed to map the readback buffer")?;
+            let mapped = slice
+                .get_mapped_range()
+                .context("failed to read the readback buffer")?;
+            let row = (width * 4) as usize;
+            let mut pixels = Vec::with_capacity(row * height as usize);
+            for line in mapped
+                .chunks_exact(padded_width as usize)
+                .take(height as usize)
+            {
+                pixels.extend_from_slice(&line[..row]);
+            }
+            drop(mapped);
+            readback.unmap();
+            for pixel in pixels.as_chunks_mut::<4>().0 {
+                let alpha = u32::from(pixel[3]);
+                if alpha != 0 && alpha != 255 {
+                    for channel in &mut pixel[..3] {
+                        *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                    }
                 }
             }
-        }
-        RgbaImage::from_raw(width, height, pixels).context("the readback has the wrong size")
+            RgbaImage::from_raw(width, height, pixels).context("the readback has the wrong size")
+        })
     }
+}
+
+/// An instance of `backends` and the adapter `WGPU_ADAPTER_NAME`, or else
+/// wgpu's default preference, picks among them.
+fn open(backends: wgpu::Backends) -> Result<(wgpu::Instance, wgpu::Adapter)> {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        display: None,
+        backends,
+        flags: wgpu::InstanceFlags::from_build_config().with_env(),
+        memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        backend_options: wgpu::BackendOptions::from_env_or_default(),
+    });
+    let adapter = pollster::block_on(wgpu::util::initialize_adapter_from_env_or_default(
+        &instance, None,
+    ))?;
+    Ok((instance, adapter))
 }
 
 /// A scene for one render on the GPU, with the textures its images name.
@@ -227,22 +266,24 @@ impl Drawing<'_> {
     /// straight-alpha RGBA.
     pub(crate) fn read(self) -> Result<RgbaImage> {
         let gpu = self.gpu;
-        let texture = gpu.device.create_texture(&TextureDescriptor {
-            label: Some("koharu raster"),
-            size: Extent3d {
-                width: u32::from(self.scene.width()),
-                height: u32::from(self.scene.height()),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        self.render(&texture.create_view(&wgpu::TextureViewDescriptor::default()))?;
-        gpu.read_texture(&texture)
+        gpu.checked(move || {
+            let texture = gpu.device.create_texture(&TextureDescriptor {
+                label: Some("koharu raster"),
+                size: Extent3d {
+                    width: u32::from(self.scene.width()),
+                    height: u32::from(self.scene.height()),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: TextureFormat::Rgba8Unorm,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            self.render(&texture.create_view(&wgpu::TextureViewDescriptor::default()))?;
+            gpu.read_texture(&texture)
+        })
     }
 
     /// Renders into `target`, an `Rgba8Unorm` render attachment the drawing's
@@ -340,5 +381,22 @@ impl Drawing<'_> {
         });
         self.bindings.insert(id, view);
         ImageSource::external_texture(id, TextureRegion::Full, true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Gpu;
+
+    #[test]
+    fn a_read_the_gpu_rejects_fails_rather_than_panicking() {
+        let Ok(gpu) = Gpu::get() else {
+            return;
+        };
+        let limit = gpu.device.limits().max_texture_dimension_2d;
+        let Ok(width) = u16::try_from(limit + 1) else {
+            return;
+        };
+        assert!(gpu.drawing(width, 1).read().is_err());
     }
 }

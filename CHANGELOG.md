@@ -1,3 +1,28 @@
+## [0.85.6](https://github.com/koharu-rs/koharu/compare/0.85.5..0.85.6) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(ml)* Walk Hayai OCR's decoder layers by iterator, as clippy requires - ([38af15d](https://github.com/koharu-rs/koharu/commit/38af15d679961de0c4892de04a53444239715d68))
+- *(release)* Bundle Windows without CEF's dxil.dll, which CEF 156 no longer ships - ([090cb8f](https://github.com/koharu-rs/koharu/commit/090cb8f7e9269ae9bfc25443be922084f598be9a))
+
+## [0.85.5](https://github.com/koharu-rs/koharu/compare/0.85.4..0.85.5) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Take CEF's shared frames through cef 156's importer, on tauri's CEF 156 bump ([#1414](https://github.com/koharu-rs/koharu/issues/1414)) - ([6a7b994](https://github.com/koharu-rs/koharu/commit/6a7b9948df2ff9e4d5266b0895585a672beaeaef))
+
+## [0.85.4](https://github.com/koharu-rs/koharu/compare/0.85.3..0.85.4) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(ui)* Offer the target languages 0.83 did again, Persian among them ([#1418](https://github.com/koharu-rs/koharu/issues/1418)) - ([e8c58d0](https://github.com/koharu-rs/koharu/commit/e8c58d01ed7c4e768bfd796311b44e717fcfa2c1))
+
+## [0.85.3](https://github.com/koharu-rs/koharu/compare/0.85.2..0.85.3) - 2026-11-18
+
+### 🐛 Bug Fixes
+
+- *(llm)* Ask ChatGPT for the models Codex 0.170.0 offers, so GPT-6.2 Sol and Astra are listed - ([484d5cf](https://github.com/koharu-rs/koharu/commit/484d5cfcb6457336a413d8859f79c8a3ff91a285))
+
 ## [0.85.2](https://github.com/koharu-rs/koharu/compare/0.85.1..0.85.2) - 2026-11-17
 
 ### 🐛 Bug Fixes
