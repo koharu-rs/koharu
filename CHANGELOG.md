@@ -1,3 +1,10 @@
+## [0.86.1](https://github.com/koharu-rs/koharu/compare/0.86.0..0.86.1) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Grow text borders and synthetic bold by a stroke instead of kurbo's expand_path, which spikes and shrinks on some fonts' curves ([#1073](https://github.com/koharu-rs/koharu/issues/1073)) - ([3338dcd](https://github.com/koharu-rs/koharu/commit/3338dcdee583b420e7546546a667836a7119c299))
+- *(ui)* Save the colour a quick drag ends on, on a react-colorful pin with omgovich/react-colorful#246 ([#866](https://github.com/koharu-rs/koharu/issues/866)) - ([4d446cf](https://github.com/koharu-rs/koharu/commit/4d446cfd0100a60a604279e759849ed1a80ac63f))
+
 ## [0.86.0](https://github.com/koharu-rs/koharu/compare/0.85.7..0.86.0) - 2026-11-19
 
 ### ⛰️  Features
