@@ -11302,8 +11302,7 @@ dependencies = [
 [[package]]
 name = "tauri-winit-gtk4"
 version = "0.31.0-beta.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b261a03b459cfab1c0f4924178e6723b10d303f20bb2593f44297f33ab2b3b0"
+source = "git+https://github.com/mayocream/winit-gtk4?rev=bf2978ad27b8f2d4a04de00afdaa882a4c28ab79#bf2978ad27b8f2d4a04de00afdaa882a4c28ab79"
 dependencies = [
  "dpi",
  "gdk4-wayland",
