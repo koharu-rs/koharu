@@ -1,3 +1,10 @@
+## [0.85.7](https://github.com/koharu-rs/koharu/compare/0.85.6..0.85.7) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(ml)* Run the layout model's attention by query chunks where libtorch falls back to math, as on AMD RDNA ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([b40f665](https://github.com/koharu-rs/koharu/commit/b40f665d5cfeeb184edbc4c416d6b69c04efc00d))
+- Draw Linux windows from copied frames, start GL only without Vulkan, and fail GPU reads instead of crashing ([#1414](https://github.com/koharu-rs/koharu/issues/1414)) - ([1ec7949](https://github.com/koharu-rs/koharu/commit/1ec79492b3274a204bc6c1af710e2554b1d7d92f))
+
 ## [0.85.6](https://github.com/koharu-rs/koharu/compare/0.85.5..0.85.6) - 2026-11-18
 
 ### 🐛 Bug Fixes
