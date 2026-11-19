@@ -91,7 +91,15 @@ impl Package for OneApi {
             store::put(
                 &folder(),
                 folder(),
-                |folder| LOAD.iter().all(|library| folder.join(library).is_file()),
+                // Complete with every file it keeps, not just those Koharu
+                // loads: SYCL can't find the GPU without its Level Zero
+                // adapters. A pattern names no one file to check.
+                |folder| {
+                    FILES
+                        .iter()
+                        .filter(|file| !file.contains('*'))
+                        .all(|file| folder.join(file).is_file())
+                },
                 |stage| async move {
                     for (project, version) in WHEELS {
                         // PyPI's stable path, which redirects to where it's
