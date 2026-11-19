@@ -1,13 +1,10 @@
 //! The GPU: one wgpu device and a vello_gpu renderer, which draws every page
 //! Koharu shows or exports.
 
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc, Weak,
-        atomic::{AtomicBool, Ordering},
-        mpsc,
-    },
+use std::sync::{
+    Arc, Weak,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -46,14 +43,38 @@ pub struct Gpu {
     vello: Mutex<State>,
 }
 
+/// What the uploaded images may take on the GPU, in bytes. Kept only while
+/// the retained content held their pixmaps, every page viewed held a
+/// texture, up to that cache's 2 GiB, on the GPU the models use. Past this,
+/// the coldest goes, and is uploaded again when it's next drawn.
+const TEXTURE_BYTES: u64 = 256 << 20;
+
 /// vello_gpu's renderer, the glyphs it keeps, and each image uploaded as a
-/// texture of its own, by its pixmap's address, kept while the pixmap lives.
+/// texture of its own, by its pixmap's address, kept while the pixmap lives
+/// and `TEXTURE_BYTES` has room.
 struct State {
     renderer: Renderer,
     resources: Resources,
-    textures: HashMap<usize, (Weak<Pixmap>, TextureId, TextureView)>,
+    textures: quick_cache::unsync::Cache<usize, Upload, Bytes>,
     /// The id the next uploaded image is named by.
     next_texture: u64,
+}
+
+/// An image's texture, and the pixmap it was uploaded from.
+struct Upload {
+    pixmap: Weak<Pixmap>,
+    id: TextureId,
+    view: TextureView,
+    bytes: u64,
+}
+
+#[derive(Clone)]
+struct Bytes;
+
+impl quick_cache::Weighter<usize, Upload> for Bytes {
+    fn weight(&self, _: &usize, upload: &Upload) -> u64 {
+        upload.bytes
+    }
 }
 
 impl Gpu {
@@ -142,7 +163,7 @@ impl Gpu {
             vello: Mutex::new(State {
                 renderer,
                 resources,
-                textures: HashMap::new(),
+                textures: quick_cache::unsync::Cache::with_weighter(64, TEXTURE_BYTES, Bytes),
                 next_texture: 0,
             }),
         })
@@ -163,7 +184,7 @@ impl Gpu {
         // A texture whose pixmap has gone, as an evicted layer's, goes too.
         vello
             .textures
-            .retain(|_, (pixmap, ..)| pixmap.strong_count() > 0);
+            .retain(|_, upload| upload.pixmap.strong_count() > 0);
         Drawing {
             gpu: self,
             vello,
@@ -389,15 +410,16 @@ impl Drawing<'_> {
     }
 
     /// `pixmap` as an image the scene samples: uploaded as a texture of its
-    /// own the first time, and named by its id.
+    /// own unless one is kept, and named by its id. The drawing holds the
+    /// texture until it renders, kept or not.
     pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> ImageSource {
         let address = Arc::as_ptr(pixmap) as usize;
         let uploaded = self
             .vello
             .textures
             .get(&address)
-            .filter(|(kept, ..)| kept.as_ptr() == Arc::as_ptr(pixmap))
-            .map(|(_, id, view)| (*id, view.clone()));
+            .filter(|upload| upload.pixmap.as_ptr() == Arc::as_ptr(pixmap))
+            .map(|upload| (upload.id, upload.view.clone()));
         let (id, view) = uploaded.unwrap_or_else(|| {
             let texture = self.gpu.device.create_texture_with_data(
                 &self.gpu.queue,
@@ -421,9 +443,15 @@ impl Drawing<'_> {
             let id = TextureId(self.vello.next_texture);
             self.vello.next_texture += 1;
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            self.vello
-                .textures
-                .insert(address, (Arc::downgrade(pixmap), id, view.clone()));
+            self.vello.textures.insert(
+                address,
+                Upload {
+                    pixmap: Arc::downgrade(pixmap),
+                    id,
+                    view: view.clone(),
+                    bytes: pixmap.data_as_u8_slice().len() as u64,
+                },
+            );
             (id, view)
         });
         self.bindings.insert(id, view);
