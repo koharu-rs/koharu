@@ -17,10 +17,10 @@ pub enum Error {
     NonUnicodePath(PathBuf),
     #[error("{0} is out of range for stable-diffusion.cpp")]
     OutOfRange(&'static str),
-    #[error("stable-diffusion.cpp couldn't load the model; its log says why")]
-    Load,
-    #[error("stable-diffusion.cpp couldn't generate the image; its log says why")]
-    Generate,
+    #[error("stable-diffusion.cpp couldn't load the model: {0}")]
+    Load(String),
+    #[error("stable-diffusion.cpp couldn't generate the image: {0}")]
+    Generate(String),
     #[error("stable-diffusion.cpp returned an image it can't have made")]
     Output,
 }

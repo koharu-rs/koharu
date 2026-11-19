@@ -23,7 +23,7 @@ crate adds safety, not behaviour.
 | a model | one at a time per context: a context can move between threads, but generating takes it whole | |
 | images | inputs are lent for the call; outputs are copied out and sd.cpp frees its own, so the C runtime that made them frees them | |
 | logs | sd.cpp's log goes to `tracing` under `stable-diffusion.cpp`; nothing from it unwinds into C | |
-| errors | a string with a NUL, a path that isn't Unicode, a size out of C's range, and sd.cpp's own failures, whose reason is in its log | |
+| errors | a string with a NUL, a path that isn't Unicode, a size out of C's range, and sd.cpp's own failures, which carry what sd.cpp warned of or failed on as the call ran, since its API answers only that a call failed | |
 
 ## Sources
 

@@ -71,10 +71,11 @@ impl Context {
         // than partway through a page.
         raw.eager_load = true;
 
-        let pointer = NonNull::new(unsafe { sys::new_sd_ctx(&raw) }).ok_or(Error::Load)?;
+        let (pointer, reason) = logging::explained(|| unsafe { sys::new_sd_ctx(&raw) });
+        let pointer = NonNull::new(pointer).ok_or(Error::Load(reason))?;
         let context = Self { pointer };
         if !unsafe { sys::sd_ctx_supports_image_generation(pointer.as_ptr()) } {
-            return Err(Error::Load);
+            return Err(Error::Load("the model doesn't generate images".to_owned()));
         }
         Ok(context)
     }
@@ -147,9 +148,11 @@ impl Context {
         }
 
         let mut output = Images(ptr::null_mut());
-        let generated = unsafe { sys::generate_image(self.pointer.as_ptr(), &raw, &mut output.0) };
+        let (generated, reason) = logging::explained(|| unsafe {
+            sys::generate_image(self.pointer.as_ptr(), &raw, &mut output.0)
+        });
         if !generated {
-            return Err(Error::Generate);
+            return Err(Error::Generate(reason));
         }
         output.copy()
     }
