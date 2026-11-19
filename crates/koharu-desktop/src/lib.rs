@@ -7,13 +7,13 @@ mod events;
 mod library;
 mod screen;
 
-use std::{io::ErrorKind, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use koharu_pipeline::{Pipeline, PipelineConfig};
 use koharu_renderer::{Gpu, Renderer, RendererConfig};
 use sentry::protocol::GpuContext;
-use tauri::{Env, Manager as _, utils::platform};
+use tauri::Manager as _;
 use tauri_plugin_log::{Target, TargetKind, log::LevelFilter};
 use tauri_plugin_window_state::StateFlags;
 use tauri_runtime_cef::{Cef, CefRuntime};
@@ -26,28 +26,17 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
     // scheduler runs on.
     tauri::async_runtime::set(tokio::runtime::Handle::current());
 
-    // The install folder in Windows release builds, where setup puts Koharu
-    // and its store, unless this user can't write there, as in a per-machine
-    // install under Program Files. Otherwise, and on macOS and Linux, where
-    // it's read-only, the app's local data folder, which is a per-user
-    // install's folder too. That is Tauri's `app_local_data_dir`, which needs
-    // the app this builds.
-    let local = dirs::data_local_dir()
-        .context("the user's local data folder is unknown")?
-        .join(&context.config().identifier)
-        .join("projects");
-    let folder = if cfg!(all(windows, not(debug_assertions))) {
-        let installed = platform::resource_dir(context.package_info(), &Env::default())
-            .context("Koharu's install folder is unknown")?
-            .join("projects");
-        let denied = fs_err::create_dir_all(&installed)
-            .and_then(|()| tempfile::tempfile_in(&installed))
-            .is_err_and(|error| error.kind() == ErrorKind::PermissionDenied);
-        if denied { local } else { installed }
-    } else {
-        local
+    // Beside the store in Koharu's root, and in the app's local data folder
+    // otherwise, which is a per-user install's folder too. That is Tauri's
+    // `app_local_data_dir`, which needs the app this builds.
+    let projects = match koharu_runtime::root() {
+        Some(folder) => folder.join("projects"),
+        None => dirs::data_local_dir()
+            .context("the user's local data folder is unknown")?
+            .join(&context.config().identifier)
+            .join("projects"),
     };
-    let library = Library::new(folder)?;
+    let library = Library::new(projects)?;
 
     // The process's, which the pipeline draws a painted area's page with.
     let renderer = Renderer::get().clone();
