@@ -1,3 +1,12 @@
+## [0.86.2](https://github.com/koharu-rs/koharu/compare/0.86.1..0.86.2) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(pipeline)* Empty libtorch's cache when the last run ends, which grew with each page and stayed until the next model load ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([c60ea08](https://github.com/koharu-rs/koharu/commit/c60ea084358b52dd101660358fb33299f7c8dff9))
+- *(renderer)* Keep uploaded images' textures within 256 MiB, which grew with every page viewed up to the 2 GiB retained cache ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([fbe36bd](https://github.com/koharu-rs/koharu/commit/fbe36bd9fe5bae6a882bef50dc7cd76c98de0abe))
+- Draw on a new GPU once the last is lost, instead of panicking in vello_gpu on the lost one ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([4ef5b6f](https://github.com/koharu-rs/koharu/commit/4ef5b6fcaa4a2b8a7d68b3650f337dd2114deab2))
+- Keep the GPU when a Windows Vulkan frame waits past 1 s, on a wgpu pin with a fix for gfx-rs/wgpu#9029 ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([8630a25](https://github.com/koharu-rs/koharu/commit/8630a25338ed6ac20e263d31d8956a3d83b764d1))
+
 ## [0.86.1](https://github.com/koharu-rs/koharu/compare/0.86.0..0.86.1) - 2026-11-19
 
 ### 🐛 Bug Fixes
