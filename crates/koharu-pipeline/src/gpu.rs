@@ -57,6 +57,7 @@ impl Gpu {
                     runtime,
                     shutdown,
                     loaded: HashMap::new(),
+                    device: None,
                 };
                 let mut queue = BinaryHeap::new();
                 let mut sent = 0;
@@ -146,6 +147,8 @@ pub(crate) struct Models {
     runtime: Handle,
     shutdown: CancellationToken,
     loaded: HashMap<Key, Box<dyn Any + Send>>,
+    /// The runtime's device, once a model has loaded on it.
+    device: Option<&'static Device>,
 }
 
 impl Models {
@@ -166,14 +169,30 @@ impl Models {
             // shutdown, and Tokio panics on a timer polled after, as a
             // download waiting to retry polls one.
             let shutdown = &self.shutdown;
-            let model = self.runtime.block_on(async {
+            let (model, device) = self.runtime.block_on(async {
                 tokio::select! {
                     biased;
                     () = shutdown.cancelled() => Err(Error::Shutdown),
-                    model = loaded(key, load) => model,
+                    loaded = loaded(key, load) => loaded,
                 }
             })?;
+            self.device = Some(device);
             self.loaded.insert(key.clone(), Box::new(model));
+        }
+        // libtorch reads some choices from the thread's current device, not
+        // from the tensors': `scaled_dot_product_attention` picks its kernel
+        // by it, so on a second GPU it would pick by the first, as the math
+        // fallback over a whole score matrix where the first is an integrated
+        // GPU AOTriton doesn't cover (koharu-rs/koharu#1408). Every call makes
+        // it current, as ggml, which stable-diffusion.cpp runs here on, sets
+        // it too.
+        if let Some(device) = self.device
+            && Cuda::device_count() > 0
+        {
+            Cuda::set_device(device.index as i64).map_err(|source| Error::Stage {
+                stage: key.stage,
+                source: source.into(),
+            })?;
         }
         Ok(self.loaded[key]
             .downcast_ref()
@@ -186,11 +205,14 @@ impl Models {
     }
 }
 
-/// The model `load` gives on the runtime's device, libtorch's cache emptied
-/// first: its caching allocator keeps what its tensors freed, and the device
-/// counts that as used, so llama.cpp and stable-diffusion.cpp, which fit
-/// themselves to free memory, wouldn't see it as free.
-async fn loaded<M, F>(key: &Key, load: impl FnOnce(&'static Device) -> F) -> Result<M>
+/// The model `load` gives on the runtime's device, with the device, libtorch's
+/// cache emptied first: its caching allocator keeps what its tensors freed,
+/// and the device counts that as used, so llama.cpp and stable-diffusion.cpp,
+/// which fit themselves to free memory, wouldn't see it as free.
+async fn loaded<M, F>(
+    key: &Key,
+    load: impl FnOnce(&'static Device) -> F,
+) -> Result<(M, &'static Device)>
 where
     F: Future<Output = anyhow::Result<M>>,
 {
@@ -208,9 +230,10 @@ where
     if cuda {
         Cuda::empty_cache().map_err(|source| failure(key, device, cuda, source.into()))?;
     }
-    load(device)
+    let model = load(device)
         .await
-        .map_err(|source| failure(key, device, cuda, source))
+        .map_err(|source| failure(key, device, cuda, source))?;
+    Ok((model, device))
 }
 
 /// The load failure, with the memory free on `device` and libtorch's.

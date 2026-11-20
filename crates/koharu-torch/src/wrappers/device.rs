@@ -2,8 +2,8 @@
 
 use koharu_torch_sys::{
     ATEN_CUDNN_BENCHMARK, ATEN_CUDNN_ENABLED, ATEN_HAS_CUDNN, AtenMemoryStats, AtenSetting,
-    aten_accelerator, aten_empty_cache, aten_has, aten_memory_stats, aten_set_setting,
-    aten_setting, aten_synchronize,
+    aten_accelerator, aten_empty_cache, aten_has, aten_memory_stats, aten_set_device,
+    aten_set_setting, aten_setting, aten_synchronize,
 };
 
 use super::utils::check;
@@ -53,6 +53,12 @@ impl Cuda {
         check(unsafe { aten_has(ATEN_HAS_CUDNN, &mut has) })
             .expect("libtorch reports its features");
         Cuda::is_available() && has
+    }
+
+    /// Makes a CUDA device the calling thread's current one, which libtorch
+    /// reads where it doesn't take the device from an operation's tensors.
+    pub fn set_device(device_index: i64) -> Result<()> {
+        check(unsafe { aten_set_device(index(device_index)?) })
     }
 
     /// Waits for all kernels in all streams on a CUDA device to complete.
