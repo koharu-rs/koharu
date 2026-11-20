@@ -5622,6 +5622,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "serde_path_to_error",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",

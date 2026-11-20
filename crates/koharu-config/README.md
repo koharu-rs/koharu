@@ -23,7 +23,7 @@ central list of them can drift from the component.
 | writing | under a lock other processes respect, on what the file holds now, writing only what changed, so comments and other tables stay as they are; no change, no write; the file is replaced at once, never half written | |
 | overrides only | a value set back to its default leaves the file, so a user who reset it follows later changes to the default | |
 | unknown keys | kept as they are on save | |
-| bad files | a file that isn't TOML or a value of the wrong type is an error, never the defaults | |
+| bad files | a file that isn't TOML is an error, never the defaults; a value that doesn't read, such as a removed model's id, reads as its default | |
 
 A write reads back what it's about to save and saves only if reading would
 return exactly what the edit left, so the file can't hold a value that reads

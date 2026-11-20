@@ -11,11 +11,8 @@ use std::{
 
 use atomicwrites::{AtomicFile, OverwriteBehavior};
 use fs_err::{File, OpenOptions};
-use serde::{
-    Serialize,
-    de::{DeserializeOwned, IntoDeserializer as _},
-};
-use toml::de::DeTable;
+use serde::{Serialize, de::DeserializeOwned};
+use serde_path_to_error::Segment;
 use toml_edit::{DocumentMut, Item, TableLike};
 
 pub use error::{Error, Result};
@@ -106,22 +103,44 @@ fn read_text(path: &Path) -> Result<Option<String>> {
         .transpose()
 }
 
+/// A value that doesn't read, such as a removed model's id, reads as its
+/// default: each pass drops the key the error names.
 fn section<T: Section>(path: &Path, text: &str) -> Result<T> {
-    let root = DeTable::parse(text).map_err(|mut error| {
-        error.set_input(Some(text));
-        invalid(path, error)
-    })?;
-    let Some((_, value)) = root
-        .into_inner()
-        .into_iter()
-        .find(|(key, _)| key.get_ref().as_ref() == T::NAME)
-    else {
+    let mut root: toml::Table = text.parse().map_err(|error| invalid(path, error))?;
+    let Some(mut value) = root.remove(T::NAME) else {
         return empty_section(path);
     };
-    T::deserialize(value.into_deserializer()).map_err(|mut error: toml::de::Error| {
-        error.set_input(Some(text));
-        invalid(path, format!("[{}]: {error}", T::NAME))
-    })
+    loop {
+        match serde_path_to_error::deserialize(value.clone()) {
+            Ok(section) => return Ok(section),
+            Err(error) if forget(&mut value, error.path()) => {}
+            Err(_) => return empty_section(path),
+        }
+    }
+}
+
+/// Removes the key `path` names from `value`, or the table key it passes
+/// through last; false when it names none.
+fn forget(mut value: &mut toml::Value, path: &serde_path_to_error::Path) -> bool {
+    let mut keys: Vec<_> = path
+        .iter()
+        .map_while(|segment| match segment {
+            Segment::Map { key } => Some(key.as_str()),
+            _ => None,
+        })
+        .collect();
+    let Some(last) = keys.pop() else {
+        return false;
+    };
+    for key in keys {
+        let Some(next) = value.get_mut(key) else {
+            return false;
+        };
+        value = next;
+    }
+    value
+        .as_table_mut()
+        .is_some_and(|table| table.remove(last).is_some())
 }
 
 /// The section with nothing in its table, which holds its defaults.
@@ -324,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_of_the_wrong_type_fails_naming_its_key() {
+    fn a_value_that_doesnt_read_is_its_default() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.toml");
         fs_err::write(
@@ -332,23 +351,19 @@ mod tests {
             indoc! {r#"
                 [pipeline]
                 retries = "three"
+                translation = { batch = "many" }
             "#},
         )
         .unwrap();
 
-        let error = read::<Pipeline>(&path).unwrap_err().to_string();
-
-        assert!(error.contains("[pipeline]"), "{error}");
-        assert!(error.contains("retries"), "{error}");
-        assert!(matches!(
-            write(&path, |pipeline: &mut Pipeline| pipeline.retries = 3),
-            Err(Error::Invalid { .. })
-        ));
+        assert_eq!(read::<Pipeline>(&path).unwrap(), Pipeline::default());
+        write(&path, |pipeline: &mut Pipeline| pipeline.retries = 3).unwrap();
         assert_eq!(
             fs_err::read_to_string(&path).unwrap(),
             indoc! {r#"
                 [pipeline]
-                retries = "three"
+                retries = 3
+                translation = { batch = "many" }
             "#}
         );
     }
