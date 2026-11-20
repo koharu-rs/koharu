@@ -5685,7 +5685,7 @@ dependencies = [
  "webp",
  "wgpu",
  "windows",
- "zip 9.6.0",
+ "zip 9.7.3",
 ]
 
 [[package]]
@@ -5923,7 +5923,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
- "zip 9.6.0",
+ "zip 9.7.3",
 ]
 
 [[package]]
@@ -6965,18 +6965,6 @@ name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
-dependencies = [
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
- "libc",
-]
-
-[[package]]
-name = "nix"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -11394,7 +11382,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.6",
  "windows-sys 0.59.0",
@@ -14012,9 +14000,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.6.0"
+version = "9.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80cc68510ea7553c30a69c732de5278e94183f68765af6c642dbccefd6ec777e"
+checksum = "63e50f7b2212e4635244be3c363b53273d159f2523eb7db3096c1d2861c1b603"
 dependencies = [
  "aes 0.9.4",
  "bzip2",
@@ -14028,7 +14016,7 @@ dependencies = [
  "libc",
  "lzma-rust2",
  "memchr",
- "nix 0.32.0",
+ "nix 0.30.1",
  "pbkdf2 0.13.0",
  "ppmd-rust",
  "sha1",
