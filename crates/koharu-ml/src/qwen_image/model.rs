@@ -10,7 +10,7 @@ use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{Context as _, Result, anyhow};
 use image::{DynamicImage, RgbaImage};
-use koharu_diffusion::{Cache, Canceller, Context, ContextParams, ImageParams};
+use koharu_diffusion::{Canceller, Context, ContextParams, ImageParams};
 
 #[derive(Debug)]
 pub(super) struct ModelPaths {
@@ -54,9 +54,9 @@ impl Model {
             .map_err(|_| anyhow!("Qwen-Image 2.1 Turbo context lock was poisoned"))?;
         let images = context
             .generate_image(&ImageParams {
-                // EasyCache skips 2 of an inpainting's 5 steps, 1.4 times as
-                // fast, for fills within a level of the full run's.
-                cache: Some(Cache::EasyCache),
+                // No step cache: on a megapixel edit EasyCache saved a tenth of
+                // the time, and in a sound effect it replaced, blurred letters.
+                cache: None,
                 // 512-pixel tiles keep the VAE within 1.2 GB on a megapixel, which
                 // an 8 GB GPU beside the other models can spare.
                 vae_tile: Some(512),

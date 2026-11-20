@@ -387,7 +387,8 @@ Each model also writes its `c2pa` action on the layers it wrote.
 
 - **A block is one text**, with its own mask and clean-up ([Blocks](#blocks)).
   A run on part of a page writes only the tiles it changes, so a block's
-  clean-up stores no more than its area.
+  clean-up stores its area, and from an edit model the context it was redrawn
+  in, which hiding its mask shows.
 - **Panels and balloons are kinds with their own outlines**, so a tool reads a
   balloon's outline from the balloon, and the texts in it are its children, as Clip Studio Paint keeps a balloon's texts in its balloon layer
   [CSP balloons].

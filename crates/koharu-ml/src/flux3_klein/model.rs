@@ -10,7 +10,7 @@ use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{Context as _, Result, anyhow};
 use image::{DynamicImage, RgbImage};
-use koharu_diffusion::{Cache, Canceller, Context, ContextParams, ImageParams, VaeFormat};
+use koharu_diffusion::{Canceller, Context, ContextParams, ImageParams, VaeFormat};
 
 #[derive(Debug)]
 pub(super) struct ModelPaths {
@@ -52,9 +52,10 @@ impl Model {
             .map_err(|_| anyhow!("FLUX.3 Image Klein context lock was poisoned"))?;
         let images = context
             .generate_image(&ImageParams {
-                // EasyCache skips 8 of 13 steps on a manga panel, 2.5 times as
-                // fast, for fills within a few levels of the full run's.
-                cache: Some(Cache::EasyCache),
+                // No step cache, as Black Forest Labs and ComfyUI's templates
+                // run it: EasyCache removed lettering as cleanly, 1.7 times as
+                // fast, but smeared one of seven words a fill lettered.
+                cache: None,
                 // Whole, a megapixel takes 1.5 GB to encode and 2.1 GB to decode,
                 // more than an 8 GB GPU has free beside the other models; 512-pixel
                 // tiles take a quarter, for fills within a level of whole ones.

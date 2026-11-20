@@ -1,19 +1,14 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
-use koharu_ml::qwen_image::{InpaintOptions, Options, QwenImage};
+use koharu_ml::qwen_image::{Options, QwenImage};
 
 #[derive(Debug, Parser)]
 struct Cli {
-    /// A condition image, read in the order given; repeat for several. With
-    /// `--mask`, the one image to inpaint.
+    /// A condition image, read in the order given; repeat for several.
     #[arg(short, long, value_name = "FILE")]
     image: Vec<PathBuf>,
-
-    /// Inpaint the image where this is white.
-    #[arg(short, long, value_name = "FILE")]
-    mask: Option<PathBuf>,
 
     #[arg(short, long, value_name = "FILE")]
     output: PathBuf,
@@ -33,12 +28,6 @@ struct Cli {
     #[arg(long)]
     height: Option<u32>,
 
-    #[arg(long, default_value_t = 0.6)]
-    strength: f64,
-
-    #[arg(long)]
-    padding_mask_crop: Option<u32>,
-
     #[arg(long, default_value_t = -1)]
     seed: i64,
 }
@@ -53,25 +42,8 @@ async fn main() -> Result<()> {
         .map(image::open)
         .collect::<Result<Vec<_>, _>>()?;
 
-    let inpainted = match (&cli.mask, images.as_slice()) {
-        (Some(mask), [input]) => Some((input, image::open(mask)?)),
-        (Some(_), _) => bail!("inpainting takes one image"),
-        (None, _) => None,
-    };
-
     let device = koharu_runtime::device().await?;
     let pipeline = QwenImage::load(device).await?;
-    if let Some((input, mask)) = inpainted {
-        let options = InpaintOptions {
-            padding_mask_crop: cli.padding_mask_crop,
-            strength: cli.strength,
-            seed: cli.seed,
-        };
-        pipeline
-            .inpaint(&cli.prompt, input, &mask, &options)?
-            .save(cli.output)?;
-        return Ok(());
-    }
     let options = Options {
         negative_prompt: cli.negative_prompt,
         true_cfg_scale: cli.true_cfg_scale,

@@ -1,5 +1,4 @@
 mod backend;
-mod diffusers;
 mod image;
 mod nn;
 

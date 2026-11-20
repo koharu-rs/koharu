@@ -18,7 +18,7 @@ Most lettering sits on plain paper or a gradient, so Koharu fills it without the
 | A smooth background                           | Telea's fast-marching fill, from OpenCV |
 | Line art, screentone, a bubble border, or art | The inpainting model                    |
 
-The model redraws each text with 256 pixels of context around it, at the page's own scale, and never across two panels. Only the masked pixels come back.
+The model redraws each text with 256 pixels of context around it, at the page's own scale, and never across two panels. LaMa's fill stays inside the mask. FLUX.3 Klein and Qwen-Image 2.1 Turbo redraw the whole window, and the clean-up keeps it around the text, shown through the block's mask, so painting the mask larger shows more of their redraw.
 
 Inspect the result at normal reading size and high zoom. Look for glyph fragments, missed punctuation or furigana, erased bubble borders, repeated textures, and smeared screentone.
 

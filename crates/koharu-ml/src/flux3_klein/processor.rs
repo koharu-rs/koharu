@@ -4,18 +4,21 @@
 //! Forest Labs' reference implementation:
 //! https://github.com/huggingface/diffusers/blob/86ef420b17363c28e36ebad6b58555e9aa8feda2/src/diffusers/modular_pipelines/flux3/image_processor.py
 //! https://github.com/black-forest-labs/flux-3-image-klein/blob/62e90b9278b73ecc52927770c6965dc6b1966498/src/flux3/pipeline.py#L129-L171
-//! Neither inpaints, so inpainting keeps diffusers' FLUX.2 Klein helpers, in
-//! `crate::diffusers`.
 
 use anyhow::{Result, ensure};
-use image::{DynamicImage, RgbImage};
+use fast_image_resize::{FilterType, ResizeAlg};
+use image::{DynamicImage, RgbImage, imageops};
 
-use crate::diffusers::{LANCZOS, Region, TOKEN, resize_and_crop, resize_to_target_area};
-
+/// The token grid: the autoencoder's 8x downsampling, then 2x2 patches.
+const TOKEN: u32 = 16;
 const MIN_SIDE: u32 = 64;
 const MAX_SIDE: u32 = 4096;
 /// The area FLUX.2 Klein's pipeline fits several references under.
 const REFERENCE_AREA: u32 = 1024 * 1024;
+const RESIZE: ResizeAlg = ResizeAlg::Convolution(FilterType::Lanczos3);
+
+/// A box as `(left, top, right, bottom)`.
+pub(super) type Region = (u32, u32, u32, u32);
 
 /// The references a generation conditions on. One is kept whole: fitted
 /// under 4 megapixels and padded to the token grid with its reflection, with
@@ -35,9 +38,9 @@ pub(super) fn references(images: &[DynamicImage]) -> Result<(Vec<RgbImage>, Opti
     Ok((references, None))
 }
 
-/// One of several references, or the reference image of an inpainting:
-/// fitted under 1 megapixel and center-cropped to the token grid.
-pub(super) fn fit_reference(image: &DynamicImage) -> Result<RgbImage> {
+/// One of several references: fitted under 1 megapixel and center-cropped to
+/// the token grid.
+fn fit_reference(image: &DynamicImage) -> Result<RgbImage> {
     let mut image = image.to_rgb8();
     if u64::from(image.width()) * u64::from(image.height()) > u64::from(REFERENCE_AREA) {
         image = resize_to_target_area(&image, REFERENCE_AREA)?;
@@ -46,6 +49,32 @@ pub(super) fn fit_reference(image: &DynamicImage) -> Result<RgbImage> {
     let height = (image.height() / TOKEN) * TOKEN;
     ensure!(width > 0 && height > 0);
     resize_and_crop(&image, width, height)
+}
+
+/// FLUX.2's `_resize_to_target_area`: scaled to about `target_area` pixels,
+/// keeping the aspect ratio.
+fn resize_to_target_area(image: &RgbImage, target_area: u32) -> Result<RgbImage> {
+    let scale =
+        (f64::from(target_area) / (f64::from(image.width()) * f64::from(image.height()))).sqrt();
+    let width = (f64::from(image.width()) * scale).floor().max(1.0) as u32;
+    let height = (f64::from(image.height()) * scale).floor().max(1.0) as u32;
+    crate::image::resize(image, width, height, RESIZE)
+}
+
+/// FLUX.2's `_resize_and_crop`, without the resize its callers here never
+/// need: the centre `width` x `height` of `image`.
+fn resize_and_crop(image: &RgbImage, width: u32, height: u32) -> Result<RgbImage> {
+    ensure!(
+        image.width() >= width && image.height() >= height,
+        "cannot center-crop {}x{} image to {}x{}",
+        image.width(),
+        image.height(),
+        width,
+        height
+    );
+    let left = (image.width() - width) / 2;
+    let top = (image.height() - height) / 2;
+    Ok(imageops::crop_imm(image, left, top, width, height).to_image())
 }
 
 /// `_get_canvas_height_width`: the size rounded up to the token grid, sides
@@ -73,7 +102,7 @@ fn resize_if_canvas_exceeds_area(image: &RgbImage) -> Result<RgbImage> {
         }
         scale *= 0.995;
     };
-    crate::image::resize(image, fit_width, fit_height, LANCZOS)
+    crate::image::resize(image, fit_width, fit_height, RESIZE)
 }
 
 /// FLUX.3's `_resize_and_fill`: `image` centred on a `width` x `height`

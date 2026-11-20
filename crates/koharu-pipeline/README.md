@@ -95,13 +95,16 @@ mask:
 
 The model redraws in windows at the page's own scale, each lettering with 256
 pixels of context around it, merged with the windows it overlaps while the
-merge stays within a megapixel. A window never spans two panels, and only the
-masked pixels come back.
+merge stays within a megapixel. A window never spans two panels.
 
-| Inpainter | Takes a prompt |
-|---|---|
-| LaMa | no |
-| FLUX.3 Klein, Qwen-Image 2.1 Turbo | yes: an area's own, or else the settings' |
+| Inpainter | Redraws | Takes a prompt | Keeps |
+|---|---|---|---|
+| LaMa | the mask | no | the mask's pixels |
+| FLUX.3 Klein, Qwen-Image 2.1 Turbo | the whole window, edited with the window as its reference, the way both models' makers publish editing, since neither ships inpainting [FLUX.3 Klein] [Qwen-Image 2.1] | yes: an area's own, or else the settings' | the window, its colours matched to the original's away from the mask: a block the part within 256 pixels of its lettering, an area all of it |
+
+What a model keeps shows through the mask, as Photoshop keeps a Generative
+Fill result whole on its layer, under a layer mask the user can paint to show
+more of it [Photoshop combine variations].
 
 ## 4. Translation
 
@@ -185,12 +188,17 @@ crate's license is `MIT OR Apache-2.0 AND BSD-3-Clause`.
 
 Read in November 2026.
 
-- Adobe: [Photoshop Content-Aware Fill], [Photoshop Generative Fill]
+- Adobe: [Photoshop Content-Aware Fill], [Photoshop Generative Fill],
+  [Photoshop combine variations]
+- Editing models: [FLUX.3 Klein], [Qwen-Image 2.1]
 - [ComfyUI routes], [Ollama keep_alive], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ]
 - Lettering: [Manga balloon basics]
 
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
+[Photoshop combine variations]: https://www.adobe.com/learn/photoshop/web/combine-variations-generative-fill
+[FLUX.3 Klein]: https://docs.comfy.org/tutorials/flux/flux-3-klein
+[Qwen-Image 2.1]: https://github.com/QwenLM/Qwen-Image-2.1
 [ComfyUI routes]: https://docs.comfy.org/development/comfyui-server/comms_routes
 [Ollama keep_alive]: https://docs.ollama.com/faq
 [OpenCV inpaint]: https://github.com/opencv/opencv/blob/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/photo/src/inpaint.cpp

@@ -23,8 +23,8 @@ to the code that makes it.
 | Baberu OCR, with DINOv2 | Japanese OCR | libtorch | [Baberu OCR] |
 | Hayai OCR v2.7 Supernova, with SigLIP2 | Japanese, Chinese, Korean, and English OCR | libtorch | [Hayai OCR] |
 | LaMa, fine-tuned on manga | inpainting | libtorch | [LaMa], as [IOPaint] runs it |
-| FLUX.3 Image Klein | inpainting and generation | stable-diffusion.cpp | [FLUX.3 Klein] |
-| Qwen-Image 2.1 Turbo, with Qwen3-VL 8B | inpainting, generation, and editing | stable-diffusion.cpp | [Qwen-Image] |
+| FLUX.3 Image Klein | generation and editing | stable-diffusion.cpp | [FLUX.3 Klein] |
+| Qwen-Image 2.1 Turbo, with Qwen3-VL 8B | generation and editing | stable-diffusion.cpp | [Qwen-Image] |
 
 Weights come from Hugging Face at a pinned commit, downloaded the first time a
 model loads. manga-ocr-ar-experimental is CC BY-NC-SA 4.0, and Qwen-Image 2.1
@@ -54,13 +54,12 @@ page's pixels can run off the device's thread.
   Each class has its own confidence threshold.
 - **OCR** returns each crop's text.
 - **Inpainting** returns the image redrawn under its mask.
+- **Generation** returns images of a prompt, and edits the images it's given.
 
-FLUX.3 ships no inpainting pipeline, so it inpaints as diffusers'
-flow-matching image-to-image does with a mask [diffusers Flux2 Klein inpaint]:
-the image fitted under a megapixel, optionally cropped around the mask, and the
-result blended back by the mask. Qwen-Image 2.1 Turbo edits by generating from
-condition images, as its diffusers pipeline does [diffusers Qwen-Image inpaint],
-a mask being one more condition image the prompt names.
+FLUX.3 and Qwen-Image 2.1 Turbo edit by generating from reference images, the
+way their own pipelines do, and neither ships an inpainting pipeline [FLUX.3
+Klein] [Qwen-Image]. A mask or a painted annotation is one more condition image
+a Qwen-Image prompt names.
 
 ## Sources
 
@@ -68,9 +67,8 @@ Read in November 2026.
 
 - Layout: [RF-DETR], [Koharu Layout]
 - OCR: [manga-ocr-ar], [Baberu OCR], [Hayai OCR]
-- Inpainting and generation: [LaMa], [IOPaint], [FLUX.3 Klein],
-  [Qwen-Image], [diffusers Flux2 Klein inpaint], [diffusers Qwen-Image
-  inpaint]
+- Inpainting, generation, and editing: [LaMa], [IOPaint], [FLUX.3 Klein],
+  [Qwen-Image]
 
 [RF-DETR]: https://github.com/roboflow/rf-detr/tree/4ab7c18729de9d02ffd0495795d0831b5630f01b
 [Koharu Layout]: https://huggingface.co/mayocream/koharu-layout-highres
@@ -81,5 +79,3 @@ Read in November 2026.
 [IOPaint]: https://github.com/Sanster/IOPaint/tree/61a759fb3f332bacdce8b2813f4837495c9b86e0
 [FLUX.3 Klein]: https://github.com/black-forest-labs/flux-3-image-klein/tree/62e90b9278b73ecc52927770c6965dc6b1966498
 [Qwen-Image]: https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/tree/fc13ba1986fcb905854dc8de2f52eee395f49b5b
-[diffusers Flux2 Klein inpaint]: https://github.com/huggingface/diffusers/blob/a37f6f8394ac2a7ee8360c3abea811efe54512b1/src/diffusers/pipelines/flux2/pipeline_flux2_klein_inpaint.py
-[diffusers Qwen-Image inpaint]: https://github.com/huggingface/diffusers/blob/74fb49b5506a6960d55de0f7e6f4e0631213dc63/src/diffusers/pipelines/qwenimage/pipeline_qwenimage_edit_inpaint.py

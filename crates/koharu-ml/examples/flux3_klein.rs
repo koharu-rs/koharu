@@ -2,15 +2,13 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use koharu_ml::flux3_klein::{Flux3Klein, GenerateOptions, InpaintOptions};
+use koharu_ml::flux3_klein::{Flux3Klein, GenerateOptions};
 
 #[derive(Debug, Parser)]
 struct Cli {
+    /// The image to edit, the first reference.
     #[arg(short, long, value_name = "FILE")]
     input: Option<PathBuf>,
-
-    #[arg(short, long, value_name = "FILE", requires = "input")]
-    mask: Option<PathBuf>,
 
     #[arg(short, long, value_name = "FILE")]
     output: PathBuf,
@@ -22,16 +20,10 @@ struct Cli {
     reference: Option<PathBuf>,
 
     #[arg(long, default_value_t = 16)]
-    steps: usize,
-
-    #[arg(long, default_value_t = 0.8)]
-    strength: f64,
+    steps: i32,
 
     #[arg(long, default_value_t = -1)]
     seed: i64,
-
-    #[arg(long)]
-    padding_mask_crop: Option<u32>,
 }
 
 #[tokio::main]
@@ -39,37 +31,23 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
     let input = cli.input.as_ref().map(image::open).transpose()?;
-    let mask = cli.mask.as_ref().map(image::open).transpose()?;
     let reference = cli.reference.as_ref().map(image::open).transpose()?;
 
     let device = koharu_runtime::device().await?;
     let pipeline = Flux3Klein::load(device).await?;
 
-    let output = if let Some(mask) = mask.as_ref() {
-        let input = input
-            .as_ref()
-            .context("--input is required when --mask is provided")?;
-        let options = InpaintOptions {
-            num_inference_steps: cli.steps,
-            strength: cli.strength,
-            seed: cli.seed,
-            padding_mask_crop: cli.padding_mask_crop,
-        };
-        pipeline.inpaint(&cli.prompt, input, reference.as_ref(), mask, &options)?
-    } else {
-        let options = GenerateOptions {
-            num_inference_steps: i32::try_from(cli.steps)?,
-            seed: cli.seed,
-            ..GenerateOptions::default()
-        };
-        let references = input.into_iter().chain(reference).collect::<Vec<_>>();
-        pipeline
-            .generate(&references, &cli.prompt, &options)?
-            .into_iter()
-            .next()
-            .context("FLUX.3 Image Klein returned no image")?
+    let options = GenerateOptions {
+        num_inference_steps: cli.steps,
+        seed: cli.seed,
+        ..GenerateOptions::default()
     };
-    output.save(cli.output)?;
+    let references = input.into_iter().chain(reference).collect::<Vec<_>>();
+    pipeline
+        .generate(&references, &cli.prompt, &options)?
+        .into_iter()
+        .next()
+        .context("FLUX.3 Image Klein returned no image")?
+        .save(cli.output)?;
 
     Ok(())
 }

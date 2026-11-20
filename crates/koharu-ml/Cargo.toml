@@ -43,10 +43,6 @@ name = "lama"
 harness = false
 
 [[bench]]
-name = "flux3_klein"
-harness = false
-
-[[bench]]
 name = "manga_ocr_ar"
 harness = false
 

@@ -1,7 +1,8 @@
 //! Runs the pipeline with its default settings over image files as a
 //! project's pages, every stage unless `--stages` names some, tracing each
 //! span's time as it closes. Then it saves each page rendered as the
-//! app draws it, the page with only its clean-ups laid over the scan, and a
+//! app draws it, the page with only its clean-ups laid over the scan through
+//! their masks, the clean-ups whole, as hiding each mask shows them, and a
 //! copy tinting each block's clean-up by what made it: green for one colour,
 //! blue for a smooth fill, and red for the inpainting model.
 //!
@@ -163,6 +164,7 @@ async fn main() -> Result<()> {
             .context("a page made from a file has a background")?;
         let mut cleaned = image::load_from_memory(&session.file(&background.file)?)?.to_rgba8();
         let mut marked = cleaned.clone();
+        let mut whole = cleaned.clone();
         let mut counts = std::collections::BTreeMap::<String, usize>::new();
         for layer in project.layers_of(page.id)? {
             let Content::Block(block) = &layer.content else {
@@ -192,6 +194,17 @@ async fn main() -> Result<()> {
                 _ => Rgba([255, 0, 0, 255]),
             };
             *counts.entry(made_by).or_default() += 1;
+            let mask = session
+                .tiles(block.mask.id, None)?
+                .coverage(cleaned.width(), cleaned.height());
+            let shown = |x: u32, y: u32| {
+                mask.as_ref().is_some_and(|(rect, mask)| {
+                    let (left, top) = (rect.x as u32, rect.y as u32);
+                    (left..left + rect.width).contains(&x)
+                        && (top..top + rect.height).contains(&y)
+                        && mask.get_pixel(x - left, y - top).0[0] != 0
+                })
+            };
             let tiles = session.tiles(block.cleanup.id, None)?;
             let size = Tile::SIZE as i64;
             for tile in &tiles.tiles {
@@ -207,13 +220,18 @@ async fn main() -> Result<()> {
                     {
                         continue;
                     }
+                    let (x, y) = (x as u32, y as u32);
                     let pixel = Rgba([pixel[0], pixel[1], pixel[2], 255]);
-                    cleaned.put_pixel(x as u32, y as u32, pixel);
+                    whole.put_pixel(x, y, pixel);
+                    if !shown(x, y) {
+                        continue;
+                    }
+                    cleaned.put_pixel(x, y, pixel);
                     let half = |a: u8, b: u8| ((u16::from(a) + u16::from(b)) / 2) as u8;
                     let mixed = Rgba(std::array::from_fn(|channel| {
                         half(pixel.0[channel], tint.0[channel])
                     }));
-                    marked.put_pixel(x as u32, y as u32, mixed);
+                    marked.put_pixel(x, y, mixed);
                 }
             }
         }
@@ -224,6 +242,7 @@ async fn main() -> Result<()> {
         let rendered = renderer.render(&session, page.id)?.rasterize()?;
         save(&rendered.image, &cli.out, &format!("{stem}_final.png"))?;
         save(&cleaned, &cli.out, &format!("{stem}_cleaned.png"))?;
+        save(&whole, &cli.out, &format!("{stem}_whole.png"))?;
         save(&marked, &cli.out, &format!("{stem}_fills.png"))?;
         if !counts.is_empty() {
             println!("{stem}: {counts:?}");

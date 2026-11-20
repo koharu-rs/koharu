@@ -1,11 +1,7 @@
-//! FLUX.3 Image Klein generation and inpainting.
-//!
-//! Generation follows Black Forest Labs' reference implementation:
+//! FLUX.3 Image Klein generation, which edits when it's given references,
+//! following Black Forest Labs' reference implementation:
 //! https://github.com/black-forest-labs/flux-3-image-klein/blob/62e90b9278b73ecc52927770c6965dc6b1966498/src/flux3/generate.py
 //! https://github.com/black-forest-labs/flux-3-image-klein/blob/62e90b9278b73ecc52927770c6965dc6b1966498/src/flux3/pipeline.py
-//! Neither it nor diffusers inpaints FLUX.3, so inpainting keeps diffusers'
-//! FLUX.2 Klein inpainting, flow-matching img2img with no model-specific step:
-//! https://github.com/huggingface/diffusers/blob/a37f6f8394ac2a7ee8360c3abea811efe54512b1/src/diffusers/pipelines/flux2/pipeline_flux2_klein_inpaint.py
 
 mod model;
 mod processor;
@@ -16,7 +12,6 @@ use koharu_diffusion::{Canceller, ImageParams, SampleMethod};
 use koharu_runtime::Repository;
 
 use self::model::{Model, ModelPaths};
-use crate::diffusers;
 
 const TRANSFORMER: Repository = Repository::model(
     "unsloth/flux-3-image-klein-GGUF",
@@ -63,28 +58,6 @@ impl Default for GenerateOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct InpaintOptions {
-    /// The margin around the mask an inpainting is cropped to, or the whole
-    /// image.
-    pub padding_mask_crop: Option<u32>,
-    pub strength: f64,
-    pub num_inference_steps: usize,
-    /// sd.cpp's seed; -1 picks one at random.
-    pub seed: i64,
-}
-
-impl Default for InpaintOptions {
-    fn default() -> Self {
-        Self {
-            padding_mask_crop: None,
-            strength: 0.8,
-            num_inference_steps: 16,
-            seed: -1,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Flux3Klein {
     model: Model,
@@ -96,7 +69,7 @@ impl Flux3Klein {
         self.model.canceller.clone()
     }
 
-    /// Loads the model once for generation and inpainting, its weights
+    /// Loads the model once for generation and editing, its weights
     /// placed by stable-diffusion.cpp's own fit to the device's free memory.
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let paths = async {
@@ -187,74 +160,5 @@ impl Flux3Klein {
             }
             _ => images,
         })
-    }
-
-    /// `image` repainted where `mask` is white, as diffusers' inpainting
-    /// pipeline does, optionally guided by `reference`.
-    pub fn inpaint(
-        &self,
-        prompt: &str,
-        image: &DynamicImage,
-        reference: Option<&DynamicImage>,
-        mask: &DynamicImage,
-        options: &InpaintOptions,
-    ) -> Result<RgbImage> {
-        ensure!(
-            image.width() == mask.width() && image.height() == mask.height(),
-            "image/mask dimensions differ: image={}x{}, mask={}x{}",
-            image.width(),
-            image.height(),
-            mask.width(),
-            mask.height()
-        );
-        ensure!(
-            !prompt.contains('\0'),
-            "prompt contains an interior NUL byte"
-        );
-        ensure!(
-            options.strength > 0.0 && options.strength <= 1.0,
-            "FLUX.3 Image Klein inpaint strength must be greater than zero and at most one"
-        );
-        ensure!(
-            options.num_inference_steps > 0,
-            "num_inference_steps must be greater than zero"
-        );
-
-        let (image, mask) = diffusers::fit_inpaint(image, mask)?;
-        let (width, height) = image.dimensions();
-        let region = options
-            .padding_mask_crop
-            .and_then(|padding| diffusers::crop_region(&mask, width, height, padding));
-        let (init_image, mut native_mask) = diffusers::crop_to_region(&image, &mask, region)?;
-        diffusers::binarize(&mut native_mask);
-        let mut references = vec![init_image.clone()];
-        if let Some(reference) = reference {
-            references.push(processor::fit_reference(reference)?);
-        }
-        let strength = diffusers::strength(options.strength, options.num_inference_steps);
-
-        let generated = self
-            .model
-            .forward(&ImageParams {
-                prompt,
-                width: Some(width),
-                height: Some(height),
-                init: Some(&init_image),
-                references: &references,
-                reference_args: Some("resize_before_vae=0"),
-                mask: Some(&native_mask),
-                cfg: Some(1.0),
-                flow_shift: Some(FLOW_SHIFT),
-                sample_method: Some(SampleMethod::Euler),
-                steps: Some(u32::try_from(options.num_inference_steps)?),
-                seed: Some(options.seed),
-                count: Some(1),
-                strength: Some(strength),
-                ..ImageParams::default()
-            })?
-            .into_iter()
-            .next()
-            .context("FLUX.3 Image Klein returned no inpainted image")?;
-        diffusers::apply_overlay(&mask, &image, generated, region)
     }
 }
