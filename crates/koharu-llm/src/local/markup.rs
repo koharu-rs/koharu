@@ -87,7 +87,7 @@ pub(crate) struct Parser {
     held: String,
     /// Whitespace right after a marker belongs to no item.
     skip_space: bool,
-    /// Only the reply's first reasoning counts; what follows is answer.
+    /// Only initial reasoning counts; after answer text starts, markers are literal.
     once: bool,
 }
 
@@ -127,14 +127,11 @@ impl Parser {
     }
 
     /// A parser for a reply to `prompt` that a schema holds once its
-    /// reasoning closes: reasoning while the template left it open, then
-    /// answer text with no markers, which a JSON string may hold.
+    /// reasoning closes. Reasoning may start in the prompt or the reply;
+    /// once answer text starts, a JSON string's markers stay literal.
     pub(crate) fn answer(markup: &'static Markup, prompt: &str) -> Self {
         let mut parser = Self::new(markup, Vec::new(), prompt);
         parser.once = true;
-        if parser.state == State::Text {
-            parser.reasoning = None;
-        }
         parser
     }
 
@@ -168,6 +165,14 @@ impl Parser {
     /// Reads answer text up to the next opening marker; answers whether it
     /// needs more of the reply.
     fn read_text(&mut self, end: bool, items: &mut Vec<Result<Item, String>>) -> bool {
+        if self.once
+            && self.reasoning.is_some_and(|(open, _)| {
+                let start = self.held.trim_start();
+                !start.starts_with(open) && !open.starts_with(start)
+            })
+        {
+            self.reasoning = None;
+        }
         let reasoning = self.reasoning.map(|(open, _)| (open, State::Reasoning));
         let call = self.call.map(|call| (call.open, State::Call));
         let markers = [reasoning, call];
@@ -545,5 +550,58 @@ mod tests {
             ),
             [Item::Text("{\"01\": \"<think>\"}".to_owned())]
         );
+    }
+
+    #[test]
+    fn an_answer_with_generated_reasoning_holds_no_markers() {
+        for (markup, prompt, reply, answer) in [
+            (
+                &GEMMA4,
+                "<|turn>model\n",
+                "<|channel>thought\nReading it.\n<channel|>\n{\"01\": \"<|channel>thought\\n<channel|>\"}",
+                "{\"01\": \"<|channel>thought\\n<channel|>\"}",
+            ),
+            (
+                &FUNCTION_TAGS,
+                "<|im_start|>assistant\n",
+                "<think>\nReading it.\n</think>\n{\"01\": \"<think>a</think>\"}",
+                "{\"01\": \"<think>a</think>\"}",
+            ),
+        ] {
+            let expected = [
+                Item::Reasoning("Reading it.\n".to_owned()),
+                Item::Text(answer.to_owned()),
+            ];
+            assert_eq!(all(&mut Parser::answer(markup, prompt), &[reply]), expected);
+            for (at, _) in reply.char_indices().skip(1) {
+                assert_eq!(
+                    all(
+                        &mut Parser::answer(markup, prompt),
+                        &[&reply[..at], &reply[at..]],
+                    ),
+                    expected,
+                    "cut at byte {at}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_answer_without_reasoning_reads_markers_as_text() {
+        let reply = " \n{\"01\": \"<|channel>thought\\n<channel|><think>a</think>\"}";
+        for markup in [&GEMMA4, &FUNCTION_TAGS] {
+            let expected = [Item::Text(reply.to_owned())];
+            assert_eq!(all(&mut Parser::answer(markup, ""), &[reply]), expected);
+            for (at, _) in reply.char_indices().skip(1) {
+                assert_eq!(
+                    all(
+                        &mut Parser::answer(markup, ""),
+                        &[&reply[..at], &reply[at..]],
+                    ),
+                    expected,
+                    "cut at byte {at}",
+                );
+            }
+        }
     }
 }
