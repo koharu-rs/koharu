@@ -101,7 +101,7 @@ masked pixels come back.
 | Inpainter | Takes a prompt |
 |---|---|
 | LaMa | no |
-| FLUX.3 Klein, MOSS-Image, Qwen-Image 2.1 Turbo | yes: an area's own, or else the settings' |
+| FLUX.3 Klein, Qwen-Image 2.1 Turbo | yes: an area's own, or else the settings' |
 
 ## 4. Translation
 
@@ -168,7 +168,7 @@ is a language CLDR doesn't name in English.
 | `detector.model` | `koharu-layout-highres` |
 | `detector.text`, `onomatopoeia`, `bubble`, `panel` | the model's own thresholds |
 | `recognizer.model` | `manga-ocr-ar`, or `baberu-ocr` or `hayai-ocr` |
-| `inpainter.model` | `lama`, or `flux3-klein`, `moss-image`, or `qwen-image` |
+| `inpainter.model` | `lama`, or `flux3-klein` or `qwen-image` |
 | `inpainter.fill` | `flux3-klein`, or another inpainter, the one Generative Fill's bar picks and keeps, as Photoshop's Generative Fill keeps its own model [Photoshop Generative Fill] |
 | `inpainter.prompt` | asks the model to remove all text and keep everything else, for a run that brings none |
 | `translator.model` | `koharu/index-translate-9b` |

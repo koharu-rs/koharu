@@ -92,7 +92,6 @@ Inpainting reconstructs the image behind source text before the translation is r
 
 - [LaMa](https://huggingface.co/mayocream/lama-manga)
 - [FLUX.3 Image Klein](https://huggingface.co/unsloth/flux-3-image-klein-GGUF)
-- [MOSS-Image](https://huggingface.co/leejet/MOSS-Image-SFT-GGUF)
 - [Qwen-Image 2.1](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF) (Qwen Research License, research and evaluation only)
 
 ### Large Language Models
