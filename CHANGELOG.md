@@ -1,3 +1,13 @@
+## [0.89.0](https://github.com/koharu-rs/koharu/compare/0.88.0..0.89.0) - 2026-11-20
+
+### ⛰️  Features
+
+- *(models)* Make Hayai OCR the default recognizer with its new 512-patch budget, and pin Hayai, manga-ocr-ar, Koharu Layout HighRes and Qwen 3.8 27B to their latest commits - ([9eac4b0](https://github.com/koharu-rs/koharu/commit/9eac4b066a05eb2ad3d329270ffbff780a816135))
+
+### 🐛 Bug Fixes
+
+- *(pipeline)* Eliminate rows in the tone solver by iterator, as clippy's needless_range_loop requires - ([c19c7d4](https://github.com/koharu-rs/koharu/commit/c19c7d4a0d1da09ef629d3005f13584afedd98dd))
+
 ## [0.88.0](https://github.com/koharu-rs/koharu/compare/0.87.0..0.88.0) - 2026-11-20
 
 ### ⛰️  Features
