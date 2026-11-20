@@ -1,3 +1,19 @@
+## [0.87.0](https://github.com/koharu-rs/koharu/compare/0.86.4..0.87.0) - 2026-11-20
+
+### ⛰️  Features
+
+- *(diffusion)* Replace Qwen-Image 2.1 with its Turbo, cache steps and tile the VAE in every diffusion model, let sd.cpp pick its kernels, and stop a fill under way - ([36126c8](https://github.com/koharu-rs/koharu/commit/36126c8ff271c78afecf9db8cb75c98f4b345e08))
+
+### 🐛 Bug Fixes
+
+- *(config)* Read a value that doesn't read, such as a removed model's id, as its default instead of failing the section - ([ada165a](https://github.com/koharu-rs/koharu/commit/ada165a7e54b9b975f3492524e53b55bc043796b))
+- *(pipeline)* Make the models' GPU current on every call, as libtorch's attention picks its kernel by the current device and on a second GPU ran its math fallback over the whole score matrix ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([5f6b48a](https://github.com/koharu-rs/koharu/commit/5f6b48a138d95687fdc162bf3122406717f78a29))
+- *(runtime)* Keep AOTriton's kernels from the HIP libtorch archive, which the store dropped as no library, failing every fused attention as an invalid kernel image ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([1c5c6f7](https://github.com/koharu-rs/koharu/commit/1c5c6f7f09206ce27f20f6fcf7add1f744787fed))
+
+### 🚜 Refactor
+
+- *(ml)* Remove MOSS-Image, which sd.cpp can't edit with and which invents lettering - ([e68cdff](https://github.com/koharu-rs/koharu/commit/e68cdff059d31299bb9cc4619a8d1887fbdc6a12))
+
 ## [0.86.4](https://github.com/koharu-rs/koharu/compare/0.86.3..0.86.4) - 2026-11-19
 
 ### 🐛 Bug Fixes
