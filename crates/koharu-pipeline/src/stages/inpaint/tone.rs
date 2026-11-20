@@ -106,17 +106,18 @@ fn solve(mut a: [[f64; 4]; 4], mut b: [[f64; 3]; 4]) -> [[f64; 3]; 4] {
             .unwrap_or(column);
         a.swap(column, pivot);
         b.swap(column, pivot);
-        let lead = a[column][column];
-        for row in 0..4 {
+        let (pivot_a, pivot_b) = (a[column], b[column]);
+        let lead = pivot_a[column];
+        for (row, (a_row, b_row)) in a.iter_mut().zip(&mut b).enumerate() {
             if row == column {
                 continue;
             }
-            let factor = a[row][column] / lead;
-            for k in 0..4 {
-                a[row][k] -= factor * a[column][k];
+            let factor = a_row[column] / lead;
+            for (value, pivot) in a_row.iter_mut().zip(pivot_a) {
+                *value -= factor * pivot;
             }
-            for channel in 0..3 {
-                b[row][channel] -= factor * b[column][channel];
+            for (value, pivot) in b_row.iter_mut().zip(pivot_b) {
+                *value -= factor * pivot;
             }
         }
     }
