@@ -55,7 +55,7 @@
         "next": "^16.4.6",
         "next-themes": "^0.4.6",
         "react": "^19.3.1",
-        "react-colorful": "github:mayocream/react-colorful#f2f44770cdc41b1ea11784b91131cafa6cfd9cba",
+        "react-colorful": "github:mayocream/react-colorful#67d796347a64a7df3a3e335c5968b664b8497b8a",
         "react-dom": "^19.3.1",
         "react-i18next": "^18.0.1",
         "react-markdown": "^10.1.0",
@@ -1888,7 +1888,7 @@
 
     "react": ["react@19.3.1", "", {}, "sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw=="],
 
-    "react-colorful": ["react-colorful@github:mayocream/react-colorful#f2f4477", { "peerDependencies": { "react": ">=16.8.0", "react-dom": ">=16.8.0" } }, "mayocream-react-colorful-f2f4477", "sha512-qlzR8KYWLCRotMoYV0UGBYRkubzK+LQtueANni6OtI6Z1Oj5BSZ1ShoD55iHpv1Hs2gX8SpagbgggdKW+32+6A=="],
+    "react-colorful": ["react-colorful@github:mayocream/react-colorful#67d7963", { "peerDependencies": { "react": ">=16.8.0", "react-dom": ">=16.8.0" } }, "mayocream-react-colorful-67d7963", "sha512-o3aw/IghFJAezHi3xAexfA9xtAd/Frv+YciqDYpX8/GyM2E7mFJhTl0V3fafce/0KIA5Px33mwHRYVGTz3P2ng=="],
 
     "react-day-picker": ["react-day-picker@10.0.2", "", { "dependencies": { "@date-fns/tz": "^1.4.1", "date-fns": "^4.1.0" }, "peerDependencies": { "@types/react": ">=16.8.0", "react": ">=16.8.0" }, "optionalPeers": ["@types/react"] }, "sha512-QetiKtZWE9Uaw/pM/SYNv6WPYOTRnSJ2puL0GgwkmUFMIwiY0dtjH1W4B7DOVXVNQM0ZOClGpH/heOfBSzWeiA=="],
 
