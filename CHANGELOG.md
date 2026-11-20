@@ -1,3 +1,21 @@
+## [0.88.0](https://github.com/koharu-rs/koharu/compare/0.87.0..0.88.0) - 2026-11-20
+
+### ⛰️  Features
+
+- *(inpaint)* Clean up and fill with FLUX.3 and Qwen-Image by a reference edit of each window, kept whole under the mask, and drop their masked inpaint - ([c1ce1c4](https://github.com/koharu-rs/koharu/commit/c1ce1c47b115d9e9f0f33533696b4186b0312fcf))
+
+### 🐛 Bug Fixes
+
+- *(bindgen)* Give the reason a library does not open, such as a missing glibc version, which libloading 0.9 keeps in the source of its "dlopen failed" - ([4237b8d](https://github.com/koharu-rs/koharu/commit/4237b8ddc618abf915a9b5d4aa673a245f69ea56))
+- *(ml)* Restore the flux3_klein bench and the diffusers module, which 4e602eca deleted by mistake - ([b21c917](https://github.com/koharu-rs/koharu/commit/b21c9176fe0b06c37a1831fea18394d1e996e3ef))
+- *(runtime)* Load llama.cpp b12565, stable-diffusion.cpp and the shim from releases built on Ubuntu 24.04, as the ones built on 26.04 needed glibc 2.43 - ([f020bc2](https://github.com/koharu-rs/koharu/commit/f020bc2957f03d6961a25d41a95e1423cba53545))
+- *(runtime)* Address an AMD GPU on Linux by the target HSA_OVERRIDE_GFX_VERSION gives it, which ROCm lists it and loads kernels by, instead of finding no GPU with its own - ([4e602ec](https://github.com/koharu-rs/koharu/commit/4e602ecaa613a4b7e43d7b3d4e3471c6c12b75e3))
+- *(ui)* Move the react-colorful pin to omgovich/react-colorful#246 as reviewed - ([6ce622d](https://github.com/koharu-rs/koharu/commit/6ce622de8843139e5e8909daa0567279e6602671))
+
+### 🚜 Refactor
+
+- *(runtime)* Simplify the Linux GPU probe and drop its test - ([c5dccd1](https://github.com/koharu-rs/koharu/commit/c5dccd154c1bc3fc3c11f2484ea80db89602eb76))
+
 ## [0.87.0](https://github.com/koharu-rs/koharu/compare/0.86.4..0.87.0) - 2026-11-20
 
 ### ⛰️  Features
