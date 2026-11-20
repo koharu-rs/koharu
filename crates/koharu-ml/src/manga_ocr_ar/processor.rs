@@ -1,6 +1,6 @@
 //! manga-ocr-ar image preprocessing and text decoding, upstream's `preprocess`
 //! and `MangaOCR.decode`:
-//! https://huggingface.co/muscgab/manga-ocr-ar-experimental/blob/7873d8492307a021d6087b2c2b5f576a30b4acae/infer.py
+//! https://huggingface.co/muscgab/manga-ocr-ar-experimental/blob/20208154a8d34dc6e5fc13ba81bc35f0a2f1a26e/infer.py
 
 use anyhow::{Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg};

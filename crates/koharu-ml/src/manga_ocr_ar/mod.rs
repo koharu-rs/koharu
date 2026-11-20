@@ -5,7 +5,7 @@
 //! CC BY-NC-SA 4.0.
 //!
 //! Upstream:
-//! https://huggingface.co/muscgab/manga-ocr-ar-experimental/tree/7873d8492307a021d6087b2c2b5f576a30b4acae
+//! https://huggingface.co/muscgab/manga-ocr-ar-experimental/tree/20208154a8d34dc6e5fc13ba81bc35f0a2f1a26e
 
 mod config;
 mod model;
@@ -23,7 +23,7 @@ use self::{
 
 const REPOSITORY: Repository = Repository::model(
     "muscgab/manga-ocr-ar-experimental",
-    "7873d8492307a021d6087b2c2b5f576a30b4acae",
+    "20208154a8d34dc6e5fc13ba81bc35f0a2f1a26e",
 );
 
 /// Upstream `MangaOCR.__call__`'s default.

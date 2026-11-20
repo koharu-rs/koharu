@@ -170,7 +170,7 @@ is a language CLDR doesn't name in English.
 |---|---|
 | `detector.model` | `koharu-layout-highres` |
 | `detector.text`, `onomatopoeia`, `bubble`, `panel` | the model's own thresholds |
-| `recognizer.model` | `manga-ocr-ar`, or `baberu-ocr` or `hayai-ocr` |
+| `recognizer.model` | `hayai-ocr`, or `manga-ocr-ar` or `baberu-ocr` |
 | `inpainter.model` | `lama`, or `flux3-klein` or `qwen-image` |
 | `inpainter.fill` | `flux3-klein`, or another inpainter, the one Generative Fill's bar picks and keeps, as Photoshop's Generative Fill keeps its own model [Photoshop Generative Fill] |
 | `inpainter.prompt` | asks the model to remove all text and keep everything else, for a run that brings none |
@@ -180,7 +180,7 @@ is a language CLDR doesn't name in English.
 | `translator.vision` | `false` |
 | `translator.reasoning` | the model's own, or `off` or an effort level, one word |
 
-Manga OCR AR is CC BY-NC-SA 4.0, so a user keeping the default is held to
+Manga OCR AR is CC BY-NC-SA 4.0, so a user who picks it is held to
 non-commercial use. Telea's port keeps OpenCV's BSD-style license, so this
 crate's license is `MIT OR Apache-2.0 AND BSD-3-Clause`.
 

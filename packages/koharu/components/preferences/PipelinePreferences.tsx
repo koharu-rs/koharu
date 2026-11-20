@@ -92,7 +92,7 @@ export function PipelinePreferences({
         model={
           <ModelSelect
             stage='recognize'
-            value={value.recognizer?.model ?? 'manga-ocr-ar'}
+            value={value.recognizer?.model ?? 'hayai-ocr'}
             names={recognizers}
             onChange={(model: Recognizer) => onChange({ ...value, recognizer: { model } })}
           />

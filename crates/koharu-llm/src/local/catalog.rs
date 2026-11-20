@@ -589,11 +589,10 @@ pub(crate) static MODELS: &[Entry] = &[
         name: "Qwen 3.8 27B",
         repository: Repository::model(
             "unsloth/Qwen3.8-27B-GGUF",
-            "f975863083b62f54a5e6fac11671c750c2bbc59c",
+            "4af51b3542f775b0a8e4b310bfb3f17e01c306c9",
         ),
         quantizations: &[
             Quantization::new("Q4_K_XL", "Q4_K XL", "Qwen3.8-27B-UD-Q4_K_XL.gguf"),
-            Quantization::new("IQ2_M", "IQ2 M", "Qwen3.8-27B-UD-IQ2_M.gguf"),
             Quantization::new("IQ2_XXS", "IQ2 XXS", "Qwen3.8-27B-UD-IQ2_XXS.gguf"),
             Quantization::new("IQ3_XXS", "IQ3 XXS", "Qwen3.8-27B-UD-IQ3_XXS.gguf"),
             Quantization::new("Q2_K_XL", "Q2_K XL", "Qwen3.8-27B-UD-Q2_K_XL.gguf"),

@@ -2,7 +2,7 @@
 //! page's text, onomatopoeia, speech bubbles, and panels.
 //!
 //! Checkpoint:
-//! https://huggingface.co/mayocream/koharu-layout-highres/tree/53fef6f1301f4cbd8324ddc24f554b3767fc9e45
+//! https://huggingface.co/mayocream/koharu-layout-highres/tree/68077eb09401a46e548190ff2786bd405113ea8b
 //! Upstream:
 //! https://github.com/roboflow/rf-detr/tree/4ab7c18729de9d02ffd0495795d0831b5630f01b
 
@@ -36,7 +36,7 @@ use self::{
 
 const REPOSITORY: Repository = Repository::model(
     "mayocream/koharu-layout-highres",
-    "53fef6f1301f4cbd8324ddc24f554b3767fc9e45",
+    "68077eb09401a46e548190ff2786bd405113ea8b",
 );
 
 /// The lowest confidence an onomatopoeia detection keeps by default. The
