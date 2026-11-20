@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use futures::future::BoxFuture;
 
-use super::{Host, Package, Release, preload};
+use super::{Host, LIBRARIES, Package, Release, preload};
 use crate::{Backend, Device};
 
 pub(super) struct Torch;
@@ -17,6 +17,16 @@ static LIBTORCH: Release = Release {
     repository: "koharu-rs/torch",
     package: "torch",
     tag: koharu_torch_sys::LIBTORCH,
+    // Its libraries, and on AMD GPUs the kernels of AOTriton, libtorch's
+    // fused attention there, which it reads from `aotriton.images` beside its
+    // own library.
+    files: &[
+        "**/*.dll",
+        "**/*.dylib",
+        "**/*.so",
+        "**/*.so.*",
+        "**/aotriton.images/**",
+    ],
 };
 
 /// The shim at the release `koharu-torch-sys`'s headers come from.
@@ -24,6 +34,7 @@ static SHIM: Release = Release {
     repository: "koharu-rs/torch",
     package: "koharu-torch",
     tag: koharu_torch_sys::SHIM,
+    files: LIBRARIES,
 };
 
 /// libtorch's own libraries for a GPU's `backend`, in load order, before the
@@ -113,6 +124,10 @@ impl Package for Torch {
                     libraries
                         .iter()
                         .all(|library| folder.join(library).is_file())
+                        // Without its kernels, AOTriton fails every fused
+                        // attention as an invalid kernel image.
+                        && (!matches!(backend, Backend::Rocm { .. })
+                            || folder.join("aotriton.images").is_dir())
                 })
                 .await?;
             SHIM.download(host, variant(backend), |folder| {
