@@ -101,7 +101,7 @@ masked pixels come back.
 | Inpainter | Takes a prompt |
 |---|---|
 | LaMa | no |
-| FLUX.3 Klein, MOSS-Image, Qwen-Image 2.1 | yes: an area's own, or else the settings' |
+| FLUX.3 Klein, MOSS-Image, Qwen-Image 2.1 Turbo | yes: an area's own, or else the settings' |
 
 ## 4. Translation
 
@@ -155,7 +155,8 @@ model, the target, or the instructions starts a new one.
   once.
 - **Failure.** The first failure ends its run, naming the page, the stage, and
   the reason, a panic included. What it finished stays. Stopping is the same
-  without the error, for every run.
+  without the error, for every run, and cuts short a diffusion model's redraw
+  under way.
 
 ## 6. Settings
 

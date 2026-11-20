@@ -8,8 +8,8 @@ use std::{ffi::CStr, path::PathBuf};
 
 use koharu_diffusion_sys as sys;
 
-pub use context::Context;
-pub use params::{ContextParams, ImageParams, SampleMethod, Scheduler, VaeFormat};
+pub use context::{Canceller, Context};
+pub use params::{Cache, ContextParams, ImageParams, SampleMethod, Scheduler, VaeFormat};
 
 /// A status stable-diffusion.cpp failed a call with, and the reason it gave.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -74,7 +74,7 @@ pub enum OptionError {
     PathToStr(PathBuf),
     #[error("stable-diffusion.cpp couldn't copy an image in")]
     Image,
-    #[error("stable-diffusion.cpp refused an option: {0}")]
+    #[error("stable-diffusion.cpp refused an option")]
     Refused(#[from] StatusError),
 }
 
@@ -83,7 +83,7 @@ pub enum OptionError {
 pub enum LoadError {
     #[error(transparent)]
     Option(#[from] OptionError),
-    #[error("stable-diffusion.cpp couldn't load the model: {0}")]
+    #[error("stable-diffusion.cpp couldn't load the model")]
     Status(#[from] StatusError),
     #[error("null result from stable-diffusion.cpp")]
     NullResult,
@@ -96,7 +96,7 @@ pub enum LoadError {
 pub enum GenerateError {
     #[error(transparent)]
     Option(#[from] OptionError),
-    #[error("stable-diffusion.cpp couldn't generate the images: {0}")]
+    #[error("stable-diffusion.cpp couldn't generate the images")]
     Status(#[from] StatusError),
     #[error("null result from stable-diffusion.cpp")]
     NullResult,

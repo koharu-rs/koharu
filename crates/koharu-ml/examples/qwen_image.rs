@@ -33,9 +33,6 @@ struct Cli {
     #[arg(long)]
     height: Option<u32>,
 
-    #[arg(long, default_value_t = 40)]
-    steps: u32,
-
     #[arg(long, default_value_t = 0.6)]
     strength: f64,
 
@@ -68,7 +65,6 @@ async fn main() -> Result<()> {
         let options = InpaintOptions {
             padding_mask_crop: cli.padding_mask_crop,
             strength: cli.strength,
-            num_inference_steps: usize::try_from(cli.steps)?,
             seed: cli.seed,
         };
         pipeline
@@ -81,7 +77,6 @@ async fn main() -> Result<()> {
         true_cfg_scale: cli.true_cfg_scale,
         width: cli.width,
         height: cli.height,
-        num_inference_steps: cli.steps,
         seed: cli.seed,
         ..Options::default()
     };
@@ -89,7 +84,7 @@ async fn main() -> Result<()> {
         .generate(&cli.prompt, &images, &options)?
         .into_iter()
         .next()
-        .context("Qwen-Image 2.1 returned no image")?
+        .context("Qwen-Image 2.1 Turbo returned no image")?
         .save(cli.output)?;
 
     Ok(())

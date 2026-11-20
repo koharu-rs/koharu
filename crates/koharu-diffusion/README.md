@@ -19,6 +19,9 @@ crate adds safety, not behaviour.
 | parameters | set by key on sd.cpp's option objects, so anything left unset is what sd.cpp would use; only the options Koharu's models need are named | sd.cpp's option keys [sd.cpp C API] |
 | loading | every weight loads up front, so a model that doesn't fit, or can't make images, fails when it loads and not partway through a generation | sd.cpp's eager loading [sd.cpp header] |
 | placing weights | sd.cpp fits the weights into the device's free memory itself, then system memory | |
+| kernels | sd.cpp picks flash attention and direct convolution for each module and backend, so none is forced on or off | sd.cpp's automatic selection [sd.cpp backends] |
+| a schedule | a model whose checkpoint saves its own noise levels steps through them, in place of a step count | sd.cpp's custom sigmas [sd.cpp C API] |
+| stopping | a canceller stops a generation under way from another thread; sd.cpp clears the request as a generation starts | `sd_cancel_generation` [sd.cpp header] |
 | prompts | sd.cpp keeps its last few prompts' encodings, so a prompt used again isn't encoded again | |
 | a model | one at a time per context: a context can move between threads, but generating takes it whole | |
 | images | inputs are copied into sd.cpp's tensors; outputs are copied out of its result, which sd.cpp frees, so the C runtime that made them frees them | sd.cpp's tensors and results [sd.cpp C API] |
@@ -29,8 +32,9 @@ crate adds safety, not behaviour.
 
 Read in November 2026.
 
-- [sd.cpp], [sd.cpp header], [sd.cpp C API]
+- [sd.cpp], [sd.cpp header], [sd.cpp C API], [sd.cpp backends]
 
 [sd.cpp]: https://github.com/leejet/stable-diffusion.cpp
 [sd.cpp header]: https://github.com/leejet/stable-diffusion.cpp/blob/532d2c1/include/stable-diffusion.h
 [sd.cpp C API]: https://github.com/leejet/stable-diffusion.cpp/blob/532d2c1/docs/guides/c_api.md
+[sd.cpp backends]: https://github.com/leejet/stable-diffusion.cpp/blob/532d2c1/docs/guides/backend.md

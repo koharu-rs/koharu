@@ -1,5 +1,6 @@
 use image::{DynamicImage, GrayImage, RgbImage, imageops};
 use koharu_ml::{
+    Canceller,
     flux3_klein::{self, Flux3Klein},
     lama::{self, Lama},
     moss_image::{self, MossImage},
@@ -23,7 +24,7 @@ pub enum Inpainter {
     Flux3Klein,
     #[strum(to_string = "MOSS-Image")]
     MossImage,
-    #[strum(to_string = "Qwen-Image 2.1")]
+    #[strum(to_string = "Qwen-Image 2.1 Turbo")]
     QwenImage,
 }
 
@@ -43,6 +44,11 @@ pub(super) trait Inpaint {
     /// The longest side of a window it redraws in one pass.
     fn pass(&self) -> u32 {
         u32::MAX
+    }
+
+    /// What stops a redraw under way, for a model that can be stopped.
+    fn canceller(&self) -> Option<Canceller> {
+        None
     }
 }
 
@@ -64,6 +70,10 @@ impl Inpaint for Lama {
 }
 
 impl Inpaint for Flux3Klein {
+    fn canceller(&self) -> Option<Canceller> {
+        Some(Flux3Klein::canceller(self))
+    }
+
     fn inference(
         &self,
         image: &RgbImage,
@@ -84,6 +94,10 @@ impl Inpaint for Flux3Klein {
 }
 
 impl Inpaint for MossImage {
+    fn canceller(&self) -> Option<Canceller> {
+        Some(MossImage::canceller(self))
+    }
+
     fn inference(
         &self,
         image: &RgbImage,
@@ -103,6 +117,10 @@ impl Inpaint for MossImage {
 }
 
 impl Inpaint for QwenImage {
+    fn canceller(&self) -> Option<Canceller> {
+        Some(QwenImage::canceller(self))
+    }
+
     fn inference(
         &self,
         image: &RgbImage,

@@ -5,7 +5,7 @@ use std::{ffi::CString, path::Path, ptr::NonNull};
 use image::{GrayImage, RgbImage};
 use koharu_diffusion_sys as sys;
 
-use crate::{OptionError, SampleMethod, Scheduler, StatusError, VaeFormat};
+use crate::{Cache, OptionError, SampleMethod, Scheduler, StatusError, VaeFormat};
 
 /// An option object. sd.cpp copies what it's set to and retains the images,
 /// so nothing set has to outlive the call.
@@ -40,6 +40,9 @@ impl Options {
             Value::Bool(value) => unsafe { sys::sd_opt_set_bool(options, name.as_ptr(), value) },
             Value::Int(value) => unsafe { sys::sd_opt_set_int(options, name.as_ptr(), value) },
             Value::Float(value) => unsafe { sys::sd_opt_set_float(options, name.as_ptr(), value) },
+            Value::Floats(values) => unsafe {
+                sys::sd_opt_set_floats(options, name.as_ptr(), values.as_ptr(), values.len())
+            },
             Value::Text(value) => {
                 let value = text(value)?;
                 unsafe { sys::sd_opt_set_string(options, name.as_ptr(), value.as_ptr()) }
@@ -89,6 +92,7 @@ pub(crate) enum Value<'a> {
     Bool(bool),
     Int(i64),
     Float(f64),
+    Floats(&'a [f32]),
     Text(&'a str),
     Path(&'a Path),
     Image(Image<'a>),
@@ -130,6 +134,16 @@ impl From<i64> for Value<'_> {
 impl From<f32> for Value<'_> {
     fn from(value: f32) -> Self {
         Self::Float(value.into())
+    }
+}
+
+/// No values leaves the option unset.
+impl<'a> From<&'a [f32]> for Value<'a> {
+    fn from(values: &'a [f32]) -> Self {
+        match values.is_empty() {
+            true => Self::Unset,
+            false => Self::Floats(values),
+        }
     }
 }
 
@@ -195,6 +209,15 @@ impl From<Scheduler> for Value<'_> {
     fn from(scheduler: Scheduler) -> Self {
         Self::Text(match scheduler {
             Scheduler::Discrete => "discrete",
+        })
+    }
+}
+
+impl From<Cache> for Value<'_> {
+    fn from(cache: Cache) -> Self {
+        Self::Text(match cache {
+            Cache::EasyCache => "easycache",
+            Cache::Spectrum => "spectrum",
         })
     }
 }

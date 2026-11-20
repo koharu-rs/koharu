@@ -10,8 +10,7 @@ use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{Context as _, Result, anyhow};
 use image::{DynamicImage, RgbImage};
-use koharu_diffusion::{Context, ContextParams, ImageParams, VaeFormat};
-use koharu_runtime::Backend;
+use koharu_diffusion::{Cache, Canceller, Context, ContextParams, ImageParams, VaeFormat};
 
 #[derive(Debug)]
 pub(super) struct ModelPaths {
@@ -23,12 +22,13 @@ pub(super) struct ModelPaths {
 #[derive(Debug)]
 pub(super) struct Model {
     context: Mutex<Context>,
+    /// Stops a generation under way.
+    pub(super) canceller: Canceller,
 }
 
 impl Model {
     /// The model on `device`.
     pub(super) fn new(device: &crate::Device, paths: &ModelPaths) -> Result<Self> {
-        let cuda = matches!(device.backend, Backend::Cuda { .. });
         let context = Context::new(&ContextParams {
             diffusion_model: Some(&paths.transformer),
             llm: Some(&paths.text_encoder),
@@ -36,12 +36,11 @@ impl Model {
             vae_format: Some(VaeFormat::Flux2),
             device: Some(&device.name),
             mmap: true,
-            flash_attention: cuda,
-            conv_direct: cuda,
             ..ContextParams::default()
         })
         .context("failed to load FLUX.3 Image Klein components")?;
         Ok(Self {
+            canceller: context.canceller(),
             context: Mutex::new(context),
         })
     }
@@ -52,7 +51,16 @@ impl Model {
             .lock()
             .map_err(|_| anyhow!("FLUX.3 Image Klein context lock was poisoned"))?;
         let images = context
-            .generate_image(params)
+            .generate_image(&ImageParams {
+                // EasyCache skips 8 of 13 steps on a manga panel, 2.5 times as
+                // fast, for fills within a few levels of the full run's.
+                cache: Some(Cache::EasyCache),
+                // Whole, a megapixel takes 1.5 GB to encode and 2.1 GB to decode,
+                // more than an 8 GB GPU has free beside the other models; 512-pixel
+                // tiles take a quarter, for fills within a level of whole ones.
+                vae_tile: Some(512),
+                ..params.clone()
+            })
             .context("FLUX.3 Image Klein inference failed")?;
         Ok(images.into_iter().map(DynamicImage::into_rgb8).collect())
     }

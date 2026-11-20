@@ -25,11 +25,11 @@ to the code that makes it.
 | LaMa, fine-tuned on manga | inpainting | libtorch | [LaMa], as [IOPaint] runs it |
 | FLUX.3 Image Klein | inpainting and generation | stable-diffusion.cpp | [FLUX.3 Klein] |
 | MOSS-Image SFT, with Qwen3.5 9B | inpainting and generation | stable-diffusion.cpp | [MOSS-Image] |
-| Qwen-Image 2.1, with Qwen3-VL 8B | inpainting, generation, and editing | stable-diffusion.cpp | [Qwen-Image] |
+| Qwen-Image 2.1 Turbo, with Qwen3-VL 8B | inpainting, generation, and editing | stable-diffusion.cpp | [Qwen-Image] |
 
 Weights come from Hugging Face at a pinned commit, downloaded the first time a
 model loads. manga-ocr-ar-experimental is CC BY-NC-SA 4.0, and Qwen-Image 2.1
-is under the Qwen Research License, for research and evaluation only.
+Turbo is under the Qwen Research License, for research and evaluation only.
 
 ## 2. One lifecycle
 
@@ -59,7 +59,7 @@ page's pixels can run off the device's thread.
 FLUX.3 and MOSS-Image ship no inpainting pipeline, so both inpaint as diffusers'
 flow-matching image-to-image does with a mask [diffusers Flux2 Klein inpaint]:
 the image fitted under a megapixel, optionally cropped around the mask, and the
-result blended back by the mask. Qwen-Image 2.1 edits by generating from
+result blended back by the mask. Qwen-Image 2.1 Turbo edits by generating from
 condition images, as its diffusers pipeline does [diffusers Qwen-Image inpaint],
 a mask being one more condition image the prompt names.
 
@@ -82,6 +82,6 @@ Read in November 2026.
 [IOPaint]: https://github.com/Sanster/IOPaint/tree/61a759fb3f332bacdce8b2813f4837495c9b86e0
 [FLUX.3 Klein]: https://github.com/black-forest-labs/flux-3-image-klein/tree/62e90b9278b73ecc52927770c6965dc6b1966498
 [MOSS-Image]: https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT
-[Qwen-Image]: https://huggingface.co/Qwen/Qwen-Image-2.1
+[Qwen-Image]: https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/tree/fc13ba1986fcb905854dc8de2f52eee395f49b5b
 [diffusers Flux2 Klein inpaint]: https://github.com/huggingface/diffusers/blob/a37f6f8394ac2a7ee8360c3abea811efe54512b1/src/diffusers/pipelines/flux2/pipeline_flux2_klein_inpaint.py
 [diffusers Qwen-Image inpaint]: https://github.com/huggingface/diffusers/blob/74fb49b5506a6960d55de0f7e6f4e0631213dc63/src/diffusers/pipelines/qwenimage/pipeline_qwenimage_edit_inpaint.py

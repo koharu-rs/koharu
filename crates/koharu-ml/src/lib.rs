@@ -12,4 +12,5 @@ pub mod manga_ocr_ar;
 pub mod moss_image;
 pub mod qwen_image;
 
+pub use koharu_diffusion::Canceller;
 pub use koharu_runtime::Device;

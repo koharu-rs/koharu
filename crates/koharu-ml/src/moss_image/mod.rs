@@ -12,7 +12,7 @@ mod model;
 
 use anyhow::{Context, Result, ensure};
 use image::{DynamicImage, RgbImage};
-use koharu_diffusion::{ImageParams, SampleMethod};
+use koharu_diffusion::{Canceller, ImageParams, SampleMethod};
 use koharu_runtime::Repository;
 
 use self::model::{Model, ModelPaths};
@@ -98,6 +98,11 @@ pub struct MossImage {
 }
 
 impl MossImage {
+    /// What stops a generation under way, from another thread.
+    pub fn canceller(&self) -> Canceller {
+        self.model.canceller.clone()
+    }
+
     /// Loads the model once for generation and inpainting, its weights
     /// placed by stable-diffusion.cpp's own fit to the device's free memory.
     pub async fn load(device: &crate::Device) -> Result<Self> {

@@ -19,13 +19,15 @@ use koharu_scene::{Content, Layer, LayerId, Op, PageId, Project, Rect, Ref, Tile
 use kurbo::{BezPath, Shape as _};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tokio::runtime::Handle;
+use tokio_util::task::AbortOnDropHandle;
 
 pub use self::model::Inpainter;
 use self::{
     flat::{Fill, Place, Verdict},
     windows::Region,
 };
-use super::{Member, Task, action, key};
+use super::{Member, Stopped, Task, action, key};
 use crate::{Area, PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -124,6 +126,7 @@ pub(crate) async fn inpaint(
     let name = own.clone().unwrap_or_default();
     let prompt = own.unwrap_or_else(|| config.inpainter.prompt.clone());
     let asked = prompt.clone();
+    let (cancel, runtime) = (member.cancel.clone(), Handle::current());
     let work = task
         .inference(&[member], move |models| {
             // What the fill tiers rebuilt all of needs no model.
@@ -131,8 +134,19 @@ pub(crate) async fn inpaint(
                 return Ok(work);
             }
             let inpainter = models.get(&key, |device| model::load(model, device))?;
+            // Stop ends the redraw under way as well as the windows after it.
+            let _stop = inpainter.canceller().map(|canceller| {
+                let cancel = cancel.clone();
+                AbortOnDropHandle::new(runtime.spawn(async move {
+                    cancel.cancelled().await;
+                    canceller.cancel();
+                }))
+            });
             let (width, height) = work.image.dimensions();
             for window in windows::plan(&work.regions, width, height, inpainter.pass()) {
+                if cancel.is_cancelled() {
+                    return Err(Stopped.into());
+                }
                 let (x, y) = (window.x as u32, window.y as u32);
                 let cut =
                     imageops::crop_imm(&work.mask, x, y, window.width, window.height).to_image();

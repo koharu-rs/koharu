@@ -2,7 +2,7 @@ use std::{
     ffi::{CStr, c_char, c_void},
     ptr::{self, NonNull},
     slice,
-    sync::Once,
+    sync::{Arc, Once},
 };
 
 use image::{DynamicImage, RgbImage, RgbaImage};
@@ -19,13 +19,42 @@ static LOG: Once = Once::new();
 /// crop is encoded once.
 #[derive(Debug)]
 pub struct Context {
-    context: NonNull<sys::sd_ctx_t>,
+    context: Arc<Raw>,
 }
 
-// A context may move between threads; every call takes `&mut self`.
-unsafe impl Send for Context {}
+/// Stops the generation its model is running, from any thread.
+#[derive(Clone, Debug)]
+pub struct Canceller(Arc<Raw>);
+
+/// sd.cpp's context, freed once neither its model nor a canceller holds it.
+#[derive(Debug)]
+struct Raw(NonNull<sys::sd_ctx_t>);
+
+// Generating takes the model whole, and a canceller only sets sd.cpp's
+// atomic cancel flag, so the context may be shared between threads.
+unsafe impl Send for Raw {}
+unsafe impl Sync for Raw {}
+
+impl Drop for Raw {
+    fn drop(&mut self) {
+        unsafe { sys::sd_ctx_free(self.0.as_ptr()) };
+    }
+}
+
+impl Canceller {
+    /// Stops the model's generation as soon as sd.cpp can, which then fails
+    /// as cancelled. sd.cpp clears the request as a generation starts, so it
+    /// stops only one under way.
+    pub fn cancel(&self) {
+        unsafe { sys::sd_cancel_generation(self.0.0.as_ptr(), sys::SD_CANCEL_ALL) };
+    }
+}
 
 impl Context {
+    pub fn canceller(&self) -> Canceller {
+        Canceller(Arc::clone(&self.context))
+    }
+
     pub fn new(params: &ContextParams) -> Result<Self, LoadError> {
         LOG.call_once(|| unsafe { sys::sd_set_log_callback(Some(log), ptr::null_mut()) });
         let options = Options::context().ok_or(LoadError::NullResult)?;
@@ -40,10 +69,6 @@ impl Context {
         options.set("vae_format", params.vae_format)?;
         options.set("backend", params.device)?;
         options.set("enable_mmap", params.mmap)?;
-        options.set("flash_attn", params.flash_attention)?;
-        options.set("diffusion_flash_attn", params.flash_attention)?;
-        options.set("diffusion_conv_direct", params.conv_direct)?;
-        options.set("vae_conv_direct", params.conv_direct)?;
         // Weights load now, so a model that doesn't fit fails here rather
         // than partway through a page.
         options.set("eager_load", true)?;
@@ -54,9 +79,9 @@ impl Context {
             status => return Err(StatusError::from(status).into()),
         }
         let context = Self {
-            context: NonNull::new(context).ok_or(LoadError::NullResult)?,
+            context: Arc::new(Raw(NonNull::new(context).ok_or(LoadError::NullResult)?)),
         };
-        if !unsafe { sys::sd_ctx_supports_image_generation(context.context.as_ptr()) } {
+        if !unsafe { sys::sd_ctx_supports_image_generation(context.context.0.as_ptr()) } {
             return Err(LoadError::NoImages);
         }
         Ok(context)
@@ -81,24 +106,23 @@ impl Context {
         options.set("sample.flow_shift", params.flow_shift)?;
         options.set("sample.method", params.sample_method)?;
         options.set("sample.steps", params.steps)?;
+        options.set("sample.sigmas", params.sigmas)?;
         options.set("strength", params.strength)?;
         options.set("seed", params.seed)?;
         options.set("batch_count", params.count)?;
+        options.set("cache.mode", params.cache)?;
+        options.set("vae_tiling.enabled", params.vae_tile.map(|_| true))?;
+        options.set("vae_tiling.tile_size_w", params.vae_tile)?;
+        options.set("vae_tiling.tile_size_h", params.vae_tile)?;
 
         let mut result = ptr::null_mut();
         match unsafe {
-            sys::sd_generate_image(self.context.as_ptr(), options.as_ptr(), &mut result)
+            sys::sd_generate_image(self.context.0.as_ptr(), options.as_ptr(), &mut result)
         } {
             sys::SD_STATUS_OK => {}
             status => return Err(StatusError::from(status).into()),
         }
         Generated(NonNull::new(result).ok_or(GenerateError::NullResult)?).images()
-    }
-}
-
-impl Drop for Context {
-    fn drop(&mut self) {
-        unsafe { sys::sd_ctx_free(self.context.as_ptr()) };
     }
 }
 
