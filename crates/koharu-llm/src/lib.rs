@@ -13,7 +13,8 @@ use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};
 
 pub use context::Context;
 pub use hosted::{
-    Endpoint, Providers, SERVERS, SIGN_INS, SignInPrompt, VENDORS, sign_in, sign_out,
+    CONTEXT_WINDOWS, Endpoint, Providers, SERVERS, SIGN_INS, SignInPrompt, VENDORS, sign_in,
+    sign_out,
 };
 pub use local::{Local, Quantization, Sampling, Size, local};
 pub use model::answers;

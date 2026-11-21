@@ -256,6 +256,15 @@ export type Edit = {
  */
 export type Endpoint = {
   base_url?: string | null
+  /**
+   *  The context window, in tokens, the server runs its models with, for
+   *  one of [`CONTEXT_WINDOWS`], whose server doesn't say: llama.cpp's
+   *  server runs every model it serves with one `--ctx-size`, and Zed's
+   *  OpenAI-compatible provider is told each model's `max_tokens`. A
+   *  conversation keeps inside it; unset, it grows until the server cuts
+   *  it off.
+   */
+  context_window?: number | null
 }
 
 /**  A command's failure, as its message with its causes. */
@@ -944,12 +953,14 @@ export type Value = null | boolean | number | string | Value[] | { [key in strin
 /**
  *  A vendor, by rig's name: whether the user signs in to it with their plan
  *  in place of giving an API key, whether they name its server by a base
- *  URL, and whether its sign-in or key is stored.
+ *  URL and give the context window it runs models with, and whether its
+ *  sign-in or key is stored.
  */
 export type Vendor = {
   name: string
   signs_in: boolean
   server: boolean
+  context_window: boolean
   connected: boolean
 }
 

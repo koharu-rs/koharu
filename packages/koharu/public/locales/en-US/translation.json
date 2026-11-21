@@ -391,6 +391,7 @@
       "configured": "Configured",
       "connections": "Connections",
       "connectionsDescription": "Credentials are stored securely on this device.",
+      "contextWindow": "Context length (tokens)",
       "credential": "Credential",
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",

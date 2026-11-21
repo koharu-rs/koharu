@@ -17,6 +17,7 @@ import { queryClient } from '@/lib/queries'
 import {
   Channel,
   commands,
+  type Endpoint,
   type Providers,
   type SignInPrompt,
   type Vendor,
@@ -34,7 +35,7 @@ async function vendorsChanged() {
 
 /** Each vendor's API key, or its sign-in for one the user signs in to with their plan, kept in
  * the OS credential store and saved apart from `config.toml`, and the `[providers]` base URL for a
- * vendor whose server the user names. */
+ * vendor whose server the user names, with the context window of a server that doesn't say. */
 export function ProviderPreferences({
   value,
   onChange,
@@ -47,6 +48,16 @@ export function ProviderPreferences({
     queryKey: vendorsKey,
     queryFn: () => call(commands.listVendors),
   })
+  /** `vendor`'s endpoint with `patch` merged in; an endpoint with nothing left set goes. */
+  const update = (vendor: string, patch: Endpoint) => {
+    const endpoint: Endpoint = { ...value[vendor], ...patch }
+    if (!endpoint.base_url) delete endpoint.base_url
+    if (!endpoint.context_window) delete endpoint.context_window
+    const next = { ...value }
+    if (Object.keys(endpoint).length > 0) next[vendor] = endpoint
+    else delete next[vendor]
+    onChange(next)
+  }
   return (
     <PreferencePage
       title={t('settings.providers.title')}
@@ -63,12 +74,13 @@ export function ProviderPreferences({
               {vendor.server && (
                 <BaseUrlField
                   value={value[vendor.name]?.base_url ?? ''}
-                  onChange={(base_url) => {
-                    const next = { ...value }
-                    if (base_url) next[vendor.name] = { base_url }
-                    else delete next[vendor.name]
-                    onChange(next)
-                  }}
+                  onChange={(base_url) => update(vendor.name, { base_url })}
+                />
+              )}
+              {vendor.context_window && (
+                <ContextWindowField
+                  value={value[vendor.name]?.context_window ?? null}
+                  onChange={(context_window) => update(vendor.name, { context_window })}
                 />
               )}
             </div>
@@ -243,6 +255,38 @@ function BaseUrlField({ value, onChange }: { value: string; onChange: (value: st
         className='h-8 text-[12px] text-foreground'
         onChange={(event) => setDraft(event.currentTarget.value)}
         onBlur={() => valid && draft !== value && onChange(draft)}
+      />
+    </label>
+  )
+}
+
+/** The context window, in tokens, that a server runs its models with, such as llama.cpp's
+ * `--ctx-size`, which reaches the preferences when the field loses the focus holding a whole
+ * number, or nothing while the server's is unknown. */
+function ContextWindowField({
+  value,
+  onChange,
+}: {
+  value: number | null
+  onChange: (value: number | null) => void
+}) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(value === null ? '' : String(value))
+  const tokens = draft === '' ? null : Number(draft)
+  const valid = tokens === null || (Number.isInteger(tokens) && tokens > 0 && tokens < 2 ** 32)
+  return (
+    <label className='grid gap-1 text-[10px] text-muted-foreground'>
+      {t('settings.providers.contextWindow')}
+      <Input
+        type='number'
+        inputMode='numeric'
+        min={1}
+        step={1}
+        value={draft}
+        aria-invalid={!valid}
+        className='h-8 text-[12px] text-foreground'
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onBlur={() => valid && tokens !== value && onChange(tokens)}
       />
     </label>
   )

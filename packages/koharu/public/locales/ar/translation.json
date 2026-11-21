@@ -391,6 +391,7 @@
       "configured": "مهيّأ",
       "connections": "الاتصالات",
       "connectionsDescription": "تُخزَّن مفاتيح API بأمان على هذا الجهاز.",
+      "contextWindow": "طول السياق (رموز)",
       "credential": "API key",
       "credentialLabel": "API key لـ {{provider}}",
       "description": "اربط مزوّدي الترجمة والنماذج اللغوية.",

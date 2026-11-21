@@ -391,6 +391,7 @@
       "configured": "已設定",
       "connections": "連線",
       "connectionsDescription": "認證資訊會安全地儲存在此裝置上。",
+      "contextWindow": "上下文長度（token）",
       "credential": "認證資訊",
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",

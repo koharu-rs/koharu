@@ -391,6 +391,7 @@
       "configured": "Configurado",
       "connections": "Conexiones",
       "connectionsDescription": "Las credenciales se almacenan de forma segura en este dispositivo.",
+      "contextWindow": "Longitud del contexto (tokens)",
       "credential": "Credencial",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecta proveedores de traducción y modelos de lenguaje.",

@@ -26,7 +26,10 @@ Koharu's local models include Index-Translate (2B, 9B, and a 35B A3B preview), w
     For Ollama, LM Studio, or an OpenAI-compatible server, enter its **Base URL**. Ollama and LM
     Studio default to their usual local addresses when the field is empty; LM Studio's is
     `http://localhost:1234`. An OpenAI-compatible server needs a base URL ending where OpenAI's
-    `/v1` does, such as `https://example.com/v1`.
+    `/v1` does, such as `https://example.com/v1`. Also enter its **Context length**, the context
+    the server runs its model with, such as llama.cpp's `--ctx-size`: translation keeps earlier
+    pages for consistency and summarizes them before they fill it. Left empty, they pile up until
+    the server cuts the prompt off and answers fail.
 
   </Step>
   <Step title='Select a model'>

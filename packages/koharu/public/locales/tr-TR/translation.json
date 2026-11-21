@@ -391,6 +391,7 @@
       "configured": "Yapılandırıldı",
       "connections": "Bağlantılar",
       "connectionsDescription": "Kimlik bilgileri bu cihazda güvenli bir şekilde saklanır.",
+      "contextWindow": "Bağlam uzunluğu (token)",
       "credential": "Kimlik bilgisi",
       "credentialLabel": "{{provider}} kimlik bilgisi",
       "description": "Çeviri ve dil modeli sağlayıcılarını bağlayın.",

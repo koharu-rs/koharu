@@ -25,7 +25,8 @@ Koharu のローカルモデルには、翻訳専用の Index-Translate（2B、9
 
     Ollama、LM Studio、OpenAI 互換サーバーは**ベース URL**を入力します。Ollama と LM Studio
     は空欄なら通常のローカルアドレスを使い、LM Studio の場合は `http://localhost:1234` です。OpenAI
-    互換サーバーには、OpenAI の `/v1` と同じ位置で終わるベース URL（例: `https://example.com/v1`）が必要です。
+    互換サーバーには、OpenAI の `/v1` と同じ位置で終わるベース URL（例: `https://example.com/v1`）が必要です。あわせて**コンテキスト長**に、サーバーがモデルを動かすコンテキスト（llama.cpp
+    の `--ctx-size` など）を入力します。翻訳は一貫性のために前のページを覚えており、いっぱいになる前に要約します。空欄だとページがたまり続け、サーバーがプロンプトを切り詰めて応答が失敗します。
 
   </Step>
   <Step title='モデルを選ぶ'>

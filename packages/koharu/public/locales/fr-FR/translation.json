@@ -391,6 +391,7 @@
       "configured": "Configuré",
       "connections": "Connexions",
       "connectionsDescription": "Les identifiants sont stockés de façon sécurisée sur cet appareil.",
+      "contextWindow": "Longueur du contexte (jetons)",
       "credential": "Identifiants",
       "credentialLabel": "Identifiants {{provider}}",
       "description": "Connectez des fournisseurs de traduction et de modèles de langage.",

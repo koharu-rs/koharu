@@ -391,6 +391,7 @@
       "configured": "設定済み",
       "connections": "接続",
       "connectionsDescription": "認証情報はこのデバイスに安全に保存されます。",
+      "contextWindow": "コンテキスト長（トークン）",
       "credential": "認証情報",
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",

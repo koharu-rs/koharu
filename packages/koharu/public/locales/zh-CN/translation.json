@@ -391,6 +391,7 @@
       "configured": "已配置",
       "connections": "连接",
       "connectionsDescription": "凭据安全地存储在此设备上。",
+      "contextWindow": "上下文长度（token）",
       "credential": "凭据",
       "credentialLabel": "{{provider}} 凭据",
       "description": "连接翻译和语言模型提供商。",

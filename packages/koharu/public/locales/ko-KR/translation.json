@@ -391,6 +391,7 @@
       "configured": "설정됨",
       "connections": "연결",
       "connectionsDescription": "자격 증명은 이 기기에 안전하게 저장됩니다.",
+      "contextWindow": "컨텍스트 길이(토큰)",
       "credential": "자격 증명",
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",

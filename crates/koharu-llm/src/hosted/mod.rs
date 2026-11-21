@@ -7,7 +7,7 @@ mod http;
 mod lm_studio;
 pub(crate) mod openai_compatible;
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroU32};
 
 use anyhow::{Context, Result, bail, ensure};
 use rig_core::{
@@ -49,6 +49,10 @@ pub const SERVERS: &[&str] = &[
     lm_studio::PROVIDER_NAME,
     openai_compatible::PROVIDER_NAME,
 ];
+
+/// The vendors whose server says nothing of the context window it runs a
+/// model with, which the user gives in `[providers]`.
+pub const CONTEXT_WINDOWS: &[&str] = &[openai_compatible::PROVIDER_NAME];
 
 /// The vendors the user signs in to with their plan, in place of an API key.
 /// The sign-in is kept under the vendor's name, where a key would be.
@@ -105,6 +109,14 @@ impl koharu_config::Section for Providers {
 pub struct Endpoint {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<url::Url>,
+    /// The context window, in tokens, the server runs its models with, for
+    /// one of [`CONTEXT_WINDOWS`], whose server doesn't say: llama.cpp's
+    /// server runs every model it serves with one `--ctx-size`, and Zed's
+    /// OpenAI-compatible provider is told each model's `max_tokens`. A
+    /// conversation keeps inside it; unset, it grows until the server cuts
+    /// it off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<NonZeroU32>,
 }
 
 /// The base URL `[providers]` sets for `vendor`, if it sets one.
@@ -115,6 +127,16 @@ fn base_url(vendor: &str) -> Result<Option<String>> {
         .get(vendor)
         .and_then(|endpoint| endpoint.base_url.as_ref())
         .map(|url| url.as_str().trim_end_matches('/').to_owned()))
+}
+
+/// The context window `[providers]` gives `vendor`'s server, if it gives one.
+fn context_window(vendor: &str) -> Result<Option<u32>> {
+    let providers: Providers = koharu_config::get()?;
+    Ok(providers
+        .0
+        .get(vendor)
+        .and_then(|endpoint| endpoint.context_window)
+        .map(NonZeroU32::get))
 }
 
 /// The vendor's API key, stored under its rig name.
@@ -132,7 +154,9 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
     match vendor {
         grok::PROVIDER_NAME => return grok::connect(id, base_url),
         lm_studio::PROVIDER_NAME => return lm_studio::connect(id, base_url),
-        openai_compatible::PROVIDER_NAME => return openai_compatible::connect(id, base_url),
+        openai_compatible::PROVIDER_NAME => {
+            return openai_compatible::connect(id, base_url, context_window(vendor)?);
+        }
         _ => {}
     }
     let selection = catalog_id(vendor)?;
@@ -193,7 +217,7 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
         grok::PROVIDER_NAME => return grok::models(base_url(vendor)?).await,
         lm_studio::PROVIDER_NAME => return lm_studio::models(base_url(vendor)?).await,
         openai_compatible::PROVIDER_NAME => {
-            return openai_compatible::models(base_url(vendor)?).await;
+            return openai_compatible::models(base_url(vendor)?, context_window(vendor)?).await;
         }
         _ => {}
     }

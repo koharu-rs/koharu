@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::future::{AbortHandle, Abortable};
 use koharu_agent::AgentConfig;
 use koharu_config::secrets::SecretString;
-use koharu_llm::{Model, Providers, SERVERS, SIGN_INS, SignInPrompt, VENDORS};
+use koharu_llm::{CONTEXT_WINDOWS, Model, Providers, SERVERS, SIGN_INS, SignInPrompt, VENDORS};
 use koharu_pipeline::PipelineConfig;
 use koharu_renderer::RendererConfig;
 use parking_lot::Mutex;
@@ -82,12 +82,14 @@ pub async fn list_models() -> Vec<Model> {
 
 /// A vendor, by rig's name: whether the user signs in to it with their plan
 /// in place of giving an API key, whether they name its server by a base
-/// URL, and whether its sign-in or key is stored.
+/// URL and give the context window it runs models with, and whether its
+/// sign-in or key is stored.
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct Vendor {
     pub name: String,
     pub signs_in: bool,
     pub server: bool,
+    pub context_window: bool,
     pub connected: bool,
 }
 
@@ -103,6 +105,7 @@ pub async fn list_vendors() -> Result<Vec<Vendor>> {
                     name: name.to_owned(),
                     signs_in: SIGN_INS.contains(&name),
                     server: SERVERS.contains(&name),
+                    context_window: CONTEXT_WINDOWS.contains(&name),
                     connected: koharu_config::secrets::get(name)?.is_some(),
                 })
             })

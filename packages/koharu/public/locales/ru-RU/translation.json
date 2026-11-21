@@ -391,6 +391,7 @@
       "configured": "Настроено",
       "connections": "Подключения",
       "connectionsDescription": "Учётные данные безопасно хранятся на этом устройстве.",
+      "contextWindow": "Длина контекста (токены)",
       "credential": "Учётные данные",
       "credentialLabel": "Учётные данные {{provider}}",
       "description": "Подключите провайдеров перевода и языковых моделей.",
