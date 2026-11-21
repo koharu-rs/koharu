@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StartView } from '@/components/start/StartView'
 import { queryClient, useProject } from '@/lib/queries'
@@ -31,6 +31,11 @@ function renderProjectFlow() {
 }
 
 describe('StartView', () => {
+  // jsdom lays nothing out, so the project list, which shows only the rows its height holds,
+  // would show none.
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(400)
+  })
   afterEach(() => vi.restoreAllMocks())
 
   it('creates a managed project by name', async () => {
@@ -77,7 +82,11 @@ describe('StartView', () => {
       .mockResolvedValueOnce(['Blue Archive'])
       .mockResolvedValueOnce([])
     const remove = vi.spyOn(commands, 'deleteProject').mockResolvedValue(null)
-    render(<StartView />)
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StartView />
+      </QueryClientProvider>,
+    )
 
     const deleteButton = await screen.findByRole('button', { name: 'Delete Blue Archive' })
     await waitFor(() => expect(deleteButton).toBeEnabled())

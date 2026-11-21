@@ -1,20 +1,16 @@
 'use client'
 
-import { ChevronLeft } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { orderedLanguageChoices } from '@/lib/translation'
-import { Button } from '@koharu/ui/components/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@koharu/ui/components/select'
+import { MenuPanel } from '@/components/controls/MenuPanel'
+import { PickerSearch } from '@/components/controls/PickerSearch'
+import { languageNames } from '@/lib/translation'
+import { Combobox, ComboboxEmpty, ComboboxItem, ComboboxList } from '@koharu/ui/components/combobox'
+import { ScrollArea } from '@koharu/ui/components/scroll-area'
 
-/** The translator's target language, saved as soon as it's picked. */
+/** The translator's target language, picked from the list as the model is beside it, and saved as
+ * soon as it's picked. */
 export function OutputPicker({
   targetLanguage,
   disabled = false,
@@ -29,52 +25,46 @@ export function OutputPicker({
   onChange: (targetLanguage: string) => void
 }) {
   const { t, i18n } = useTranslation()
-  const languageChoices = useMemo(() => orderedLanguageChoices(i18n.language), [i18n.language])
+  const [query, setQuery] = useState('')
+  const names = useMemo(() => languageNames(i18n.language), [i18n.language])
 
   return (
-    <div className='min-w-0 overflow-hidden'>
-      <div className='mb-1 flex h-7 items-center border-b border-border/60 px-0.5 pb-1'>
-        <Button
-          type='button'
-          variant='ghost'
-          size='icon-xs'
-          aria-label={t('common.back')}
-          className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
-          disabled={saving}
-          onClick={onBack}
-        >
-          <ChevronLeft className='size-3.5' />
-        </Button>
-        <span className='ml-1 text-[11px] font-medium'>{t('outputPicker.title')}</span>
-      </div>
-
-      <div className='grid gap-2 p-1'>
-        <label className='grid gap-1 text-[9px] text-muted-foreground'>
-          {t('model.targetLanguage')}
-          <Select
-            value={targetLanguage}
-            items={Object.fromEntries(
-              languageChoices.map((language) => [language.tag, language.name]),
-            )}
-            disabled={disabled || saving}
-            onValueChange={(next) => next && next !== targetLanguage && onChange(next)}
+    <MenuPanel title={t('outputPicker.title')} backDisabled={saving} onBack={onBack}>
+      <Combobox<string>
+        inline
+        open
+        items={Object.keys(names)}
+        value={targetLanguage}
+        inputValue={query}
+        readOnly={disabled || saving}
+        itemToStringLabel={(tag) => names[tag] ?? tag}
+        onInputValueChange={setQuery}
+        onValueChange={(tag) => tag && tag !== targetLanguage && onChange(tag)}
+      >
+        <div className='mb-0.5 border-b border-border/60 pb-1'>
+          <PickerSearch
+            query={query}
+            label={t('outputPicker.search')}
+            onClear={() => setQuery('')}
+          />
+        </div>
+        {/* Its children come only while nothing matches, so it's empty, and hidden, otherwise. */}
+        <ComboboxEmpty className='flex px-2.5 py-5 empty:hidden'>
+          {t('outputPicker.noResults')}
+        </ComboboxEmpty>
+        <ScrollArea className='max-h-72 min-w-0' viewportClassName='max-h-72 overscroll-contain'>
+          <ComboboxList
+            aria-label={t('outputPicker.targetLanguage')}
+            className='max-h-none overflow-visible p-0 pt-0.5'
           >
-            <SelectTrigger
-              aria-label={t('outputPicker.targetLanguage')}
-              className='h-7 w-full text-[11px]'
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {languageChoices.map((language) => (
-                <SelectItem key={language.tag} value={language.tag}>
-                  {language.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-      </div>
-    </div>
+            {(tag: string) => (
+              <ComboboxItem key={tag} value={tag}>
+                {names[tag]}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ScrollArea>
+      </Combobox>
+    </MenuPanel>
   )
 }

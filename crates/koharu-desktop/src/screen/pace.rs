@@ -15,17 +15,10 @@ use std::{
 
 use tauri_runtime_cef::OffscreenView;
 
-use super::{
-    FRAME_RATE,
-    paint::{Mask, Painted},
-};
+use super::paint::{Mask, Painted};
 
-/// A frame period, in microseconds, as capture timestamps count.
-const PERIOD: i64 = 1_000_000 / FRAME_RATE as i64;
-/// Deliveries remembered for the fastest, a second's worth.
-const DELIVERIES: usize = FRAME_RATE as usize;
-/// The quiet after which a frame is shown at once.
-const PAUSE: Duration = Duration::from_micros(3 * PERIOD as u64);
+/// The frame periods of quiet after which a frame is shown at once.
+const PAUSE: u64 = 3;
 
 pub struct Pacer {
     /// Frames taken and not yet shown, by when they're due.
@@ -72,32 +65,39 @@ impl Pacer {
     }
 
     /// Takes the frame `texture` with its `mask`, captured at `timestamp`
-    /// microseconds, and wakes `view`'s window when it's due.
+    /// microseconds by CEF rendering `frame_rate` frames a second, at least
+    /// one, and wakes `view`'s window when it's due.
     pub fn arrive(
         &mut self,
         texture: wgpu::Texture,
         mask: Mask,
         timestamp: u64,
+        frame_rate: i32,
         view: &OffscreenView,
     ) {
+        // A frame period, in microseconds, as capture timestamps count.
+        let period = 1_000_000 / i64::from(frame_rate);
         let now = Instant::now();
         let epoch = *self.epoch.get_or_insert(now);
         let arrived = i64::try_from(now.duration_since(epoch).as_micros()).unwrap_or(i64::MAX);
         let timestamp = i64::try_from(timestamp).unwrap_or(i64::MAX);
         self.deliveries.push_back(arrived.saturating_sub(timestamp));
-        if self.deliveries.len() > DELIVERIES {
+        // The fastest is of the last second's deliveries.
+        let remembered = usize::try_from(frame_rate).unwrap_or(1);
+        while self.deliveries.len() > remembered {
             self.deliveries.pop_front();
         }
+        let pause = Duration::from_micros(PAUSE * period.unsigned_abs());
         let paused = self.pending.is_empty()
             && self
                 .last
-                .is_none_or(|last| now.duration_since(last) > PAUSE);
+                .is_none_or(|last| now.duration_since(last) > pause);
         self.last = Some(now);
         let due = if paused {
             now
         } else {
             let fastest = self.deliveries.iter().copied().min().unwrap_or(0);
-            let due = timestamp.saturating_add(fastest).saturating_add(PERIOD);
+            let due = timestamp.saturating_add(fastest).saturating_add(period);
             epoch + Duration::from_micros(u64::try_from(due).unwrap_or(0))
         };
         self.pending.push_back(Paced { texture, mask, due });

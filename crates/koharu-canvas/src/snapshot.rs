@@ -4,7 +4,7 @@
 
 use std::{collections::HashMap, io::Cursor, sync::LazyLock};
 
-use koharu_renderer::Frame;
+use koharu_renderer::{Frame, ResolvedText};
 use koharu_scene::{
     Content, Frame as TextFrame, Hash, Layer, LayerId, Offset, Page, PixelFormat, Project, Role,
     Session, Text,
@@ -212,11 +212,7 @@ impl Walk<'_> {
         };
         let control = match &layer.content {
             Content::Text(text) => {
-                let laid = self
-                    .frame
-                    .layer(id)
-                    .and_then(|drawn| drawn.text())
-                    .map(|text| text.frame);
+                let laid = self.frame.layer(id).and_then(|drawn| drawn.text());
                 text_control(id, text, laid, locked)
             }
             Content::Block(block) => {
@@ -242,11 +238,7 @@ impl Walk<'_> {
                 }
                 match &block.translation {
                     Some(text) => {
-                        let laid = self
-                            .frame
-                            .translation(id)
-                            .and_then(|drawn| drawn.text())
-                            .map(|text| text.frame);
+                        let laid = self.frame.translation(id).and_then(|drawn| drawn.text());
                         text_control(id, text, laid, locked)
                     }
                     None => text_control(id, &block.source, None, locked),
@@ -305,8 +297,16 @@ fn frame_outline(text: &Text) -> Option<BezPath> {
 }
 
 /// A text's control: the box it laid out in, or for one that drew nothing,
-/// its frame's box. Point text that drew nothing has none.
-fn text_control(layer: LayerId, text: &Text, laid: Option<Rect>, locked: bool) -> Option<Control> {
+/// its frame's box, and whether what it laid out runs past its frame. Point
+/// text that drew nothing has none.
+fn text_control(
+    layer: LayerId,
+    text: &Text,
+    laid: Option<&ResolvedText>,
+    locked: bool,
+) -> Option<Control> {
+    let overflows = laid.is_some_and(|laid| laid.overflowed);
+    let laid = laid.map(|laid| laid.frame);
     let (local, resize) = match &text.frame {
         TextFrame::Point => (laid?, Resize::None),
         TextFrame::Box { bounds, .. } => (
@@ -328,13 +328,15 @@ fn text_control(layer: LayerId, text: &Text, laid: Option<Rect>, locked: bool) -
         ),
     };
     (local.width() > 0.0 && local.height() > 0.0).then(|| {
-        Control::new(
+        let mut control = Control::new(
             layer,
             local,
             Affine::from(text.transform),
             resize,
             true,
             locked,
-        )
+        );
+        control.overflows = overflows;
+        control
     })
 }

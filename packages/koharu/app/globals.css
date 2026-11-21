@@ -1,6 +1,8 @@
 @import '@koharu/ui/globals.css';
 
 :root {
+  --font-sans:
+    var(--font-noto-sans), var(--font-noto-sans-cjk), ui-sans-serif, system-ui, sans-serif;
   --radius: 0.75rem;
   --background: #ffffff;
   --foreground: #111111;
@@ -36,6 +38,16 @@
   --shadow-content: -1px -1px 1px rgb(17 17 17 / 0.05);
   --shadow-toolrail: 0 3px 8px rgb(17 17 17 / 0.12), 0 1px 2px rgb(17 17 17 / 0.08);
   --shadow-floating: 0 12px 32px rgb(17 17 17 / 0.16), 0 2px 8px rgb(17 17 17 / 0.08);
+}
+
+/* A CJK interface keeps Noto Sans CJK first: Noto Sans has `…`, `—`, and `·` too, but draws
+   them as Latin punctuation, not the full-width forms CJK text sets. */
+html:lang(ja),
+html:lang(zh),
+html:lang(ko),
+html:lang(wuu) {
+  --font-sans:
+    var(--font-noto-sans-cjk), var(--font-noto-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 .dark {
@@ -78,7 +90,7 @@
     @apply text-foreground select-none;
     background-color: transparent;
     overflow: hidden;
-    font-family: var(--font-noto-sans-cjk), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-feature-settings:
       'cv02' 1,
       'cv03' 1,
@@ -118,9 +130,38 @@
     background: color-mix(in srgb, var(--primary) 24%, transparent);
   }
 
+  /* A native scrollbar, as a select's list has, drawn as ScrollArea draws its own: a 7 px round
+     thumb in the border colour on no track, shown while the pointer is over what scrolls.
+     `scrollbar-width` and `scrollbar-color` would turn these off in Chromium, which also leaves
+     a thumb with a logical border unpainted. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 1px solid transparent;
+    border-left-width: 2px;
+    border-radius: 9999px;
+    background: var(--border) padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:horizontal {
+    border-left-width: 1px;
+    border-top-width: 2px;
+  }
+
+  :not(:hover)::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-corner,
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+
   * {
-    scrollbar-color: color-mix(in srgb, var(--foreground) 22%, transparent) transparent;
-    scrollbar-width: thin;
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;

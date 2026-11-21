@@ -1,7 +1,7 @@
 //! Inference-only manga-ocr-ar network.
 //!
 //! Upstream architecture and decoding:
-//! https://huggingface.co/muscgab/manga-ocr-ar-experimental/blob/7873d8492307a021d6087b2c2b5f576a30b4acae/infer.py
+//! https://huggingface.co/muscgab/manga-ocr-ar-experimental/blob/20208154a8d34dc6e5fc13ba81bc35f0a2f1a26e/infer.py
 //! Upstream decodes through `_GraphStep`, a CUDA graph of `Model.step`, where
 //! it can; this port follows `greedy_cached`, which upstream says matches it
 //! up to floating-point noise.

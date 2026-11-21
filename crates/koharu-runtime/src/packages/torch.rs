@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use futures::future::BoxFuture;
 
-use super::{Host, Package, Release, preload};
+use super::{Host, LIBRARIES, Package, Release, preload};
 use crate::{Backend, Device};
 
 pub(super) struct Torch;
@@ -17,6 +17,16 @@ static LIBTORCH: Release = Release {
     repository: "koharu-rs/torch",
     package: "torch",
     tag: koharu_torch_sys::LIBTORCH,
+    // Its libraries, and on AMD GPUs the kernels of AOTriton, libtorch's
+    // fused attention there, which it reads from `aotriton.images` beside its
+    // own library.
+    files: &[
+        "**/*.dll",
+        "**/*.dylib",
+        "**/*.so",
+        "**/*.so.*",
+        "**/aotriton.images/**",
+    ],
 };
 
 /// The shim at the release `koharu-torch-sys`'s headers come from.
@@ -24,6 +34,7 @@ static SHIM: Release = Release {
     repository: "koharu-rs/torch",
     package: "koharu-torch",
     tag: koharu_torch_sys::SHIM,
+    files: LIBRARIES,
 };
 
 /// libtorch's own libraries for a GPU's `backend`, in load order, before the
@@ -57,6 +68,7 @@ fn libraries(backend: Backend) -> &'static [&'static str] {
             "caffe2_nvrtc.dll",
             "torch_global_deps.dll",
             "torch_cpu.dll",
+            "aotriton_v2.dll",
             "torch_hip.dll",
             "torch.dll",
         ],
@@ -66,6 +78,7 @@ fn libraries(backend: Backend) -> &'static [&'static str] {
             "libcaffe2_nvrtc.so",
             "libtorch_global_deps.so",
             "libtorch_cpu.so",
+            "libaotriton_v2.so",
             "libtorch_hip.so",
             "libtorch.so",
         ],
@@ -111,6 +124,10 @@ impl Package for Torch {
                     libraries
                         .iter()
                         .all(|library| folder.join(library).is_file())
+                        // Without its kernels, AOTriton fails every fused
+                        // attention as an invalid kernel image.
+                        && (!matches!(backend, Backend::Rocm { .. })
+                            || folder.join("aotriton.images").is_dir())
                 })
                 .await?;
             SHIM.download(host, variant(backend), |folder| {

@@ -46,7 +46,8 @@ pub async fn preview(family: &str) -> Result<Vec<u8>> {
         let frame = layout.resolved.frame;
         let scale = f64::from(HEIGHT) / frame.height().max(1.0);
         let width = (frame.width() * scale).ceil().max(1.0) as u16;
-        let mut drawing = Gpu::get()?.drawing(width, HEIGHT);
+        let gpu = Gpu::get()?;
+        let mut drawing = gpu.drawing(width, HEIGHT);
         text::draw(
             &mut drawing,
             &layout,

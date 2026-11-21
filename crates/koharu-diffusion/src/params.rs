@@ -18,8 +18,18 @@ pub enum SampleMethod {
     Euler,
 }
 
+/// sd.cpp's step caches, which skip steps that change little.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Cache {
+    /// EasyCache, for DiT models: reuses a step's output while its input
+    /// changes little.
+    EasyCache,
+    /// Spectrum: forecasts a step's output from the steps before it.
+    Spectrum,
+}
+
 /// A model's files and Koharu's settings for it. Whatever is left unset keeps
-/// sd.cpp's own default, from `sd_ctx_params_init`.
+/// sd.cpp's own default.
 #[derive(Clone, Debug, Default)]
 pub struct ContextParams<'a> {
     pub model: Option<&'a Path>,
@@ -31,22 +41,14 @@ pub struct ContextParams<'a> {
     /// The text encoder's vision projector, for a model whose text encoder
     /// reads its condition images, such as Qwen-Image 2.1's Qwen3-VL.
     pub llm_vision: Option<&'a Path>,
-    /// A `tokenizer.json` for a text encoder whose vocabulary sd.cpp doesn't
-    /// hold, such as MOSS-Image's Qwen3.5.
-    pub tokenizer: Option<&'a Path>,
     pub vae_format: Option<VaeFormat>,
     /// The device to run on, by its ggml name, such as `CUDA0`.
     pub device: Option<&'a str>,
     /// Memory-maps the weight files instead of reading them in.
     pub mmap: bool,
-    /// Flash attention, in the text encoder and the denoiser.
-    pub flash_attention: bool,
-    /// Direct convolution, in the denoiser and the VAE.
-    pub conv_direct: bool,
 }
 
-/// One generation. Whatever is left unset keeps sd.cpp's own default, from
-/// `sd_img_gen_params_init`.
+/// One generation. Whatever is left unset keeps sd.cpp's own default.
 #[derive(Clone, Debug, Default)]
 pub struct ImageParams<'a> {
     pub prompt: &'a str,
@@ -67,6 +69,14 @@ pub struct ImageParams<'a> {
     pub flow_shift: Option<f32>,
     pub sample_method: Option<SampleMethod>,
     pub steps: Option<u32>,
+    /// The noise levels to step through, ending in zero, in place of `steps`
+    /// and the scheduler's own; empty keeps them.
+    pub sigmas: &'a [f32],
+    /// Reuses work between steps that change little.
+    pub cache: Option<Cache>,
+    /// Encodes and decodes in square tiles this many pixels a side, which
+    /// takes less memory; unset runs the VAE whole.
+    pub vae_tile: Option<u32>,
     pub strength: Option<f32>,
     pub seed: Option<i64>,
     /// How many images to generate.

@@ -11,11 +11,11 @@ use strum::{Display, VariantArray};
 #[serde(rename_all = "kebab-case")]
 #[derive(specta::Type)]
 pub enum Recognizer {
-    #[default]
     #[strum(to_string = "Manga OCR AR")]
     MangaOcrAr,
     #[strum(to_string = "Baberu OCR")]
     BaberuOcr,
+    #[default]
     #[strum(to_string = "Hayai OCR")]
     HayaiOcr,
 }

@@ -5,8 +5,7 @@ import { History, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { dispatch } from '@/lib/backend'
-import { useProject } from '@/lib/queries'
+import { send, useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type History as Steps } from '@koharu/ipc/protocol'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
@@ -89,7 +88,7 @@ function Window({ history, offset }: { history: Steps; offset: { x: number; y: n
                 data-current={step === history.current}
                 data-undone={step > history.current}
                 className='w-full truncate rounded-md px-2 py-1 text-left text-[11px] hover:bg-foreground/[0.05] data-[current=true]:bg-accent data-[current=true]:font-medium data-[undone=true]:text-muted-foreground'
-                onClick={() => step !== history.current && dispatch(commands.goTo, step)}
+                onClick={() => step !== history.current && send(commands.goTo, step)}
               >
                 {step === 0
                   ? t('history.opened')

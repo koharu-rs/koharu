@@ -3,7 +3,6 @@ import { createElement, StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Providers from '@/app/providers'
-import { call } from '@/lib/backend'
 import { useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, events, type Preferences } from '@koharu/ipc/protocol'
@@ -89,12 +88,6 @@ describe('Tauri runtime', () => {
       stage: 'detect',
     })
     view.unmount()
-  })
-
-  it('passes the managed project name to open', async () => {
-    const open = vi.spyOn(commands, 'open').mockResolvedValue(null)
-    await expect(call(commands.open, 'Volume 1')).resolves.toBeNull()
-    expect(open).toHaveBeenCalledWith('Volume 1')
   })
 
   it('applies the canvas and download events directly to the store', async () => {

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use super::{Host, LIBRARIES, extract};
+use super::{Host, extract};
 use crate::{Backend, store};
 
 /// One of Koharu's own builds of a native library, released on GitHub as
@@ -14,6 +14,8 @@ pub(super) struct Release {
     /// folder, so two packages released from one repository need two.
     pub(super) package: &'static str,
     pub(super) tag: &'static str,
+    /// The archive's files the store keeps.
+    pub(super) files: &'static [&'static str],
 }
 
 impl Release {
@@ -42,12 +44,13 @@ impl Release {
             "https://github.com/{}/releases/download/{}/{triple}-{variant}.tar.gz",
             self.repository, self.tag
         );
+        let files = self.files;
         store::put(
             &self.version(),
             self.folder(host, backend),
             |folder| folder.is_dir() && complete(folder),
             move |stage| async move {
-                extract(&url, &stage, LIBRARIES).await?;
+                extract(&url, &stage, files).await?;
                 Ok(stage)
             },
         )

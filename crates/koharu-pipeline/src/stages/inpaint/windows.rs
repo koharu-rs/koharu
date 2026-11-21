@@ -3,7 +3,9 @@
 //! shrunk left glyph-shaped patches, so each window is about a megapixel at
 //! most, and no longer on a side than the model redraws in one pass. Each
 //! holds its lettering whole with context around it, and never spans two
-//! panels.
+//! panels. Each lettering is redrawn in one window only: windows overlap, and
+//! an edit model keeps what its reference shows, so a lettering an earlier
+//! window already filled would come back as that fill, flaws and all.
 
 use koharu_scene::Rect;
 
@@ -18,10 +20,17 @@ pub(super) struct Region {
     pub(super) panel: Option<Rect>,
 }
 
+/// A window the model redraws, and the regions it redraws in it.
+pub(super) struct Window {
+    pub(super) rect: Rect,
+    /// Indices into the regions planned; each is in exactly one window.
+    pub(super) regions: Vec<usize>,
+}
+
 /// Each region's window, grown by the context within its panel and `side`,
 /// merged with the windows it overlaps in the same panel while the merge
 /// stays within a megapixel and `side`.
-pub(super) fn plan(regions: &[Region], width: u32, height: u32, side: u32) -> Vec<Rect> {
+pub(super) fn plan(regions: &[Region], width: u32, height: u32, side: u32) -> Vec<Window> {
     let side = i64::from(side);
     let page = Bounds::of(Rect {
         x: 0,
@@ -29,9 +38,10 @@ pub(super) fn plan(regions: &[Region], width: u32, height: u32, side: u32) -> Ve
         width,
         height,
     });
-    let mut windows: Vec<(Bounds, Bounds)> = regions
+    let mut windows: Vec<(Bounds, Bounds, Vec<usize>)> = regions
         .iter()
-        .map(|region| {
+        .enumerate()
+        .map(|(index, region)| {
             let limit = region
                 .panel
                 .map_or(page, |panel| Bounds::of(panel).meet(page));
@@ -45,20 +55,22 @@ pub(super) fn plan(regions: &[Region], width: u32, height: u32, side: u32) -> Ve
                 )
                 .meet(limit);
             // A lettering past its panel's edge stays whole.
-            (limit, grown.join(lettering))
+            (limit, grown.join(lettering), vec![index])
         })
         .collect();
     'merging: loop {
         for first in 0..windows.len() {
             for second in first + 1..windows.len() {
-                let ((limit, a), (other, b)) = (windows[first], windows[second]);
+                let (limit, a) = (windows[first].0, windows[first].1);
+                let (other, b) = (windows[second].0, windows[second].1);
                 let joined = a.join(b);
                 let fits = joined.area() <= MOST
                     && joined.right - joined.left <= side
                     && joined.bottom - joined.top <= side;
                 if limit == other && a.overlaps(b) && fits {
                     windows[first].1 = joined;
-                    windows.swap_remove(second);
+                    let (_, _, held) = windows.swap_remove(second);
+                    windows[first].2.extend(held);
                     continue 'merging;
                 }
             }
@@ -67,9 +79,21 @@ pub(super) fn plan(regions: &[Region], width: u32, height: u32, side: u32) -> Ve
     }
     windows
         .into_iter()
-        .filter(|(_, window)| window.area() > 0)
-        .map(|(_, window)| window.rect())
+        .filter(|(_, window, _)| window.area() > 0)
+        .map(|(_, window, regions)| Window {
+            rect: window.rect(),
+            regions,
+        })
         .collect()
+}
+
+/// The part of `window` within the context of `lettering`: what a lettering's
+/// clean-up keeps of an edit model's window, apart from its neighbours'.
+pub(super) fn around(lettering: Rect, window: Rect) -> Rect {
+    Bounds::of(lettering)
+        .grow(CONTEXT, CONTEXT)
+        .meet(Bounds::of(window))
+        .rect()
 }
 
 /// A rectangle by its edges, the right and bottom ones exclusive.
@@ -181,7 +205,10 @@ mod tests {
                 panel: left,
             },
         ];
-        let windows = plan(&regions, 2000, 2000, u32::MAX);
+        let windows: Vec<Rect> = plan(&regions, 2000, 2000, u32::MAX)
+            .into_iter()
+            .map(|window| window.rect)
+            .collect();
         assert_eq!(windows.len(), 3);
         assert!(windows.contains(&rect(0, 0, 496, 466)));
         assert!(windows.contains(&rect(1000, 0, 356, 436)));

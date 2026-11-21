@@ -7,7 +7,7 @@ use anyhow::Result;
 use futures::future::BoxFuture;
 use koharu_llama_sys::ggml_backend_dev_t;
 
-use super::{Host, Package, Release};
+use super::{Host, LIBRARIES, Package, Release};
 use crate::{Backend, Device};
 
 pub(super) struct Llama;
@@ -19,6 +19,7 @@ static LLAMA: Release = Release {
     repository: "koharu-rs/llama",
     package: "llama",
     tag: koharu_llama_sys::RELEASE,
+    files: LIBRARIES,
 };
 
 /// stable-diffusion.cpp at the commit `koharu-diffusion-sys`'s header comes
@@ -27,6 +28,7 @@ static DIFFUSION: Release = Release {
     repository: "koharu-rs/diffusion",
     package: "diffusion",
     tag: koharu_diffusion_sys::RELEASE,
+    files: LIBRARIES,
 };
 
 impl Package for Llama {

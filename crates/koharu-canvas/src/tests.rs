@@ -65,16 +65,16 @@ fn fixture(size: (u32, u32), ops: Vec<Value>) -> Option<Fixture> {
         .expect("an edit");
     let page = change.pages.added[0];
     let renderer = RENDERER.clone();
-    let Ok(gpu) = Gpu::get() else {
+    if Gpu::get().is_err() {
         eprintln!("skipped without a GPU");
         return None;
-    };
+    }
     let session = Arc::new(Mutex::new(session));
     let mut fixture = Fixture {
         _dir: dir,
         session: Arc::clone(&session),
         renderer,
-        canvas: Canvas::new(gpu, session, RENDERER.clone()),
+        canvas: Canvas::new(session, RENDERER.clone()),
         page,
     };
     fixture.render();

@@ -57,8 +57,10 @@
     "loading": "جارٍ التحميل…"
   },
   "errors": {
+    "actionFailed": "تعذّر إكمال هذا الإجراء",
     "fatalTitle": "تعذّر على Koharu المتابعة",
-    "tryAgain": "أعد المحاولة"
+    "tryAgain": "أعد المحاولة",
+    "unknown": "أعاد التطبيق الأصلي خطأً غير معروف."
   },
   "feedback": {
     "addScreenshot": "إضافة لقطة شاشة",
@@ -92,12 +94,16 @@
     "title": "التعبئة التوليدية"
   },
   "fontPicker": {
+    "addFavorite": "إضافة {{name}} إلى المفضلة",
     "choose": "اختر خطًا",
+    "favoritesOnly": "عرض الخطوط المفضلة",
     "fontCount": "{{count}} خط",
     "fontCount_one": "{{count}} خط",
     "fontCount_other": "{{count}} خط",
     "fonts": "الخطوط",
+    "noFavorites": "لا توجد خطوط مفضلة بعد",
     "noResults": "لا توجد خطوط تطابق هذا البحث",
+    "removeFavorite": "إزالة {{name}} من المفضلة",
     "search": "ابحث عن خطوط"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "الحدود",
     "borderColor": "لون الحدود",
     "borderWidth": "عرض الحدود",
+    "chooseBorderWidth": "اختر عرض الحدود",
     "chooseFontSize": "اختر حجم الخط",
-    "decreaseBorderWidth": "تقليل عرض الحدود",
     "font": "الخط",
     "fontSize": "حجم الخط",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "وزن الخط",
     "horizontal": "أفقي",
-    "increaseBorderWidth": "زيادة عرض الحدود",
     "opacity": "العتامة",
     "selectPage": "اختر صفحة لعرض طبقاتها.",
     "source": "النص المصدر",
@@ -191,20 +196,6 @@
     "translation": "الترجمة",
     "type": "النوع",
     "vertical": "عمودي"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "حذف {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "إغلاق المشروع",
     "delete": "حذف المحدّد",
     "discord": "Discord",
+    "donate": "تبرّع",
     "edit": "تحرير",
     "export": "تصدير المشروع",
     "feedback": "إرسال ملاحظات",
@@ -295,9 +287,12 @@
       "recognize": "التعرّف على النص",
       "translate": "ترجمة"
     },
-    "selected": "{{count}} محدّد"
+    "selected": "{{count}} محدّد",
+    "translated": "تمت ترجمة {{translated}} من {{total}}"
   },
   "outputPicker": {
+    "noResults": "لا توجد لغات تطابق هذا البحث.",
+    "search": "البحث في اللغات",
     "targetLanguage": "اللغة المستهدفة",
     "title": "مخرجات الترجمة"
   },
@@ -391,6 +386,7 @@
       "configured": "مهيّأ",
       "connections": "الاتصالات",
       "connectionsDescription": "تُخزَّن مفاتيح API بأمان على هذا الجهاز.",
+      "contextWindow": "طول السياق (رموز)",
       "credential": "API key",
       "credentialLabel": "API key لـ {{provider}}",
       "description": "اربط مزوّدي الترجمة والنماذج اللغوية.",
@@ -414,15 +410,18 @@
     },
     "title": "الإعدادات",
     "typesetting": {
+      "addFallback": "إضافة خط بديل",
       "addFamily": "إضافة عائلة خطوط",
-      "defaultFamilies": "عائلات الخطوط الافتراضية",
       "description": "عيّن مجموعة الخطوط المرتّبة المستخدمة عندما لا يكون لطبقة النص عائلة معيّنة.",
       "empty": "لا توجد عائلات افتراضية. سيستخدم Koharu البديل من النظام.",
+      "fallbacks": "البدائل",
+      "fallbacksDescription": "تُستخدم بالترتيب للأحرف التي يفتقدها الخط الأساسي. اسحب لإعادة الترتيب، أو إلى الأساسي للتبديل.",
       "familyLabel": "عائلة الخطوط الافتراضية {{index}}",
       "fontFallback": "الخطوط المفضلة",
       "fontFallbackDescription": "يستخدم Koharu أول عائلة متاحة تدعم النص.",
       "loadError": "تعذّر تحميل الخطوط. لا يزال بإمكانك إزالة العائلات الحالية.",
       "loadingFonts": "جارٍ تحميل الخطوط…",
+      "primary": "أساسي",
       "removeFamily": "إزالة {{family}}",
       "title": "محرك العرض"
     }
@@ -440,10 +439,12 @@
     "loadingProjects": "جارٍ تحميل المشاريع…",
     "newDescription": "أنشئ مساحة عمل نظيفة لصفحاتك وترجماتك وعمليات التصدير.",
     "newProject": "مشروع جديد",
+    "noResults": "لا توجد مشاريع تطابق هذا البحث.",
     "projectKind": "مشروع Koharu",
     "projectList": "المشاريع",
     "projectName": "اسم المشروع",
     "projectNamePlaceholder": "مشروعي الجديد",
+    "search": "البحث في المشاريع",
     "storageHint": "تُخزَّن المشاريع محليًا على هذا الكمبيوتر.",
     "title": "المشاريع",
     "yourProjects": "مشاريعك"

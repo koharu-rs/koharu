@@ -57,8 +57,10 @@
     "loading": "正在載入…"
   },
   "errors": {
+    "actionFailed": "無法完成該操作",
     "fatalTitle": "Koharu 無法繼續執行",
-    "tryAgain": "再試一次"
+    "tryAgain": "再試一次",
+    "unknown": "原生應用程式傳回了未知錯誤。"
   },
   "feedback": {
     "addScreenshot": "新增螢幕截圖",
@@ -92,12 +94,16 @@
     "title": "生成填色"
   },
   "fontPicker": {
+    "addFavorite": "將 {{name}} 加入我的最愛",
     "choose": "選擇字型",
+    "favoritesOnly": "顯示我的最愛字型",
     "fontCount": "{{count}} 種字型",
     "fontCount_one": "{{count}} 種字型",
     "fontCount_other": "{{count}} 種字型",
     "fonts": "字型",
+    "noFavorites": "尚無我的最愛字型",
     "noResults": "沒有符合此搜尋的字型",
+    "removeFavorite": "將 {{name}} 從我的最愛移除",
     "search": "搜尋字型"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "描邊",
     "borderColor": "描邊色彩",
     "borderWidth": "描邊寬度",
+    "chooseBorderWidth": "選擇描邊寬度",
     "chooseFontSize": "選擇字型大小",
-    "decreaseBorderWidth": "減少描邊寬度",
     "font": "字體",
     "fontSize": "字型大小",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "字型粗細",
     "horizontal": "橫排",
-    "increaseBorderWidth": "增加描邊寬度",
     "opacity": "不透明度",
     "selectPage": "選擇頁面以檢查其圖層。",
     "source": "原文",
@@ -191,20 +196,6 @@
     "translation": "譯文",
     "type": "排版",
     "vertical": "直排"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "刪除 {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "關閉專案",
     "delete": "刪除所選項目",
     "discord": "Discord",
+    "donate": "贊助",
     "edit": "編輯",
     "export": "匯出專案",
     "feedback": "傳送意見回饋",
@@ -295,9 +287,12 @@
       "recognize": "辨識",
       "translate": "翻譯"
     },
-    "selected": "已選擇 {{count}}"
+    "selected": "已選擇 {{count}}",
+    "translated": "已翻譯 {{translated}}/{{total}}"
   },
   "outputPicker": {
+    "noResults": "沒有符合此搜尋的語言。",
+    "search": "搜尋語言",
     "targetLanguage": "目標語言",
     "title": "翻譯輸出"
   },
@@ -391,6 +386,7 @@
       "configured": "已設定",
       "connections": "連線",
       "connectionsDescription": "認證資訊會安全地儲存在此裝置上。",
+      "contextWindow": "上下文長度（token）",
       "credential": "認證資訊",
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
@@ -414,15 +410,18 @@
     },
     "title": "設定",
     "typesetting": {
+      "addFallback": "新增備用字型",
       "addFamily": "新增字型家族",
-      "defaultFamilies": "預設字型家族",
       "description": "設定文字圖層未指定字型家族時使用的有序字型堆疊。",
       "empty": "沒有預設字型家族。Koharu 將使用系統後備字型。",
+      "fallbacks": "備用字型",
+      "fallbacksDescription": "主要字型缺少的字元會依序使用備用字型。拖曳可調整順序，拖到主要字型上即可互換。",
       "familyLabel": "預設字型家族 {{index}}",
       "fontFallback": "偏好字型",
       "fontFallbackDescription": "Koharu 使用第一個支援該文字的可用字型家族。",
       "loadError": "無法載入字型。仍可移除現有字型家族。",
       "loadingFonts": "正在載入字型…",
+      "primary": "主要字型",
       "removeFamily": "移除 {{family}}",
       "title": "渲染器"
     }
@@ -440,10 +439,12 @@
     "loadingProjects": "正在載入專案…",
     "newDescription": "為頁面、翻譯和匯出建立乾淨的工作區。",
     "newProject": "新建專案",
+    "noResults": "沒有符合此搜尋的專案。",
     "projectKind": "Koharu 專案",
     "projectList": "專案",
     "projectName": "專案名稱",
     "projectNamePlaceholder": "我的新專案",
+    "search": "搜尋專案",
     "storageHint": "專案會儲存在這台電腦上。",
     "title": "專案",
     "yourProjects": "你的專案"

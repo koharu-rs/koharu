@@ -7,7 +7,7 @@ mod http;
 mod lm_studio;
 pub(crate) mod openai_compatible;
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroU32};
 
 use anyhow::{Context, Result, bail, ensure};
 use rig_core::{
@@ -41,19 +41,6 @@ pub const VENDORS: &[&str] = &[
     openai_compatible::PROVIDER_NAME,
 ];
 
-/// The vendors whose server the user names by its base URL: one they run, or
-/// one that speaks OpenAI's format. Every vendor still reads a base URL from
-/// `[providers]`.
-pub const SERVERS: &[&str] = &[
-    ollama::PROVIDER_NAME,
-    lm_studio::PROVIDER_NAME,
-    openai_compatible::PROVIDER_NAME,
-];
-
-/// The vendors the user signs in to with their plan, in place of an API key.
-/// The sign-in is kept under the vendor's name, where a key would be.
-pub const SIGN_INS: &[&str] = &[chatgpt::PROVIDER_NAME, grok::PROVIDER_NAME];
-
 /// What a sign-in asks of the user: to sign in on a page, entering a code
 /// there for a device code.
 #[derive(Clone, Debug, Serialize, specta::Type)]
@@ -64,8 +51,9 @@ pub struct SignInPrompt {
     pub code: Option<String>,
 }
 
-/// Signs in to `vendor`, one of [`SIGN_INS`], telling `prompt` what the
-/// user must do.
+/// Signs in to `vendor`, ChatGPT or Grok, with the user's plan in place of
+/// an API key, telling `prompt` what the user must do. The sign-in is kept
+/// under the vendor's name, where a key would be.
 pub async fn sign_in(
     vendor: &str,
     prompt: impl Fn(SignInPrompt) + Send + Sync + 'static,
@@ -77,8 +65,8 @@ pub async fn sign_in(
     }
 }
 
-/// Signs out of `vendor`, one of [`SIGN_INS`]: the vendor revokes the
-/// sign-in, and Koharu deletes it.
+/// Signs out of `vendor`, one [`sign_in`] signs in to: the vendor revokes
+/// the sign-in, and Koharu deletes it.
 pub async fn sign_out(vendor: &str) -> Result<()> {
     match vendor {
         chatgpt::PROVIDER_NAME => chatgpt::sign_out().await,
@@ -105,6 +93,13 @@ impl koharu_config::Section for Providers {
 pub struct Endpoint {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<url::Url>,
+    /// The context window, in tokens, an OpenAI-compatible server runs its
+    /// models with, which it doesn't say: llama.cpp's server runs every model
+    /// it serves with one `--ctx-size`, and Zed's OpenAI-compatible provider
+    /// is told each model's `max_tokens`. A conversation keeps inside it;
+    /// unset, it grows until the server cuts it off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<NonZeroU32>,
 }
 
 /// The base URL `[providers]` sets for `vendor`, if it sets one.
@@ -115,6 +110,16 @@ fn base_url(vendor: &str) -> Result<Option<String>> {
         .get(vendor)
         .and_then(|endpoint| endpoint.base_url.as_ref())
         .map(|url| url.as_str().trim_end_matches('/').to_owned()))
+}
+
+/// The context window `[providers]` gives `vendor`'s server, if it gives one.
+fn context_window(vendor: &str) -> Result<Option<u32>> {
+    let providers: Providers = koharu_config::get()?;
+    Ok(providers
+        .0
+        .get(vendor)
+        .and_then(|endpoint| endpoint.context_window)
+        .map(NonZeroU32::get))
 }
 
 /// The vendor's API key, stored under its rig name.
@@ -132,7 +137,9 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
     match vendor {
         grok::PROVIDER_NAME => return grok::connect(id, base_url),
         lm_studio::PROVIDER_NAME => return lm_studio::connect(id, base_url),
-        openai_compatible::PROVIDER_NAME => return openai_compatible::connect(id, base_url),
+        openai_compatible::PROVIDER_NAME => {
+            return openai_compatible::connect(id, base_url, context_window(vendor)?);
+        }
         _ => {}
     }
     let selection = catalog_id(vendor)?;
@@ -193,7 +200,7 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
         grok::PROVIDER_NAME => return grok::models(base_url(vendor)?).await,
         lm_studio::PROVIDER_NAME => return lm_studio::models(base_url(vendor)?).await,
         openai_compatible::PROVIDER_NAME => {
-            return openai_compatible::models(base_url(vendor)?).await;
+            return openai_compatible::models(base_url(vendor)?, context_window(vendor)?).await;
         }
         _ => {}
     }

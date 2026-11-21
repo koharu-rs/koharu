@@ -5,11 +5,8 @@ import { create } from 'zustand'
 import type {
   Bounds,
   LayerId,
-  Model,
   PageId,
   PipelineEvent,
-  Preferences,
-  Rgba,
   RunId,
   Size,
   Stage,
@@ -17,7 +14,6 @@ import type {
   Transfer,
   Typed,
 } from '@koharu/ipc/protocol'
-import { toast } from '@koharu/ui/components/toast'
 
 export type CanvasTool = Tool
 export const MIN_BRUSH_DIAMETER = 1
@@ -25,22 +21,6 @@ export function maxBrushDiameter(size: Size): number {
   // Assume that for all sizes below 2048 width, 128 is sufficient.
   // For anything above, scale by percentage greater than 2048 width.
   return Math.round(Math.max(size.width / 2048, 1.0) * 128)
-}
-
-/** Each tool's key, Photoshop's for its counterpart: the Move tool's V, the Direct Selection
- * tool's A, the Type tool's T, the Brush's B, the Eraser's E, the Eyedropper's I, the Remove
- * tool's J, and the Hand's H. */
-export const toolKeys: Record<CanvasTool, string> = {
-  select: 'v',
-  direct_select: 'a',
-  marquee: 'm',
-  lasso: 'l',
-  text: 't',
-  draw: 'b',
-  eraser: 'e',
-  color_picker: 'i',
-  remove: 'j',
-  pan: 'h',
 }
 
 export interface CanvasBrush {
@@ -76,8 +56,6 @@ export interface Job {
 
 interface KoharuStore {
   initialized: boolean
-  preferences: Preferences | null
-  models: Model[]
   jobs: Record<string, Job>
   downloads: Record<string, Transfer>
   camera: Camera
@@ -121,8 +99,6 @@ interface KoharuStore {
 
 export const useKoharuStore = create<KoharuStore>()((set) => ({
   initialized: false,
-  preferences: null,
-  models: [],
   jobs: {},
   downloads: {},
   camera: { zoom: 1, x: 0, y: 0 },
@@ -227,35 +203,4 @@ export function receivePickedColor(color: string): void {
   useKoharuStore.setState((state) => ({
     picked: { color, serial: (state.picked?.serial ?? 0) + 1 },
   }))
-}
-
-export function receivePreferences(preferences: Preferences): void {
-  useKoharuStore.setState({ preferences })
-}
-
-export function receiveModels(models: Model[]): void {
-  useKoharuStore.setState({ models })
-}
-
-export function receiveError(message: string): void {
-  toast.add({ type: 'error', title: 'Could not complete that action', description: message })
-}
-
-/** A CSS hex colour as the canvas's straight RGBA, from 0 to 1. */
-export function hexToRgba(hex: string): Rgba {
-  const value = hex.replace('#', '')
-  const channel = (start: number) => Number.parseInt(value.slice(start, start + 2), 16) / 255
-  return [channel(0), channel(2), channel(4), 1]
-}
-
-/** The canvas's RGBA as a CSS hex colour, its alpha left out. */
-export function rgbaToHex(color: Rgba): string {
-  return `#${color
-    .slice(0, 3)
-    .map((channel) =>
-      Math.round(Math.min(1, Math.max(0, channel)) * 255)
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('')}`.toUpperCase()
 }

@@ -132,7 +132,7 @@ impl Tool for GetProject {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "The project's pages in order, each with its size and scan.".to_owned()
+        "The project's pages in order, each with its size, its scan, and how many of its blocks are translated.".to_owned()
     }
 
     fn parameters(&self) -> Value {

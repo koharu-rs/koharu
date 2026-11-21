@@ -55,10 +55,13 @@ do: with the scene's own queries and edits, its undo and redo, and its history.
 - **Where it lives.** A Windows release build keeps it in the folder Koharu is
   installed in, beside the model store, so it holds Koharu's program, models,
   and projects together; a per-user install goes to the user's own
-  `AppData\Local` [Tauri installer]. That folder isn't writable on
-  macOS or Linux [Tauri app directories], so there it's the app's local data
-  folder, and so is it in debug builds, which then share the installed app's
-  projects.
+  `AppData\Local` [Tauri installer]. Where the user can't write that folder,
+  as in a per-machine install under Program Files, and on macOS and Linux,
+  where it's read-only [Tauri app directories], it's the app's local data
+  folder, as Clip Studio Paint keeps its user data in `AppData` wherever its
+  program is installed [Clip Studio Paint user data]. That is a per-user
+  install's folder too, and debug builds use it, so they share a per-user
+  install's projects.
 - **Import** makes a page of each image, of each image in a ZIP, CBZ, RAR, or
   CBR archive, and of each page of a PDF, in name order.
 - **Export** writes every page as PNG or PSD files in a folder, or as a CBZ of
@@ -83,8 +86,10 @@ Read in November 2026.
 - Chromium Embedded Framework and Electron: [CEF render handler], [Electron
   offscreen rendering]
 - Tauri: [Tauri installer], [Tauri app directories]
+- Clip Studio Paint: [Clip Studio Paint user data]
 
 [CEF render handler]: https://github.com/chromiumembedded/cef/blob/14c5a089e8452874cb1a556dc3fde26ed2d87723/include/cef_render_handler.h#L132-L150
 [Electron offscreen rendering]: https://github.com/electron/electron/blob/6d9ec3d7433a01587615a23881ed64ed94e1fa6d/docs/tutorial/offscreen-rendering.md
 [Tauri installer]: https://github.com/tauri-apps/tauri/blob/17a527316d3aee46f7185c178d3b3122d8ebfd7b/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi#L546-L547
 [Tauri app directories]: https://github.com/tauri-apps/tauri/blob/17a527316d3aee46f7185c178d3b3122d8ebfd7b/crates/tauri-utils/src/config.rs#L3617-L3637
+[Clip Studio Paint user data]: https://support.clip-studio.com/en-us/faq/articles/20210039

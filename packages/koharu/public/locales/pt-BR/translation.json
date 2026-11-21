@@ -57,8 +57,10 @@
     "loading": "Carregando…"
   },
   "errors": {
+    "actionFailed": "Não foi possível concluir a ação",
     "fatalTitle": "O Koharu não pôde continuar",
-    "tryAgain": "Tentar novamente"
+    "tryAgain": "Tentar novamente",
+    "unknown": "O aplicativo nativo retornou um erro desconhecido."
   },
   "feedback": {
     "addScreenshot": "Adicionar captura de tela",
@@ -92,12 +94,16 @@
     "title": "Preenchimento generativo"
   },
   "fontPicker": {
+    "addFavorite": "Adicionar {{name}} aos favoritos",
     "choose": "Escolher uma fonte",
+    "favoritesOnly": "Mostrar fontes favoritas",
     "fontCount": "{{count}} fontes",
     "fontCount_one": "{{count}} fonte",
     "fontCount_other": "{{count}} fontes",
     "fonts": "Fontes",
+    "noFavorites": "Ainda não há fontes favoritas",
     "noResults": "Nenhuma fonte corresponde à busca",
+    "removeFavorite": "Remover {{name}} dos favoritos",
     "search": "Buscar fontes"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "Contorno",
     "borderColor": "Cor do contorno",
     "borderWidth": "Largura do contorno",
+    "chooseBorderWidth": "Escolher largura do contorno",
     "chooseFontSize": "Escolher tamanho da fonte",
-    "decreaseBorderWidth": "Diminuir largura do contorno",
     "font": "Fonte",
     "fontSize": "Tamanho da fonte",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "Peso da fonte",
     "horizontal": "Horizontal",
-    "increaseBorderWidth": "Aumentar largura do contorno",
     "opacity": "Opacidade",
     "selectPage": "Selecione uma página para inspecionar suas camadas.",
     "source": "Texto original",
@@ -191,20 +196,6 @@
     "translation": "Tradução",
     "type": "Tipografia",
     "vertical": "Vertical"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "Excluir {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "Fechar projeto",
     "delete": "Excluir seleção",
     "discord": "Discord",
+    "donate": "Doar",
     "edit": "Editar",
     "export": "Exportar projeto",
     "feedback": "Enviar feedback",
@@ -295,9 +287,12 @@
       "recognize": "Reconhecer",
       "translate": "Traduzir"
     },
-    "selected": "{{count}} selecionadas"
+    "selected": "{{count}} selecionadas",
+    "translated": "{{translated}} de {{total}} traduzidos"
   },
   "outputPicker": {
+    "noResults": "Nenhum idioma corresponde a esta pesquisa.",
+    "search": "Pesquisar idiomas",
     "targetLanguage": "Idioma de destino",
     "title": "Saída da tradução"
   },
@@ -391,6 +386,7 @@
       "configured": "Configurado",
       "connections": "Conexões",
       "connectionsDescription": "As credenciais são armazenadas com segurança neste dispositivo.",
+      "contextWindow": "Tamanho do contexto (tokens)",
       "credential": "Credencial",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecte provedores de tradução e modelos de linguagem.",
@@ -414,15 +410,18 @@
     },
     "title": "Configurações",
     "typesetting": {
+      "addFallback": "Adicionar uma alternativa",
       "addFamily": "Adicionar família de fontes",
-      "defaultFamilies": "Famílias de fontes padrão",
       "description": "Defina a pilha ordenada de fontes usada quando uma camada de texto não tem família atribuída.",
       "empty": "Nenhuma família padrão. O Koharu usará a alternativa do sistema.",
+      "fallbacks": "Alternativas",
+      "fallbacksDescription": "Usadas em ordem para os caracteres que faltam na principal. Arraste para reordenar, ou sobre Principal para trocar.",
       "familyLabel": "Família de fontes padrão {{index}}",
       "fontFallback": "Fontes preferidas",
       "fontFallbackDescription": "O Koharu usa a primeira família disponível compatível com o texto.",
       "loadError": "Não foi possível carregar as fontes. As famílias existentes ainda podem ser removidas.",
       "loadingFonts": "Carregando fontes…",
+      "primary": "Principal",
       "removeFamily": "Remover {{family}}",
       "title": "Renderizador"
     }
@@ -440,10 +439,12 @@
     "loadingProjects": "Carregando projetos…",
     "newDescription": "Crie um espaço de trabalho limpo para suas páginas, traduções e exportações.",
     "newProject": "Novo projeto",
+    "noResults": "Nenhum projeto corresponde a esta pesquisa.",
     "projectKind": "Projeto do Koharu",
     "projectList": "Projetos",
     "projectName": "Nome do projeto",
     "projectNamePlaceholder": "Meu novo projeto",
+    "search": "Pesquisar projetos",
     "storageHint": "Os projetos são armazenados localmente neste computador.",
     "title": "Projetos",
     "yourProjects": "Seus projetos"

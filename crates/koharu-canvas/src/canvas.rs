@@ -44,7 +44,6 @@ const TYPING_SLACK: f64 = 4.0;
 /// The page viewport over one open project. It reads the project, never
 /// writes it: every change leaves as an `Effect::Edit` for the host.
 pub struct Canvas {
-    gpu: &'static Gpu,
     session: Arc<Mutex<Session>>,
     /// Lays out the text being typed, as the host's renders lay it out.
     renderer: Renderer,
@@ -114,9 +113,8 @@ struct Active {
 }
 
 impl Canvas {
-    pub fn new(gpu: &'static Gpu, session: Arc<Mutex<Session>>, renderer: Renderer) -> Self {
+    pub fn new(session: Arc<Mutex<Session>>, renderer: Renderer) -> Self {
         Self {
-            gpu,
             session,
             renderer,
             view: View::default(),
@@ -714,8 +712,9 @@ impl Canvas {
             .collect()
     }
 
-    /// Redraws if what it would show changed, and returns the texture;
-    /// `None` when nothing changed or the viewport is empty.
+    /// Redraws if what it would show changed, or the GPU it drew on was
+    /// lost, and returns the texture; `None` when nothing changed or the
+    /// viewport is empty.
     pub fn draw(&mut self) -> anyhow::Result<Option<&wgpu::Texture>> {
         let size = self.view.size();
         let (width, height) = (size.width as u32, size.height as u32);
@@ -726,17 +725,18 @@ impl Canvas {
         let sized = self
             .target
             .as_ref()
-            .is_some_and(|target| target.size() == (width, height));
+            .is_some_and(|target| target.size() == (width, height) && !target.gpu.lost());
         if sized && self.drawn.as_ref() == Some(&look) {
             return Ok(None);
         }
-        let mut drawing = self.gpu.drawing(width as u16, height as u16);
+        let gpu = Gpu::get()?;
+        let mut drawing = gpu.drawing(width as u16, height as u16);
         self.base(&mut drawing);
         self.page(&mut drawing)?;
         self.overlay(&mut drawing)?;
         let target = match self.target.take() {
             Some(target) if sized => target,
-            _ => Target::new(self.gpu, width, height),
+            _ => Target::new(&gpu, width, height)?,
         };
         let target = self.target.insert(target);
         drawing.render(&target.view)?;
@@ -793,7 +793,7 @@ impl Canvas {
     /// The texture as last drawn, read back.
     pub fn snapshot(&self) -> anyhow::Result<RgbaImage> {
         let target = self.target.as_ref().context("the canvas hasn't drawn")?;
-        self.gpu.read_texture(&target.texture)
+        target.gpu.read_texture(&target.texture)
     }
 
     /// The overlay: Story's frames and numbers, the gesture's preview, then
@@ -807,7 +807,9 @@ impl Canvas {
         let gesture = self.gesture.as_ref().map(|active| &active.gesture);
         let dragged = gesture.map(Gesture::dragged).unwrap_or_default();
         if self.story.shown {
-            self.story(&cx, &dragged, &mut overlay)?;
+            for (layer, control) in self.story_controls(&cx, &dragged) {
+                overlay.story_frame(control, self.story.hovered == Some(layer));
+            }
         }
         // A selected clean-up or mask is seen on its own in place of its
         // bounds: a mask as Photoshop's rubylith, half red over what it
@@ -865,13 +867,12 @@ impl Canvas {
                     .unwrap_or(control)
             })
             .collect();
-        for control in &selected {
-            overlay.control(control);
-        }
-        if let Some(hover) = self.selection.hover()
-            && !self.selection.contains(hover)
-            && let Some(control) = cx.snapshot.control(hover)
-        {
+        let hovered = self
+            .selection
+            .hover()
+            .filter(|&hover| !self.selection.contains(hover))
+            .and_then(|hover| cx.snapshot.control(hover));
+        for control in selected.iter().copied().chain(hovered) {
             overlay.control(control);
         }
         if self.tool == Tool::DirectSelect {
@@ -887,6 +888,16 @@ impl Canvas {
             }
         } else if let [control] = selected[..] {
             overlay.handles(control);
+        }
+        // Story's numbers over the selection's handles, so none hides behind
+        // one; each carries the overflow mark its corner would, which shows
+        // on the outlined frames' corners when they don't.
+        if self.story.shown {
+            self.story_numbers(&cx, &dragged, &mut overlay)?;
+        } else {
+            for control in selected.iter().copied().chain(hovered) {
+                overlay.overflow(control);
+            }
         }
         if let Some(typing) = &self.typing {
             let transform = typing.transform();
@@ -906,10 +917,27 @@ impl Canvas {
         Ok(())
     }
 
-    /// Each text's frame and its number in the scene's reading order, under
-    /// the selection's handles, so they never take a handle's place; a text
-    /// being dragged has them where the drag puts it, as its handles do.
-    fn story(
+    /// Each text in the scene's reading order, with its control: where a
+    /// drag puts it while it's dragged, as its handles go.
+    fn story_controls<'a>(
+        &self,
+        cx: &Context<'a>,
+        dragged: &'a [Control],
+    ) -> Vec<(LayerId, &'a Control)> {
+        let snapshot = cx.snapshot;
+        snapshot
+            .story()
+            .iter()
+            .filter_map(|&(layer, _)| {
+                let control = dragged.iter().find(|moved| moved.layer == layer);
+                Some((layer, control.or_else(|| snapshot.control(layer))?))
+            })
+            .collect()
+    }
+
+    /// Each text's number in the scene's reading order, on its frame's
+    /// top-left corner.
+    fn story_numbers(
         &self,
         cx: &Context,
         dragged: &[Control],
@@ -921,7 +949,6 @@ impl Canvas {
             let Some(control) = control.or_else(|| cx.snapshot.control(layer)) else {
                 continue;
             };
-            overlay.story_frame(control, self.story.hovered == Some(layer));
             let label = match numbers.entry((index + 1, sfx)) {
                 Entry::Occupied(laid) => laid.into_mut(),
                 Entry::Vacant(place) => {
@@ -937,7 +964,7 @@ impl Canvas {
                     }
                 }
             };
-            overlay.story_number(control.corners()[0], label, sfx)?;
+            overlay.story_number(control, label, sfx)?;
         }
         Ok(())
     }

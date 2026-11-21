@@ -57,8 +57,10 @@
     "loading": "불러오는 중…"
   },
   "errors": {
+    "actionFailed": "작업을 완료할 수 없습니다",
     "fatalTitle": "Koharu를 계속 실행할 수 없습니다",
-    "tryAgain": "다시 시도"
+    "tryAgain": "다시 시도",
+    "unknown": "네이티브 애플리케이션이 알 수 없는 오류를 반환했습니다."
   },
   "feedback": {
     "addScreenshot": "스크린샷 추가",
@@ -92,12 +94,16 @@
     "title": "생성형 채우기"
   },
   "fontPicker": {
+    "addFavorite": "{{name}}을(를) 즐겨찾기에 추가",
     "choose": "글꼴 선택",
+    "favoritesOnly": "즐겨찾는 글꼴 표시",
     "fontCount": "글꼴 {{count}}개",
     "fontCount_one": "글꼴 {{count}}개",
     "fontCount_other": "글꼴 {{count}}개",
     "fonts": "글꼴",
+    "noFavorites": "아직 즐겨찾는 글꼴이 없습니다",
     "noResults": "검색과 일치하는 글꼴이 없습니다",
+    "removeFavorite": "{{name}}을(를) 즐겨찾기에서 제거",
     "search": "글꼴 검색"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "테두리",
     "borderColor": "테두리 색상",
     "borderWidth": "테두리 너비",
+    "chooseBorderWidth": "테두리 너비 선택",
     "chooseFontSize": "글꼴 크기 선택",
-    "decreaseBorderWidth": "테두리 너비 줄이기",
     "font": "글꼴",
     "fontSize": "글꼴 크기",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "글꼴 굵기",
     "horizontal": "가로쓰기",
-    "increaseBorderWidth": "테두리 너비 늘리기",
     "opacity": "불투명도",
     "selectPage": "레이어를 확인할 페이지를 선택하세요.",
     "source": "원문",
@@ -191,20 +196,6 @@
     "translation": "번역",
     "type": "타이포그래피",
     "vertical": "세로쓰기"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "{{name}} 삭제",
@@ -245,6 +236,7 @@
     "closeProject": "프로젝트 닫기",
     "delete": "선택 항목 삭제",
     "discord": "Discord",
+    "donate": "후원하기",
     "edit": "편집",
     "export": "프로젝트 내보내기",
     "feedback": "피드백 보내기",
@@ -295,9 +287,12 @@
       "recognize": "인식",
       "translate": "번역"
     },
-    "selected": "{{count}}개 선택됨"
+    "selected": "{{count}}개 선택됨",
+    "translated": "{{total}}개 중 {{translated}}개 번역됨"
   },
   "outputPicker": {
+    "noResults": "이 검색과 일치하는 언어가 없습니다.",
+    "search": "언어 검색",
     "targetLanguage": "대상 언어",
     "title": "번역 출력"
   },
@@ -391,6 +386,7 @@
       "configured": "설정됨",
       "connections": "연결",
       "connectionsDescription": "자격 증명은 이 기기에 안전하게 저장됩니다.",
+      "contextWindow": "컨텍스트 길이(토큰)",
       "credential": "자격 증명",
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
@@ -414,15 +410,18 @@
     },
     "title": "설정",
     "typesetting": {
+      "addFallback": "대체 글꼴 추가",
       "addFamily": "글꼴 패밀리 추가",
-      "defaultFamilies": "기본 글꼴 패밀리",
       "description": "텍스트 레이어에 글꼴 패밀리가 지정되지 않았을 때 사용할 순서 있는 글꼴 스택을 설정합니다.",
       "empty": "기본 패밀리가 없습니다. Koharu가 시스템 대체 글꼴을 사용합니다.",
+      "fallbacks": "대체 글꼴",
+      "fallbacksDescription": "기본 글꼴에 없는 문자에 순서대로 쓰입니다. 드래그해 순서를 바꾸거나, 기본에 놓아 서로 바꿀 수 있습니다.",
       "familyLabel": "기본 글꼴 패밀리 {{index}}",
       "fontFallback": "선호 글꼴",
       "fontFallbackDescription": "Koharu는 텍스트를 지원하는 첫 번째 사용 가능한 패밀리를 사용합니다.",
       "loadError": "글꼴을 불러오지 못했습니다. 기존 패밀리는 삭제할 수 있습니다.",
       "loadingFonts": "글꼴 불러오는 중…",
+      "primary": "기본",
       "removeFamily": "{{family}} 삭제",
       "title": "렌더러"
     }
@@ -440,10 +439,12 @@
     "loadingProjects": "프로젝트 불러오는 중…",
     "newDescription": "페이지, 번역 및 내보내기를 위한 새 작업 공간을 만드세요.",
     "newProject": "새 프로젝트",
+    "noResults": "이 검색과 일치하는 프로젝트가 없습니다.",
     "projectKind": "Koharu 프로젝트",
     "projectList": "프로젝트",
     "projectName": "프로젝트 이름",
     "projectNamePlaceholder": "새 프로젝트",
+    "search": "프로젝트 검색",
     "storageHint": "프로젝트는 이 컴퓨터에 로컬로 저장됩니다.",
     "title": "프로젝트",
     "yourProjects": "내 프로젝트"

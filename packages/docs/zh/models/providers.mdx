@@ -24,7 +24,8 @@ Koharu 的本地模型包括只做翻译的 Index-Translate（2B、9B 和 35B A3
 
     对 Ollama、LM Studio 或 OpenAI 兼容服务器，填写其**基础 URL**。Ollama 和 LM Studio
     留空时使用其常用的本地地址，LM Studio 为 `http://localhost:1234`。OpenAI
-    兼容服务器需要一个在 OpenAI 的 `/v1` 处结尾的基础 URL，例如 `https://example.com/v1`。
+    兼容服务器需要一个在 OpenAI 的 `/v1` 处结尾的基础 URL，例如 `https://example.com/v1`。同时填写其**上下文长度**，即服务器运行模型时的上下文大小，例如
+    llama.cpp 的 `--ctx-size`：翻译会为保持一致而记住前面的页面，并在填满之前加以总结。留空时，页面会不断累积，直到服务器截断提示词，导致回答失败。
 
   </Step>
   <Step title='选择模型'>

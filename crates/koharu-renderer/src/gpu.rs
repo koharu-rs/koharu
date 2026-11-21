@@ -1,15 +1,16 @@
 //! The GPU: one wgpu device and a vello_gpu renderer, which draws every page
 //! Koharu shows or exports.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock, Weak, mpsc},
+use std::sync::{
+    Arc, Weak,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
 };
 
-use anyhow::{Context, Result, anyhow};
-use glifo::{FontEmbolden, Glyph};
+use anyhow::{Context, Result, anyhow, bail};
+use glifo::Glyph;
 use image::RgbaImage;
-use kurbo::Affine;
+use kurbo::{Affine, Stroke};
 use parking_lot::{Mutex, MutexGuard};
 use vello_gpu::{
     ImageSource, Pixmap, RenderOptions, RenderTarget, RenderTargetConfig, Renderer, Resources,
@@ -22,9 +23,10 @@ use wgpu::{
 
 use crate::fonts::Font;
 
-/// The process's GPU, started the first time it's asked for. One that fails
-/// to start stays failed until Koharu starts again.
-static GPU: LazyLock<Result<Gpu>> = LazyLock::new(Gpu::new);
+/// The process's GPU: started the first time it's asked for, and again the
+/// first time after its device is lost, as a driver reset or a GPU out of
+/// memory loses it.
+static GPU: Mutex<Option<Arc<Gpu>>> = Mutex::new(None);
 
 /// The device and its queue, which the desktop's compositor shares, and
 /// vello_gpu's renderer. The instance and adapter stay, because a window's
@@ -35,25 +37,64 @@ pub struct Gpu {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    /// Set when wgpu reports the device lost.
+    lost: Arc<AtomicBool>,
     /// What one drawing holds at a time.
     vello: Mutex<State>,
 }
 
+/// What the uploaded images may take on the GPU, in bytes. Kept only while
+/// the retained content held their pixmaps, every page viewed held a
+/// texture, up to that cache's 2 GiB, on the GPU the models use. Past this,
+/// the coldest goes, and is uploaded again when it's next drawn.
+const TEXTURE_BYTES: u64 = 256 << 20;
+
 /// vello_gpu's renderer, the glyphs it keeps, and each image uploaded as a
-/// texture of its own, by its pixmap's address, kept while the pixmap lives.
+/// texture of its own, by its pixmap's address, kept while the pixmap lives
+/// and `TEXTURE_BYTES` has room.
 struct State {
     renderer: Renderer,
     resources: Resources,
-    textures: HashMap<usize, (Weak<Pixmap>, TextureId, TextureView)>,
+    textures: quick_cache::unsync::Cache<usize, Upload, Bytes>,
     /// The id the next uploaded image is named by.
     next_texture: u64,
 }
 
+/// An image's texture, and the pixmap it was uploaded from.
+struct Upload {
+    pixmap: Weak<Pixmap>,
+    id: TextureId,
+    view: TextureView,
+    bytes: u64,
+}
+
+#[derive(Clone)]
+struct Bytes;
+
+impl quick_cache::Weighter<usize, Upload> for Bytes {
+    fn weight(&self, _: &usize, upload: &Upload) -> u64 {
+        upload.bytes
+    }
+}
+
 impl Gpu {
-    /// The process's GPU, which the canvas and the window draw with.
-    pub fn get() -> Result<&'static Self> {
-        GPU.as_ref()
-            .map_err(|error| anyhow!("the GPU didn't start: {error:#}"))
+    /// The process's GPU, which the canvas and the window draw with: a new
+    /// one once the last was lost, so what a holder made on the last, it
+    /// makes again on this one.
+    pub fn get() -> Result<Arc<Self>> {
+        let mut current = GPU.lock();
+        if let Some(gpu) = current.as_ref().filter(|gpu| !gpu.lost()) {
+            return Ok(Arc::clone(gpu));
+        }
+        let gpu = Arc::new(Self::new().context("the GPU didn't start")?);
+        *current = Some(Arc::clone(&gpu));
+        Ok(gpu)
+    }
+
+    /// Whether wgpu reported the device lost, after which nothing draws on
+    /// it.
+    pub fn lost(&self) -> bool {
+        self.lost.load(Ordering::Acquire)
     }
 
     /// Creates the device with the adapter's texture and buffer limits, rather
@@ -89,11 +130,18 @@ impl Gpu {
         .context("no GPU adapter supports vello_gpu's features")?;
         // wgpu panics on an error no scope catches, and Koharu's panic hook
         // closes the app, so a GPU short of memory, or lost, ended Koharu in
-        // the middle of a thumbnail. Reads fail through `checked` instead,
+        // the middle of a thumbnail. Reads fail through `catch` instead,
         // and the rest is logged.
         device.on_uncaptured_error(Arc::new(|error| tracing::error!("GPU error: {error}")));
-        device.set_device_lost_callback(|reason, message| {
-            tracing::error!("the GPU device was lost ({reason:?}): {message}");
+        // wgpu calls it as it loses the device, before the call that lost it
+        // returns.
+        let lost = Arc::new(AtomicBool::new(false));
+        device.set_device_lost_callback({
+            let lost = Arc::clone(&lost);
+            move |reason, message| {
+                lost.store(true, Ordering::Release);
+                tracing::error!("the GPU device was lost ({reason:?}): {message}");
+            }
         });
         // A render takes its size from its target; this only sizes the
         // renderer's first buffers.
@@ -111,10 +159,11 @@ impl Gpu {
             adapter,
             device,
             queue,
+            lost,
             vello: Mutex::new(State {
                 renderer,
                 resources,
-                textures: HashMap::new(),
+                textures: quick_cache::unsync::Cache::with_weighter(64, TEXTURE_BYTES, Bytes),
                 next_texture: 0,
             }),
         })
@@ -135,7 +184,7 @@ impl Gpu {
         // A texture whose pixmap has gone, as an evicted layer's, goes too.
         vello
             .textures
-            .retain(|_, (pixmap, ..)| pixmap.strong_count() > 0);
+            .retain(|_, upload| upload.pixmap.strong_count() > 0);
         Drawing {
             gpu: self,
             vello,
@@ -144,16 +193,19 @@ impl Gpu {
         }
     }
 
-    /// Runs `work`, which records its GPU work and waits for it on this
-    /// thread, inside error scopes, so a GPU error fails it rather than
-    /// leaving what it reads back blank.
-    fn checked<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
+    /// Runs `work`, which makes GPU resources or records GPU work and waits
+    /// for it on this thread, inside error scopes, so a GPU error fails it
+    /// rather than leaving what it reads back blank, or an invalid resource
+    /// to be kept: wgpu makes one that ran out of memory invalid for good.
+    pub fn catch<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
         let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let result = work();
         let invalid = pollster::block_on(validation.pop());
         let short = pollster::block_on(memory.pop());
-        match invalid.or(short) {
+        // Running out of memory leaves a resource invalid, and the
+        // validation errors of whatever uses it follow from that.
+        match short.or(invalid) {
             Some(error) => Err(anyhow!("the GPU failed: {error}")),
             None => result,
         }
@@ -163,7 +215,7 @@ impl Gpu {
     /// premultiplied RGBA, as vello_gpu draws it, read back as straight
     /// alpha.
     pub fn read_texture(&self, texture: &Texture) -> Result<RgbaImage> {
-        self.checked(|| {
+        self.catch(|| {
             let (width, height) = (texture.width(), texture.height());
             let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
                 * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
@@ -266,7 +318,7 @@ impl Drawing<'_> {
     /// straight-alpha RGBA.
     pub(crate) fn read(self) -> Result<RgbaImage> {
         let gpu = self.gpu;
-        gpu.checked(move || {
+        gpu.catch(move || {
             let texture = gpu.device.create_texture(&TextureDescriptor {
                 label: Some("koharu raster"),
                 size: Extent3d {
@@ -289,6 +341,11 @@ impl Drawing<'_> {
     /// Renders into `target`, an `Rgba8Unorm` render attachment the drawing's
     /// size, as premultiplied RGBA.
     pub fn render(mut self, target: &TextureView) -> Result<()> {
+        // vello_gpu uploads through wgpu's `create_buffer_init`, which panics
+        // on a lost device's buffers.
+        if self.gpu.lost() {
+            bail!("the GPU device was lost");
+        }
         let mut encoder = self
             .gpu
             .device
@@ -318,69 +375,97 @@ impl Drawing<'_> {
     }
 
     /// Fills `glyphs` of `font` at `size` with the current paint and
-    /// transform, each turned by `turn` and grown by `embolden`.
+    /// transform, each turned by `turn`, and strokes them too with `stroke`,
+    /// whose width is in the run's units, when there is one.
     pub(crate) fn glyphs(
         &mut self,
         font: &Font,
         size: f32,
         turn: Option<Affine>,
-        embolden: FontEmbolden,
+        stroke: Option<Stroke>,
         glyphs: &[Glyph],
     ) -> Result<()> {
-        let mut run = self
-            .scene
-            .glyph_run(&mut self.vello.resources, &font.data)
-            .font_size(size)
-            .normalized_coords(&font.coords)
-            .font_embolden(embolden)
-            .hint(false);
-        if let Some(turn) = turn {
-            run = run.glyph_transform(turn);
+        let passes: &[bool] = match stroke {
+            Some(stroke) => {
+                self.scene.set_stroke(stroke);
+                &[false, true]
+            }
+            None => &[false],
+        };
+        for &stroking in passes {
+            let mut run = self
+                .scene
+                .glyph_run(&mut self.vello.resources, &font.data)
+                .font_size(size)
+                .normalized_coords(&font.coords)
+                .hint(false);
+            if let Some(turn) = turn {
+                run = run.glyph_transform(turn);
+            }
+            let glyphs = glyphs.iter().copied();
+            match stroking {
+                true => run.stroke_glyphs(glyphs),
+                false => run.fill_glyphs(glyphs),
+            }
+            .map_err(|error| anyhow!("glyphs couldn't be drawn: {error:?}"))?;
         }
-        run.fill_glyphs(glyphs.iter().copied())
-            .map_err(|error| anyhow!("glyphs couldn't be drawn: {error:?}"))
+        Ok(())
     }
 
     /// `pixmap` as an image the scene samples: uploaded as a texture of its
-    /// own the first time, and named by its id.
-    pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> ImageSource {
+    /// own unless one is kept, and named by its id. The drawing holds the
+    /// texture until it renders, kept or not; one the GPU had no memory for
+    /// fails the drawing and isn't kept.
+    pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> Result<ImageSource> {
         let address = Arc::as_ptr(pixmap) as usize;
         let uploaded = self
             .vello
             .textures
             .get(&address)
-            .filter(|(kept, ..)| kept.as_ptr() == Arc::as_ptr(pixmap))
-            .map(|(_, id, view)| (*id, view.clone()));
-        let (id, view) = uploaded.unwrap_or_else(|| {
-            let texture = self.gpu.device.create_texture_with_data(
-                &self.gpu.queue,
-                &TextureDescriptor {
-                    label: Some("koharu image"),
-                    size: Extent3d {
-                        width: u32::from(pixmap.width()),
-                        height: u32::from(pixmap.height()),
-                        depth_or_array_layers: 1,
+            .filter(|upload| upload.pixmap.as_ptr() == Arc::as_ptr(pixmap))
+            .map(|upload| (upload.id, upload.view.clone()));
+        let (id, view) = match uploaded {
+            Some(uploaded) => uploaded,
+            None => {
+                let gpu = self.gpu;
+                let texture = gpu.catch(|| {
+                    Ok(gpu.device.create_texture_with_data(
+                        &gpu.queue,
+                        &TextureDescriptor {
+                            label: Some("koharu image"),
+                            size: Extent3d {
+                                width: u32::from(pixmap.width()),
+                                height: u32::from(pixmap.height()),
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: TextureFormat::Rgba8Unorm,
+                            usage: TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        },
+                        wgpu::util::TextureDataOrder::LayerMajor,
+                        pixmap.data_as_u8_slice(),
+                    ))
+                })?;
+                let id = TextureId(self.vello.next_texture);
+                self.vello.next_texture += 1;
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                self.vello.textures.insert(
+                    address,
+                    Upload {
+                        pixmap: Arc::downgrade(pixmap),
+                        id,
+                        view: view.clone(),
+                        bytes: pixmap.data_as_u8_slice().len() as u64,
                     },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: TextureFormat::Rgba8Unorm,
-                    usage: TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                },
-                wgpu::util::TextureDataOrder::LayerMajor,
-                pixmap.data_as_u8_slice(),
-            );
-            let id = TextureId(self.vello.next_texture);
-            self.vello.next_texture += 1;
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            self.vello
-                .textures
-                .insert(address, (Arc::downgrade(pixmap), id, view.clone()));
-            (id, view)
-        });
+                );
+                (id, view)
+            }
+        };
         self.bindings.insert(id, view);
-        ImageSource::external_texture(id, TextureRegion::Full, true)
+        Ok(ImageSource::external_texture(id, TextureRegion::Full, true))
     }
 }
 

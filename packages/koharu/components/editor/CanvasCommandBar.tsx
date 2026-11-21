@@ -1,8 +1,7 @@
 'use client'
 
 import { InferenceControl } from '@/components/editor/InferenceControl'
-import { call } from '@/lib/backend'
-import { usePage } from '@/lib/queries'
+import { send, usePage } from '@/lib/queries'
 import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
 import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
 
@@ -16,7 +15,7 @@ export function CanvasCommandBar() {
     const target: Target = selection === 'project' ? 'project' : { pages: selectedPages }
     // A run takes its stages in the pipeline's order, whichever order they were picked in.
     const ordered = pipelineStages.filter((stage) => stages.includes(stage))
-    void call(commands.runPipeline, target, ordered).catch(() => undefined)
+    send(commands.runPipeline, target, ordered)
   }
 
   return (

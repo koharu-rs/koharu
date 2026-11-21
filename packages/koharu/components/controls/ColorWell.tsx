@@ -6,6 +6,7 @@ import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
+import { toHex, toRgba } from '@/lib/color'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
@@ -47,7 +48,7 @@ export function ColorWell(props: ColorWellProps) {
   }, [value])
 
   const set = (color: string) => {
-    const normalized = normalize(color)
+    const normalized = toHex(toRgba(color))
     setDraft(normalized)
     setTransparent(false)
     if (props.allowTransparent) props.onChange(normalized)
@@ -100,11 +101,11 @@ export function ColorWell(props: ColorWellProps) {
           {accessibleLabel}
         </TooltipContent>
       </Tooltip>
-      <PopoverContent side='right' align='start' className='w-60 rounded-xl p-3'>
+      <PopoverContent side='right' align='start' className='w-60 p-3'>
         <div>
           <HexColorPicker
             color={draft}
-            onChange={(color) => setDraft(normalize(color))}
+            onChange={(color) => setDraft(toHex(toRgba(color)))}
             onChangeEnd={set}
           />
         </div>
@@ -145,11 +146,4 @@ export function ColorWell(props: ColorWellProps) {
       </PopoverContent>
     </Popover>
   )
-}
-
-function normalize(value: string): string {
-  const digits = value.startsWith('#') ? value.slice(1) : value
-  const expanded =
-    digits.length === 3 ? [...digits].map((digit) => digit.repeat(2)).join('') : digits
-  return `#${expanded}`.toUpperCase()
 }

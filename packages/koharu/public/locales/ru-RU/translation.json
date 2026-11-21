@@ -57,8 +57,10 @@
     "loading": "Загрузка…"
   },
   "errors": {
+    "actionFailed": "Не удалось выполнить действие",
     "fatalTitle": "Koharu не может продолжить работу",
-    "tryAgain": "Повторить"
+    "tryAgain": "Повторить",
+    "unknown": "Нативное приложение вернуло неизвестную ошибку."
   },
   "feedback": {
     "addScreenshot": "Добавить снимок экрана",
@@ -92,12 +94,16 @@
     "title": "Генеративная заливка"
   },
   "fontPicker": {
+    "addFavorite": "Добавить {{name}} в избранное",
     "choose": "Выбрать шрифт",
+    "favoritesOnly": "Показать избранные шрифты",
     "fontCount": "Шрифтов: {{count}}",
     "fontCount_one": "Шрифт: {{count}}",
     "fontCount_other": "Шрифтов: {{count}}",
     "fonts": "Шрифты",
+    "noFavorites": "Избранных шрифтов пока нет",
     "noResults": "Нет шрифтов, соответствующих поиску",
+    "removeFavorite": "Удалить {{name}} из избранного",
     "search": "Искать шрифты"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "Обводка",
     "borderColor": "Цвет обводки",
     "borderWidth": "Ширина обводки",
+    "chooseBorderWidth": "Выбрать ширину обводки",
     "chooseFontSize": "Выбрать размер шрифта",
-    "decreaseBorderWidth": "Уменьшить ширину обводки",
     "font": "Шрифт",
     "fontSize": "Размер шрифта",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "Насыщенность шрифта",
     "horizontal": "Горизонтально",
-    "increaseBorderWidth": "Увеличить ширину обводки",
     "opacity": "Непрозрачность",
     "selectPage": "Выберите страницу для просмотра её слоёв.",
     "source": "Исходный текст",
@@ -191,20 +196,6 @@
     "translation": "Перевод",
     "type": "Типографика",
     "vertical": "Вертикально"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "Удалить {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "Закрыть проект",
     "delete": "Удалить выбранное",
     "discord": "Discord",
+    "donate": "Поддержать",
     "edit": "Правка",
     "export": "Экспорт проекта",
     "feedback": "Отправить отзыв",
@@ -295,9 +287,12 @@
       "recognize": "Распознать",
       "translate": "Перевести"
     },
-    "selected": "Выбрано: {{count}}"
+    "selected": "Выбрано: {{count}}",
+    "translated": "Переведено {{translated}} из {{total}}"
   },
   "outputPicker": {
+    "noResults": "Нет языков, соответствующих запросу.",
+    "search": "Поиск языков",
     "targetLanguage": "Язык перевода",
     "title": "Вывод перевода"
   },
@@ -391,6 +386,7 @@
       "configured": "Настроено",
       "connections": "Подключения",
       "connectionsDescription": "Учётные данные безопасно хранятся на этом устройстве.",
+      "contextWindow": "Длина контекста (токены)",
       "credential": "Учётные данные",
       "credentialLabel": "Учётные данные {{provider}}",
       "description": "Подключите провайдеров перевода и языковых моделей.",
@@ -414,15 +410,18 @@
     },
     "title": "Настройки",
     "typesetting": {
+      "addFallback": "Добавить резервный шрифт",
       "addFamily": "Добавить семейство шрифтов",
-      "defaultFamilies": "Семейства шрифтов по умолчанию",
       "description": "Задайте упорядоченный стек шрифтов для текстового слоя без назначенного семейства.",
       "empty": "Нет семейств по умолчанию. Koharu будет использовать системный запасной шрифт.",
+      "fallbacks": "Резервные",
+      "fallbacksDescription": "Используются по порядку для символов, которых нет в основном шрифте. Перетащите, чтобы изменить порядок, или на «Основной», чтобы поменять их местами.",
       "familyLabel": "Семейство шрифтов по умолчанию {{index}}",
       "fontFallback": "Предпочитаемые шрифты",
       "fontFallbackDescription": "Koharu использует первое доступное семейство, поддерживающее текст.",
       "loadError": "Не удалось загрузить шрифты. Существующие семейства всё ещё можно удалить.",
       "loadingFonts": "Загрузка шрифтов…",
+      "primary": "Основной",
       "removeFamily": "Удалить {{family}}",
       "title": "Рендерер"
     }
@@ -440,10 +439,12 @@
     "loadingProjects": "Загрузка проектов…",
     "newDescription": "Создайте чистое рабочее пространство для страниц, переводов и экспорта.",
     "newProject": "Новый проект",
+    "noResults": "Нет проектов, соответствующих запросу.",
     "projectKind": "Проект Koharu",
     "projectList": "Проекты",
     "projectName": "Имя проекта",
     "projectNamePlaceholder": "Мой новый проект",
+    "search": "Поиск проектов",
     "storageHint": "Проекты хранятся локально на этом компьютере.",
     "title": "Проекты",
     "yourProjects": "Ваши проекты"

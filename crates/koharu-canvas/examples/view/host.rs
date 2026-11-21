@@ -5,7 +5,7 @@ use std::{sync::Arc, time::Instant};
 
 use anyhow::{Context as _, Result};
 use koharu_canvas::{Brush, Canvas, Effect, Snapshot};
-use koharu_renderer::{Gpu, Renderer};
+use koharu_renderer::Renderer;
 use koharu_scene::{Edit, Op, PageId, Ref, Rgba, Session};
 use parking_lot::Mutex;
 
@@ -24,8 +24,7 @@ pub struct Host {
 
 impl Host {
     pub fn new(renderer: Renderer, session: Arc<Mutex<Session>>, page: PageId) -> Result<Self> {
-        let gpu = Gpu::get()?;
-        let canvas = Canvas::new(gpu, Arc::clone(&session), renderer.clone());
+        let canvas = Canvas::new(Arc::clone(&session), renderer.clone());
         let brush = Brush {
             diameter: 24.0,
             color: Rgba([0.9, 0.1, 0.2, 1.0]),

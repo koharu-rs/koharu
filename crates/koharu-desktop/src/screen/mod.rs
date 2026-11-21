@@ -14,6 +14,7 @@ mod input;
 mod keys;
 mod pace;
 mod paint;
+mod refresh;
 mod shared;
 
 use std::{
@@ -45,6 +46,7 @@ use winit::{
     cursor::CursorIcon,
     dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
     event::{Ime, WindowEvent},
+    monitor::MonitorHandle,
     window::{ImeCapabilities, ImeEnableRequest, ImeRequest, ImeRequestData, Window},
 };
 
@@ -54,9 +56,6 @@ use crate::{app::App, events};
 
 /// The window's label in `tauri.conf.json`, and its webview's.
 pub const MAIN: &str = "main";
-
-/// The frames a second CEF renders the page at, and paces them by.
-const FRAME_RATE: i32 = 60;
 
 thread_local! {
     /// The main window, on the main thread, from `open` until it's
@@ -313,7 +312,8 @@ impl Screen {
 
 /// The main window as the main thread holds it.
 struct Main {
-    gpu: &'static Gpu,
+    /// The GPU the surface and CEF's frames are on.
+    gpu: Arc<Gpu>,
     /// Tells the interface where the page shows.
     handle: AppHandle<CefRuntime>,
     /// The webview's layout, which the runtime keeps current; set when CEF
@@ -355,11 +355,25 @@ struct Main {
     /// Takes CEF's frames and paces them, where it shares them as GPU
     /// textures.
     shared: Option<Shared>,
+    /// The monitor the window was last on.
+    monitor: Option<MonitorHandle>,
+    /// The frames a second CEF renders the page at, and the pacer paces
+    /// by: that monitor's refresh rate.
+    frame_rate: i32,
 }
 
 struct Shared {
     importer: Importer,
     pacer: Pacer,
+}
+
+impl Shared {
+    fn new(gpu: &Gpu) -> Self {
+        Self {
+            importer: Importer::new(gpu),
+            pacer: Pacer::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -498,19 +512,37 @@ impl Main {
 
     /// Takes a frame CEF shared: the page's with its mask, or the popup's.
     fn take_shared(&mut self, type_: PaintElementType, info: &AcceleratedPaintInfo) -> Result<()> {
-        let Some(shared) = self.shared.as_mut() else {
+        // On a lost GPU, frames wait for the window to move to a new one.
+        let Some(shared) = self.shared.as_mut().filter(|_| !self.gpu.lost()) else {
             return Ok(());
         };
-        let frame = shared.importer.take(self.gpu, info)?;
+        let frame = shared.importer.take(&self.gpu, info)?;
         if type_ == PaintElementType::POPUP {
             self.painted.popup_frame = Some(frame);
             return Ok(());
         }
-        let mask = shared.importer.mask(self.gpu, &frame)?;
+        let mask = shared.importer.mask(&self.gpu, &frame)?;
         if let Some(view) = &self.view {
-            shared.pacer.arrive(frame, mask, info.extra.timestamp, view);
+            shared
+                .pacer
+                .arrive(frame, mask, info.extra.timestamp, self.frame_rate, view);
         }
         Ok(())
+    }
+
+    /// Follows the window to the monitor it's on now, rendering at that
+    /// monitor's refresh rate; the new frame rate, if it changed.
+    fn follow_monitor(&mut self) -> Option<i32> {
+        let monitor = self.window()?.current_monitor();
+        if monitor == self.monitor {
+            return None;
+        }
+        let frame_rate = refresh::frame_rate(monitor.as_ref());
+        self.monitor = monitor;
+        (frame_rate != self.frame_rate).then(|| {
+            self.frame_rate = frame_rate;
+            frame_rate
+        })
     }
 
     /// CEF's cursor, over its page.
@@ -532,11 +564,33 @@ impl Main {
         if size.width == 0 || size.height == 0 {
             return;
         }
+        // What the window made on a lost GPU goes with it, to be made again
+        // on the process's new one: the surface below, and CEF's frames,
+        // which CEF paints again after this call returns.
+        if self.gpu.lost() {
+            self.gpu = match Gpu::get() {
+                Ok(gpu) => gpu,
+                Err(error) => {
+                    tracing::error!("failed to present the window: {error:#}");
+                    return;
+                }
+            };
+            self.compositor = None;
+            self.painted.view_frame = None;
+            self.painted.popup_frame = None;
+            if let Some(shared) = &mut self.shared {
+                *shared = Shared::new(&self.gpu);
+            }
+            if let Some(host) = self.host() {
+                host.invalidate(PaintElementType::VIEW);
+                host.invalidate(PaintElementType::POPUP);
+            }
+        }
         if let Some(shared) = &mut self.shared {
             shared.pacer.show(&mut self.painted, Instant::now());
         }
         if self.compositor.is_none() {
-            match Compositor::new(self.gpu, Arc::clone(window)) {
+            match Compositor::new(&self.gpu, Arc::clone(window)) {
                 Ok(created) => self.compositor = Some(created),
                 Err(error) => {
                     tracing::error!("failed to create the window's surface: {error:#}");
@@ -558,13 +612,16 @@ impl Main {
             })
         });
         if let Err(error) = compositor.present(
-            self.gpu,
+            &self.gpu,
             (size.width, size.height),
             &mut self.painted,
             canvas,
             std::mem::take(&mut self.captures),
         ) {
             tracing::error!("failed to present the window: {error:#}");
+            // The next frame makes the surface again, and draws what
+            // `painted` still holds on it, as after a lost GPU.
+            self.compositor = None;
         }
     }
 }
@@ -636,6 +693,14 @@ fn remember(browser: Option<&mut Browser>) {
         with(|main| {
             main.browser.get_or_insert_with(|| browser.clone());
         });
+    }
+}
+
+/// Renders the page at the refresh rate of the monitor the window moved to.
+fn follow_monitor() {
+    let moved = with(|main| main.follow_monitor().zip(main.host())).flatten();
+    if let Some((frame_rate, host)) = moved {
+        host.set_windowless_frame_rate(frame_rate);
     }
 }
 
@@ -717,9 +782,10 @@ fn blink(handle: AppHandle<CefRuntime>) -> tauri::async_runtime::JoinHandle<()> 
 pub fn open(
     handle: &AppHandle<CefRuntime>,
     screen: &Screen,
-    gpu: &'static Gpu,
+    gpu: Arc<Gpu>,
     shared: bool,
 ) -> Result<()> {
+    let frames = shared.then(|| Shared::new(&gpu));
     WINDOW.set(Some(Main {
         gpu,
         handle: handle.clone(),
@@ -740,10 +806,9 @@ pub fn open(
         web_cursor: Some(CursorIcon::Default),
         compositor: None,
         ime: false,
-        shared: shared.then(|| Shared {
-            importer: Importer::new(gpu),
-            pacer: Pacer::new(),
-        }),
+        shared: frames,
+        monitor: None,
+        frame_rate: refresh::FALLBACK,
     }));
     let _ = screen.0.set(handle.clone());
 
@@ -785,12 +850,23 @@ fn add_webview(window: &tauri::Window<CefRuntime>, url: WebviewUrl, shared: bool
         .size(size)
         // The canvas shows through where the page paints nothing.
         .transparent(true)
+        // The app's window opens no DevTools window, debug builds' Ctrl+Shift+I included;
+        // their DevTools protocol on port 4000 is the runtime's, and stays.
+        .devtools(false)
         .on_page_load(|_, payload| {
             if payload.event() == PageLoadEvent::Started {
                 focus_page();
             }
         })
-        .with_browser_settings(|settings| settings.windowless_frame_rate = FRAME_RATE);
+        // The runtime makes the render handler, which gives the window its
+        // view, before it asks for the settings.
+        .with_browser_settings(|settings| {
+            settings.windowless_frame_rate = with(|main| {
+                main.follow_monitor();
+                main.frame_rate
+            })
+            .unwrap_or(refresh::FALLBACK);
+        });
     webview
         .runtime_specific_attributes_mut()
         .as_cef_webview_attributes_mut()
@@ -889,6 +965,7 @@ pub fn on_window_event(app: &Arc<App>, label: &str, window: Arc<dyn Window>, eve
             with(|main| main.present(&window));
         }
         WindowEvent::SurfaceResized(_) => window.request_redraw(),
+        WindowEvent::Moved(_) => follow_monitor(),
         WindowEvent::ScaleFactorChanged { .. } => change(Main::place),
         WindowEvent::Focused(focused) => {
             if *focused {

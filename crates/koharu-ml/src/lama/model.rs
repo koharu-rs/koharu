@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::nn::{self, Module, ModuleT};
 use anyhow::Result;
-use koharu_torch::{Device, Kind, Tensor};
+use koharu_torch::{Cuda, Device, Kind, Tensor};
 
 use super::config::FFCResNetGeneratorConfig;
 
@@ -165,9 +165,32 @@ impl FFCResNetGenerator {
         for (conv, bn) in &self.upsample {
             x = bn.forward_t(&conv.forward(&x)?, false)?.relu()?;
         }
-        self.final_conv
-            .forward(&x.reflection_pad2d([3, 3, 3, 3])?)?
-            .sigmoid()
+        let x = x.reflection_pad2d([3, 3, 3, 3])?;
+        // Upstream convolves the whole image at once. With libtorch's cuDNN
+        // switch off, as the runtime keeps it for ROCm on Windows, a GPU
+        // convolution is PyTorch's native one, which unfolds all of its input
+        // first: 64 × 7 × 7 values for each output pixel, 7.5 GiB in F32 for
+        // an 800-pixel window, past an 8 GB card. Bands of rows, each with the
+        // six padding rows it reads, keep that within 256 MiB; an output pixel
+        // reads only its own 7 × 7 neighbourhood, so the bands join into the
+        // same image, up to rounding.
+        let output = if x.device().is_cuda() && !Cuda::user_enabled_cudnn() {
+            let size = x.size();
+            let (rows, width) = (size[2] - 6, size[3] - 6);
+            let row = size[1] * 7 * 7 * width * x.kind().elt_size_in_bytes() as i64;
+            let band = ((256 << 20) / row).max(1);
+            let bands = (0..rows)
+                .step_by(band as usize)
+                .map(|top| {
+                    self.final_conv
+                        .forward(&x.narrow(2, top, band.min(rows - top) + 6)?)
+                })
+                .collect::<koharu_torch::Result<Vec<_>>>()?;
+            Tensor::cat(&bands, 2)?
+        } else {
+            self.final_conv.forward(&x)?
+        };
+        output.sigmoid()
     }
 }
 

@@ -18,13 +18,8 @@ import { useTranslation } from 'react-i18next'
 
 import { ColorWell } from '@/components/controls/ColorWell'
 import { usePage } from '@/lib/queries'
-import {
-  maxBrushDiameter,
-  MIN_BRUSH_DIAMETER,
-  toolKeys,
-  useKoharuStore,
-  type CanvasTool,
-} from '@/lib/store'
+import { shortcutLabel, toolKeys } from '@/lib/shortcuts'
+import { maxBrushDiameter, MIN_BRUSH_DIAMETER, useKoharuStore, type CanvasTool } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 import {
   NumberField,
@@ -115,7 +110,7 @@ export function ToolBar() {
               </TooltipTrigger>
               <TooltipContent side='right'>
                 {t(`tools.${tool}`)}
-                <span className='ml-2 opacity-60'>{toolKeys[tool].toUpperCase()}</span>
+                <span className='ml-2 opacity-60'>{shortcutLabel(toolKeys[tool])}</span>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -169,12 +164,7 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
           {t('tools.brushSizeShort', { size: roundedValue })}
         </TooltipContent>
       </Tooltip>
-      <PopoverContent
-        side='right'
-        align='center'
-        sideOffset={8}
-        className='w-48 gap-2.5 rounded-xl p-2.5'
-      >
+      <PopoverContent side='right' align='center' sideOffset={8} className='w-48'>
         <div className='flex items-center justify-between gap-3'>
           <PopoverTitle className='text-[11px]'>{t('tools.brushSize')}</PopoverTitle>
           <NumberField

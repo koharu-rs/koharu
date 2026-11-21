@@ -1,3 +1,114 @@
+## [0.89.0](https://github.com/koharu-rs/koharu/compare/0.88.0..0.89.0) - 2026-11-20
+
+### ⛰️  Features
+
+- *(models)* Make Hayai OCR the default recognizer with its new 512-patch budget, and pin Hayai, manga-ocr-ar, Koharu Layout HighRes and Qwen 3.8 27B to their latest commits - ([9eac4b0](https://github.com/koharu-rs/koharu/commit/9eac4b066a05eb2ad3d329270ffbff780a816135))
+
+### 🐛 Bug Fixes
+
+- *(pipeline)* Eliminate rows in the tone solver by iterator, as clippy's needless_range_loop requires - ([c19c7d4](https://github.com/koharu-rs/koharu/commit/c19c7d4a0d1da09ef629d3005f13584afedd98dd))
+
+## [0.88.0](https://github.com/koharu-rs/koharu/compare/0.87.0..0.88.0) - 2026-11-20
+
+### ⛰️  Features
+
+- *(inpaint)* Clean up and fill with FLUX.3 and Qwen-Image by a reference edit of each window, kept whole under the mask, and drop their masked inpaint - ([c1ce1c4](https://github.com/koharu-rs/koharu/commit/c1ce1c47b115d9e9f0f33533696b4186b0312fcf))
+
+### 🐛 Bug Fixes
+
+- *(bindgen)* Give the reason a library does not open, such as a missing glibc version, which libloading 0.9 keeps in the source of its "dlopen failed" - ([4237b8d](https://github.com/koharu-rs/koharu/commit/4237b8ddc618abf915a9b5d4aa673a245f69ea56))
+- *(ml)* Restore the flux3_klein bench and the diffusers module, which 4e602eca deleted by mistake - ([b21c917](https://github.com/koharu-rs/koharu/commit/b21c9176fe0b06c37a1831fea18394d1e996e3ef))
+- *(runtime)* Load llama.cpp b12565, stable-diffusion.cpp and the shim from releases built on Ubuntu 24.04, as the ones built on 26.04 needed glibc 2.43 - ([f020bc2](https://github.com/koharu-rs/koharu/commit/f020bc2957f03d6961a25d41a95e1423cba53545))
+- *(runtime)* Address an AMD GPU on Linux by the target HSA_OVERRIDE_GFX_VERSION gives it, which ROCm lists it and loads kernels by, instead of finding no GPU with its own - ([4e602ec](https://github.com/koharu-rs/koharu/commit/4e602ecaa613a4b7e43d7b3d4e3471c6c12b75e3))
+- *(ui)* Move the react-colorful pin to omgovich/react-colorful#246 as reviewed - ([6ce622d](https://github.com/koharu-rs/koharu/commit/6ce622de8843139e5e8909daa0567279e6602671))
+
+### 🚜 Refactor
+
+- *(runtime)* Simplify the Linux GPU probe and drop its test - ([c5dccd1](https://github.com/koharu-rs/koharu/commit/c5dccd154c1bc3fc3c11f2484ea80db89602eb76))
+
+## [0.87.0](https://github.com/koharu-rs/koharu/compare/0.86.4..0.87.0) - 2026-11-20
+
+### ⛰️  Features
+
+- *(diffusion)* Replace Qwen-Image 2.1 with its Turbo, cache steps and tile the VAE in every diffusion model, let sd.cpp pick its kernels, and stop a fill under way - ([36126c8](https://github.com/koharu-rs/koharu/commit/36126c8ff271c78afecf9db8cb75c98f4b345e08))
+
+### 🐛 Bug Fixes
+
+- *(config)* Read a value that doesn't read, such as a removed model's id, as its default instead of failing the section - ([ada165a](https://github.com/koharu-rs/koharu/commit/ada165a7e54b9b975f3492524e53b55bc043796b))
+- *(pipeline)* Make the models' GPU current on every call, as libtorch's attention picks its kernel by the current device and on a second GPU ran its math fallback over the whole score matrix ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([5f6b48a](https://github.com/koharu-rs/koharu/commit/5f6b48a138d95687fdc162bf3122406717f78a29))
+- *(runtime)* Keep AOTriton's kernels from the HIP libtorch archive, which the store dropped as no library, failing every fused attention as an invalid kernel image ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([1c5c6f7](https://github.com/koharu-rs/koharu/commit/1c5c6f7f09206ce27f20f6fcf7add1f744787fed))
+
+### 🚜 Refactor
+
+- *(ml)* Remove MOSS-Image, which sd.cpp can't edit with and which invents lettering - ([e68cdff](https://github.com/koharu-rs/koharu/commit/e68cdff059d31299bb9cc4619a8d1887fbdc6a12))
+
+## [0.86.4](https://github.com/koharu-rs/koharu/compare/0.86.3..0.86.4) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Exit a second launch quietly and bring the open window forward, on a tauri fork pin (RUST-F0) - ([3d7c42a](https://github.com/koharu-rs/koharu/commit/3d7c42afcfe86cc42704664e9c5663e2d9feb30a))
+- *(desktop)* Make the window's surface again once it's lost or left unconfigured, which failed every frame after - ([7ca020b](https://github.com/koharu-rs/koharu/commit/7ca020bd0121c183391823b2281a69ceb03a4f9d))
+- *(diffusion)* Say why stable-diffusion.cpp failed, from what it logged during the call, such as the memory a step needed and the memory free - ([b7fe480](https://github.com/koharu-rs/koharu/commit/b7fe48002cea7e8b8e9dead7bba893d70b2ce50c))
+- *(ml)* Stop layout detection crashing on a 1x1 glyph mask, with imageproc pinned to image-rs/imageproc#824 - ([daaa6b5](https://github.com/koharu-rs/koharu/commit/daaa6b5e78658733ade1b8727b84044c64ed2f50))
+- *(pipeline)* Empty libtorch's cache only while a model is loaded, since opening a project before one panicked calling libtorch unloaded ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([fcfdfb0](https://github.com/koharu-rs/koharu/commit/fcfdfb03fe5ca17f80310d2a5b13046426c567b6))
+- *(pipeline)* Stop a model load when the runtime shuts down, which panicked on exit mid-download (RUST-R8) - ([9564410](https://github.com/koharu-rs/koharu/commit/9564410f366d77d2d8ecadf01528c7074dbf576a))
+- Pin the tauri fork commit that compares CEF's exit code as a c_int, which broke the Linux build - ([bc30f60](https://github.com/koharu-rs/koharu/commit/bc30f600c66dc1af7a93158a145dbc1e9626e28b))
+- Keep projects and the store in the user's local data folder when the install folder isn't writable, as in a per-machine install under Program Files - ([7f6d924](https://github.com/koharu-rs/koharu/commit/7f6d92404f5f9f0e8ec22f1f04fa3ee19db252dd))
+
+### 🚜 Refactor
+
+- *(diffusion)* Move to stable-diffusion.cpp master-1106's C API, failing with its status and reason instead of reading its log - ([c219218](https://github.com/koharu-rs/koharu/commit/c219218ba8a953a4489aac8dfafd50cdbe83200c))
+- Decide Koharu's root once in koharu-runtime, for the store and the projects beside it - ([d3beae7](https://github.com/koharu-rs/koharu/commit/d3beae78acea272bf2a505b02aa70aa8fd45f4e8))
+
+### ⚙️ Miscellaneous Tasks
+
+- Upload to release-please's release by id, which kept tauri-action from emptying its notes - ([4d4251b](https://github.com/koharu-rs/koharu/commit/4d4251b254bfbdfa82f54e1460fb7de50643a46a))
+
+## [0.86.3](https://github.com/koharu-rs/koharu/compare/0.86.2..0.86.3) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load HIP libtorch with AOTriton's fused attention, from libtorch.2 and koharu.3 ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([c366a12](https://github.com/koharu-rs/koharu/commit/c366a1268ea37515922c01fd02e81777d357425d))
+
+### ⚙️ Miscellaneous Tasks
+
+- Let release-please write the release notes, without the version heading - ([cb5991a](https://github.com/koharu-rs/koharu/commit/cb5991ab96595f45b5c68280df9da1bd9ebc1787))
+
+## [0.86.2](https://github.com/koharu-rs/koharu/compare/0.86.1..0.86.2) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(pipeline)* Empty libtorch's cache when the last run ends, which grew with each page and stayed until the next model load ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([c60ea08](https://github.com/koharu-rs/koharu/commit/c60ea084358b52dd101660358fb33299f7c8dff9))
+- *(renderer)* Keep uploaded images' textures within 256 MiB, which grew with every page viewed up to the 2 GiB retained cache ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([fbe36bd](https://github.com/koharu-rs/koharu/commit/fbe36bd9fe5bae6a882bef50dc7cd76c98de0abe))
+- Draw on a new GPU once the last is lost, instead of panicking in vello_gpu on the lost one ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([4ef5b6f](https://github.com/koharu-rs/koharu/commit/4ef5b6fcaa4a2b8a7d68b3650f337dd2114deab2))
+- Keep the GPU when a Windows Vulkan frame waits past 1 s, on a wgpu pin with a fix for gfx-rs/wgpu#9029 ([#1408](https://github.com/koharu-rs/koharu/issues/1408)) - ([8630a25](https://github.com/koharu-rs/koharu/commit/8630a25338ed6ac20e263d31d8956a3d83b764d1))
+
+## [0.86.1](https://github.com/koharu-rs/koharu/compare/0.86.0..0.86.1) - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Grow text borders and synthetic bold by a stroke instead of kurbo's expand_path, which spikes and shrinks on some fonts' curves ([#1073](https://github.com/koharu-rs/koharu/issues/1073)) - ([3338dcd](https://github.com/koharu-rs/koharu/commit/3338dcdee583b420e7546546a667836a7119c299))
+- *(ui)* Save the colour a quick drag ends on, on a react-colorful pin with omgovich/react-colorful#246 ([#866](https://github.com/koharu-rs/koharu/issues/866)) - ([4d446cf](https://github.com/koharu-rs/koharu/commit/4d446cfd0100a60a604279e759849ed1a80ac63f))
+
+## [0.86.0](https://github.com/koharu-rs/koharu/compare/0.85.7..0.86.0) - 2026-11-19
+
+### ⛰️  Features
+
+- *(desktop)* Render the page at its monitor's refresh rate instead of 60 fps - ([87c59d2](https://github.com/koharu-rs/koharu/commit/87c59d2540f74db44e60bcc2c01245b167ce31cc))
+
+### 🐛 Bug Fixes
+
+- Scale Linux windows by the font DPI KDE sets for fractional scales, on a winit-gtk4 pin with tauri-apps/winit-gtk4#5 ([#1425](https://github.com/koharu-rs/koharu/issues/1425)) - ([830755f](https://github.com/koharu-rs/koharu/commit/830755fb0f4b5f869e5c64496c157de83b17d15b))
+
+### 🚜 Refactor
+
+- *(ml)* Keep the layout model's attention chunk size inside attention() - ([73ddb00](https://github.com/koharu-rs/koharu/commit/73ddb008a3898b2d15a7b4a741bc4a808a6b5599))
+
+### ⚙️ Miscellaneous Tasks
+
+- Install LLVM 22.1.8 for Windows bindings instead of Visual Studio's libclang - ([cf9b160](https://github.com/koharu-rs/koharu/commit/cf9b160048e3e7f56364b5a31684a53b96be52e1))
+- Generate Windows bindings with Visual Studio's own libclang - ([fd62692](https://github.com/koharu-rs/koharu/commit/fd626928486fb295ca8126993b43c6396c41549d))
+
 ## [0.85.7](https://github.com/koharu-rs/koharu/compare/0.85.6..0.85.7) - 2026-11-19
 
 ### 🐛 Bug Fixes

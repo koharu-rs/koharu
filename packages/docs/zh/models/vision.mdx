@@ -14,13 +14,13 @@ icon: 'eye'
 
 ## OCR
 
-| 模型                                                                             | 识别内容               |
-| -------------------------------------------------------------------------------- | ---------------------- |
-| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | 日文漫画文字（默认）   |
-| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | 日文漫画文字           |
-| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | 日文、中文、韩文和英文 |
+| 模型                                                                             | 识别内容                       |
+| -------------------------------------------------------------------------------- | ------------------------------ |
+| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | 日文漫画文字                   |
+| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | 日文漫画文字                   |
+| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | 日文、中文、韩文和英文（默认） |
 
-Manga OCR AR 采用 CC BY-NC-SA 4.0 许可，因此保持默认设置时只能用于非商业用途。各模型的许可请查看其模型卡。
+Manga OCR AR 采用 CC BY-NC-SA 4.0 许可，因此选用它时只能用于非商业用途。各模型的许可请查看其模型卡。
 
 <Note>
   OCR 读取已检测的文本块。文字缺失时请先检查检测结果：更换识别模型无法找回从未被检测到的文本块。
@@ -31,9 +31,9 @@ Manga OCR AR 采用 CC BY-NC-SA 4.0 许可，因此保持默认设置时只能�
 <Tabs>
   <Tab title="直接修复">经过漫画微调的 **LaMa** 是默认模型，适合日常的文字去除。</Tab>
   <Tab title="生成式">
-    **FLUX.3 Klein**、**MOSS-Image** 和 **Qwen-Image 2.1** 通过 stable-diffusion.cpp 运行，并遵循**设置 → 流水线**中的**提示词**；默认提示词要求模型去除所有文字并保持其他内容不变。
+    **FLUX.3 Klein** 和 **Qwen-Image 2.1 Turbo** 通过 stable-diffusion.cpp 运行，并遵循**设置 → 流水线**中的**提示词**；默认提示词要求模型去除所有文字并保持其他内容不变。
 
-    这些模型需要更多下载空间、内存和时间。提示词应描述去除文字的要求，译文请用文本图层排版。Qwen-Image 2.1 采用 Qwen Research License，仅限研究和评估用途。
+    这些模型需要更多下载空间、内存和时间。提示词应描述去除文字的要求，译文请用文本图层排版。Qwen-Image 2.1 Turbo 采用 Qwen Research License，仅限研究和评估用途。
 
   </Tab>
 </Tabs>

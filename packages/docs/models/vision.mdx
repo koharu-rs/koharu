@@ -14,13 +14,13 @@ Text, SFX, bubble, and panel thresholds set how confident each class must be; em
 
 ## OCR
 
-| Model                                                                            | Reads                                  |
-| -------------------------------------------------------------------------------- | -------------------------------------- |
-| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | Japanese manga text; the default       |
-| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | Japanese manga text                    |
-| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | Japanese, Chinese, Korean, and English |
+| Model                                                                            | Reads                                               |
+| -------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | Japanese manga text                                 |
+| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | Japanese manga text                                 |
+| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | Japanese, Chinese, Korean, and English; the default |
 
-Manga OCR AR is licensed CC BY-NC-SA 4.0, so keeping the default holds you to non-commercial use. Check each model card for its license.
+Manga OCR AR is licensed CC BY-NC-SA 4.0, so choosing it holds you to non-commercial use. Check each model card for its license.
 
 <Note>
   OCR reads detected text blocks. Check detection first when text is missing: changing the
@@ -34,9 +34,9 @@ Manga OCR AR is licensed CC BY-NC-SA 4.0, so keeping the default holds you to no
     **LaMa**, fine-tuned on manga, is the default. Start here for routine lettering removal.
   </Tab>
   <Tab title="Generative">
-    **FLUX.3 Klein**, **MOSS-Image**, and **Qwen-Image 2.1** run on stable-diffusion.cpp and follow the **Prompt** in **Settings → Pipeline**, which by default asks the model to remove all text and keep everything else.
+    **FLUX.3 Klein** and **Qwen-Image 2.1 Turbo** run on stable-diffusion.cpp and follow the **Prompt** in **Settings → Pipeline**, which by default asks the model to remove all text and keep everything else.
 
-    These models need more download space, memory, and time. Describe the removal of lettering; typeset the translation with text layers. Qwen-Image 2.1 is under the Qwen Research License, for research and evaluation only.
+    These models need more download space, memory, and time. Describe the removal of lettering; typeset the translation with text layers. Qwen-Image 2.1 Turbo is under the Qwen Research License, for research and evaluation only.
 
   </Tab>
 </Tabs>

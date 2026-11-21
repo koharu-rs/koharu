@@ -89,7 +89,11 @@ fn rewrite(file: syn::File) -> String {
                 .iter()
                 .map(|path| {
                     unsafe { __open(path) }.map_err(|error| {
-                        Error::other(::std::format!("couldn't load {}: {error}", path.display()))
+                        // libloading keeps the system's reason, such as a
+                        // missing dependency or symbol version, in the source.
+                        let reason = ::std::error::Error::source(&error)
+                            .map_or_else(|| error.to_string(), |source| source.to_string());
+                        Error::other(::std::format!("couldn't load {}: {reason}", path.display()))
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;

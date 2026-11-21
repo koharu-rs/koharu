@@ -551,7 +551,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot 0.12.5",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
  "x11rb",
 ]
 
@@ -1011,7 +1011,7 @@ dependencies = [
  "regex",
  "rustc-hash 2.1.3",
  "shlex",
- "syn 3.0.10",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -1693,9 +1693,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.7"
+version = "4.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8876b300ab35ba921adea3dfd70157a46249b33f95c9084ae5709785478946"
+checksum = "844c5c0b65be192cb68d570cca1b21a6444431d24e39c084dc0336177015337c"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1715,9 +1715,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.6.7"
+version = "4.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c751b79415d4e559e3d1fcf128e09e720eb673a06d26cf6f392d37d75b66e0"
+checksum = "b4c174f11f949b9ca8c60580925e282b9cbd5454750e506f08648b2038080cd7"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1793,7 +1793,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2232,7 +2232,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.10",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -2879,7 +2879,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3670,7 +3670,7 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4986,8 +4986,7 @@ dependencies = [
 [[package]]
 name = "imageproc"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7b27bc0867dc40df08deb53d6e96342db6e0702e7ae33ed09a4eba33e594b05"
+source = "git+https://github.com/mayocream/imageproc?rev=8c64b41c0c715449b250d6c4e06516fe8310a7fa#8c64b41c0c715449b250d6c4e06516fe8310a7fa"
 dependencies = [
  "ab_glyph",
  "approx",
@@ -5511,7 +5510,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "clap",
  "indoc",
@@ -5535,7 +5534,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -5569,7 +5568,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "bindgen",
  "fs-err",
@@ -5581,7 +5580,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -5612,7 +5611,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "age",
  "atomicwrites",
@@ -5623,6 +5622,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "serde_path_to_error",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
@@ -5632,7 +5632,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-desktop"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -5685,12 +5685,12 @@ dependencies = [
  "webp",
  "wgpu",
  "windows",
- "zip 9.6.0",
+ "zip 9.7.3",
 ]
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
@@ -5700,7 +5700,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "koharu-bindgen",
  "libloading 0.9.1",
@@ -5708,7 +5708,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-leptonica"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "image",
  "thiserror 2.0.21",
@@ -5716,7 +5716,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -5732,7 +5732,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "koharu-bindgen",
  "libloading 0.9.1",
@@ -5740,7 +5740,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llm"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "backon",
@@ -5776,7 +5776,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -5805,7 +5805,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -5844,7 +5844,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -5862,7 +5862,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "fontique",
@@ -5900,7 +5900,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "anyhow",
  "backon",
@@ -5923,12 +5923,12 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
- "zip 9.6.0",
+ "zip 9.7.3",
 ]
 
 [[package]]
 name = "koharu-scene"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "blake3",
  "color",
@@ -5962,7 +5962,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-sentry"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "sentry",
  "serde",
@@ -5973,7 +5973,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "fs-err",
  "half",
@@ -5987,7 +5987,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.85.7"
+version = "0.89.0"
 dependencies = [
  "koharu-bindgen",
  "libloading 0.9.1",
@@ -6820,7 +6820,31 @@ dependencies = [
  "indexmap 2.14.2",
  "libm",
  "log",
- "naga-types",
+ "naga-types 30.0.1",
+ "num-traits",
+ "once_cell",
+ "rustc-hash 1.1.0",
+ "thiserror 2.0.21",
+ "unicode-ident",
+]
+
+[[package]]
+name = "naga"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.10.0",
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "codespan-reporting",
+ "half",
+ "hashbrown 0.17.1",
+ "indexmap 2.14.2",
+ "libm",
+ "log",
+ "naga-types 30.0.2",
  "num-traits",
  "once_cell",
  "rustc-hash 1.1.0",
@@ -6834,6 +6858,17 @@ name = "naga-types"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
+dependencies = [
+ "hashbrown 0.17.1",
+ "indexmap 2.14.2",
+ "rustc-hash 1.1.0",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "naga-types"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "hashbrown 0.17.1",
  "indexmap 2.14.2",
@@ -6930,18 +6965,6 @@ name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
-dependencies = [
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
- "libc",
-]
-
-[[package]]
-name = "nix"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -8337,9 +8360,9 @@ dependencies = [
 
 [[package]]
 name = "pollster"
-version = "1.0.1"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336"
+checksum = "7e9b9cf600136f5b976fbc5727d58c26e1ecab8ee23088d44ef1c7af793550ab"
 
 [[package]]
 name = "poly1305"
@@ -8641,7 +8664,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9355,9 +9378,9 @@ checksum = "3582f63211428f83597b51b2ddb88e2a91a9d52d12831f9d08f5e624e8977422"
 
 [[package]]
 name = "rmcp"
-version = "3.10.0"
+version = "3.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5949e504d5ab9944a168259afc0c39ac0230627b6ec5367ace194c59bcbe163"
+checksum = "391f153431ab68664d946513ea0cb3edbca78eaf99c5a983036cacab6220d85b"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -9370,6 +9393,7 @@ dependencies = [
  "indexmap 2.14.2",
  "libc",
  "pastey 0.2.3",
+ "percent-encoding",
  "pin-project-lite",
  "rand 0.10.3",
  "schemars 1.2.3",
@@ -9383,6 +9407,8 @@ dependencies = [
  "tokio-util",
  "tower-service",
  "tracing",
+ "unicode-general-category",
+ "unicode-normalization",
  "uuid",
 ]
 
@@ -9514,7 +9540,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9527,7 +9553,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9586,7 +9612,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9920,9 +9946,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "sentry"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7c2c887f17023c9462a4202176efc33ca7228f9c30c0141c765ab534ab2d36b"
+checksum = "d7bc7fb14982f395d53924f4feebd48c6cc136399c49ac2160dcf2b260e74b75"
 dependencies = [
  "cfg_aliases",
  "httpdate",
@@ -9943,9 +9969,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-actix"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "004ede24516440d366cfc4109d52a74395d87b517efded27aeca901f3bd4eb0f"
+checksum = "a5cb315100e0aea440d1e42135e4900647ed6d6b0899e6a2716d5322ce4b9dd0"
 dependencies = [
  "actix-http",
  "actix-web",
@@ -9956,9 +9982,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-backtrace"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c391d4330f3b37fdddf2b928151244e8c2dc0cfea1740e455cc8942af436f919"
+checksum = "f68328b53eb7defc20f993ed7cd1f4ce10d06feecefdf914db062ce2523e4b77"
 dependencies = [
  "backtrace",
  "regex",
@@ -9967,9 +9993,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-contexts"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "654dacb94135c713e1dcbff01314a83d333f0e62f76b91fed5ab87415075530c"
+checksum = "1d57fb52d1e5d76cc5a7415428004699d9e6d498859a7acc8e05becc57dad81f"
 dependencies = [
  "hostname",
  "libc",
@@ -9981,22 +10007,21 @@ dependencies = [
 
 [[package]]
 name = "sentry-core"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edcb294ca821e5c5624edaf33535eb18b06ef4f8675201d3e4d81ce325741692"
+checksum = "8367f7f31654b35453e20c8aca06e0ecf5a4d4793e33be139c1581e475a94e6a"
 dependencies = [
  "rand 0.10.3",
  "sentry-types",
- "serde",
  "serde_json",
  "url",
 ]
 
 [[package]]
 name = "sentry-debug-images"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74835055f6a57b78c0e13f941b460e39edc1899b05fe31dd47cd02367f70888f"
+checksum = "386f4ce2364e58f2ca811f388a0427fa13784bbe7aee85f302e901ef4b00fab9"
 dependencies = [
  "findshlibs",
  "sentry-core",
@@ -10004,9 +10029,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-log"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f24141aaeb20c731719b33077f1063a79e07eef63a4954530559c067ba046aad"
+checksum = "c938358d54c65a79fea165a447ae0eabc5717f23ba482ceee279c5645f0ccad3"
 dependencies = [
  "bitflags 2.13.2",
  "log",
@@ -10015,9 +10040,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-minidump"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55831db2fa73841be2e016cbd421c147e8d1617710d85e52fae8d9ab30863c18"
+checksum = "a4f81147f336cc454c1ef43fcd71d741c5446ccf6a87394886e2f1c2de7b5524"
 dependencies = [
  "minidumper-child",
  "sentry-core",
@@ -10027,9 +10052,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-panic"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5d28522f81ed90510ec43ed01cb1873a393b329dc719f93335b4c75fbef05d1"
+checksum = "2ab095af8f107e893941f857d8e204f5d25404247c34af131c7d199e3021679f"
 dependencies = [
  "sentry-backtrace",
  "sentry-core",
@@ -10037,9 +10062,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-tracing"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec67c296aadc41d4d41b64738908c51cacddf99edebe7a2b476f9bf40de93ff5"
+checksum = "a7cae82b121a812e69a1cfaaacb800112f5f261f362fbf5a08e13d1c11ef349e"
 dependencies = [
  "bitflags 2.13.2",
  "sentry-backtrace",
@@ -10050,9 +10075,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-types"
-version = "0.49.5"
+version = "0.49.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83d84a36b6bdeeb7813976fb899fca45d94540d2e2b80eac91ba66b4c654d8f0"
+checksum = "03da7c1f79d001b4f18e277f8207470efb262fb94c761baa195873d2ace8eb8a"
 dependencies = [
  "debugid",
  "hex",
@@ -10944,7 +10969,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 [[package]]
 name = "tauri"
 version = "3.0.0-alpha.6"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -10992,7 +11017,7 @@ dependencies = [
 [[package]]
 name = "tauri-build"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -11014,7 +11039,7 @@ dependencies = [
 [[package]]
 name = "tauri-codegen"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "base64 0.23.1",
  "brotli 9.1.1",
@@ -11040,7 +11065,7 @@ dependencies = [
 [[package]]
 name = "tauri-macros"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -11053,7 +11078,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "anyhow",
  "glob",
@@ -11180,7 +11205,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime"
 version = "3.0.0-alpha.5"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "cookie",
  "dpi",
@@ -11200,7 +11225,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "3.0.0-alpha.7"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -11238,7 +11263,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "3.0.0-alpha.4"
-source = "git+https://github.com/tauri-apps/tauri?rev=323f9cb94174e37c1d80d942a9065910d00d01f2#323f9cb94174e37c1d80d942a9065910d00d01f2"
+source = "git+https://github.com/mayocream/tauri?rev=e671767d6803fe5b5907d5618a6dea3707d027d8#e671767d6803fe5b5907d5618a6dea3707d027d8"
 dependencies = [
  "anyhow",
  "brotli 9.1.1",
@@ -11302,8 +11327,7 @@ dependencies = [
 [[package]]
 name = "tauri-winit-gtk4"
 version = "0.31.0-beta.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b261a03b459cfab1c0f4924178e6723b10d303f20bb2593f44297f33ab2b3b0"
+source = "git+https://github.com/mayocream/winit-gtk4?rev=bf2978ad27b8f2d4a04de00afdaa882a4c28ab79#bf2978ad27b8f2d4a04de00afdaa882a4c28ab79"
 dependencies = [
  "dpi",
  "gdk4-wayland",
@@ -11361,10 +11385,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12061,10 +12085,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
+name = "unicode-general-category"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b993bddc193ae5bd0d623b49ec06ac3e9312875fdae725a975c51db1cc1677f"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-normalization-alignments"
@@ -12222,9 +12261,9 @@ checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
 
 [[package]]
 name = "uuid"
-version = "1.29.2"
+version = "1.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bed99139f7dac9b5cfe5f17be4d66dc7079a34dee1d74bcc77217119240e267c"
+checksum = "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -12336,7 +12375,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e22815682cf60d24cf8781bd445f309622930e8b8885459b21109b4f6b205b76"
 dependencies = [
- "naga",
+ "naga 30.0.1",
  "wesl",
  "wesl-macros",
  "wgsl-parse",
@@ -12708,8 +12747,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "146fc3d654250e6207921a66c87534c621bc886c70df83dcf466c1d66813810e"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "arrayvec",
  "bitflags 2.13.2",
@@ -12720,7 +12758,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "js-sys",
  "log",
- "naga",
+ "naga 30.0.2",
  "parking_lot 0.12.5",
  "portable-atomic",
  "profiling",
@@ -12737,9 +12775,8 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -12751,8 +12788,8 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap 2.14.2",
  "log",
- "naga",
- "naga-types",
+ "naga 30.0.2",
+ "naga-types 30.0.2",
  "once_cell",
  "parking_lot 0.12.5",
  "portable-atomic",
@@ -12771,36 +12808,32 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-apple"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "061f3d319a40d39d00b1ecc2c33b89fe21d4e6fe01859df3500a3a8ecccd6b68"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-emscripten"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-hal"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -12820,8 +12853,8 @@ dependencies = [
  "libc",
  "libloading 0.8.9",
  "log",
- "naga",
- "naga-types",
+ "naga 30.0.2",
+ "naga-types 30.0.2",
  "ndk-sys",
  "objc2 0.6.5",
  "objc2-core-foundation",
@@ -12854,25 +12887,23 @@ dependencies = [
 
 [[package]]
 name = "wgpu-naga-bridge"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
- "naga",
+ "naga 30.0.2",
  "wgpu-types",
 ]
 
 [[package]]
 name = "wgpu-types"
-version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99dad6f1fbdbbdb4c278a6508b059d44688f5cebddf78d005a46a31340269286"
+version = "30.0.2"
+source = "git+https://github.com/mayocream/wgpu?rev=d1a03ed3a2fe5a670d467bae23279372daf66da6#d1a03ed3a2fe5a670d467bae23279372daf66da6"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
  "js-sys",
  "log",
- "naga-types",
+ "naga-types 30.0.2",
  "raw-window-handle",
  "static_assertions",
  "web-sys",
@@ -12961,7 +12992,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -13125,15 +13156,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]
@@ -13987,9 +14009,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.6.0"
+version = "9.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80cc68510ea7553c30a69c732de5278e94183f68765af6c642dbccefd6ec777e"
+checksum = "63e50f7b2212e4635244be3c363b53273d159f2523eb7db3096c1d2861c1b603"
 dependencies = [
  "aes 0.9.4",
  "bzip2",
@@ -14003,7 +14025,7 @@ dependencies = [
  "libc",
  "lzma-rust2",
  "memchr",
- "nix 0.32.0",
+ "nix 0.30.1",
  "pbkdf2 0.13.0",
  "ppmd-rust",
  "sha1",

@@ -27,8 +27,8 @@ same way and undo the same way.
 | what's shown | the frame the renderer last drew, the page and project it drew, and what each shown layer offers: its frame, its handles, and how it resizes and turns | |
 | selection | the selected layers, in the order they were picked, the one the select tool would pick under the pointer, the anchors the direct selection tool picked on the selected text's frame, and where the selected layers lie on the page as they're laid out, a point text's lines included, for the host to place its own controls beside, as Photoshop's Contextual Task Bar sits below a selection. A block's clean-up is picked only from the host's Layers, never by a click or a marquee | a layer mask is targeted by its thumbnail in the Layers panel, not on the canvas [Photoshop layer masks] |
 | area | what the marquee and the lasso marked of the page's pixels, a byte a pixel: a new shape replaces it, adds to it with Shift held at its press, or takes from it with Alt; a click without a drag, Deselect, or another page drops it. Its edge draws as marching ants, black dashes over white, held still rather than moving, and where it lies on the page goes to the host, which places Generative Fill below it. The host reads it for a fill, which runs as the pipeline's area run, and the area stays to fill again | Photoshop's selection tools make a new selection, add to it, or subtract from it [Photoshop marquee] [Photoshop lasso]; a dashed border shows a selection, which Deselect, Ctrl+D, drops [Photoshop selections]; Generative Fill in the Contextual Task Bar fills a selection after a prompt, or from what surrounds it with none [Photoshop Generative Fill] |
-| story | while the host shows the Story panel, each text's frame outlined faintly, and its number in the scene's reading order in a pill centred on the frame's top-left corner, filled for dialogue and outlined for a sound effect; the frame of the text whose entry the pointer is on drawn stronger. They draw under the selection's handles, which keep their place and their reach | |
-| overlay | outlines, handles, a frame's anchors, the marquee, and each gesture's preview, drawn over the page in screen pixels, so lines and handles keep their size at any zoom. A selected block's mask shows in place of its bounds as a half-red overlay over what it hides, and a selected clean-up with the rest of the page greyed out | selected anchors are filled squares and the rest hollow [Photoshop path selection]; a mask shows as a rubylith, a 50% red overlay [Photoshop layer masks] |
+| story | while the host shows the Story panel, each text's frame outlined faintly, and its number in the scene's reading order in a pill centred on the frame's top-left corner, filled for dialogue and outlined for a sound effect; the frame of the text whose entry the pointer is on drawn stronger. The frames draw under the selection's outlines and handles, and the numbers over them, so none hides behind a handle; the handles keep their place and their reach | |
+| overlay | outlines, handles, a frame's anchors, the marquee, and each gesture's preview, drawn over the page in screen pixels, so lines and handles keep their size at any zoom. A selected block's mask shows in place of its bounds as a half-red overlay over what it hides, and a selected clean-up with the rest of the page greyed out. A text that runs past its frame has a plus in a hollow square on the frame's top-left corner where the frame is outlined, or beside its Story number, which takes that corner, while Story shows; the text past it still draws, so no line goes missing from an export | selected anchors are filled squares and the rest hollow [Photoshop path selection]; a mask shows as a rubylith, a 50% red overlay [Photoshop layer masks]; "the overflow icon appears on the bounding box" when type doesn't fit it [Photoshop create type], on its lower-right corner, and hides the type past it |
 | settings | the tool, the brush, and the theme's colours, which the host owns and the canvas only reads, so the panels and the canvas show one value | |
 
 Tools read the frame that was drawn, never a newer project, so what the
@@ -68,15 +68,17 @@ release that follow.
 Read in November 2026.
 
 - W3C: [Pointer Events], [UI Events key], [CSS UI]
-- Adobe: [Photoshop type], [Photoshop transform], [Photoshop text paths], [Photoshop path
-  selection], [Photoshop anchor points], [InDesign paths], [Photoshop inline input], [Photoshop
-  marquee], [Photoshop lasso], [Photoshop selections], [Photoshop Generative Fill]
+- Adobe: [Photoshop type], [Photoshop create type], [Photoshop transform], [Photoshop text
+  paths], [Photoshop path selection], [Photoshop anchor points], [InDesign paths], [Photoshop
+  inline input], [Photoshop marquee], [Photoshop lasso], [Photoshop selections], [Photoshop
+  Generative Fill]
 - Clip Studio Paint: [CSP layer masks]
 
 [Pointer Events]: https://www.w3.org/TR/pointerevents3/
 [UI Events key]: https://www.w3.org/TR/uievents-key/
 [CSS UI]: https://www.w3.org/TR/css-ui-4/#cursor
 [Photoshop type]: https://helpx.adobe.com/photoshop/desktop/text-typography/type-layers-creation/type-layers-in-photoshop.html
+[Photoshop create type]: https://helpx.adobe.com/photoshop/using/creating-type.html
 [Photoshop transform]: https://helpx.adobe.com/photoshop/using/free-transformations-images-shapes-paths.html
 [Photoshop text paths]: https://helpx.adobe.com/photoshop/desktop/text-typography/text-on-paths-shapes/modify-text-paths.html
 [Photoshop path selection]: https://helpx.adobe.com/photoshop/desktop/draw-shapes-paths/create-shapes/select-paths-and-path-segments.html

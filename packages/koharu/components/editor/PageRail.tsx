@@ -9,14 +9,14 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { FilePlus2, FolderOpen, LoaderCircle, MoreHorizontal, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useDebounce } from 'use-debounce'
 
-import { call, dispatch } from '@/lib/backend'
-import { useImportPages, usePage, useProject } from '@/lib/queries'
+import { send, useImportPages, usePage, useProject } from '@/lib/queries'
 import { deletePages, movePage } from '@/lib/scene'
 import { pipelineStages, useKoharuStore } from '@/lib/store'
 import { commands, type ImportSource, type PageSummary, type Stage } from '@koharu/ipc/protocol'
@@ -104,17 +104,17 @@ export function PageRail() {
     selectPages(next)
     if (page.id !== active) {
       selectLayers([])
-      dispatch(commands.show, page.id)
+      send(commands.show, page.id)
     }
   }
 
-  const deletePage = (page: string) =>
-    void call(deletePages, [page])
-      .then(() => {
-        selectPages(selected.filter((selectedPage) => selectedPage !== page))
-        if (active === page) selectLayers([])
-      })
-      .catch(() => undefined)
+  const deletion = useMutation({
+    mutationFn: (page: string) => deletePages([page]),
+    onSuccess: (_, page) => {
+      selectPages(selected.filter((selectedPage) => selectedPage !== page))
+      if (active === page) selectLayers([])
+    },
+  })
 
   /** A page dropped on another takes its place; `move_page` counts its index after the page is
    * taken out, which is that place either way. */
@@ -122,7 +122,7 @@ export function PageRail() {
     const page = dragged?.page
     setDragged(null)
     if (page !== undefined && target !== null && pages[target]?.id !== page) {
-      dispatch(movePage, page, target)
+      send(movePage, page, target)
     }
   }
 
@@ -207,11 +207,7 @@ export function PageRail() {
                         dragged={dragged?.page === page.id}
                         target={dragged !== null && dragged.target === index}
                         onSelect={(additive, range) => select(index, additive, range)}
-                        onRun={(stage) =>
-                          void call(commands.runPipeline, { pages: [page.id] }, [stage]).catch(
-                            () => undefined,
-                          )
-                        }
+                        onRun={(stage) => send(commands.runPipeline, { pages: [page.id] }, [stage])}
                         onDelete={() => {
                           setPageToDelete({ page: page.id, number: index + 1 })
                           setConfirmingDelete(true)
@@ -225,7 +221,7 @@ export function PageRail() {
           </DndContext>
         )}
 
-        <div className='mt-auto flex shrink-0 items-center gap-2 px-2 py-2'>
+        <div className='mt-auto flex shrink-0 items-center gap-2 px-1.5 pt-0.5 pb-1.5'>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -233,13 +229,13 @@ export function PageRail() {
                   type='button'
                   variant='ghost'
                   size='icon'
-                  className='size-8 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
+                  className='size-6 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
                   aria-label={t('menu.settings')}
                   onClick={() => setSettingsOpen(true)}
                 />
               }
             >
-              <Settings className='size-4' />
+              <Settings className='size-3.5' />
             </TooltipTrigger>
             <TooltipContent side='right'>{t('menu.settings')}</TooltipContent>
           </Tooltip>
@@ -261,7 +257,7 @@ export function PageRail() {
               variant='destructive'
               onClick={() => {
                 setConfirmingDelete(false)
-                if (pageToDelete !== null) deletePage(pageToDelete.page)
+                if (pageToDelete !== null) deletion.mutate(pageToDelete.page)
               }}
             >
               {t('navigator.delete')}
@@ -303,23 +299,12 @@ function PageImportMenu({
         {icon}
         {importing ? t('navigator.importingAction') : t('navigator.importAction')}
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align='start'
-        className='w-auto min-w-20 border border-border/50 p-0.5 shadow-sm ring-0'
-      >
-        <DropdownMenuItem
-          disabled={importing}
-          className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-          onClick={() => onImport('files')}
-        >
+      <DropdownMenuContent align='start' className='w-auto min-w-20'>
+        <DropdownMenuItem disabled={importing} onClick={() => onImport('files')}>
           <FilePlus2 />
           {t('navigator.importFiles')}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={importing}
-          className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-          onClick={() => onImport('folder')}
-        >
+        <DropdownMenuItem disabled={importing} onClick={() => onImport('folder')}>
           <FolderOpen />
           {t('navigator.importFolder')}
         </DropdownMenuItem>
@@ -415,7 +400,8 @@ function PageItem({
                       variant='ghost'
                       size='icon-xs'
                       aria-label={t('navigator.actionsFor', { page: name })}
-                      className='-mt-1 shrink-0 opacity-0 shadow-none group-hover:opacity-100 aria-expanded:opacity-100'
+                      // Over the name's line, not below it, so the size sits close under the name.
+                      className='-my-1.5 shrink-0 opacity-0 shadow-none group-hover:opacity-100 aria-expanded:opacity-100'
                     />
                   }
                 >
@@ -431,9 +417,11 @@ function PageItem({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <p className='mt-1 text-[9px] text-muted-foreground tabular-nums'>
+            <p className='mt-1.5 text-[9px] text-muted-foreground tabular-nums'>
               {page.size.width} × {page.size.height}
             </p>
+            {/* Nothing on a page with no text found yet. */}
+            {page.texts > 0 && <Translated translated={page.translated} total={page.texts} />}
           </div>
         </article>
       </ContextMenuTrigger>
@@ -446,6 +434,45 @@ function PageItem({
         />
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+/** How many of a page's texts are translated, as a ring and a count, as a CAT tool's file list
+ * shows each file's progress; the sentence it stands for is its label and its tooltip. */
+function Translated({ translated, total }: { translated: number; total: number }) {
+  const { t } = useTranslation()
+  const label = t('navigator.translated', { translated, total })
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span role='img' aria-label={label} />}
+        className='mt-1 flex w-fit items-center gap-1 text-[9px] text-muted-foreground tabular-nums'
+      >
+        <svg viewBox='0 0 16 16' aria-hidden='true' className='size-3 -rotate-90'>
+          <circle
+            cx='8'
+            cy='8'
+            r='6.5'
+            fill='none'
+            strokeWidth='2'
+            className='stroke-foreground/10'
+          />
+          {/* A path length of 1, so the dash is the translated share of the ring. */}
+          <circle
+            cx='8'
+            cy='8'
+            r='6.5'
+            fill='none'
+            strokeWidth='2'
+            pathLength={1}
+            strokeDasharray={`${translated / total} 1`}
+            className='stroke-primary'
+          />
+        </svg>
+        {translated} / {total}
+      </TooltipTrigger>
+      <TooltipContent side='right'>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -487,18 +514,12 @@ function PageActions({
 function PageThumbnail({ page, version, label }: { page: string; version: string; label: string }) {
   const { t } = useTranslation()
   const [source, setSource] = useState<string | null>(null)
-  const [settled, setSettled] = useState(false)
-
-  useEffect(() => {
-    setSettled(false)
-    const timeout = window.setTimeout(() => setSettled(true), 100)
-    return () => window.clearTimeout(timeout)
-  }, [version])
+  // Read once the page settles, not on every change of a stroke or a drag.
+  const [settled] = useDebounce(version, 100)
 
   const thumbnail = useQuery({
-    queryKey: ['thumbnail', page, version],
-    queryFn: async () => new Uint8Array(await call(commands.getPageThumbnail, page)),
-    enabled: settled,
+    queryKey: ['thumbnail', page, settled],
+    queryFn: async () => new Uint8Array(await commands.getPageThumbnail(page)),
     staleTime: Number.POSITIVE_INFINITY,
     notifyOnChangeProps: ['data'],
   }).data

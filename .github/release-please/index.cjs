@@ -71,6 +71,16 @@ class Koharu extends BaseStrategy {
     })
     return updates
   }
+
+  // release-please finds the version in the release PR body's heading, and CHANGELOG.md
+  // keeps it; the release page already titles the notes with the version.
+  async buildReleases(mergedPullRequest, options) {
+    const releases = await super.buildReleases(mergedPullRequest, options)
+    return releases.map((release) => ({
+      ...release,
+      notes: release.notes.replace(/^#{2,} \[?\d+\.\d+\.\d+.*\s*/, ''),
+    }))
+  }
 }
 
 // A custom release type avoids rewriting Cargo's inherited workspace versions in JavaScript.

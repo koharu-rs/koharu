@@ -125,7 +125,7 @@ impl<'n> Painter<'_, '_, 'n> {
             Content::Pixels(pixels) => {
                 let scale = transform.determinant().abs().sqrt();
                 let (level, to_layer) = pixels.level(scale, self.drawing.gpu.largest_texture());
-                let image = self.drawing.image(&level);
+                let image = self.drawing.image(&level)?;
                 let scene = &mut self.drawing.scene;
                 scene.set_transform(transform * to_layer);
                 scene.set_paint(PaintType::Image(Image {

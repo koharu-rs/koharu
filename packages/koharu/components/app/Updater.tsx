@@ -18,7 +18,7 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from '@koharu/ui/components/alert-dialog'
-import { Progress } from '@koharu/ui/components/progress'
+import { Progress, ProgressValue } from '@koharu/ui/components/progress'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 
 type UpdateState =
@@ -27,7 +27,7 @@ type UpdateState =
   | { kind: 'error'; update: Update; message: string }
 
 export function Updater() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [state, setState] = useState<UpdateState | null>(null)
 
   useEffect(() => {
@@ -132,10 +132,12 @@ export function Updater() {
           </ScrollArea>
         )}
         {state.kind === 'downloading' && (
-          <Progress value={percent} aria-label={t('updater.downloading.title')}>
-            <span className='ml-auto text-xs text-muted-foreground tabular-nums'>
-              {percent === null ? '…' : `${Math.round(percent)}%`}
-            </span>
+          <Progress
+            value={percent}
+            locale={i18n.language}
+            aria-label={t('updater.downloading.title')}
+          >
+            <ProgressValue className='text-xs'>{(formatted) => formatted || '…'}</ProgressValue>
           </Progress>
         )}
         {state.kind === 'error' && (

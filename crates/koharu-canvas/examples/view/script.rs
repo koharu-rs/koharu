@@ -43,7 +43,7 @@ pub fn run(mut host: Host, snapshot: &Path, dense: bool) -> Result<()> {
             .collect()
     };
     let mut timer = Timer {
-        gpu,
+        gpu: &gpu,
         phases: Vec::new(),
     };
 

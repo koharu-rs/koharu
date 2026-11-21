@@ -14,13 +14,13 @@ RF-DETR のセグメンテーションモデルである **Koharu Layout HighRes
 
 ## OCR
 
-| モデル                                                                           | 読み取り対象                     |
-| -------------------------------------------------------------------------------- | -------------------------------- |
-| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | 日本語のマンガのテキスト（既定） |
-| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | 日本語のマンガのテキスト         |
-| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | 日本語、中国語、韓国語、英語     |
+| モデル                                                                           | 読み取り対象                         |
+| -------------------------------------------------------------------------------- | ------------------------------------ |
+| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | 日本語のマンガのテキスト             |
+| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | 日本語のマンガのテキスト             |
+| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | 日本語、中国語、韓国語、英語（既定） |
 
-Manga OCR AR のライセンスは CC BY-NC-SA 4.0 のため、既定のまま使う場合は非商用利用に限られます。各モデルのライセンスはモデルカードで確認してください。
+Manga OCR AR のライセンスは CC BY-NC-SA 4.0 のため、選んだ場合は非商用利用に限られます。各モデルのライセンスはモデルカードで確認してください。
 
 <Note>
   OCR
@@ -34,9 +34,9 @@ Manga OCR AR のライセンスは CC BY-NC-SA 4.0 のため、既定のまま�
     マンガ向けに追加学習した **LaMa** が既定です。通常の文字消しはここから始めます。
   </Tab>
   <Tab title="生成型">
-    **FLUX.3 Klein**、**MOSS-Image**、**Qwen-Image 2.1** は stable-diffusion.cpp で動き、**設定 → パイプライン**の**プロンプト**に従います。既定のプロンプトは、すべての文字を消してそれ以外はそのまま残すよう指示します。
+    **FLUX.3 Klein** と **Qwen-Image 2.1 Turbo** は stable-diffusion.cpp で動き、**設定 → パイプライン**の**プロンプト**に従います。既定のプロンプトは、すべての文字を消してそれ以外はそのまま残すよう指示します。
 
-    これらはより多くのダウンロード容量、メモリ、時間を必要とします。プロンプトには文字の除去を書き、訳文はテキストレイヤーで組版します。Qwen-Image 2.1 は Qwen Research License で、研究と評価の目的に限られます。
+    これらはより多くのダウンロード容量、メモリ、時間を必要とします。プロンプトには文字の除去を書き、訳文はテキストレイヤーで組版します。Qwen-Image 2.1 Turbo は Qwen Research License で、研究と評価の目的に限られます。
 
   </Tab>
 </Tabs>

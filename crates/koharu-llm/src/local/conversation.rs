@@ -142,7 +142,7 @@ mod tests {
         conversation
             .messages
             .iter()
-            .map(|message| message["role"].as_str().unwrap())
+            .map(|message| message["role"].as_str().expect("every message has a role"))
             .collect()
     }
 

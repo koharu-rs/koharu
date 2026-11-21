@@ -1,8 +1,7 @@
 import * as Sentry from '@sentry/nextjs'
 
-import { setHeaders } from '@koharu/ipc/protocol'
-
 import { tauriOptions, traceHeaders } from '@/lib/sentry'
+import { setRunner } from '@koharu/ipc/protocol'
 
 // Everything the SDK records, sent through the Rust SDK, which has the DSN, the release,
 // and the user. Koharu reports page content, so replays aren't masked. The feedback form
@@ -20,7 +19,10 @@ Sentry.init({
   replaysOnErrorSampleRate: 1,
 })
 
-// Every command carries the interface's trace, which the backend's work for it continues.
-setHeaders(traceHeaders)
+// Every command runs in a span, timing its round trip, and carries that span's trace, which
+// the backend's work for it continues.
+setRunner((command, invoke) =>
+  Sentry.startSpan({ name: command, op: 'ipc' }, () => invoke({ headers: traceHeaders() })),
+)
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
