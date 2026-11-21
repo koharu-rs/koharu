@@ -51,6 +51,7 @@ backon = { version = "1.6.0", default-features = false, features = ["std", "toki
 base64 = "0.23.1"
 bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 blake3 = "1.8.7"
+block2 = "0.6.2"
 bytes = "1.12.1"
 bytesize = "2.7.0"
 # CEF's frames as GPU textures; tauri-runtime-cef pins this version.
@@ -99,6 +100,15 @@ minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_
 minijinja-contrib = { version = "3.1.0", features = ["pycompat"] }
 # oauth2 sends its requests on an older reqwest; Koharu sends them on rig's.
 oauth2 = { version = "5.0.0", default-features = false }
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    "NSEvent",
+    "NSPanel",
+    "NSResponder",
+    "NSWindow",
+] }
 parking_lot = "0.13.0"
 petgraph = "0.8.3"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97e5b4b1d9a03c3ef9b904dd5de864f5e8aa8" }
@@ -143,22 +153,23 @@ strum = { version = "0.28.0", features = ["derive"] }
 syn = { version = "3.0.10", features = ["full"] }
 tar = "0.4.46"
 # tauri-apps/tauri#16573 (CEF 156) with a second launch exiting quietly and
-# telling the running instance (RUST-F0).
-tauri = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8", default-features = false, features = [
+# telling the running instance (RUST-F0), and a windowless browser's unhandled
+# keys kept from the macOS main menu.
+tauri = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f", default-features = false, features = [
     "compression",
     "dynamic-acl",
     "specta",
     "tracing",
 ] }
-tauri-build = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8" }
-tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8", features = ["build"] }
+tauri-build = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f" }
+tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f", features = ["build"] }
 tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "14ed4c4f9e717929347b9c5609acaefc259a4e22" }
-tauri-runtime-cef = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8", features = ["unstable"] }
+tauri-runtime-cef = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f", features = ["unstable"] }
 # The native window and event types of `Cef::on_window_event`: the runtime's
 # own winit fork, which it does not re-export.
 tauri-winit = { version = "=0.31.0-beta.3", default-features = false }
@@ -202,9 +213,9 @@ windows = { version = "0.62.2", features = [
 zip = { version = "9.5.0", features = ["deflate"] }
 
 [patch.crates-io]
-tauri = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8" }
-tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8" }
-tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "e671767d6803fe5b5907d5618a6dea3707d027d8" }
+tauri = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f" }
+tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f" }
+tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "a1c62222380ac16df9e156e27c8d4a1e4ba2607f" }
 # The published 0.31.0-beta.3 with tauri-apps/winit-gtk4#5, which scales X11
 # windows by the font DPI as KDE's fractional scales set it (#1425).
 tauri-winit-gtk4 = { git = "https://github.com/mayocream/winit-gtk4", rev = "bf2978ad27b8f2d4a04de00afdaa882a4c28ab79" }
