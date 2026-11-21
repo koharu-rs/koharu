@@ -1,3 +1,36 @@
+## [0.90.0](https://github.com/koharu-rs/koharu/compare/0.89.0..0.90.0) - 2026-11-21
+
+### ⛰️  Features
+
+- *(app)* Move the selection with the arrow keys ([#1433](https://github.com/koharu-rs/koharu/issues/1433)) - ([7ef59c5](https://github.com/koharu-rs/koharu/commit/7ef59c5ad7930ff8617276c148a0b243515b1bae))
+- *(canvas)* Mark a text that runs past its frame with Photoshop's overflow mark on its top-left corner or beside its Story number, and draw Story's numbers over the handles - ([3ba5ece](https://github.com/koharu-rs/koharu/commit/3ba5eceead1ed9144ba4396a7b43b5b4891ace77))
+- *(llm)* Give an OpenAI-compatible server's context length in Settings, so the translation conversation summarizes earlier pages before it overflows - ([83ec928](https://github.com/koharu-rs/koharu/commit/83ec928e0e62f7ca483d9ed9cd3a9d50d681f03b))
+- *(ui)* Show recently used colors in the color well ([#989](https://github.com/koharu-rs/koharu/issues/989)) - ([96a1665](https://github.com/koharu-rs/koharu/commit/96a1665379227b2bafbfb6fddead2fcbdf5bf4f2))
+
+### 🐛 Bug Fixes
+
+- *(llm)* Separate generated reasoning from structured answers ([#1461](https://github.com/koharu-rs/koharu/issues/1461)) - ([0e8963a](https://github.com/koharu-rs/koharu/commit/0e8963af38177c4be8ca80089df3250c85cb7682))
+- *(ml)* Run LaMa's final convolution in row bands while cuDNN is off, so PyTorch's native kernel unfolds at most 256 MiB at a time on Windows ROCm - ([6f90b46](https://github.com/koharu-rs/koharu/commit/6f90b46ad483ae83333b9fa777eda02db528261f))
+- *(renderer)* Report running out of GPU memory over the validation errors it causes, and keep no texture the GPU had no memory for - ([97b3776](https://github.com/koharu-rs/koharu/commit/97b37768b86c06fd071241a19d8035778c718cd7))
+- *(ui)* Let the color well's hex field take a code typed past its shorthand - ([3003c1c](https://github.com/koharu-rs/koharu/commit/3003c1cb2224aea85ba8233e67bef5eb62ddbbfc))
+- *(ui)* Bundle Noto Sans variable font ahead of Noto Sans CJK ([#1462](https://github.com/koharu-rs/koharu/issues/1462)) - ([c3cafae](https://github.com/koharu-rs/koharu/commit/c3cafae465a7e021d4d2b82211c3d6f96f09fab6))
+- *(ui)* Draw a typed font size exactly, turning its frame's fitting off, so texts set alike look alike - ([6dd120a](https://github.com/koharu-rs/koharu/commit/6dd120a28faf6d1c17e0f0430238cb1941b71c76))
+
+### 🚜 Refactor
+
+- *(llm)* Split the local engine into loading, prefix reuse, and token picking, move the wire out of local/mod.rs, and read where reasoning starts by one rule - ([f10adb2](https://github.com/koharu-rs/koharu/commit/f10adb267c68509eda4cbc74bb1ed41d9e319841))
+- *(renderer)* Rename Gpu::checked to Gpu::catch - ([c371e9a](https://github.com/koharu-rs/koharu/commit/c371e9ad604564e985a0f134925eb6e558d66883))
+- *(ui)* Rebuild the interface on React Query and Base UI, with favorite fonts, project search, and each page's translated tally - ([2579346](https://github.com/koharu-rs/koharu/commit/2579346280da62c97ca81992f1f5764aeda23cac))
+- Restore VENDORS with list_models and list_vendors taking no parameters, and keep each vendor's sign-in, server, and context window traits in the interface - ([82625c8](https://github.com/koharu-rs/koharu/commit/82625c8afab806e980684d21f81be9acf99f13ab))
+- Keep the vendor list and what each takes in the interface, list models and stored credentials for the vendors it names, and drop VENDORS, SERVERS, SIGN_INS, and CONTEXT_WINDOWS - ([e7d8039](https://github.com/koharu-rs/koharu/commit/e7d8039c99bfad53793549f485b65c152307447d))
+
+## New Contributors ❤️
+
+* @ZenoArrows made their first contribution in [#989](https://github.com/koharu-rs/koharu/pull/989)
+* @petmav made their first contribution in [#1433](https://github.com/koharu-rs/koharu/pull/1433)
+* @hiranaka99 made their first contribution in [#1461](https://github.com/koharu-rs/koharu/pull/1461)
+* @Remilya made their first contribution in [#1462](https://github.com/koharu-rs/koharu/pull/1462)
+
 ## [0.89.0](https://github.com/koharu-rs/koharu/compare/0.88.0..0.89.0) - 2026-11-20
 
 ### ⛰️  Features
