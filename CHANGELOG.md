@@ -1,3 +1,9 @@
+## [0.90.1](https://github.com/koharu-rs/koharu/compare/0.90.0..0.90.1) - 2026-11-21
+
+### 🐛 Bug Fixes
+
+- *(ui)* List layers topmost first, as Photoshop's Layers panel does, with drags placing a row above or below where they're aimed - ([4828216](https://github.com/koharu-rs/koharu/commit/48282164755eeb691991c5db9d94ef09eb9140af))
+
 ## [0.90.0](https://github.com/koharu-rs/koharu/compare/0.89.0..0.90.0) - 2026-11-21
 
 ### ⛰️  Features
