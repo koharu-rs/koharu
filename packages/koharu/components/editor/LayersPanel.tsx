@@ -41,6 +41,7 @@ import {
   isLockedLayer,
   isTextLayer,
   plainText,
+  walkLayers,
   type BlockLayer,
   type Drop,
   type Part,
@@ -55,10 +56,11 @@ import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Slider } from '@koharu/ui/components/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
-/** The page's layers first to last, which is reading order, each with its depth; the last
- * draws on top. A block's clean-up and mask are its own, shown on its row, not listed. */
+/** The page's layers topmost first, as Photoshop's Layers panel lists them, each with its depth:
+ * the scene keeps them in reading order and draws the last on top. A block's clean-up and mask
+ * are its own, shown on its row, not listed. */
 function displayedLayers(layers: Layer[], depth = 0): { placed: Placed; depth: number }[] {
-  return layers.flatMap((layer) => {
+  return layers.toReversed().flatMap((layer) => {
     const placed = { layer, ancestors: [] as Layer[] }
     return [
       { placed, depth },
@@ -70,8 +72,8 @@ function displayedLayers(layers: Layer[], depth = 0): { placed: Placed; depth: n
   })
 }
 
-/** The shown page's layers in reading order, each a row to select, show, lock, fade, or delete,
- * a block's with its clean-up and mask. */
+/** The shown page's layers topmost first, each a row to select, show, lock, fade, or delete, a
+ * block's with its clean-up and mask. */
 export function LayersPanel() {
   const { t } = useTranslation()
   const page = usePage().data
@@ -87,7 +89,7 @@ export function LayersPanel() {
   }, [selected])
 
   const rows = useMemo(() => (page ? displayedLayers(page.layers) : []), [page])
-  // A drag of rows: the layers it carries, in reading order, and where it would put them now.
+  // A drag of rows: the layers it carries, in the scene's order, and where it would put them now.
   const [drag, setDrag] = useState<{ layers: LayerId[]; drop: Drop | null } | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
@@ -103,9 +105,9 @@ export function LayersPanel() {
 
   if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
-  /** What a drag shows under the pointer: its first layer's name, and how many more it carries. */
+  /** What a drag shows under the pointer: its top row's name, and how many more it carries. */
   const draggedName = (layers: LayerId[]) => {
-    const index = rows.findIndex((row) => row.placed.layer.id === layers[0])
+    const index = rows.findIndex((row) => layers.includes(row.placed.layer.id))
     const first = rows[index]?.placed.layer
     const name = first ? localizedLayerName(first, index, t) : ''
     return layers.length > 1 ? `${name} +${layers.length - 1}` : name
@@ -114,12 +116,14 @@ export function LayersPanel() {
   /** A drag carries every selected layer when it starts on a selected row, else that row's. */
   const carried = (layer: LayerId) =>
     selected.includes(layer)
-      ? rows.map((row) => row.placed.layer.id).filter((id) => selected.includes(id))
+      ? walkLayers(page.layers)
+          .map(({ layer }) => layer.id)
+          .filter((id) => selected.includes(id))
       : [layer]
 
-  /** Where the pointer is over the row under it: its top or bottom quarter puts the layers
-   * before or after it, and a container's middle into it; another row's halves, before or after.
-   * Only a place the scene allows. */
+  /** Where the pointer is over the row under it: its top or bottom quarter puts the layers above
+   * or below it, and a container's middle into it; another row's halves, above or below. Above is
+   * after it in the scene, which draws later layers on top. Only a place the scene allows. */
   const follow = ({ active, over, activatorEvent, delta }: DragMoveEvent) => {
     const layers = drag?.layers ?? carried(String(active.id))
     const target = over ? findLayer(page.layers, String(over.id))?.layer : undefined
@@ -129,13 +133,13 @@ export function LayersPanel() {
       const at = (start.clientY + delta.y - over.rect.top) / over.rect.height
       const zone: Drop['zone'] = isContainer(target)
         ? at < 0.25
-          ? 'before'
+          ? 'after'
           : at > 0.75
-            ? 'after'
+            ? 'before'
             : 'inside'
         : at < 0.5
-          ? 'before'
-          : 'after'
+          ? 'after'
+          : 'before'
       const candidate = { target: target.id, zone }
       if (dropMoves(page.layers, layers, candidate)) drop = candidate
     }
@@ -154,7 +158,6 @@ export function LayersPanel() {
     anchor.current = block.id
     selectLayers([layer.id])
   }
-
 
   // Modifier semantics mirror the page rail: ctrl/meta toggles, shift selects a display range.
   const selectLayer = (layer: LayerId, additive: boolean, range: boolean) => {
@@ -279,7 +282,8 @@ function LayerRow({
   movable: boolean
   /** Whether the drag in progress carries it. */
   carried: boolean
-  /** Where the drag in progress would put its layers relative to this row. */
+  /** Where the drag in progress would put its layers relative to this row's layer in the scene:
+   * after it shows above the row, before it below. */
   drop: Drop['zone'] | undefined
   onDelete: () => void
 }) {
@@ -310,7 +314,7 @@ function LayerRow({
           {(drop === 'before' || drop === 'after') && (
             <span
               aria-hidden='true'
-              className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-primary ${drop === 'before' ? '-top-px' : '-bottom-px'}`}
+              className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-primary ${drop === 'after' ? '-top-px' : '-bottom-px'}`}
             />
           )}
           <button

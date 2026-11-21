@@ -427,10 +427,10 @@ Each model also writes its `c2pa` action on the layers it wrote.
 
 ### How the app shows it
 
-- **Layers panel:** the tree first to last, which is reading order, so the top
-  row is read first and the bottom row draws on top, where Photoshop's and Clip
-  Studio Paint's layer palettes list the topmost layer first. A block's row shows its clean-up and its mask, and
-  painting goes to whichever is selected.
+- **Layers panel:** the tree last to first, so the top row draws on top, as
+  Photoshop's and Clip Studio Paint's layer palettes list the topmost layer
+  first; the Story panel shows reading order. A block's row shows its clean-up
+  and its mask, and painting goes to whichever is selected.
 - **Story panel:** each page's shown blocks and texts in reading order, a
   block with its source's wording and its translation's, as Clip Studio Paint's
   Story Editor "shows all text on each page" in text fields, leaving out what

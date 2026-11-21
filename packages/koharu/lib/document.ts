@@ -57,8 +57,8 @@ export function findPart(
   return undefined
 }
 
-/** Where a drag over a Layers row puts what it carries: before the row, after it, or into it,
- * as its last children. */
+/** Where a drag over a Layers row puts what it carries: before the row's layer in the scene,
+ * after it, or into it, as its last children, which draw on top. */
 export interface Drop {
   target: LayerId
   zone: 'before' | 'after' | 'inside'
