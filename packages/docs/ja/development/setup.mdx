@@ -1,0 +1,75 @@
+---
+title: '開発環境のセットアップ'
+description: 'デスクトップアプリを実行し、必要な確認を選び、派生バインディングを再生成します。'
+icon: 'terminal'
+---
+
+## 前提条件
+
+Koharu は Rust 1.97.1（2024 edition）、Bun 1.3.14、LLVM 22.1.8 で開発されています。リポジトリではこれらのバージョンを固定していません。LLVM は `-sys` クレートのバインディング生成に使う libclang を提供します。ネイティブライブラリ自体は実行時にダウンロードされるビルド済みパッケージなので、C++ のビルドシステムは不要です。
+
+<Tabs>
+  <Tab title='Windows'>ネイティブ依存関係用に MSVC の C/C++ ビルドツールをインストールします。</Tab>
+  <Tab title='Linux'>
+    CI と同じ `build-essential`、`libgtk-4-dev`、`libxdo-dev`、`libssl-dev`、
+    `libayatana-appindicator3-dev`、`librsvg2-dev` をインストールします。テストには
+    `fonts-noto-cjk`、`dbus-x11`、`gnome-keyring` も必要です。
+  </Tab>
+  <Tab title='macOS'>
+    プラットフォームの C/C++ 開発ツールをインストールし、CEF のヘルパープロセスがビルドする Rust
+    ターゲットを追加します: `rustup target add aarch64-apple-darwin x86_64-apple-darwin`。
+  </Tab>
+</Tabs>
+
+## 開発を始める
+
+```bash
+git clone https://github.com/koharu-rs/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun install` は、ワークスペースが使うリビジョンの Tauri CLI も `cargo install` でインストールします。`bun dev` は `cargo tauri dev` を実行し、ポート 3000 で Next.js のインターフェースとデスクトップアプリを起動します。最初のビルドでは CEF をダウンロードします。デバッグビルドでは `http://127.0.0.1:4000` で CEF のリモートデバッグを利用できます。
+
+<Note>
+  Tauri CLI は自身が実行するビルドに `CEF_PATH` を設定します。`koharu` や `koharu-desktop` など CEF
+  をリンクするクレートで `cargo` コマンドを直接実行する場合は、同じフォルダー（OS
+  のキャッシュフォルダー内の `tauri-cef`）を設定してください。設定しないと CEF
+  を再ダウンロードして再ビルドします。Windows では `%LOCALAPPDATA%\tauri-cef` です。
+</Note>
+
+## 対象コンポーネントを確認する
+
+関連する最小のデバッグチェックか対象テストを 1 回実行します。
+
+```bash
+cargo check -p koharu
+cargo test -p koharu-pipeline <test_name>
+cargo fmt --all --check
+```
+
+インターフェースの作業では、`bun run test` で Vitest のテスト、`bun run lint` でリンターを実行します。`bun run check` はリポジトリの TypeScript と JSON のフォーマットを確認します。
+
+<Note>
+  フルスイート、デバッグ以外のプロファイル、E2E テストは、明示的に依頼された場合にだけ実行します。
+</Note>
+
+## IPC バインディングを再生成する
+
+Rust のコマンドシグネチャと Specta の型が正本です。
+
+```bash
+cargo run -p koharu-desktop --bin ipc
+bun run format
+```
+
+`packages/ipc/src/protocol.ts` は手で編集しないでください。
+
+## 実行ファイルをビルドする
+
+リリース用の実行ファイルが必要な場合、`bun run build` が `cargo tauri build --no-bundle` を実行し、`target/release` に出力します。インストーラーの作成はリリースワークフローが担当します。
+
+<Card title='ドキュメントを編集する' icon='book-open' href='/ja/development/documentation'>
+  Mintlify をプレビューし、英語・日本語・中国語のドキュメントを管理します。
+</Card>

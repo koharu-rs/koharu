@@ -1,0 +1,43 @@
+---
+title: 'Set up Koharu Agent'
+description: 'Choose the Agent model and connect agents in other programs over MCP.'
+icon: 'robot'
+---
+
+Koharu Agent is a project assistant inside the editor. It runs on any model you can pick for translation that calls tools: a hosted model, a subscription such as ChatGPT, or one of Koharu's general local models.
+
+<Steps>
+  <Step title='Connect a provider'>
+    Add an API key or sign in under **Settings → Providers**, or skip this step to use a local
+    model. See [translation providers](/models/providers).
+  </Step>
+  <Step title='Open the Agent panel'>
+    Open a project and select the **Agent** tab on the right, beside **Layers** and **Story**.
+  </Step>
+  <Step title='Choose a model'>
+    Select a model and a reasoning level under the message box. **Provider default** uses the
+    model's own level, and **Off** turns reasoning off where the model allows it. More reasoning can
+    help with ambiguous edits but takes longer. **New chat** beside them starts the conversation
+    over.
+  </Step>
+</Steps>
+
+## What context is shared
+
+Each request starts with the open project's outline: its pages and their layers. The Agent renders and attaches a page image only when it calls its page-view tool; it does not attach every page. A hosted model's provider receives what the Agent sends it.
+
+<Note>
+  The Agent and translation share provider connections, but not models: the Agent's model and
+  reasoning are saved in the `[agent]` section of `~/.koharu/config.toml`, apart from translation's.
+  That section also holds `max_turns` (20 model calls per request by default) and `corrections` (how
+  many times a malformed tool call goes back to the model, 2 by default). The Agent's system prompt
+  is Koharu's own and can't be changed.
+</Note>
+
+## Connect other agents over MCP
+
+While Koharu runs, it serves the same tools to agents in other programs over MCP's Streamable HTTP transport at `http://127.0.0.1:7878/mcp`, shown at the top of the Agent panel. Add that URL to an MCP client on the same machine. The server works on whichever project is open, accepts connections from this machine only, and refuses requests from web pages.
+
+<Card title='Work with a project' icon='comment' href='/agent/projects'>
+  Give the Agent a precise scope, review its edits, and use project history.
+</Card>

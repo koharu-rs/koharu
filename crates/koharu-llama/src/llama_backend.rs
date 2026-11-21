@@ -2,8 +2,6 @@
 
 use crate::LlamaCppError;
 use koharu_llama_sys::ggml_log_level;
-use std::ffi::CString;
-use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
@@ -25,24 +23,6 @@ impl LlamaBackend {
     }
 
     /// Initialize the llama backend (without numa).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    ///# use koharu_llama::llama_backend::LlamaBackend;
-    ///# use koharu_llama::LlamaCppError;
-    ///# use std::error::Error;
-    ///
-    ///# fn main() -> Result<(), Box<dyn Error>> {
-    ///
-    ///
-    /// let backend = LlamaBackend::init()?;
-    /// // the llama backend can only be initialized once
-    /// assert_eq!(Err(LlamaCppError::BackendAlreadyInitialized), LlamaBackend::init());
-    ///
-    ///# Ok(())
-    ///# }
-    /// ```
     #[tracing::instrument(skip_all)]
     pub fn init() -> crate::Result<LlamaBackend> {
         Self::mark_init()?;
@@ -51,37 +31,14 @@ impl LlamaBackend {
     }
 
     /// Initialize the llama backend (with numa).
-    /// ```no_run
-    ///# use koharu_llama::llama_backend::LlamaBackend;
-    ///# use std::error::Error;
-    ///# use koharu_llama::llama_backend::NumaStrategy;
-    ///
-    ///# fn main() -> Result<(), Box<dyn Error>> {
-    ///
-    /// LlamaBackend::load_all_backends_from_path("path/to/llama/backends")?;
-    /// let llama_backend = LlamaBackend::init_numa(NumaStrategy::MIRROR)?;
-    ///
-    ///# Ok(())
-    ///# }
-    /// ```
     #[tracing::instrument(skip_all)]
     pub fn init_numa(strategy: NumaStrategy) -> crate::Result<LlamaBackend> {
-        Self::mark_init()?;
+        // Initialize backends first, then NUMA.
+        let this = Self::init()?;
         unsafe {
             koharu_llama_sys::llama_numa_init(koharu_llama_sys::ggml_numa_strategy::from(strategy));
         }
-        Ok(LlamaBackend {})
-    }
-
-    /// Load llama.cpp dynamic backend plugins from a package directory.
-    pub fn load_all_backends_from_path(path: impl AsRef<Path>) -> crate::Result<()> {
-        let path = path.as_ref();
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| LlamaCppError::BackendPathToStrError(path.to_path_buf()))?;
-        let path_cstr = CString::new(path_str).map_err(LlamaCppError::BackendPathNullError)?;
-        unsafe { koharu_llama_sys::ggml_backend_load_all_from_path(path_cstr.as_ptr()) };
-        Ok(())
+        Ok(this)
     }
 
     /// Was the code built for a GPU backend & is a supported one available.
@@ -168,20 +125,6 @@ impl From<NumaStrategy> for koharu_llama_sys::ggml_numa_strategy {
 }
 
 /// Drops the llama backend.
-/// ```no_run
-///
-///# use koharu_llama::llama_backend::LlamaBackend;
-///# use std::error::Error;
-///
-///# fn main() -> Result<(), Box<dyn Error>> {
-/// let backend = LlamaBackend::init()?;
-/// drop(backend);
-/// // can be initialized again after being dropped
-/// let backend = LlamaBackend::init()?;
-///# Ok(())
-///# }
-///
-/// ```
 impl Drop for LlamaBackend {
     fn drop(&mut self) {
         match LLAMA_BACKEND_INITIALIZED.compare_exchange(true, false, SeqCst, SeqCst) {

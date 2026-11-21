@@ -1,23 +1,23 @@
 import type { Metadata } from 'next'
 import { ThemeProvider } from 'next-themes'
-import { Noto_Sans_JP, Noto_Sans_SC, Noto_Sans_TC } from 'next/font/google'
+import localFont from 'next/font/local'
 
 import './globals.css'
 import Providers from '@/app/providers'
 
-const notoSansJP = Noto_Sans_JP({
-  subsets: ['latin'],
-  variable: '--font-noto-jp',
+const notoSans = localFont({
+  src: './fonts/NotoSans-VF.ttf',
+  weight: '100 900',
+  variable: '--font-noto-sans',
+  // No Arial stand-in scaled to Noto Sans's metrics: a character Noto Sans lacks goes on to
+  // Noto Sans CJK, as it did before Noto Sans came first.
+  adjustFontFallback: false,
 })
 
-const notoSansSC = Noto_Sans_SC({
-  subsets: ['latin'],
-  variable: '--font-noto-sc',
-})
-
-const notoSansTC = Noto_Sans_TC({
-  subsets: ['latin'],
-  variable: '--font-noto-tc',
+const notoSansCJK = localFont({
+  src: './fonts/NotoSansCJK-VF.otf',
+  weight: '100 900',
+  variable: '--font-noto-sans-cjk',
 })
 
 export const metadata: Metadata = {
@@ -30,11 +30,13 @@ function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang='en-US' suppressHydrationWarning style={{ backgroundColor: 'transparent' }}>
-      <body
-        className={`${notoSansSC.variable} ${notoSansTC.variable} ${notoSansJP.variable} antialiased`}
-        style={{ backgroundColor: 'transparent' }}
-      >
+    <html
+      lang='en-US'
+      className={`${notoSans.variable} ${notoSansCJK.variable}`}
+      suppressHydrationWarning
+      style={{ backgroundColor: 'transparent' }}
+    >
+      <body className='antialiased' style={{ backgroundColor: 'transparent' }}>
         <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
           <Providers>{children}</Providers>
         </ThemeProvider>

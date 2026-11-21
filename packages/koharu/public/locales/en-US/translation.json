@@ -18,45 +18,31 @@
     "title": "Activity"
   },
   "agent": {
-    "account": "ChatGPT account",
-    "applying": "Applying project changes...",
-    "automatic": "Automatic",
     "cancel": "Cancel",
     "cancelled": "Cancelled.",
-    "deviceCode": "Device code",
-    "deviceCodeHint": "Your browser has opened. Enter this code to authorize Koharu.",
     "emptyDescription": "Ask the agent to inspect, translate, edit, or process this project. It will view page images only when needed.",
     "emptyTitle": "What should Koharu do?",
     "failed": "The agent request failed.",
-    "loading": "Loading Codex...",
+    "loading": "Loading agent…",
     "message": "Message Koharu Agent",
-    "model": "Codex model",
+    "model": "Model",
+    "newChat": "New chat",
     "placeholder": "Ask Koharu to work on this project...",
-    "properties": "Properties",
     "reasoning": "Reasoning",
-    "reasoningLevels": {
-      "high": "High",
-      "low": "Low",
-      "max": "Max",
-      "medium": "Medium",
-      "ultra": "Ultra",
-      "xhigh": "Extra high"
-    },
     "send": "Send",
-    "signIn": "Sign in with Codex",
-    "signInDescription": "Sign in with your ChatGPT subscription. Koharu uses device-code authentication and never asks for an API key.",
-    "signInTitle": "Connect Codex",
-    "signOut": "Sign out",
-    "signingIn": "Waiting for sign-in...",
     "thinking": "Thinking...",
+    "thought": "Thought for {{seconds}}s",
     "title": "Agent",
+    "toolFailed": "{{tool}} failed",
+    "used": "Used {{tool}}",
+    "using": "Using {{tool}}",
     "working": "Working..."
   },
   "canvas": {
     "empty": "Select a page to begin.",
-    "fit": "Fit Window",
-    "surface": "Koharu canvas",
-    "unavailable": "WebGPU canvas unavailable"
+    "notice": {
+      "eraser_needs_raster": "Select a raster layer to erase."
+    }
   },
   "colorPicker": {
     "brushColor": "Brush color",
@@ -70,63 +56,88 @@
     "back": "Back",
     "cancel": "Cancel",
     "clearSearch": "Clear search",
-    "loading": "Loading…",
-    "reset": "Reset"
+    "loading": "Loading…"
   },
   "errors": {
+    "actionFailed": "Could not complete that action",
     "fatalTitle": "Koharu could not continue",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "unknown": "The native application returned an unknown error."
+  },
+  "feedback": {
+    "addScreenshot": "Add a screenshot",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "email": "Email",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "Please describe what happened.",
+    "failed": "The feedback couldn’t be sent. Please try again.",
+    "forbidden": "This build can’t send feedback.",
+    "hide": "Hide",
+    "highlight": "Highlight",
+    "message": "Description",
+    "messagePlaceholder": "What happened? What did you expect?",
+    "name": "Name",
+    "namePlaceholder": "Your name",
+    "noClient": "Feedback isn’t available right now.",
+    "removeHighlight": "Remove",
+    "removeScreenshot": "Remove screenshot",
+    "required": "(required)",
+    "sent": "Thank you for your feedback!",
+    "submit": "Send",
+    "timeout": "Sending timed out. Please try again.",
+    "title": "Send Feedback"
+  },
+  "fill": {
+    "deselect": "Deselect",
+    "generate": "Generate",
+    "model": "Fill model",
+    "prompt": "Describe what to add (optional)",
+    "title": "Generative Fill"
   },
   "fontPicker": {
-    "activeFilterCount": "{{count}} active filters",
-    "activeFilterCount_one": "{{count}} active filter",
-    "activeFilterCount_other": "{{count}} active filters",
-    "allPurposes": "All purposes",
-    "allScripts": "All scripts",
-    "allSources": "All sources",
-    "allStyles": "All styles",
+    "addFavorite": "Add {{name}} to favorites",
     "choose": "Choose a font",
-    "clearFilters": "Clear filters",
-    "filter": "Filter fonts",
-    "filterActiveLabel": "Filter fonts, {{count}} active",
+    "favoritesOnly": "Show favorite fonts",
     "fontCount": "{{count}} fonts",
     "fontCount_one": "{{count}} font",
     "fontCount_other": "{{count}} fonts",
-    "fontLabel": "{{family}}, {{source}}",
     "fonts": "Fonts",
+    "noFavorites": "No favorite fonts yet",
     "noResults": "No fonts match this search",
-    "purpose": "Purpose",
-    "script": "Script",
-    "scripts": {
-      "arab": "Arabic",
-      "beng": "Bengali",
-      "cyrl": "Cyrillic",
-      "deva": "Devanagari",
-      "gujr": "Gujarati",
-      "guru": "Gurmukhi",
-      "hang": "Hangul",
-      "hani": "Han",
-      "hebr": "Hebrew",
-      "hira": "Hiragana",
-      "kana": "Katakana",
-      "knda": "Kannada",
-      "latn": "Latin",
-      "mlym": "Malayalam",
-      "taml": "Tamil",
-      "telu": "Telugu",
-      "thai": "Thai"
+    "removeFavorite": "Remove {{name}} from favorites",
+    "search": "Search fonts"
+  },
+  "history": {
+    "close": "Close history",
+    "opened": "Opened",
+    "steps": {
+      "add_text": "Add text",
+      "delete_layers": "Delete layers",
+      "delete_pages": "Delete pages",
+      "detect": "Detection",
+      "edit_frame": "Edit frame",
+      "erase": "Erase",
+      "import": "Import pages",
+      "inpaint": "Inpainting",
+      "move": "Move",
+      "move_layer": "Move layers",
+      "move_page": "Move page",
+      "paint": "Paint",
+      "recognize": "OCR",
+      "resize": "Resize",
+      "rotate": "Rotate",
+      "set_locked": "Lock or unlock",
+      "set_source_text": "Edit source text",
+      "set_style": "Change type",
+      "set_text": "Edit text",
+      "set_visibility": "Show or hide",
+      "translate": "Translation",
+      "update_layer": "Change layer"
     },
-    "search": "Search fonts",
-    "source": "Source",
-    "sources": {
-      "bundled": "Bundled",
-      "system": "System"
-    },
-    "style": "Style"
+    "title": "History"
   },
   "inference": {
-    "currentPage": "Current page",
-    "currentPageDescription": "Process only the page in the canvas.",
     "entireProject": "Entire project",
     "entireProjectDescription": "Process every page in this project.",
     "model": "Model",
@@ -139,7 +150,6 @@
     "runProcessing": "Run processing",
     "scope": "Scope",
     "scopeShort": {
-      "page": "Page",
       "project": "Project",
       "selected-pages": "Selection"
     },
@@ -166,109 +176,88 @@
     "alignTop": "Align top",
     "alignment": "Alignment",
     "auto": "Auto",
-    "autoFit": "Auto fit",
     "border": "Border",
     "borderColor": "Border color",
     "borderWidth": "Border width",
+    "chooseBorderWidth": "Choose border width",
     "chooseFontSize": "Choose font size",
-    "color": "Color",
-    "customFrame": "Custom frame",
-    "decreaseBorderWidth": "Decrease border width",
-    "direction": "Direction",
     "font": "Font",
     "fontSize": "Font size",
-    "fontStyle": "Font style",
     "fontStyles": {
       "italic": "Italic",
-      "normal": "Regular",
       "oblique": "Oblique"
     },
     "fontWeight": "Font weight",
     "horizontal": "Horizontal",
-    "increaseBorderWidth": "Increase border width",
     "opacity": "Opacity",
-    "placement": "Placement",
-    "resetAutoFit": "Reset to auto fit",
     "selectPage": "Select a page to inspect its layers.",
-    "size": "Size",
     "source": "Source text",
-    "style": "Style",
+    "text": "Text",
     "textColor": "Text color",
     "textDirection": "Text direction",
     "translation": "Translation",
     "type": "Type",
-    "unplaced": "Unplaced",
-    "vertical": "Vertical",
-    "weight": "Weight",
-    "width": "Width"
-  },
-  "languages": {
-    "en-US": "English",
-    "es-ES": "Español",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
+    "vertical": "Vertical"
   },
   "layers": {
     "delete": "Delete {{name}}",
     "edit": "Edit {{name}}",
     "empty": "No layers on this page.",
     "hide": "Hide {{name}}",
-    "imageName": "Image {{index}}",
     "kinds": {
-      "cleanup": "Cleanup",
-      "dialogue": "Dialogue",
-      "freeText": "Free text",
+      "balloon": "Balloon",
+      "block": "Text block",
       "group": "Group",
       "image": "Image",
-      "paint": "Paint",
-      "text": "Text",
-      "textGroup": "Text group"
+      "mask": "Mask",
+      "panel": "Panel",
+      "raster": "Raster",
+      "shape": "Shape",
+      "text": "Text"
     },
+    "lock": "Lock {{name}}",
     "locked": "Locked",
-    "lockedLabel": "{{name}} is locked",
-    "moveDown": "Move {{name}} down",
-    "moveUp": "Move {{name}} up",
     "opacityLabel": "{{name}} opacity",
-    "originalArtwork": "Original artwork",
+    "parts": {
+      "cleanup": "Cleanup",
+      "mask": "Mask",
+      "pick": "{{part}} of {{name}}",
+      "toggle": "Shift-click to show or hide"
+    },
     "show": "Show {{name}}",
     "sourceLabel": "{{name}} source text",
+    "textLabel": "{{name}} text",
     "textName": "Text {{index}}",
     "title": "Layers",
-    "translationLabel": "{{name}} translation"
+    "translationLabel": "{{name}} translation",
+    "unlock": "Unlock {{name}}",
+    "unlocked": "Unlocked"
   },
   "menu": {
     "about": "About",
     "closeProject": "Close Project",
     "delete": "Delete Selected",
     "discord": "Discord",
+    "donate": "Donate",
     "edit": "Edit",
-    "exportPng": "Export PNG…",
-    "exportPsd": "Export PSD…",
+    "export": "Export Project",
+    "feedback": "Send Feedback",
     "file": "File",
     "fit": "Fit Window",
     "github": "GitHub",
     "help": "Help",
-    "importPages": "Import Pages…",
-    "process": "Process",
-    "processLayers": "Process Selected Layers",
-    "processPages": "Process Selected Pages",
-    "processProject": "Process Project",
+    "history": "History",
+    "import": "Import Pages",
     "redo": "Redo",
-    "runPhase": "Run {{phase}}",
     "selectAllLayers": "Select All Layers",
     "settings": "Settings",
     "undo": "Undo",
+    "unloadModels": "Unload Models",
     "view": "View"
   },
   "model": {
     "baseUrl": "Base URL",
     "default": "Default",
-    "instructions": "Instructions",
     "targetLanguage": "Target language"
   },
   "modelPicker": {
@@ -282,69 +271,58 @@
   "navigator": {
     "actionsFor": "Actions for {{page}}",
     "delete": "Delete",
+    "deleteDescription": "This deletes “{{page}}” and its layers. You can undo it.",
+    "deleteTitle": "Delete page?",
     "emptyDescription": "Import image files or a folder to add pages.",
     "emptyTitle": "No pages yet",
-    "filter": "Filter pages",
     "importAction": "Import",
     "importFiles": "Files…",
     "importFolder": "Folder…",
     "importing": "Importing pages…",
     "importingAction": "Importing…",
-    "layerCount": "{{count}} layers",
-    "layerCount_one": "{{count}} layer",
-    "layerCount_other": "{{count}} layers",
     "noImage": "No image",
-    "noResults": "No pages match this filter.",
-    "pageName": "Page name",
+    "pageNumber": "Page {{number}}",
     "pages": "Pages",
-    "rename": "Rename",
-    "renameDescription": "Choose a new name for this page.",
-    "renameTitle": "Rename page"
+    "run": {
+      "detect": "Detect",
+      "inpaint": "Inpaint",
+      "recognize": "Recognize",
+      "translate": "Translate"
+    },
+    "selected": "{{count}} selected",
+    "translated": "{{translated}} of {{total}} translated"
   },
   "outputPicker": {
-    "instructions": "Translation instructions",
-    "instructionsPlaceholder": "Optional guidance for tone, names, and formatting.",
+    "noResults": "No languages match this search.",
+    "search": "Search languages",
     "targetLanguage": "Target language",
     "title": "Translation output"
   },
   "phase": {
-    "detection": "Detection",
-    "inpainting": "Inpainting",
-    "ocr": "OCR",
-    "translation": "Translation"
+    "detect": "Detection",
+    "inpaint": "Inpainting",
+    "recognize": "OCR",
+    "translate": "Translation"
   },
   "phaseDescription": {
-    "detection": "Locate text on the page.",
-    "inpainting": "Rebuild the artwork behind removed text.",
-    "ocr": "Read the text inside each region.",
-    "translation": "Convert source text to the target language."
+    "detect": "Locate text on the page.",
+    "inpaint": "Rebuild the artwork behind removed text.",
+    "recognize": "Read the text inside each region.",
+    "translate": "Convert source text to the target language."
   },
-  "providerDescriptions": {
-    "atlas-cloud": "Atlas-hosted language models.",
-    "caiyun": "Caiyun translation API.",
-    "claude": "Anthropic Claude models.",
-    "deepl": "DeepL translation API.",
-    "deepseek": "DeepSeek language models.",
-    "gemini": "Google Gemini models.",
-    "google-cloud-translation": "Google Cloud Translation API.",
-    "grok": "xAI Grok language models.",
-    "lm-studio": "Models served by LM Studio.",
-    "local": "Models running on this device.",
-    "minimax": "MiniMax language models.",
-    "openai": "OpenAI language models.",
-    "openai-compatible": "Any server exposing an OpenAI-compatible API.",
-    "openrouter": "Models routed through OpenRouter."
+  "psd": {
+    "background": "Background",
+    "cleanup": "Cleanup",
+    "outline": "Outline"
   },
-  "resources": {
-    "cpu": "CPU",
-    "processUtilization": "Process utilization",
-    "ram": "RAM",
-    "summary": "RAM {{ram}}%, CPU {{cpu}}%",
-    "title": "System resources",
-    "tooltip": "RAM {{ramUsed}} of {{ramTotal}} · CPU {{cpu}}%",
-    "usedOfTotal": "{{used}} of {{total}} used",
-    "vramUnavailable": "Unavailable",
-    "vramValue": "{{value}} VRAM"
+  "reasoning": {
+    "high": "High",
+    "low": "Low",
+    "max": "Max",
+    "medium": "Medium",
+    "minimal": "Minimal",
+    "off": "Off",
+    "xhigh": "Extra high"
   },
   "settings": {
     "appearance": {
@@ -361,108 +339,93 @@
       "title": "Appearance"
     },
     "backToEditor": "Back to editor",
-    "generation": {
-      "description": "Fine-tune how language models generate translated text.",
-      "enableReasoning": "Enable reasoning",
-      "frequencyPenalty": "Frequency penalty",
-      "maxTokens": "Maximum tokens",
-      "minP": "Min P",
-      "presencePenalty": "Presence penalty",
-      "repeatPenalty": "Repeat penalty",
-      "sampling": "Sampling",
-      "samplingDescription": "Control how the model selects and varies generated text.",
-      "temperature": "Temperature",
-      "reasoning": "Reasoning",
-      "reasoningDescription": "Use model reasoning during translation.",
-      "title": "Generation",
-      "topK": "Top K",
-      "topP": "Top P",
-      "vision": "Vision",
-      "visionDescription": "Feed page images to the LLM during translation."
-    },
     "loading": "Loading preferences…",
     "pipeline": {
       "description": "Choose the models and options used to process each page.",
+      "model": "Model",
       "modelLabel": "{{stage}} model",
       "options": {
         "bubbleThreshold": "Bubble threshold",
-        "negativePrompt": "Negative prompt",
+        "onomatopoeiaThreshold": "SFX threshold",
         "panelThreshold": "Panel threshold",
         "prompt": "Prompt",
+        "promptDescription": "Applies only to generative models.",
         "textThreshold": "Text threshold"
       },
-      "processing": "Processing",
       "stages": {
-        "detection": {
+        "detect": {
           "description": "Find text, speech bubbles, and panels.",
-          "title": "Detection"
+          "title": "Detector"
         },
-        "inpainting": {
+        "inpaint": {
           "description": "Rebuild artwork beneath removed text.",
-          "title": "Inpainting"
+          "title": "Inpainter"
         },
-        "ocr": {
+        "recognize": {
           "description": "Read the source text inside detected regions.",
-          "title": "OCR"
+          "title": "Recognizer"
+        },
+        "translate": {
+          "description": "Translate the source text into the target language.",
+          "title": "Translator"
         }
       },
-      "title": "Pipeline"
+      "thresholds": "Thresholds",
+      "title": "Pipeline",
+      "translator": {
+        "instructions": "Additional instructions",
+        "instructionsDescription": "Optional, in any language and form, such as a name's spelling or the tone. Koharu adds them, as written, after its own system prompt.",
+        "reasoning": "Reasoning",
+        "reasoningDescription": "Use model reasoning during translation.",
+        "targetLanguageDescription": "Choose the language to translate text into.",
+        "vision": "Vision",
+        "visionDescription": "Feed page images to the LLM during translation."
+      }
     },
     "providers": {
+      "browserHint": "Finish signing in on the page your browser opened.",
       "clearCredential": "Clear {{provider}} credential",
       "configured": "Configured",
       "connections": "Connections",
       "connectionsDescription": "Credentials are stored securely on this device.",
+      "contextWindow": "Context length (tokens)",
       "credential": "Credential",
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",
+      "deviceCodeHint": "Enter this code on the page your browser opened.",
       "notConfigured": "Not configured",
+      "openPage": "Open sign-in page",
+      "openaiCompatible": "OpenAI-compatible",
+      "signIn": "Sign in",
+      "signInLabel": "Sign in to {{provider}}",
+      "signOut": "Sign out",
+      "signOutLabel": "Sign out of {{provider}}",
+      "signingIn": "Waiting for sign-in…",
+      "subscription": "Subscription",
       "title": "Providers"
-    },
-    "shortcuts": {
-      "description": "Single-key shortcuts are available whenever a text field is not focused.",
-      "inputLabel": "{{action}} shortcut",
-      "title": "Shortcuts",
-      "tools": "Tools"
     },
     "tabs": {
       "appearance": "Appearance",
       "pipeline": "Pipeline",
       "providers": "Providers",
-      "shortcuts": "Shortcuts",
-      "translation": "Translation",
-      "typesetting": "Typesetting"
+      "typesetting": "Renderer"
     },
     "title": "Settings",
-    "translation": {
-      "description": "Choose any configured provider model, then apply one shared set of translation and generation options.",
-      "instructionsDescription": "Names, tone, terminology, or formatting guidance.",
-      "instructionsLabel": "Translation instructions",
-      "instructionsPlaceholder": "Optional project-wide guidance",
-      "model": "Model",
-      "modelDescription": "Provider labels identify where each model runs; connections are configured separately.",
-      "modelQuantization": "Model quantization",
-      "output": "Output",
-      "quantization": "Quantization",
-      "quantizationDescription": "Smaller formats use less memory, usually with a quality tradeoff.",
-      "selectQuantization": "Select a quantization",
-      "targetLanguageDescription": "Choose the language to translate text into.",
-      "title": "Translation",
-      "translationModel": "Translation model",
-      "translationModelDescription": "Choose the model used to translate text."
-    },
     "typesetting": {
+      "addFallback": "Add a fallback",
       "addFamily": "Add font family",
-      "defaultFamilies": "Default font families",
       "description": "Set the ordered font stack used when a text layer has no assigned family.",
       "empty": "No default families. Koharu will use the system fallback.",
+      "fallbacks": "Fallbacks",
+      "fallbacksDescription": "Used in order for characters the primary lacks. Drag to reorder, or onto Primary to swap.",
       "familyLabel": "Default font family {{index}}",
-      "fontFallback": "Font fallback",
+      "fontFallback": "Preferred fonts",
       "fontFallbackDescription": "Koharu uses the first available family that supports the text.",
       "loadError": "Fonts could not be loaded. Existing families can still be removed.",
       "loadingFonts": "Loading fonts…",
+      "primary": "Primary",
       "removeFamily": "Remove {{family}}",
-      "title": "Typesetting"
+      "title": "Renderer"
     }
   },
   "start": {
@@ -478,11 +441,13 @@
     "loadingProjects": "Loading projects…",
     "newDescription": "Create a clean workspace for your pages, translations, and exports.",
     "newProject": "New project",
+    "noResults": "No projects match this search.",
     "projectKind": "Koharu project",
     "projectList": "Projects",
     "projectName": "Project name",
     "projectNamePlaceholder": "My new project",
-    "storageHint": "Projects are stored locally in your Documents folder.",
+    "search": "Search projects",
+    "storageHint": "Projects are stored locally on this computer.",
     "title": "Projects",
     "yourProjects": "Your projects"
   },
@@ -495,6 +460,12 @@
   "status": {
     "zoom": "Zoom"
   },
+  "story": {
+    "noText": "No text on this page.",
+    "sfx": "Sound effect",
+    "title": "Story",
+    "translate": "Translate {{name}}"
+  },
   "tools": {
     "brushSize": "Brush size",
     "brushSizeInput": "Brush size",
@@ -502,9 +473,12 @@
     "brushSizeShort": "{{size}} px",
     "color_picker": "Color picker",
     "decreaseBrushSize": "Decrease brush size",
+    "direct_select": "Direct Selection",
     "draw": "Brush",
     "eraser": "Eraser",
     "increaseBrushSize": "Increase brush size",
+    "lasso": "Lasso",
+    "marquee": "Rectangular Marquee",
     "pan": "Pan",
     "remove": "Remove",
     "select": "Select",

@@ -1,4 +1,4 @@
-﻿//! Key-value overrides for a model.
+//! Key-value overrides for a model.
 
 use crate::model::params::LlamaModelParams;
 use std::ffi::{CStr, CString};

@@ -2,8 +2,8 @@
 name = "koharu-pipeline"
 version.workspace = true
 edition.workspace = true
-description = "In-process scene-processing workflow for Koharu."
-license.workspace = true
+description.workspace = true
+license = "MIT OR Apache-2.0 AND BSD-3-Clause"
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
@@ -13,34 +13,37 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = { workspace = true }
-async-trait = { workspace = true }
-clap = { workspace = true }
-futures = { workspace = true }
+base64 = { workspace = true }
+bytesize = { workspace = true }
+icu_experimental = { workspace = true }
+icu_locale = { workspace = true }
+icu_locale_core = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
-koharu-ml = { workspace = true }
+indoc = { workspace = true }
 koharu-config = { workspace = true }
+koharu-llm = { workspace = true }
+koharu-ml = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rasterizer = { workspace = true, features = ["native"] }
+koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
-koharu-translator = { workspace = true }
+koharu-torch = { workspace = true }
+kurbo = { workspace = true }
+parking_lot = { workspace = true }
+petgraph = { workspace = true }
 rayon = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }
+serde_json = { workspace = true }
 strum = { workspace = true }
-sysinfo = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-nvml-wrapper = { workspace = true }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = [
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-] }
-
 [dev-dependencies]
-toml = { workspace = true }
+clap = { workspace = true }
+fs-err = { workspace = true }
+tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }

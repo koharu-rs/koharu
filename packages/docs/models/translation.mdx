@@ -1,0 +1,34 @@
+---
+title: 'Configure translation'
+description: 'Set the model, target language, instructions, reasoning, and image input.'
+icon: 'language'
+---
+
+Choose translation settings in the **Translator** section of **Settings → Pipeline**; the processing selector also sets the model and the target language. They are saved with Koharu's settings and apply to every project. Provider connections and credentials are read for each request.
+
+## Language and instructions
+
+Choose the **Target language**. Koharu's own system prompt, Index-Translate's translation instruction in English, asks the model to translate each page into it and to answer in the same JSON. Add your own under **Additional instructions**, in any language and form, such as the spelling of names, terminology, tone, pronouns, or text that should remain untranslated; Koharu adds them, as written, after its own prompt. Test them on several pages after correcting OCR.
+
+LFM3 1.7B is made for a limited set of target languages. Other local and hosted models accept every target language Koharu offers.
+
+## How pages are translated
+
+Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the instructions starts a new one.
+
+Each page is sent as its texts in reading order, and the answer must return every one. A malformed answer, a missing text, or a blank translation fails that page. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
+
+## Options
+
+| Option    | What it does                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vision    | Sends the page image, 1,280 pixels on its longer side, ahead of the texts; off by default                                                    |
+| Reasoning | Lets the model reason before it answers, at the level you choose; **Provider default** uses the model's own, and **Off** turns reasoning off |
+
+A model that can't take the reasoning level you choose, such as **Off** on a model that always reasons, stops the run and names the setting. Vision works only with a model that reads images; with any other model the run fails and asks you to turn **Vision** off. Both options add time, and on Koharu's own tests with Index-Translate 9B neither read better, so try them on a few pages before keeping them.
+
+## Local quantization
+
+Koharu's local models load their default quantization. To choose another, set the model in `~/.koharu/config.toml` with the quantization after a colon, for example `model = "koharu/index-translate-9b:Q8_0"` under `[pipeline.translator]`. Smaller files need less memory, usually at a quality cost. Hosted providers control their own serving precision.
+
+Generated translations remain editable project data. [Review the wording and page layout](/guides/review) before export.

@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::lama::{InpaintRequest, LaMa};
+use koharu_ml::lama::Lama;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,9 +16,8 @@ async fn main() -> Result<()> {
     let image = image::open(&image_path)?;
     let mask = image::open(&mask_path)?.to_luma8();
 
-    koharu_ml::init().await?;
-    let model = LaMa::load(koharu_ml::Device::default()).await?;
-    let config = InpaintRequest::default();
+    let device = koharu_runtime::device().await?;
+    let model = Lama::load(device).await?;
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -29,7 +28,7 @@ async fn main() -> Result<()> {
     criterion.bench_function("lama/inference/3840x2074", |bencher| {
         bencher.iter(|| {
             let output = model
-                .inference(black_box(&image), black_box(&mask), black_box(&config))
+                .inference(black_box(&image), black_box(&mask))
                 .expect("LaMa inference failed");
             black_box(output);
         });

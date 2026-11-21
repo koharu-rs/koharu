@@ -1,0 +1,161 @@
+---
+title: 'Troubleshooting'
+description: 'Diagnose a problem and collect the information needed to reproduce it.'
+icon: 'circle-question'
+---
+
+Start with the complete error in the activity center or the error message. Identify the failing stage before changing project files or the store.
+
+<AccordionGroup>
+  <Accordion title="The first run does not finish">
+    The first time a model runs, Koharu downloads the runtime packages for your GPU and the model's weights. Let active downloads in the activity center finish and confirm that GitHub, PyPI, AMD's repository, and Hugging Face are reachable.
+
+    If it fails repeatedly, close every Koharu process, update the GPU driver, restart the computer, and retry on a stable network. Capture the complete error.
+
+    Do not remove the store while a process may have its libraries loaded.
+
+  </Accordion>
+
+  <Accordion title="A model download fails">
+    Check access to the model's Hugging Face repository and the free disk space for the store. Proxies, regional filtering, antivirus scanning, or interrupted writes can block downloads.
+
+    Retry the same model once. If the same file fails, include the repository, filename, and full error in your report.
+
+  </Accordion>
+
+<Accordion title='Models do not run on my GPU'>
+  Koharu uses the best GPU it finds and fails rather than falling back to another, and it has no
+  CPU-only mode. Check that the driver meets the requirements in [hardware](/hardware), and read the
+  error for the GPU it tried. On a Vulkan-only machine, detection, OCR, and LaMa run on the CPU by
+  design.
+</Accordion>
+
+<Accordion title='A model runs out of memory'>
+  Koharu does not unload models to make room, so a model that does not fit fails and names the free
+  memory. Choose a smaller model, or switch the other stages to lighter models in **Settings →
+  Pipeline** so the heavier ones unload, then retry. **Edit → Unload Models** frees every model
+  Koharu loaded, as before a large fill; each loads again when it's next needed.
+</Accordion>
+
+<Accordion title='Detection or OCR misses text'>
+  Check that the page is upright and readable. Inspect the detected text blocks before changing OCR
+  models. Adjust thresholds conservatively across several pages and run detection again, try a
+  manga-specific recognizer for Japanese, and correct source text before translating again.
+</Accordion>
+
+<Accordion title='Inpainting damages artwork'>
+  Paint a smaller Remove area and avoid bubble borders and line art. Try LaMa before a heavier
+  generative model. Clear the layer selection before painting so touch-ups go to a new raster layer.
+</Accordion>
+
+<Accordion title='A translation provider fails'>
+  Verify the key, sign-in, or base URL in **Settings → Providers**, then reopen the processing
+  selector. For a compatible server, check that the base URL ends where OpenAI's `/v1` does, and
+  turn **Vision** off if the model does not accept images.
+</Accordion>
+
+<Accordion title='Koharu Agent cannot run'>
+  Choose a model in the Agent panel; only models that call tools are offered. Check its provider's
+  connection in **Settings → Providers**, and cancel a request before retrying.
+</Accordion>
+
+<Accordion title='Text is missing or malformed'>
+  Confirm the text block has a translation, is visible, has nonzero opacity, and uses a font
+  covering the target script. Source text is never drawn.
+</Accordion>
+
+  <Accordion title="Export differs from the canvas">
+    Capture the affected page, format, a canvas screenshot, and the exported image. Canvas and exports draw through the same renderer, so a meaningful mismatch should be reported.
+  </Accordion>
+</AccordionGroup>
+
+## Collect detailed logs
+
+Koharu always writes INFO messages and above to a log file; see [data locations](/reference/data#logs). For more detail, start Koharu from a terminal with `RUST_LOG` set, which enables debug logging on the terminal for that process. A terminal runs commands you type or paste; leave it open while reproducing the problem.
+
+<Warning>
+  Close Koharu first. Launching it while it runs only brings the open window forward, and logging
+  applies only to a newly started process.
+</Warning>
+
+<Tabs>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Open PowerShell">
+        Open Start, search for **PowerShell**, and launch **Windows PowerShell**. Windows Terminal also works with a PowerShell tab. Use PowerShell rather than Command Prompt.
+      </Step>
+      <Step title="Start Koharu">
+        Paste the command with `Ctrl+V` or right-click, then press Enter. Do not paste the `PS C:\Users\YourName>` prompt.
+
+        ```powershell
+        $env:RUST_LOG="debug"; koharu.exe
+        ```
+      </Step>
+      <Step title="Use a full path if needed">
+        If `koharu.exe` is not recognized, search for Koharu in Start, right-click **Open file location**, then open the shortcut's **Properties** and copy **Target**. Replace the example below with that path, keeping `&` and the quotes.
+
+        ```powershell
+        $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
+        ```
+      </Step>
+    </Steps>
+
+    The environment setting lasts only in this PowerShell window. Closing it clears the setting.
+
+  </Tab>
+  <Tab title="macOS">
+    Press `Command+Space`, search for **Terminal**, and press Return. Paste with `Command+V`, then press Return:
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+    If the command is not found, launch the app from its installed path:
+
+    ```bash
+    RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
+    ```
+
+    If that path does not exist, check the app's location in Finder and substitute its actual path.
+
+  </Tab>
+  <Tab title="Linux">
+    Search the application menu for **Terminal**, or try `Ctrl+Alt+T`. Paste with `Ctrl+Shift+V`, then press Enter:
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+    If the command is not found, try the Debian/RPM package location:
+
+    ```bash
+    RUST_LOG=debug /usr/bin/koharu
+    ```
+
+    If that file is missing, check or reinstall the package for your distribution.
+
+  </Tab>
+</Tabs>
+
+Reproduce the problem with this copy of Koharu. The terminal may remain busy until the app closes; keep the complete surrounding output, not just the last error. Close Koharu normally afterward, or press `Ctrl+C` once in the terminal if the launched process is frozen.
+
+## Save a log file
+
+In a new terminal, run the command for your platform, reproduce the problem, and close Koharu. The log is written to your home directory. Substitute the full executable path if the short command was unavailable.
+
+<Tabs>
+  <Tab title="Windows">
+    ```powershell
+    $env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
+    ```
+  </Tab>
+  <Tab title="macOS and Linux">
+    ```bash
+    RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
+    ```
+  </Tab>
+</Tabs>
+
+Before sharing, replace credentials, private filenames, and private page text with `[removed]`, keeping surrounding diagnostics. Include your OS, Koharu version, intended action, reproduction steps, and approximate error time.
+
+Attach the text log to a [GitHub issue](https://github.com/koharu-rs/koharu/issues) or ask on [Discord](https://discord.gg/mHvHkxGnUY).

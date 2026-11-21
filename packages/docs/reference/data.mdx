@@ -1,0 +1,51 @@
+---
+title: 'Formats and data'
+description: 'Locate projects, settings, credentials, downloads, and logs.'
+icon: 'database'
+---
+
+## Supported formats
+
+| Purpose             | Format                                   |
+| ------------------- | ---------------------------------------- |
+| Import              | PNG, JPEG, WebP, ZIP, CBZ, RAR, CBR, PDF |
+| Flattened export    | PNG, or a CBZ of PNG pages               |
+| Layered interchange | PSD                                      |
+| Working project     | One `.khr` file                          |
+
+## Project data
+
+Each project is one `.khr` file in the projects folder: `projects` in Koharu's installation folder on Windows, `~/Library/Application Support/Koharu/projects` on macOS, and `~/.local/share/Koharu/projects` on Linux. The file is a SQLite database holding the imported images, generated artwork, raster edits, and text. While a project is open, Koharu holds it locked and may keep a `-wal` file beside it.
+
+<Warning>
+  Do not change or copy a project file while it is open. Deleting a project from the start screen
+  permanently removes its file.
+</Warning>
+
+## Settings and credentials
+
+Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]`, `[providers]`, `[renderer]`, and `[agent]`. Settings you leave at their defaults are not written, so later default changes reach you. A file that is not valid TOML, or a value of the wrong type, is an error rather than a silent default; fix it or use the Settings screen.
+
+API keys and sign-ins are encrypted in `~/.koharu/secrets.age`. Its key is the only thing Koharu keeps in the operating system's credential store; on Linux that needs a Secret Service such as GNOME Keyring, KWallet, or KeePassXC. If the key is lost, the file cannot be read again and is deleted, so you sign in again. A project backup includes no keys or sign-ins.
+
+## Runtime and model store
+
+Runtime packages and model files are stored in the `store` folder in Koharu's installation folder on Windows, and in `koharu/store` under the operating system cache folder on macOS and Linux. This data is replaceable: removing it while Koharu is closed makes the required files download again.
+
+Never remove the store while Koharu may still have its libraries loaded.
+
+## Logs
+
+Koharu writes a log file of its INFO messages and above to `%LOCALAPPDATA%\Koharu\logs` on Windows, `~/Library/Logs/Koharu` on macOS, and `~/.local/share/Koharu/logs` on Linux. See [troubleshooting](/reference/troubleshooting) for more detailed logs.
+
+## Back up safely
+
+<Steps>
+  <Step title='Close the project'>Finish current work before copying its file.</Step>
+  <Step title='Copy the project file'>
+    Copy the `.khr` file. A PSD or CBZ export is not a project backup.
+  </Step>
+  <Step title='Save settings separately'>
+    Copy `config.toml` if needed. Reconnect providers through Koharu on the restored machine.
+  </Step>
+</Steps>

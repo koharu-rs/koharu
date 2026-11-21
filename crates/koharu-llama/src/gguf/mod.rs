@@ -1,11 +1,12 @@
-﻿//! Safe wrapper around `gguf_context` for reading GGUF file metadata.
+//! Safe wrapper around `gguf_context` for reading GGUF file metadata.
 //!
 //! Provides metadata-only access to GGUF files without loading tensor data.
 //! Useful for inspecting model architecture parameters before loading a model.
 
 use std::ffi::{CStr, CString};
 use std::path::Path;
-use std::ptr::NonNull;
+
+use crate::ptr::Ptr;
 
 /// A safe wrapper around `gguf_context`.
 ///
@@ -13,8 +14,13 @@ use std::ptr::NonNull;
 /// never loaded into memory (`no_alloc = true`).
 #[derive(Debug)]
 pub struct GgufContext {
-    ctx: NonNull<koharu_llama_sys::gguf_context>,
+    ctx: Ptr<koharu_llama_sys::gguf_context>,
 }
+
+// SAFETY: `gguf_context` is mostly POD. Getters use `&`, setters use `&mut`.
+unsafe impl Send for GgufContext {}
+// SAFETY: Same as above.
+unsafe impl Sync for GgufContext {}
 
 impl GgufContext {
     /// Open a GGUF file and parse its metadata header.
@@ -29,7 +35,7 @@ impl GgufContext {
         };
         let ptr = unsafe { koharu_llama_sys::gguf_init_from_file(c_path.as_ptr(), params) };
         Some(Self {
-            ctx: NonNull::new(ptr)?,
+            ctx: Ptr::new(ptr)?,
         })
     }
 
@@ -61,7 +67,7 @@ impl GgufContext {
     }
 
     /// Read a `uint32` value. Panics (inside llama.cpp) if the stored type is
-    /// not `GGUF_TYPE_UINT32` â€” check `kv_type` first if unsure.
+    /// not `GGUF_TYPE_UINT32` — check `kv_type` first if unsure.
     pub fn val_u32(&self, idx: i64) -> u32 {
         unsafe { koharu_llama_sys::gguf_get_val_u32(self.ctx.as_ptr(), idx) }
     }
@@ -94,6 +100,6 @@ impl GgufContext {
 
 impl Drop for GgufContext {
     fn drop(&mut self) {
-        unsafe { koharu_llama_sys::gguf_free(self.ctx.as_ptr()) }
+        unsafe { koharu_llama_sys::gguf_free(self.ctx.as_mut_ptr()) }
     }
 }

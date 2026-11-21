@@ -1,0 +1,32 @@
+---
+title: 'Settings'
+description: 'Find the controls for appearance, models, providers, translation, and fonts.'
+icon: 'gear'
+---
+
+Open **File → Settings**, the settings button in the page list, or the one on the start screen. Changes save automatically after a short delay; choose **Back to editor** to return.
+
+## Appearance
+
+Choose **Light**, **Dark**, or **System**, and the interface language. These settings do not change page rendering or the translation target language.
+
+## Pipeline
+
+Choose a model for each stage: the detector, recognizer, inpainter, and translator. The detector has text, SFX, bubble, and panel thresholds; the inpainter has the prompt the generative models follow; the translator has **Vision**, **Reasoning**, the target language, and **Additional instructions**. The processing selector also sets the translation model and target language. See [vision and inpainting models](/models/vision) and [translation settings](/models/translation).
+
+## Providers
+
+Add API keys, sign in to subscriptions, and set base URLs for the connections listed in [translation providers](/models/providers). Keys and sign-ins are stored encrypted on this device; base URLs are saved in `config.toml`.
+
+## Renderer
+
+Set the ordered preferred fonts, CCWildWords and then Adobe 黑体 Std unless you change them. Koharu uses them for a text with no font of its own and when a font cannot supply a glyph, then falls back to system fonts. Individual text layers still own their typography.
+
+<Note>
+  Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]` (including
+  `[pipeline.translator]`), `[providers]`, `[renderer]` for typesetting, and `[agent]`. The file can
+  be edited by hand for options the app has no screen for; a value of the wrong type is an error,
+  never a default. Keep credentials out of it and use **Settings → Providers** instead.
+</Note>
+
+See [data locations](/reference/data) for project and download storage.

@@ -1,14 +1,25 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StartView } from '@/components/start/StartView'
 import { queryClient, useProject } from '@/lib/queries'
-import { commands } from '@koharu/bridge/protocol'
+import { commands } from '@koharu/ipc/protocol'
 
 function ProjectFlow() {
   const project = useProject().data
   return project ? <p>Opened {project.name}</p> : <StartView />
+}
+
+/** The desktop with `open` as its open project, empty. */
+function desktop(open: () => string | null) {
+  vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
+  vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
+  vi.spyOn(commands, 'query').mockImplementation(async (query) =>
+    query.query === 'get_project'
+      ? { id: 'project', version: '1', pages: [] }
+      : { steps: [], current: 0 },
+  )
 }
 
 function renderProjectFlow() {
@@ -20,23 +31,18 @@ function renderProjectFlow() {
 }
 
 describe('StartView', () => {
+  // jsdom lays nothing out, so the project list, which shows only the rows its height holds,
+  // would show none.
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(400)
+  })
   afterEach(() => vi.restoreAllMocks())
 
   it('creates a managed project by name', async () => {
     let opened = false
-    vi.spyOn(commands, 'getProject').mockImplementation(async () =>
-      opened
-        ? {
-            name: 'Volume 1',
-            revision: 0,
-            active_page: null,
-            can_undo: false,
-            can_redo: false,
-          }
-        : null,
-    )
+    desktop(() => (opened ? 'Volume 1' : null))
     vi.spyOn(commands, 'listProjects').mockResolvedValue([])
-    const create = vi.spyOn(commands, 'createProject').mockImplementation(async () => {
+    const create = vi.spyOn(commands, 'create').mockImplementation(async () => {
       opened = true
       return null
     })
@@ -54,19 +60,9 @@ describe('StartView', () => {
 
   it('opens a managed project without reloading the application', async () => {
     let opened = false
-    vi.spyOn(commands, 'getProject').mockImplementation(async () =>
-      opened
-        ? {
-            name: 'Blue Archive',
-            revision: 1,
-            active_page: null,
-            can_undo: false,
-            can_redo: false,
-          }
-        : null,
-    )
-    vi.spyOn(commands, 'listProjects').mockResolvedValue([{ name: 'Blue Archive' }])
-    const open = vi.spyOn(commands, 'openProject').mockImplementation(async () => {
+    desktop(() => (opened ? 'Blue Archive' : null))
+    vi.spyOn(commands, 'listProjects').mockResolvedValue(['Blue Archive'])
+    const open = vi.spyOn(commands, 'open').mockImplementation(async () => {
       opened = true
       return null
     })
@@ -83,10 +79,14 @@ describe('StartView', () => {
 
   it('confirms before deleting a managed project', async () => {
     vi.spyOn(commands, 'listProjects')
-      .mockResolvedValueOnce([{ name: 'Blue Archive' }])
+      .mockResolvedValueOnce(['Blue Archive'])
       .mockResolvedValueOnce([])
     const remove = vi.spyOn(commands, 'deleteProject').mockResolvedValue(null)
-    render(<StartView />)
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StartView />
+      </QueryClientProvider>,
+    )
 
     const deleteButton = await screen.findByRole('button', { name: 'Delete Blue Archive' })
     await waitFor(() => expect(deleteButton).toBeEnabled())

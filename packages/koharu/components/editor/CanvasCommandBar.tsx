@@ -1,10 +1,9 @@
 'use client'
 
 import { InferenceControl } from '@/components/editor/InferenceControl'
-import { call } from '@/lib/backend'
-import { usePage } from '@/lib/queries'
+import { send, usePage } from '@/lib/queries'
 import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
-import { commands, type Scope, type Stage } from '@koharu/bridge/protocol'
+import { commands, type Stage, type Target } from '@koharu/ipc/protocol'
 
 export function CanvasCommandBar() {
   const page = usePage().data
@@ -13,20 +12,10 @@ export function CanvasCommandBar() {
   const running = Object.values(jobs).find((job) => job.state === 'running')
 
   const run = (selection: PipelineScope, stages: Stage[]) => {
-    if (!page) return
-    const scope: Scope =
-      selection === 'project'
-        ? { scope: 'project' }
-        : selection === 'selected-pages'
-          ? { scope: 'pages', value: selectedPages }
-          : { scope: 'pages', value: [page.id] }
-    const operation =
-      stages.length === pipelineStages.length
-        ? ({ operation: 'full' } as const)
-        : stages.length === 1
-          ? ({ operation: 'only', stage: stages[0]! } as const)
-          : ({ operation: 'stages', stages } as const)
-    void call(commands.process, scope, operation).catch(() => undefined)
+    const target: Target = selection === 'project' ? 'project' : { pages: selectedPages }
+    // A run takes its stages in the pipeline's order, whichever order they were picked in.
+    const ordered = pipelineStages.filter((stage) => stages.includes(stage))
+    send(commands.runPipeline, target, ordered)
   }
 
   return (

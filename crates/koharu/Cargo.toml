@@ -5,22 +5,19 @@ version.workspace = true
 edition.workspace = true
 description.workspace = true
 authors.workspace = true
-readme = "README.md"
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
 license.workspace = true
 
-[features]
-default = ["tauri/cef"]
-
 [dependencies]
 clap = { workspace = true }
-console = { workspace = true }
-koharu-app = { workspace = true }
-koharu-metrics = { workspace = true }
-log = { workspace = true }
+indoc = { workspace = true }
+koharu-desktop = { workspace = true }
+koharu-sentry = { workspace = true }
+machine-uid = { workspace = true }
 rfd = { workspace = true }
 sentry = { workspace = true }
 serde_json = { workspace = true }
@@ -28,21 +25,13 @@ tauri = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-process = { workspace = true }
 tauri-plugin-updater = { workspace = true }
+tauri-runtime-cef = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = ["Win32_System_Console"] }
+windows = { workspace = true }
 
 [build-dependencies]
 tauri-build = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    "serde_json",
-    "tauri-build",
-    "tauri-plugin-opener",
-    "tauri-plugin-process",
-    "tauri-plugin-updater",
-]

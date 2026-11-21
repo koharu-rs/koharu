@@ -1,14 +1,13 @@
 {
-  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/4af26a3f7f8b692d62cca549bbacd93f5ce90b41/crates/tauri-schema-generator/schemas/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/17a527316d3aee46f7185c178d3b3122d8ebfd7b/crates/tauri-schema-generator/schemas/config.schema.json",
   "identifier": "Koharu",
   "build": {
     "devUrl": "http://localhost:3000",
     "frontendDist": "../../packages/koharu/out",
-    "beforeDevCommand": "bun run ui:dev",
-    "beforeBuildCommand": "bun run ui:build"
+    "beforeDevCommand": "bun run --filter @koharu/app dev",
+    "beforeBuildCommand": "bun run --filter @koharu/app build"
   },
   "app": {
-    "macOSPrivateApi": true,
     "security": {
       "csp": null
     },
@@ -45,7 +44,10 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ1QjAxQjRENzYxOTE1MDYKUldRR0ZSbDJUUnV3MWFXN09pNjhoRmNMSTV2Ylh3Wm9CZHhiRE01RVZtYXFLWVd4Vi9SbkE4QnUK",
-      "endpoints": ["https://github.com/mayocream/koharu/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/koharu-rs/koharu/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "quiet"
+      }
     }
   }
 }

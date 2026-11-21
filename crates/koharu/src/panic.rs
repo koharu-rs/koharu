@@ -1,5 +1,8 @@
-use std::time::Duration;
+use indoc::formatdoc;
 
+/// Chains after Sentry's hook, which reports and sends the panic, then tells
+/// the user and closes the app, so a panic on any thread doesn't leave it
+/// running.
 pub fn install() {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -16,18 +19,15 @@ pub fn install() {
             .map(|l| format!("{}:{}", l.file(), l.line()))
             .unwrap_or_default();
 
-        tracing::error!(%msg, %location, "Koharu panicked");
-
-        if let Some(client) = sentry::Hub::current().client() {
-            client.flush(Some(Duration::from_secs(2)));
-        }
-
         rfd::MessageDialog::new()
             .set_level(rfd::MessageLevel::Error)
             .set_title("Koharu has stopped")
-            .set_description(format!(
-                "Something went wrong and Koharu needs to close.\n\n{msg}\n\nat {location}"
-            ))
+            .set_description(formatdoc! {"
+                Something went wrong, and Koharu needs to close.
+
+                {msg}
+                at {location}"
+            })
             .set_buttons(rfd::MessageButtons::Ok)
             .show();
 

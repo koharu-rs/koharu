@@ -1,0 +1,510 @@
+{
+  "about": {
+    "author": "Auteur",
+    "description": "Outils de traduction de mangas",
+    "unavailable": "Indisponible",
+    "version": "Version"
+  },
+  "activity": {
+    "dismiss": "Ignorer",
+    "downloadFailed": "Échec du téléchargement.",
+    "downloadingFiles": "Téléchargement de {{count}} fichiers",
+    "downloadingFiles_one": "Téléchargement de {{count}} fichier",
+    "downloadingFiles_other": "Téléchargement de {{count}} fichiers",
+    "modelDownload": "Téléchargement du modèle",
+    "processing": "Traitement",
+    "processingFailed": "Échec du traitement.",
+    "stop": "Arrêter",
+    "title": "Activité"
+  },
+  "agent": {
+    "cancel": "Annuler",
+    "cancelled": "Annulé.",
+    "emptyDescription": "Demandez à l’agent d’analyser, de traduire, de modifier ou de traiter ce projet. Il ne consultera les images des pages qu’en cas de besoin.",
+    "emptyTitle": "Que doit faire Koharu ?",
+    "failed": "La requête de l’agent a échoué.",
+    "loading": "Chargement de l’agent…",
+    "message": "Message à l’agent Koharu",
+    "model": "Modèle",
+    "newChat": "Nouvelle discussion",
+    "placeholder": "Demandez à Koharu de travailler sur ce projet…",
+    "reasoning": "Raisonnement",
+    "send": "Envoyer",
+    "thinking": "Réflexion…",
+    "thought": "Réflexion : {{seconds}} s",
+    "title": "Agent",
+    "toolFailed": "Échec de {{tool}}",
+    "used": "A utilisé {{tool}}",
+    "using": "Utilise {{tool}}",
+    "working": "Travail en cours…"
+  },
+  "canvas": {
+    "empty": "Sélectionnez une page pour commencer.",
+    "notice": {
+      "eraser_needs_raster": "Sélectionnez un calque matriciel pour effacer."
+    }
+  },
+  "colorPicker": {
+    "brushColor": "Couleur du pinceau",
+    "hexCode": "Code couleur hexadécimal",
+    "sampleCanvas": "Prélever une couleur sur le canevas",
+    "transparent": "Transparent"
+  },
+  "common": {
+    "back": "Retour",
+    "cancel": "Annuler",
+    "clearSearch": "Effacer la recherche",
+    "loading": "Chargement…"
+  },
+  "errors": {
+    "actionFailed": "Impossible de terminer cette action",
+    "fatalTitle": "Koharu ne peut pas continuer",
+    "tryAgain": "Réessayer",
+    "unknown": "L’application native a renvoyé une erreur inconnue."
+  },
+  "feedback": {
+    "addScreenshot": "Ajouter une capture d’écran",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "email": "E-mail",
+    "emailPlaceholder": "votre.adresse@example.org",
+    "emptyMessage": "Décrivez ce qui s’est passé.",
+    "failed": "Le commentaire n’a pas pu être envoyé. Veuillez réessayer.",
+    "forbidden": "Cette version ne peut pas envoyer de commentaires.",
+    "hide": "Masquer",
+    "highlight": "Surligner",
+    "message": "Description",
+    "messagePlaceholder": "Que s’est-il passé ? À quoi vous attendiez-vous ?",
+    "name": "Nom",
+    "namePlaceholder": "Votre nom",
+    "noClient": "Les commentaires ne sont pas disponibles pour le moment.",
+    "removeHighlight": "Retirer",
+    "removeScreenshot": "Retirer la capture d’écran",
+    "required": "(obligatoire)",
+    "sent": "Merci pour votre commentaire !",
+    "submit": "Envoyer",
+    "timeout": "L’envoi a expiré. Veuillez réessayer.",
+    "title": "Envoyer un commentaire"
+  },
+  "fill": {
+    "deselect": "Désélectionner",
+    "generate": "Générer",
+    "model": "Modèle de remplissage",
+    "prompt": "Décrivez ce qu’il faut ajouter (facultatif)",
+    "title": "Remplissage génératif"
+  },
+  "fontPicker": {
+    "addFavorite": "Ajouter {{name}} aux favoris",
+    "choose": "Choisir une police",
+    "favoritesOnly": "Afficher les polices favorites",
+    "fontCount": "{{count}} polices",
+    "fontCount_one": "{{count}} police",
+    "fontCount_other": "{{count}} polices",
+    "fonts": "Polices",
+    "noFavorites": "Aucune police favorite pour l’instant",
+    "noResults": "Aucune police ne correspond à cette recherche",
+    "removeFavorite": "Retirer {{name}} des favoris",
+    "search": "Rechercher des polices"
+  },
+  "history": {
+    "close": "Fermer l’historique",
+    "opened": "À l’ouverture",
+    "steps": {
+      "add_text": "Ajouter du texte",
+      "delete_layers": "Supprimer des calques",
+      "delete_pages": "Supprimer des pages",
+      "detect": "Détection",
+      "edit_frame": "Modifier le cadre",
+      "erase": "Effacer",
+      "import": "Importer des pages",
+      "inpaint": "Inpainting",
+      "move": "Déplacer",
+      "move_layer": "Déplacer des calques",
+      "move_page": "Déplacer la page",
+      "paint": "Peindre",
+      "recognize": "OCR",
+      "resize": "Redimensionner",
+      "rotate": "Faire pivoter",
+      "set_locked": "Verrouiller ou déverrouiller",
+      "set_source_text": "Modifier le texte source",
+      "set_style": "Modifier le style du texte",
+      "set_text": "Modifier le texte",
+      "set_visibility": "Afficher ou masquer",
+      "translate": "Traduction",
+      "update_layer": "Modifier le calque"
+    },
+    "title": "Historique"
+  },
+  "inference": {
+    "entireProject": "Projet entier",
+    "entireProjectDescription": "Traiter toutes les pages de ce projet.",
+    "model": "Modèle",
+    "noModel": "Aucun modèle",
+    "notSet": "Non défini",
+    "output": "Sortie",
+    "pipelineStages": "Étapes du pipeline",
+    "providerDefault": "Par défaut du fournisseur",
+    "run": "Lancer",
+    "runProcessing": "Lancer le traitement",
+    "scope": "Portée",
+    "scopeShort": {
+      "project": "Projet",
+      "selected-pages": "Sélection"
+    },
+    "selectPagesFirst": "Sélectionnez d’abord des pages",
+    "selectedCount": "{{count}} pages sélectionnées",
+    "selectedCount_one": "{{count}} page sélectionnée",
+    "selectedCount_other": "{{count}} pages sélectionnées",
+    "selectedPages": "Pages sélectionnées",
+    "selector": "Paramètres de traitement",
+    "shortcuts": "Options de traitement",
+    "stageCount": "{{count}} étapes",
+    "stageCount_one": "{{count}} étape",
+    "stageCount_other": "{{count}} étapes",
+    "stages": "Étapes",
+    "stop": "Arrêter",
+    "stopProcessing": "Arrêter le traitement"
+  },
+  "inspector": {
+    "alignBottom": "Aligner en bas",
+    "alignCenter": "Centrer",
+    "alignLeft": "Aligner à gauche",
+    "alignMiddle": "Centrer verticalement",
+    "alignRight": "Aligner à droite",
+    "alignTop": "Aligner en haut",
+    "alignment": "Alignement",
+    "auto": "Auto",
+    "border": "Contour",
+    "borderColor": "Couleur du contour",
+    "borderWidth": "Épaisseur du contour",
+    "chooseBorderWidth": "Choisir l’épaisseur du contour",
+    "chooseFontSize": "Choisir la taille de police",
+    "font": "Police",
+    "fontSize": "Taille de police",
+    "fontStyles": {
+      "italic": "Italique",
+      "oblique": "Oblique"
+    },
+    "fontWeight": "Graisse",
+    "horizontal": "Horizontal",
+    "opacity": "Opacité",
+    "selectPage": "Sélectionnez une page pour inspecter ses calques.",
+    "source": "Texte source",
+    "text": "Texte",
+    "textColor": "Couleur du texte",
+    "textDirection": "Sens du texte",
+    "translation": "Traduction",
+    "type": "Type",
+    "vertical": "Vertical"
+  },
+  "layers": {
+    "delete": "Supprimer {{name}}",
+    "edit": "Modifier {{name}}",
+    "empty": "Aucun calque sur cette page.",
+    "hide": "Masquer {{name}}",
+    "kinds": {
+      "balloon": "Bulle",
+      "block": "Bloc de texte",
+      "group": "Groupe",
+      "image": "Image",
+      "mask": "Masque",
+      "panel": "Case",
+      "raster": "Matriciel",
+      "shape": "Forme",
+      "text": "Texte"
+    },
+    "lock": "Verrouiller {{name}}",
+    "locked": "Verrouillé",
+    "opacityLabel": "Opacité de {{name}}",
+    "parts": {
+      "cleanup": "Nettoyage",
+      "mask": "Masque",
+      "pick": "{{part}} de {{name}}",
+      "toggle": "Maj+clic pour afficher ou masquer"
+    },
+    "show": "Afficher {{name}}",
+    "sourceLabel": "Texte source de {{name}}",
+    "textLabel": "Texte de {{name}}",
+    "textName": "Texte {{index}}",
+    "title": "Calques",
+    "translationLabel": "Traduction de {{name}}",
+    "unlock": "Déverrouiller {{name}}",
+    "unlocked": "Déverrouillé"
+  },
+  "menu": {
+    "about": "À propos",
+    "closeProject": "Fermer le projet",
+    "delete": "Supprimer la sélection",
+    "discord": "Discord",
+    "donate": "Faire un don",
+    "edit": "Édition",
+    "export": "Exporter le projet",
+    "feedback": "Envoyer un commentaire",
+    "file": "Fichier",
+    "fit": "Ajuster à la fenêtre",
+    "github": "GitHub",
+    "help": "Aide",
+    "history": "Historique",
+    "import": "Importer des pages",
+    "redo": "Rétablir",
+    "selectAllLayers": "Sélectionner tous les calques",
+    "settings": "Paramètres",
+    "undo": "Annuler",
+    "unloadModels": "Décharger les modèles",
+    "view": "Affichage"
+  },
+  "model": {
+    "baseUrl": "URL de base",
+    "default": "Par défaut",
+    "targetLanguage": "Langue cible"
+  },
+  "modelPicker": {
+    "empty": "Aucun modèle disponible.",
+    "loading": "Chargement des modèles…",
+    "noResults": "Aucun modèle ne correspond à cette recherche.",
+    "search": "Rechercher des modèles",
+    "title": "Choisir un modèle",
+    "useModel": "Utiliser {{model}} de {{provider}}"
+  },
+  "navigator": {
+    "actionsFor": "Actions pour {{page}}",
+    "delete": "Supprimer",
+    "deleteDescription": "Cette action supprime « {{page}} » et ses calques. Vous pouvez l’annuler.",
+    "deleteTitle": "Supprimer la page ?",
+    "emptyDescription": "Importez des fichiers image ou un dossier pour ajouter des pages.",
+    "emptyTitle": "Aucune page pour l’instant",
+    "importAction": "Importer",
+    "importFiles": "Fichiers…",
+    "importFolder": "Dossier…",
+    "importing": "Importation des pages…",
+    "importingAction": "Importation…",
+    "noImage": "Aucune image",
+    "pageNumber": "Page {{number}}",
+    "pages": "Pages",
+    "run": {
+      "detect": "Détecter",
+      "inpaint": "Retoucher",
+      "recognize": "Reconnaître",
+      "translate": "Traduire"
+    },
+    "selected": "Sélection : {{count}}",
+    "translated": "{{translated}} sur {{total}} traduits"
+  },
+  "outputPicker": {
+    "noResults": "Aucune langue ne correspond à cette recherche.",
+    "search": "Rechercher une langue",
+    "targetLanguage": "Langue cible",
+    "title": "Sortie de traduction"
+  },
+  "phase": {
+    "detect": "Détection",
+    "inpaint": "Inpainting",
+    "recognize": "OCR",
+    "translate": "Traduction"
+  },
+  "phaseDescription": {
+    "detect": "Repérer le texte sur la page.",
+    "inpaint": "Reconstruire l’image derrière le texte supprimé.",
+    "recognize": "Lire le texte de chaque zone.",
+    "translate": "Convertir le texte source dans la langue cible."
+  },
+  "psd": {
+    "background": "Arrière-plan",
+    "cleanup": "Nettoyage",
+    "outline": "Contour"
+  },
+  "reasoning": {
+    "high": "Élevé",
+    "low": "Faible",
+    "max": "Max",
+    "medium": "Moyen",
+    "minimal": "Minimal",
+    "off": "Désactivé",
+    "xhigh": "Très élevé"
+  },
+  "settings": {
+    "appearance": {
+      "description": "Adaptez votre espace de travail à la pièce sans modifier le rendu des images.",
+      "interface": "Interface",
+      "language": "Langue",
+      "theme": "Thème",
+      "themeDescription": "« Système » suit le réglage du système d’exploitation.",
+      "themes": {
+        "dark": "Sombre",
+        "light": "Clair",
+        "system": "Système"
+      },
+      "title": "Apparence"
+    },
+    "backToEditor": "Retour à l’éditeur",
+    "loading": "Chargement des préférences…",
+    "pipeline": {
+      "description": "Choisissez les modèles et les options utilisés pour traiter chaque page.",
+      "model": "Modèle",
+      "modelLabel": "Modèle de {{stage}}",
+      "options": {
+        "bubbleThreshold": "Seuil des bulles",
+        "onomatopoeiaThreshold": "Seuil des onomatopées",
+        "panelThreshold": "Seuil des cases",
+        "prompt": "Prompt",
+        "promptDescription": "Ne s’applique qu’aux modèles génératifs.",
+        "textThreshold": "Seuil du texte"
+      },
+      "stages": {
+        "detect": {
+          "description": "Trouver le texte, les bulles et les cases.",
+          "title": "Détecteur"
+        },
+        "inpaint": {
+          "description": "Reconstruire l’image sous le texte supprimé.",
+          "title": "Retoucheur"
+        },
+        "recognize": {
+          "description": "Lire le texte source dans les zones détectées.",
+          "title": "Reconnaisseur"
+        },
+        "translate": {
+          "description": "Traduire le texte source dans la langue cible.",
+          "title": "Traducteur"
+        }
+      },
+      "thresholds": "Seuils",
+      "title": "Pipeline",
+      "translator": {
+        "instructions": "Instructions supplémentaires",
+        "instructionsDescription": "Facultatives, dans n’importe quelle langue et sous n’importe quelle forme, comme l’orthographe d’un nom ou le ton. Koharu les ajoute telles quelles après sa propre instruction système.",
+        "reasoning": "Raisonnement",
+        "reasoningDescription": "Utiliser le raisonnement du modèle pendant la traduction.",
+        "targetLanguageDescription": "Choisissez la langue dans laquelle traduire le texte.",
+        "vision": "Vision",
+        "visionDescription": "Transmettre les images des pages au LLM pendant la traduction."
+      }
+    },
+    "providers": {
+      "browserHint": "Terminez la connexion sur la page ouverte par votre navigateur.",
+      "clearCredential": "Effacer les identifiants {{provider}}",
+      "configured": "Configuré",
+      "connections": "Connexions",
+      "connectionsDescription": "Les identifiants sont stockés de façon sécurisée sur cet appareil.",
+      "contextWindow": "Longueur du contexte (jetons)",
+      "credential": "Identifiants",
+      "credentialLabel": "Identifiants {{provider}}",
+      "description": "Connectez des fournisseurs de traduction et de modèles de langage.",
+      "deviceCodeHint": "Saisissez ce code sur la page ouverte par votre navigateur.",
+      "notConfigured": "Non configuré",
+      "openPage": "Ouvrir la page de connexion",
+      "openaiCompatible": "Compatible OpenAI",
+      "signIn": "Se connecter",
+      "signInLabel": "Se connecter à {{provider}}",
+      "signOut": "Se déconnecter",
+      "signOutLabel": "Se déconnecter de {{provider}}",
+      "signingIn": "En attente de connexion…",
+      "subscription": "Abonnement",
+      "title": "Fournisseurs"
+    },
+    "tabs": {
+      "appearance": "Apparence",
+      "pipeline": "Pipeline",
+      "providers": "Fournisseurs",
+      "typesetting": "Moteur de rendu"
+    },
+    "title": "Paramètres",
+    "typesetting": {
+      "addFallback": "Ajouter une police de secours",
+      "addFamily": "Ajouter une famille de polices",
+      "description": "Définissez la liste ordonnée de polices utilisée lorsqu’aucune famille n’est attribuée à un calque de texte.",
+      "empty": "Aucune famille par défaut. Koharu utilisera la police de secours du système.",
+      "fallbacks": "Polices de secours",
+      "fallbacksDescription": "Utilisées dans l’ordre pour les caractères absents de la police principale. Faites glisser pour réordonner, ou sur Principale pour les échanger.",
+      "familyLabel": "Famille de polices par défaut {{index}}",
+      "fontFallback": "Polices préférées",
+      "fontFallbackDescription": "Koharu utilise la première famille disponible qui prend en charge le texte.",
+      "loadError": "Impossible de charger les polices. Les familles existantes peuvent toujours être supprimées.",
+      "loadingFonts": "Chargement des polices…",
+      "primary": "Principale",
+      "removeFamily": "Retirer {{family}}",
+      "title": "Moteur de rendu"
+    }
+  },
+  "start": {
+    "create": "Créer",
+    "deleteAction": "Supprimer le projet",
+    "deleteDescription": "Cette action supprime définitivement « {{name}} » et toutes ses pages. Elle est irréversible.",
+    "deleteLabel": "Supprimer {{name}}",
+    "deleteTitle": "Supprimer le projet ?",
+    "deleting": "Suppression…",
+    "description": "Ouvrez un espace de travail ou commencez une nouvelle traduction.",
+    "emptyDescription": "Créez votre premier projet pour commencer à importer des pages.",
+    "emptyTitle": "Aucun projet pour l’instant",
+    "loadingProjects": "Chargement des projets…",
+    "newDescription": "Créez un espace de travail vierge pour vos pages, traductions et exports.",
+    "newProject": "Nouveau projet",
+    "noResults": "Aucun projet ne correspond à cette recherche.",
+    "projectKind": "Projet Koharu",
+    "projectList": "Projets",
+    "projectName": "Nom du projet",
+    "projectNamePlaceholder": "Mon nouveau projet",
+    "search": "Rechercher un projet",
+    "storageHint": "Les projets sont stockés localement sur cet ordinateur.",
+    "title": "Projets",
+    "yourProjects": "Vos projets"
+  },
+  "startup": {
+    "description": "Chargement des environnements d’IA locaux et préparation de l’espace de travail. Le premier lancement peut prendre un moment.",
+    "opening": "Ouverture de Koharu…",
+    "status": "Initialisation des environnements locaux",
+    "title": "Préparation de Koharu"
+  },
+  "status": {
+    "zoom": "Zoom"
+  },
+  "story": {
+    "noText": "Aucun texte sur cette page.",
+    "sfx": "Effet sonore",
+    "title": "Histoire",
+    "translate": "Traduire {{name}}"
+  },
+  "tools": {
+    "brushSize": "Taille du pinceau",
+    "brushSizeInput": "Taille du pinceau",
+    "brushSizePixels": "Taille du pinceau : {{size}} pixels",
+    "brushSizeShort": "{{size}} px",
+    "color_picker": "Pipette",
+    "decreaseBrushSize": "Réduire la taille du pinceau",
+    "direct_select": "Sélection directe",
+    "draw": "Pinceau",
+    "eraser": "Gomme",
+    "increaseBrushSize": "Augmenter la taille du pinceau",
+    "lasso": "Lasso",
+    "marquee": "Rectangle de sélection",
+    "pan": "Déplacer",
+    "remove": "Retirer",
+    "select": "Sélection",
+    "text": "Texte"
+  },
+  "updater": {
+    "available": {
+      "description": "Koharu <strong>{{version}}</strong> est prêt à être installé",
+      "title": "Mise à jour disponible"
+    },
+    "close": "Fermer",
+    "downloading": {
+      "subtitle": "Koharu {{version}}",
+      "title": "Téléchargement de la mise à jour…"
+    },
+    "error": {
+      "description": "Un problème est survenu pendant la mise à jour",
+      "title": "Échec de la mise à jour"
+    },
+    "later": "Plus tard",
+    "noNotes": "Aucune note de version fournie.",
+    "retry": "Réessayer",
+    "update": "Mettre à jour"
+  },
+  "window": {
+    "close": "Fermer",
+    "maximize": "Agrandir",
+    "minimize": "Réduire",
+    "restore": "Restaurer"
+  }
+}

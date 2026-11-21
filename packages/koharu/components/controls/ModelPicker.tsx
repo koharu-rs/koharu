@@ -1,151 +1,210 @@
 'use client'
 
-import { Check, ChevronLeft, LoaderCircle, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { LoaderCircle } from 'lucide-react'
+import { useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { modelKey, providerName } from '@/lib/translation'
-import type { Model, ModelSelection, ProviderPreference } from '@koharu/bridge/protocol'
-import { Button } from '@koharu/ui/components/button'
+import { MenuPanel } from '@/components/controls/MenuPanel'
+import { PickerSearch } from '@/components/controls/PickerSearch'
+import { vendorName } from '@/lib/vendors'
+import type { Model } from '@koharu/ipc/protocol'
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@koharu/ui/components/input-group'
+  Combobox,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  useComboboxFilteredItems,
+} from '@koharu/ui/components/combobox'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 
+/** A row of the list: a vendor's heading, or one of its models with its place among the matches. */
+type Row = { vendor: string } | { model: Model; index: number }
+
+/** A row's height in pixels: a model's line, or a vendor's heading. */
+const height = (row: Row | undefined) => (row && 'model' in row ? 28 : 24)
+
+/** The list's height in pixels, which it opens with the model in use in the middle of. */
+const LIST_HEIGHT = 288
+
+/** Picks a model by its `vendor/model` reference, from Koharu's own and each vendor's that has a
+ * key or a sign-in, as Claude's and Codex's model menus do: a search line, the models under their
+ * vendors one line each, the one in use checked, and the keyboard's arrows and Enter. `onBack`
+ * gives it a heading that goes back, for a menu it opens inside of. */
 export function ModelPicker({
   value,
   models,
-  providers,
   loading = false,
   disabled = false,
-  busyModel,
   onBack,
   onSelect,
 }: {
-  value: ModelSelection | null
+  value: string | null
   models: Model[]
-  providers: ProviderPreference[]
   loading?: boolean
   disabled?: boolean
-  busyModel?: string | null
-  onBack: () => void
-  onSelect: (model: Model) => void
+  onBack?: () => void
+  onSelect: (reference: string) => void
 }) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
-  const search = useRef<HTMLInputElement>(null)
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const results = useMemo(
-    () =>
-      models.filter((model) => {
-        if (!normalizedQuery) return true
-        const provider = providerName(providers, model.provider)
-        return [model.name, model.model, provider].some((candidate) =>
-          candidate?.toLocaleLowerCase().includes(normalizedQuery),
+  const list = useRef<{ reveal: (index: number) => void }>(null)
+  // Each vendor's models together, the vendors in the order they first come.
+  const ordered = useMemo(() => {
+    const vendors = [...new Set(models.map((model) => model.vendor))]
+    return vendors.flatMap((vendor) => models.filter((model) => model.vendor === vendor))
+  }, [models])
+
+  const body = (
+    <Combobox<Model>
+      inline
+      open
+      virtualized
+      items={ordered}
+      value={ordered.find((model) => model.reference === value) ?? null}
+      inputValue={query}
+      readOnly={disabled}
+      itemToStringLabel={(model) => model.name}
+      isItemEqualToValue={(model, other) => model.reference === other.reference}
+      filter={(model, text) => {
+        const needle = text.trim().toLocaleLowerCase()
+        return [model.name, model.reference, model.vendor].some((candidate) =>
+          candidate.toLocaleLowerCase().includes(needle),
         )
-      }),
-    [models, normalizedQuery, providers],
+      }}
+      onInputValueChange={setQuery}
+      onValueChange={(model) => model && onSelect(model.reference)}
+      onItemHighlighted={(_, { reason, index }) => {
+        if (reason === 'keyboard') list.current?.reveal(index)
+      }}
+    >
+      <div className='mb-0.5 border-b border-border/60 pb-1'>
+        <PickerSearch query={query} label={t('modelPicker.search')} onClear={() => setQuery('')} />
+      </div>
+      {/* Its children come only while nothing matches, so it's empty, and hidden, otherwise. */}
+      <ComboboxEmpty className='flex items-center gap-2 px-2.5 py-5 empty:hidden'>
+        {loading && models.length === 0 && <LoaderCircle className='size-3.5 animate-spin' />}
+        {t(
+          models.length > 0
+            ? 'modelPicker.noResults'
+            : loading
+              ? 'modelPicker.loading'
+              : 'modelPicker.empty',
+        )}
+      </ComboboxEmpty>
+      <ComboboxList aria-label={t('modelPicker.title')} className='max-h-none overflow-visible p-0'>
+        {/* Anew for each query, so a filtered list starts at its top. */}
+        <ModelList key={query} selected={value} ref={list} />
+      </ComboboxList>
+    </Combobox>
   )
+  return onBack ? (
+    <MenuPanel title={t('modelPicker.title')} backDisabled={disabled} onBack={onBack}>
+      {body}
+    </MenuPanel>
+  ) : (
+    <div className='min-w-0 overflow-hidden'>{body}</div>
+  )
+}
 
-  useEffect(() => {
-    search.current?.focus()
-  }, [])
+/** The matches under their vendors' headings. Only the rows in view exist, as a vendor such as
+ * OpenRouter lists hundreds of models; `reveal` scrolls to a match the keyboard reaches. */
+function ModelList({
+  selected,
+  ref,
+}: {
+  selected: string | null
+  ref: Ref<{ reveal: (index: number) => void }>
+}) {
+  const { t } = useTranslation()
+  const matches = useComboboxFilteredItems<Model>()
+  const rows = useMemo(
+    () =>
+      matches.flatMap((model, index): Row[] =>
+        matches[index - 1]?.vendor === model.vendor
+          ? [{ model, index }]
+          : [{ vendor: model.vendor }, { model, index }],
+      ),
+    [matches],
+  )
+  const current = rows.findIndex((row) => 'model' in row && row.model.reference === selected)
+  const viewport = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => viewport.current,
+    getItemKey: (index) => {
+      const row = rows[index]
+      return row ? ('model' in row ? row.model.reference : `vendor:${row.vendor}`) : index
+    },
+    estimateSize: (index) => height(rows[index]),
+    paddingStart: 2,
+    paddingEnd: 2,
+    overscan: 8,
+    // The list opens on the model in use, wherever it is, in its middle. The virtualizer scrolls
+    // here each time it takes the list, as a second mount in Strict Mode does, where a scroll of
+    // the list's own would be undone.
+    initialOffset: () =>
+      current < 0
+        ? 0
+        : Math.max(
+            0,
+            rows.slice(0, current).reduce((top, row) => top + height(row), 2) +
+              (28 - LIST_HEIGHT) / 2,
+          ),
+    initialRect: { width: 256, height: LIST_HEIGHT },
+  })
 
+  useImperativeHandle(ref, () => ({
+    reveal: (index) =>
+      virtualizer.scrollToIndex(
+        rows.findIndex((row) => 'model' in row && row.index === index),
+        { align: 'auto' },
+      ),
+  }))
+
+  if (rows.length === 0) return null
   return (
-    <div className='min-w-0 overflow-hidden'>
-      <div className='mb-1 flex h-7 items-center border-b border-border/60 px-0.5 pb-1'>
-        <Button
-          type='button'
-          variant='ghost'
-          size='icon-xs'
-          aria-label={t('common.back')}
-          className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
-          onClick={onBack}
-        >
-          <ChevronLeft className='size-3.5' />
-        </Button>
-        <span className='ml-1 text-[11px] font-medium'>{t('modelPicker.title')}</span>
-      </div>
-
-      <div className='border-b border-border/60 p-1'>
-        <InputGroup className='h-7 border-0 bg-muted/50 shadow-none focus-within:bg-background has-[>[data-align=inline-start]]:[&>input]:pl-0'>
-          <InputGroupAddon className='pr-1 pl-1.5'>
-            <Search className='size-3' />
-          </InputGroupAddon>
-          <InputGroupInput
-            ref={search}
-            value={query}
-            aria-label={t('modelPicker.search')}
-            placeholder={t('modelPicker.search')}
-            className='h-7 px-0 text-[11px]'
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-          {query && (
-            <InputGroupAddon align='inline-end' className='pr-0.5'>
-              <InputGroupButton aria-label={t('common.clearSearch')} onClick={() => setQuery('')}>
-                <X />
-              </InputGroupButton>
-            </InputGroupAddon>
-          )}
-        </InputGroup>
-      </div>
-
-      <ScrollArea
-        className='max-h-64 min-w-0 overflow-hidden'
-        viewportClassName='h-auto max-h-64 min-w-0 overscroll-contain'
-      >
-        <div className='grid min-w-0 gap-0.5 py-0.5'>
-          {results.map((model) => {
-            const key = modelKey(model)
-            const selected = value ? key === modelKey(value) : false
+    <ScrollArea
+      className='max-h-72 min-w-0 overflow-hidden'
+      viewportClassName='h-auto max-h-72 min-w-0 overscroll-contain'
+      viewportRef={viewport}
+    >
+      <div className='relative w-full min-w-0' style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((item) => {
+          const row = rows[item.index]
+          if (!row) return null
+          const place = { transform: `translateY(${item.start}px)` }
+          if (!('model' in row)) {
             return (
-              <Button
-                key={key}
-                type='button'
-                variant='ghost'
-                aria-label={t('modelPicker.useModel', {
-                  model: model.name,
-                  provider: providerName(providers, model.provider),
-                })}
-                aria-pressed={selected}
-                disabled={disabled || Boolean(busyModel)}
-                className='h-auto min-h-9 w-full max-w-full min-w-0 justify-start gap-2 overflow-hidden rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
-                onClick={() => onSelect(model)}
+              <div
+                key={item.key}
+                role='presentation'
+                className='absolute top-0 left-0 flex h-6 w-full items-end truncate px-2 pb-0.5 text-[10px] text-muted-foreground'
+                style={place}
               >
-                <span className='min-w-0 flex-1 overflow-hidden'>
-                  <span className='block truncate text-[11px] text-foreground'>{model.name}</span>
-                  <span className='block truncate text-[9px] text-muted-foreground'>
-                    {providerName(providers, model.provider)}
-                  </span>
-                </span>
-                {busyModel === key ? (
-                  <LoaderCircle className='size-3.5 shrink-0 animate-spin text-primary' />
-                ) : (
-                  selected && <Check className='size-3.5 shrink-0 text-primary' />
-                )}
-              </Button>
+                {vendorName(row.vendor, t)}
+              </div>
             )
-          })}
-          {loading && models.length === 0 && (
-            <div className='flex h-20 items-center justify-center gap-2 text-[11px] text-muted-foreground'>
-              <LoaderCircle className='size-3.5 animate-spin' /> {t('modelPicker.loading')}
-            </div>
-          )}
-          {!loading && models.length === 0 && (
-            <div className='px-2.5 py-5 text-center text-[11px] text-muted-foreground'>
-              {t('modelPicker.empty')}
-            </div>
-          )}
-          {models.length > 0 && results.length === 0 && (
-            <div className='px-2.5 py-5 text-center text-[11px] text-muted-foreground'>
-              {t('modelPicker.noResults')}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
+          }
+          return (
+            <ComboboxItem
+              key={item.key}
+              index={row.index}
+              value={row.model}
+              aria-label={t('modelPicker.useModel', {
+                model: row.model.name,
+                provider: vendorName(row.model.vendor, t),
+              })}
+              aria-setsize={matches.length}
+              aria-posinset={row.index + 1}
+              className='absolute top-0 left-0 h-7'
+              style={place}
+            >
+              <span className='min-w-0 flex-1 truncate'>{row.model.name}</span>
+            </ComboboxItem>
+          )
+        })}
+      </div>
+    </ScrollArea>
   )
 }

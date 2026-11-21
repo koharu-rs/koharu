@@ -1,0 +1,57 @@
+---
+title: 'Translate your first page'
+description: 'Create a project, run the pipeline, review the page, and export it.'
+icon: 'rocket'
+---
+
+Start with one readable PNG, JPEG, or WebP manga page and an [installed copy of Koharu](/installation).
+
+<Steps>
+  <Step title="Create a project">
+    On the start screen, enter a name under **New project** and choose **Create**. Koharu creates a single `.khr` project file in its projects folder and opens the editor.
+  </Step>
+  <Step title="Import your page">
+    Choose **File → Import Pages → Files…**, or use the **Import** button shown in the empty page list. Select your image. Koharu copies it into the project file, so you can move the original later.
+  </Step>
+  <Step title="Choose the translation output">
+    Open the processing selector above the canvas. Choose a **Model** and, under **Output**, a target language. Both are saved with Koharu's settings and apply to every project. Rules for the model, such as how to spell names, go under **Additional instructions** in **Settings → Pipeline**.
+
+    For a hosted model, first add its API key or sign in under **Settings → Providers**. See [translation providers](/models/providers).
+
+  </Step>
+  <Step title="Run the pipeline">
+    Select the page in **Pages**, set **Scope** to **Selected pages**, keep all four **Stages** selected, and click **Run**.
+
+    Detection finds panels, speech bubbles, and text. OCR reads the source text, inpainting removes the source lettering, and translation writes and places the target-language text.
+
+    Follow the page and stage in the activity center. The first run also downloads the runtime and the models.
+
+  </Step>
+  <Step title="Review the result">
+    In **Story**, compare each text block's **Source text** with its **Translation**. Correct OCR, wording, names, and line breaks.
+
+    Paint over missed source lettering with **Remove**; releasing the stroke inpaints that area right away. Use **Brush** or **Eraser** for raster touch-ups and **Text** for a missing line. Undo an unwanted edit with **Edit → Undo**.
+
+  </Step>
+  <Step title="Fit the text">
+    Select a text block and adjust the font, size, alignment, direction, color, and border in the **Type** section. Check the page at normal reading size.
+
+    <Note>
+      Only translations are drawn. Source text stays editable, but it never appears on the page.
+    </Note>
+
+  </Step>
+  <Step title="Export">
+    Choose **File → Export Project**, then **PNG…** for flattened images, **PSD…** for layered documents, or **CBZ…** for a comic archive. Select where to save.
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Process a chapter" icon="layers" href="/guides/processing">
+    Choose page scopes and rerun only the stages that need work.
+  </Card>
+
+  <Card title="Refine the artwork" icon="paintbrush" href="/guides/cleanup">
+    Fix clean-up with the Remove brush and manual raster corrections.
+  </Card>
+</CardGroup>

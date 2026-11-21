@@ -2,4 +2,3 @@
 
 pub mod panic;
 pub mod sentry;
-pub mod tracing;

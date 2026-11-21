@@ -1,23 +1,59 @@
+//! Gets Koharu ready to run models on this machine's GPU.
+
 mod device;
 mod hardware;
-mod network;
-mod runtime;
-mod source;
+mod huggingface;
+mod packages;
 mod store;
+mod transfer;
 
-pub mod download;
+use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
-pub use device::{Backend, Device, DeviceType};
-pub use hardware::Hardware;
-pub use runtime::{Feature, Package, Runtime, Torch};
-pub use source::HuggingFaceFile;
-pub use store::Store;
+use anyhow::Context;
+use tokio::sync::OnceCell;
 
-/// Builds the shared client used by remote APIs and long-running model requests.
-///
-/// Connection setup follows the shared HTTP policy. Response reads have no
-/// implicit timeout or retry, so callers retain cancellation ownership and
-/// non-idempotent generation requests are never replayed automatically.
-pub fn http_client() -> anyhow::Result<reqwest::Client> {
-    network::http()
+pub use device::{Backend, Device, Memory};
+pub use huggingface::Repository;
+pub use transfer::{State, Transfer, transfers};
+
+/// Koharu's root: the folder setup put it in, in Windows release builds, where
+/// this user can write it, which a per-machine install's, under Program Files,
+/// isn't. The store goes in it, and the app's projects beside the store.
+pub fn root() -> Option<&'static Path> {
+    static ROOT: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+        if !cfg!(all(windows, not(debug_assertions))) {
+            return None;
+        }
+        let executable = std::env::current_exe().expect("Koharu knows where its executable is");
+        let folder = executable.parent().expect("an executable is in a folder");
+        match tempfile::tempfile_in(folder) {
+            Err(error) if error.kind() == ErrorKind::PermissionDenied => None,
+            _ => Some(folder.to_owned()),
+        }
+    });
+    ROOT.as_deref()
+}
+
+/// Where every model runs: the best GPU, once what it needs is downloaded and
+/// loaded. Every caller shares that start, and a failed one is tried again on
+/// the next call.
+pub async fn device() -> anyhow::Result<&'static Device> {
+    static DEVICE: OnceCell<Device> = OnceCell::const_new();
+    DEVICE
+        .get_or_try_init(|| async {
+            let gpu = hardware::candidates()
+                .into_iter()
+                .next()
+                .context("GPU is not available")?;
+            let device = packages::start(&gpu)
+                .await
+                .with_context(|| format!("{} can't be used", gpu.description))?;
+            tracing::info!("models run on {}", device.description);
+            Ok(device)
+        })
+        .await
 }

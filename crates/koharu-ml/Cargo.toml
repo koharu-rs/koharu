@@ -12,87 +12,38 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-koharu-diffusion = { workspace = true }
-koharu-llama = { workspace = true, features = ["llguidance"] }
-koharu-runtime = { workspace = true }
-koharu-torch = { workspace = true }
-ab_glyph = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true }
+fast_image_resize = { workspace = true }
+fs-err = { workspace = true }
+icu_properties = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
-icu_properties = { workspace = true }
-encoding_rs = { workspace = true }
-fast_image_resize = { workspace = true }
-minijinja = { workspace = true }
-minijinja-contrib = { workspace = true }
+koharu-diffusion = { workspace = true }
+koharu-leptonica = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-torch = { workspace = true }
+kurbo = { workspace = true }
+memmap2 = { workspace = true }
 rayon = { workspace = true }
-schemars = { workspace = true }
+safetensors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
 tokenizers = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
+ab_glyph = { workspace = true }
+clap = { workspace = true }
 criterion = { workspace = true }
 tempfile = { workspace = true }
-
-[[bench]]
-name = "pp_doclayout_v3"
-harness = false
-
-[[bench]]
-name = "pp_ocr_v6_det"
-harness = false
-
-[[bench]]
-name = "pp_ocr_v6_rec"
-harness = false
-
-[[bench]]
-name = "aot_inpainting"
-harness = false
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [[bench]]
 name = "lama"
 harness = false
 
 [[bench]]
-name = "comic_text_detector"
-harness = false
-
-[[bench]]
-name = "comic_text_bubble_detector"
-harness = false
-
-[[bench]]
-name = "comic_onomatopoeia"
-harness = false
-
-[[bench]]
-name = "speech_bubble_yolov8m"
-harness = false
-
-[[bench]]
-name = "speech_bubble_yolo11n"
-harness = false
-
-[[bench]]
-name = "comic_layout_yolo26s"
-harness = false
-
-[[bench]]
-name = "flux2_klein"
-harness = false
-
-[[bench]]
-name = "paddle_ocr_vl"
-harness = false
-
-[[bench]]
-name = "manga_ocr"
+name = "manga_ocr_ar"
 harness = false
 
 [[bench]]
@@ -100,13 +51,9 @@ name = "baberu_ocr"
 harness = false
 
 [[bench]]
-name = "manga_text_mask"
+name = "hayai_ocr"
 harness = false
 
 [[bench]]
-name = "font_detector"
-harness = false
-
-[[bench]]
-name = "koharu_layout_rfdetr_seg_2xl"
+name = "koharu_layout_highres"
 harness = false

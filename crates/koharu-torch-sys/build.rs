@@ -1,38 +1,27 @@
-use std::{env, path::Path};
+use std::env;
 
-use anyhow::Result;
-use koharu_bindgen::Generator;
+/// The shim's functions and libtorch's own C API.
+const FUNCTIONS: &str = "^(aten|aoti_torch|torch)_.*";
+/// libtorch's per-backend C functions, which its headers declare whatever
+/// the build, but only some builds export: `aoti_torch_mps_*` only a Metal
+/// one, and `aoti_torch_cpu_*` only one with MKL and oneDNN.
+const BACKENDS: &str = "^aoti_torch_(mps|cpu)_.*";
 
-const SHIM_LIBRARY_NAME: &str = "koharu-torch";
-const OPAQUE_TYPES: &str = "^(tensor|scalar|optimizer|torch_module|ivalue)$";
-const TORCH_API_HEADER: &str = "libtch/torch_api.h";
-const TORCH_API_GENERATED_HEADER: &str = "libtch/torch_api_generated.h";
-const RERUN_IF_CHANGED: &[&str] = &["build.rs", TORCH_API_HEADER, TORCH_API_GENERATED_HEADER];
-
-fn main() -> Result<()> {
-    for path in RERUN_IF_CHANGED {
-        println!("cargo:rerun-if-changed={path}");
-    }
-    generate_bindings(Path::new(&env::var("OUT_DIR")?))
-}
-
-fn generate_bindings(out_dir: &Path) -> Result<()> {
-    generator(TORCH_API_HEADER)
-        .with_bindgen(|builder| {
-            builder
-                .allowlist_function("^(at.*|ato.*|ats.*|atc.*|atm.*|ati.*|get_and_reset_last_err)$")
-                .blocklist_function("^at_autocast_(is_enabled|set_enabled)$")
-        })
-        .write_to_file(out_dir.join("torch_api.rs"))?;
-
-    generator(TORCH_API_GENERATED_HEADER)
-        .with_bindgen(|builder| builder.clang_arg("-Ilibtch").allowlist_function("^atg_.*"))
-        .write_to_file(out_dir.join("torch_api_generated.rs"))?;
-
-    Ok(())
-}
-
-fn generator(header: impl AsRef<Path>) -> Generator {
-    Generator::from_header(header, SHIM_LIBRARY_NAME)
-        .with_bindgen(|builder| builder.layout_tests(false).blocklist_type(OPAQUE_TYPES))
+fn main() {
+    koharu_bindgen::generate(|bindings| {
+        bindings
+            // libtorch's C headers are C++ underneath: `using` aliases and
+            // its header-only types.
+            .clang_args(["-x", "c++", "-std=c++17"])
+            .allowlist_function(FUNCTIONS)
+            .blocklist_function(BACKENDS)
+            .allowlist_var("AOTI_TORCH_SUCCESS")
+            .prepend_enum_name(false)
+    });
+    // koharu-torch generates its tensor methods from the bindings, and from
+    // the header the shim generates its operator functions into.
+    let out = env::var("OUT_DIR").expect("Cargo sets it");
+    println!("cargo::metadata=bindings={out}/bindings.rs");
+    let crate_dir = env::var("CARGO_MANIFEST_DIR").expect("Cargo sets it");
+    println!("cargo::metadata=operators={crate_dir}/include/koharu_torch_aten.h");
 }

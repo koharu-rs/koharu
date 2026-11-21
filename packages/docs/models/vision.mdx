@@ -1,0 +1,48 @@
+---
+title: 'Vision and inpainting models'
+description: 'Choose models for detection, OCR, and artwork reconstruction.'
+icon: 'eye'
+---
+
+Open **Settings → Pipeline** and choose a model for each stage. Every model runs on your machine; the [workflow](/guides/processing) stays the same whichever you choose.
+
+## Detection
+
+**Koharu Layout HighRes**, an RF-DETR segmenter, finds panels, speech bubbles, text, and sound effects, and gives each text block its mask and reading order.
+
+Text, SFX, bubble, and panel thresholds set how confident each class must be; empty fields use the model's own. Lower thresholds keep more uncertain regions and may add false positives. Compare several representative pages before changing them, then run detection again on those pages.
+
+## OCR
+
+| Model                                                                            | Reads                                               |
+| -------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Manga OCR AR](https://huggingface.co/muscgab/manga-ocr-ar-experimental)         | Japanese manga text                                 |
+| [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)                  | Japanese manga text                                 |
+| [Hayai OCR](https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova) | Japanese, Chinese, Korean, and English; the default |
+
+Manga OCR AR is licensed CC BY-NC-SA 4.0, so choosing it holds you to non-commercial use. Check each model card for its license.
+
+<Note>
+  OCR reads detected text blocks. Check detection first when text is missing: changing the
+  recognizer cannot recover a block that was never detected.
+</Note>
+
+## Inpainting
+
+<Tabs>
+  <Tab title="Direct">
+    **LaMa**, fine-tuned on manga, is the default. Start here for routine lettering removal.
+  </Tab>
+  <Tab title="Generative">
+    **FLUX.3 Klein** and **Qwen-Image 2.1 Turbo** run on stable-diffusion.cpp and follow the **Prompt** in **Settings → Pipeline**, which by default asks the model to remove all text and keep everything else.
+
+    These models need more download space, memory, and time. Describe the removal of lettering; typeset the translation with text layers. Qwen-Image 2.1 Turbo is under the Qwen Research License, for research and evaluation only.
+
+  </Tab>
+</Tabs>
+
+Flat and smoothly shaded backgrounds are filled without any model, so the choice matters most for lettering over line art and screentone. See [cleanup](/guides/cleanup).
+
+## First runs
+
+Weights download from Hugging Face, pinned to a commit, the first time a model loads, and the model stays loaded until the settings switch away from it. A first run includes download and loading costs, so compare warmed models on identical pages before choosing a project default.

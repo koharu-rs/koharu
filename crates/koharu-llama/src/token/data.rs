@@ -1,4 +1,4 @@
-﻿//! Safe wrapper around `llama_token_data`.
+//! Safe wrapper around `llama_token_data`.
 use crate::token::LlamaToken;
 
 /// A transparent wrapper around `llama_token_data`.

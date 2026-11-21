@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Allows the web interface to send its events, breadcrumbs, and scope to the Rust SDK."
+permissions = ["allow-envelope", "allow-breadcrumb", "allow-scope"]

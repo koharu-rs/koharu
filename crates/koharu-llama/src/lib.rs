@@ -17,6 +17,7 @@
 use std::ffi::{NulError, c_char};
 use std::fmt::Debug;
 use std::num::NonZeroI32;
+use std::sync::OnceLock;
 
 use crate::llama_batch::BatchAddError;
 use std::os::raw::c_int;
@@ -31,13 +32,23 @@ pub mod llama_batch;
 pub(crate) mod llguidance_sampler;
 mod log;
 pub mod model;
+#[cfg(feature = "mtmd")]
 pub mod mtmd;
+mod ptr;
 pub mod sampling;
+#[cfg(feature = "common")]
+pub mod speculative;
 pub mod timing;
 pub mod token;
 pub mod token_type;
+pub mod vocab;
 
-pub use crate::context::session::LlamaStateSeqFlags;
+pub use crate::context::session::{LlamaStateSeqFlags, SeqState};
+
+#[cfg(feature = "common")]
+pub(crate) fn status_is_ok(status: koharu_llama_sys::llama_rs_status) -> bool {
+    status == koharu_llama_sys::LLAMA_RS_STATUS_OK
+}
 
 /// A failable result from a llama.cpp function.
 pub type Result<T> = std::result::Result<T, LlamaCppError>;
@@ -65,7 +76,7 @@ pub enum LlamaCppError {
     #[error("{0}")]
     LlamaContextLoadError(#[from] LlamaContextLoadError),
     /// There was an error adding a token to a batch.
-    #[error("{0}")]
+    #[error["{0}"]]
     BatchAddError(#[from] BatchAddError),
     /// see [`EmbeddingsError`]
     #[error(transparent)]
@@ -74,15 +85,17 @@ pub enum LlamaCppError {
     /// Backend device not found
     #[error("Backend device {0} not found")]
     BackendDeviceNotFound(usize),
-    /// Failed to convert the backend path to a Rust str. This means the path was not valid unicode.
-    #[error("failed to convert backend path {0} to str")]
-    BackendPathToStrError(PathBuf),
-    /// The backend path contained a null byte.
-    #[error("backend path contains null byte {0}")]
-    BackendPathNullError(NulError),
     /// Max devices exceeded
     #[error("Max devices exceeded. Max devices is {0}")]
     MaxDevicesExceeded(usize),
+    /// Failed to convert JSON schema to grammar.
+    #[cfg(feature = "common")]
+    #[error("JsonSchemaToGrammarError: {0}")]
+    JsonSchemaToGrammarError(String),
+    /// There was an error fitting model parameters to available memory.
+    #[cfg(feature = "common")]
+    #[error("{0}")]
+    FitError(#[from] crate::model::params::FitError),
 }
 
 /// There was an error while getting the chat template from a model.
@@ -125,6 +138,19 @@ pub enum LlamaContextLoadError {
     NullReturn,
 }
 
+/// Errors from the sequence-state save/restore API.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum StateSeqError {
+    /// llama.cpp read or wrote a different number of bytes than expected.
+    #[error("state seq size mismatch: expected {expected}, actual {actual}")]
+    SizeMismatch {
+        /// Number of bytes the caller expected to transfer.
+        expected: usize,
+        /// Number of bytes llama.cpp actually transferred.
+        actual: usize,
+    },
+}
+
 /// Failed to decode a batch.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum DecodeError {
@@ -153,19 +179,17 @@ pub enum EncodeError {
     Unknown(c_int),
 }
 
-/// When embedding related functions fail
+/// Fetching embeddings failed.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
-pub enum EmbeddingsError {
-    /// Embeddings weren't enabled in the context options
-    #[error("Embeddings weren't enabled in the context options")]
-    NotEnabled,
-    /// Logits weren't enabled for the given token
-    #[error("Logits were not enabled for the given token")]
-    LogitsNotEnabled,
-    /// The given sequence index exceeds the max sequence id
-    #[error("Can't use sequence embeddings with a model supporting only LLAMA_POOLING_TYPE_NONE")]
-    NonePoolType,
-}
+#[error("Embeddings or logits weren't enabled")]
+pub struct EmbeddingsError(());
+
+/// Retrieving embeddings sequences failed.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+#[error(
+    "Embeddings or logits weren't enabled, or the model was configured with LLAMA_POOLING_TYPE_NONE"
+)]
+pub struct EmbeddingsSeqError(());
 
 /// Errors that can occur when initializing a grammar sampler
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
@@ -251,79 +275,54 @@ pub enum LlamaLoraAdapterRemoveError {
 }
 
 /// get the time (in microseconds) according to llama.cpp
-/// ```no_run
-/// # use koharu_llama::llama_time_us;
-/// # use koharu_llama::llama_backend::LlamaBackend;
-/// let backend = LlamaBackend::init().unwrap();
-/// let time = llama_time_us();
-/// assert!(time > 0);
-/// ```
 #[must_use]
 pub fn llama_time_us() -> i64 {
     unsafe { koharu_llama_sys::llama_time_us() }
 }
 
 /// get the max number of devices according to llama.cpp (this is generally cuda devices)
-/// ```no_run
-/// # use koharu_llama::max_devices;
-/// let max_devices = max_devices();
-/// assert!(max_devices >= 0);
-/// ```
 #[must_use]
 pub fn max_devices() -> usize {
     unsafe { koharu_llama_sys::llama_max_devices() }
 }
 
 /// is memory mapping supported according to llama.cpp
-/// ```no_run
-/// # use koharu_llama::mmap_supported;
-/// let mmap_supported = mmap_supported();
-/// if mmap_supported {
-///   println!("mmap_supported!");
-/// }
-/// ```
 #[must_use]
 pub fn mmap_supported() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mmap() }
 }
 
 /// is memory locking supported according to llama.cpp
-/// ```no_run
-/// # use koharu_llama::mlock_supported;
-/// let mlock_supported = mlock_supported();
-/// if mlock_supported {
-///    println!("mlock_supported!");
-/// }
-/// ```
 #[must_use]
 pub fn mlock_supported() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mlock() }
 }
 
-/// An error that can occur when converting a token to a string.
-#[derive(Debug, thiserror::Error, Clone)]
-#[non_exhaustive]
-pub enum TokenToStringError {
-    /// the token type was unknown
-    #[error("Unknown Token Type")]
-    UnknownTokenType,
-    /// There was insufficient buffer space to convert the token to a string.
-    #[error("Insufficient Buffer Space {0}")]
-    InsufficientBufferSpace(c_int),
-    /// The token was not valid utf8.
-    #[error("FromUtf8Error {0}")]
-    FromUtf8Error(#[from] FromUtf8Error),
-}
+/// Convert a JSON schema string into a llama.cpp grammar string.
+#[cfg(feature = "common")]
+pub fn json_schema_to_grammar(schema_json: &str) -> Result<String> {
+    let schema_cstr = std::ffi::CString::new(schema_json)
+        .map_err(|err| LlamaCppError::JsonSchemaToGrammarError(err.to_string()))?;
+    let mut out = std::ptr::null_mut();
+    let rc = unsafe {
+        koharu_llama_sys::llama_rs_json_schema_to_grammar(schema_cstr.as_ptr(), false, &mut out)
+    };
 
-/// Failed to convert a string to a token sequence.
-#[derive(Debug, thiserror::Error)]
-pub enum StringToTokenError {
-    /// the string contained a null byte and thus could not be converted to a c string.
-    #[error("{0}")]
-    NulError(#[from] NulError),
-    #[error("{0}")]
-    /// Failed to convert a provided integer to a [`c_int`].
-    CIntConversionError(#[from] std::num::TryFromIntError),
+    let result = {
+        if !status_is_ok(rc) || out.is_null() {
+            return Err(LlamaCppError::JsonSchemaToGrammarError(format!(
+                "ffi error {}",
+                rc
+            )));
+        }
+        let grammar_bytes = unsafe { std::ffi::CStr::from_ptr(out) }.to_bytes().to_vec();
+        let grammar = String::from_utf8(grammar_bytes)
+            .map_err(|err| LlamaCppError::JsonSchemaToGrammarError(err.to_string()))?;
+        Ok(grammar)
+    };
+
+    unsafe { koharu_llama_sys::llama_rs_string_free(out) };
+    result
 }
 
 /// Failed to apply model chat template.
@@ -351,39 +350,21 @@ pub enum ApplyChatTemplateError {
     FfiError(i32),
 }
 
+/// Failed to accept a token in a sampler.
+#[derive(Debug, thiserror::Error)]
+pub enum SamplerAcceptError {
+    /// llama.cpp returned an error code.
+    #[error("ffi error {0}")]
+    FfiError(i32),
+}
+
 /// Get the time in microseconds according to ggml
-///
-/// ```no_run
-/// # use std::time::Duration;
-/// # use koharu_llama::llama_backend::LlamaBackend;
-/// let backend = LlamaBackend::init().unwrap();
-/// use koharu_llama::ggml_time_us;
-///
-/// let start = ggml_time_us();
-///
-/// std::thread::sleep(Duration::from_micros(10));
-///
-/// let end = ggml_time_us();
-///
-/// let elapsed = end - start;
-///
-/// assert!(elapsed >= 10)
 #[must_use]
 pub fn ggml_time_us() -> i64 {
     unsafe { koharu_llama_sys::ggml_time_us() }
 }
 
 /// checks if mlock is supported
-///
-/// ```no_run
-/// # use koharu_llama::llama_supports_mlock;
-///
-/// if llama_supports_mlock() {
-///   println!("mlock is supported!");
-/// } else {
-///   println!("mlock is not supported!");
-/// }
-/// ```
 #[must_use]
 pub fn llama_supports_mlock() -> bool {
     unsafe { koharu_llama_sys::llama_supports_mlock() }
@@ -537,22 +518,42 @@ extern "C" fn logs_to_trace(
 pub fn send_logs_to_tracing(options: LogOptions) {
     // TODO: Reinitialize the state to support calling send_logs_to_tracing multiple times.
 
-    // We set up separate log states for llama.cpp and ggml to make sure that CONT logs between the two
-    // can't possibly interfere with each other. In other words, if llama.cpp emits a log without a trailing
-    // newline and calls a GGML function, the logs won't be weirdly intermixed and instead we'll llama.cpp logs
-    // will CONT previous llama.cpp logs and GGML logs will CONT previous ggml logs.
+    // We set up separate log states for each backend to make sure that CONT
+    // logs between them can't possibly interfere with each other.
+    //
+    // In other words, if llama.cpp emits a log without a trailing newline and
+    // calls a GGML function, the logs won't be weirdly intermixed and instead
+    // we'll llama.cpp logs will CONT previous llama.cpp logs and GGML logs
+    // will CONT previous ggml logs.
+    static LLAMA_STATE: OnceLock<Box<log::State>> = OnceLock::new();
+    #[cfg(feature = "mtmd")]
+    static MTMD_STATE: OnceLock<Box<log::State>> = OnceLock::new();
+    static GGML_STATE: OnceLock<Box<log::State>> = OnceLock::new();
+
     let llama_heap_state = Box::as_ref(
-        log::LLAMA_STATE
+        LLAMA_STATE
             .get_or_init(|| Box::new(log::State::new(log::Module::LlamaCpp, options.clone()))),
     ) as *const _;
+
+    #[cfg(feature = "mtmd")]
+    let mtmd_heap_state = Box::as_ref(
+        MTMD_STATE.get_or_init(|| Box::new(log::State::new(log::Module::Mtmd, options.clone()))),
+    ) as *const _;
+
     let ggml_heap_state = Box::as_ref(
-        log::GGML_STATE.get_or_init(|| Box::new(log::State::new(log::Module::Ggml, options))),
+        GGML_STATE.get_or_init(|| Box::new(log::State::new(log::Module::Ggml, options))),
     ) as *const _;
 
     unsafe {
-        // GGML has to be set last since both llama and the MTMD helper configure it as well.
         koharu_llama_sys::llama_log_set(Some(logs_to_trace), llama_heap_state as *mut _);
-        koharu_llama_sys::mtmd_helper_log_set(Some(logs_to_trace), llama_heap_state as *mut _);
+
+        // There is both `mtmd_log_set` and `mtmd_helper_log_set`. We use the
+        // helper, since we don't particularly want to differentiate these
+        // two, and the helper calls the normal `mtmd_log_set` as well.
+        #[cfg(feature = "mtmd")]
+        koharu_llama_sys::mtmd_helper_log_set(Some(logs_to_trace), mtmd_heap_state as *mut _);
+
+        // GGML has to be set after llama since setting llama logs sets ggml logs as well.
         koharu_llama_sys::ggml_log_set(Some(logs_to_trace), ggml_heap_state as *mut _);
     }
 }

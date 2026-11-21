@@ -1,0 +1,72 @@
+---
+title: '开发环境设置'
+description: '运行桌面应用、选择针对性检查并重新生成派生绑定。'
+icon: 'terminal'
+---
+
+## 前置条件
+
+Koharu 基于 Rust 1.97.1（2024 edition）、Bun 1.3.14 和 LLVM 22.1.8 开发，仓库不会固定这些版本。LLVM 提供 `-sys` crate 生成绑定所需的 libclang；原生库本身是运行时下载的预编译软件包，因此不需要 C++ 构建系统。
+
+<Tabs>
+  <Tab title='Windows'>安装 MSVC C/C++ 构建工具，用于原生依赖。</Tab>
+  <Tab title='Linux'>
+    安装 CI 使用的软件包：`build-essential`、`libgtk-4-dev`、`libxdo-dev`、`libssl-dev`、
+    `libayatana-appindicator3-dev` 和 `librsvg2-dev`。测试还需要 `fonts-noto-cjk`、`dbus-x11` 和
+    `gnome-keyring`。
+  </Tab>
+  <Tab title='macOS'>
+    安装平台 C/C++ 开发工具，并添加 CEF 辅助进程要构建的 Rust 目标： `rustup target add
+    aarch64-apple-darwin x86_64-apple-darwin`。
+  </Tab>
+</Tabs>
+
+## 开始开发
+
+```bash
+git clone https://github.com/koharu-rs/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun install` 还会用 `cargo install` 安装工作区所用版本的 Tauri CLI。`bun dev` 运行 `cargo tauri dev`，在 3000 端口启动 Next.js 界面和桌面应用，首次构建时会下载 CEF。调试构建在 `http://127.0.0.1:4000` 提供 CEF 远程调试。
+
+<Note>
+  Tauri CLI 会为它运行的构建设置 `CEF_PATH`。直接对链接 CEF 的 crate（例如 `koharu` 和
+  `koharu-desktop`）运行 `cargo` 命令时，需要把它设为同一个文件夹，即系统缓存文件夹中的
+  `tauri-cef`，否则会重新下载并重新构建 CEF。Windows 上为 `%LOCALAPPDATA%\tauri-cef`。
+</Note>
+
+## 检查受影响的组件
+
+只运行一次最小的相关调试检查或针对性测试，例如：
+
+```bash
+cargo check -p koharu
+cargo test -p koharu-pipeline <test_name>
+cargo fmt --all --check
+```
+
+界面开发时，`bun run test` 运行界面的 Vitest 测试，`bun run lint` 运行代码检查。`bun run check` 检查仓库中 TypeScript 与 JSON 的格式。
+
+<Note>默认不要运行完整测试套件、非调试配置或端到端测试，只在明确要求时运行。</Note>
+
+## 重新生成 IPC 绑定
+
+Rust 命令签名和 Specta 类型是权威来源：
+
+```bash
+cargo run -p koharu-desktop --bin ipc
+bun run format
+```
+
+不要手动修改 `packages/ipc/src/protocol.ts`。
+
+## 构建可执行文件
+
+需要发布版可执行文件时，`bun run build` 会运行 `cargo tauri build --no-bundle`，输出到 `target/release`。安装包由发布工作流负责生成。
+
+<Card title='编辑文档' icon='book-open' href='/zh/development/documentation'>
+  预览 Mintlify，并维护英文、日文与中文文档。
+</Card>

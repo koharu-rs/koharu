@@ -1,6 +1,8 @@
 'use client'
 
 import '@/lib/i18n'
+import * as Sentry from '@sentry/nextjs'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export default function GlobalError({
@@ -11,6 +13,11 @@ export default function GlobalError({
   reset: () => void
 }) {
   const { t, i18n } = useTranslation()
+
+  useEffect(() => {
+    Sentry.captureException(error)
+  }, [error])
+
   return (
     <html lang={i18n.resolvedLanguage ?? i18n.language}>
       <body className='grid min-h-screen place-items-center bg-background text-foreground'>

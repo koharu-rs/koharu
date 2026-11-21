@@ -1,0 +1,39 @@
+---
+title: 'Typeset a translation'
+description: 'Fit text with suitable fonts, writing direction, alignment, color, and border.'
+icon: 'font'
+---
+
+Typography is saved in the project. The canvas and every export draw the page the same way.
+
+<Steps>
+  <Step title="Choose a text frame">
+    Translation places each block's text in its room in the balloon, or in its source's frame when it has no balloon, so resizing the frame reflows the text. To add text yourself, click with **Text** for point text or drag for a text box.
+  </Step>
+  <Step title="Choose fonts with the right coverage">
+    The font list includes your installed fonts and the families of Koharu's font dataset, which download when a text first needs them. If a font lacks a glyph, Koharu tries the preferred fonts in **Settings → Renderer**, then Arial, then the system's fallback for the text's script, then symbol and emoji fonts.
+
+    Use fonts that cover the target script. A Latin display font alone is insufficient for Japanese or Chinese dialogue.
+
+  </Step>
+  <Step title="Fit and style the text">
+    Select text blocks or text layers with **Select**, **Direct Selection**, or **Text**, and set the font, color, size, weight, style, alignment, direction, and border in the bar that appears beside them. Changes apply to every character of every selected text. While you type into a text, the font, color, size, weight, style, and border apply to the characters you've selected, or to the next ones you type, as Photoshop's Character panel does. A setting the characters don't share shows empty.
+
+    **Auto** size grows or shrinks the text to the largest size its box or balloon holds. New translations fit the same way, starting from the page's typical lettering size. Typing a size draws the text at exactly that size, as Photoshop does, so texts set to the same size look the same; text too long for its box runs past it, and a **+** on the box's top-left corner, beside its number while **Story** is open, marks it until you resize the box.
+
+  </Step>
+  <Step title="Review at reading size">
+    Check every page with the visibility and opacity you intend to export. Confirm each block has a translation: source text is never drawn.
+  </Step>
+</Steps>
+
+## Vertical CJK text
+
+Vertical columns run right to left. Latin letters and digits turn a quarter clockwise, `!` and `?` set full width, and a run of two or three of them sits upright in one cell. A translation is vertical only when its source is and the target is Japanese or Chinese; any other language runs horizontally, turned by its source's tilt.
+
+Inspect punctuation, emphasis marks, Latin runs, and small kana individually. Font coverage, vertical metrics, and translation length still determine the quality of the result. Right-to-left scripts are laid out in their own direction.
+
+<Tip>
+  Use [PNG or CBZ for delivery and PSD for layered editing](/guides/export), and retain the Koharu
+  project for future changes to text and fitting.
+</Tip>

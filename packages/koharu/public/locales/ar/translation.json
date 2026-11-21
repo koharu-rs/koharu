@@ -1,0 +1,510 @@
+{
+  "about": {
+    "author": "المؤلف",
+    "description": "أدوات ترجمة المانغا",
+    "unavailable": "غير متاح",
+    "version": "الإصدار"
+  },
+  "activity": {
+    "dismiss": "تجاهل",
+    "downloadFailed": "فشل التنزيل.",
+    "downloadingFiles": "جارٍ تنزيل {{count}} من الملفات",
+    "downloadingFiles_one": "جارٍ تنزيل {{count}} ملف",
+    "downloadingFiles_other": "جارٍ تنزيل {{count}} من الملفات",
+    "modelDownload": "تنزيل النموذج",
+    "processing": "قيد المعالجة",
+    "processingFailed": "فشلت المعالجة.",
+    "stop": "إيقاف",
+    "title": "النشاط"
+  },
+  "agent": {
+    "cancel": "إلغاء",
+    "cancelled": "أُلغي.",
+    "emptyDescription": "اطلب من Agent فحص هذا المشروع أو ترجمته أو تعديله أو معالجته. لن يعرض صور الصفحات إلا عند الحاجة.",
+    "emptyTitle": "ماذا ينبغي أن يفعل Koharu؟",
+    "failed": "فشل طلب Agent.",
+    "loading": "جارٍ تحميل الوكيل…",
+    "message": "راسل Koharu Agent",
+    "model": "النموذج",
+    "newChat": "محادثة جديدة",
+    "placeholder": "اطلب من Koharu العمل على هذا المشروع...",
+    "reasoning": "التفكير",
+    "send": "إرسال",
+    "thinking": "جارٍ التفكير...",
+    "thought": "فكّر لمدة {{seconds}} ث",
+    "title": "Agent",
+    "toolFailed": "فشل {{tool}}",
+    "used": "استخدم {{tool}}",
+    "using": "يستخدم {{tool}}",
+    "working": "جارٍ العمل..."
+  },
+  "canvas": {
+    "empty": "اختر صفحة للبدء.",
+    "notice": {
+      "eraser_needs_raster": "حدد طبقة نقطية للمسح."
+    }
+  },
+  "colorPicker": {
+    "brushColor": "لون الفرشاة",
+    "hexCode": "رمز اللون الست عشري",
+    "sampleCanvas": "اختيار لون من اللوحة",
+    "transparent": "شفاف"
+  },
+  "common": {
+    "back": "رجوع",
+    "cancel": "إلغاء",
+    "clearSearch": "مسح البحث",
+    "loading": "جارٍ التحميل…"
+  },
+  "errors": {
+    "actionFailed": "تعذّر إكمال هذا الإجراء",
+    "fatalTitle": "تعذّر على Koharu المتابعة",
+    "tryAgain": "أعد المحاولة",
+    "unknown": "أعاد التطبيق الأصلي خطأً غير معروف."
+  },
+  "feedback": {
+    "addScreenshot": "إضافة لقطة شاشة",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "email": "البريد الإلكتروني",
+    "emailPlaceholder": "your.email@example.org",
+    "emptyMessage": "يُرجى وصف ما حدث.",
+    "failed": "تعذّر إرسال الملاحظات. يُرجى المحاولة مرة أخرى.",
+    "forbidden": "لا يمكن إرسال الملاحظات من هذا الإصدار.",
+    "hide": "إخفاء",
+    "highlight": "تمييز",
+    "message": "الوصف",
+    "messagePlaceholder": "ماذا حدث؟ وماذا كنت تتوقع؟",
+    "name": "الاسم",
+    "namePlaceholder": "اسمك",
+    "noClient": "الملاحظات غير متاحة حاليًا.",
+    "removeHighlight": "إزالة",
+    "removeScreenshot": "إزالة لقطة الشاشة",
+    "required": "(مطلوب)",
+    "sent": "شكرًا على ملاحظاتك!",
+    "submit": "إرسال",
+    "timeout": "انتهت مهلة الإرسال. يُرجى المحاولة مرة أخرى.",
+    "title": "إرسال ملاحظات"
+  },
+  "fill": {
+    "deselect": "إلغاء التحديد",
+    "generate": "إنشاء",
+    "model": "نموذج التعبئة",
+    "prompt": "صِف ما تريد إضافته (اختياري)",
+    "title": "التعبئة التوليدية"
+  },
+  "fontPicker": {
+    "addFavorite": "إضافة {{name}} إلى المفضلة",
+    "choose": "اختر خطًا",
+    "favoritesOnly": "عرض الخطوط المفضلة",
+    "fontCount": "{{count}} خط",
+    "fontCount_one": "{{count}} خط",
+    "fontCount_other": "{{count}} خط",
+    "fonts": "الخطوط",
+    "noFavorites": "لا توجد خطوط مفضلة بعد",
+    "noResults": "لا توجد خطوط تطابق هذا البحث",
+    "removeFavorite": "إزالة {{name}} من المفضلة",
+    "search": "ابحث عن خطوط"
+  },
+  "history": {
+    "close": "إغلاق السجل",
+    "opened": "عند الفتح",
+    "steps": {
+      "add_text": "إضافة نص",
+      "delete_layers": "حذف الطبقات",
+      "delete_pages": "حذف الصفحات",
+      "detect": "الكشف",
+      "edit_frame": "تحرير الإطار",
+      "erase": "مسح",
+      "import": "استيراد الصفحات",
+      "inpaint": "الترميم",
+      "move": "نقل",
+      "move_layer": "نقل الطبقات",
+      "move_page": "نقل الصفحة",
+      "paint": "رسم",
+      "recognize": "OCR",
+      "resize": "تغيير الحجم",
+      "rotate": "تدوير",
+      "set_locked": "قفل أو إلغاء القفل",
+      "set_source_text": "تحرير النص الأصلي",
+      "set_style": "تغيير نمط النص",
+      "set_text": "تحرير النص",
+      "set_visibility": "إظهار أو إخفاء",
+      "translate": "الترجمة",
+      "update_layer": "تغيير الطبقة"
+    },
+    "title": "السجل"
+  },
+  "inference": {
+    "entireProject": "المشروع كاملًا",
+    "entireProjectDescription": "معالجة كل صفحة في هذا المشروع.",
+    "model": "النموذج",
+    "noModel": "لا يوجد نموذج",
+    "notSet": "غير محدد",
+    "output": "الإخراج",
+    "pipelineStages": "مراحل خط المعالجة",
+    "providerDefault": "افتراضي المزوّد",
+    "run": "تشغيل",
+    "runProcessing": "تشغيل المعالجة",
+    "scope": "النطاق",
+    "scopeShort": {
+      "project": "مشروع",
+      "selected-pages": "التحديد"
+    },
+    "selectPagesFirst": "حدّد الصفحات أولًا",
+    "selectedCount": "{{count}} من الصفحات المحدّدة",
+    "selectedCount_one": "{{count}} صفحة محدّدة",
+    "selectedCount_other": "{{count}} من الصفحات المحدّدة",
+    "selectedPages": "الصفحات المحدّدة",
+    "selector": "إعدادات المعالجة",
+    "shortcuts": "خيارات المعالجة",
+    "stageCount": "{{count}} من المراحل",
+    "stageCount_one": "{{count}} مرحلة",
+    "stageCount_other": "{{count}} من المراحل",
+    "stages": "المراحل",
+    "stop": "إيقاف",
+    "stopProcessing": "إيقاف المعالجة"
+  },
+  "inspector": {
+    "alignBottom": "محاذاة للأسفل",
+    "alignCenter": "توسيط أفقي",
+    "alignLeft": "محاذاة لليسار",
+    "alignMiddle": "توسيط رأسي",
+    "alignRight": "محاذاة لليمين",
+    "alignTop": "محاذاة للأعلى",
+    "alignment": "المحاذاة",
+    "auto": "تلقائي",
+    "border": "الحدود",
+    "borderColor": "لون الحدود",
+    "borderWidth": "عرض الحدود",
+    "chooseBorderWidth": "اختر عرض الحدود",
+    "chooseFontSize": "اختر حجم الخط",
+    "font": "الخط",
+    "fontSize": "حجم الخط",
+    "fontStyles": {
+      "italic": "مائل",
+      "oblique": "منحرف"
+    },
+    "fontWeight": "وزن الخط",
+    "horizontal": "أفقي",
+    "opacity": "العتامة",
+    "selectPage": "اختر صفحة لعرض طبقاتها.",
+    "source": "النص المصدر",
+    "text": "نص",
+    "textColor": "لون النص",
+    "textDirection": "اتجاه النص",
+    "translation": "الترجمة",
+    "type": "النوع",
+    "vertical": "عمودي"
+  },
+  "layers": {
+    "delete": "حذف {{name}}",
+    "edit": "تعديل {{name}}",
+    "empty": "لا توجد طبقات في هذه الصفحة.",
+    "hide": "إخفاء {{name}}",
+    "kinds": {
+      "balloon": "فقاعة",
+      "block": "كتلة نص",
+      "group": "مجموعة",
+      "image": "صورة",
+      "mask": "قناع",
+      "panel": "إطار",
+      "raster": "نقطية",
+      "shape": "شكل",
+      "text": "نص"
+    },
+    "lock": "قفل {{name}}",
+    "locked": "مقفل",
+    "opacityLabel": "عتامة {{name}}",
+    "parts": {
+      "cleanup": "تنظيف",
+      "mask": "قناع",
+      "pick": "{{part}} {{name}}",
+      "toggle": "Shift+نقر للإظهار أو الإخفاء"
+    },
+    "show": "إظهار {{name}}",
+    "sourceLabel": "النص المصدر لـ {{name}}",
+    "textLabel": "نص {{name}}",
+    "textName": "نص {{index}}",
+    "title": "الطبقات",
+    "translationLabel": "ترجمة {{name}}",
+    "unlock": "إلغاء قفل {{name}}",
+    "unlocked": "غير مقفل"
+  },
+  "menu": {
+    "about": "عن البرنامج",
+    "closeProject": "إغلاق المشروع",
+    "delete": "حذف المحدّد",
+    "discord": "Discord",
+    "donate": "تبرّع",
+    "edit": "تحرير",
+    "export": "تصدير المشروع",
+    "feedback": "إرسال ملاحظات",
+    "file": "ملف",
+    "fit": "ملاءمة النافذة",
+    "github": "GitHub",
+    "help": "مساعدة",
+    "history": "السجل",
+    "import": "استيراد الصفحات",
+    "redo": "إعادة",
+    "selectAllLayers": "تحديد كل الطبقات",
+    "settings": "الإعدادات",
+    "undo": "تراجع",
+    "unloadModels": "إلغاء تحميل النماذج",
+    "view": "عرض"
+  },
+  "model": {
+    "baseUrl": "عنوان URL الأساسي",
+    "default": "افتراضي",
+    "targetLanguage": "اللغة المستهدفة"
+  },
+  "modelPicker": {
+    "empty": "لا توجد نماذج متاحة.",
+    "loading": "جارٍ تحميل النماذج…",
+    "noResults": "لا توجد نماذج تطابق هذا البحث.",
+    "search": "ابحث عن نماذج",
+    "title": "اختر نموذجًا",
+    "useModel": "استخدام {{model}} من {{provider}}"
+  },
+  "navigator": {
+    "actionsFor": "إجراءات {{page}}",
+    "delete": "حذف",
+    "deleteDescription": "يؤدي هذا إلى حذف «{{page}}» وطبقاتها. يمكنك التراجع عن ذلك.",
+    "deleteTitle": "حذف الصفحة؟",
+    "emptyDescription": "استورد ملفات صور أو مجلدًا لإضافة صفحات.",
+    "emptyTitle": "لا توجد صفحات بعد",
+    "importAction": "استيراد",
+    "importFiles": "ملفات…",
+    "importFolder": "مجلد…",
+    "importing": "جارٍ استيراد الصفحات…",
+    "importingAction": "جارٍ الاستيراد…",
+    "noImage": "لا توجد صورة",
+    "pageNumber": "الصفحة {{number}}",
+    "pages": "الصفحات",
+    "run": {
+      "detect": "كشف",
+      "inpaint": "ترميم",
+      "recognize": "التعرّف على النص",
+      "translate": "ترجمة"
+    },
+    "selected": "{{count}} محدّد",
+    "translated": "تمت ترجمة {{translated}} من {{total}}"
+  },
+  "outputPicker": {
+    "noResults": "لا توجد لغات تطابق هذا البحث.",
+    "search": "البحث في اللغات",
+    "targetLanguage": "اللغة المستهدفة",
+    "title": "مخرجات الترجمة"
+  },
+  "phase": {
+    "detect": "الكشف",
+    "inpaint": "الترميم",
+    "recognize": "OCR",
+    "translate": "الترجمة"
+  },
+  "phaseDescription": {
+    "detect": "تحديد موقع النص على الصفحة.",
+    "inpaint": "إعادة بناء الرسم خلف النص المُزال.",
+    "recognize": "قراءة النص داخل كل منطقة.",
+    "translate": "تحويل النص المصدر إلى اللغة المستهدفة."
+  },
+  "psd": {
+    "background": "الخلفية",
+    "cleanup": "تنظيف",
+    "outline": "المخطط"
+  },
+  "reasoning": {
+    "high": "عالٍ",
+    "low": "منخفض",
+    "max": "الأقصى",
+    "medium": "متوسط",
+    "minimal": "أدنى",
+    "off": "إيقاف",
+    "xhigh": "عالٍ جدًا"
+  },
+  "settings": {
+    "appearance": {
+      "description": "طابق مساحة عملك مع الغرفة دون تغيير طريقة عرض الرسومات.",
+      "interface": "الواجهة",
+      "language": "اللغة",
+      "theme": "المظهر",
+      "themeDescription": "يتبع النظام إعداد نظام التشغيل.",
+      "themes": {
+        "dark": "داكن",
+        "light": "فاتح",
+        "system": "النظام"
+      },
+      "title": "المظهر"
+    },
+    "backToEditor": "العودة إلى المحرّر",
+    "loading": "جارٍ تحميل التفضيلات…",
+    "pipeline": {
+      "description": "اختر النماذج والخيارات المستخدمة لمعالجة كل صفحة.",
+      "model": "النموذج",
+      "modelLabel": "نموذج {{stage}}",
+      "options": {
+        "bubbleThreshold": "عتبة الفقاعات",
+        "onomatopoeiaThreshold": "عتبة المؤثرات الصوتية",
+        "panelThreshold": "عتبة الألواح",
+        "prompt": "الطلب",
+        "promptDescription": "ينطبق على النماذج التوليدية فقط.",
+        "textThreshold": "عتبة النص"
+      },
+      "stages": {
+        "detect": {
+          "description": "إيجاد النصوص وفقاعات الكلام والألواح.",
+          "title": "الكاشف"
+        },
+        "inpaint": {
+          "description": "إعادة بناء الرسم أسفل النص المُزال.",
+          "title": "المرمّم"
+        },
+        "recognize": {
+          "description": "قراءة النص المصدر داخل المناطق المكتشفة.",
+          "title": "المتعرّف"
+        },
+        "translate": {
+          "description": "ترجمة النص المصدر إلى اللغة الهدف.",
+          "title": "المترجم"
+        }
+      },
+      "thresholds": "العتبات",
+      "title": "خط المعالجة",
+      "translator": {
+        "instructions": "تعليمات إضافية",
+        "instructionsDescription": "اختيارية، بأي لغة وأي صيغة، مثل طريقة كتابة اسم أو نبرة الأسلوب. يضيفها Koharu كما هي بعد موجّه النظام الخاص به.",
+        "reasoning": "التفكير",
+        "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
+        "targetLanguageDescription": "اختر اللغة التي تُترجم إليها النصوص.",
+        "vision": "الرؤية",
+        "visionDescription": "تزويد النموذج اللغوي بصور الصفحات أثناء الترجمة."
+      }
+    },
+    "providers": {
+      "browserHint": "أكمل تسجيل الدخول في الصفحة التي فتحها متصفحك.",
+      "clearCredential": "مسح API key لـ {{provider}}",
+      "configured": "مهيّأ",
+      "connections": "الاتصالات",
+      "connectionsDescription": "تُخزَّن مفاتيح API بأمان على هذا الجهاز.",
+      "contextWindow": "طول السياق (رموز)",
+      "credential": "API key",
+      "credentialLabel": "API key لـ {{provider}}",
+      "description": "اربط مزوّدي الترجمة والنماذج اللغوية.",
+      "deviceCodeHint": "أدخل هذا الرمز في الصفحة التي فتحها متصفحك.",
+      "notConfigured": "غير مهيّأ",
+      "openPage": "فتح صفحة تسجيل الدخول",
+      "openaiCompatible": "متوافق مع OpenAI",
+      "signIn": "تسجيل الدخول",
+      "signInLabel": "تسجيل الدخول إلى {{provider}}",
+      "signOut": "تسجيل الخروج",
+      "signOutLabel": "تسجيل الخروج من {{provider}}",
+      "signingIn": "في انتظار تسجيل الدخول…",
+      "subscription": "الاشتراك",
+      "title": "المزوّدون"
+    },
+    "tabs": {
+      "appearance": "المظهر",
+      "pipeline": "خط المعالجة",
+      "providers": "المزوّدون",
+      "typesetting": "محرك العرض"
+    },
+    "title": "الإعدادات",
+    "typesetting": {
+      "addFallback": "إضافة خط بديل",
+      "addFamily": "إضافة عائلة خطوط",
+      "description": "عيّن مجموعة الخطوط المرتّبة المستخدمة عندما لا يكون لطبقة النص عائلة معيّنة.",
+      "empty": "لا توجد عائلات افتراضية. سيستخدم Koharu البديل من النظام.",
+      "fallbacks": "البدائل",
+      "fallbacksDescription": "تُستخدم بالترتيب للأحرف التي يفتقدها الخط الأساسي. اسحب لإعادة الترتيب، أو إلى الأساسي للتبديل.",
+      "familyLabel": "عائلة الخطوط الافتراضية {{index}}",
+      "fontFallback": "الخطوط المفضلة",
+      "fontFallbackDescription": "يستخدم Koharu أول عائلة متاحة تدعم النص.",
+      "loadError": "تعذّر تحميل الخطوط. لا يزال بإمكانك إزالة العائلات الحالية.",
+      "loadingFonts": "جارٍ تحميل الخطوط…",
+      "primary": "أساسي",
+      "removeFamily": "إزالة {{family}}",
+      "title": "محرك العرض"
+    }
+  },
+  "start": {
+    "create": "إنشاء",
+    "deleteAction": "حذف المشروع",
+    "deleteDescription": "يؤدي هذا إلى حذف «{{name}}» وكل صفحاته نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+    "deleteLabel": "حذف {{name}}",
+    "deleteTitle": "حذف المشروع؟",
+    "deleting": "جارٍ الحذف…",
+    "description": "افتح مساحة عمل أو ابدأ ترجمة جديدة.",
+    "emptyDescription": "أنشئ مشروعك الأول لبدء استيراد الصفحات.",
+    "emptyTitle": "لا توجد مشاريع بعد",
+    "loadingProjects": "جارٍ تحميل المشاريع…",
+    "newDescription": "أنشئ مساحة عمل نظيفة لصفحاتك وترجماتك وعمليات التصدير.",
+    "newProject": "مشروع جديد",
+    "noResults": "لا توجد مشاريع تطابق هذا البحث.",
+    "projectKind": "مشروع Koharu",
+    "projectList": "المشاريع",
+    "projectName": "اسم المشروع",
+    "projectNamePlaceholder": "مشروعي الجديد",
+    "search": "البحث في المشاريع",
+    "storageHint": "تُخزَّن المشاريع محليًا على هذا الكمبيوتر.",
+    "title": "المشاريع",
+    "yourProjects": "مشاريعك"
+  },
+  "startup": {
+    "description": "جارٍ تحميل بيئات الذكاء الاصطناعي المحلية وتحضير مساحة العمل. قد يستغرق التشغيل الأول لحظة.",
+    "opening": "جارٍ فتح Koharu…",
+    "status": "تهيئة البيئات المحلية",
+    "title": "تحضير Koharu"
+  },
+  "status": {
+    "zoom": "تكبير"
+  },
+  "story": {
+    "noText": "لا يوجد نص في هذه الصفحة.",
+    "sfx": "مؤثر صوتي",
+    "title": "القصة",
+    "translate": "ترجمة {{name}}"
+  },
+  "tools": {
+    "brushSize": "حجم الفرشاة",
+    "brushSizeInput": "حجم الفرشاة",
+    "brushSizePixels": "حجم الفرشاة: {{size}} بكسل",
+    "brushSizeShort": "{{size}} بكسل",
+    "color_picker": "منتقي الألوان",
+    "decreaseBrushSize": "تقليل حجم الفرشاة",
+    "direct_select": "التحديد المباشر",
+    "draw": "فرشاة",
+    "eraser": "ممحاة",
+    "increaseBrushSize": "زيادة حجم الفرشاة",
+    "lasso": "اللاسو",
+    "marquee": "التحديد المستطيل",
+    "pan": "تحريك",
+    "remove": "إزالة",
+    "select": "تحديد",
+    "text": "نص"
+  },
+  "updater": {
+    "available": {
+      "description": "Koharu <strong>{{version}}</strong> جاهز للتثبيت",
+      "title": "يتوفّر تحديث"
+    },
+    "close": "إغلاق",
+    "downloading": {
+      "subtitle": "Koharu {{version}}",
+      "title": "جارٍ تنزيل التحديث…"
+    },
+    "error": {
+      "description": "حدث خطأ أثناء التحديث",
+      "title": "فشل التحديث"
+    },
+    "later": "لاحقًا",
+    "noNotes": "لا توجد ملاحظات إصدار.",
+    "retry": "إعادة المحاولة",
+    "update": "تحديث"
+  },
+  "window": {
+    "close": "إغلاق",
+    "maximize": "تكبير",
+    "minimize": "تصغير",
+    "restore": "استعادة"
+  }
+}

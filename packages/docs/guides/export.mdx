@@ -1,0 +1,45 @@
+---
+title: 'Export PNG, PSD, and CBZ'
+description: 'Export every page as flattened images, layered documents, or a comic archive.'
+icon: 'file-export'
+---
+
+Review the pages before choosing **File → Export Project**. Export always writes every page of the project, in project order.
+
+<Steps>
+  <Step title="Choose a format">
+    <Tabs>
+      <Tab title="PNG">
+        One flattened image per page for delivery and review, drawn as the canvas draws it.
+      </Tab>
+      <Tab title="PSD">
+        One layered Photoshop document per page for further typography or artwork edits. Every layer stays editable: the scan is the bottom pixel layer, panels and balloons become folders, and each text block becomes a folder holding its clean-up as a pixel layer masked by the block's mask, its source as a hidden type layer, and its translation as a type layer. Visibility, opacity, blend modes, and locks are kept. Pages larger than 30,000 pixels on a side cannot be exported as PSD.
+      </Tab>
+      <Tab title="CBZ">
+        One comic archive of the flattened PNG pages, for readers that open CBZ files.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Choose a destination">
+    For PNG and PSD, select a folder in the native dialog. Files are numbered in page order with at least three digits:
+
+    ```text
+    001.png
+    002.png
+    ```
+
+    For CBZ, choose where to save the archive; it is named after the project by default, and its pages are numbered the same way. Existing files with the same names are overwritten.
+
+  </Step>
+</Steps>
+
+<Note>
+  PSD is an interchange format. It does not keep model provenance, undo history, or Koharu's
+  automatic fitting. Keep the `.khr` project file as your editable source and backup.
+</Note>
+
+## Check consistency
+
+The canvas, PNG, CBZ, and PSD all draw through the same renderer. If they differ, report the page, format, and images through [troubleshooting](/reference/troubleshooting).
+
+There is no separate “inpainted image only” export.

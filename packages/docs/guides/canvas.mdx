@@ -1,0 +1,70 @@
+---
+title: 'Use the canvas'
+description: 'Navigate the page and choose the right tool for text, artwork, and cleanup.'
+icon: 'arrow-pointer'
+---
+
+The toolbar on the canvas picks the tool. **Layers** on the right edits the shown page's layers and **Story** every page's text, and a bar beside selected text sets its type.
+
+## Navigate and select
+
+Use **Pan** to move the view and the zoom slider in the status bar to change zoom. **View → Fit Window**, `Ctrl+0` or `Command+0`, fits the active page. Switching pages fits the new page.
+
+Use **Select** to pick layers. Click a layer, hold `Shift`, `Ctrl`, or `Command` to add or remove one, or drag from an empty spot to select with a marquee. Drag a selection to move it. Resize and rotate handles appear for a single selection; a multiple selection can only be moved. Locked layers do not move.
+
+## Choose an editing tool
+
+<Tabs>
+  <Tab title='Direct Selection'>
+    Select a text block or text layer with **Direct Selection** to show the anchors of its frame.
+    Drag an anchor or a segment to reshape the frame, `Shift`-click to pick more anchors, or drag
+    from an empty spot to pick the anchors inside a marquee. `Delete` or `Backspace` removes the
+    picked anchors, keeping at least three. The text fits the new shape when the drag ends.
+  </Tab>
+  <Tab title='Marquee and Lasso'>
+    Drag with **Rectangular Marquee** to mark a rectangle of the page, or with **Lasso** to mark a
+    freehand shape, as in Photoshop. Hold `Shift` as you start a drag to add to the marked area, or
+    `Alt` to take from it. A click without a drag, or `Ctrl+D` or `Command+D`, deselects it. The bar
+    below the area is **Generative Fill**. Pick the model it draws with, FLUX.3 Klein unless you
+    pick another: it's the fill's own, apart from the inpainting model in **Settings → Pipeline**,
+    which cleans pages and **Remove**'s strokes. Describe what to draw there and choose
+    **Generate**, or leave the prompt empty to use the **Prompt** in **Settings → Pipeline**. The
+    result is added as a new raster layer limited to the area, named after your prompt. The area
+    stays marked, so you can generate again, and a fill model that Settings doesn't use stays loaded
+    for five minutes after the last run, so generating again doesn't load it again. LaMa takes no
+    prompt, so with it the bar has no prompt field.
+  </Tab>
+  <Tab title='Text'>
+    Click with **Text** to start point text, or drag to start a text box, and type on the canvas, as
+    in Photoshop. Click a text with **Text**, or double-click it with **Select**, to type into it
+    where you clicked; drag across it to select characters, or double-click a word. `Ctrl`+`Enter`
+    or `Enter` on the number pad keeps what you typed, as clicking away or choosing another tool
+    does, and `Esc` drops it. Each time you type into a text is one undo step, and a new text is
+    added only once it has characters. Then adjust [typography](/guides/typesetting).
+  </Tab>
+  <Tab title='Brush and Eraser'>
+    **Brush** paints with the chosen color and size on the selected raster layer, or creates a new
+    raster layer at the top of the page when none is selected. **Eraser** needs a selected raster
+    layer. Both also paint a text block's clean-up or mask selected in **Layers**; on a mask,
+    **Brush** shows more of the clean-up and **Eraser** hides it. Both skip hidden or locked layers.
+    Hold `Alt` and scroll to change the size.
+  </Tab>
+  <Tab title='Color picker'>
+    Click with **Color picker** to sample the page's own pixel under the pointer. The sampled color
+    becomes the brush color, or, when you started from a color field's **Pick color from canvas**,
+    that field's color.
+  </Tab>
+  <Tab title='Remove'>
+    Paint over source marks with **Remove**. Releasing the stroke inpaints that area right away and
+    adds the result as a new raster layer limited to the painted area. See
+    [cleanup](/guides/cleanup).
+  </Tab>
+</Tabs>
+
+<Tip>
+  Hold `Space` or the middle mouse button and drag to pan without changing tools. Scroll to pan,
+  hold `Shift` to pan horizontally, or hold `Ctrl` or `Command` to zoom at the pointer; a trackpad
+  pinch also zooms. `Escape` clears the selection.
+</Tip>
+
+Single-key tool shortcuts are inactive while a text field is focused. See [keyboard shortcuts](/reference/shortcuts).

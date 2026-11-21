@@ -1,88 +1,152 @@
+//! Pixel writes and reads, where each 64×64 tile is compressed on its own,
+//! and opening a project, which checks every layer.
+//!
+//! A page is 2048×2896 RGBA, about a scanned manga page, filled with gradients
+//! and low noise so zlib does the work a scan would give it.
+
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
-use koharu_scene::{At, Authored, EntityId, PageDraft, Session, SourceText};
-use tokio::runtime::Runtime;
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use koharu_scene::{Created, Edit, LayerId, Op, Rect, Session};
+use serde_json::{Value, json};
+use tempfile::TempDir;
 
-const ENTITIES: usize = 2_048;
+const WIDTH: u32 = 2048;
+const HEIGHT: u32 = 2896;
 
-fn source(text: impl Into<String>) -> SourceText {
-    SourceText {
-        text: Authored::user(text.into()),
-        language: None,
+fn edit(ops: Vec<Value>) -> Edit {
+    Edit {
+        label: "bench".to_owned(),
+        ops: ops
+            .into_iter()
+            .map(|op| serde_json::from_value(op).expect("a valid op"))
+            .collect(),
     }
 }
 
-fn populated(runtime: &Runtime) -> (Session, EntityId) {
-    let mut session = runtime
-        .block_on(Session::memory())
-        .expect("create benchmark scene");
-    let mut selected = None;
-    let patch = session
-        .snapshot()
-        .patch(|edit| {
-            let page = edit.add_page(PageDraft::new("page", 1200.0, 1800.0), At::End)?;
-            for index in 0..ENTITIES {
-                if index % 4 == 0 {
-                    let content = edit.add_text_content(page, At::End)?;
-                    edit.set(content, &source(format!("text {index}")))?;
-                    selected = Some(content);
-                } else {
-                    edit.add_entity(page, At::End)?;
-                }
-            }
-            Ok(())
+fn write(layer: LayerId, pixels: Vec<u8>) -> Edit {
+    Edit {
+        label: "bench".to_owned(),
+        ops: vec![Op::WritePixels {
+            layer: layer.into(),
+            rect: Rect {
+                x: 0,
+                y: 0,
+                width: WIDTH,
+                height: HEIGHT,
+            },
+            pixels,
+        }],
+    }
+}
+
+/// A page of RGBA pixels: smooth gradients with low noise, as in a scan.
+fn page_pixels(seed: u32) -> Vec<u8> {
+    let mut state = seed | 1;
+    let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            let noise = (state & 7) as u8;
+            pixels.extend([
+                (x / 8) as u8 ^ noise,
+                (y / 12) as u8 ^ noise,
+                ((x + y) / 16) as u8,
+                255,
+            ]);
+        }
+    }
+    pixels
+}
+
+/// A project in a fresh directory with one page holding one empty raster.
+fn raster() -> (TempDir, Session, LayerId) {
+    let dir = TempDir::new().expect("a temporary directory");
+    let mut session = Session::create(dir.path().join("bench.khr")).expect("a project");
+    let change = session
+        .apply(edit(vec![
+            json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": WIDTH, "height": HEIGHT}}),
+            json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "raster"}}),
+        ]))
+        .expect("an edit");
+    let layer = change
+        .created
+        .iter()
+        .find_map(|created| match created {
+            Created::Layer { id, .. } => Some(*id),
+            Created::Page { .. } => None,
         })
-        .expect("build benchmark scene");
-    runtime
-        .block_on(session.commit(patch))
-        .expect("commit benchmark scene");
-    (session, selected.expect("scene has entities"))
+        .expect("a raster");
+    (dir, session, layer)
 }
 
-fn scene_benchmarks(criterion: &mut Criterion) {
-    let runtime = Runtime::new().expect("create benchmark runtime");
-    let (session, selected) = populated(&runtime);
-    let snapshot = session.snapshot();
+fn pixels(c: &mut Criterion) {
+    let (first, second) = (page_pixels(1), page_pixels(2));
+    let mut group = c.benchmark_group("pixels");
+    group.sample_size(10);
+    group.bench_function("write a page into an empty raster", |b| {
+        b.iter_batched(
+            || (raster(), first.clone()),
+            |((dir, mut session, layer), pixels)| {
+                session.apply(write(layer, pixels)).expect("a paint");
+                (dir, session)
+            },
+            BatchSize::PerIteration,
+        );
+    });
+    group.bench_function("write a page over a full raster", |b| {
+        b.iter_batched(
+            || {
+                let (dir, mut session, layer) = raster();
+                session.apply(write(layer, first.clone())).expect("a paint");
+                ((dir, session, layer), second.clone())
+            },
+            |((dir, mut session, layer), pixels)| {
+                session.apply(write(layer, pixels)).expect("a paint");
+                (dir, session)
+            },
+            BatchSize::PerIteration,
+        );
+    });
+    let (_dir, mut session, layer) = raster();
+    session.apply(write(layer, first.clone())).expect("a paint");
+    group.bench_function("decode a full raster", |b| {
+        b.iter(|| black_box(session.tiles(layer, None).expect("tiles")));
+    });
+    group.finish();
+}
 
-    criterion.bench_function("scene/snapshot_clone", |bencher| {
-        bencher.iter(|| black_box(snapshot.clone()));
-    });
-    criterion.bench_function("scene/entities_with_source_text", |bencher| {
-        bencher.iter(|| {
-            black_box(
-                snapshot
-                    .entities_with::<SourceText>()
-                    .expect("query source text")
-                    .count(),
-            )
-        });
-    });
-    criterion.bench_function("scene/component_patch", |bencher| {
-        bencher.iter(|| {
-            black_box(
-                snapshot
-                    .patch(|edit| edit.set(selected, &source("changed")))
-                    .expect("build component patch"),
-            )
-        });
-    });
-    let patch = snapshot
-        .patch(|edit| edit.set(selected, &source("changed")))
-        .expect("build preview patch");
-    criterion.bench_function("scene/component_preview", |bencher| {
-        bencher.iter(|| black_box(snapshot.preview(black_box([&patch])).unwrap()));
-    });
-    criterion.bench_function("scene/reorder_patch", |bencher| {
-        bencher.iter(|| {
-            black_box(
-                snapshot
-                    .patch(|edit| edit.move_entity(selected, snapshot.parent(selected)?, At::Start))
-                    .expect("build reorder patch"),
-            )
-        });
+/// Opening checks every layer of every page.
+fn open(c: &mut Criterion) {
+    const PAGES: usize = 20;
+    const TEXTS: usize = 30;
+    let dir = TempDir::new().expect("a temporary directory");
+    let path = dir.path().join("bench.khr");
+    let mut session = Session::create(&path).expect("a project");
+    for index in 0..PAGES {
+        let mut ops = vec![
+            json!({"op": "add_page", "id": "$p", "index": index, "size": {"width": WIDTH, "height": HEIGHT}}),
+        ];
+        ops.extend((0..TEXTS).map(|text| {
+            json!({
+                "op": "add_layer", "page": "$p", "index": text,
+                "layer": {
+                    "kind": "text",
+                    "content": [{"insert": "吹き出しの", "attributes": {"weight": 700}}, {"insert": "テキスト"}],
+                    "frame": {"box": {"bounds": {"x": 100.0, "y": 100.0, "width": 300.0, "height": 400.0}}},
+                    "language": "ja",
+                },
+            })
+        }));
+        session.apply(edit(ops)).expect("a page");
+    }
+    drop(session);
+    c.bench_function("open a project of 20 pages with 30 texts each", |b| {
+        b.iter(|| black_box(Session::open(&path).expect("it opens")));
     });
 }
 
-criterion_group!(benches, scene_benchmarks);
+criterion_group!(benches, pixels, open);
 criterion_main!(benches);

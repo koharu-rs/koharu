@@ -6,11 +6,12 @@
 //! # Warning
 //! This API is experimental and subject to breaking changes.
 use std::ffi::{CStr, CString};
-use std::ptr::NonNull;
+use std::marker::PhantomData;
 use std::slice;
 
 use crate::context::LlamaContext;
 use crate::model::LlamaModel;
+use crate::ptr::Ptr;
 use crate::token::LlamaToken;
 
 /// Input chunk types for multimodal data
@@ -51,22 +52,6 @@ impl From<koharu_llama_sys::mtmd_input_chunk_type> for MtmdInputChunkType {
 }
 
 /// Configuration parameters for MTMD context
-///
-/// # Examples
-///
-/// ```no_run
-/// use koharu_llama::mtmd::{MtmdContextParams, mtmd_default_marker};
-/// use std::ffi::CString;
-///
-/// let params = MtmdContextParams {
-///     use_gpu: false,
-///     print_timings: true,
-///     n_threads: 4,
-///     media_marker: CString::new(mtmd_default_marker()).unwrap(),
-///     image_min_tokens: -1,
-///     image_max_tokens: -1,
-/// };
-/// ```
 #[derive(Debug, Clone)]
 pub struct MtmdContextParams {
     /// Whether to use GPU acceleration
@@ -159,11 +144,17 @@ pub struct MtmdInputText {
 /// text, images, and audio through llama.cpp's multimodal interface.
 #[derive(Debug)]
 pub struct MtmdContext {
-    pub(crate) context: NonNull<koharu_llama_sys::mtmd_context>,
+    context: Ptr<koharu_llama_sys::mtmd_context>,
 }
 
-// MtmdContext is thread safe
+// SAFETY: `mtmd_context` tokenization is thread safe.
+//
+// Note that evaluation and encoding is not thread-safe, but we ensure this
+// doesn't happen on multiple threads by making those methods take `&mut`.
 unsafe impl Send for MtmdContext {}
+// SAFETY: Same as above.
+// Unlike `LlamaContext`, this context doesn't need to synchronize at various
+// points, so there's no danger there.
 unsafe impl Sync for MtmdContext {}
 
 impl MtmdContext {
@@ -200,7 +191,7 @@ impl MtmdContext {
             )
         };
 
-        let context = NonNull::new(context).ok_or(MtmdInitError::NullResult)?;
+        let context = Ptr::new(context).ok_or(MtmdInitError::NullResult)?;
         Ok(Self { context })
     }
 
@@ -287,7 +278,7 @@ impl MtmdContext {
         text: MtmdInputText,
         bitmaps: &[&MtmdBitmap],
     ) -> Result<MtmdInputChunks, MtmdTokenizeError> {
-        let chunks = MtmdInputChunks::new();
+        let mut chunks = MtmdInputChunks::new();
         let text_cstring = CString::new(text.text)?;
         let input_text = koharu_llama_sys::mtmd_input_text {
             text: text_cstring.as_ptr(),
@@ -297,15 +288,13 @@ impl MtmdContext {
         };
 
         // Create bitmap pointers
-        let bitmap_ptrs: Vec<*const koharu_llama_sys::mtmd_bitmap> = bitmaps
-            .iter()
-            .map(|b| b.bitmap.as_ptr().cast_const())
-            .collect();
+        let bitmap_ptrs: Vec<*const koharu_llama_sys::mtmd_bitmap> =
+            bitmaps.iter().map(|b| b.bitmap.as_ptr()).collect();
 
         let result = unsafe {
             koharu_llama_sys::mtmd_tokenize(
                 self.context.as_ptr(),
-                chunks.chunks.as_ptr(),
+                chunks.chunks.as_mut_ptr(),
                 &raw const input_text,
                 bitmap_ptrs.as_ptr().cast_mut(),
                 bitmaps.len(),
@@ -337,9 +326,9 @@ impl MtmdContext {
     /// # Errors
     ///
     /// Returns `MtmdEncodeError::EncodeFailure` if encoding fails.
-    pub fn encode_chunk(&self, chunk: &MtmdInputChunk) -> Result<(), MtmdEncodeError> {
+    pub fn encode_chunk(&mut self, chunk: &MtmdInputChunk<'_>) -> Result<(), MtmdEncodeError> {
         let result = unsafe {
-            koharu_llama_sys::mtmd_encode_chunk(self.context.as_ptr(), chunk.chunk.as_ptr())
+            koharu_llama_sys::mtmd_encode_chunk(self.context.as_mut_ptr(), chunk.chunk.as_ptr())
         };
 
         if result == 0 {
@@ -352,7 +341,7 @@ impl MtmdContext {
 
 impl Drop for MtmdContext {
     fn drop(&mut self) {
-        unsafe { koharu_llama_sys::mtmd_free(self.context.as_ptr()) }
+        unsafe { koharu_llama_sys::mtmd_free(self.context.as_mut_ptr()) }
     }
 }
 
@@ -361,13 +350,14 @@ impl Drop for MtmdContext {
 /// Represents bitmap data for images or audio that can be processed
 /// by the multimodal system. For images, data is stored in RGB format.
 /// For audio, data is stored as PCM F32 samples.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MtmdBitmap {
-    pub(crate) bitmap: NonNull<koharu_llama_sys::mtmd_bitmap>,
+    bitmap: Ptr<koharu_llama_sys::mtmd_bitmap>,
 }
 
-// MtmdBitmap is thread safe
+// SAFETY: `mtmd_bitmap` is thread safe.
 unsafe impl Send for MtmdBitmap {}
+// SAFETY: Same as above.
 unsafe impl Sync for MtmdBitmap {}
 
 impl MtmdBitmap {
@@ -387,19 +377,6 @@ impl MtmdBitmap {
     ///
     /// * `InvalidDataSize` - Data length doesn't match `nx * ny * 3`
     /// * `NullResult` - Underlying C function returned null
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use koharu_llama::mtmd::MtmdBitmap;
-    ///
-    /// // Create a 2x2 red image
-    /// let red_pixel = [255, 0, 0]; // RGB values for red
-    /// let image_data = red_pixel.repeat(4); // 2x2 = 4 pixels
-    ///
-    /// let bitmap = MtmdBitmap::from_image_data(2, 2, &image_data);
-    /// assert!(bitmap.is_ok());
-    /// ```
     pub fn from_image_data(nx: u32, ny: u32, data: &[u8]) -> Result<Self, MtmdBitmapError> {
         if data.len() != (nx * ny * 3) as usize {
             return Err(MtmdBitmapError::InvalidDataSize);
@@ -407,7 +384,7 @@ impl MtmdBitmap {
 
         let bitmap = unsafe { koharu_llama_sys::mtmd_bitmap_init(nx, ny, data.as_ptr()) };
 
-        let bitmap = NonNull::new(bitmap).ok_or(MtmdBitmapError::NullResult)?;
+        let bitmap = Ptr::new(bitmap).ok_or(MtmdBitmapError::NullResult)?;
         Ok(Self { bitmap })
     }
 
@@ -424,25 +401,11 @@ impl MtmdBitmap {
     /// # Errors
     ///
     /// * `NullResult` - Underlying C function returned null
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use koharu_llama::mtmd::MtmdBitmap;
-    ///
-    /// // Create a simple sine wave audio sample
-    /// let audio_data: Vec<f32> = (0..100)
-    ///     .map(|i| (i as f32 * 0.1).sin())
-    ///     .collect();
-    ///
-    /// let bitmap = MtmdBitmap::from_audio_data(&audio_data);
-    /// // Note: This will likely fail without proper MTMD context setup
-    /// ```
     pub fn from_audio_data(data: &[f32]) -> Result<Self, MtmdBitmapError> {
         let bitmap =
             unsafe { koharu_llama_sys::mtmd_bitmap_init_from_audio(data.len(), data.as_ptr()) };
 
-        let bitmap = NonNull::new(bitmap).ok_or(MtmdBitmapError::NullResult)?;
+        let bitmap = Ptr::new(bitmap).ok_or(MtmdBitmapError::NullResult)?;
         Ok(Self { bitmap })
     }
 
@@ -478,24 +441,20 @@ impl MtmdBitmap {
         placeholder: bool,
     ) -> Result<Self, MtmdBitmapError> {
         let path_cstr = CString::new(path)?;
+        // This helper now returns a wrapper struct (bitmap + an optional video
+        // decoding context) instead of a bare pointer. `video_ctx` is only set
+        // when MTMD_VIDEO is enabled at compile time; this crate does not build
+        // with it on, so it is always null here and only the bitmap matters.
         let wrapper = unsafe {
             koharu_llama_sys::mtmd_helper_bitmap_init_from_file(
                 ctx.context.as_ptr(),
                 path_cstr.as_ptr(),
                 placeholder,
+                koharu_llama_sys::mtmd_helper_init_opt_default(),
             )
         };
 
-        if !wrapper.video_ctx.is_null() {
-            unsafe {
-                if !wrapper.bitmap.is_null() {
-                    koharu_llama_sys::mtmd_bitmap_free(wrapper.bitmap);
-                }
-                koharu_llama_sys::mtmd_helper_video_free(wrapper.video_ctx);
-            }
-            return Err(MtmdBitmapError::NullResult);
-        }
-        let bitmap = NonNull::new(wrapper.bitmap).ok_or(MtmdBitmapError::NullResult)?;
+        let bitmap = Ptr::new(wrapper.bitmap).ok_or(MtmdBitmapError::NullResult)?;
         Ok(Self { bitmap })
     }
 
@@ -529,25 +488,19 @@ impl MtmdBitmap {
         data: &[u8],
         placeholder: bool,
     ) -> Result<Self, MtmdBitmapError> {
+        // See the comment in `from_file`: this returns a wrapper struct now, and
+        // `video_ctx` is always null since MTMD_VIDEO is not enabled in this build.
         let wrapper = unsafe {
             koharu_llama_sys::mtmd_helper_bitmap_init_from_buf(
                 ctx.context.as_ptr(),
                 data.as_ptr(),
                 data.len(),
                 placeholder,
+                koharu_llama_sys::mtmd_helper_init_opt_default(),
             )
         };
 
-        if !wrapper.video_ctx.is_null() {
-            unsafe {
-                if !wrapper.bitmap.is_null() {
-                    koharu_llama_sys::mtmd_bitmap_free(wrapper.bitmap);
-                }
-                koharu_llama_sys::mtmd_helper_video_free(wrapper.video_ctx);
-            }
-            return Err(MtmdBitmapError::NullResult);
-        }
-        let bitmap = NonNull::new(wrapper.bitmap).ok_or(MtmdBitmapError::NullResult)?;
+        let bitmap = Ptr::new(wrapper.bitmap).ok_or(MtmdBitmapError::NullResult)?;
         Ok(Self { bitmap })
     }
 
@@ -614,16 +567,16 @@ impl MtmdBitmap {
     ///
     /// ```no_run
     /// # use koharu_llama::mtmd::MtmdBitmap;
-    /// # fn example(bitmap: &MtmdBitmap) -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn example(bitmap: &mut MtmdBitmap) -> Result<(), Box<dyn std::error::Error>> {
     /// bitmap.set_id("image_001")?;
     /// assert_eq!(bitmap.id(), Some("image_001".to_string()));
     /// # Ok(())
     /// # }
     /// ```
-    pub fn set_id(&self, id: &str) -> Result<(), std::ffi::NulError> {
+    pub fn set_id(&mut self, id: &str) -> Result<(), std::ffi::NulError> {
         let id_cstr = CString::new(id)?;
         unsafe {
-            koharu_llama_sys::mtmd_bitmap_set_id(self.bitmap.as_ptr(), id_cstr.as_ptr());
+            koharu_llama_sys::mtmd_bitmap_set_id(self.bitmap.as_mut_ptr(), id_cstr.as_ptr());
         }
         Ok(())
     }
@@ -631,7 +584,7 @@ impl MtmdBitmap {
 
 impl Drop for MtmdBitmap {
     fn drop(&mut self) {
-        unsafe { koharu_llama_sys::mtmd_bitmap_free(self.bitmap.as_ptr()) }
+        unsafe { koharu_llama_sys::mtmd_bitmap_free(self.bitmap.as_mut_ptr()) }
     }
 }
 
@@ -642,8 +595,13 @@ impl Drop for MtmdBitmap {
 /// with text chunks containing tokens and media chunks containing embeddings.
 #[derive(Debug)]
 pub struct MtmdInputChunks {
-    pub(crate) chunks: NonNull<koharu_llama_sys::mtmd_input_chunks>,
+    chunks: Ptr<koharu_llama_sys::mtmd_input_chunks>,
 }
+
+// SAFETY: `mtmd_input_chunks` is thread-safe, it's just a list of chunks.
+unsafe impl Send for MtmdInputChunks {}
+// SAFETY: Same as above.
+unsafe impl Sync for MtmdInputChunks {}
 
 impl Default for MtmdInputChunks {
     fn default() -> Self {
@@ -656,20 +614,10 @@ impl MtmdInputChunks {
     /// # Panics
     /// This function will panic if the underlying llama.cpp function returns null,
     /// which should not happen.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use koharu_llama::mtmd::MtmdInputChunks;
-    ///
-    /// let chunks = MtmdInputChunks::new();
-    /// assert_eq!(chunks.len(), 0);
-    /// assert!(chunks.is_empty());
-    /// ```
     #[must_use]
     pub fn new() -> Self {
         let chunks = unsafe { koharu_llama_sys::mtmd_input_chunks_init() };
-        let chunks = NonNull::new(chunks).unwrap();
+        let chunks = Ptr::new(chunks).unwrap();
         Self { chunks }
     }
 
@@ -685,9 +633,24 @@ impl MtmdInputChunks {
         self.len() == 0
     }
 
-    /// Get a chunk by index
+    /// Get a chunk by index.
+    ///
+    /// The returned chunk borrows from this collection. Dropping the collection
+    /// while a borrowed chunk is still in use is a compile error. Use
+    /// [`MtmdInputChunk::copy`] if you need a chunk that outlives the collection.
+    ///
+    /// # Examples
+    ///
+    /// ```compile_fail
+    /// use koharu_llama::mtmd::MtmdInputChunks;
+    ///
+    /// let chunks = MtmdInputChunks::new();
+    /// let chunk = chunks.get(0);
+    /// drop(chunks);
+    /// let _ = chunk;
+    /// ```
     #[must_use]
-    pub fn get(&self, index: usize) -> Option<MtmdInputChunk> {
+    pub fn get(&self, index: usize) -> Option<MtmdInputChunk<'_>> {
         if index >= self.len() {
             return None;
         }
@@ -696,9 +659,10 @@ impl MtmdInputChunks {
             unsafe { koharu_llama_sys::mtmd_input_chunks_get(self.chunks.as_ptr(), index) };
 
         // Note: We don't own this chunk, it's owned by the chunks collection
-        NonNull::new(chunk_ptr.cast_mut()).map(|ptr| MtmdInputChunk {
+        Ptr::new(chunk_ptr.cast_mut()).map(|ptr| MtmdInputChunk {
             chunk: ptr,
             owned: false,
+            phantom: PhantomData,
         })
     }
 
@@ -748,8 +712,8 @@ impl MtmdInputChunks {
     /// This function is NOT thread-safe.
     pub fn eval_chunks(
         &self,
-        mtmd_ctx: &MtmdContext,
-        llama_ctx: &LlamaContext,
+        mtmd_ctx: &mut MtmdContext,
+        llama_ctx: &mut LlamaContext,
         n_past: koharu_llama_sys::llama_pos,
         seq_id: koharu_llama_sys::llama_seq_id,
         n_batch: i32,
@@ -759,8 +723,8 @@ impl MtmdInputChunks {
 
         let result = unsafe {
             koharu_llama_sys::mtmd_helper_eval_chunks(
-                mtmd_ctx.context.as_ptr(),
-                llama_ctx.context.as_ptr(),
+                mtmd_ctx.context.as_mut_ptr(),
+                llama_ctx.context.as_mut_ptr(),
                 self.chunks.as_ptr(),
                 n_past,
                 seq_id,
@@ -780,7 +744,7 @@ impl MtmdInputChunks {
 
 impl Drop for MtmdInputChunks {
     fn drop(&mut self) {
-        unsafe { koharu_llama_sys::mtmd_input_chunks_free(self.chunks.as_ptr()) }
+        unsafe { koharu_llama_sys::mtmd_input_chunks_free(self.chunks.as_mut_ptr()) }
     }
 }
 
@@ -789,13 +753,23 @@ impl Drop for MtmdInputChunks {
 /// Represents a single chunk of input data, which can be either text tokens,
 /// image tokens, or audio tokens. The chunk type determines what kind of
 /// data and operations are available.
+///
+/// `'a` is the lifetime of the [`MtmdInputChunks`] this chunk was borrowed
+/// from via [`MtmdInputChunks::get`]. [`MtmdInputChunk::copy`] returns an
+/// owned chunk with a `'static` lifetime that is freed independently.
 #[derive(Debug)]
-pub struct MtmdInputChunk {
-    pub(crate) chunk: NonNull<koharu_llama_sys::mtmd_input_chunk>,
+pub struct MtmdInputChunk<'a> {
+    chunk: Ptr<koharu_llama_sys::mtmd_input_chunk>,
     owned: bool,
+    phantom: PhantomData<&'a MtmdInputChunks>,
 }
 
-impl MtmdInputChunk {
+// SAFETY: `mtmd_input_chunks` is thread-safe, it's POD.
+unsafe impl Send for MtmdInputChunk<'_> {}
+// SAFETY: Same as above.
+unsafe impl Sync for MtmdInputChunk<'_> {}
+
+impl MtmdInputChunk<'_> {
     /// Get the type of this chunk
     #[must_use]
     pub fn chunk_type(&self) -> MtmdInputChunkType {
@@ -873,6 +847,9 @@ impl MtmdInputChunk {
     /// (e.g., KV cache management) by moving the chunk ownership to your own code.
     /// Remember to ensure the copied chunk is properly freed when you're done with it.
     ///
+    /// The copy does not borrow from the original collection, so it can
+    /// outlive the [`MtmdInputChunks`] this chunk was taken from.
+    ///
     /// # Returns
     ///
     /// Returns an owned copy of the chunk.
@@ -880,17 +857,21 @@ impl MtmdInputChunk {
     /// # Errors
     ///
     /// Returns `MtmdInputChunkError::NullResult` if copying fails.
-    pub fn copy(&self) -> Result<Self, MtmdInputChunkError> {
+    pub fn copy(&self) -> Result<MtmdInputChunk<'static>, MtmdInputChunkError> {
         let chunk = unsafe { koharu_llama_sys::mtmd_input_chunk_copy(self.chunk.as_ptr()) };
-        let chunk = NonNull::new(chunk).ok_or(MtmdInputChunkError::NullResult)?;
-        Ok(Self { chunk, owned: true })
+        let chunk = Ptr::new(chunk).ok_or(MtmdInputChunkError::NullResult)?;
+        Ok(MtmdInputChunk {
+            chunk,
+            owned: true,
+            phantom: PhantomData,
+        })
     }
 }
 
-impl Drop for MtmdInputChunk {
+impl Drop for MtmdInputChunk<'_> {
     fn drop(&mut self) {
         if self.owned {
-            unsafe { koharu_llama_sys::mtmd_input_chunk_free(self.chunk.as_ptr()) }
+            unsafe { koharu_llama_sys::mtmd_input_chunk_free(self.chunk.as_mut_ptr()) }
         }
     }
 }
@@ -904,18 +885,6 @@ impl Drop for MtmdInputChunk {
 /// # Returns
 ///
 /// Returns the default media marker as a string slice.
-///
-/// # Examples
-///
-/// ```no_run
-/// use koharu_llama::mtmd::mtmd_default_marker;
-///
-/// let marker = mtmd_default_marker();
-/// assert!(!marker.is_empty());
-///
-/// let text = format!("Describe this image: {}", marker);
-/// assert!(text.contains(marker));
-/// ```
 #[must_use]
 pub fn mtmd_default_marker() -> &'static str {
     unsafe {

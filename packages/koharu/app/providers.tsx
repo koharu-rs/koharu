@@ -1,32 +1,16 @@
 'use client'
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Channel } from '@tauri-apps/api/core'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 
 import { StartupView } from '@/components/app/StartupView'
 import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
-import { refreshTranslationModels } from '@/lib/backend'
+import { hear } from '@/lib/events'
 import i18n from '@/lib/i18n'
-import { pageKey, pagesKey, projectKey, queryClient, refresh } from '@/lib/queries'
-import {
-  receiveCanvas,
-  receiveDownload,
-  receiveStartupState,
-  receiveJob,
-  receiveResources,
-  useKoharuStore,
-} from '@/lib/store'
-import {
-  commands,
-  type CanvasState,
-  type Download,
-  type Job,
-  type ModelResources,
-  type ProjectInfo,
-} from '@koharu/bridge/protocol'
+import { queryClient } from '@/lib/queries'
+import { useKoharuStore } from '@/lib/store'
 import { Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
@@ -38,47 +22,7 @@ export function Providers({ children }: { children: ReactNode }) {
     lifecycle.active = true
     if (!lifecycle.bound) {
       lifecycle.bound = true
-      const completed = new Map<string, number>()
-      const channel = <T,>(receive: (value: T) => void) =>
-        new Channel<T>((value) => {
-          if (lifecycle.active) receive(value)
-        })
-
-      void refreshTranslationModels().catch(() => undefined)
-
-      void commands
-        .subscribe(
-          channel<CanvasState>(receiveCanvas),
-          channel<Job>((job) => {
-            const previous = completed.get(job.id) ?? 0
-            completed.set(job.id, job.completed)
-            receiveJob(job)
-            if (job.completed > previous || job.state !== 'running') {
-              void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
-            }
-          }),
-          channel<Download>(receiveDownload),
-          channel<ModelResources>(receiveResources),
-          channel<ProjectInfo | null>((project) => {
-            const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-            queryClient.setQueryData(projectKey, project)
-            if (previous?.name !== project?.name) {
-              const store = useKoharuStore.getState()
-              store.selectPages(project?.active_page ? [project.active_page] : [])
-              store.selectLayers([])
-            }
-            if (project) {
-              void refresh(pagesKey, pageKey).catch(() => undefined)
-            } else {
-              queryClient.setQueryData(pagesKey, [])
-              queryClient.setQueryData(pageKey, null)
-            }
-          }),
-        )
-        .then((state) => {
-          if (lifecycle.active) receiveStartupState(state)
-        })
-        .catch(() => undefined)
+      void hear(() => lifecycle.active).catch(() => undefined)
     }
 
     return () => {
@@ -96,13 +40,24 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    // Prevent the host webview from applying browser zoom; keep Ctrl+wheel for app handlers.
+    // The webview is the app's window, not a browser tab: it applies no browser zoom, keeping
+    // Ctrl+wheel for the app's handlers, and opens no browser menu on a right-click, where the
+    // app shows its own menu or none. A text field keeps its edit menu, as Clip Studio Paint's do.
     const preventViewportScaling = (event: WheelEvent) => {
       if (event.ctrlKey) event.preventDefault()
     }
+    const preventBrowserMenu = (event: MouseEvent) => {
+      if (!(event.target instanceof Element && event.target.matches(':read-write'))) {
+        event.preventDefault()
+      }
+    }
 
     window.addEventListener('wheel', preventViewportScaling, { capture: true, passive: false })
-    return () => window.removeEventListener('wheel', preventViewportScaling, { capture: true })
+    window.addEventListener('contextmenu', preventBrowserMenu)
+    return () => {
+      window.removeEventListener('wheel', preventViewportScaling, { capture: true })
+      window.removeEventListener('contextmenu', preventBrowserMenu)
+    }
   }, [])
 
   return (

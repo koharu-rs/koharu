@@ -2,32 +2,20 @@
 name = "koharu-torch-sys"
 version.workspace = true
 edition.workspace = true
-description = "Low-level FFI bindings for the LibTorch C++ API."
-license = "MIT OR Apache-2.0"
+description.workspace = true
+license.workspace = true
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
-publish = true
+keywords.workspace = true
+publish.workspace = true
 build = "build.rs"
-
-categories = ["external-ffi-bindings", "science"]
+# Nothing is linked; the key passes the bindings' path to koharu-torch.
+links = "koharu-torch"
 
 [dependencies]
 libloading = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = { workspace = true }
-
 [build-dependencies]
-anyhow = { workspace = true }
 koharu-bindgen = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    "anyhow",
-    "koharu-bindgen",
-    "libc",
-    "libloading",
-]

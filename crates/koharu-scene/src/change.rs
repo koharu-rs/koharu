@@ -1,169 +1,132 @@
+//! What an edit, undo, or redo changed, found by comparing two projects.
+
 use std::collections::{BTreeMap, BTreeSet};
 
-use revision::revisioned;
+use imbl::ordmap::DiffItem;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{EntityId, RelationId, Revision, patch::Operation};
+use crate::{Layer, LayerId, Page, PageId, Project, Revision, project::depth_first};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Change {
-    pub from: Revision,
-    pub to: Revision,
-    pub entities: Vec<EntityChange>,
-    /// Entities and page roots whose hierarchy changed.
-    pub hierarchy: Vec<EntityId>,
-    pub components: Vec<ComponentChange>,
-    pub relations: Vec<RelationChange>,
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Created {
+    Page { id: PageId, label: Option<String> },
+    Layer { id: LayerId, label: Option<String> },
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum EntityChange {
-    Inserted(EntityId),
-    Removed(EntityId),
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+pub struct PageChanges {
+    pub added: Vec<PageId>,
+    pub removed: Vec<PageId>,
+    pub reordered: bool,
+    pub changed: BTreeSet<PageId>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ComponentChange {
-    pub owner: ComponentOwner,
-    pub kind: String,
-    pub change: ValueChangeKind,
+/// The session's steps, as Photoshop's History panel lists the states of the
+/// current session, older first, and dims the ones a jump back would lose.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+pub struct History {
+    /// Every step's undo label, oldest first.
+    pub steps: Vec<String>,
+    /// How many steps the project holds: 0 is the project as it opened, and
+    /// the steps after it can be redone.
+    pub current: usize,
 }
 
-#[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum ComponentOwner {
-    Project,
-    Entity(EntityId),
-    Relation(RelationId),
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ValueChangeKind {
-    Inserted,
-    Removed,
-    Replaced,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum RelationChange {
-    Inserted(RelationId),
-    Removed(RelationId),
-    Changed(RelationId),
-}
-
-impl Change {
-    pub(crate) fn empty(revision: Revision) -> Self {
-        Self {
-            from: revision,
-            to: revision,
-            entities: Vec::new(),
-            hierarchy: Vec::new(),
-            components: Vec::new(),
-            relations: Vec::new(),
-        }
+impl History {
+    /// The label of the step undo takes back.
+    #[must_use]
+    pub fn undo(&self) -> Option<&str> {
+        self.current
+            .checked_sub(1)
+            .and_then(|at| self.steps.get(at))
+            .map(String::as_str)
     }
 
-    pub(crate) fn from_operations(from: Revision, to: Revision, operations: &[Operation]) -> Self {
-        let mut entities = BTreeMap::<EntityId, (bool, bool)>::new();
-        let mut hierarchy = BTreeSet::new();
-        let mut components = BTreeMap::new();
-        let mut relations = BTreeMap::<RelationId, RelationChange>::new();
+    /// The label of the step redo makes again.
+    #[must_use]
+    pub fn redo(&self) -> Option<&str> {
+        self.steps.get(self.current).map(String::as_str)
+    }
+}
 
-        for operation in operations {
-            match operation {
-                Operation::InsertPage { id, .. } => {
-                    entities
-                        .entry(*id)
-                        .and_modify(|state| state.1 = true)
-                        .or_insert((false, true));
-                    hierarchy.insert(*id);
+/// What one edit, undo, or redo changed.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+pub struct Change {
+    pub revision: Revision,
+    pub created: Vec<Created>,
+    pub pages: PageChanges,
+    /// Added, changed, or removed layers, pixels included. A layer that only
+    /// moved among its siblings, or whose child list changed, changes its
+    /// page, not itself.
+    pub layers: BTreeSet<LayerId>,
+    pub history: History,
+}
+
+/// A page's layers by id.
+fn by_id(page: &Page) -> BTreeMap<LayerId, &Layer> {
+    depth_first(&page.layers)
+        .into_iter()
+        .map(|layer| (layer.id, layer))
+        .collect()
+}
+
+pub(crate) fn changed(before: &Project, after: &Project) -> (PageChanges, BTreeSet<LayerId>) {
+    let mut layers = BTreeSet::new();
+    let mut changed = BTreeSet::new();
+    let (mut added, mut removed) = (Vec::new(), Vec::new());
+    for item in before.pages.diff(&after.pages) {
+        match item {
+            DiffItem::Add(id, page) => {
+                added.push(*id);
+                layers.extend(by_id(page).into_keys());
+            }
+            DiffItem::Remove(id, page) => {
+                removed.push(*id);
+                layers.extend(by_id(page).into_keys());
+            }
+            // A layer that only moved, or whose children changed, changes
+            // its page and not itself.
+            DiffItem::Update { old, new } => {
+                changed.insert(*new.0);
+                let (old, new) = (by_id(old.1), by_id(new.1));
+                for (id, layer) in &new {
+                    if old.get(id).is_none_or(|was| was.own() != layer.own()) {
+                        layers.insert(*id);
+                    }
                 }
-                Operation::InsertEntity { page, id, .. } => {
-                    entities
-                        .entry(*id)
-                        .and_modify(|state| state.1 = true)
-                        .or_insert((false, true));
-                    hierarchy.extend([*page, *id]);
-                }
-                Operation::RemovePage { id, .. } => {
-                    entities
-                        .entry(*id)
-                        .and_modify(|state| state.1 = false)
-                        .or_insert((true, false));
-                    hierarchy.insert(*id);
-                }
-                Operation::RemoveEntity { page, id, .. } => {
-                    entities
-                        .entry(*id)
-                        .and_modify(|state| state.1 = false)
-                        .or_insert((true, false));
-                    hierarchy.extend([*page, *id]);
-                }
-                Operation::MovePage { id, .. } => {
-                    hierarchy.insert(*id);
-                }
-                Operation::MoveEntity {
-                    id,
-                    before_page,
-                    before_parent,
-                    after_page,
-                    after_parent,
-                    ..
-                } => {
-                    hierarchy.extend([
-                        *id,
-                        *before_page,
-                        *before_parent,
-                        *after_page,
-                        *after_parent,
-                    ]);
-                }
-                Operation::ReplaceComponent {
-                    owner,
-                    key,
-                    before,
-                    after,
-                } => {
-                    let change = match (before, after) {
-                        (None, Some(_)) => ValueChangeKind::Inserted,
-                        (Some(_), None) => ValueChangeKind::Removed,
-                        _ => ValueChangeKind::Replaced,
-                    };
-                    components.insert(
-                        (*owner, key.kind.clone()),
-                        ComponentChange {
-                            owner: *owner,
-                            kind: key.kind.clone(),
-                            change,
-                        },
-                    );
-                }
-                Operation::InsertRelation { id, .. } => {
-                    relations.insert(*id, RelationChange::Inserted(*id));
-                }
-                Operation::RemoveRelation { id, .. } => {
-                    relations.insert(*id, RelationChange::Removed(*id));
-                }
-                Operation::ReplaceRelation { id, .. } => {
-                    relations.entry(*id).or_insert(RelationChange::Changed(*id));
-                }
+                layers.extend(old.keys().filter(|id| !new.contains_key(id)));
             }
         }
-
-        let entities = entities
-            .into_iter()
-            .filter_map(|(id, state)| match state {
-                (false, true) => Some(EntityChange::Inserted(id)),
-                (true, false) => Some(EntityChange::Removed(id)),
-                _ => None,
-            })
-            .collect();
-        Self {
-            from,
-            to,
-            entities,
-            hierarchy: hierarchy.into_iter().collect(),
-            components: components.into_values().collect(),
-            relations: relations.into_values().collect(),
-        }
     }
+    for item in before.tiles.diff(&after.tiles) {
+        let layer = match item {
+            DiffItem::Add(layer, _) | DiffItem::Remove(layer, _) => *layer,
+            DiffItem::Update { new, .. } => *new.0,
+        };
+        layers.insert(layer);
+        let owner = after.index.get(&layer).or_else(|| before.index.get(&layer));
+        changed.extend(owner.copied());
+    }
+    let stayed_before = before
+        .order
+        .iter()
+        .filter(|page| after.pages.contains_key(*page));
+    let stayed_after = after
+        .order
+        .iter()
+        .filter(|page| before.pages.contains_key(*page));
+    let reordered = !stayed_before.eq(stayed_after);
+    changed.retain(|page| after.pages.contains_key(page) && !added.contains(page));
+    (
+        PageChanges {
+            added,
+            removed,
+            reordered,
+            changed,
+        },
+        layers,
+    )
 }

@@ -20,7 +20,9 @@ function NumberFieldGroup({ className, ...props }: NumberFieldPrimitive.Group.Pr
   )
 }
 
-function NumberFieldInput({ className, ...props }: NumberFieldPrimitive.Input.Props) {
+/** Enter takes a typed value and leaves the field, as a number field in Photoshop's bars and
+ * panels does; Base UI commits a typed value only when the field loses focus. */
+function NumberFieldInput({ className, onKeyDown, ...props }: NumberFieldPrimitive.Input.Props) {
   return (
     <NumberFieldPrimitive.Input
       data-slot='number-field-input'
@@ -28,6 +30,12 @@ function NumberFieldInput({ className, ...props }: NumberFieldPrimitive.Input.Pr
         'h-full min-w-0 flex-1 bg-transparent px-1 text-center text-[11px] tabular-nums outline-none selection:bg-primary selection:text-primary-foreground',
         className,
       )}
+      onKeyDown={(event) => {
+        onKeyDown?.(event)
+        if (event.key === 'Enter' && !event.defaultPrevented && !event.nativeEvent.isComposing) {
+          event.currentTarget.blur()
+        }
+      }}
       {...props}
     />
   )

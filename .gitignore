@@ -54,5 +54,6 @@ test-results/
 # SponsorKit runtime cache (the generated SVG is tracked)
 .cache.json
 
-# Zensical build output
-/docs/site/
+# Local documentation output
+/packages/docs/.mintlify/
+/packages/docs/site/

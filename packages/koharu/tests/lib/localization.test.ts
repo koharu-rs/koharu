@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { resources } from '@/lib/i18n'
-import { orderedLanguageChoices } from '@/lib/translation'
+import { languageNames } from '@/lib/translation'
 
 function keys(value: object, prefix = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => {
@@ -52,33 +52,15 @@ describe('editor localization', () => {
     }
   })
 
-  it('distinguishes a font origin from source text', () => {
-    for (const [locale, resource] of Object.entries(resources)) {
-      expect(resource.translation.fontPicker.source, locale).not.toBe(
-        resource.translation.inspector.source,
-      )
-    }
-  })
-
-  it('orders language choices by their displayed name without mutating the source', () => {
-    const languages = [
-      { tag: 'ja-JP', name: 'Japanese' },
-      { tag: 'zh-CN', name: 'Simplified Chinese' },
-      { tag: 'en-US', name: 'English' },
-      { tag: 'de-DE', name: 'German' },
-    ]
-
-    expect(orderedLanguageChoices(languages).map((language) => language.name)).toEqual([
-      'English',
-      'German',
-      'Japanese',
-      'Simplified Chinese',
-    ])
-    expect(languages.map((language) => language.name)).toEqual([
-      'Japanese',
-      'Simplified Chinese',
-      'English',
-      'German',
-    ])
+  it('names the target languages in the interface language, in its order', () => {
+    const names = Object.values(languageNames('en-US'))
+    expect(names).toContain('English')
+    expect(names).toContain('Japanese')
+    expect(names).toEqual(
+      [...names].sort((left, right) =>
+        left.localeCompare(right, 'en-US', { numeric: true, sensitivity: 'base' }),
+      ),
+    )
+    expect(Object.values(languageNames('ja-JP'))).toContain('英語')
   })
 })

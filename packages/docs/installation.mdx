@@ -1,0 +1,53 @@
+---
+title: 'Install Koharu'
+description: 'Download a release, complete the first run, and keep the app up to date.'
+icon: 'download'
+---
+
+<Steps>
+  <Step title="Choose a release">
+    Open the [latest GitHub release](https://github.com/koharu-rs/koharu/releases/latest) and select the package for your operating system and processor.
+
+    <Tabs>
+      <Tab title="Windows">
+        Run the Windows installer (`-setup.exe` or `.msi`) from the release, or install with WinGet:
+
+        ```powershell
+        winget install koharu
+        ```
+      </Tab>
+      <Tab title="macOS">
+        Choose the Apple-silicon release and place Koharu in Applications, or install with Homebrew:
+
+        ```bash
+        brew install --cask koharu
+        ```
+      </Tab>
+      <Tab title="Linux">
+        Choose the `.deb` or `.rpm` package for your processor (x86-64 or ARM64). Install any desktop-library dependencies reported by your package manager.
+      </Tab>
+    </Tabs>
+
+  </Step>
+  <Step title="Check your GPU">
+    Koharu runs its models on a GPU and draws pages with one. Check [hardware and runtimes](/hardware) before your first run.
+  </Step>
+  <Step title="Let the first run download">
+    The first time a model runs, Koharu downloads the native runtime packages for your GPU and that model's weights. Keep the app open while downloads finish; the activity center shows their progress.
+
+    Runtime packages come from GitHub release assets, PyPI for CUDA, and AMD's repository for ROCm; model weights and fonts come from Hugging Face.
+
+  </Step>
+  <Step title="Create your first project">
+    Follow the [quickstart](/quickstart) with one readable manga page.
+  </Step>
+</Steps>
+
+## Install updates
+
+Release builds check a signed GitHub release feed once at startup; there is no manual update check. When an update is offered, choose **Update** and let the download finish; Koharu installs it and relaunches. **Later** keeps the current version until the next start.
+
+<Tip>
+  Use a release build for translation work. Use the [development setup](/development/setup) when you
+  want to change Koharu's code.
+</Tip>

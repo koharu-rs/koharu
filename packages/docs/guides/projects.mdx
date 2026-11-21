@@ -1,0 +1,58 @@
+---
+title: 'Projects and imports'
+description: 'Keep pages, translations, and artwork together in one Koharu project file.'
+icon: 'folder-open'
+---
+
+A project owns its source images, text, artwork edits, and layout. Koharu keeps each project in one `.khr` file and never changes the files you import. Every edit is saved as it happens; there is no **Save** command.
+
+## Create and reopen projects
+
+The start screen lists the projects in Koharu's projects folder, most recently changed first:
+
+| Platform | Projects folder                                 |
+| -------- | ----------------------------------------------- |
+| Windows  | `projects` in the folder Koharu is installed in |
+| macOS    | `~/Library/Application Support/Koharu/projects` |
+| Linux    | `~/.local/share/Koharu/projects`                |
+
+Create, open, or delete projects here. A project's name is its file name, so a name that is not a valid file name on every platform is refused. Choose **File → Close Project** to return to the start screen.
+
+<Warning>
+  Deleting a project permanently removes its file after you confirm. Undo cannot restore it.
+</Warning>
+
+## Import pages
+
+<Steps>
+  <Step title='Choose files or a folder'>
+    Open **File → Import Pages → Files…** to select images, archives, or PDFs. Choose **Folder…** to
+    import the supported files directly inside a folder; subfolders are not searched.
+  </Step>
+  <Step title='Check the imported order'>
+    Files and archive entries are sorted by name with numbers compared by value: `page2.png` comes
+    before `page10.png`. PDF pages keep document order. New pages go after the project's last page.
+  </Step>
+  <Step title='Organize the page list'>
+    Select pages with `Ctrl`, `Command`, or `Shift`, drag a page to a new position, or delete a page
+    from its actions menu. Deletion can be undone. Page order determines processing and export
+    order.
+  </Step>
+</Steps>
+
+| Source                            | Imported result                                                  |
+| --------------------------------- | ---------------------------------------------------------------- |
+| PNG, JPEG (`.jpg`, `.jpeg`), WebP | One page per image                                               |
+| ZIP, CBZ, RAR, CBR                | One page per PNG, JPEG, or WebP entry; other entries are skipped |
+| PDF                               | One page per document page, rendered at 300 DPI                  |
+
+Files that operating systems leave in archives, such as macOS's `__MACOSX` resource forks, are skipped. Imported bytes are copied into the project file, so moving or deleting an original does not affect the project.
+
+## Back up and restore
+
+Close the project, then copy its `.khr` file. To restore it, close Koharu and put the file back in the projects folder.
+
+<Note>
+  Closing a project keeps everything you did but clears its undo and redo history. A project can be
+  open in only one window at a time.
+</Note>

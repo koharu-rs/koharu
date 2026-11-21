@@ -1,11 +1,18 @@
-//! Low-level dynamic bindings for stable-diffusion.cpp.
+//! stable-diffusion.cpp's C API, resolved from the runtime's build when `load`
+//! is called. The header is copied verbatim from `COMMIT`.
 
 #![allow(
-    clippy::all,
     non_camel_case_types,
     non_snake_case,
     non_upper_case_globals,
-    unpredictable_function_pointer_comparisons
+    unpredictable_function_pointer_comparisons,
+    clippy::all
 )]
+
+/// The koharu-rs/diffusion release built from `COMMIT`.
+pub const RELEASE: &str = "master-1106-532d2c1.4";
+
+/// The stable-diffusion.cpp commit the header comes from.
+pub const COMMIT: &str = "532d2c1";
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

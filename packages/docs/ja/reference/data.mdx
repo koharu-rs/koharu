@@ -1,0 +1,51 @@
+---
+title: '形式とデータの保存先'
+description: 'プロジェクト、設定、資格情報、ダウンロード、ログの場所を確認します。'
+icon: 'database'
+---
+
+## 対応形式
+
+| 用途               | 形式                                     |
+| ------------------ | ---------------------------------------- |
+| 読み込み           | PNG、JPEG、WebP、ZIP、CBZ、RAR、CBR、PDF |
+| 統合画像の書き出し | PNG、または PNG ページの CBZ             |
+| レイヤー付きの交換 | PSD                                      |
+| 作業用プロジェクト | `.khr` ファイル 1 つ                     |
+
+## プロジェクトデータ
+
+各プロジェクトは、プロジェクトフォルダー内の `.khr` ファイル 1 つです。プロジェクトフォルダーは、Windows では Koharu のインストールフォルダー内の `projects`、macOS では `~/Library/Application Support/Koharu/projects`、Linux では `~/.local/share/Koharu/projects` です。ファイルは SQLite データベースで、読み込んだ画像、生成した画像、ラスターの編集、テキストを保持します。プロジェクトを開いている間、Koharu はファイルをロックし、隣に `-wal` ファイルを置くことがあります。
+
+<Warning>
+  開いているプロジェクトのファイルを変更・コピーしないでください。スタート画面からプロジェクトを削除すると、そのファイルは完全に削除されます。
+</Warning>
+
+## 設定と資格情報
+
+設定は `~/.koharu/config.toml` に、コンポーネントごとのテーブル（`[pipeline]`、`[providers]`、`[renderer]`、`[agent]`）として保存されます。既定値のままの設定は書き込まれないため、後で既定値が変わればそれが反映されます。TOML として正しくないファイルや型の違う値は、黙って既定値にはならずエラーになります。ファイルを直すか、設定画面を使ってください。
+
+API キーとサインイン情報は `~/.koharu/secrets.age` に暗号化されています。Koharu が OS の資格情報ストアに保管するのはその鍵だけです。Linux では GNOME Keyring、KWallet、KeePassXC などの Secret Service が必要です。鍵が失われるとファイルは二度と読めないため削除され、再度サインインすることになります。プロジェクトのバックアップにはキーやサインイン情報は含まれません。
+
+## ランタイムとモデルのストア
+
+ランタイムパッケージとモデルファイルは、Windows では Koharu のインストールフォルダー内の `store` フォルダー、macOS と Linux では OS のキャッシュフォルダー内の `koharu/store` に保存されます。これらは再取得できるデータです。Koharu を終了した状態で削除すると、必要なファイルが再びダウンロードされます。
+
+Koharu がライブラリを読み込んでいる可能性がある間は、ストアを削除しないでください。
+
+## ログ
+
+Koharu は INFO 以上のメッセージをログファイルに書き込みます。保存先は Windows では `%LOCALAPPDATA%\Koharu\logs`、macOS では `~/Library/Logs/Koharu`、Linux では `~/.local/share/Koharu/logs` です。より詳しいログは[トラブルシューティング](/ja/reference/troubleshooting)を参照してください。
+
+## 安全にバックアップする
+
+<Steps>
+  <Step title='プロジェクトを閉じる'>ファイルをコピーする前に作業を終えます。</Step>
+  <Step title='プロジェクトファイルをコピーする'>
+    `.khr` ファイルをコピーします。PSD や CBZ の書き出しはプロジェクトのバックアップにはなりません。
+  </Step>
+  <Step title='設定を別に保存する'>
+    必要なら `config.toml` をコピーします。復元先のマシンでは Koharu
+    からプロバイダーを接続し直します。
+  </Step>
+</Steps>

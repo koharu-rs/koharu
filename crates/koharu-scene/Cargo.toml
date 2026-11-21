@@ -2,7 +2,7 @@
 name = "koharu-scene"
 version.workspace = true
 edition.workspace = true
-description = "Performance-first typed scene model for Koharu."
+description.workspace = true
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
@@ -13,18 +13,30 @@ publish.workspace = true
 
 [dependencies]
 blake3 = { workspace = true }
-bytes = { workspace = true }
+color = { workspace = true }
+derive_more = { workspace = true }
+flate2 = { workspace = true }
+fs-err = { workspace = true }
+icu_locale_core = { workspace = true }
+image = { workspace = true }
 imbl = { workspace = true }
-hashbrown = { workspace = true }
-koharu-storage = { workspace = true }
-revision = { workspace = true }
+indoc = { workspace = true }
+json-patch = { workspace = true }
+jsonptr = { workspace = true }
+kurbo = { workspace = true }
+rayon = { workspace = true }
+rusqlite = { workspace = true }
+schemars = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true }
-slotmap = { workspace = true }
-smallvec = { workspace = true }
+serde_json = { workspace = true }
+serde_rusqlite = { workspace = true }
+serde_with = { workspace = true }
+similar = { workspace = true }
 specta = { workspace = true }
+strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

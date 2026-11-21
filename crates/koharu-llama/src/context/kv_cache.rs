@@ -1,4 +1,4 @@
-﻿//! utilities for working with the kv cache
+//! utilities for working with the kv cache
 
 use crate::context::LlamaContext;
 use std::ffi::c_int;

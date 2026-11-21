@@ -1,11 +1,19 @@
 use std::{
-    ffi::{CStr, c_char, c_int, c_uint},
+    ffi::{CStr, c_char, c_int, c_uint, c_void},
     sync::OnceLock,
 };
 
 use libloading::Library;
 
-use crate::{Backend, Device, DeviceType};
+use crate::{Backend, Device};
+
+const ATTRIBUTE_INTEGRATED: c_int = 18;
+const ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
+const ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
+
+// The bundled CUDA 13.3 runtimes support compute capability 7.5 and newer.
+const MIN_DRIVER_VERSION: c_int = 13030;
+const MIN_COMPUTE_CAPABILITY: u32 = 75;
 
 type Init = unsafe extern "C" fn(c_uint) -> c_int;
 type DeviceGetCount = unsafe extern "C" fn(*mut c_int) -> c_int;
@@ -14,110 +22,174 @@ type DeviceGetAttribute = unsafe extern "C" fn(*mut c_int, c_int, c_int) -> c_in
 type DeviceGetName = unsafe extern "C" fn(*mut c_char, c_int, c_int) -> c_int;
 type DeviceTotalMemory = unsafe extern "C" fn(*mut usize, c_int) -> c_int;
 type DriverGetVersion = unsafe extern "C" fn(*mut c_int) -> c_int;
+type DevicePrimaryCtxRetain = unsafe extern "C" fn(*mut *mut c_void, c_int) -> c_int;
 
-pub(super) fn probe() -> Option<(i32, Vec<Device>)> {
-    static LIBRARY: OnceLock<Option<Library>> = OnceLock::new();
-    let library = LIBRARY
-        .get_or_init(|| {
-            #[cfg(target_os = "windows")]
-            {
-                // Restrict discovery to the system driver. Loading by bare name would allow a
-                // working-directory or application-directory DLL to be selected instead.
-                unsafe {
-                    libloading::os::windows::Library::load_with_flags(
-                        "nvcuda.dll",
-                        libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
-                    )
-                    .ok()
-                    .map(Into::into)
-                }
-            }
-            #[cfg(target_os = "linux")]
-            {
-                // The unversioned name can resolve to a toolkit stub rather than the installed
-                // driver, so only accept the loader-managed soname.
-                unsafe { Library::new("libcuda.so.1").ok() }
-            }
-            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-            {
-                None
-            }
-        })
-        .as_ref()?;
-    unsafe {
-        let init = *library.get::<Init>(b"cuInit\0").ok()?;
-        let get_device_count = *library.get::<DeviceGetCount>(b"cuDeviceGetCount\0").ok()?;
-        let get_device = *library.get::<DeviceGet>(b"cuDeviceGet\0").ok()?;
-        let get_device_attribute = *library
-            .get::<DeviceGetAttribute>(b"cuDeviceGetAttribute\0")
-            .ok()?;
-        let get_device_name = *library.get::<DeviceGetName>(b"cuDeviceGetName\0").ok()?;
-        let get_device_memory = *library
-            .get::<DeviceTotalMemory>(b"cuDeviceTotalMem_v2\0")
-            .ok()?;
-        let get_driver_version = *library
-            .get::<DriverGetVersion>(b"cuDriverGetVersion\0")
-            .ok()?;
+struct Cuda {
+    // Keep the library loaded for as long as its function pointers are used.
+    _library: Library,
+    device_count: c_int,
+    get_device: DeviceGet,
+    get_device_attribute: DeviceGetAttribute,
+    get_device_name: DeviceGetName,
+    get_device_memory: DeviceTotalMemory,
+    retain_primary_context: DevicePrimaryCtxRetain,
+}
 
-        if init(0) != 0 {
-            return None;
+impl Cuda {
+    fn load() -> Option<Self> {
+        let library = load_library()?;
+        unsafe {
+            let init = *library.get::<Init>(b"cuInit\0").ok()?;
+            let get_device_count = *library.get::<DeviceGetCount>(b"cuDeviceGetCount\0").ok()?;
+            let get_driver_version = *library
+                .get::<DriverGetVersion>(b"cuDriverGetVersion\0")
+                .ok()?;
+
+            if init(0) != 0 {
+                return None;
+            }
+
+            let mut driver_version = 0;
+            if get_driver_version(&mut driver_version) != 0 {
+                return None;
+            }
+            if driver_version < MIN_DRIVER_VERSION {
+                tracing::warn!(
+                    driver_version,
+                    required = MIN_DRIVER_VERSION,
+                    "CUDA driver is too old"
+                );
+                return None;
+            }
+
+            let mut device_count = 0;
+            if get_device_count(&mut device_count) != 0 || device_count <= 0 {
+                return None;
+            }
+
+            Some(Self {
+                get_device: *library.get::<DeviceGet>(b"cuDeviceGet\0").ok()?,
+                get_device_attribute: *library
+                    .get::<DeviceGetAttribute>(b"cuDeviceGetAttribute\0")
+                    .ok()?,
+                get_device_name: *library.get::<DeviceGetName>(b"cuDeviceGetName\0").ok()?,
+                get_device_memory: *library
+                    .get::<DeviceTotalMemory>(b"cuDeviceTotalMem_v2\0")
+                    .ok()?,
+                retain_primary_context: *library
+                    .get::<DevicePrimaryCtxRetain>(b"cuDevicePrimaryCtxRetain\0")
+                    .ok()?,
+                _library: library,
+                device_count,
+            })
         }
-
-        let mut driver_version = 0;
-        if get_driver_version(&mut driver_version) != 0 {
-            return None;
-        }
-
-        let mut count = 0;
-        if get_device_count(&mut count) != 0 || count <= 0 {
-            return Some((driver_version, Vec::new()));
-        }
-
-        let mut devices = Vec::new();
-        for index in 0..count {
-            let mut handle = 0;
-            if get_device(&mut handle, index) != 0 {
-                continue;
-            }
-            let mut major = 0;
-            let mut minor = 0;
-            if get_device_attribute(&mut major, 75, handle) != 0
-                || get_device_attribute(&mut minor, 76, handle) != 0
-                || major < 0
-                || minor < 0
-            {
-                continue;
-            }
-            let mut name = [0; 256];
-            let name = if get_device_name(name.as_mut_ptr(), name.len() as c_int, handle) == 0 {
-                CStr::from_ptr(name.as_ptr()).to_string_lossy().into_owned()
-            } else {
-                format!("CUDA{index}")
-            };
-            let mut memory_total = 0;
-            if get_device_memory(&mut memory_total, handle) != 0 {
-                memory_total = 0;
-            }
-            let mut integrated = 0;
-            if get_device_attribute(&mut integrated, 18, handle) != 0 {
-                integrated = 0;
-            }
-            devices.push(Device {
-                index: index as usize,
-                name: format!("CUDA{index}"),
-                description: name,
-                backend: Backend::Cuda,
-                device_type: if integrated != 0 {
-                    DeviceType::IntegratedGpu
-                } else {
-                    DeviceType::Gpu
-                },
-                memory_total,
-                memory_free: 0,
-                compute_capability: (major as u32) * 10 + minor as u32,
-                target: None,
-            });
-        }
-        Some((driver_version, devices))
     }
+
+    fn attribute(&self, handle: c_int, attribute: c_int) -> Option<u32> {
+        let mut value = 0;
+        if unsafe { (self.get_device_attribute)(&mut value, attribute, handle) } != 0 {
+            return None;
+        }
+        u32::try_from(value).ok()
+    }
+
+    fn description(&self, handle: c_int) -> Option<String> {
+        let mut buffer = [0u8; 256];
+        if unsafe {
+            (self.get_device_name)(buffer.as_mut_ptr().cast(), buffer.len() as c_int, handle)
+        } != 0
+        {
+            return None;
+        }
+        let name = CStr::from_bytes_until_nul(&buffer).ok()?;
+        Some(name.to_string_lossy().into_owned())
+    }
+
+    /// The device and its total memory, which ranks it.
+    fn device(&self, index: c_int) -> Option<(Device, u64)> {
+        let mut handle = 0;
+        if unsafe { (self.get_device)(&mut handle, index) } != 0 {
+            return None;
+        }
+
+        let major = self.attribute(handle, ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR)?;
+        let minor = self.attribute(handle, ATTRIBUTE_COMPUTE_CAPABILITY_MINOR)?;
+        let compute_capability = major * 10 + minor;
+        if compute_capability < MIN_COMPUTE_CAPABILITY {
+            return None;
+        }
+
+        let name = format!("CUDA{index}");
+        let description = self.description(handle).unwrap_or_else(|| name.clone());
+        let mut memory = 0;
+        if unsafe { (self.get_device_memory)(&mut memory, handle) } != 0 {
+            memory = 0;
+        }
+        let device = Device {
+            name,
+            index: usize::try_from(index).ok()?,
+            description,
+            backend: Backend::Cuda { compute_capability },
+            integrated: self.attribute(handle, ATTRIBUTE_INTEGRATED).unwrap_or(0) != 0,
+        };
+        Some((device, memory as u64))
+    }
+}
+
+fn driver() -> Option<&'static Cuda> {
+    static DRIVER: OnceLock<Option<Cuda>> = OnceLock::new();
+    DRIVER.get_or_init(Cuda::load).as_ref()
+}
+
+pub(super) fn probe() -> Vec<(Device, u64)> {
+    let Some(driver) = driver() else {
+        return Vec::new();
+    };
+    (0..driver.device_count)
+        .filter_map(|index| driver.device(index))
+        .collect()
+}
+
+/// Holds a reference to the primary context of the device at `index` for the
+/// rest of the process.
+///
+/// libtorch destroys its cached cuFFT plans in a static destructor as its DLL
+/// shuts down. A `torch_cuda.dll` built by the CUDA 13.3 toolkit has let the
+/// context go by then, while the driver, loaded first by the probe, still runs
+/// `cufftDestroy` for real and reads the context's freed memory: an access
+/// violation as the process exits. libtorch and llama.cpp use this same context,
+/// so this only creates it before their first use.
+pub(crate) fn hold_primary_context(index: usize) {
+    let Some(driver) = driver() else {
+        return;
+    };
+    let (mut handle, mut context) = (0, std::ptr::null_mut());
+    let status = unsafe {
+        match (driver.get_device)(&mut handle, index as c_int) {
+            0 => (driver.retain_primary_context)(&mut context, handle),
+            status => status,
+        }
+    };
+    if status != 0 {
+        tracing::warn!(status, "couldn't hold the CUDA primary context");
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn load_library() -> Option<Library> {
+    // Exclude application-local and working-directory DLLs from driver discovery.
+    unsafe {
+        libloading::os::windows::Library::load_with_flags(
+            "nvcuda.dll",
+            libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
+        )
+        .ok()
+        .map(Into::into)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn load_library() -> Option<Library> {
+    // The unversioned name may resolve to a toolkit stub instead of the driver.
+    unsafe { Library::new("libcuda.so.1").ok() }
 }

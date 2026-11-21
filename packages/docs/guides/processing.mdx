@@ -1,0 +1,50 @@
+---
+title: 'Process pages'
+description: 'Run detection, OCR, inpainting, and translation at the scope your edit needs.'
+icon: 'play'
+---
+
+The processing selector above the canvas sets the model, page scope, stages, and target language. Start with the smallest scope that covers the work.
+
+## Choose a scope
+
+<Tabs>
+  <Tab title='Selected pages'>Process the pages selected in the page list.</Tab>
+  <Tab title='Entire project'>Process every page in project order.</Tab>
+  <Tab title='One text'>
+    In **Story**, point at a text block or select it, then click the translate button under its
+    number. It translates that text block alone.
+  </Tab>
+</Tabs>
+
+## Choose stages
+
+Select one or more stages, then choose **Run**. Selected stages always run in this order:
+
+```mermaid
+flowchart LR
+  detection["Detection"] --> ocr["OCR"] --> translation["Translation"]
+  detection --> inpainting["Inpainting"]
+```
+
+Detection finds panels, speech bubbles, and text blocks, with a mask over each block's source glyphs. OCR reads each block's source text. Inpainting rebuilds the artwork under each mask. Translation writes each block's translation and places it in its room in the balloon, or in its source's frame when it has no balloon.
+
+<Note>
+  Omitted stages are not added. Include detection or OCR when a later stage needs fresh input.
+</Note>
+
+## Follow progress and stop work
+
+The activity center shows each run's stage, page, progress, and failures. Runs started while another is going wait their turn; runs on text blocks or a painted area go first. **Stop** stops every run, running and queued.
+
+Each stage writes its result for a page as one undo step as soon as it finishes. Completed work stays when a later stage fails or the run stops. The first failure ends its run and names the page, stage, and reason.
+
+A stage with nothing to do, such as OCR on a page without text, does nothing and does not fail.
+
+<Warning>
+  A rerun replaces what is there, your own edits included, and undo is the way back. Detection
+  replaces a page's panels, balloons, and text blocks, but leaves locked ones as they are. OCR
+  rewrites source text, and translation rewrites each translation's wording and placement.
+</Warning>
+
+Continue with [text review](/guides/review) or [cleanup](/guides/cleanup).

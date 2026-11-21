@@ -1,0 +1,252 @@
+//! The thread that owns the models and runs one call at a time, as
+//! koharu-llm's engine thread owns its model, so a model is never shared and
+//! needs no lock. Calls wait in a priority queue, so an interactive run goes
+//! ahead at the next call. A model loads the first time a stage asks for it and stays
+//! until the settings switch away from it, `unload` is called, or the
+//! pipeline ends; one no setting uses, which a run brought, stays five minutes
+//! after a run last ended. Nothing is unloaded to make room: a model that doesn't fit
+//! fails, naming the memory free when it began to load. The stages know their
+//! models; this knows only their keys.
+
+use std::{
+    any::Any,
+    cmp::Ordering,
+    collections::{BinaryHeap, HashMap, HashSet},
+    sync::mpsc,
+};
+
+use bytesize::ByteSize;
+use koharu_runtime::Device;
+use koharu_torch::Cuda;
+use tokio::runtime::Handle;
+use tokio_util::sync::CancellationToken;
+
+use crate::{Error, Result, Stage, scheduler::Priority};
+
+/// Work for the GPU thread.
+pub(crate) type Work = Box<dyn FnOnce(&mut Models) + Send>;
+
+/// A call's place in line, the smallest first: model upkeep goes ahead of
+/// every stage's call.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Turn {
+    Upkeep,
+    Stage(Priority),
+}
+
+/// The way to the GPU thread. It ends, unloading the models, once every
+/// handle drops and its queue is empty.
+#[derive(Clone)]
+pub(crate) struct Gpu(mpsc::Sender<(Turn, Work)>);
+
+impl Gpu {
+    pub(crate) fn spawn(runtime: Handle) -> Self {
+        let (sender, receiver) = mpsc::channel::<(Turn, Work)>();
+        // Cancelled when the runtime shuts down, which drops its tasks before
+        // it stops its timers.
+        let shutdown = CancellationToken::new();
+        let guard = shutdown.clone().drop_guard();
+        runtime.spawn(async move {
+            let _guard = guard;
+            std::future::pending::<()>().await;
+        });
+        std::thread::Builder::new()
+            .name("koharu-pipeline-gpu".to_owned())
+            .spawn(move || {
+                let mut models = Models {
+                    runtime,
+                    shutdown,
+                    loaded: HashMap::new(),
+                    device: None,
+                };
+                let mut queue = BinaryHeap::new();
+                let mut sent = 0;
+                loop {
+                    // Waits only when nothing is queued.
+                    let first = match queue.is_empty() {
+                        true => match receiver.recv() {
+                            Ok(call) => Some(call),
+                            Err(_) => return,
+                        },
+                        false => None,
+                    };
+                    for (turn, work) in first.into_iter().chain(receiver.try_iter()) {
+                        queue.push(Call { turn, sent, work });
+                        sent += 1;
+                    }
+                    if let Some(call) = queue.pop() {
+                        (call.work)(&mut models);
+                    }
+                }
+            })
+            .expect("the OS starts a thread");
+        Self(sender)
+    }
+
+    /// Queues `work` at `turn`.
+    pub(crate) fn run(&self, turn: Turn, work: impl FnOnce(&mut Models) + Send + 'static) {
+        // The thread ends only once every handle has dropped.
+        let _ = self.0.send((turn, Box::new(work)));
+    }
+
+    /// Gives back to the device what libtorch's caching allocator keeps of
+    /// the tensors calls freed, ahead of the calls queued. The cache grows
+    /// page by page, as pages need different sizes, and the device counts
+    /// it as used. It's left while no model is loaded: before the first,
+    /// the runtime hasn't loaded libtorch, as a project opening stops what
+    /// isn't running.
+    pub(crate) fn empty_cache(&self) {
+        self.run(Turn::Upkeep, |models| {
+            if !models.loaded.is_empty()
+                && Cuda::device_count() > 0
+                && let Err(error) = Cuda::empty_cache()
+            {
+                tracing::warn!("libtorch's cache wasn't emptied: {error}");
+            }
+        });
+    }
+}
+
+/// A queued call; `BinaryHeap` pops the greatest, so the order is reversed:
+/// the earliest turn, then the earliest sent.
+struct Call {
+    turn: Turn,
+    sent: u64,
+    work: Work,
+}
+
+impl Ord for Call {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (other.turn, other.sent).cmp(&(self.turn, self.sent))
+    }
+}
+
+impl PartialOrd for Call {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Call {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Call {}
+
+/// A model as the settings name it: its stage, and its name there.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct Key {
+    pub(crate) stage: Stage,
+    pub(crate) name: String,
+}
+
+/// The loaded models, which the GPU thread owns.
+pub(crate) struct Models {
+    runtime: Handle,
+    shutdown: CancellationToken,
+    loaded: HashMap<Key, Box<dyn Any + Send>>,
+    /// The runtime's device, once a model has loaded on it.
+    device: Option<&'static Device>,
+}
+
+impl Models {
+    /// The model `key` names, which `load` gives the first time, on the
+    /// runtime's device.
+    pub(crate) fn get<M, F>(
+        &mut self,
+        key: &Key,
+        load: impl FnOnce(&'static Device) -> F,
+    ) -> Result<&M>
+    where
+        M: Send + 'static,
+        F: Future<Output = anyhow::Result<M>>,
+    {
+        if !self.loaded.contains_key(key) {
+            let _span = tracing::info_span!("load", model = %key.name).entered();
+            // This thread isn't the runtime's, so a load here outlives its
+            // shutdown, and Tokio panics on a timer polled after, as a
+            // download waiting to retry polls one.
+            let shutdown = &self.shutdown;
+            let (model, device) = self.runtime.block_on(async {
+                tokio::select! {
+                    biased;
+                    () = shutdown.cancelled() => Err(Error::Shutdown),
+                    loaded = loaded(key, load) => loaded,
+                }
+            })?;
+            self.device = Some(device);
+            self.loaded.insert(key.clone(), Box::new(model));
+        }
+        // libtorch reads some choices from the thread's current device, not
+        // from the tensors': `scaled_dot_product_attention` picks its kernel
+        // by it, so on a second GPU it would pick by the first, as the math
+        // fallback over a whole score matrix where the first is an integrated
+        // GPU AOTriton doesn't cover (koharu-rs/koharu#1408). Every call makes
+        // it current, as ggml, which stable-diffusion.cpp runs here on, sets
+        // it too.
+        if let Some(device) = self.device
+            && Cuda::device_count() > 0
+        {
+            Cuda::set_device(device.index as i64).map_err(|source| Error::Stage {
+                stage: key.stage,
+                source: source.into(),
+            })?;
+        }
+        Ok(self.loaded[key]
+            .downcast_ref()
+            .expect("a key loads one kind of model"))
+    }
+
+    /// Unloads every model `wanted` doesn't hold.
+    pub(crate) fn retain(&mut self, wanted: &HashSet<Key>) {
+        self.loaded.retain(|key, _| wanted.contains(key));
+    }
+}
+
+/// The model `load` gives on the runtime's device, with the device, libtorch's
+/// cache emptied first: its caching allocator keeps what its tensors freed,
+/// and the device counts that as used, so llama.cpp and stable-diffusion.cpp,
+/// which fit themselves to free memory, wouldn't see it as free.
+async fn loaded<M, F>(
+    key: &Key,
+    load: impl FnOnce(&'static Device) -> F,
+) -> Result<(M, &'static Device)>
+where
+    F: Future<Output = anyhow::Result<M>>,
+{
+    let device = koharu_runtime::device()
+        .await
+        .map_err(|source| Error::Load {
+            model: key.name.clone(),
+            device: "no device".to_owned(),
+            free: ByteSize(0),
+            reserved: ByteSize(0),
+            active: ByteSize(0),
+            source,
+        })?;
+    let cuda = Cuda::device_count() > 0;
+    if cuda {
+        Cuda::empty_cache().map_err(|source| failure(key, device, cuda, source.into()))?;
+    }
+    let model = load(device)
+        .await
+        .map_err(|source| failure(key, device, cuda, source))?;
+    Ok((model, device))
+}
+
+/// The load failure, with the memory free on `device` and libtorch's.
+fn failure(key: &Key, device: &Device, cuda: bool, source: anyhow::Error) -> Error {
+    let held = cuda
+        .then(|| Cuda::memory(device.index as i64).ok())
+        .flatten();
+    Error::Load {
+        model: key.name.clone(),
+        device: device.description.clone(),
+        free: ByteSize(device.memory().free),
+        reserved: ByteSize(held.map_or(0, |held| held.reserved)),
+        active: ByteSize(held.map_or(0, |held| held.active)),
+        source,
+    }
+}

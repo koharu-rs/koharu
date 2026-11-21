@@ -1,0 +1,49 @@
+---
+title: 'Review text and layers'
+description: "Correct source text and translation without losing the page's editable structure."
+icon: 'spell-check'
+---
+
+Select a text block on the canvas, in **Layers**, or in **Story**. A text block keeps its source text, its translation, the mask over its source glyphs, and its clean-up together, so you can correct OCR without rebuilding the text box.
+
+## Correct the text
+
+**Story** lists every page's text blocks and text layers, page by page, each page's in reading order, the hidden ones left out. Clicking into a text on another page shows that page. While it's open, the canvas outlines each text's frame with its number at the top-left corner, outlined for a sound effect, and pointing at an entry draws its frame stronger. Edit **Source text** when OCR is wrong. Edit **Translation** for meaning, tone, names, or line breaks. A field commits when it loses focus.
+
+With the **Text** tool, select a text block or text layer on the canvas to type its translation in place. Click away or press `Ctrl+Enter` to commit; `Escape` leaves the text as it was.
+
+<Note>
+  Koharu draws translations only. A block without a translation shows its clean-up but no text, and
+  source text never appears on the canvas or in exports.
+</Note>
+
+## Manage layers
+
+The layer list shows the page's tree frontmost first: panels, balloons, text blocks, text, rasters, and other layers, nested as they are. Select several with `Ctrl`, `Command`, or `Shift`, or with **Edit → Select All Layers**. Each row can show or hide and lock or unlock its layer; an expanded row sets opacity and deletes the layer with everything inside it. Drag rows to reorder them, or onto a panel, group, or balloon to put them inside it; a balloon holds only text blocks and text layers. A text block's row has a button for its clean-up and one for its mask: click one to select it for painting, or `Shift`-click it to show or hide it. These buttons are the only way to select them; the canvas never selects a clean-up or a mask. A selected mask shows on the canvas as a red overlay over what it hides, as Photoshop shows a mask, and a selected clean-up shows with the rest of the page greyed out.
+
+Deleting a text block removes its clean-up too, so the original lettering shows again. A locked layer cannot be moved, and detection leaves it in place on a rerun.
+
+## Review a page
+
+<Steps>
+  <Step title='Check detection and OCR'>
+    Verify the text blocks, then correct source recognition errors.
+  </Step>
+  <Step title='Review the translation'>
+    Check meaning, tone, terminology, and names against the source.
+  </Step>
+  <Step title='Inspect the artwork'>
+    Look for remnants of source lettering and damage around cleaned areas.
+  </Step>
+  <Step title='Check the reading experience'>
+    Adjust typography, then inspect the page at normal reading size.
+  </Step>
+</Steps>
+
+## Undo and redo
+
+Use **Edit → Undo** or **Redo**. The shortcuts are `Ctrl+Z` and `Ctrl+Shift+Z` on Windows/Linux, or `Command+Z` and `Command+Shift+Z` on macOS.
+
+Each page-stage result that a run writes is its own undo step, so undoing a project run takes one step per page and stage. History keeps the 20 most recent steps and is cleared when the project closes.
+
+**View → History** lists the steps in a small window over the canvas, after the project as it opened. Click a step to go back or forward to it.

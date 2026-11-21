@@ -1,0 +1,46 @@
+[package]
+name = "koharu-llm"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+backon = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+koharu-config = { workspace = true }
+koharu-llama = { workspace = true }
+koharu-llama-sys = { workspace = true }
+koharu-runtime = { workspace = true }
+llguidance = { workspace = true }
+minijinja = { workspace = true }
+minijinja-contrib = { workspace = true }
+oauth2 = { workspace = true }
+reqwest = { workspace = true }
+rig-agent = { workspace = true }
+rig-core = { workspace = true }
+rig-memory = { workspace = true }
+rig-reqwest = { workspace = true }
+schemars = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+specta = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }
+toml = { workspace = true }

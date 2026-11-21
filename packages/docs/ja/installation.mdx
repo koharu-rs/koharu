@@ -1,0 +1,52 @@
+---
+title: 'Koharu のインストール'
+description: 'リリースを入手し、初回実行を完了して、アプリを更新します。'
+icon: 'download'
+---
+
+<Steps>
+  <Step title="リリースを選ぶ">
+    [最新の GitHub リリース](https://github.com/koharu-rs/koharu/releases/latest)から、OS とプロセッサーに合うパッケージを選びます。
+
+    <Tabs>
+      <Tab title="Windows">
+        リリースの Windows インストーラー（`-setup.exe` または `.msi`）を実行するか、WinGet を使います。
+
+        ```powershell
+        winget install koharu
+        ```
+      </Tab>
+      <Tab title="macOS">
+        Apple シリコン向けのリリースを選んで Koharu をアプリケーションフォルダーへ移動するか、Homebrew を使います。
+
+        ```bash
+        brew install --cask koharu
+        ```
+      </Tab>
+      <Tab title="Linux">
+        プロセッサー（x86-64 または ARM64）に合う `.deb` または `.rpm` パッケージを選びます。パッケージマネージャーが要求するデスクトップライブラリもインストールしてください。
+      </Tab>
+    </Tabs>
+
+  </Step>
+  <Step title="GPU を確認する">
+    Koharu はモデルを GPU で実行し、ページの描画にも GPU を使います。初回実行の前に[ハードウェアとランタイム](/ja/hardware)を確認してください。
+  </Step>
+  <Step title="初回のダウンロードを待つ">
+    モデルを初めて実行するとき、Koharu は GPU 用のネイティブランタイムパッケージとそのモデルの重みをダウンロードします。ダウンロードが終わるまでアプリを開いたままにし、進捗はアクティビティセンターで確認します。
+
+    ランタイムパッケージは GitHub のリリースアセットから、CUDA 用は PyPI から、ROCm 用は AMD のリポジトリから取得し、モデルの重みとフォントは Hugging Face から取得します。
+
+  </Step>
+  <Step title="プロジェクトを作る">
+    読みやすいマンガ画像を 1 枚用意し、[クイックスタート](/ja/quickstart)へ進みます。
+  </Step>
+</Steps>
+
+## アップデート
+
+リリース版は起動時に一度だけ署名付きの GitHub 更新フィードを確認します。手動での更新確認はありません。更新が表示されたら**更新**を選び、ダウンロードの完了を待ちます。Koharu がインストールして再起動します。**後で**を選ぶと、次回起動まで現在のバージョンを使い続けます。
+
+<Tip>
+  翻訳作業にはリリース版を使います。コードを変更する場合は[開発環境のセットアップ](/ja/development/setup)を参照してください。
+</Tip>

@@ -1,0 +1,43 @@
+---
+title: '连接翻译服务商'
+description: '使用本地 GGUF、托管服务或兼容模型服务器。'
+icon: 'plug'
+---
+
+模型选择器列出 Koharu 的本地模型，以及每个已连接服务商的全部模型。模型以 `服务商/模型` 命名，例如 `koharu/index-translate-9b`。翻译和智能体从同一个列表中选择；智能体只显示能调用工具的模型。
+
+## 可用连接
+
+| 连接     | 服务商                                                               | 连接方式                         |
+| -------- | -------------------------------------------------------------------- | -------------------------------- |
+| 本地推理 | 通过 llama.cpp 在进程内运行的 Koharu GGUF 模型                       | 无需配置                         |
+| 托管 API | OpenAI、Anthropic、Google Gemini、xAI、DeepSeek、MiniMax、OpenRouter | API 密钥                         |
+| 订阅     | ChatGPT，以及使用 SuperGrok 或 X Premium 方案的 Grok                 | 登录                             |
+| 自托管   | Ollama、LM Studio，以及一个 OpenAI 兼容服务器                        | 基础 URL（服务器需要时还需密钥） |
+
+Koharu 的本地模型包括只做翻译的 Index-Translate（2B、9B 和 35B A3B 预览版），以及 Gemma 4、Qwen 3.5、Qwen 3.6、Qwen 3.8 和 LFM3 系列的通用模型，其中部分提供无审查版本。默认翻译模型是 Index-Translate 9B。每个本地模型都会在首次运行时从 Hugging Face 下载。
+
+<Steps>
+  <Step title='保存连接'>
+    打开**设置 → 提供商**。在服务商的**凭据**栏中输入 API 密钥，失去焦点时保存。对 ChatGPT 或
+    Grok，选择**登录**，在浏览器打开的页面上完成登录，需要时输入 Koharu 显示的代码。
+
+    对 Ollama、LM Studio 或 OpenAI 兼容服务器，填写其**基础 URL**。Ollama 和 LM Studio
+    留空时使用其常用的本地地址，LM Studio 为 `http://localhost:1234`。OpenAI
+    兼容服务器需要一个在 OpenAI 的 `/v1` 处结尾的基础 URL，例如 `https://example.com/v1`。同时填写其**上下文长度**，即服务器运行模型时的上下文大小，例如
+    llama.cpp 的 `--ctx-size`：翻译会为保持一致而记住前面的页面，并在填满之前加以总结。留空时，页面会不断累积，直到服务器截断提示词，导致回答失败。
+
+  </Step>
+  <Step title='选择模型'>
+    打开处理选择器中的**模型**，或**设置 → 流水线 → 翻译器 → 模型**。打开处理选择器会刷新列表。没有密钥或无法连接的服务商不会列出模型。
+  </Step>
+  <Step title='先试一页'>检查原文，在当前页面运行翻译，确认结果后再处理整章。</Step>
+</Steps>
+
+## 凭据与隐私
+
+API 密钥和登录信息加密保存在 `~/.koharu/secrets.age` 中，其密钥保存在操作系统的凭据存储里；不会读取环境变量。基础 URL 保存在 `~/.koharu/config.toml` 的 `[providers]` 部分。**退出登录**会撤销并删除订阅登录，橡皮擦按钮会清除密钥。
+
+使用本地模型时，下载完成后页面和文字都留在你的设备上。托管服务商会收到它翻译的每一页的文字，开启**视觉**时还会收到页面图像，并按其自身的保留条款处理。本地检测和 OCR 不会让托管翻译请求变成本地处理。
+
+<Warning>不要把密钥写进附加指示、文本图层或配置文件。请通过**设置 → 提供商**保存凭据。</Warning>

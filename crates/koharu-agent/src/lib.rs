@@ -1,13 +1,13 @@
-//! Koharu's in-process, OAuth-backed Codex agent.
+//! Koharu's agent and its tools on an open project.
+
+// Proving a tool's future `Send` walks the renderer's wgpu types deeper than
+// the default 128.
+#![recursion_limit = "256"]
 
 mod agent;
-mod codex;
-mod config;
-mod control;
-mod tool;
+mod mcp;
+mod tools;
 
-pub use agent::{Agent, Event, Message, Role, RunId, RunResult};
-pub use codex::{Account, Codex, CodexModel, LoginEvent};
-pub use config::{Config, Reasoning};
-pub use control::Control;
-pub use tool::{Host, Invocation, Tool, ToolCall, ToolImage};
+pub use agent::{Agent, AgentConfig, Event};
+pub use mcp::McpServer;
+pub use tools::Tools;

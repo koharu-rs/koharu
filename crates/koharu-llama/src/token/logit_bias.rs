@@ -1,4 +1,4 @@
-﻿//! Safe wrapper around `llama_logit_bias`.
+//! Safe wrapper around `llama_logit_bias`.
 use crate::token::LlamaToken;
 
 /// A transparent wrapper around `llama_logit_bias`.

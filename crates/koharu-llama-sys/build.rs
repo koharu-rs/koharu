@@ -1,45 +1,19 @@
-use std::{env, path::PathBuf};
+/// llama.cpp's, ggml's, and mtmd's public API; the wrapper's `llama_rs_` names
+/// fall under `llama_`.
+const FUNCTIONS: &str = "^(ggml|gguf|llama|mtmd)_.*";
+const TYPES: &str = "^(ggml|gguf|llama|mtmd)_.*";
+const VARIABLES: &str = "^(GGML|GGUF|LLAMA|MTMD)_.*";
 
-use anyhow::Result;
-use koharu_bindgen::Generator;
-
-const HEADER: &str = "wrapper.h";
-const PUBLIC_HEADERS: &[&str] = &[
-    "include/llama.h",
-    "include/gguf.h",
-    "include/ggml.h",
-    "include/ggml-alloc.h",
-    "include/ggml-backend.h",
-    "include/ggml-cpu.h",
-    "include/ggml-opt.h",
-    "include/mtmd.h",
-    "include/mtmd-helper.h",
-];
-const FUNCTION_ALLOWLIST: &str = "^(ggml|gguf|llama|mtmd)_.*";
-const TYPE_ALLOWLIST: &str = "^(ggml|gguf|llama|mtmd)_.*";
-const VARIABLE_ALLOWLIST: &str = "^(GGML|GGUF|LLAMA|MTMD)_.*";
-
-fn main() -> Result<()> {
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed={HEADER}");
-    for path in PUBLIC_HEADERS {
-        println!("cargo:rerun-if-changed={path}");
-    }
-
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let include_dir = manifest_dir.join("include");
-    Generator::from_header(manifest_dir.join(HEADER), "llama")
-        .with_libraries(["llama", "mtmd"])
-        .with_bindgen(|builder| {
-            builder
-                .clang_arg(format!("-I{}", manifest_dir.display()))
-                .clang_arg(format!("-I{}", include_dir.display()))
-                .layout_tests(false)
-                .derive_partialeq(true)
-                .allowlist_function(FUNCTION_ALLOWLIST)
-                .allowlist_type(TYPE_ALLOWLIST)
-                .allowlist_var(VARIABLE_ALLOWLIST)
-                .prepend_enum_name(false)
-        })
-        .write_to_file(PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs"))
+fn main() {
+    koharu_bindgen::generate(|bindings| {
+        bindings
+            .allowlist_function(FUNCTIONS)
+            // ggml-cpu.h declares it, but llama.cpp defines it nowhere, so no
+            // build exports it and `load` would always fail.
+            .blocklist_function("ggml_threadpool_get_n_threads")
+            .allowlist_type(TYPES)
+            .allowlist_var(VARIABLES)
+            .derive_partialeq(true)
+            .prepend_enum_name(false)
+    });
 }

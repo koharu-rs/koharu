@@ -1,15 +1,25 @@
-//! Browser WebGPU canvas for prepared Koharu frames.
-//!
-//! Functional code is intentionally WASM-only. Native rendering, preparation,
-//! persistence, and durable edit validation belong to the application and
-//! `koharu-rasterizer`.
+//! The page viewport: draws a page with the renderer and turns window-space
+//! pointer events into edits for the host to apply.
 
-#[cfg(any(target_arch = "wasm32", test))]
-mod cache;
-#[cfg(target_arch = "wasm32")]
-mod surface;
-#[cfg(target_arch = "wasm32")]
-mod web;
+mod area;
+mod canvas;
+mod control;
+mod draw;
+mod effect;
+mod gesture;
+mod selection;
+mod settings;
+mod snapshot;
+#[cfg(test)]
+mod tests;
+mod tools;
+mod typing;
+mod view;
 
-#[cfg(target_arch = "wasm32")]
-pub use web::{WebCanvas, create_canvas};
+pub use canvas::Canvas;
+pub use effect::{Effect, Notice};
+pub use kurbo::{Point, Rect, Size, TranslateScale, Vec2};
+pub use settings::{Brush, Colors, Story, Tool};
+pub use snapshot::Snapshot;
+pub use typing::{CharKey, Typed};
+pub use view::Camera;

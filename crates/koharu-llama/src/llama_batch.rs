@@ -9,13 +9,16 @@ use std::marker::PhantomData;
 pub struct LlamaBatch<'a> {
     /// The number of tokens the batch was allocated with. they are safe to write to - but not necessarily read from as they are not necessarily initialized
     allocated: usize,
-    /// The logits that are initialized. Used by [`LlamaContext`] to ensure that only initialized logits are accessed.
-    pub(crate) initialized_logits: Vec<i32>,
     #[allow(clippy::doc_markdown)]
     /// The llama_cpp batch. always initialize by `koharu_llama_sys::llama_batch_init(allocated, <unknown>, <unknown>)`
     pub(crate) llama_batch: llama_batch,
     phantom: PhantomData<&'a [LlamaToken]>,
 }
+
+// SAFETY: The batch is POD, with getters using `&` and setters using `&mut`.
+unsafe impl Send for LlamaBatch<'_> {}
+// SAFETY: Same as above.
+unsafe impl Sync for LlamaBatch<'_> {}
 
 /// Errors that can occur when adding a token to a batch.
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
@@ -33,7 +36,6 @@ impl<'a> LlamaBatch<'a> {
     /// the number of tokens to 0.
     pub fn clear(&mut self) {
         self.llama_batch.n_tokens = 0;
-        self.initialized_logits.clear();
     }
 
     /// add a token to the batch for sequences `seq_ids` at position `pos`. If `logits` is true, the
@@ -83,12 +85,6 @@ impl<'a> LlamaBatch<'a> {
                 .logits
                 .add(offset_usize)
                 .write(i8::from(logits));
-        }
-
-        if logits {
-            self.initialized_logits.push(offset);
-        } else {
-            self.initialized_logits.retain(|l| l != &offset);
         }
 
         // batch.n_tokens++;
@@ -150,7 +146,6 @@ impl<'a> LlamaBatch<'a> {
 
         LlamaBatch {
             allocated: n_tokens,
-            initialized_logits: vec![],
             llama_batch: batch,
             phantom: PhantomData,
         }
@@ -182,11 +177,6 @@ impl<'a> LlamaBatch<'a> {
         };
         let batch = Self {
             allocated: 0,
-            initialized_logits: vec![
-                (tokens.len() - 1)
-                    .try_into()
-                    .expect("number of tokens exceeds i32::MAX + 1"),
-            ],
             llama_batch: batch,
             phantom: PhantomData,
         };
@@ -202,16 +192,6 @@ impl<'a> LlamaBatch<'a> {
 
 impl<'a> Drop for LlamaBatch<'a> {
     /// Drops the `LlamaBatch`.
-    ///
-    /// ```no_run
-    /// # use koharu_llama::llama_batch::LlamaBatch;
-    /// # use std::error::Error;
-    /// # fn main() -> Result<(), Box<dyn Error>> {
-    /// let batch = LlamaBatch::new(512, 1);
-    /// // frees the memory associated with the batch. (allocated by llama.cpp)
-    /// drop(batch);
-    /// # Ok(())
-    /// # }
     fn drop(&mut self) {
         unsafe {
             if self.allocated > 0 {

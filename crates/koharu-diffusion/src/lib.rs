@@ -1,65 +1,105 @@
-//! Safe, owning wrappers for the stable-diffusion.cpp C API.
-//!
-//! The crate mirrors the upstream API closely while keeping C strings, input
-//! buffers, contexts, generated images, and generated audio under Rust
-//! ownership. The native library is loaded dynamically by
-//! [`koharu_diffusion_sys`].
-//!
-//! Raster inputs and outputs use the `image` crate directly: [`RgbImage`] for
-//! generated/reference/control images and video frames, and [`GrayImage`] for
-//! masks.
-//!
-//! ```no_run
-//! use koharu_diffusion::{Context, ContextParams, ImageGenerationParams};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let context_params = ContextParams {
-//!     model_path: Some("model.gguf".into()),
-//!     ..ContextParams::default()
-//! };
-//! let mut context = Context::new(&context_params)?;
-//! let image_params = ImageGenerationParams {
-//!     prompt: "a watercolor fox reading by a window".into(),
-//!     ..ImageGenerationParams::default()
-//! };
-//! let images = context.generate_image(&image_params)?;
-//! println!("generated {} image(s)", images.len());
-//! images[0].save("output.png")?;
-//! # Ok(())
-//! # }
-//! ```
+//! stable-diffusion.cpp for Koharu's diffusion models.
 
-#![deny(unsafe_op_in_unsafe_fn)]
-
-mod callbacks;
 mod context;
-mod convert;
-mod enums;
-mod error;
-mod ffi;
-mod image;
+mod options;
 mod params;
-mod system;
-mod upscaler;
 
-pub use ::image::{GrayImage, RgbImage};
-pub use callbacks::{
-    GraphEvaluation, LogMessage, Preview, PreviewOptions, Progress,
-    clear_graph_evaluation_callback, clear_log_callback, clear_preview_callback,
-    clear_progress_callback, send_logs_to_tracing, set_graph_evaluation_callback, set_log_callback,
-    set_preview_callback, set_progress_callback,
-};
-pub use context::{CancelHandle, Context};
-pub use convert::{
-    CannyParams, ComponentConversion, Conversion, ImatrixCollector, begin_imatrix_collection,
-    convert, convert_with_components, load_imatrix, preprocess_canny,
-};
-pub use enums::*;
-pub use error::{Error, Result};
-pub use image::{Audio, RgbImageView, Video};
-pub use params::*;
-pub use system::{Device, commit, list_devices, physical_core_count, system_info, version};
-pub use upscaler::{Upscaler, UpscalerParams};
+use std::{ffi::CStr, path::PathBuf};
 
-/// Low-level bindings for functionality not yet represented by the safe API.
-pub use koharu_diffusion_sys as sys;
+use koharu_diffusion_sys as sys;
+
+pub use context::{Canceller, Context};
+pub use params::{Cache, ContextParams, ImageParams, SampleMethod, Scheduler, VaeFormat};
+
+/// A status stable-diffusion.cpp failed a call with, and the reason it gave.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum StatusError {
+    #[error("{0}")]
+    InvalidArgument(String),
+    #[error("{0}")]
+    UnknownKey(String),
+    #[error("{0}")]
+    TypeMismatch(String),
+    #[error("{0}")]
+    OutOfRange(String),
+    #[error("{0}")]
+    Unsupported(String),
+    #[error("{0}")]
+    OutOfMemory(String),
+    #[error("{0}")]
+    LoadFailed(String),
+    #[error("{0}")]
+    GenerationFailed(String),
+    #[error("{0}")]
+    Busy(String),
+    #[error("{0}")]
+    Cancelled(String),
+    #[error("status {0}: {1}")]
+    Unknown(sys::sd_status_t, String),
+}
+
+/// The status sd.cpp failed this thread's last call with, by the reason it
+/// keeps for that call until the next.
+impl From<sys::sd_status_t> for StatusError {
+    fn from(status: sys::sd_status_t) -> Self {
+        let reason = unsafe { sys::sd_get_last_error() };
+        let reason = match reason.is_null() {
+            true => String::new(),
+            false => unsafe { CStr::from_ptr(reason) }
+                .to_string_lossy()
+                .into_owned(),
+        };
+        match status {
+            sys::SD_STATUS_INVALID_ARGUMENT => Self::InvalidArgument(reason),
+            sys::SD_STATUS_UNKNOWN_KEY => Self::UnknownKey(reason),
+            sys::SD_STATUS_TYPE_MISMATCH => Self::TypeMismatch(reason),
+            sys::SD_STATUS_OUT_OF_RANGE => Self::OutOfRange(reason),
+            sys::SD_STATUS_UNSUPPORTED => Self::Unsupported(reason),
+            sys::SD_STATUS_OUT_OF_MEMORY => Self::OutOfMemory(reason),
+            sys::SD_STATUS_LOAD_FAILED => Self::LoadFailed(reason),
+            sys::SD_STATUS_GENERATION_FAILED => Self::GenerationFailed(reason),
+            sys::SD_STATUS_BUSY => Self::Busy(reason),
+            sys::SD_STATUS_CANCELLED => Self::Cancelled(reason),
+            status => Self::Unknown(status, reason),
+        }
+    }
+}
+
+/// An option sd.cpp couldn't be given or wouldn't take.
+#[derive(Debug, thiserror::Error)]
+pub enum OptionError {
+    #[error("{0} contains a NUL byte")]
+    Nul(&'static str),
+    #[error("{} isn't valid Unicode", .0.display())]
+    PathToStr(PathBuf),
+    #[error("stable-diffusion.cpp couldn't copy an image in")]
+    Image,
+    #[error("stable-diffusion.cpp refused an option")]
+    Refused(#[from] StatusError),
+}
+
+/// Loading a model failed.
+#[derive(Debug, thiserror::Error)]
+pub enum LoadError {
+    #[error(transparent)]
+    Option(#[from] OptionError),
+    #[error("stable-diffusion.cpp couldn't load the model")]
+    Status(#[from] StatusError),
+    #[error("null result from stable-diffusion.cpp")]
+    NullResult,
+    #[error("stable-diffusion.cpp can't generate images with this model")]
+    NoImages,
+}
+
+/// Generating images failed.
+#[derive(Debug, thiserror::Error)]
+pub enum GenerateError {
+    #[error(transparent)]
+    Option(#[from] OptionError),
+    #[error("stable-diffusion.cpp couldn't generate the images")]
+    Status(#[from] StatusError),
+    #[error("null result from stable-diffusion.cpp")]
+    NullResult,
+    #[error("stable-diffusion.cpp returned an image it can't have made")]
+    Output,
+}

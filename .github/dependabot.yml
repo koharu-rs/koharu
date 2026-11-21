@@ -8,14 +8,19 @@ updates:
 - package-ecosystem: "cargo" # See documentation for possible values
   directory: "/" # Location of package manifests
   schedule:
-    interval: "weekly"
+    interval: "daily"
+  groups:
+    minijinja:
+      patterns:
+        - "minijinja"
+        - "minijinja-contrib"
 
 - package-ecosystem: "bun"
   directory: "/"
   schedule:
-    interval: "weekly"
+    interval: "daily"
 
 - package-ecosystem: "github-actions"
   directory: "/"
   schedule:
-    interval: "weekly"
+    interval: "daily"

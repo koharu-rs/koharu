@@ -1,0 +1,156 @@
+---
+title: '故障排除'
+description: '定位问题，并收集能够帮助复现的诊断信息。'
+icon: 'circle-question'
+---
+
+先读取活动中心或错误消息中的完整错误。更改项目文件或存储目录前，确认出错的阶段。
+
+<AccordionGroup>
+  <Accordion title="首次运行无法完成">
+    首次运行模型时，Koharu 会下载适用于你的 GPU 的运行时软件包以及该模型的权重。请等待活动中心中的下载完成，并确认可以访问 GitHub、PyPI、AMD 仓库和 Hugging Face。
+
+    若反复失败，请关闭所有 Koharu 进程，更新 GPU 驱动，重启电脑，并在稳定网络下重试。记录完整错误。
+
+    进程可能仍加载着其中的库时，不要删除存储目录。
+
+  </Accordion>
+
+  <Accordion title="模型下载失败">
+    检查能否访问模型的 Hugging Face 仓库，以及存储目录所在磁盘的可用空间。代理、地区过滤、杀毒软件扫描或写入中断都可能阻止下载。
+
+    对同一模型重试一次。如果同一文件仍失败，请在报告中附上仓库、文件名和完整错误。
+
+  </Accordion>
+
+<Accordion title='模型无法在 GPU 上运行'>
+  Koharu 使用找到的最合适的 GPU，失败时不会改用其他 GPU，也没有纯 CPU
+  模式。请确认驱动满足[硬件](/zh/hardware)中的要求，并查看错误中提到的 GPU。在只有 Vulkan
+  的机器上，检测、OCR 和 LaMa 按设计在 CPU 上运行。
+</Accordion>
+
+<Accordion title='模型内存不足'>
+  Koharu
+  不会为了腾出空间而卸载模型，因此放不下的模型会失败并指出可用内存。请选择更小的模型，或在**设置 →
+  流水线**中把其他阶段换成更轻的模型以卸载较重的模型，然后重试。在大面积填充等操作之前，可选择**编辑
+  → 卸载模型**释放 Koharu 加载的所有模型；模型会在下次需要时重新加载。
+</Accordion>
+
+<Accordion title='检测或 OCR 漏掉文字'>
+  确认页面方向正确且清晰可读。更换 OCR
+  模型前先检查检测到的文本块。在多页上谨慎调整阈值并重新运行检测，日文可尝试漫画专用识别模型，并在重新翻译前修正原文。
+</Accordion>
+
+<Accordion title='修补损坏图稿'>
+  用移除工具涂抹更小的区域，避开对白框边线和线稿。先尝试
+  LaMa，再考虑更重的生成式模型。绘制前清除图层选择，让手动修整进入新的栅格图层。
+</Accordion>
+
+<Accordion title='翻译服务商失败'>
+  在**设置 → 提供商**中检查密钥、登录或基础 URL，然后重新打开处理选择器。对兼容服务器，请确认基础
+  URL 在 OpenAI 的 `/v1` 处结尾；如果模型不接受图像，请关闭**视觉**。
+</Accordion>
+
+<Accordion title='Koharu Agent 无法运行'>
+  在智能体面板中选择模型；只会列出能调用工具的模型。在**设置 →
+  提供商**中检查其服务商连接，重试前先取消正在进行的请求。
+</Accordion>
+
+<Accordion title='文字缺失或显示异常'>
+  确认文本块有译文、处于可见状态、不透明度不为零，并使用覆盖目标文字的字体。原文不会被绘制。
+</Accordion>
+
+  <Accordion title="导出结果与画布不同">
+    记录受影响的页面、格式、画布截图和导出图像。画布和导出都通过同一个渲染器绘制，明显差异请报告。
+  </Accordion>
+</AccordionGroup>
+
+## 收集详细日志
+
+Koharu 始终会把 INFO 及以上级别的消息写入日志文件，参见[数据位置](/zh/reference/data)。如需更多细节，请设置 `RUST_LOG` 并从终端启动 Koharu，该进程的调试日志会显示在终端中。终端是运行输入或粘贴命令的窗口，复现期间请保持打开。
+
+<Warning>
+  请先关闭 Koharu。在它运行时再次启动只会把已打开的窗口调到前面，日志设置只对新启动的进程生效。
+</Warning>
+
+<Tabs>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="打开 PowerShell">
+        在开始菜单搜索 **PowerShell**，打开 **Windows PowerShell**。Windows Terminal 的 PowerShell 标签也可以。不要在命令提示符中运行这些命令。
+      </Step>
+      <Step title="启动 Koharu">
+        使用 `Ctrl+V` 或右键粘贴，然后按 Enter。不要复制窗口中的 `PS C:\Users\YourName>` 提示符。
+
+        ```powershell
+        $env:RUST_LOG="debug"; koharu.exe
+        ```
+      </Step>
+      <Step title="需要时使用完整路径">
+        如果无法识别命令，在开始菜单搜索 Koharu，右键选择**打开文件所在的位置**。打开快捷方式的**属性**并复制**目标**。替换下方示例路径，保留 `&` 和引号。
+
+        ```powershell
+        $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
+        ```
+      </Step>
+    </Steps>
+
+    环境变量仅在这个 PowerShell 窗口中有效，关闭窗口即可清除。
+
+  </Tab>
+  <Tab title="macOS">
+    按 `Command+Space` 搜索 **Terminal** 并回车。用 `Command+V` 粘贴并运行：
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+    如果找不到命令，使用安装路径：
+
+    ```bash
+    RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
+    ```
+
+    路径不存在时，请在 Finder 中确认应用位置并替换为实际路径。
+
+  </Tab>
+  <Tab title="Linux">
+    在应用菜单搜索 **Terminal**，或尝试 `Ctrl+Alt+T`。用 `Ctrl+Shift+V` 粘贴后按 Enter：
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+    找不到命令时，尝试 Debian/RPM 软件包的默认位置：
+
+    ```bash
+    RUST_LOG=debug /usr/bin/koharu
+    ```
+
+    文件不存在时，检查或重新安装对应发行版的软件包。
+
+  </Tab>
+</Tabs>
+
+用这次启动的 Koharu 复现问题。应用关闭前，终端可能一直输出而不出现新提示符。保留错误前后的内容，不要只复制最后一行。之后正常关闭应用；如果启动的进程卡住，可在终端按一次 `Ctrl+C`。
+
+## 保存日志文件
+
+打开新终端，运行对应平台的命令，复现问题后关闭 Koharu。日志会保存到用户主目录。如果短命令不可用，替换为之前使用的完整可执行文件路径。
+
+<Tabs>
+  <Tab title="Windows">
+    ```powershell
+    $env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
+    ```
+  </Tab>
+  <Tab title="macOS 与 Linux">
+    ```bash
+    RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
+    ```
+  </Tab>
+</Tabs>
+
+共享前，把凭据、私密文件名和页面文本替换为 `[removed]`，保留周围诊断信息。同时附上操作系统、Koharu 版本、目标操作、复现步骤和错误的大致时间。
+
+将文本日志附到 [GitHub issue](https://github.com/koharu-rs/koharu/issues)，或在 [Discord](https://discord.gg/mHvHkxGnUY)寻求帮助。

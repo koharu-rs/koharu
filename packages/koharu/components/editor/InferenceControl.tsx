@@ -4,28 +4,29 @@ import {
   Bot,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Play,
   Settings,
   Sparkles,
   Square,
 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { MenuPanel } from '@/components/controls/MenuPanel'
 import { ModelPicker } from '@/components/controls/ModelPicker'
-import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
-import { call, refreshTranslationModels, savePreferences } from '@/lib/backend'
-import { pipelineStages, receivePreferences, useKoharuStore, type PipelineScope } from '@/lib/store'
-import { modelKey, modelSelection, providerName } from '@/lib/translation'
+import { OutputPicker } from '@/components/controls/OutputPicker'
+import { modelName, vendorOf } from '@/lib/models'
+import { send, useModels, usePreferences, useSavePreferences } from '@/lib/queries'
+import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
+import { languageName } from '@/lib/translation'
 import {
   commands,
   type Model,
-  type ModelSelection,
-  type ProviderPreference,
+  type Preferences,
   type Stage,
-} from '@koharu/bridge/protocol'
+  type TranslatorConfig,
+} from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
@@ -49,11 +50,6 @@ export function InferenceControl({
   const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
   const unavailable = scope === 'selected-pages' && selectedPages.length === 0
 
-  const stop = () => {
-    if (!running) return
-    void call(commands.stopJob, running.id).catch(() => undefined)
-  }
-
   return (
     <div className='flex items-center gap-1'>
       <RuntimeSelector
@@ -74,7 +70,7 @@ export function InferenceControl({
         )}
         disabled={(disabled || unavailable) && !running}
         aria-label={running ? t('inference.stopProcessing') : t('inference.runProcessing')}
-        onClick={running ? stop : () => onRun(scope, stages)}
+        onClick={running ? () => send(commands.stopPipeline) : () => onRun(scope, stages)}
       >
         {running ? <Square className='size-3 fill-current' /> : <Play className='size-3' />}
         <span>{running ? t('inference.stop') : t('inference.run')}</span>
@@ -98,60 +94,43 @@ function RuntimeSelector({
   onScopeChange: (scope: PipelineScope) => void
   onStagesChange: (stages: Stage[]) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<SelectorView>('root')
-  const [loadingModels, setLoadingModels] = useState(false)
-  const [savingModel, setSavingModel] = useState<string | null>(null)
-  const [savingOutput, setSavingOutput] = useState(false)
-  const preferences = useKoharuStore((state) => state.preferences)
-  const translationModels = useKoharuStore((state) => state.translationModels)
+  const preferences = usePreferences().data
+  const models = useModels()
+  const saveModel = useSavePreferences()
+  const saveOutput = useSavePreferences()
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
-  const model = preferences?.pipeline.translation.model ?? null
-  const translation = preferences?.pipeline.translation ?? null
-  const providers = preferences?.providers.entries ?? []
-  const languages = preferences?.languages ?? []
-  const choices = availableModels(model, translationModels, providers)
-  const modelLabel =
-    choices.find((choice) => model && modelKey(choice) === modelKey(model))?.name ??
-    (model ? (model.model ?? t('inference.providerDefault')) : t('inference.noModel'))
-  const outputLabel =
-    languages.find((language) => language.tag === translation?.target_language)?.name ??
-    translation?.target_language ??
-    t('inference.notSet')
+  const translator = preferences?.pipeline.translator ?? null
+  const model = translator?.model || null
+  const choices = availableModels(model, models.data ?? [])
+  const modelLabel = model ? modelName(choices, model) : t('inference.noModel')
+  const target = translator?.target
+  const outputLabel = target ? languageName(target, i18n.language) : t('inference.notSet')
+
+  /** The preferences with the translator's section changed. */
+  const withTranslator = (preferences: Preferences, change: Partial<TranslatorConfig>) => ({
+    ...preferences,
+    pipeline: {
+      ...preferences.pipeline,
+      translator: { ...preferences.pipeline.translator, ...change },
+    },
+  })
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
     setView('root')
-    if (!next) return
-    setLoadingModels(true)
-    void refreshTranslationModels(true)
-      .catch(() => undefined)
-      .finally(() => setLoadingModels(false))
+    if (next) void models.refetch()
   }
 
-  const chooseModel = (next: Model) => {
-    if (!preferences || savingModel) return
-    if (model && modelKey(model) === modelKey(next)) {
+  const chooseModel = (next: string) => {
+    if (!preferences || saveModel.isPending) return
+    if (next === model) {
       setView('root')
       return
     }
-
-    const key = modelKey(next)
-    setSavingModel(key)
-    const pipeline = {
-      ...preferences.pipeline,
-      translation: {
-        ...preferences.pipeline.translation,
-        model: modelSelection(next),
-      },
-    }
-    void savePreferences(pipeline, preferences.providers, preferences.typesetting)
-      .then((saved) => {
-        receivePreferences(saved)
-      })
-      .catch(() => undefined)
-      .finally(() => setSavingModel(null))
+    saveModel.mutate(withTranslator(preferences, { model: next }))
   }
 
   const chooseScope = (next: PipelineScope) => {
@@ -159,23 +138,9 @@ function RuntimeSelector({
     setView('root')
   }
 
-  const saveOutput = (draft: OutputDraft) => {
-    if (!preferences || !translation || savingOutput) return
-    setSavingOutput(true)
-    const pipeline = {
-      ...preferences.pipeline,
-      translation: {
-        ...translation,
-        target_language: draft.targetLanguage,
-        instructions: draft.instructions || null,
-      },
-    }
-    void savePreferences(pipeline, preferences.providers, preferences.typesetting)
-      .then((saved) => {
-        receivePreferences(saved)
-      })
-      .catch(() => undefined)
-      .finally(() => setSavingOutput(false))
+  const chooseOutput = (next: string) => {
+    if (!preferences || saveOutput.isPending) return
+    saveOutput.mutate(withTranslator(preferences, { target: next }))
   }
 
   const toggleStage = (stage: Stage) => {
@@ -207,11 +172,7 @@ function RuntimeSelector({
         <ChevronDown className='size-3 shrink-0' />
       </PopoverTrigger>
 
-      <PopoverContent
-        align='start'
-        sideOffset={4}
-        className='w-64 min-w-0 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
-      >
+      <PopoverContent align='start' sideOffset={4} className='w-64 gap-0 overflow-hidden p-1'>
         {view === 'root' && (
           <div className='grid gap-0.5' aria-label={t('inference.shortcuts')}>
             <SelectorRow
@@ -243,7 +204,7 @@ function RuntimeSelector({
               type='button'
               variant='ghost'
               size='sm'
-              className='h-8 justify-start gap-2 rounded-lg px-2 text-[11px] font-normal text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+              className='h-7 justify-start gap-2 rounded-md px-2 text-[11px] font-normal text-muted-foreground hover:bg-primary/10 hover:text-foreground'
               onClick={() => {
                 setOpen(false)
                 setSettingsOpen(true)
@@ -258,88 +219,63 @@ function RuntimeSelector({
           <ModelPicker
             value={model}
             models={choices}
-            providers={providers}
-            loading={loadingModels}
-            disabled={running}
-            busyModel={savingModel}
+            loading={models.isFetching}
+            disabled={running || saveModel.isPending}
             onBack={() => setView('root')}
             onSelect={chooseModel}
           />
         )}
 
         {view === 'scope' && (
-          <SelectorPanel title={t('inference.scope')} onBack={() => setView('root')}>
-            <SelectorOption
-              value='page'
-              label={t('inference.currentPage')}
-              detail={t('inference.currentPageDescription')}
-              selected={scope === 'page'}
-              onSelect={chooseScope}
-            />
-            <SelectorOption
-              value='selected-pages'
-              label={t('inference.selectedPages')}
-              detail={
-                selectionCount
-                  ? t('inference.selectedCount', { count: selectionCount })
-                  : t('inference.selectPagesFirst')
-              }
-              selected={scope === 'selected-pages'}
-              disabled={selectionCount === 0}
-              onSelect={chooseScope}
-            />
-            <SelectorOption
-              value='project'
-              label={t('inference.entireProject')}
-              detail={t('inference.entireProjectDescription')}
-              selected={scope === 'project'}
-              onSelect={chooseScope}
-            />
-          </SelectorPanel>
+          <MenuPanel title={t('inference.scope')} onBack={() => setView('root')}>
+            <div className='grid min-w-0 gap-0.5'>
+              <SelectorOption
+                value='selected-pages'
+                label={t('inference.selectedPages')}
+                detail={
+                  selectionCount
+                    ? t('inference.selectedCount', { count: selectionCount })
+                    : t('inference.selectPagesFirst')
+                }
+                selected={scope === 'selected-pages'}
+                disabled={selectionCount === 0}
+                onSelect={chooseScope}
+              />
+              <SelectorOption
+                value='project'
+                label={t('inference.entireProject')}
+                detail={t('inference.entireProjectDescription')}
+                selected={scope === 'project'}
+                onSelect={chooseScope}
+              />
+            </div>
+          </MenuPanel>
         )}
 
         {view === 'stages' && (
-          <SelectorPanel title={t('inference.pipelineStages')} onBack={() => setView('root')}>
-            <SelectorOption
-              value='detection'
-              label={t('phase.detection')}
-              detail={t('phaseDescription.detection')}
-              selected={stages.includes('detection')}
-              onSelect={toggleStage}
-            />
-            <SelectorOption
-              value='ocr'
-              label={t('phase.ocr')}
-              detail={t('phaseDescription.ocr')}
-              selected={stages.includes('ocr')}
-              onSelect={toggleStage}
-            />
-            <SelectorOption
-              value='translation'
-              label={t('phase.translation')}
-              detail={t('phaseDescription.translation')}
-              selected={stages.includes('translation')}
-              onSelect={toggleStage}
-            />
-            <SelectorOption
-              value='inpainting'
-              label={t('phase.inpainting')}
-              detail={t('phaseDescription.inpainting')}
-              selected={stages.includes('inpainting')}
-              onSelect={toggleStage}
-            />
-          </SelectorPanel>
+          <MenuPanel title={t('inference.pipelineStages')} onBack={() => setView('root')}>
+            <div className='grid min-w-0 gap-0.5'>
+              {pipelineStages.map((stage) => (
+                <SelectorOption
+                  key={stage}
+                  value={stage}
+                  label={t(`phase.${stage}`)}
+                  detail={t(`phaseDescription.${stage}`)}
+                  selected={stages.includes(stage)}
+                  onSelect={toggleStage}
+                />
+              ))}
+            </div>
+          </MenuPanel>
         )}
 
-        {view === 'output' && translation && (
+        {view === 'output' && translator && (
           <OutputPicker
-            targetLanguage={translation.target_language}
-            instructions={translation.instructions}
-            languages={languages}
+            targetLanguage={translator.target ?? 'en'}
             disabled={running}
-            saving={savingOutput}
+            saving={saveOutput.isPending}
             onBack={() => setView('root')}
-            onChange={saveOutput}
+            onChange={chooseOutput}
           />
         )}
       </PopoverContent>
@@ -362,7 +298,7 @@ function SelectorRow({
       variant='ghost'
       size='sm'
       aria-label={`${label} ${value}`}
-      className='h-8 min-w-0 justify-start gap-3 overflow-hidden rounded-lg px-2 text-[11px] font-normal hover:bg-primary/10'
+      className='h-7 min-w-0 justify-start gap-3 overflow-hidden rounded-md px-2 text-[11px] font-normal hover:bg-primary/10'
       onClick={onClick}
     >
       <span className='shrink-0'>{label}</span>
@@ -371,36 +307,6 @@ function SelectorRow({
       </span>
       <ChevronRight className='size-3.5 shrink-0 text-muted-foreground' />
     </Button>
-  )
-}
-
-function SelectorPanel({
-  title,
-  onBack,
-  children,
-}: {
-  title: string
-  onBack: () => void
-  children: ReactNode
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className='min-w-0 overflow-hidden'>
-      <div className='mb-1 flex h-7 items-center border-b border-border/60 px-0.5 pb-1'>
-        <Button
-          type='button'
-          variant='ghost'
-          size='icon-xs'
-          aria-label={t('common.back')}
-          className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
-          onClick={onBack}
-        >
-          <ChevronLeft className='size-3.5' />
-        </Button>
-        <span className='ml-1 text-[11px] font-medium'>{title}</span>
-      </div>
-      <div className='grid min-w-0 gap-0.5 overflow-hidden'>{children}</div>
-    </div>
   )
 }
 
@@ -437,20 +343,16 @@ function SelectorOption<Value extends string>({
   )
 }
 
-function availableModels(
-  selected: ModelSelection | null,
-  models: Model[],
-  providers: ProviderPreference[],
-): Model[] {
-  if (!selected || models.some((model) => modelKey(model) === modelKey(selected))) return models
+/** The models to pick from, with the one the preferences hold first when the list lacks it. */
+function availableModels(selected: string | null, models: Model[]): Model[] {
+  if (!selected || models.some((model) => model.reference === selected)) return models
   return [
     {
-      provider: selected.provider,
-      model: selected.model ?? null,
-      name: selected.model ?? providerName(providers, selected.provider),
-      quantizations: [],
-      vision: selected.vision ?? false,
-      reasoning: selected.reasoning ?? false,
+      reference: selected,
+      name: selected,
+      vendor: vendorOf(selected),
+      images: false,
+      tools: false,
     },
     ...models,
   ]

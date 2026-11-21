@@ -1,97 +1,76 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+//! What a run is asked to do.
 
-use anyhow::{Result, bail};
+use std::collections::BTreeSet;
+
+use koharu_scene::{LayerId, PageId, Rect};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use specta::Type;
+use strum::{Display, VariantArray};
 
-use crate::{ProgressSink, Scope, Stage};
-use koharu_scene::EntityId;
+use crate::PipelineConfig;
 
-#[derive(Clone, Debug)]
-pub struct InpaintingMask {
-    pub page: EntityId,
-    pub png: Arc<[u8]>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-pub enum Operation {
-    #[default]
-    Full,
-    Through {
-        stage: Stage,
-    },
-    Only {
-        stage: Stage,
-    },
-    Stages {
-        stages: Vec<Stage>,
-    },
-}
-
-impl Operation {
-    pub(crate) fn stages(&self) -> Result<Vec<Stage>> {
-        let stages = match self {
-            Self::Full => Stage::ALL.to_vec(),
-            Self::Through {
-                stage: Stage::Detection,
-            } => vec![Stage::Detection],
-            Self::Through { stage: Stage::Ocr } => vec![Stage::Detection, Stage::Ocr],
-            Self::Through {
-                stage: Stage::Translation,
-            } => {
-                vec![Stage::Detection, Stage::Ocr, Stage::Translation]
-            }
-            Self::Through {
-                stage: Stage::Inpainting,
-            } => vec![Stage::Detection, Stage::Inpainting],
-            Self::Only { stage } => vec![*stage],
-            Self::Stages { stages } => Stage::ALL
-                .into_iter()
-                .filter(|stage| stages.contains(stage))
-                .collect(),
-        };
-        if stages.is_empty() {
-            bail!("at least one pipeline stage must be selected");
-        }
-        Ok(stages)
-    }
-}
-
-#[derive(Clone)]
+/// One run: `stages` on a target, each page's in stage order.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Request {
-    pub operation: Operation,
-    pub scope: Scope,
-    pub stop: StopToken,
-    pub progress: Option<ProgressSink>,
-    pub inpainting_mask: Option<InpaintingMask>,
+    pub target: Target,
+    pub stages: BTreeSet<Stage>,
+    /// For this run only; the pipeline's own otherwise.
+    #[serde(default)]
+    pub config: Option<PipelineConfig>,
 }
 
-impl Default for Request {
-    fn default() -> Self {
-        Self {
-            operation: Operation::Full,
-            scope: Scope::Project,
-            stop: StopToken::default(),
-            progress: None,
-            inpainting_mask: None,
-        }
-    }
+/// What a run works on. It runs every stage it's given on everything it
+/// names, replacing what's there, and never a stage it isn't given.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[derive(specta::Type)]
+pub enum Target {
+    /// Every page.
+    Project,
+    Pages(Vec<PageId>),
+    /// Recognition, inpainting, or translation on blocks.
+    Blocks(Vec<LayerId>),
+    /// Inpainting only: a new raster layer limited by a layer mask to the
+    /// area, as Photoshop's Generative Fill and Content-Aware Fill write one.
+    /// Its prompt goes ahead of the inpainter section's; LaMa, which takes
+    /// none, ignores it.
+    Area {
+        page: PageId,
+        area: Area,
+        prompt: Option<String>,
+    },
 }
 
-#[derive(Clone, Default)]
-pub struct StopToken(Arc<AtomicBool>);
+/// A stage, in the order a page's stages run.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    VariantArray,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+#[derive(specta::Type)]
+pub enum Stage {
+    Detect,
+    Recognize,
+    Inpaint,
+    Translate,
+}
 
-impl StopToken {
-    pub fn stop(&self) {
-        self.0.store(true, Ordering::Release);
-    }
-
-    #[must_use]
-    pub fn stopped(&self) -> bool {
-        self.0.load(Ordering::Acquire)
-    }
+/// A painted area of a page: a byte a pixel over `rect`, in page pixels,
+/// painted where it isn't 0.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, specta::Type)]
+pub struct Area {
+    pub rect: Rect,
+    pub pixels: Vec<u8>,
 }

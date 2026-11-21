@@ -1,4 +1,4 @@
-﻿//! Safe wrappers around `llama_token_data` and `llama_token_data_array`.
+//! Safe wrappers around `llama_token_data` and `llama_token_data_array`.
 
 use std::fmt::Debug;
 use std::fmt::Display;
