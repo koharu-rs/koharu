@@ -5,7 +5,7 @@
   ],
   "scripts": {
     "tauri": "cargo tauri",
-    "postinstall": "cargo install tauri-cli --git https://github.com/tauri-apps/tauri --rev 323f9cb94174e37c1d80d942a9065910d00d01f2 --locked",
+    "postinstall": "cargo install tauri-cli --git https://github.com/mayocream/tauri --rev 67bbfdf1696ad85db5be6931c9c66f45e22a736c --locked",
     "predev": "kill-port 3000",
     "dev": "cargo tauri dev",
     "build": "cargo tauri build --no-bundle",
