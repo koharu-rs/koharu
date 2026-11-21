@@ -14,22 +14,23 @@ import {
 } from '@/components/preferences/PreferenceFields'
 import { call, dispatch, refreshModels } from '@/lib/backend'
 import { queryClient } from '@/lib/queries'
+import { type Vendor, vendors } from '@/lib/vendors'
 import {
   Channel,
   commands,
   type Endpoint,
   type Providers,
   type SignInPrompt,
-  type Vendor,
 } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 
-const vendorsKey = ['vendors'] as const
+const connectedKey = ['connected-vendors'] as const
 
-/** Lists the vendors and models again after a key or a sign-in changed. */
+/** Asks again which vendors are connected, and lists the models again, after a key or a sign-in
+ * changed. */
 async function vendorsChanged() {
-  await queryClient.invalidateQueries({ queryKey: vendorsKey })
+  await queryClient.invalidateQueries({ queryKey: connectedKey })
   await refreshModels(true)
 }
 
@@ -44,9 +45,13 @@ export function ProviderPreferences({
   onChange: (value: Providers) => void
 }) {
   const { t } = useTranslation()
-  const vendors = useQuery({
-    queryKey: vendorsKey,
-    queryFn: () => call(commands.listVendors),
+  const connected = useQuery({
+    queryKey: connectedKey,
+    queryFn: () =>
+      call(
+        commands.listConnected,
+        vendors.map((vendor) => vendor.name),
+      ),
   })
   /** `vendor`'s endpoint with `patch` merged in; an endpoint with nothing left set goes. */
   const update = (vendor: string, patch: Endpoint) => {
@@ -67,17 +72,27 @@ export function ProviderPreferences({
         title={t('settings.providers.connections')}
         description={t('settings.providers.connectionsDescription')}
       >
-        {(vendors.data ?? []).map((vendor) => (
+        {vendors.map((vendor) => (
           <PreferenceRow key={vendor.name} title={vendorName(vendor.name, t)} align='start'>
             <div className='grid gap-2'>
-              {vendor.signs_in ? <SignInField vendor={vendor} /> : <KeyField vendor={vendor} />}
+              {vendor.signsIn ? (
+                <SignInField
+                  vendor={vendor}
+                  connected={connected.data?.includes(vendor.name) ?? false}
+                />
+              ) : (
+                <KeyField
+                  vendor={vendor}
+                  connected={connected.data?.includes(vendor.name) ?? false}
+                />
+              )}
               {vendor.server && (
                 <BaseUrlField
                   value={value[vendor.name]?.base_url ?? ''}
                   onChange={(base_url) => update(vendor.name, { base_url })}
                 />
               )}
-              {vendor.context_window && (
+              {vendor.contextWindow && (
                 <ContextWindowField
                   value={value[vendor.name]?.context_window ?? null}
                   onChange={(context_window) => update(vendor.name, { context_window })}
@@ -92,7 +107,7 @@ export function ProviderPreferences({
 }
 
 /** A vendor's key, written to the credential store when the field loses the focus. */
-function KeyField({ vendor }: { vendor: Vendor }) {
+function KeyField({ vendor, connected }: { vendor: Vendor; connected: boolean }) {
   const { t } = useTranslation()
   const inputId = useId()
   const [draft, setDraft] = useState('')
@@ -121,9 +136,7 @@ function KeyField({ vendor }: { vendor: Vendor }) {
           spellCheck={false}
           value={draft}
           placeholder={
-            vendor.connected
-              ? t('settings.providers.configured')
-              : t('settings.providers.notConfigured')
+            connected ? t('settings.providers.configured') : t('settings.providers.notConfigured')
           }
           className='h-8 min-w-0 flex-1 text-[12px] [-webkit-text-security:disc] [&::placeholder]:[-webkit-text-security:none]'
           onChange={(event) => setDraft(event.currentTarget.value)}
@@ -132,7 +145,7 @@ function KeyField({ vendor }: { vendor: Vendor }) {
             if (event.key === 'Enter') event.currentTarget.blur()
           }}
         />
-        {vendor.connected && (
+        {connected && (
           <Button
             type='button'
             variant='outline'
@@ -150,7 +163,7 @@ function KeyField({ vendor }: { vendor: Vendor }) {
 
 /** A vendor's sign-in with the user's plan: a button that signs in, showing the page and the code
  * the sign-in waits on, or signs out. The browser opens on the page unless the sign-in opened it. */
-function SignInField({ vendor }: { vendor: Vendor }) {
+function SignInField({ vendor, connected }: { vendor: Vendor; connected: boolean }) {
   const { t } = useTranslation()
   const [waiting, setWaiting] = useState(false)
   const [prompt, setPrompt] = useState<SignInPrompt | null>(null)
@@ -226,13 +239,13 @@ function SignInField({ vendor }: { vendor: Vendor }) {
           size='sm'
           className='justify-self-start'
           aria-label={
-            vendor.connected
+            connected
               ? t('settings.providers.signOutLabel', { provider: name })
               : t('settings.providers.signInLabel', { provider: name })
           }
-          onClick={vendor.connected ? signOut : () => void signIn()}
+          onClick={connected ? signOut : () => void signIn()}
         >
-          {vendor.connected ? t('settings.providers.signOut') : t('settings.providers.signIn')}
+          {connected ? t('settings.providers.signOut') : t('settings.providers.signIn')}
         </Button>
       )}
     </div>
