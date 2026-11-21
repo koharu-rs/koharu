@@ -40,7 +40,7 @@ use llguidance::{Matcher, ParserFactory, api::TopLevelGrammar};
 use rig_core::error::{ErrorReport, ProviderError};
 use tokio::sync::mpsc::UnboundedSender;
 
-use super::{Sampling, Size, template::Template};
+use super::{Sampling, Size, markup, template::Template};
 
 /// Only instructions and history are worth sharing; a shorter common prefix is
 /// the chat template's header.
@@ -70,9 +70,9 @@ pub(super) struct Job {
     pub(super) images: Vec<Vec<u8>>,
     pub(super) sampling: Sampling,
     pub(super) schema: Option<String>,
-    /// The marker after which `schema` holds the reply, which reasons
-    /// freely up to it.
-    pub(super) answer_after: Option<&'static str>,
+    /// The opening and closing markers of the reasoning the reply may write
+    /// before `schema` holds it.
+    pub(super) answer_after: Option<(&'static str, &'static str)>,
     pub(super) frames: UnboundedSender<Result<Step, ProviderError>>,
 }
 
@@ -280,14 +280,30 @@ enum Picker {
     /// token with the highest logit the grammar allows.
     Guided(Box<Matcher>),
     /// Reasoning by `first`'s picks until the reply writes `close`, then the
-    /// answer by `then`'s, as llama.cpp's lazy grammar starts at a trigger.
+    /// answer by `then`'s. Reasoning the prompt didn't open comes only at the
+    /// reply's start, so a reply whose first text past whitespace can't open
+    /// it is answer from that token on, as llama.cpp's Gemma 4 grammar holds
+    /// an optional thought and then the schema
+    /// (common/parsers/gemma4.cpp at b12565).
     Reasoning {
         first: Box<Picker>,
+        /// The marker the reply opens its reasoning with, until it has.
+        open: Option<&'static str>,
         close: &'static str,
-        /// The reply's last bytes, to find `close` across tokens.
+        /// The reply's last bytes, to find `open` and `close` across tokens.
         tail: Vec<u8>,
         then: Box<Picker>,
     },
+}
+
+impl Picker {
+    /// Ends reasoning: the answer's picks follow.
+    fn answer(&mut self) {
+        *self = match std::mem::replace(self, Self::Chain(LlamaSampler::greedy())) {
+            Self::Reasoning { then, .. } => *then,
+            picker => picker,
+        };
+    }
 }
 
 impl Sequence {
@@ -585,8 +601,9 @@ impl<'m> Engine<'m> {
             history.iter().copied(),
         )?;
         let picker = match job.answer_after {
-            Some(close) => Picker::Reasoning {
+            Some((open, close)) => Picker::Reasoning {
                 first: Box::new(self.picker(&job.sampling, None, history.iter().copied())?),
+                open: (!markup::opened(open, &job.prompt)).then_some(open),
                 close,
                 tail: Vec::new(),
                 then: Box::new(answer),
@@ -700,20 +717,34 @@ impl<'m> Engine<'m> {
     /// The token `picker` picks from the logits of output `index`.
     fn pick(&self, picker: &mut Picker, index: i32) -> LlamaToken {
         if let Picker::Reasoning {
-            first, close, tail, ..
+            first,
+            open,
+            close,
+            tail,
+            ..
         } = picker
         {
             let token = self.pick(first, index);
             tail.extend(self.model.vocab().token_to_piece(token, true, None));
+            if let Some(marker) = *open {
+                let space = tail.len() - tail.trim_ascii_start().len();
+                tail.drain(..space);
+                if tail.starts_with(marker.as_bytes()) {
+                    *open = None;
+                } else if marker.as_bytes().starts_with(tail.as_slice()) {
+                    return token;
+                } else {
+                    // This token is the answer's first, so the schema picks it.
+                    picker.answer();
+                    return self.pick(picker, index);
+                }
+            }
             let done = tail.ends_with(close.as_bytes());
             if tail.len() > 2 * close.len() {
                 tail.drain(..tail.len() - close.len());
             }
-            if done
-                && let Picker::Reasoning { then, .. } =
-                    std::mem::replace(picker, Picker::Chain(LlamaSampler::greedy()))
-            {
-                *picker = *then;
+            if done {
+                picker.answer();
             }
             return token;
         }

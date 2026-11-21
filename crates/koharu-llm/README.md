@@ -58,7 +58,7 @@ fails open on structured output.
 | prompts | the model's own chat template from its GGUF, rendered as llama.cpp renders it with its Jinja engine | |
 | decoding | one thread owns the model, and its sequences decode together | llama.cpp's parallel decoding [llama.cpp parallel] |
 | reuse | a request reuses the longest prefix any sequence holds, at least 64 tokens; a recurrent model keeps a checkpoint of its state short of each prompt's end to go back to, with the same answer as decoding the whole prompt again | |
-| reasoning and tool calls | read from the reply as it streams, by markers its template writes; a reply held to a schema reasons freely, and the grammar holds it from the reasoning's end | |
+| reasoning and tool calls | read from the reply as it streams, by markers its template writes; a reply held to a schema may reason first, where its prompt left reasoning open or by opening it at its start, and the grammar holds the rest, so markers in the answer are text | llama.cpp's Gemma 4 grammar: an optional thought, then the schema [llama.cpp Gemma 4] |
 
 ## 4. Context
 
@@ -81,7 +81,7 @@ Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
-- llama.cpp: [llama.cpp fit], [llama.cpp parallel]
+- llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp Gemma 4]
 
 [rig]: https://github.com/0xPlaygrounds/rig
 [Ollama API]: https://github.com/ollama/ollama/blob/main/docs/api.md
@@ -93,3 +93,4 @@ Read in November 2026.
 [OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
 [llama.cpp fit]: https://github.com/ggml-org/llama.cpp/blob/785322d17f2d/common/fit.h
 [llama.cpp parallel]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/examples/parallel/parallel.cpp#L264-L476
+[llama.cpp Gemma 4]: https://github.com/ggml-org/llama.cpp/blob/d7d1b632da766f1247456b4f42406a96a0609d93/common/parsers/gemma4.cpp#L344-L351
