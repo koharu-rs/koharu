@@ -1,3 +1,9 @@
+## [0.90.2](https://github.com/koharu-rs/koharu/compare/0.90.1..0.90.2) - 2026-11-21
+
+### 🐛 Bug Fixes
+
+- *(app)* Give real key presses their KeyboardEvent.code on Windows and Linux, so Delete, Backspace, and the arrow keys reach their shortcuts - ([22f4ec3](https://github.com/koharu-rs/koharu/commit/22f4ec300c675a374931e5b7a7929c4ae250eeba))
+
 ## [0.90.1](https://github.com/koharu-rs/koharu/compare/0.90.0..0.90.1) - 2026-11-21
 
 ### 🐛 Bug Fixes
