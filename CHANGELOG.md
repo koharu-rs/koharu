@@ -1,3 +1,13 @@
+## [0.91.0](https://github.com/koharu-rs/koharu/compare/0.90.3..0.91.0) - 2026-11-21
+
+### ⛰️  Features
+
+- *(linux)* Ship an AppImage again, packaged like the .deb so it runs on the host's own libraries - ([41d01b3](https://github.com/koharu-rs/koharu/commit/41d01b35897cdf3b4a5387f4edd33332a7f2949c))
+
+### 🐛 Bug Fixes
+
+- *(sentry)* Send reports over rustls, so Koharu no longer links the system's OpenSSL 3 - ([d1c5b2a](https://github.com/koharu-rs/koharu/commit/d1c5b2ab88443a1903fb58bf79facb887e044194))
+
 ## [0.90.3](https://github.com/koharu-rs/koharu/compare/0.90.2..0.90.3) - 2026-11-21
 
 ### 🐛 Bug Fixes
