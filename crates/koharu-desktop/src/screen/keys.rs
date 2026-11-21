@@ -1,11 +1,13 @@
 //! The keyboard and input method, as CEF takes them: key events identified by
-//! Windows virtual-key codes, text as character events, and the input
-//! method's composition through CEF's IME calls.
+//! Windows virtual-key codes and the platform's scan codes, text as character
+//! events, and the input method's composition through CEF's IME calls.
 
 use tauri_runtime_cef::cef::{
     BrowserHost, CefString, CompositionUnderline, CompositionUnderlineStyle, ImplBrowserHost as _,
     KeyEvent as CefKeyEvent, KeyEventType, Range, sys::cef_event_flags_t,
 };
+#[cfg(windows)]
+use winit::platform::scancode::PhysicalKeyExtScancode as _;
 use winit::{
     event::{ElementState, Ime, KeyEvent},
     keyboard::{Key, KeyCode, ModifiersState, PhysicalKey},
@@ -55,6 +57,8 @@ pub fn send_key(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState)
         },
         modifiers: flags,
         windows_key_code: windows_key_code(event),
+        #[cfg(any(windows, target_os = "linux"))]
+        native_key_code: native_key_code(event),
         // Windows sends Alt's chords as system keys, which aren't text.
         is_system_key: i32::from(modifiers.alt_key() && !modifiers.control_key()),
         ..Default::default()
@@ -125,9 +129,29 @@ pub fn send_ime(host: &BrowserHost, ime: &Ime) {
     }
 }
 
-/// The Windows virtual-key code Chromium identifies a key by, which it also
-/// derives `KeyboardEvent.code` from. A letter is the layout's, as Windows
-/// reports it; every other key is its position's on a US layout.
+/// The key's native keycode, which CEF turns into `KeyboardEvent.code`
+/// through Chromium's `NativeKeycodeToDomCode`; without it the page's key
+/// events have no code. On Windows it's the scan code, `0xe0`-prefixed when
+/// extended.
+#[cfg(windows)]
+fn native_key_code(event: &KeyEvent) -> i32 {
+    event
+        .physical_key
+        .to_scancode()
+        .map_or(0, |scancode| scancode as i32)
+}
+
+/// On Linux it's the XKB keycode, the evdev code plus 8, back through the
+/// keymap tauri-winit's GTK backend made the physical key with.
+#[cfg(target_os = "linux")]
+fn native_key_code(event: &KeyEvent) -> i32 {
+    winit_common::xkb::physicalkey_to_scancode(event.physical_key)
+        .map_or(0, |scancode| scancode as i32 + 8)
+}
+
+/// The Windows virtual-key code Chromium identifies a key by. A letter is the
+/// layout's, as Windows reports it; every other key is its position's on a US
+/// layout.
 fn windows_key_code(event: &KeyEvent) -> i32 {
     if let Key::Character(text) = &event.logical_key
         && let Some(letter) = text.chars().next().filter(char::is_ascii_alphabetic)

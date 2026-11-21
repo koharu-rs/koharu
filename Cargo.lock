@@ -5685,6 +5685,7 @@ dependencies = [
  "webp",
  "wgpu",
  "windows",
+ "winit-common",
  "zip 9.7.3",
 ]
 

@@ -187,6 +187,8 @@ vello_gpu = "0.4.0"
 webp = { version = "0.3.1" }
 wgpu = "30.0.1"
 winit = "0.30.13"
+# The XKB keymap tauri-winit's GTK backend makes its physical keys with.
+winit-common = { version = "=0.31.0-beta.3", features = ["xkb"] }
 windows = { version = "0.62.2", features = [
     "Win32",
     "Win32_Devices_Display",

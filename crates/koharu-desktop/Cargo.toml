@@ -66,3 +66,6 @@ zip = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+winit-common = { workspace = true }
