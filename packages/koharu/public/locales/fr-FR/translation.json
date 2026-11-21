@@ -47,6 +47,8 @@
   "colorPicker": {
     "brushColor": "Couleur du pinceau",
     "hexCode": "Code couleur hexadécimal",
+    "recent": "Couleurs récentes",
+    "recentColor": "Couleur récente {{color}}",
     "sampleCanvas": "Prélever une couleur sur le canevas",
     "transparent": "Transparent"
   },

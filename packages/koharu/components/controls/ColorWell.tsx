@@ -1,12 +1,13 @@
 'use client'
 
 import { Pipette, SquareSlash } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
 import { toHex, toRgba } from '@/lib/color'
+import { rememberColor, useColorHistory } from '@/lib/colorHistory'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
@@ -36,7 +37,9 @@ export function ColorWell(props: ColorWellProps) {
   const [transparent, setTransparent] = useState(value === null)
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState<{ text: string; color: string } | null>(null)
+  const opened = useRef(draft)
   const sampling = useColorSampling()
+  const recent = useColorHistory((state) => state.colors)
   const accessibleLabel = label ?? t('colorPicker.brushColor')
 
   useEffect(() => {
@@ -63,8 +66,16 @@ export function ColorWell(props: ColorWellProps) {
     props.onChange(null)
   }
 
+  // A colour joins the history when the popover closes on it, so the drags and the keystrokes of a
+  // hex code that led there don't fill it; canvas picks join it in `ColorSamplingProvider`.
+  const openChange = (next: boolean) => {
+    if (next) opened.current = draft
+    else if (!transparent && draft !== opened.current) rememberColor(draft)
+    setOpen(next)
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={openChange}>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -136,6 +147,20 @@ export function ColorWell(props: ColorWellProps) {
             </Button>
           )}
         </div>
+        {recent.length > 0 && (
+          <div role='group' aria-label={t('colorPicker.recent')} className='mt-3 flex gap-1'>
+            {recent.map((color) => (
+              <button
+                key={color}
+                type='button'
+                aria-label={t('colorPicker.recentColor', { color })}
+                className='size-5 rounded-[3px] ring-1 ring-black/15 outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                style={{ backgroundColor: color }}
+                onClick={() => set(color)}
+              />
+            ))}
+          </div>
+        )}
         {allowTransparent && (
           <Button
             type='button'

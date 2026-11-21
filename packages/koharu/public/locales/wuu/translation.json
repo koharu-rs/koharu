@@ -47,6 +47,8 @@
   "colorPicker": {
     "brushColor": "笔刷颜色",
     "hexCode": "十六进制颜色代码",
+    "recent": "最近用过个颜色",
+    "recentColor": "最近用过个颜色 {{color}}",
     "sampleCanvas": "从画布浪取颜色",
     "transparent": "透明"
   },
