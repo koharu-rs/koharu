@@ -323,7 +323,7 @@ impl Compositor {
 
     /// The frame again, drawn into a texture and read back as RGBA.
     fn capture(&self, gpu: &Gpu, (width, height): (u32, u32)) -> Result<RgbaImage> {
-        let texture = gpu.checked(|| {
+        let texture = gpu.catch(|| {
             Ok(gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("koharu capture"),
                 size: wgpu::Extent3d {
@@ -381,7 +381,7 @@ impl Layer {
                     .contains(wgpu::TextureUsages::COPY_DST)
         });
         if !sized {
-            let texture = gpu.checked(|| {
+            let texture = gpu.catch(|| {
                 Ok(gpu.device.create_texture(&wgpu::TextureDescriptor {
                     label: Some("koharu web paint"),
                     size: wgpu::Extent3d {

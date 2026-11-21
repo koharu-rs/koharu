@@ -18,7 +18,7 @@ impl Target {
     pub fn new(gpu: &Arc<Gpu>, width: u32, height: u32) -> anyhow::Result<Self> {
         // Rendered into by vello_gpu, sampled by the host, and copied out
         // for a snapshot.
-        let texture = gpu.checked(|| {
+        let texture = gpu.catch(|| {
             Ok(gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("koharu canvas"),
                 size: wgpu::Extent3d {

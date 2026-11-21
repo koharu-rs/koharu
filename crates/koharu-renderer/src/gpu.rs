@@ -130,7 +130,7 @@ impl Gpu {
         .context("no GPU adapter supports vello_gpu's features")?;
         // wgpu panics on an error no scope catches, and Koharu's panic hook
         // closes the app, so a GPU short of memory, or lost, ended Koharu in
-        // the middle of a thumbnail. Reads fail through `checked` instead,
+        // the middle of a thumbnail. Reads fail through `catch` instead,
         // and the rest is logged.
         device.on_uncaptured_error(Arc::new(|error| tracing::error!("GPU error: {error}")));
         // wgpu calls it as it loses the device, before the call that lost it
@@ -197,7 +197,7 @@ impl Gpu {
     /// for it on this thread, inside error scopes, so a GPU error fails it
     /// rather than leaving what it reads back blank, or an invalid resource
     /// to be kept: wgpu makes one that ran out of memory invalid for good.
-    pub fn checked<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
+    pub fn catch<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
         let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let result = work();
@@ -215,7 +215,7 @@ impl Gpu {
     /// premultiplied RGBA, as vello_gpu draws it, read back as straight
     /// alpha.
     pub fn read_texture(&self, texture: &Texture) -> Result<RgbaImage> {
-        self.checked(|| {
+        self.catch(|| {
             let (width, height) = (texture.width(), texture.height());
             let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
                 * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
@@ -318,7 +318,7 @@ impl Drawing<'_> {
     /// straight-alpha RGBA.
     pub(crate) fn read(self) -> Result<RgbaImage> {
         let gpu = self.gpu;
-        gpu.checked(move || {
+        gpu.catch(move || {
             let texture = gpu.device.create_texture(&TextureDescriptor {
                 label: Some("koharu raster"),
                 size: Extent3d {
@@ -428,7 +428,7 @@ impl Drawing<'_> {
             Some(uploaded) => uploaded,
             None => {
                 let gpu = self.gpu;
-                let texture = gpu.checked(|| {
+                let texture = gpu.catch(|| {
                     Ok(gpu.device.create_texture_with_data(
                         &gpu.queue,
                         &TextureDescriptor {
