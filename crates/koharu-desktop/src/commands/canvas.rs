@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use koharu_canvas::{Brush, Colors, Rect, Story, Tool};
+use koharu_canvas::{Brush, Colors, Rect, Story, Tool, Vec2};
 use koharu_scene::{CharStyle, LayerId};
 use tauri::State;
 
@@ -64,6 +64,14 @@ pub fn set_zoom(app: State<'_, Arc<App>>, zoom: f64) {
 #[specta::specta]
 pub fn select(app: State<'_, Arc<App>>, layers: Vec<LayerId>) {
     app.screen.select(Arc::clone(&app), layers);
+}
+
+/// Moves the selection `dx` and `dy` page pixels with the Move tool, as
+/// Photoshop's arrow keys nudge it.
+#[tauri::command]
+#[specta::specta]
+pub fn nudge(app: State<'_, Arc<App>>, dx: f64, dy: f64) {
+    app.screen.nudge(Arc::clone(&app), Vec2::new(dx, dy));
 }
 
 /// Drops the area the marquee and the lasso marked, as Photoshop's Deselect

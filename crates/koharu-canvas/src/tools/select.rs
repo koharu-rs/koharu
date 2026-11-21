@@ -1,12 +1,12 @@
 //! The select tool: a click, a drag of the selection, the marquee, and what
 //! the pointer hovers.
 
-use koharu_scene::LayerId;
-use kurbo::{Point, Rect};
+use koharu_scene::{Edit, LayerId, Op};
+use kurbo::{Affine, Point, Rect, Vec2};
 
 use super::{
     command,
-    transform::{Mode, Transform},
+    transform::{Mode, Transform, transformed},
 };
 use crate::{
     Effect,
@@ -74,14 +74,31 @@ pub(crate) fn hover(cx: &Context, page: Point) -> Option<LayerId> {
 
 /// A move of `selection`'s unlocked layers from `page`.
 fn drag(cx: &Context, selection: &[LayerId], page: Point) -> Gesture {
-    let controls: Vec<Control> = cx
-        .snapshot
+    let controls = movable(cx, selection).cloned().collect();
+    Gesture::Transform(Transform::new(cx, Mode::Move, page, controls))
+}
+
+/// An arrow key's move of the selection `by` page pixels, as Photoshop's
+/// Move tool nudges it: the layers a drag takes, in one edit.
+pub(crate) fn nudge(cx: &Context, by: Vec2) -> Vec<Effect> {
+    let ops: Vec<Op> = movable(cx, cx.selection.ids())
+        .map(|control| transformed(control, Affine::translate(by)))
+        .collect();
+    if ops.is_empty() {
+        return Vec::new();
+    }
+    vec![Effect::Edit(Edit {
+        label: "move".to_owned(),
+        ops,
+    })]
+}
+
+/// The selected layers a move takes: the unlocked ones the canvas shows.
+fn movable<'a>(cx: &Context<'a>, selection: &'a [LayerId]) -> impl Iterator<Item = &'a Control> {
+    cx.snapshot
         .controls()
         .iter()
-        .filter(|control| selection.contains(&control.layer) && !control.locked)
-        .cloned()
-        .collect();
-    Gesture::Transform(Transform::new(cx, Mode::Move, page, controls))
+        .filter(move |control| selection.contains(&control.layer) && !control.locked)
 }
 
 /// A selection rectangle, from where it started to where it is, in page

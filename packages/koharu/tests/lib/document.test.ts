@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dropMoves, nudgeable } from '@/lib/document'
+import { dropMoves } from '@/lib/document'
 import type { Layer } from '@koharu/ipc/protocol'
 
 /** A shown, unlocked layer of `kind` holding `children`, with only what dropping reads. */
@@ -30,26 +30,5 @@ describe('dropMoves', () => {
       { layer: 'free', parent: 'balloon', index: 1 },
     ])
     expect(dropMoves(page, ['panel'], { target: 'balloon', zone: 'after' })).toBeNull()
-  })
-})
-
-describe('nudgeable', () => {
-  it('moves what the scene lets move, with the layers inside a container', () => {
-    const locked = { ...layer('locked', 'raster'), locked: true } as Layer
-    const frozen = {
-      ...layer('frozen', 'group', [layer('inside', 'raster')]),
-      locked: true,
-    } as Layer
-    const page = [
-      layer('panel', 'panel', [
-        layer('block', 'block'),
-        layer('folder', 'group', [layer('deep', 'raster')]),
-      ]),
-      layer('free', 'raster'),
-      locked,
-      frozen,
-    ]
-    expect(nudgeable(page, ['panel', 'block', 'free'])).toEqual(['panel', 'block', 'deep', 'free'])
-    expect(nudgeable(page, ['locked', 'frozen', 'inside', 'gone'])).toEqual([])
   })
 })

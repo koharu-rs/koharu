@@ -22,6 +22,14 @@ import { commands, type Rgba } from '@koharu/ipc/protocol'
 const command = { preventDefault: true, useKey: true } as const
 const tools = Object.keys(toolKeys) as CanvasTool[]
 
+/** Each arrow key's step in page pixels, y growing downward. */
+const nudges: Record<string, [number, number] | undefined> = {
+  arrowleft: [-1, 0],
+  arrowright: [1, 0],
+  arrowup: [0, -1],
+  arrowdown: [0, 1],
+}
+
 /** The canvas's place in the window. The native canvas draws the page under the web interface
  * wherever this element and its ancestors paint nothing, and takes the pointer there; the
  * interface sets its tool, brush, and colours, and hears its camera and selection. */
@@ -114,6 +122,21 @@ export function CanvasWorkspace() {
       if (selectedLayers.length) send(deleteSelection, selectedLayers, page?.layers ?? [])
     },
     { preventDefault: () => selectedLayers.length > 0 },
+  )
+  // Photoshop's Move tool nudges the selection a pixel, and ten with Shift; the canvas moves what
+  // a drag would. A focused control that took the key, such as a slider, keeps it.
+  useHotkeys(
+    Object.keys(nudges).flatMap((key) => [key, `shift+${key}`]),
+    (_, { keys, shift }) => {
+      const [dx, dy] = nudges[keys?.[0] ?? ''] ?? [0, 0]
+      const distance = shift ? 10 : 1
+      send(commands.nudge, dx * distance, dy * distance)
+    },
+    {
+      enabled: tool === 'select' && selectedLayers.length > 0,
+      preventDefault: true,
+      ignoreEventWhen: (event) => event.defaultPrevented,
+    },
   )
   useHotkeys('escape', () => {
     colorSampling?.cancel()
