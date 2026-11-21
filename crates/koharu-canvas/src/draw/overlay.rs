@@ -4,7 +4,7 @@
 
 use koharu_renderer::{Drawing, Frame, Label};
 use koharu_scene::Rgba;
-use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Shape, Stroke};
+use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Shape, Stroke, Vec2};
 use vello_gpu::peniko::{BlendMode, Color, Compose, Fill, Mix};
 
 use crate::{
@@ -66,6 +66,38 @@ impl<'a, 'g> Overlay<'a, 'g> {
 
     pub fn control(&mut self, control: &Control) {
         self.outline(control.outline());
+    }
+
+    /// When `control`'s text runs past its frame, the overflow mark on the
+    /// frame's top-left corner, where Photoshop marks paragraph type that
+    /// overflows its box on the lower-right one. Koharu still draws the text
+    /// that runs past, so no line goes missing from an export.
+    pub fn overflow(&mut self, control: &Control) {
+        if control.overflows {
+            let at = self.view.to_screen() * control.handle_point(Handle::NorthWest, self.view);
+            self.overflow_mark(at);
+        }
+    }
+
+    /// Photoshop's overflow mark, a plus in a hollow square, centred on `at`
+    /// in the viewport.
+    fn overflow_mark(&mut self, at: Point) {
+        let scale = self.view.scale();
+        let side = (HANDLE + 4.0) * scale;
+        let square = Rect::from_center_size(at, (side, side));
+        let selection = color(self.colors.selection);
+        let line = Stroke::new(scale);
+        self.filled(Affine::IDENTITY, Color::WHITE, &square);
+        self.stroked(line.clone(), selection, &square);
+        let arm = side * 0.3;
+        let across = Vec2::new(arm, 0.0);
+        let down = Vec2::new(0.0, arm);
+        self.stroked(
+            line.clone(),
+            selection,
+            &Line::new(at - across, at + across),
+        );
+        self.stroked(line, selection, &Line::new(at - down, at + down));
     }
 
     /// What's selected while typing: the selection's colour, faint, over
@@ -152,13 +184,19 @@ impl<'a, 'g> Overlay<'a, 'g> {
         self.stroked(stroke, selection.with_alpha(alpha), &path);
     }
 
-    /// A text's place in reading order in a pill centred on the frame's
-    /// top-left `corner`, a page point: filled for dialogue and outlined for
-    /// a sound effect, as Story's numbers are. `label` is the number laid out
-    /// in the colour that shows on the pill.
-    pub fn story_number(&mut self, corner: Point, label: &Label, sfx: bool) -> anyhow::Result<()> {
+    /// `control`'s place in reading order in a pill centred on its frame's
+    /// top-left corner: filled for dialogue and outlined for a sound effect,
+    /// as Story's numbers are, and the overflow mark beside it, where the
+    /// pill would hide it, when its text runs past its frame. `label` is the
+    /// number laid out in the colour that shows on the pill.
+    pub fn story_number(
+        &mut self,
+        control: &Control,
+        label: &Label,
+        sfx: bool,
+    ) -> anyhow::Result<()> {
         let scale = self.view.scale();
-        let corner = self.view.to_screen() * corner;
+        let corner = self.view.to_screen() * control.corners()[0];
         let text = label.bounds();
         let height = NUMBER * scale;
         let width = ((text.width() + 8.0) * scale).max(height);
@@ -178,7 +216,13 @@ impl<'a, 'g> Overlay<'a, 'g> {
         let at = Affine::translate(middle)
             * Affine::scale(scale)
             * Affine::translate(-text.center().to_vec2());
-        label.draw(self.drawing, at)
+        label.draw(self.drawing, at)?;
+        if control.overflows {
+            let side = (HANDLE + 4.0) * scale;
+            let beside = Point::new(pill.rect().x1 + 2.0 * scale + side * 0.5, corner.y);
+            self.overflow_mark(beside);
+        }
+        Ok(())
     }
 
     /// The corner squares of a control resizing by them, and the rotate

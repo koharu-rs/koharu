@@ -85,6 +85,8 @@ pub(crate) struct Control {
     /// Whether a click or a marquee on the canvas picks it; a block's
     /// clean-up is picked only by its button in Layers.
     pub picks: bool,
+    /// Whether its text runs past its frame, which its outline marks.
+    pub overflows: bool,
     local: Rect,
     transform: Affine,
     /// `local` on the page, and its bounds, kept since every pointer move
@@ -110,6 +112,7 @@ impl Control {
             rotates,
             locked,
             picks: true,
+            overflows: false,
             local,
             transform,
             outline,
