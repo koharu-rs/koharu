@@ -121,7 +121,8 @@ export function TypeBar() {
   const frame = lettering?.frame ?? 'point'
   // A box and a path fit their text alike, a balloon's translation in a path; point text has no fit.
   const fitted = typeof frame !== 'object' ? null : frame.box ? 'box' : 'path'
-  const autoFit = typeof frame === 'object' && (frame.box ?? frame.path)?.fit === 'best'
+  const fit = typeof frame === 'object' ? (frame.box ?? frame.path)?.fit : undefined
+  const autoFit = fit === 'best'
 
   /** Merges `patch` into each target's style, shown at once on the first. */
   const apply = (patch: TextStyle) => {
@@ -254,8 +255,11 @@ export function TypeBar() {
           canAutoFit={fitted !== null}
           onChange={(next) => {
             applyChars({ size: next })
-            // A set size is the most the text takes, as the frame's best fit would grow it.
-            if (autoFit && fitted) update({ frame: { [fitted]: { fit: 'shrink' } } })
+            // A typed size is the size the text draws at, as in Photoshop and Clip Studio Paint, so
+            // a frame that shrinks or grows its text stops fitting it; a growing box keeps the size.
+            if (fitted && fit !== 'none' && fit !== 'grow') {
+              update({ frame: { [fitted]: { fit: 'none' } } })
+            }
           }}
           onAutoFit={() => fitted && update({ frame: { [fitted]: { fit: 'best' } } })}
         />
