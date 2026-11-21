@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};
 
 pub use context::Context;
-pub use hosted::{Endpoint, Providers, SignInPrompt, sign_in, sign_out};
+pub use hosted::{Endpoint, Providers, SignInPrompt, VENDORS, sign_in, sign_out};
 pub use local::{Local, Quantization, Sampling, Size, local};
 pub use model::answers;
 pub use rig_agent::agent::AgentBuilder;
@@ -68,15 +68,15 @@ impl From<&ModelSpec> for Model {
     }
 }
 
-/// Every model the user can pick: Koharu's own, and each of `vendors`' that
-/// has a key or a sign-in, by rig's names. A vendor whose list fails is left
-/// out, with the failure logged.
-pub async fn models(vendors: &[String]) -> Vec<Model> {
+/// Every model the user can pick: Koharu's own, and each vendor's that has a
+/// key or a sign-in. A vendor whose list fails is left out, with the failure
+/// logged.
+pub async fn models() -> Vec<Model> {
     let mut models = local::specs();
     let listed = futures::future::join_all(
-        vendors
+        VENDORS
             .iter()
-            .map(|vendor| async move { (vendor, hosted::models(vendor).await) }),
+            .map(|&vendor| async move { (vendor, hosted::models(vendor).await) }),
     )
     .await;
     for (vendor, listed) in listed {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::future::{AbortHandle, Abortable};
 use koharu_agent::AgentConfig;
 use koharu_config::secrets::SecretString;
-use koharu_llm::{Model, Providers, SignInPrompt};
+use koharu_llm::{Model, Providers, SignInPrompt, VENDORS};
 use koharu_pipeline::PipelineConfig;
 use koharu_renderer::RendererConfig;
 use parking_lot::Mutex;
@@ -73,26 +73,35 @@ pub async fn save_preferences(
     .await??)
 }
 
-/// Koharu's own models, and each of `vendors`' that has a key or a sign-in,
-/// by rig's names, which the interface keeps.
+/// Koharu's own models, and each vendor's that has a key or a sign-in.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_models(vendors: Vec<String>) -> Vec<Model> {
-    koharu_llm::models(&vendors).await
+pub async fn list_models() -> Vec<Model> {
+    koharu_llm::models().await
 }
 
-/// Those of `vendors`, by rig's names, whose sign-in or key is stored.
+/// A vendor, by rig's name, and whether its sign-in or key is stored. What
+/// the user gives it, a key, a sign-in, a server, is the interface's to say.
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct Vendor {
+    pub name: String,
+    pub connected: bool,
+}
+
+/// Every vendor Koharu lists models from, in its order.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_connected(vendors: Vec<String>) -> Result<Vec<String>> {
-    Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
-        let mut connected = Vec::new();
-        for vendor in vendors {
-            if koharu_config::secrets::get(&vendor)?.is_some() {
-                connected.push(vendor);
-            }
-        }
-        Ok(connected)
+pub async fn list_vendors() -> Result<Vec<Vendor>> {
+    Ok(tokio::task::spawn_blocking(|| -> anyhow::Result<_> {
+        VENDORS
+            .iter()
+            .map(|&name| {
+                Ok(Vendor {
+                    name: name.to_owned(),
+                    connected: koharu_config::secrets::get(name)?.is_some(),
+                })
+            })
+            .collect()
     })
     .await??)
 }

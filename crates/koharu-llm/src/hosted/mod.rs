@@ -14,12 +14,32 @@ use rig_core::{
     catalog::{Catalog, ModelSpec, ReasoningSupport},
     driver::DynModel,
     operation::Completion,
-    providers::registry::{ConnectOptions, ProviderConfig, ProviderId},
+    providers::{
+        anthropic, deepseek, gemini, minimax, ollama, openai, openrouter,
+        registry::{ConnectOptions, ProviderConfig, ProviderId},
+        xai,
+    },
 };
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 
 pub(crate) use http::{Http, SignIn, reqwest};
+
+/// The vendors Koharu lists models from, by rig's names.
+pub const VENDORS: &[&str] = &[
+    openai::PROVIDER_NAME,
+    anthropic::PROVIDER_NAME,
+    gemini::PROVIDER_NAME,
+    xai::PROVIDER_NAME,
+    deepseek::PROVIDER_NAME,
+    minimax::PROVIDER_NAME,
+    openrouter::PROVIDER_NAME,
+    chatgpt::PROVIDER_NAME,
+    grok::PROVIDER_NAME,
+    ollama::PROVIDER_NAME,
+    lm_studio::PROVIDER_NAME,
+    openai_compatible::PROVIDER_NAME,
+];
 
 /// What a sign-in asks of the user: to sign in on a page, entering a code
 /// there for a device code.
@@ -228,27 +248,20 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
 
 #[cfg(test)]
 mod tests {
-    use rig_core::providers::{
-        anthropic, deepseek, gemini, minimax, ollama, openai, openrouter, xai,
-    };
-
     use super::*;
 
     /// Every vendor rig configures connects in its OpenAI, Anthropic, or
     /// Gemini format, and a model the catalog doesn't list keeps its id.
     #[test]
     fn every_vendor_connects() {
-        for vendor in [
-            openai::PROVIDER_NAME,
-            anthropic::PROVIDER_NAME,
-            gemini::PROVIDER_NAME,
-            xai::PROVIDER_NAME,
-            deepseek::PROVIDER_NAME,
-            minimax::PROVIDER_NAME,
-            openrouter::PROVIDER_NAME,
-            chatgpt::PROVIDER_NAME,
-            ollama::PROVIDER_NAME,
-        ] {
+        for vendor in VENDORS.iter().filter(|vendor| {
+            ![
+                grok::PROVIDER_NAME,
+                lm_studio::PROVIDER_NAME,
+                openai_compatible::PROVIDER_NAME,
+            ]
+            .contains(vendor)
+        }) {
             let spec = spec(catalog_id(vendor).unwrap(), "a-model-from-next-year");
             let options = ConnectOptions::new().api_key("key").http(Http::default());
             let model = Catalog::builtin().connect_with(&spec, options).unwrap();

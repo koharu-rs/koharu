@@ -6,7 +6,6 @@ import { commands } from '@koharu/ipc/protocol'
 import type { Preferences } from '@koharu/ipc/protocol'
 
 import { receiveError, receiveModels, receivePreferences } from './store'
-import { vendors } from './vendors'
 
 type Command<Args extends unknown[], Result> = (...args: Args) => Promise<Result>
 
@@ -65,10 +64,7 @@ export function refreshModels(force = false): Promise<void> {
   if (!force && modelsRequest) return modelsRequest
 
   const generation = ++modelsGeneration
-  const request = call(
-    commands.listModels,
-    vendors.map((vendor) => vendor.name),
-  )
+  const request = call(commands.listModels)
     .then((models) => {
       if (generation === modelsGeneration) receiveModels(models)
     })

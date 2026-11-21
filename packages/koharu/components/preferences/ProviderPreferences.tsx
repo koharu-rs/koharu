@@ -14,23 +14,23 @@ import {
 } from '@/components/preferences/PreferenceFields'
 import { call, dispatch, refreshModels } from '@/lib/backend'
 import { queryClient } from '@/lib/queries'
-import { type Vendor, vendors } from '@/lib/vendors'
+import { vendorTraits } from '@/lib/vendors'
 import {
   Channel,
   commands,
   type Endpoint,
   type Providers,
   type SignInPrompt,
+  type Vendor,
 } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 
-const connectedKey = ['connected-vendors'] as const
+const vendorsKey = ['vendors'] as const
 
-/** Asks again which vendors are connected, and lists the models again, after a key or a sign-in
- * changed. */
+/** Lists the vendors and models again after a key or a sign-in changed. */
 async function vendorsChanged() {
-  await queryClient.invalidateQueries({ queryKey: connectedKey })
+  await queryClient.invalidateQueries({ queryKey: vendorsKey })
   await refreshModels(true)
 }
 
@@ -45,13 +45,9 @@ export function ProviderPreferences({
   onChange: (value: Providers) => void
 }) {
   const { t } = useTranslation()
-  const connected = useQuery({
-    queryKey: connectedKey,
-    queryFn: () =>
-      call(
-        commands.listConnected,
-        vendors.map((vendor) => vendor.name),
-      ),
+  const vendors = useQuery({
+    queryKey: vendorsKey,
+    queryFn: () => call(commands.listVendors),
   })
   /** `vendor`'s endpoint with `patch` merged in; an endpoint with nothing left set goes. */
   const update = (vendor: string, patch: Endpoint) => {
@@ -72,42 +68,35 @@ export function ProviderPreferences({
         title={t('settings.providers.connections')}
         description={t('settings.providers.connectionsDescription')}
       >
-        {vendors.map((vendor) => (
-          <PreferenceRow key={vendor.name} title={vendorName(vendor.name, t)} align='start'>
-            <div className='grid gap-2'>
-              {vendor.signsIn ? (
-                <SignInField
-                  vendor={vendor}
-                  connected={connected.data?.includes(vendor.name) ?? false}
-                />
-              ) : (
-                <KeyField
-                  vendor={vendor}
-                  connected={connected.data?.includes(vendor.name) ?? false}
-                />
-              )}
-              {vendor.server && (
-                <BaseUrlField
-                  value={value[vendor.name]?.base_url ?? ''}
-                  onChange={(base_url) => update(vendor.name, { base_url })}
-                />
-              )}
-              {vendor.contextWindow && (
-                <ContextWindowField
-                  value={value[vendor.name]?.context_window ?? null}
-                  onChange={(context_window) => update(vendor.name, { context_window })}
-                />
-              )}
-            </div>
-          </PreferenceRow>
-        ))}
+        {(vendors.data ?? []).map((vendor) => {
+          const traits = vendorTraits[vendor.name] ?? {}
+          return (
+            <PreferenceRow key={vendor.name} title={vendorName(vendor.name, t)} align='start'>
+              <div className='grid gap-2'>
+                {traits.signsIn ? <SignInField vendor={vendor} /> : <KeyField vendor={vendor} />}
+                {traits.server && (
+                  <BaseUrlField
+                    value={value[vendor.name]?.base_url ?? ''}
+                    onChange={(base_url) => update(vendor.name, { base_url })}
+                  />
+                )}
+                {traits.contextWindow && (
+                  <ContextWindowField
+                    value={value[vendor.name]?.context_window ?? null}
+                    onChange={(context_window) => update(vendor.name, { context_window })}
+                  />
+                )}
+              </div>
+            </PreferenceRow>
+          )
+        })}
       </PreferenceSection>
     </PreferencePage>
   )
 }
 
 /** A vendor's key, written to the credential store when the field loses the focus. */
-function KeyField({ vendor, connected }: { vendor: Vendor; connected: boolean }) {
+function KeyField({ vendor }: { vendor: Vendor }) {
   const { t } = useTranslation()
   const inputId = useId()
   const [draft, setDraft] = useState('')
@@ -136,7 +125,9 @@ function KeyField({ vendor, connected }: { vendor: Vendor; connected: boolean })
           spellCheck={false}
           value={draft}
           placeholder={
-            connected ? t('settings.providers.configured') : t('settings.providers.notConfigured')
+            vendor.connected
+              ? t('settings.providers.configured')
+              : t('settings.providers.notConfigured')
           }
           className='h-8 min-w-0 flex-1 text-[12px] [-webkit-text-security:disc] [&::placeholder]:[-webkit-text-security:none]'
           onChange={(event) => setDraft(event.currentTarget.value)}
@@ -145,7 +136,7 @@ function KeyField({ vendor, connected }: { vendor: Vendor; connected: boolean })
             if (event.key === 'Enter') event.currentTarget.blur()
           }}
         />
-        {connected && (
+        {vendor.connected && (
           <Button
             type='button'
             variant='outline'
@@ -163,7 +154,7 @@ function KeyField({ vendor, connected }: { vendor: Vendor; connected: boolean })
 
 /** A vendor's sign-in with the user's plan: a button that signs in, showing the page and the code
  * the sign-in waits on, or signs out. The browser opens on the page unless the sign-in opened it. */
-function SignInField({ vendor, connected }: { vendor: Vendor; connected: boolean }) {
+function SignInField({ vendor }: { vendor: Vendor }) {
   const { t } = useTranslation()
   const [waiting, setWaiting] = useState(false)
   const [prompt, setPrompt] = useState<SignInPrompt | null>(null)
@@ -239,13 +230,13 @@ function SignInField({ vendor, connected }: { vendor: Vendor; connected: boolean
           size='sm'
           className='justify-self-start'
           aria-label={
-            connected
+            vendor.connected
               ? t('settings.providers.signOutLabel', { provider: name })
               : t('settings.providers.signInLabel', { provider: name })
           }
-          onClick={connected ? signOut : () => void signIn()}
+          onClick={vendor.connected ? signOut : () => void signIn()}
         >
-          {connected ? t('settings.providers.signOut') : t('settings.providers.signIn')}
+          {vendor.connected ? t('settings.providers.signOut') : t('settings.providers.signIn')}
         </Button>
       )}
     </div>

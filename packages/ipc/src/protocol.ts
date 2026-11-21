@@ -949,6 +949,15 @@ export type Typed = {
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value }
 
+/**
+ *  A vendor, by rig's name, and whether its sign-in or key is stored. What
+ *  the user gives it, a key, a sign-in, a server, is the interface's to say.
+ */
+export type Vendor = {
+  name: string
+  connected: boolean
+}
+
 export const commands = {
   listProjects: () => invoke<string[]>('list_projects', {}, { headers: headers() }),
   /** Creates a project and opens it. */
@@ -992,12 +1001,10 @@ export const commands = {
   /** Saves every section, hands each to its owner, and answers them as the file holds them now. */
   savePreferences: (preferences: Preferences) =>
     invoke<Preferences>('save_preferences', { preferences }, { headers: headers() }),
-  /** Koharu's own models, and each of `vendors`' that has a key or a sign-in, by rig's names, which the interface keeps. */
-  listModels: (vendors: string[]) =>
-    invoke<Model[]>('list_models', { vendors }, { headers: headers() }),
-  /** Those of `vendors`, by rig's names, whose sign-in or key is stored. */
-  listConnected: (vendors: string[]) =>
-    invoke<string[]>('list_connected', { vendors }, { headers: headers() }),
+  /** Koharu's own models, and each vendor's that has a key or a sign-in. */
+  listModels: () => invoke<Model[]>('list_models', {}, { headers: headers() }),
+  /** Every vendor Koharu lists models from, in its order. */
+  listVendors: () => invoke<Vendor[]>('list_vendors', {}, { headers: headers() }),
   /** Stores `vendor`'s API key, encrypted with the key the OS credential store keeps, or forgets it for `None`. */
   setApiKey: (vendor: string, key: string | null) =>
     invoke<null>('set_api_key', { vendor, key }, { headers: headers() }),
