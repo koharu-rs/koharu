@@ -485,11 +485,11 @@ pub fn key(app: &Arc<App>, event: &KeyEvent) {
         {
             main.input.keyboard = Side::Web;
         }
-        Some((main.host()?, main.input.modifiers))
+        Some((main.host()?, main.input.modifiers, main.input.field))
     })
     .flatten();
-    if let Some((host, modifiers)) = held {
-        keys::send_key(&host, event, modifiers);
+    if let Some((host, modifiers, field)) = held {
+        keys::send_key(&host, event, modifiers, field);
     }
 }
 

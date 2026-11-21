@@ -3,10 +3,11 @@
 //! events, and the input method's composition through CEF's IME calls.
 
 use tauri_runtime_cef::cef::{
-    BrowserHost, CefString, CompositionUnderline, CompositionUnderlineStyle, ImplBrowserHost as _,
-    KeyEvent as CefKeyEvent, KeyEventType, Range, sys::cef_event_flags_t,
+    BrowserHost, CefString, CompositionUnderline, CompositionUnderlineStyle, ImplBrowser as _,
+    ImplBrowserHost as _, ImplFrame as _, KeyEvent as CefKeyEvent, KeyEventType, Range,
+    sys::cef_event_flags_t,
 };
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use winit::platform::scancode::PhysicalKeyExtScancode as _;
 use winit::{
     event::{ElementState, Ime, KeyEvent},
@@ -45,10 +46,16 @@ pub fn flags(modifiers: ModifiersState, buttons: u32) -> u32 {
     flags
 }
 
-/// A key press or release, and the text a press types.
-pub fn send_key(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState) {
+/// A key press or release, and the text a press types. `field` is whether a
+/// field of the page's has the focus.
+pub fn send_key(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState, field: bool) {
     let flags = flags(modifiers, 0);
     let pressed = event.state == ElementState::Pressed;
+    let (character, unmodified_character) = if cfg!(target_os = "macos") {
+        characters(event)
+    } else {
+        (0, 0)
+    };
     host.send_key_event(Some(&CefKeyEvent {
         type_: if pressed {
             KeyEventType::RAWKEYDOWN
@@ -57,12 +64,16 @@ pub fn send_key(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState)
         },
         modifiers: flags,
         windows_key_code: windows_key_code(event),
-        #[cfg(any(windows, target_os = "linux"))]
         native_key_code: native_key_code(event),
         // Windows sends Alt's chords as system keys, which aren't text.
         is_system_key: i32::from(modifiers.alt_key() && !modifiers.control_key()),
+        character,
+        unmodified_character,
         ..Default::default()
     }));
+    if cfg!(target_os = "macos") && pressed && field {
+        edit(host, event, modifiers);
+    }
     // A shortcut isn't text; AltGr, which Windows reports as Control and
     // Alt together, types it.
     let shortcut = (modifiers.control_key() && !modifiers.alt_key()) || modifiers.meta_key();
@@ -75,11 +86,38 @@ pub fn send_key(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState)
                 type_: KeyEventType::CHAR,
                 modifiers: flags,
                 windows_key_code: i32::from(unit),
+                native_key_code: native_key_code(event),
                 character: unit,
                 unmodified_character: unit,
                 ..Default::default()
             }));
         }
+    }
+}
+
+/// Cut, Copy, Paste, Select All, Undo, and Redo in a field of the page's, for
+/// their Cmd chords on macOS, where Blink leaves them to the browser's Edit
+/// menu [Blink editing behavior], which doesn't reach this app's page.
+///
+/// [Blink editing behavior]: https://chromium.googlesource.com/chromium/src/+/161066f3d4245f28c30e428514ff38725b47e31c/third_party/blink/renderer/core/editing/editing_behavior.cc#171
+fn edit(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState) {
+    if !modifiers.meta_key() || modifiers.control_key() || modifiers.alt_key() {
+        return;
+    }
+    let Key::Character(letter) = &event.key_without_modifiers else {
+        return;
+    };
+    let Some(frame) = host.browser().and_then(|browser| browser.focused_frame()) else {
+        return;
+    };
+    match (letter.as_str(), modifiers.shift_key()) {
+        ("x", false) => frame.cut(),
+        ("c", false) => frame.copy(),
+        ("v", false) => frame.paste(),
+        ("a", false) => frame.select_all(),
+        ("z", false) => frame.undo(),
+        ("z", true) => frame.redo(),
+        _ => {}
     }
 }
 
@@ -132,8 +170,8 @@ pub fn send_ime(host: &BrowserHost, ime: &Ime) {
 /// The key's native keycode, which CEF turns into `KeyboardEvent.code`
 /// through Chromium's `NativeKeycodeToDomCode`; without it the page's key
 /// events have no code. On Windows it's the scan code, `0xe0`-prefixed when
-/// extended.
-#[cfg(windows)]
+/// extended, and on macOS the virtual key code.
+#[cfg(any(windows, target_os = "macos"))]
 fn native_key_code(event: &KeyEvent) -> i32 {
     event
         .physical_key
@@ -147,6 +185,21 @@ fn native_key_code(event: &KeyEvent) -> i32 {
 fn native_key_code(event: &KeyEvent) -> i32 {
     winit_common::xkb::physicalkey_to_scancode(event.physical_key)
         .map_or(0, |scancode| scancode as i32 + 8)
+}
+
+/// The key's characters with and without its modifiers, as macOS's `NSEvent`
+/// has them. CEF on macOS rebuilds the `NSEvent` from these and the native
+/// key code, and ignores `windows_key_code` [CEF key event].
+///
+/// [CEF key event]: https://github.com/chromiumembedded/cef/blob/6028375/libcef/browser/native/browser_platform_delegate_native_mac.mm#L484-L545
+fn characters(event: &KeyEvent) -> (u16, u16) {
+    let first = |text: &str| text.encode_utf16().next().unwrap_or(0);
+    let character = event.text_with_all_modifiers.as_deref().map_or(0, first);
+    let unmodified = match &event.key_without_modifiers {
+        Key::Character(text) => first(text),
+        _ => character,
+    };
+    (character, unmodified)
 }
 
 /// The Windows virtual-key code Chromium identifies a key by. A letter is the
