@@ -257,6 +257,18 @@ impl Canvas {
         self.selection.ids()
     }
 
+    /// Moves the selection `by` page pixels with the Move tool, as an arrow
+    /// key does; nothing with another tool. Returns the edit.
+    pub fn nudge(&mut self, by: Vec2) -> Vec<Effect> {
+        if self.tool != Tool::Select {
+            return Vec::new();
+        }
+        let effects = self
+            .context()
+            .map_or_else(Vec::new, |cx| tools::select::nudge(&cx, by));
+        self.apply(effects)
+    }
+
     /// Where the selection lies on the page, in page pixels, which the host
     /// places its own controls beside: its layers as they're laid out, a
     /// point text's lines included, and the handles drawn on them as far as

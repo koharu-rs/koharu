@@ -1088,6 +1088,9 @@ export const commands = {
   /** The selection the Layers panel made. */
   select: (layers: LayerId[]) =>
     runner('select', (options) => invoke<null>('select', { layers }, options)),
+  /** Moves the selection `dx` and `dy` page pixels with the Move tool, as Photoshop's arrow keys nudge it. */
+  nudge: (dx: number, dy: number) =>
+    runner('nudge', (options) => invoke<null>('nudge', { dx, dy }, options)),
   /** Fills the area the marquee and the lasso marked with `model` after `prompt`, or the inpainter's own prompt when there's none, as Photoshop's Generative Fill does with the model its bar shows; `None` while no area is marked. The model is this run's only, in the settings' place. */
   fill: (prompt: string | null, model: Inpainter) =>
     runner('fill', (options) => invoke<RunId | null>('fill', { prompt, model }, options)),
