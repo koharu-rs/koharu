@@ -57,8 +57,10 @@
     "loading": "Loading…"
   },
   "errors": {
+    "actionFailed": "Could not complete that action",
     "fatalTitle": "Koharu could not continue",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "unknown": "The native application returned an unknown error."
   },
   "feedback": {
     "addScreenshot": "Add a screenshot",
@@ -92,12 +94,16 @@
     "title": "Generative Fill"
   },
   "fontPicker": {
+    "addFavorite": "Add {{name}} to favorites",
     "choose": "Choose a font",
+    "favoritesOnly": "Show favorite fonts",
     "fontCount": "{{count}} fonts",
     "fontCount_one": "{{count}} font",
     "fontCount_other": "{{count}} fonts",
     "fonts": "Fonts",
+    "noFavorites": "No favorite fonts yet",
     "noResults": "No fonts match this search",
+    "removeFavorite": "Remove {{name}} from favorites",
     "search": "Search fonts"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "Border",
     "borderColor": "Border color",
     "borderWidth": "Border width",
+    "chooseBorderWidth": "Choose border width",
     "chooseFontSize": "Choose font size",
-    "decreaseBorderWidth": "Decrease border width",
     "font": "Font",
     "fontSize": "Font size",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "Font weight",
     "horizontal": "Horizontal",
-    "increaseBorderWidth": "Increase border width",
     "opacity": "Opacity",
     "selectPage": "Select a page to inspect its layers.",
     "source": "Source text",
@@ -191,20 +196,6 @@
     "translation": "Translation",
     "type": "Type",
     "vertical": "Vertical"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "Delete {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "Close Project",
     "delete": "Delete Selected",
     "discord": "Discord",
+    "donate": "Donate",
     "edit": "Edit",
     "export": "Export Project",
     "feedback": "Send Feedback",
@@ -295,9 +287,12 @@
       "recognize": "Recognize",
       "translate": "Translate"
     },
-    "selected": "{{count}} selected"
+    "selected": "{{count}} selected",
+    "translated": "{{translated}} of {{total}} translated"
   },
   "outputPicker": {
+    "noResults": "No languages match this search.",
+    "search": "Search languages",
     "targetLanguage": "Target language",
     "title": "Translation output"
   },
@@ -415,15 +410,18 @@
     },
     "title": "Settings",
     "typesetting": {
+      "addFallback": "Add a fallback",
       "addFamily": "Add font family",
-      "defaultFamilies": "Default font families",
       "description": "Set the ordered font stack used when a text layer has no assigned family.",
       "empty": "No default families. Koharu will use the system fallback.",
+      "fallbacks": "Fallbacks",
+      "fallbacksDescription": "Used in order for characters the primary lacks. Drag to reorder, or onto Primary to swap.",
       "familyLabel": "Default font family {{index}}",
       "fontFallback": "Preferred fonts",
       "fontFallbackDescription": "Koharu uses the first available family that supports the text.",
       "loadError": "Fonts could not be loaded. Existing families can still be removed.",
       "loadingFonts": "Loading fonts…",
+      "primary": "Primary",
       "removeFamily": "Remove {{family}}",
       "title": "Renderer"
     }
@@ -441,10 +439,12 @@
     "loadingProjects": "Loading projects…",
     "newDescription": "Create a clean workspace for your pages, translations, and exports.",
     "newProject": "New project",
+    "noResults": "No projects match this search.",
     "projectKind": "Koharu project",
     "projectList": "Projects",
     "projectName": "Project name",
     "projectNamePlaceholder": "My new project",
+    "search": "Search projects",
     "storageHint": "Projects are stored locally on this computer.",
     "title": "Projects",
     "yourProjects": "Your projects"

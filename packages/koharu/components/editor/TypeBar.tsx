@@ -1,22 +1,15 @@
 'use client'
 
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  ChevronDown,
-  Italic,
-  Minus,
-  Plus,
-  SquareSlash,
-} from 'lucide-react'
+import { useMutation } from '@tanstack/react-query'
+import { AlignCenter, AlignLeft, AlignRight, ChevronDown, Italic } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Choice } from '@/components/controls/Choice'
 import { ColorWell } from '@/components/controls/ColorWell'
 import { FontPicker } from '@/components/controls/FontPicker'
 import { ContextBar } from '@/components/editor/ContextBar'
-import { call, dispatch } from '@/lib/backend'
+import { toHex, toRgba } from '@/lib/color'
 import {
   expandLayerSelection,
   isBlockLayer,
@@ -24,9 +17,9 @@ import {
   letteringOf,
   walkLayers,
 } from '@/lib/document'
-import { useFonts, usePage } from '@/lib/queries'
+import { readPage, send, useFonts, usePage, usePreferences } from '@/lib/queries'
 import { setStyle, updateLayer } from '@/lib/scene'
-import { hexToRgba, rgbaToHex, useKoharuStore, type CanvasTool } from '@/lib/store'
+import { useKoharuStore, type CanvasTool } from '@/lib/store'
 import {
   commands,
   type Align,
@@ -34,6 +27,7 @@ import {
   type CharStyle,
   type Direction,
   type FontFamily,
+  type Layer,
   type LayerId,
   type Text,
   type TextStyle,
@@ -46,23 +40,10 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@koharu/ui/components/dropdown-menu'
-import {
-  NumberField,
-  NumberFieldDecrement,
-  NumberFieldGroup,
-  NumberFieldIncrement,
-  NumberFieldInput,
-} from '@koharu/ui/components/number-field'
-import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@koharu/ui/components/select'
+import { NumberField, NumberFieldGroup, NumberFieldInput } from '@koharu/ui/components/number-field'
 import { Toggle } from '@koharu/ui/components/toggle'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
+import { cn } from '@koharu/ui/lib/utils'
 
 /** The renderer's own default when `[renderer]` names no font. */
 const FALLBACK_FONT = 'CCWildWords'
@@ -82,12 +63,9 @@ const TOOLS: CanvasTool[] = ['select', 'direct_select', 'text']
 export function TypeBar() {
   const { t } = useTranslation()
   const tool = useKoharuStore((state) => state.tool)
-  const borderWidthId = useId()
   const page = usePage().data
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
-  const defaultFont = useKoharuStore(
-    (state) => state.preferences?.renderer.font_families?.[0] ?? FALLBACK_FONT,
-  )
+  const defaultFont = usePreferences().data?.renderer.font_families?.[0] ?? FALLBACK_FONT
   const availableFonts = useFonts().data
   const targets = useMemo(() => {
     if (!page) return []
@@ -99,10 +77,12 @@ export function TypeBar() {
   const current = targets[0]
   const lettering: Text | null = current ? letteringOf(current) : null
   const typing = useKoharuStore((state) => state.typing)
-  const [draft, setDraft] = useState<{ layer: LayerId; style: TextStyle } | null>(null)
-  const sequence = useRef(0)
-
-  useEffect(() => setDraft(null), [current?.id])
+  // The newest style asked for shows on the first target until the page is read with it.
+  const restyle = useMutation({
+    mutationFn: (edit: { layer: LayerId; style: TextStyle; targets: Layer[]; patch: TextStyle }) =>
+      setStyle(edit.targets, edit.patch),
+    onSettled: readPage,
+  })
 
   // While typing, what the canvas says its selected characters share; otherwise what every
   // character of the selected texts shares.
@@ -110,7 +90,10 @@ export function TypeBar() {
     () => typing ?? sharedChars(targets.flatMap((layer) => letteringOf(layer) ?? [])),
     [typing, targets],
   )
-  const drafted = current && draft?.layer === current.id ? draft.style : null
+  const drafted =
+    current && restyle.isPending && restyle.variables.layer === current.id
+      ? restyle.variables.style
+      : null
   const style: TextStyle = {
     ...lettering?.style,
     ...drafted,
@@ -127,16 +110,12 @@ export function TypeBar() {
   /** Merges `patch` into each target's style, shown at once on the first. */
   const apply = (patch: TextStyle) => {
     if (!current) return
-    setDraft({
+    restyle.mutate({
       layer: current.id,
       style: { ...style, ...patch, chars: { ...chars, ...patch.chars } },
+      targets,
+      patch,
     })
-    const request = ++sequence.current
-    void call(setStyle, targets, patch)
-      .catch(() => undefined)
-      .finally(() => {
-        if (sequence.current === request) setDraft(null)
-      })
   }
 
   /** A character setting: while typing, the canvas styles the selected characters, or holds it
@@ -145,13 +124,13 @@ export function TypeBar() {
     if (!typing) return apply({ chars: patch })
     // A mark can't unset a value, so no border on some characters is a border no wide.
     const marked = patch.stroke === null ? { ...patch, stroke: undefined, stroke_width: 0 } : patch
-    void call(commands.styleTyping, marked).catch(() => undefined)
+    send(commands.styleTyping, marked)
   }
 
   /** Merges `patch` into each target's lettering: a text's own values, a block's translation's. */
   const update = (patch: { [key in string]: Value }) => {
     for (const layer of targets) {
-      dispatch(updateLayer, layer.id, isBlockLayer(layer) ? { translation: patch } : patch)
+      send(updateLayer, layer.id, isBlockLayer(layer) ? { translation: patch } : patch)
     }
   }
 
@@ -182,8 +161,8 @@ export function TypeBar() {
   if (!selectionBounds || !(targets.length || typing) || !TOOLS.includes(tool)) return null
 
   // One row, as Photoshop's type options bar, at the user's choice: the face, its size, and its
-  // colour, then the paragraph; italic and vertical text are toggles, and the border sits behind
-  // one button, as Photoshop keeps a stroke out of the bar.
+  // colour, then the paragraph; italic and vertical text are toggles, and the border's colour and
+  // width close the row, as Clip Studio Paint's text tool shows a text's edge beside its colour.
   const toggle =
     'h-6 w-6 min-w-6 rounded-md bg-background px-0 text-muted-foreground data-[pressed]:border-primary data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary/90'
   return (
@@ -209,21 +188,14 @@ export function TypeBar() {
           }}
         />
       </div>
-      <Select
+      <Choice
+        size='sm'
         value={mixed.has('weight') ? '' : String(weight)}
-        onValueChange={(next) => next && applyChars({ weight: Number(next) })}
-      >
-        <SelectTrigger size='sm' aria-label={t('inspector.fontWeight')} className='w-16'>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {weights.map((value) => (
-            <SelectItem key={value} value={String(value)}>
-              {value}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        choices={Object.fromEntries(weights.map((value) => [value, String(value)]))}
+        label={t('inspector.fontWeight')}
+        className='w-14'
+        onChange={(next) => applyChars({ weight: Number(next) })}
+      />
       <Tooltip>
         <TooltipTrigger
           render={
@@ -247,12 +219,23 @@ export function TypeBar() {
         </TooltipTrigger>
         <TooltipContent>{t('inspector.fontStyles.italic')}</TooltipContent>
       </Tooltip>
-      <div className='w-[4.5rem]'>
-        <FontSizeField
-          disabled={false}
+      <div className='w-15'>
+        <PresetField
+          name='font-size'
+          testId='type-size'
           value={size}
-          autoFit={autoFit}
-          canAutoFit={fitted !== null}
+          min={0.5}
+          // Photoshop's largest type size.
+          max={1296}
+          presets={fontSizes}
+          label={t('inspector.fontSize')}
+          menuLabel={t('inspector.chooseFontSize')}
+          auto={{
+            label: t('inspector.auto'),
+            active: autoFit,
+            available: fitted !== null,
+            onPick: () => fitted && update({ frame: { [fitted]: { fit: 'best' } } }),
+          }}
           onChange={(next) => {
             applyChars({ size: next })
             // A typed size is the size the text draws at, as in Photoshop and Clip Studio Paint, so
@@ -261,14 +244,13 @@ export function TypeBar() {
               update({ frame: { [fitted]: { fit: 'none' } } })
             }
           }}
-          onAutoFit={() => fitted && update({ frame: { [fitted]: { fit: 'best' } } })}
         />
       </div>
       <ColorWell
         label={t('inspector.textColor')}
         size='sm'
-        value={mixed.has('fill') ? '' : chars.fill ? rgbaToHex(chars.fill) : BLACK}
-        onChange={(color) => color && applyChars({ fill: hexToRgba(color) })}
+        value={mixed.has('fill') ? '' : chars.fill ? toHex(chars.fill) : BLACK}
+        onChange={(color) => color && applyChars({ fill: toRgba(color) })}
       />
       <div
         role='group'
@@ -294,18 +276,24 @@ export function TypeBar() {
             ],
           ] as const
         ).map(([value, Icon, label]) => (
-          <button
-            key={value}
-            type='button'
-            aria-label={label}
-            aria-pressed={align === value}
-            data-active={align === value}
-            disabled={!paragraph}
-            className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
-            onClick={() => apply({ align: value })}
-          >
-            <Icon className='size-3' />
-          </button>
+          <Tooltip key={value}>
+            <TooltipTrigger
+              render={
+                <button
+                  type='button'
+                  aria-label={label}
+                  aria-pressed={align === value}
+                  data-active={align === value}
+                  disabled={!paragraph}
+                  className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
+                  onClick={() => apply({ align: value })}
+                />
+              }
+            >
+              <Icon className='size-3' />
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+          </Tooltip>
         ))}
       </div>
       <Tooltip>
@@ -342,76 +330,33 @@ export function TypeBar() {
           <span className='ml-2 opacity-60'>{t(`inspector.${direction}`)}</span>
         </TooltipContent>
       </Tooltip>
-      <Popover>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <PopoverTrigger
-                aria-label={t('inspector.border')}
-                className='grid size-6 shrink-0 place-items-center rounded-md border border-input bg-background text-muted-foreground hover:bg-muted'
-              />
-            }
-          >
-            {strokeEnabled && stroke ? (
-              <span
-                aria-hidden='true'
-                className='size-3 rounded-[3px] border-2'
-                style={{ borderColor: rgbaToHex(stroke) }}
-              />
-            ) : (
-              <SquareSlash aria-hidden='true' className='size-3.5' />
-            )}
-          </TooltipTrigger>
-          <TooltipContent>{t('inspector.border')}</TooltipContent>
-        </Tooltip>
-        <PopoverContent side='bottom' align='end' className='w-auto gap-1.5 rounded-xl p-2'>
-          <span className='text-[10px] font-medium text-muted-foreground'>
-            {t('inspector.border')}
-          </span>
-          <div className='flex items-center gap-1'>
-            <ColorWell
-              label={t('inspector.borderColor')}
-              size='sm'
-              allowTransparent
-              value={strokeEnabled && stroke ? rgbaToHex(stroke) : null}
-              onChange={(color) =>
-                applyChars(
-                  color === null
-                    ? { stroke: null }
-                    : {
-                        stroke: hexToRgba(color),
-                        stroke_width: strokeWidth > 0 ? strokeWidth : 1.5,
-                      },
-                )
-              }
-            />
-            <NumberField
-              id={borderWidthId}
-              name='border-width'
-              className='w-24'
-              value={strokeWidth > 0 ? strokeWidth : 1.5}
-              min={0.5}
-              max={32}
-              step={0.5}
-              onValueChange={(next) => {
-                if (next !== null && next >= 0.5 && next <= 32) {
-                  applyChars({ stroke_width: next, stroke: stroke ?? hexToRgba(WHITE) })
-                }
-              }}
-            >
-              <NumberFieldGroup>
-                <NumberFieldDecrement aria-label={t('inspector.decreaseBorderWidth')}>
-                  <Minus />
-                </NumberFieldDecrement>
-                <NumberFieldInput aria-label={t('inspector.borderWidth')} />
-                <NumberFieldIncrement aria-label={t('inspector.increaseBorderWidth')}>
-                  <Plus />
-                </NumberFieldIncrement>
-              </NumberFieldGroup>
-            </NumberField>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <div role='group' aria-label={t('inspector.border')} className='flex items-center gap-1'>
+        <ColorWell
+          label={t('inspector.borderColor')}
+          size='sm'
+          allowTransparent
+          value={strokeEnabled && stroke ? toHex(stroke) : null}
+          onChange={(color) =>
+            applyChars(
+              color === null
+                ? { stroke: null }
+                : { stroke: toRgba(color), stroke_width: strokeWidth > 0 ? strokeWidth : 1.5 },
+            )
+          }
+        />
+        <div className='w-12'>
+          <PresetField
+            name='border-width'
+            value={strokeWidth > 0 ? strokeWidth : 1.5}
+            min={0.5}
+            max={32}
+            presets={borderWidths}
+            label={t('inspector.borderWidth')}
+            menuLabel={t('inspector.chooseBorderWidth')}
+            onChange={(next) => applyChars({ stroke_width: next, stroke: stroke ?? toRgba(WHITE) })}
+          />
+        </div>
+      </div>
     </ContextBar>
   )
 }
@@ -491,104 +436,123 @@ function sameFont(left: string, right: string): boolean {
   return normalize(left) === normalize(right)
 }
 
-const fontSizePresets = [8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
+/** The font sizes the size field lists, as Photoshop's options bar does. */
+const fontSizes = [8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
+/** The border widths the width field lists. */
+const borderWidths = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32]
 
-function FontSizeField({
+/** A number typed in, in half steps, or picked from `presets` behind the arrow beside it, as
+ * Photoshop's options bar sets a font size. A typed number applies on Enter or on leaving the
+ * field, and one outside `min` to `max` goes back. `auto` is a choice above the presets that the
+ * field shows by its label. */
+function PresetField({
+  name,
   value,
-  autoFit,
-  canAutoFit,
-  disabled,
+  min,
+  max,
+  presets,
+  label,
+  menuLabel,
+  auto,
+  testId,
   onChange,
-  onAutoFit,
 }: {
-  /** `null` when the characters don't share one. */
+  name: string
+  /** `null` when the selection doesn't share one. */
   value: number | null
-  autoFit: boolean
-  canAutoFit: boolean
-  disabled: boolean
+  min: number
+  max: number
+  presets: number[]
+  label: string
+  menuLabel: string
+  auto?: { label: string; active: boolean; available: boolean; onPick: () => void }
+  testId?: string
   onChange: (value: number) => void
-  onAutoFit: () => void
 }) {
-  const { t } = useTranslation()
   const id = useId()
-  const [draft, setDraft] = useState<number | null>(value)
+  const field = useRef<HTMLDivElement>(null)
+  const shown = auto?.active ? null : value
+  const [draft, setDraft] = useState<number | null>(shown)
 
   useEffect(() => {
-    setDraft(autoFit ? null : value)
-  }, [autoFit, value])
+    setDraft(shown)
+  }, [shown])
 
-  const select = (choice: string) => {
+  const pick = (choice: string) => {
     if (choice === 'auto') {
       setDraft(null)
-      onAutoFit()
+      auto?.onPick()
       return
     }
-    const size = Number(choice)
-    if (Number.isFinite(size) && size > 0 && size <= 300) {
-      setDraft(size)
-      onChange(size)
-    }
+    const preset = Number(choice)
+    setDraft(preset)
+    onChange(preset)
   }
 
+  // The chosen one shows as a select's chosen item does, its tick left out, which the field's
+  // narrow list has no room for.
+  const item =
+    'pr-2 data-checked:bg-accent data-checked:text-accent-foreground [&>[data-slot=dropdown-menu-radio-item-indicator]]:hidden'
+
   const commit = (next: number | null) => {
-    if (next !== null && next > 0 && next <= 300) {
-      onChange(next)
-    } else {
-      setDraft(autoFit ? null : value)
-    }
+    if (next !== null && next >= min && next <= max) onChange(next)
+    else setDraft(shown)
   }
 
   return (
     <NumberField
       id={id}
-      name='font-size'
+      name={name}
       className='min-w-0'
-      disabled={disabled}
       value={draft}
-      min={0.5}
-      max={300}
+      min={min}
+      max={max}
       step={0.5}
       onValueChange={setDraft}
       onValueCommitted={commit}
     >
-      <NumberFieldGroup>
-        <NumberFieldInput
-          data-testid='type-size'
-          aria-label={t('inspector.fontSize')}
-          placeholder={autoFit ? t('inspector.auto') : undefined}
-          className='px-1.5 text-left text-ellipsis'
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            disabled={disabled}
-            aria-label={t('inspector.chooseFontSize')}
-            className='grid size-6 shrink-0 place-items-center border-l border-input text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-40'
-          >
-            <ChevronDown className='size-3' />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align='end'
-            className='w-28 min-w-28 border border-border/50 p-0.5 shadow-sm ring-0'
-          >
-            <DropdownMenuRadioGroup value={autoFit ? 'auto' : String(value)} onValueChange={select}>
-              {canAutoFit && (
-                <DropdownMenuRadioItem value='auto' className='min-h-6 py-0.5 text-[10px]'>
-                  {t('inspector.auto')}
-                </DropdownMenuRadioItem>
-              )}
-              {fontSizePresets.map((size) => (
-                <DropdownMenuRadioItem
-                  key={size}
-                  value={String(size)}
-                  className='min-h-6 py-0.5 text-[10px] tabular-nums'
-                >
-                  {size}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </NumberFieldGroup>
+      <Tooltip>
+        <TooltipTrigger render={<NumberFieldGroup ref={field} />}>
+          <NumberFieldInput
+            data-testid={testId}
+            aria-label={label}
+            placeholder={auto?.active ? auto.label : undefined}
+            className='px-1 text-left text-ellipsis'
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={menuLabel}
+              className='grid h-full w-4 shrink-0 place-items-center border-l border-input text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground'
+            >
+              <ChevronDown className='size-3' />
+            </DropdownMenuTrigger>
+            {/* Under the whole field and as wide, as a select's list opens, wider only for a
+              label that needs it. */}
+            <DropdownMenuContent anchor={field} align='start' className='min-w-fit'>
+              <DropdownMenuRadioGroup
+                value={auto?.active ? 'auto' : String(value)}
+                onValueChange={pick}
+              >
+                {auto?.available && (
+                  <DropdownMenuRadioItem value='auto' className={item}>
+                    {auto.label}
+                  </DropdownMenuRadioItem>
+                )}
+                {presets.map((preset) => (
+                  <DropdownMenuRadioItem
+                    key={preset}
+                    value={String(preset)}
+                    className={cn(item, 'tabular-nums')}
+                  >
+                    {preset}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
     </NumberField>
   )
 }

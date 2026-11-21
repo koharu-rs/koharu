@@ -1,28 +1,65 @@
 'use client'
 
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Star } from 'lucide-react'
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
+import { PickerSearch } from '@/components/controls/PickerSearch'
 import { useFontPreview } from '@/lib/queries'
 import type { FontFamily } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
-import { Empty, EmptyTitle } from '@koharu/ui/components/empty'
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@koharu/ui/components/input-group'
-import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  useComboboxFilteredItems,
+} from '@koharu/ui/components/combobox'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Separator } from '@koharu/ui/components/separator'
+import { Toggle } from '@koharu/ui/components/toggle'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
 
 const rowHeight = 38
 const listHeight = 248
 
+/** The families starred as favorites, by normalized name, and whether the picker lists only them,
+ * as Photoshop's font menu keeps favorites and its Show Favorite Fonts filter. Every picker shares
+ * them, and the interface keeps them in its browser profile, as it does the editor's panel widths. */
+const useFavoriteFonts = create<{
+  favorites: string[]
+  only: boolean
+  toggle: (family: string) => void
+  showOnly: (only: boolean) => void
+}>()(
+  persist(
+    (set) => ({
+      favorites: [],
+      only: false,
+      toggle: (family) =>
+        set(({ favorites }) => {
+          const name = normalizeFontName(family)
+          return {
+            favorites: favorites.includes(name)
+              ? favorites.filter((favorite) => favorite !== name)
+              : [...favorites, name],
+          }
+        }),
+      showOnly: (only) => set({ only }),
+    }),
+    { name: 'favorite-fonts' },
+  ),
+)
+
+/** Picks a font family, each shown in its own face: a search line that matches a family's name or
+ * any of its faces' PostScript names, and a star beside it that lists only the favorites, then the
+ * matches in alphabetical order, the keyboard's arrows and Enter moving through them. */
 export function FontPicker({
   value,
   families,
@@ -41,9 +78,8 @@ export function FontPicker({
   onChange: (family: string) => void
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const input = useRef<HTMLInputElement>(null)
+  const list = useRef<{ reveal: (index: number) => void }>(null)
   const orderedFamilies = useMemo(
     () =>
       [...families].sort((left, right) =>
@@ -51,31 +87,45 @@ export function FontPicker({
       ),
     [families],
   )
-  const results = useMemo(() => {
-    const normalized = normalizeFontName(query)
-    return orderedFamilies.filter(
-      (family) =>
-        !normalized ||
-        [family.name, ...family.faces.map((face) => face.post_script_name)].some((name) =>
-          normalizeFontName(name).includes(normalized),
-        ),
-    )
-  }, [orderedFamilies, query])
   const selectedFamily = useMemo(
     () =>
       orderedFamilies.find((family) => normalizeFontName(family.name) === normalizeFontName(value)),
     [orderedFamilies, value],
   )
+  const { favorites, only, showOnly } = useFavoriteFonts()
+  const listed = useMemo(
+    () =>
+      only
+        ? orderedFamilies.filter((family) => favorites.includes(normalizeFontName(family.name)))
+        : orderedFamilies,
+    [only, favorites, orderedFamilies],
+  )
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (!next) setQuery('')
+    <Combobox<FontFamily>
+      virtualized
+      items={listed}
+      value={selectedFamily ?? null}
+      inputValue={query}
+      disabled={disabled}
+      itemToStringLabel={(family) => family.name}
+      isItemEqualToValue={(family, other) =>
+        normalizeFontName(family.name) === normalizeFontName(other.name)
+      }
+      filter={(family, text) => {
+        const normalized = normalizeFontName(text)
+        return [family.name, ...family.faces.map((face) => face.post_script_name)].some((name) =>
+          normalizeFontName(name).includes(normalized),
+        )
+      }}
+      onInputValueChange={setQuery}
+      onOpenChange={(open) => !open && setQuery('')}
+      onValueChange={(family) => family && onChange(family.name)}
+      onItemHighlighted={(_, { reason, index }) => {
+        if (reason === 'keyboard') list.current?.reveal(index)
       }}
     >
-      <PopoverTrigger
+      <ComboboxTrigger
         render={
           <Button
             variant='outline'
@@ -83,11 +133,10 @@ export function FontPicker({
             className='w-full min-w-0 justify-between font-normal'
           />
         }
-        disabled={disabled}
         aria-label={ariaLabel}
         data-testid='type-font-picker'
         className={cn(
-          'w-full min-w-0 justify-between font-normal',
+          'w-full min-w-0 justify-between font-normal [&>svg:last-child]:size-3.5',
           size === 'sm' ? 'h-6 gap-1 px-1.5 text-[11px]' : 'h-8 gap-2 px-2.5 text-[12px]',
         )}
       >
@@ -97,74 +146,74 @@ export function FontPicker({
             className='min-w-0 flex-1 py-1 [&>img]:max-h-3.5'
           />
         ) : (
-          <span className='truncate'>{value || placeholder || t('fontPicker.choose')}</span>
+          <span className={cn('truncate', !value && 'text-muted-foreground')}>
+            {value || placeholder || t('fontPicker.choose')}
+          </span>
         )}
-        <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
-      </PopoverTrigger>
-      <PopoverContent
-        align='start'
-        className='w-(--anchor-width) min-w-44 gap-0 overflow-hidden rounded-lg p-0'
-        initialFocus={input}
-      >
-        <div className='border-b p-1'>
-          <InputGroup className='h-6 border-0 bg-muted/50 shadow-none focus-within:bg-background has-[>[data-align=inline-start]]:[&>input]:pl-0'>
-            <InputGroupAddon className='pr-1 pl-1.5'>
-              <Search className='size-3' />
-            </InputGroupAddon>
-            <InputGroupInput
-              ref={input}
-              value={query}
-              aria-label={t('fontPicker.search')}
-              placeholder={t('fontPicker.search')}
-              className='h-6 px-0 text-[11px]'
-              onChange={(event) => setQuery(event.currentTarget.value)}
+      </ComboboxTrigger>
+      <ComboboxContent className='w-(--anchor-width) min-w-44'>
+        <div className='flex items-center gap-1 border-b p-1'>
+          <div className='min-w-0 flex-1'>
+            <PickerSearch
+              query={query}
+              label={t('fontPicker.search')}
+              onClear={() => setQuery('')}
             />
-            {query && (
-              <InputGroupAddon align='inline-end' className='gap-0.5 pr-0.5'>
-                <InputGroupButton aria-label={t('common.clearSearch')} onClick={() => setQuery('')}>
-                  <X />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
+          </div>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  size='sm'
+                  aria-label={t('fontPicker.favoritesOnly')}
+                  pressed={only}
+                  onPressedChange={showOnly}
+                  // The search line keeps the keys, so the arrows still move through the list.
+                  onMouseDown={(event) => event.preventDefault()}
+                  className='size-7 shrink-0 px-0 text-muted-foreground aria-pressed:bg-transparent aria-pressed:text-primary aria-pressed:hover:bg-muted'
+                />
+              }
+            >
+              <Star className={cn('size-3.5', only && 'fill-current')} />
+            </TooltipTrigger>
+            <TooltipContent>{t('fontPicker.favoritesOnly')}</TooltipContent>
+          </Tooltip>
         </div>
-        <div className='flex h-6 items-center px-2 text-[9px] text-muted-foreground'>
-          {t('fontPicker.fontCount', { count: results.length })}
-        </div>
-        <Separator />
-        {open && (
-          <FontList
-            key={query}
-            families={results}
-            value={value}
-            onSelect={(family) => {
-              onChange(family)
-              setOpen(false)
-            }}
-          />
-        )}
-      </PopoverContent>
-    </Popover>
+        <ComboboxEmpty className='py-4'>
+          {only && favorites.length === 0 ? t('fontPicker.noFavorites') : t('fontPicker.noResults')}
+        </ComboboxEmpty>
+        <ComboboxList
+          aria-label={t('fontPicker.fonts')}
+          className='max-h-none overflow-visible p-0'
+        >
+          {/* Anew for each query, so a filtered list starts at its top. */}
+          <FontList key={query} selected={value} ref={list} />
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   )
 }
 
+/** The matches, how many, then each in its own face behind its favorite star, opening on
+ * `selected`. Only the rows in view exist, as a system can hold thousands of families; `reveal`
+ * scrolls to a match the keyboard reaches. */
 function FontList({
-  families,
-  value,
-  onSelect,
+  selected,
+  ref,
 }: {
-  families: FontFamily[]
-  value: string
-  onSelect: (family: string) => void
+  selected: string
+  ref: Ref<{ reveal: (index: number) => void }>
 }) {
   const { t } = useTranslation()
-  const list = useRef<HTMLDivElement>(null)
+  const families = useComboboxFilteredItems<FontFamily>()
+  const { favorites, toggle } = useFavoriteFonts()
   const selectedIndex = families.findIndex(
-    (family) => normalizeFontName(family.name) === normalizeFontName(value),
+    (family) => normalizeFontName(family.name) === normalizeFontName(selected),
   )
+  const viewport = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: families.length,
-    getScrollElement: () => list.current,
+    getScrollElement: () => viewport.current,
     getItemKey: (index) => normalizeFontName(families[index]?.name ?? String(index)),
     estimateSize: () => rowHeight,
     overscan: 6,
@@ -179,57 +228,78 @@ function FontList({
       ),
   })
 
+  useImperativeHandle(ref, () => ({
+    reveal: (index) => virtualizer.scrollToIndex(index, { align: 'auto' }),
+  }))
+
+  if (families.length === 0) return null
   return (
-    <ScrollArea
-      viewportRef={list}
-      role='listbox'
-      aria-label={t('fontPicker.fonts')}
-      className='relative'
-      viewportClassName='overflow-x-hidden'
-      style={{
-        height:
-          families.length === 0
-            ? rowHeight * 2
-            : Math.min(listHeight, Math.max(rowHeight, families.length * rowHeight)),
-      }}
-    >
-      <div className='relative' style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const family = families[virtualRow.index]
-          if (!family) return null
-          const selected = normalizeFontName(family.name) === normalizeFontName(value)
-          return (
-            <button
-              key={virtualRow.key}
-              type='button'
-              role='option'
-              aria-label={family.name}
-              aria-selected={selected}
-              className={cn(
-                'absolute inset-x-0 top-0 flex h-9.5 w-full items-center px-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                selected && 'bg-accent text-accent-foreground',
-              )}
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-              onClick={() => onSelect(family.name)}
-            >
-              <div className='flex min-w-0 flex-1 flex-col justify-center gap-px'>
-                <FontPreviewLabel family={family} className='h-4.5 w-full min-w-0' />
-                <span className='min-w-0 truncate text-[8px] leading-none text-muted-foreground'>
-                  {family.name}
-                </span>
-              </div>
-            </button>
-          )
-        })}
+    <>
+      <div className='flex h-6 items-center px-2 text-[9px] text-muted-foreground'>
+        {t('fontPicker.fontCount', { count: families.length })}
       </div>
-      {families.length === 0 && (
-        <Empty role='status' className='absolute inset-1 rounded-md p-2'>
-          <EmptyTitle className='text-[11px] text-muted-foreground'>
-            {t('fontPicker.noResults')}
-          </EmptyTitle>
-        </Empty>
-      )}
-    </ScrollArea>
+      <Separator />
+      <ScrollArea
+        viewportRef={viewport}
+        className='relative'
+        viewportClassName='overflow-x-hidden'
+        style={{ height: Math.min(listHeight, families.length * rowHeight) }}
+      >
+        <div className='relative' style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((row) => {
+            const family = families[row.index]
+            if (!family) return null
+            const favorite = favorites.includes(normalizeFontName(family.name))
+            return (
+              <ComboboxItem
+                key={row.key}
+                index={row.index}
+                value={family}
+                aria-label={family.name}
+                aria-setsize={families.length}
+                aria-posinset={row.index + 1}
+                // The chosen family shows in the accent, as a bar's lists show their chosen item,
+                // with no tick. Base UI marks it with a bare `data-selected`, which shadcn's
+                // `data-selected:` variant, written for `="true"`, doesn't match. Its right is as
+                // wide as the star's strip and gaps on its left, so the face sits between even
+                // margins.
+                className='group/font absolute inset-x-0 top-0 h-9.5 gap-1 rounded-none pr-5.5 pl-1 data-[selected]:bg-accent data-[selected]:text-accent-foreground data-[selected]:**:text-accent-foreground [&>span]:hidden!'
+                style={{ transform: `translateY(${row.start}px)` }}
+              >
+                {/* Starred with the pointer, as in Photoshop's font menu; its click stops here, so
+                    it doesn't pick the family, and the item keeps focus on the search line. */}
+                <button
+                  type='button'
+                  tabIndex={-1}
+                  aria-pressed={favorite}
+                  aria-label={t(favorite ? 'fontPicker.removeFavorite' : 'fontPicker.addFavorite', {
+                    name: family.name,
+                  })}
+                  className={cn(
+                    'grid w-3.5 shrink-0 place-items-center self-stretch text-muted-foreground hover:text-foreground',
+                    favorite
+                      ? 'text-primary'
+                      : 'opacity-0 group-hover/font:opacity-100 group-data-highlighted/font:opacity-100',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggle(family.name)
+                  }}
+                >
+                  <Star className={cn('size-3', favorite && 'fill-current')} />
+                </button>
+                <div className='flex min-w-0 flex-1 flex-col justify-center gap-px'>
+                  <FontPreviewLabel family={family} className='h-4.5 w-full min-w-0' />
+                  <span className='min-w-0 truncate text-[8px] leading-none text-muted-foreground'>
+                    {family.name}
+                  </span>
+                </div>
+              </ComboboxItem>
+            )
+          })}
+        </div>
+      </ScrollArea>
+    </>
   )
 }
 

@@ -57,8 +57,10 @@
     "loading": "来勒加载…"
   },
   "errors": {
+    "actionFailed": "迭个操作做弗好",
     "fatalTitle": "Koharu 运行弗下去哉",
-    "tryAgain": "再试一趟"
+    "tryAgain": "再试一趟",
+    "unknown": "原生应用返转来一个弗晓得个错误。"
   },
   "feedback": {
     "addScreenshot": "加一张截图",
@@ -92,12 +94,16 @@
     "title": "创成式填充"
   },
   "fontPicker": {
+    "addFavorite": "拿 {{name}} 加到收藏",
     "choose": "选字体",
+    "favoritesOnly": "显示收藏个字体",
     "fontCount": "{{count}} 种字体",
     "fontCount_one": "{{count}} 种字体",
     "fontCount_other": "{{count}} 种字体",
     "fonts": "字体",
+    "noFavorites": "还呒没收藏个字体",
     "noResults": "寻弗着符合条件个字体",
+    "removeFavorite": "拿 {{name}} 从收藏里拿脱",
     "search": "搜寻字体"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "描边",
     "borderColor": "描边颜色",
     "borderWidth": "描边宽度",
+    "chooseBorderWidth": "选描边宽度",
     "chooseFontSize": "选字体大小",
-    "decreaseBorderWidth": "拿描边调细点",
     "font": "字体",
     "fontSize": "字体大小",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "字体粗细",
     "horizontal": "横排",
-    "increaseBorderWidth": "拿描边调粗点",
     "opacity": "不透明度",
     "selectPage": "先选一页，再看箇页个图层。",
     "source": "原文",
@@ -191,20 +196,6 @@
     "translation": "译文",
     "type": "排版",
     "vertical": "竖排"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "删除 {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "关闭项目",
     "delete": "删除拣中个内容",
     "discord": "Discord",
+    "donate": "捐赠",
     "edit": "编辑",
     "export": "导出项目",
     "feedback": "发送反馈",
@@ -295,9 +287,12 @@
       "recognize": "识别",
       "translate": "翻译"
     },
-    "selected": "拣中个页面：{{count}} 页"
+    "selected": "拣中个页面：{{count}} 页",
+    "translated": "译好 {{translated}}/{{total}}"
   },
   "outputPicker": {
+    "noResults": "呒没搭搿个搜索对得上个语言。",
+    "search": "搜语言",
     "targetLanguage": "目标语言",
     "title": "翻译输出"
   },
@@ -415,15 +410,18 @@
     },
     "title": "设置",
     "typesetting": {
+      "addFallback": "加备用字体",
       "addFamily": "添加字体系列",
-      "defaultFamilies": "默认字体系列",
       "description": "设定字体系列个使用次序。文本图层呒没指定字体系列个辰光，就照箇个次序选用字体。",
       "empty": "呒没默认字体系列。Koharu 会用系统后备字体。",
+      "fallbacks": "备用字体",
+      "fallbacksDescription": "主字体呒没个字，按顺序用备用字体。拖拖好调顺序，拖到主字体浪就对调。",
       "familyLabel": "默认字体系列 {{index}}",
       "fontFallback": "首选字体",
       "fontFallbackDescription": "Koharu 照次序寻，选第一个可用、又支持箇段文本个字体系列。",
       "loadError": "字体加载失败哉。列表里向原有个字体系列还是好移除。",
       "loadingFonts": "来勒加载字体…",
+      "primary": "主字体",
       "removeFamily": "从列表里向移除 {{family}}",
       "title": "渲染器"
     }
@@ -441,10 +439,12 @@
     "loadingProjects": "来勒加载项目…",
     "newDescription": "建一个清爽个工作区，用来放页面、译文搭导出文件。",
     "newProject": "新建项目",
+    "noResults": "呒没搭搿个搜索对得上个项目。",
     "projectKind": "Koharu 项目",
     "projectList": "项目",
     "projectName": "项目名称",
     "projectNamePlaceholder": "我个新项目",
+    "search": "搜项目",
     "storageHint": "项目保存在本机里向。",
     "title": "项目",
     "yourProjects": "侬个项目"

@@ -57,8 +57,10 @@
     "loading": "読み込み中…"
   },
   "errors": {
+    "actionFailed": "操作を完了できませんでした",
     "fatalTitle": "Koharuを続行できませんでした",
-    "tryAgain": "再試行"
+    "tryAgain": "再試行",
+    "unknown": "ネイティブアプリケーションが不明なエラーを返しました。"
   },
   "feedback": {
     "addScreenshot": "スクリーンショットを追加",
@@ -92,12 +94,16 @@
     "title": "生成塗りつぶし"
   },
   "fontPicker": {
+    "addFavorite": "{{name}} をお気に入りに追加",
     "choose": "フォントを選択",
+    "favoritesOnly": "お気に入りのフォントを表示",
     "fontCount": "{{count}}個のフォント",
     "fontCount_one": "{{count}}個のフォント",
     "fontCount_other": "{{count}}個のフォント",
     "fonts": "フォント",
+    "noFavorites": "お気に入りのフォントはまだありません",
     "noResults": "この検索に一致するフォントはありません",
+    "removeFavorite": "{{name}} をお気に入りから削除",
     "search": "フォントを検索"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "縁取り",
     "borderColor": "縁取りの色",
     "borderWidth": "縁取り幅",
+    "chooseBorderWidth": "縁取り幅を選択",
     "chooseFontSize": "フォントサイズを選択",
-    "decreaseBorderWidth": "縁取り幅を縮小",
     "font": "フォント",
     "fontSize": "フォントサイズ",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "フォントの太さ",
     "horizontal": "横書き",
-    "increaseBorderWidth": "縁取り幅を拡大",
     "opacity": "不透明度",
     "selectPage": "ページを選択してレイヤーを確認します。",
     "source": "原文",
@@ -191,20 +196,6 @@
     "translation": "翻訳",
     "type": "タイポグラフィ",
     "vertical": "縦書き"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "{{name}}を削除",
@@ -245,6 +236,7 @@
     "closeProject": "プロジェクトを閉じる",
     "delete": "選択項目を削除",
     "discord": "Discord",
+    "donate": "寄付する",
     "edit": "編集",
     "export": "プロジェクトを書き出す",
     "feedback": "フィードバックを送信",
@@ -295,9 +287,12 @@
       "recognize": "文字認識",
       "translate": "翻訳"
     },
-    "selected": "{{count}}件選択中"
+    "selected": "{{count}}件選択中",
+    "translated": "{{total}} 件中 {{translated}} 件翻訳済み"
   },
   "outputPicker": {
+    "noResults": "この検索に一致する言語はありません。",
+    "search": "言語を検索",
     "targetLanguage": "対象言語",
     "title": "翻訳出力"
   },
@@ -415,15 +410,18 @@
     },
     "title": "設定",
     "typesetting": {
+      "addFallback": "フォールバックを追加",
       "addFamily": "フォントファミリーを追加",
-      "defaultFamilies": "既定のフォントファミリー",
       "description": "テキストレイヤーにファミリーが指定されていない場合に使う、順序付きフォントスタックを設定します。",
       "empty": "既定のファミリーがありません。Koharuはシステムの代替フォントを使用します。",
+      "fallbacks": "フォールバック",
+      "fallbacksDescription": "メインにない文字に順番に使われます。ドラッグで並べ替え、メインに重ねると入れ替えられます。",
       "familyLabel": "既定のフォントファミリー {{index}}",
       "fontFallback": "優先フォント",
       "fontFallbackDescription": "Koharuは文字に対応する最初の利用可能なファミリーを使用します。",
       "loadError": "フォントを読み込めませんでした。既存のファミリーは削除できます。",
       "loadingFonts": "フォントを読み込み中…",
+      "primary": "メイン",
       "removeFamily": "{{family}}を削除",
       "title": "レンダラー"
     }
@@ -441,10 +439,12 @@
     "loadingProjects": "プロジェクトを読み込み中…",
     "newDescription": "ページ、翻訳、書き出し用の新しいワークスペースを作成します。",
     "newProject": "新規プロジェクト",
+    "noResults": "この検索に一致するプロジェクトはありません。",
     "projectKind": "Koharuプロジェクト",
     "projectList": "プロジェクト",
     "projectName": "プロジェクト名",
     "projectNamePlaceholder": "新しいプロジェクト",
+    "search": "プロジェクトを検索",
     "storageHint": "プロジェクトはこのコンピューターにローカル保存されます。",
     "title": "プロジェクト",
     "yourProjects": "プロジェクト一覧"

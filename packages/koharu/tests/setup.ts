@@ -71,8 +71,6 @@ beforeEach(() => {
   useKoharuStore.setState({
     ...initial,
     initialized: false,
-    preferences: null,
-    models: [],
     jobs: {},
     downloads: {},
     camera: { zoom: 1, x: 0, y: 0 },

@@ -2,26 +2,26 @@
 
 import * as Sentry from '@sentry/nextjs'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { FilePlus2, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
+import { FilePlus2, FolderOpen, LoaderCircle } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
-import { call, dispatch } from '@/lib/backend'
-import { useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
+import { send, useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
 import { deleteSelection } from '@/lib/scene'
+import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
 import { useKoharuStore } from '@/lib/store'
 import { commands } from '@koharu/ipc/protocol'
 import {
   Menubar,
-  MenubarCheckboxItem as UiMenubarCheckboxItem,
-  MenubarContent as UiMenubarContent,
-  MenubarItem as UiMenubarItem,
+  MenubarCheckboxItem,
+  MenubarContent,
+  MenubarItem,
   MenubarMenu,
-  MenubarSeparator as UiMenubarSeparator,
-  MenubarShortcut as UiMenubarShortcut,
+  MenubarSeparator,
+  MenubarShortcut,
   MenubarSub,
   MenubarSubContent,
   MenubarSubTrigger,
@@ -56,8 +56,6 @@ export function TitleBar() {
     cleanup: t('psd.cleanup'),
     outline: t('psd.outline'),
   }
-
-  const closeProject = () => void call(commands.close).catch(() => undefined)
 
   /** Sentry's feedback form, in the interface's language; it leaves the page when it closes. */
   const sendFeedback = async () => {
@@ -102,8 +100,10 @@ export function TitleBar() {
           <div className='w-[84px] shrink-0' />
         ) : (
           <div className='relative z-10 flex h-full w-10 shrink-0 items-center justify-center rounded-br-lg'>
+            {/* Its weight is in its top, its feet pale, so centred it reads 2 px above the
+                menus' words; lowered by that to sit on their line. */}
             <Image
-              className='pointer-events-none'
+              className='pointer-events-none translate-y-0.5'
               src='/icon.png'
               alt='Koharu'
               width={17}
@@ -118,15 +118,11 @@ export function TitleBar() {
             <MenubarTrigger>{t('menu.file')}</MenubarTrigger>
             <MenubarContent>
               <MenubarSub>
-                <MenubarSubTrigger
-                  disabled={!project || importing}
-                  aria-busy={importing}
-                  className='min-h-8 gap-1.5 px-2 py-1 text-xs'
-                >
+                <MenubarSubTrigger disabled={!project || importing} aria-busy={importing}>
                   {importing && <LoaderCircle className='animate-spin' aria-hidden='true' />}
                   {importing ? t('navigator.importing') : t('menu.import')}
                 </MenubarSubTrigger>
-                <MenubarSubContent className='min-w-40 p-1'>
+                <MenubarSubContent>
                   <MenubarItem disabled={importing} onClick={() => importPages('files')}>
                     <FilePlus2 />
                     {t('navigator.importFiles')}
@@ -141,12 +137,11 @@ export function TitleBar() {
                 <MenubarSubTrigger
                   disabled={!project || pages.length === 0 || exporting}
                   aria-busy={exporting}
-                  className='min-h-8 gap-1.5 px-2 py-1 text-xs'
                 >
                   {exporting && <LoaderCircle className='animate-spin' aria-hidden='true' />}
                   {t('menu.export')}
                 </MenubarSubTrigger>
-                <MenubarSubContent className='min-w-40 p-1'>
+                <MenubarSubContent>
                   {(['png', 'psd', 'cbz'] as const).map((format) => (
                     <MenubarItem
                       key={format}
@@ -159,14 +154,11 @@ export function TitleBar() {
                 </MenubarSubContent>
               </MenubarSub>
               <MenubarSeparator />
-              <MenubarItem disabled={!project} onClick={closeProject}>
+              <MenubarItem disabled={!project} onClick={() => send(commands.close)}>
                 {t('menu.closeProject')}
               </MenubarItem>
               <MenubarSeparator />
-              <MenubarItem onClick={() => setSettingsOpen(true)}>
-                <Settings />
-                {t('menu.settings')}
-              </MenubarItem>
+              <MenubarItem onClick={() => setSettingsOpen(true)}>{t('menu.settings')}</MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 
@@ -175,17 +167,17 @@ export function TitleBar() {
             <MenubarContent>
               <MenubarItem
                 disabled={!history || history.current === 0}
-                onClick={() => dispatch(commands.undo)}
+                onClick={() => send(commands.undo)}
               >
                 {t('menu.undo')}
-                <MenubarShortcut>Ctrl+Z</MenubarShortcut>
+                <MenubarShortcut>{shortcutLabel(shortcuts.undo)}</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
                 disabled={!history || history.current >= history.steps.length}
-                onClick={() => dispatch(commands.redo)}
+                onClick={() => send(commands.redo)}
               >
                 {t('menu.redo')}
-                <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>
+                <MenubarShortcut>{shortcutLabel(shortcuts.redo)}</MenubarShortcut>
               </MenubarItem>
               <MenubarSeparator />
               <MenubarItem
@@ -193,19 +185,19 @@ export function TitleBar() {
                 onClick={() => selectLayers(page?.layers.map((layer) => layer.id) ?? [])}
               >
                 {t('menu.selectAllLayers')}
-                <MenubarShortcut>Ctrl+A</MenubarShortcut>
+                <MenubarShortcut>{shortcutLabel(shortcuts.selectAll)}</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
                 disabled={selectedLayers.length === 0}
                 variant='destructive'
-                onClick={() => dispatch(deleteSelection, selectedLayers, page?.layers ?? [])}
+                onClick={() => send(deleteSelection, selectedLayers, page?.layers ?? [])}
               >
                 {t('menu.delete')}
-                <MenubarShortcut>Del</MenubarShortcut>
+                <MenubarShortcut>{shortcutLabel(shortcuts.delete)}</MenubarShortcut>
               </MenubarItem>
               <MenubarSeparator />
               {/* Frees the GPU, as Photoshop's Edit → Purge frees memory. */}
-              <MenubarItem onClick={() => dispatch(commands.unload)}>
+              <MenubarItem onClick={() => send(commands.unload)}>
                 {t('menu.unloadModels')}
               </MenubarItem>
             </MenubarContent>
@@ -214,9 +206,9 @@ export function TitleBar() {
           <MenubarMenu>
             <MenubarTrigger>{t('menu.view')}</MenubarTrigger>
             <MenubarContent>
-              <MenubarItem disabled={!page} onClick={() => dispatch(commands.fit)}>
+              <MenubarItem disabled={!page} onClick={() => send(commands.fit)}>
                 {t('menu.fit')}
-                <MenubarShortcut>Ctrl+0</MenubarShortcut>
+                <MenubarShortcut>{shortcutLabel(shortcuts.fit)}</MenubarShortcut>
               </MenubarItem>
               <MenubarCheckboxItem
                 disabled={!page}
@@ -233,16 +225,24 @@ export function TitleBar() {
             <MenubarTrigger>{t('menu.help')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
-                onClick={() => void openUrl('https://discord.gg/mHvHkxGnUY').catch(() => undefined)}
-              >
-                {t('menu.discord')}
-              </MenubarItem>
-              <MenubarItem
                 onClick={() =>
                   void openUrl('https://github.com/koharu-rs/koharu').catch(() => undefined)
                 }
               >
                 {t('menu.github')}
+              </MenubarItem>
+              <MenubarItem
+                onClick={() => void openUrl('https://discord.gg/mHvHkxGnUY').catch(() => undefined)}
+              >
+                {t('menu.discord')}
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  void openUrl('https://github.com/sponsors/mayocream').catch(() => undefined)
+                }
+              >
+                {t('menu.donate')}
               </MenubarItem>
               <MenubarItem onClick={() => void sendFeedback().catch(() => undefined)}>
                 {t('menu.feedback')}
@@ -287,44 +287,4 @@ function MenubarTrigger({ className, ...props }: ComponentProps<typeof UiMenubar
       {...props}
     />
   )
-}
-
-function MenubarContent({ className, ...props }: ComponentProps<typeof UiMenubarContent>) {
-  return <UiMenubarContent className={cn('min-w-44 p-1', className)} {...props} />
-}
-
-function MenubarItem({ className, ...props }: ComponentProps<typeof UiMenubarItem>) {
-  return (
-    <UiMenubarItem
-      className={cn(
-        "min-h-8 gap-1.5 px-2 py-1 text-xs [&_svg:not([class*='size-'])]:size-3.5",
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-/** Its text in line with the other items', and its check where their shortcuts go. */
-function MenubarCheckboxItem({
-  className,
-  ...props
-}: ComponentProps<typeof UiMenubarCheckboxItem>) {
-  return (
-    <UiMenubarCheckboxItem
-      className={cn(
-        'min-h-8 pr-7 pl-2 text-xs [&>span:first-child]:right-2 [&>span:first-child]:left-auto',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function MenubarShortcut({ className, ...props }: ComponentProps<typeof UiMenubarShortcut>) {
-  return <UiMenubarShortcut className={cn('text-[11px]', className)} {...props} />
-}
-
-function MenubarSeparator({ className, ...props }: ComponentProps<typeof UiMenubarSeparator>) {
-  return <UiMenubarSeparator className={cn('my-0.5', className)} {...props} />
 }

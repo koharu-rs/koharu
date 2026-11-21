@@ -1,20 +1,19 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Eraser } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { vendorName } from '@/components/preferences/models'
 import {
+  NumberField,
   PreferencePage,
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { call, dispatch, refreshModels } from '@/lib/backend'
-import { queryClient } from '@/lib/queries'
-import { vendorTraits } from '@/lib/vendors'
+import { modelsKey, refresh, send } from '@/lib/queries'
+import { vendorName, vendorTraits } from '@/lib/vendors'
 import {
   Channel,
   commands,
@@ -29,9 +28,8 @@ import { Input } from '@koharu/ui/components/input'
 const vendorsKey = ['vendors'] as const
 
 /** Lists the vendors and models again after a key or a sign-in changed. */
-async function vendorsChanged() {
-  await queryClient.invalidateQueries({ queryKey: vendorsKey })
-  await refreshModels(true)
+function vendorsChanged() {
+  return refresh(vendorsKey, modelsKey)
 }
 
 /** Each vendor's API key, or its sign-in for one the user signs in to with their plan, kept in
@@ -45,10 +43,7 @@ export function ProviderPreferences({
   onChange: (value: Providers) => void
 }) {
   const { t } = useTranslation()
-  const vendors = useQuery({
-    queryKey: vendorsKey,
-    queryFn: () => call(commands.listVendors),
-  })
+  const vendors = useQuery({ queryKey: vendorsKey, queryFn: () => commands.listVendors() })
   /** `vendor`'s endpoint with `patch` merged in; an endpoint with nothing left set goes. */
   const update = (vendor: string, patch: Endpoint) => {
     const endpoint: Endpoint = { ...value[vendor], ...patch }
@@ -80,9 +75,16 @@ export function ProviderPreferences({
                     onChange={(base_url) => update(vendor.name, { base_url })}
                   />
                 )}
+                {/* The context window, in tokens, the server runs its models with, such as
+                    llama.cpp's `--ctx-size`; nothing while the server's is unknown. */}
                 {traits.contextWindow && (
-                  <ContextWindowField
+                  <NumberField
+                    label={t('settings.providers.contextWindow')}
                     value={value[vendor.name]?.context_window ?? null}
+                    min={1}
+                    max={2 ** 32 - 1}
+                    step={1}
+                    integer
                     onChange={(context_window) => update(vendor.name, { context_window })}
                   />
                 )}
@@ -102,13 +104,13 @@ function KeyField({ vendor }: { vendor: Vendor }) {
   const [draft, setDraft] = useState('')
   const name = vendorName(vendor.name, t)
 
-  const store = (key: string | null) =>
-    void call(commands.setApiKey, vendor.name, key)
-      .then(async () => {
-        setDraft('')
-        await vendorsChanged()
-      })
-      .catch(() => undefined)
+  const store = useMutation({
+    mutationFn: (key: string | null) => commands.setApiKey(vendor.name, key),
+    onSuccess: async () => {
+      setDraft('')
+      await vendorsChanged()
+    },
+  })
 
   return (
     <div className='grid gap-1'>
@@ -131,7 +133,7 @@ function KeyField({ vendor }: { vendor: Vendor }) {
           }
           className='h-8 min-w-0 flex-1 text-[12px] [-webkit-text-security:disc] [&::placeholder]:[-webkit-text-security:none]'
           onChange={(event) => setDraft(event.currentTarget.value)}
-          onBlur={() => draft && store(draft)}
+          onBlur={() => draft && store.mutate(draft)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') event.currentTarget.blur()
           }}
@@ -142,7 +144,7 @@ function KeyField({ vendor }: { vendor: Vendor }) {
             variant='outline'
             size='icon'
             aria-label={t('settings.providers.clearCredential', { provider: name })}
-            onClick={() => store(null)}
+            onClick={() => store.mutate(null)}
           >
             <Eraser />
           </Button>
@@ -156,39 +158,31 @@ function KeyField({ vendor }: { vendor: Vendor }) {
  * the sign-in waits on, or signs out. The browser opens on the page unless the sign-in opened it. */
 function SignInField({ vendor }: { vendor: Vendor }) {
   const { t } = useTranslation()
-  const [waiting, setWaiting] = useState(false)
   const [prompt, setPrompt] = useState<SignInPrompt | null>(null)
   const name = vendorName(vendor.name, t)
-
-  const signIn = async () => {
-    setWaiting(true)
-    const channel = new Channel<SignInPrompt>()
-    channel.onmessage = (asked) => {
-      setPrompt(asked)
-      if (!asked.opened) void openUrl(asked.url).catch(() => undefined)
-    }
-    try {
-      await call(commands.signIn, vendor.name, channel)
-      await vendorsChanged()
-    } catch {
-      // `call` reports the failure.
-    } finally {
-      setWaiting(false)
-      setPrompt(null)
-    }
-  }
-
-  const signOut = () =>
-    void call(commands.signOut, vendor.name)
-      .then(vendorsChanged)
-      .catch(() => undefined)
+  const signIn = useMutation({
+    mutationFn: () => {
+      const channel = new Channel<SignInPrompt>()
+      channel.onmessage = (asked) => {
+        setPrompt(asked)
+        if (!asked.opened) void openUrl(asked.url).catch(() => undefined)
+      }
+      return commands.signIn(vendor.name, channel)
+    },
+    onSuccess: vendorsChanged,
+    onSettled: () => setPrompt(null),
+  })
+  const signOut = useMutation({
+    mutationFn: () => commands.signOut(vendor.name),
+    onSuccess: vendorsChanged,
+  })
 
   return (
     <div className='grid gap-1'>
       <span className='text-[10px] text-muted-foreground'>
         {t('settings.providers.subscription')}
       </span>
-      {waiting ? (
+      {signIn.isPending ? (
         <div className='grid gap-2 rounded-md border bg-muted/40 p-2.5'>
           {prompt?.code && (
             <p className='font-mono text-base font-semibold tracking-[0.18em] select-text'>
@@ -217,7 +211,7 @@ function SignInField({ vendor }: { vendor: Vendor }) {
               type='button'
               variant='ghost'
               size='sm'
-              onClick={() => dispatch(commands.stopSignIn)}
+              onClick={() => send(commands.stopSignIn)}
             >
               {t('common.cancel')}
             </Button>
@@ -234,7 +228,7 @@ function SignInField({ vendor }: { vendor: Vendor }) {
               ? t('settings.providers.signOutLabel', { provider: name })
               : t('settings.providers.signInLabel', { provider: name })
           }
-          onClick={vendor.connected ? signOut : () => void signIn()}
+          onClick={() => (vendor.connected ? signOut.mutate() : signIn.mutate())}
         >
           {vendor.connected ? t('settings.providers.signOut') : t('settings.providers.signIn')}
         </Button>
@@ -259,38 +253,6 @@ function BaseUrlField({ value, onChange }: { value: string; onChange: (value: st
         className='h-8 text-[12px] text-foreground'
         onChange={(event) => setDraft(event.currentTarget.value)}
         onBlur={() => valid && draft !== value && onChange(draft)}
-      />
-    </label>
-  )
-}
-
-/** The context window, in tokens, that a server runs its models with, such as llama.cpp's
- * `--ctx-size`, which reaches the preferences when the field loses the focus holding a whole
- * number, or nothing while the server's is unknown. */
-function ContextWindowField({
-  value,
-  onChange,
-}: {
-  value: number | null
-  onChange: (value: number | null) => void
-}) {
-  const { t } = useTranslation()
-  const [draft, setDraft] = useState(value === null ? '' : String(value))
-  const tokens = draft === '' ? null : Number(draft)
-  const valid = tokens === null || (Number.isInteger(tokens) && tokens > 0 && tokens < 2 ** 32)
-  return (
-    <label className='grid gap-1 text-[10px] text-muted-foreground'>
-      {t('settings.providers.contextWindow')}
-      <Input
-        type='number'
-        inputMode='numeric'
-        min={1}
-        step={1}
-        value={draft}
-        aria-invalid={!valid}
-        className='h-8 text-[12px] text-foreground'
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        onBlur={() => valid && tokens !== value && onChange(tokens)}
       />
     </label>
   )

@@ -1,9 +1,11 @@
 'use client'
 
-import { useId } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { Input } from '@koharu/ui/components/input'
+import {
+  NumberField as NumberFieldRoot,
+  NumberFieldGroup,
+  NumberFieldInput,
+} from '@koharu/ui/components/number-field'
 
 export function PreferencePage({
   title,
@@ -99,26 +101,15 @@ export function TextField({
   )
 }
 
-/**
- * `min` and `max` on a number input are validation hints the browser never
- * enforces on typed text, so bounds are applied here before the value reaches
- * the stored configuration.
- */
-function parseBounded(raw: string, min?: number, max?: number) {
-  if (raw === '') return null
-  const value = Number(raw)
-  if (!Number.isFinite(value)) return null
-  if (min !== undefined && value < min) return min
-  if (max !== undefined && value > max) return max
-  return value
-}
-
+/** A number the field clamps to `min` and `max` as it's typed, or nothing. */
 export function NumberField({
   label,
   value,
   min,
   max,
   step,
+  integer = false,
+  placeholder,
   onChange,
 }: {
   label: string
@@ -126,25 +117,30 @@ export function NumberField({
   min?: number
   max?: number
   step?: number
+  /** Whole numbers only. */
+  integer?: boolean
+  placeholder?: string
   onChange: (value: number | null) => void
 }) {
-  const { t } = useTranslation()
-  const id = useId()
   // The label takes the room a wrapped neighbour's label adds, so inputs side by side line up.
   return (
     <label className='grid grid-rows-[1fr_auto] gap-1 text-[10px] text-muted-foreground'>
       {label}
-      <Input
-        id={id}
-        type='number'
-        value={value ?? ''}
+      <NumberFieldRoot
+        value={value}
         min={min}
         max={max}
         step={step}
-        placeholder={t('model.default')}
-        className='h-8 text-[12px] text-foreground'
-        onChange={(event) => onChange(parseBounded(event.currentTarget.value, min, max))}
-      />
+        format={integer ? { maximumFractionDigits: 0, useGrouping: false } : undefined}
+        onValueChange={onChange}
+      >
+        <NumberFieldGroup className='h-8 rounded-lg focus-within:ring-3 focus-within:ring-ring/50'>
+          <NumberFieldInput
+            placeholder={placeholder}
+            className='px-2.5 text-left text-[12px] text-foreground placeholder:text-muted-foreground'
+          />
+        </NumberFieldGroup>
+      </NumberFieldRoot>
     </label>
   )
 }

@@ -2,9 +2,10 @@
 
 import { ArrowLeft, Cpu, KeyRound, Monitor, Moon, Palette, Sun, Type } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Choice } from '@/components/controls/Choice'
 import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
 import {
   PreferencePage,
@@ -13,19 +14,21 @@ import {
 } from '@/components/preferences/PreferenceFields'
 import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
-import { refreshModels, refreshPreferences, savePreferences } from '@/lib/backend'
-import { supportedLanguages } from '@/lib/i18n'
+import { nativeNames } from '@/lib/i18n'
+import {
+  modelsKey,
+  preferencesKey,
+  queryClient,
+  refresh,
+  useEditPreferences,
+  useModels,
+  usePreferences,
+} from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import type { Preferences } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@koharu/ui/components/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@koharu/ui/components/tabs'
+import { ToggleGroup, ToggleGroupItem } from '@koharu/ui/components/toggle-group'
 
 const tabs = [
   ['appearance', Palette],
@@ -33,69 +36,34 @@ const tabs = [
   ['providers', KeyRound],
   ['typesetting', Type],
 ] as const
-type Tab = (typeof tabs)[number][0]
 
 export function SettingsPage() {
   const { t } = useTranslation()
-  const open = useKoharuStore((state) => state.settingsOpen)
   const setOpen = useKoharuStore((state) => state.setSettingsOpen)
-  const preferences = useKoharuStore((state) => state.preferences)
-  const models = useKoharuStore((state) => state.models)
-  const [tab, setTab] = useState<Tab>('appearance')
-  const [draft, setDraft] = useState<Preferences | null>(preferences)
-  const lastSaved = useRef<string | null>(null)
-  const pending = useRef<Promise<unknown>>(Promise.resolve())
+  const preferences = usePreferences().data
+  const models = useModels().data ?? []
+  const { edit, flush } = useEditPreferences()
 
-  const saveDraft = useCallback((next: Preferences) => {
-    const serialized = JSON.stringify(next)
-    if (serialized === lastSaved.current) return pending.current
-    lastSaved.current = serialized
-    pending.current = savePreferences(next).catch((error: unknown) => {
-      if (lastSaved.current === serialized) lastSaved.current = null
-      throw error
-    })
-    return pending.current
+  // What the file holds as the page opens, which a save under way would answer itself.
+  useEffect(() => {
+    void refresh(modelsKey)
+    if (!queryClient.isMutating({ mutationKey: preferencesKey })) void refresh(preferencesKey)
   }, [])
 
-  useEffect(() => {
-    if (!open) return
-    void refreshPreferences().catch(() => undefined)
-    void refreshModels().catch(() => undefined)
-  }, [open])
-
-  useEffect(() => {
-    if (!open || !preferences) return
-    const serialized = JSON.stringify(preferences)
-    // The file's state replaces the draft only when it isn't this draft's own save coming back.
-    if (serialized === lastSaved.current) return
-    lastSaved.current = serialized
-    setDraft(preferences)
-  }, [open, preferences])
-
-  useEffect(() => {
-    if (!open || !draft) return
-    if (JSON.stringify(draft) === lastSaved.current) return
-    const timeout = window.setTimeout(() => void saveDraft(draft).catch(() => undefined), 260)
-    return () => window.clearTimeout(timeout)
-  }, [draft, open, saveDraft])
-
-  if (!open) return null
-
   return (
-    <section className='settings-page flex min-h-0 flex-1 bg-[var(--surface-sidebar)] text-foreground'>
-      <nav className='flex w-64 shrink-0 flex-col bg-[var(--surface-sidebar)] px-3 py-4'>
+    <Tabs
+      defaultValue='appearance'
+      orientation='vertical'
+      className='settings-page min-h-0 flex-1 gap-0 bg-[var(--surface-sidebar)] text-foreground'
+    >
+      <nav className='flex w-64 shrink-0 flex-col px-3 py-4'>
         <Button
           type='button'
           variant='ghost'
           className='mb-5 h-9 justify-start gap-2 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
           onClick={() => {
-            if (!draft) {
-              setOpen(false)
-              return
-            }
-            void saveDraft(draft)
-              .then(() => setOpen(false))
-              .catch(() => undefined)
+            flush()
+            setOpen(false)
           }}
         >
           <ArrowLeft className='size-4' /> {t('settings.backToEditor')}
@@ -103,21 +71,17 @@ export function SettingsPage() {
         <p className='mb-2 px-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase'>
           {t('settings.title')}
         </p>
-        <div className='grid gap-1'>
+        <TabsList className='w-full gap-1 bg-transparent p-0'>
           {tabs.map(([id, Icon]) => (
-            <Button
+            <TabsTrigger
               key={id}
-              type='button'
-              variant='ghost'
-              size='sm'
-              data-active={tab === id}
-              className='h-10 w-full justify-start gap-3 rounded-lg px-3 text-left text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
-              onClick={() => setTab(id)}
+              value={id}
+              className='h-10 flex-none gap-3 rounded-lg px-3 text-[12px] font-normal text-muted-foreground hover:bg-foreground/[0.06] data-active:bg-accent data-active:text-accent-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none data-active:hover:bg-accent data-active:hover:text-accent-foreground dark:data-active:border-transparent dark:data-active:bg-accent dark:data-active:text-accent-foreground'
             >
-              <Icon className='size-4' /> {t(`settings.tabs.${id}`)}
-            </Button>
+              <Icon /> {t(`settings.tabs.${id}`)}
+            </TabsTrigger>
           ))}
-        </div>
+        </TabsList>
       </nav>
       <main className='relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden rounded-tl-2xl bg-[var(--surface-canvas)] shadow-[var(--shadow-content)]'>
         <header className='flex h-14 shrink-0 items-center border-b border-border/80 px-8'>
@@ -125,31 +89,44 @@ export function SettingsPage() {
         </header>
         <ScrollArea className='min-h-0 flex-1'>
           <div className='mx-auto w-full max-w-4xl px-10 py-10'>
-            {tab === 'appearance' && <AppearancePreferences />}
-            {tab !== 'appearance' && !draft && <LoadingPreferences />}
-            {tab === 'pipeline' && draft && (
-              <PipelinePreferences
-                value={draft.pipeline}
-                models={models}
-                onChange={(pipeline) => setDraft({ ...draft, pipeline })}
-              />
-            )}
-            {tab === 'providers' && draft && (
-              <ProviderPreferences
-                value={draft.providers}
-                onChange={(providers) => setDraft({ ...draft, providers })}
-              />
-            )}
-            {tab === 'typesetting' && draft && (
-              <TypesettingPreferences
-                value={draft.renderer}
-                onChange={(renderer) => setDraft({ ...draft, renderer })}
-              />
-            )}
+            <TabsContent value='appearance'>
+              <AppearancePreferences />
+            </TabsContent>
+            <TabsContent value='pipeline'>
+              {preferences ? (
+                <PipelinePreferences
+                  value={preferences.pipeline}
+                  models={models}
+                  onChange={(pipeline) => edit({ ...preferences, pipeline })}
+                />
+              ) : (
+                <LoadingPreferences />
+              )}
+            </TabsContent>
+            <TabsContent value='providers'>
+              {preferences ? (
+                <ProviderPreferences
+                  value={preferences.providers}
+                  onChange={(providers) => edit({ ...preferences, providers })}
+                />
+              ) : (
+                <LoadingPreferences />
+              )}
+            </TabsContent>
+            <TabsContent value='typesetting'>
+              {preferences ? (
+                <TypesettingPreferences
+                  value={preferences.renderer}
+                  onChange={(renderer) => edit({ ...preferences, renderer })}
+                />
+              ) : (
+                <LoadingPreferences />
+              )}
+            </TabsContent>
           </div>
         </ScrollArea>
       </main>
-    </section>
+    </Tabs>
   )
 }
 
@@ -172,49 +149,30 @@ function AppearancePreferences() {
           title={t('settings.appearance.theme')}
           description={t('settings.appearance.themeDescription')}
         >
-          <div className='grid grid-cols-3 rounded-xl border border-input bg-background p-0.5'>
-            {themes.map(([value, Icon]) => {
-              // The ghost variant's dark hover outranks any active override, so the
-              // chosen theme is a default button instead.
-              const active = theme === value
-              return (
-                <Button
-                  key={value}
-                  type='button'
-                  variant={active ? 'default' : 'ghost'}
-                  size='sm'
-                  className={
-                    active
-                      ? 'h-9 gap-1.5 text-[10px]'
-                      : 'h-9 gap-1.5 text-[10px] text-muted-foreground'
-                  }
-                  onClick={() => setTheme(value)}
-                >
-                  <Icon className='size-3.5' /> {t(`settings.appearance.themes.${value}`)}
-                </Button>
-              )
-            })}
-          </div>
+          <ToggleGroup
+            value={theme ? [theme] : []}
+            onValueChange={([next]) => next && setTheme(next)}
+            aria-label={t('settings.appearance.theme')}
+            className='grid w-full grid-cols-3 gap-0 rounded-xl border border-input bg-background p-0.5'
+          >
+            {themes.map(([value, Icon]) => (
+              <ToggleGroupItem
+                key={value}
+                value={value}
+                className='h-9 gap-1.5 text-[10px] text-muted-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground hover:aria-pressed:bg-primary/90'
+              >
+                <Icon className='size-3.5' /> {t(`settings.appearance.themes.${value}`)}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </PreferenceRow>
         <PreferenceRow title={t('settings.appearance.language')}>
-          <Select
+          <Choice
             value={i18n.language}
-            items={Object.fromEntries(
-              supportedLanguages.map((language) => [language, t(`languages.${language}`)]),
-            )}
-            onValueChange={(language) => language && i18n.changeLanguage(language)}
-          >
-            <SelectTrigger className='h-8 w-full text-[11px]'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {supportedLanguages.map((language) => (
-                <SelectItem key={language} value={language}>
-                  {t(`languages.${language}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            choices={nativeNames}
+            label={t('settings.appearance.language')}
+            onChange={(language) => void i18n.changeLanguage(language)}
+          />
         </PreferenceRow>
       </PreferenceSection>
     </PreferencePage>

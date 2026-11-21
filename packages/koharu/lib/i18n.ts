@@ -1,8 +1,22 @@
 'use client'
 
+// FormatJS's DisplayNames in place of Chromium's, whose ICU data keeps only the names of languages
+// Chromium's own interface offers and so leaves some out, such as Tibetan; FormatJS carries CLDR's
+// whole set for each interface language below.
+import '@formatjs/intl-displaynames/polyfill-force.js'
+import '@formatjs/intl-displaynames/locale-data/ar.js'
+import '@formatjs/intl-displaynames/locale-data/en.js'
+import '@formatjs/intl-displaynames/locale-data/es.js'
+import '@formatjs/intl-displaynames/locale-data/fr.js'
+import '@formatjs/intl-displaynames/locale-data/ja.js'
+import '@formatjs/intl-displaynames/locale-data/ko.js'
+import '@formatjs/intl-displaynames/locale-data/pt.js'
+import '@formatjs/intl-displaynames/locale-data/ru.js'
+import '@formatjs/intl-displaynames/locale-data/tr.js'
+import '@formatjs/intl-displaynames/locale-data/zh.js'
+import '@formatjs/intl-displaynames/locale-data/zh-Hant.js'
 import i18n, { type Resource } from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
-import LocalStorageBackend from 'i18next-localstorage-backend'
 import { initReactI18next } from 'react-i18next'
 
 import ar from '@/public/locales/ar/translation.json'
@@ -35,16 +49,50 @@ export const resources = {
 
 export type SupportedLanguage = keyof typeof resources
 
+// Every key the interface translates is en-US's, which `tsc` checks.
+declare module 'i18next' {
+  interface CustomTypeOptions {
+    resources: (typeof resources)['en-US']
+  }
+}
+
 export const supportedLanguages = Object.keys(resources) as SupportedLanguage[]
 
+/** The CLDR locale whose names an interface language shows, where its own tag doesn't find it: Wu
+ * has none, and Koharu writes it in simplified Chinese; Taiwan's is Traditional Chinese. */
+const cldrLocales: Partial<Record<string, string>> = { wuu: 'zh', 'zh-TW': 'zh-Hant' }
+
+/** Language names in the interface language `display`, from CLDR. */
+export function displayNames(display: string) {
+  return new Intl.DisplayNames([cldrLocales[display] ?? display], { type: 'language' })
+}
+
+/** The variant an interface language is named as, where a reader tells it from its kin; others are
+ * named by their language alone, as a language menu lists them. */
+const variants: Partial<Record<SupportedLanguage, string>> = {
+  'zh-CN': 'zh-Hans',
+  'zh-TW': 'zh-Hant',
+  'pt-BR': 'pt-BR',
+}
+
+/** Each interface language by its own name, in every interface language, capitalized as a menu's
+ * item begins. */
+export const nativeNames = Object.fromEntries(
+  supportedLanguages.map((language) => {
+    const tag = variants[language] ?? new Intl.Locale(language).language
+    const name = displayNames(language).of(tag) ?? language
+    return [language, name.charAt(0).toLocaleUpperCase(language) + name.slice(1)]
+  }),
+) as Record<string, string>
+
 i18n
-  .use(LocalStorageBackend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
     supportedLngs: supportedLanguages,
     fallbackLng: 'en-US',
+    // The language picked last, kept in the webview's storage across restarts.
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],

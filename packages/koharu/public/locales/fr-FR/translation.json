@@ -57,8 +57,10 @@
     "loading": "Chargement…"
   },
   "errors": {
+    "actionFailed": "Impossible de terminer cette action",
     "fatalTitle": "Koharu ne peut pas continuer",
-    "tryAgain": "Réessayer"
+    "tryAgain": "Réessayer",
+    "unknown": "L’application native a renvoyé une erreur inconnue."
   },
   "feedback": {
     "addScreenshot": "Ajouter une capture d’écran",
@@ -92,12 +94,16 @@
     "title": "Remplissage génératif"
   },
   "fontPicker": {
+    "addFavorite": "Ajouter {{name}} aux favoris",
     "choose": "Choisir une police",
+    "favoritesOnly": "Afficher les polices favorites",
     "fontCount": "{{count}} polices",
     "fontCount_one": "{{count}} police",
     "fontCount_other": "{{count}} polices",
     "fonts": "Polices",
+    "noFavorites": "Aucune police favorite pour l’instant",
     "noResults": "Aucune police ne correspond à cette recherche",
+    "removeFavorite": "Retirer {{name}} des favoris",
     "search": "Rechercher des polices"
   },
   "history": {
@@ -171,8 +177,8 @@
     "border": "Contour",
     "borderColor": "Couleur du contour",
     "borderWidth": "Épaisseur du contour",
+    "chooseBorderWidth": "Choisir l’épaisseur du contour",
     "chooseFontSize": "Choisir la taille de police",
-    "decreaseBorderWidth": "Réduire l’épaisseur du contour",
     "font": "Police",
     "fontSize": "Taille de police",
     "fontStyles": {
@@ -181,7 +187,6 @@
     },
     "fontWeight": "Graisse",
     "horizontal": "Horizontal",
-    "increaseBorderWidth": "Augmenter l’épaisseur du contour",
     "opacity": "Opacité",
     "selectPage": "Sélectionnez une page pour inspecter ses calques.",
     "source": "Texte source",
@@ -191,20 +196,6 @@
     "translation": "Traduction",
     "type": "Type",
     "vertical": "Vertical"
-  },
-  "languages": {
-    "ar": "العربية",
-    "en-US": "English",
-    "es-ES": "Español",
-    "fr-FR": "Français",
-    "ja-JP": "日本語",
-    "ko-KR": "한국어",
-    "pt-BR": "Português brasileiro",
-    "ru-RU": "Русский",
-    "tr-TR": "Türkçe",
-    "wuu": "吴语",
-    "zh-CN": "简体中文",
-    "zh-TW": "繁體中文"
   },
   "layers": {
     "delete": "Supprimer {{name}}",
@@ -245,6 +236,7 @@
     "closeProject": "Fermer le projet",
     "delete": "Supprimer la sélection",
     "discord": "Discord",
+    "donate": "Faire un don",
     "edit": "Édition",
     "export": "Exporter le projet",
     "feedback": "Envoyer un commentaire",
@@ -295,9 +287,12 @@
       "recognize": "Reconnaître",
       "translate": "Traduire"
     },
-    "selected": "Sélection : {{count}}"
+    "selected": "Sélection : {{count}}",
+    "translated": "{{translated}} sur {{total}} traduits"
   },
   "outputPicker": {
+    "noResults": "Aucune langue ne correspond à cette recherche.",
+    "search": "Rechercher une langue",
     "targetLanguage": "Langue cible",
     "title": "Sortie de traduction"
   },
@@ -415,15 +410,18 @@
     },
     "title": "Paramètres",
     "typesetting": {
+      "addFallback": "Ajouter une police de secours",
       "addFamily": "Ajouter une famille de polices",
-      "defaultFamilies": "Familles de polices par défaut",
       "description": "Définissez la liste ordonnée de polices utilisée lorsqu’aucune famille n’est attribuée à un calque de texte.",
       "empty": "Aucune famille par défaut. Koharu utilisera la police de secours du système.",
+      "fallbacks": "Polices de secours",
+      "fallbacksDescription": "Utilisées dans l’ordre pour les caractères absents de la police principale. Faites glisser pour réordonner, ou sur Principale pour les échanger.",
       "familyLabel": "Famille de polices par défaut {{index}}",
       "fontFallback": "Polices préférées",
       "fontFallbackDescription": "Koharu utilise la première famille disponible qui prend en charge le texte.",
       "loadError": "Impossible de charger les polices. Les familles existantes peuvent toujours être supprimées.",
       "loadingFonts": "Chargement des polices…",
+      "primary": "Principale",
       "removeFamily": "Retirer {{family}}",
       "title": "Moteur de rendu"
     }
@@ -441,10 +439,12 @@
     "loadingProjects": "Chargement des projets…",
     "newDescription": "Créez un espace de travail vierge pour vos pages, traductions et exports.",
     "newProject": "Nouveau projet",
+    "noResults": "Aucun projet ne correspond à cette recherche.",
     "projectKind": "Projet Koharu",
     "projectList": "Projets",
     "projectName": "Nom du projet",
     "projectNamePlaceholder": "Mon nouveau projet",
+    "search": "Rechercher un projet",
     "storageHint": "Les projets sont stockés localement sur cet ordinateur.",
     "title": "Projets",
     "yourProjects": "Vos projets"

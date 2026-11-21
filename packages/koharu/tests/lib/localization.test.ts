@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { resources } from '@/lib/i18n'
-import { orderedLanguageChoices } from '@/lib/translation'
+import { languageNames } from '@/lib/translation'
 
 function keys(value: object, prefix = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => {
@@ -53,7 +53,7 @@ describe('editor localization', () => {
   })
 
   it('names the target languages in the interface language, in its order', () => {
-    const names = orderedLanguageChoices('en-US').map((language) => language.name)
+    const names = Object.values(languageNames('en-US'))
     expect(names).toContain('English')
     expect(names).toContain('Japanese')
     expect(names).toEqual(
@@ -61,6 +61,6 @@ describe('editor localization', () => {
         left.localeCompare(right, 'en-US', { numeric: true, sensitivity: 'base' }),
       ),
     )
-    expect(orderedLanguageChoices('ja-JP').map((language) => language.name)).toContain('英語')
+    expect(Object.values(languageNames('ja-JP'))).toContain('英語')
   })
 })

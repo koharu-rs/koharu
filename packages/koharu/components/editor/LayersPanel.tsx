@@ -12,6 +12,7 @@ import {
   type DragMoveEvent,
   type Modifier,
 } from '@dnd-kit/core'
+import { useMutation } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
 import {
   Brush,
@@ -32,7 +33,6 @@ import {
 import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { call, dispatch } from '@/lib/backend'
 import {
   dropMoves,
   findLayer,
@@ -46,7 +46,7 @@ import {
   type Part,
   type Placed,
 } from '@/lib/document'
-import { usePage } from '@/lib/queries'
+import { send, usePage } from '@/lib/queries'
 import { deleteLayers, moveLayers, setLocked, setPartVisibility, setVisibility } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
 import { type Layer, type LayerId } from '@koharu/ipc/protocol'
@@ -90,6 +90,16 @@ export function LayersPanel() {
   // A drag of rows: the layers it carries, in reading order, and where it would put them now.
   const [drag, setDrag] = useState<{ layers: LayerId[]; drop: Drop | null } | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+  const deletion = useMutation({
+    mutationFn: (layer: LayerId) => deleteLayers([layer]),
+    onSuccess: (_, layer) => {
+      if (selected.includes(layer)) {
+        selectLayers(selected.filter((selectedLayer) => selectedLayer !== layer))
+      }
+      setExpandedLayer((current) => (current === layer ? null : current))
+    },
+  })
 
   if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
@@ -138,22 +148,13 @@ export function LayersPanel() {
     const layer = block[part]
     if (!layer) return
     if (toggle) {
-      dispatch(setPartVisibility, block.id, part, !layer.visible)
+      send(setPartVisibility, block.id, part, !layer.visible)
       return
     }
     anchor.current = block.id
     selectLayers([layer.id])
   }
 
-  const deleteLayer = (layer: LayerId) =>
-    void call(deleteLayers, [layer])
-      .then(() => {
-        if (selected.includes(layer)) {
-          selectLayers(selected.filter((selectedLayer) => selectedLayer !== layer))
-        }
-        setExpandedLayer((current) => (current === layer ? null : current))
-      })
-      .catch(() => undefined)
 
   // Modifier semantics mirror the page rail: ctrl/meta toggles, shift selects a display range.
   const selectLayer = (layer: LayerId, additive: boolean, range: boolean) => {
@@ -197,7 +198,7 @@ export function LayersPanel() {
         onDragEnd={() => {
           const moves = drag?.drop ? dropMoves(page.layers, drag.layers, drag.drop) : null
           setDrag(null)
-          if (moves?.length) dispatch(moveLayers, moves)
+          if (moves?.length) send(moveLayers, moves)
         }}
       >
         <ScrollArea className='min-h-0 flex-1'>
@@ -223,12 +224,12 @@ export function LayersPanel() {
                   onSelect={(event) =>
                     selectLayer(layer.id, event.ctrlKey || event.metaKey, event.shiftKey)
                   }
-                  onToggle={() => dispatch(setVisibility, [layer.id], !layer.visible, null)}
-                  onLock={() => dispatch(setLocked, [layer.id], !layer.locked)}
+                  onToggle={() => send(setVisibility, [layer.id], !layer.visible, null)}
+                  onLock={() => send(setLocked, [layer.id], !layer.locked)}
                   movable={!isLockedLayer(placed)}
                   carried={drag?.layers.includes(layer.id) ?? false}
                   drop={drag?.drop?.target === layer.id ? drag.drop.zone : undefined}
-                  onDelete={() => deleteLayer(layer.id)}
+                  onDelete={() => deletion.mutate(layer.id)}
                 />
               )
             })}
@@ -390,10 +391,10 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
     setOpacity(layer.opacity * 100)
   }, [layer.id, layer.opacity])
 
-  const commitOpacity = (next: number) =>
-    void call(setVisibility, [layer.id], null, next / 100).catch(() =>
-      setOpacity(layer.opacity * 100),
-    )
+  const fade = useMutation({
+    mutationFn: (next: number) => setVisibility([layer.id], null, next / 100),
+    onError: () => setOpacity(layer.opacity * 100),
+  })
 
   return (
     <div className='grid min-w-0 gap-1.5 px-1.5 pt-0.5 pb-1.5'>
@@ -411,7 +412,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
             disabled={layer.locked}
             className='[&_[data-slot=slider-thumb]]:size-2'
             onValueChange={setOpacity}
-            onValueCommitted={commitOpacity}
+            onValueCommitted={(next) => fade.mutate(next)}
           />
           <span className='w-7 shrink-0 text-right text-[8px] text-muted-foreground tabular-nums'>
             {Math.round(opacity)}%

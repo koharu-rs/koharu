@@ -850,6 +850,9 @@ fn add_webview(window: &tauri::Window<CefRuntime>, url: WebviewUrl, shared: bool
         .size(size)
         // The canvas shows through where the page paints nothing.
         .transparent(true)
+        // The app's window opens no DevTools window, debug builds' Ctrl+Shift+I included;
+        // their DevTools protocol on port 4000 is the runtime's, and stays.
+        .devtools(false)
         .on_page_load(|_, payload| {
             if payload.event() == PageLoadEvent::Started {
                 focus_page();

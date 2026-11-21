@@ -10,7 +10,8 @@ use crate::{Background, History, Layer, LayerId, Page, PageId, ProjectId, Result
 #[derive(Clone, Debug, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "query", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Query {
-    /// List the pages in order, with their sizes and backgrounds.
+    /// List the pages in order, with their sizes, backgrounds, and how many
+    /// of their blocks are translated.
     GetProject,
     /// Get one page with its layers, each holding its children, masks among
     /// them.
@@ -42,12 +43,18 @@ pub struct ProjectAnswer {
     pub pages: Vec<PageSummary>,
 }
 
-/// A page without its layers, which `get_page` answers.
+/// A page without its layers, which `get_page` answers, and how far its
+/// translation is, as a CAT tool's file list shows each file's progress,
+/// Trados Studio's Files view among them.
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct PageSummary {
     pub id: PageId,
     pub size: Size,
     pub background: Option<Background>,
+    /// Its blocks, hidden ones too.
+    pub texts: usize,
+    /// Its blocks that hold a translation.
+    pub translated: usize,
 }
 
 impl Session {
@@ -59,12 +66,20 @@ impl Session {
                 version: self.version()?,
                 pages: project
                     .pages()
-                    .map(|page| PageSummary {
-                        id: page.id,
-                        size: page.size,
-                        background: page.background,
+                    .map(|page| {
+                        let blocks = project.blocks(page.id)?;
+                        Ok(PageSummary {
+                            id: page.id,
+                            size: page.size,
+                            background: page.background,
+                            texts: blocks.len(),
+                            translated: blocks
+                                .iter()
+                                .filter(|(_, block)| block.translation.is_some())
+                                .count(),
+                        })
                     })
-                    .collect(),
+                    .collect::<Result<_>>()?,
             }),
             Query::GetPage { page } => Answer::Page(project.page(page)?.clone()),
             Query::GetLayer { layer } => Answer::Layer(Box::new(project.layer(layer)?.clone())),

@@ -118,9 +118,38 @@
     background: color-mix(in srgb, var(--primary) 24%, transparent);
   }
 
+  /* A native scrollbar, as a select's list has, drawn as ScrollArea draws its own: a 7 px round
+     thumb in the border colour on no track, shown while the pointer is over what scrolls.
+     `scrollbar-width` and `scrollbar-color` would turn these off in Chromium, which also leaves
+     a thumb with a logical border unpainted. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 1px solid transparent;
+    border-left-width: 2px;
+    border-radius: 9999px;
+    background: var(--border) padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:horizontal {
+    border-left-width: 1px;
+    border-top-width: 2px;
+  }
+
+  :not(:hover)::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-corner,
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+
   * {
-    scrollbar-color: color-mix(in srgb, var(--foreground) 22%, transparent) transparent;
-    scrollbar-width: thin;
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;

@@ -1,6 +1,9 @@
 'use client'
 
 import {
+  MutationCache,
+  MutationObserver,
+  QueryCache,
   QueryClient,
   type QueryKey,
   queryOptions,
@@ -8,6 +11,8 @@ import {
   useMutation,
   useQuery,
 } from '@tanstack/react-query'
+import type { ParseKeys } from 'i18next'
+import { useDebouncedCallback } from 'use-debounce'
 
 import {
   commands,
@@ -17,10 +22,12 @@ import {
   type Page,
   type PageId,
   type PageSummary,
+  type Preferences,
   type ProjectAnswer,
 } from '@koharu/ipc/protocol'
+import { toast } from '@koharu/ui/components/toast'
 
-import { call } from './backend'
+import i18n from './i18n'
 
 export const projectKey = ['project'] as const
 export const pageKey = ['page'] as const
@@ -28,6 +35,8 @@ export const pageKey = ['page'] as const
 export const pagesKey = ['pages'] as const
 export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
+export const preferencesKey = ['preferences'] as const
+export const modelsKey = ['models'] as const
 
 /** The open project as the editor lists it: its name, the page the canvas shows, its pages, and
  * its history, read through the scene's own queries. */
@@ -41,15 +50,58 @@ export interface ProjectView {
   revisions: Record<PageId, string>
 }
 
+declare module '@tanstack/react-query' {
+  interface Register {
+    /** `activity` is the activity center's row while the mutation runs. */
+    mutationMeta: { activity?: ParseKeys }
+  }
+}
+
+/** A failed command's toast: the desktop rejects with its error's message. */
+function report(error: unknown): void {
+  const description =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : i18n.t('errors.unknown')
+  toast.add({ type: 'error', title: i18n.t('errors.actionFailed'), description })
+}
+
+/** Every command runs as a query or a mutation, whose failure shows here. */
+export const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: report }),
+  mutationCache: new MutationCache({ onError: report }),
+  defaultOptions: {
+    queries: {
+      staleTime: Number.POSITIVE_INFINITY,
+      retry: false,
+      refetchOnReconnect: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
+/** Runs a command whose answer nothing waits on, as a mutation, so a failure shows as any
+ * mutation's does. */
+export function send<Args extends unknown[]>(
+  command: (...args: Args) => Promise<unknown>,
+  ...args: Args
+): void {
+  void new MutationObserver(queryClient, { mutationFn: () => command(...args) })
+    .mutate()
+    .catch(() => undefined)
+}
+
 const projectQuery = queryOptions({
   queryKey: projectKey,
   queryFn: async (): Promise<ProjectView | null> => {
-    const name = await call(commands.getOpenProject)
+    const name = await commands.getOpenProject()
     if (name === null) return null
     const [page, project, history] = await Promise.all([
-      call(commands.getShownPage),
-      call(commands.query, { query: 'get_project' }),
-      call(commands.query, { query: 'get_history' }),
+      commands.getShownPage(),
+      commands.query({ query: 'get_project' }),
+      commands.query({ query: 'get_history' }),
     ])
     const known = queryClient.getQueryData<ProjectView | null>(projectKey)
     return {
@@ -65,26 +117,15 @@ const projectQuery = queryOptions({
 const pageQuery = queryOptions({
   queryKey: pageKey,
   queryFn: async (): Promise<Page | null> => {
-    const page = await call(commands.getShownPage)
+    const page = await commands.getShownPage()
     if (page === null) return null
-    return (await call(commands.query, { query: 'get_page', page })) as Page
+    return (await commands.query({ query: 'get_page', page })) as Page
   },
 })
 
 const fontsQuery = queryOptions({
   queryKey: fontsKey,
-  queryFn: () => call(commands.listFonts),
-})
-
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: Number.POSITIVE_INFINITY,
-      retry: false,
-      refetchOnReconnect: false,
-      refetchOnWindowFocus: false,
-    },
-  },
+  queryFn: () => commands.listFonts(),
 })
 
 /** The open project, read again after every change the desktop tells. */
@@ -108,8 +149,8 @@ export function usePageStory(page: PageId, enabled = true) {
     queryKey: [...pagesKey, page],
     queryFn: async () => {
       const [layers, story] = await Promise.all([
-        call(commands.query, { query: 'get_page', page }),
-        call(commands.query, { query: 'get_story', page }),
+        commands.query({ query: 'get_page', page }),
+        commands.query({ query: 'get_story', page }),
       ])
       return { page: layers as Page, story: story as LayerId[] }
     },
@@ -119,6 +160,57 @@ export function usePageStory(page: PageId, enabled = true) {
 
 export function useFonts(enabled = true) {
   return useQuery({ ...fontsQuery, enabled })
+}
+
+export function usePreferences() {
+  return useQuery({ queryKey: preferencesKey, queryFn: () => commands.getPreferences() })
+}
+
+/** Saves the preferences one save after another. Each save shows at once; what the file holds
+ * replaces it only while the cache still holds that save, so an answer never undoes a newer
+ * edit, saved or still waiting to be. */
+export function useSavePreferences() {
+  return useMutation({
+    mutationKey: preferencesKey,
+    scope: { id: 'preferences' },
+    mutationFn: (preferences: Preferences) => commands.savePreferences(preferences),
+    onMutate: async (preferences) => {
+      await queryClient.cancelQueries({ queryKey: preferencesKey })
+      queryClient.setQueryData(preferencesKey, preferences)
+    },
+    onSettled: (saved, _, preferences) => {
+      if (queryClient.getQueryData(preferencesKey) !== preferences) return
+      if (saved) queryClient.setQueryData(preferencesKey, saved)
+      else void queryClient.invalidateQueries({ queryKey: preferencesKey })
+    },
+  })
+}
+
+/** Edits the preferences as a settings page does: each edit shows at once, and saves once the
+ * edits pause; `flush` saves one still waiting. */
+export function useEditPreferences() {
+  const { mutate } = useSavePreferences()
+  const save = useDebouncedCallback(mutate, 260, { flushOnExit: true })
+  const edit = (preferences: Preferences) => {
+    void queryClient.cancelQueries({ queryKey: preferencesKey })
+    queryClient.setQueryData(preferencesKey, preferences)
+    save(preferences)
+  }
+  return { edit, flush: save.flush }
+}
+
+/** The models the translator and the agent can use. */
+export function useModels() {
+  return useQuery({ queryKey: modelsKey, queryFn: () => commands.listModels() })
+}
+
+/** The projects the start view lists, read again each time it shows. */
+export function useProjects() {
+  return useQuery({
+    queryKey: projectsKey,
+    queryFn: () => commands.listProjects(),
+    refetchOnMount: 'always',
+  })
 }
 
 export function useFontPreview(font: FontFamily | undefined, enabled = true) {
@@ -137,18 +229,17 @@ export function useFontPreview(font: FontFamily | undefined, enabled = true) {
   })
 }
 
+/** A command the activity center lists by `label` while it runs, busy wherever it's used. */
 export function useCommand<Args extends unknown[], Result>(
   key: QueryKey,
   command: (...args: Args) => Promise<Result>,
-  label: string,
-  onSuccess?: () => Promise<void>,
+  label: ParseKeys,
 ) {
   const busy = useIsMutating({ mutationKey: key }) > 0
   const mutation = useMutation({
     mutationKey: key,
-    mutationFn: (args: Args) => call(command, ...args),
+    mutationFn: (args: Args) => command(...args),
     meta: { activity: label },
-    onSuccess,
   })
   return { run: (...args: Args) => mutation.mutate(args), busy }
 }
@@ -157,6 +248,14 @@ export function useCommand<Args extends unknown[], Result>(
 export function useImportPages() {
   const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing')
   return { importPages: run, importing: busy }
+}
+
+/** Resolves once the shown page has been read since the call: a read already under way, as a
+ * change starts one, is joined rather than started again, and one a later change starts is waited
+ * for too. An edit shown before it lands holds until then, so it doesn't flash back. */
+export async function readPage(): Promise<void> {
+  do await queryClient.refetchQueries({ queryKey: pageKey }, { cancelRefetch: false })
+  while (queryClient.isFetching({ queryKey: pageKey }) > 0)
 }
 
 export async function refresh(...keys: QueryKey[]): Promise<void> {

@@ -1,8 +1,8 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { getVersion } from '@tauri-apps/api/app'
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -23,22 +23,12 @@ export function AboutDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const [version, setVersion] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open || version) return
-    let active = true
-    void getVersion()
-      .then((current) => {
-        if (active) setVersion(current)
-      })
-      .catch(() => {
-        if (active) setVersion(t('about.unavailable'))
-      })
-    return () => {
-      active = false
-    }
-  }, [open, t, version])
+  // `null` when the version can't be read, which About says without a toast.
+  const version = useQuery({
+    queryKey: ['version'],
+    queryFn: () => getVersion().catch(() => null),
+    enabled: open,
+  }).data
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -55,7 +45,9 @@ export function AboutDialog({
 
         <dl className='grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 border-t border-border/70 pt-3 text-[11px]'>
           <dt className='text-muted-foreground'>{t('about.version')}</dt>
-          <dd className='text-right font-medium'>{version ?? t('common.loading')}</dd>
+          <dd className='text-right font-medium'>
+            {version === null ? t('about.unavailable') : (version ?? t('common.loading'))}
+          </dd>
           <dt className='text-muted-foreground'>{t('about.author')}</dt>
           <dd className='text-right font-medium'>{author}</dd>
         </dl>

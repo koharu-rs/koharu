@@ -1,7 +1,7 @@
 //! Writes `packages/ipc/src/protocol.ts`: every type the commands and events
 //! carry, from specta's metadata, every command as a function over Tauri's
-//! `invoke` sending the headers the interface sets, and every event as a
-//! listener over its `listen`. tauri-specta has no release for Tauri 3 with
+//! `invoke` that runs through the runner the interface sets, and every event
+//! as a listener over its `listen`. tauri-specta has no release for Tauri 3 with
 //! this specta, and the interface needs only this much of it.
 
 use std::{borrow::Cow, fmt::Write as _, path::Path, sync::LazyLock};
@@ -27,16 +27,23 @@ fn main() -> Result<()> {
         )
         .framework_runtime(move |mut exporter| {
             let mut out = String::from(indoc! {r#"
-                import { Channel, invoke } from '@tauri-apps/api/core'
+                import { Channel, invoke, type InvokeOptions } from '@tauri-apps/api/core'
                 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
                 export { Channel }
 
-                let headers = (): Record<string, string> => ({})
+                /** Runs the command `command` by calling `invoke` with the options it sends, such as
+                 * headers. */
+                export type Runner = <T>(
+                  command: string,
+                  invoke: (options?: InvokeOptions) => Promise<T>,
+                ) => Promise<T>
 
-                /** Sets what every command sends as its headers, such as the interface's trace. */
-                export function setHeaders(provide: () => Record<string, string>): void {
-                  headers = provide
+                let runner: Runner = (_, invoke) => invoke()
+
+                /** Sets how every command runs, such as in a span whose trace it sends as headers. */
+                export function setRunner(next: Runner): void {
+                  runner = next
                 }
 
             "#});
@@ -78,7 +85,8 @@ impl Format for IpcFormat {
 }
 
 /// `export const commands`: each command as a function of its arguments,
-/// resolving to its `Ok` value; an `Err` rejects the promise.
+/// run through the runner, resolving to its `Ok` value; an `Err` rejects the
+/// promise.
 fn commands(
     exporter: &FrameworkExporter,
     functions: &[Function],
@@ -106,11 +114,11 @@ fn commands(
         }
         let _ = writeln!(
             entries,
-            r#"{}: ({}) => invoke<{result}>("{}", {{ {} }}, {{ headers: headers() }}),"#,
+            r#"{}: ({}) => runner("{name}", (options) => invoke<{result}>("{name}", {{ {} }}, options)),"#,
             function.name().to_lower_camel_case(),
             params.join(", "),
-            function.name(),
             keys.join(", "),
+            name = function.name(),
         );
     }
     Ok(formatdoc! {"
