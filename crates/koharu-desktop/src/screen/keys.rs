@@ -121,6 +121,58 @@ fn edit(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState) {
     }
 }
 
+/// Has Koharu's window take the Edit menu's chords on macOS before the menu,
+/// whose items nothing in this window enables, so they reach `send_key`.
+/// Native panels, the save dialog among them, keep the menu, which their text
+/// fields cut, copy, and paste through.
+#[cfg(target_os = "macos")]
+pub fn take_edit_chords() {
+    use std::ptr::{self, NonNull};
+
+    use block2::RcBlock;
+    use objc2::{ClassType as _, MainThreadMarker, runtime::NSObjectProtocol as _};
+    use objc2_app_kit::{NSEvent, NSEventMask, NSPanel};
+
+    let handler = RcBlock::new(|event: NonNull<NSEvent>| -> *mut NSEvent {
+        // SAFETY: AppKit hands a monitor a live event.
+        let key = unsafe { event.as_ref() };
+        if edit_chord(key)
+            && let Some(mtm) = MainThreadMarker::new()
+            && let Some(window) = key.window(mtm)
+            && !window.isKindOfClass(NSPanel::class())
+        {
+            window.sendEvent(key);
+            return ptr::null_mut();
+        }
+        event.as_ptr()
+    });
+    // SAFETY: The handler returns the event it was given, or null for one it
+    // delivered itself.
+    let monitor = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler)
+    };
+    // The monitor lasts as long as the app.
+    std::mem::forget(monitor);
+}
+
+/// Whether `key` is Cmd+X, C, V, A, Z, or Shift+Z, by the layout's letter with
+/// Shift aside, as macOS matches the Edit menu's key equivalents.
+#[cfg(target_os = "macos")]
+fn edit_chord(key: &objc2_app_kit::NSEvent) -> bool {
+    use objc2_app_kit::NSEventModifierFlags as Flags;
+
+    let held =
+        key.modifierFlags() & (Flags::Command | Flags::Shift | Flags::Control | Flags::Option);
+    let letter = key
+        .charactersIgnoringModifiers()
+        .map(|text| text.to_string().to_lowercase());
+    match letter.as_deref() {
+        Some("x" | "c" | "v" | "a") => held == Flags::Command,
+        Some("z") => held == Flags::Command || held == Flags::Command | Flags::Shift,
+        _ => false,
+    }
+}
+
 /// The input method's composition and what it commits. A commit replaces
 /// the composition, which character events would leave in place.
 pub fn send_ime(host: &BrowserHost, ime: &Ime) {

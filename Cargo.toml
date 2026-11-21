@@ -51,6 +51,7 @@ backon = { version = "1.6.0", default-features = false, features = ["std", "toki
 base64 = "0.23.1"
 bindgen = { version = "0.73.2", default-features = false, features = ["logging", "runtime"] }
 blake3 = "1.8.7"
+block2 = "0.6.2"
 bytes = "1.12.1"
 bytesize = "2.7.0"
 # CEF's frames as GPU textures; tauri-runtime-cef pins this version.
@@ -99,6 +100,15 @@ minijinja = { version = "3.1.0", features = ["json", "loop_controls", "preserve_
 minijinja-contrib = { version = "3.1.0", features = ["pycompat"] }
 # oauth2 sends its requests on an older reqwest; Koharu sends them on rig's.
 oauth2 = { version = "5.0.0", default-features = false }
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "block2",
+    "NSEvent",
+    "NSPanel",
+    "NSResponder",
+    "NSWindow",
+] }
 parking_lot = "0.13.0"
 petgraph = "0.8.3"
 photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97e5b4b1d9a03c3ef9b904dd5de864f5e8aa8" }
