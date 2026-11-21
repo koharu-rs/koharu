@@ -736,7 +736,7 @@ impl Canvas {
         self.overlay(&mut drawing)?;
         let target = match self.target.take() {
             Some(target) if sized => target,
-            _ => Target::new(&gpu, width, height),
+            _ => Target::new(&gpu, width, height)?,
         };
         let target = self.target.insert(target);
         drawing.render(&target.view)?;

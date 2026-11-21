@@ -193,16 +193,19 @@ impl Gpu {
         }
     }
 
-    /// Runs `work`, which records its GPU work and waits for it on this
-    /// thread, inside error scopes, so a GPU error fails it rather than
-    /// leaving what it reads back blank.
-    fn checked<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
+    /// Runs `work`, which makes GPU resources or records GPU work and waits
+    /// for it on this thread, inside error scopes, so a GPU error fails it
+    /// rather than leaving what it reads back blank, or an invalid resource
+    /// to be kept: wgpu makes one that ran out of memory invalid for good.
+    pub fn checked<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
         let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
         let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let result = work();
         let invalid = pollster::block_on(validation.pop());
         let short = pollster::block_on(memory.pop());
-        match invalid.or(short) {
+        // Running out of memory leaves a resource invalid, and the
+        // validation errors of whatever uses it follow from that.
+        match short.or(invalid) {
             Some(error) => Err(anyhow!("the GPU failed: {error}")),
             None => result,
         }
@@ -411,8 +414,9 @@ impl Drawing<'_> {
 
     /// `pixmap` as an image the scene samples: uploaded as a texture of its
     /// own unless one is kept, and named by its id. The drawing holds the
-    /// texture until it renders, kept or not.
-    pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> ImageSource {
+    /// texture until it renders, kept or not; one the GPU had no memory for
+    /// fails the drawing and isn't kept.
+    pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> Result<ImageSource> {
         let address = Arc::as_ptr(pixmap) as usize;
         let uploaded = self
             .vello
@@ -420,42 +424,48 @@ impl Drawing<'_> {
             .get(&address)
             .filter(|upload| upload.pixmap.as_ptr() == Arc::as_ptr(pixmap))
             .map(|upload| (upload.id, upload.view.clone()));
-        let (id, view) = uploaded.unwrap_or_else(|| {
-            let texture = self.gpu.device.create_texture_with_data(
-                &self.gpu.queue,
-                &TextureDescriptor {
-                    label: Some("koharu image"),
-                    size: Extent3d {
-                        width: u32::from(pixmap.width()),
-                        height: u32::from(pixmap.height()),
-                        depth_or_array_layers: 1,
+        let (id, view) = match uploaded {
+            Some(uploaded) => uploaded,
+            None => {
+                let gpu = self.gpu;
+                let texture = gpu.checked(|| {
+                    Ok(gpu.device.create_texture_with_data(
+                        &gpu.queue,
+                        &TextureDescriptor {
+                            label: Some("koharu image"),
+                            size: Extent3d {
+                                width: u32::from(pixmap.width()),
+                                height: u32::from(pixmap.height()),
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: TextureFormat::Rgba8Unorm,
+                            usage: TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        },
+                        wgpu::util::TextureDataOrder::LayerMajor,
+                        pixmap.data_as_u8_slice(),
+                    ))
+                })?;
+                let id = TextureId(self.vello.next_texture);
+                self.vello.next_texture += 1;
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                self.vello.textures.insert(
+                    address,
+                    Upload {
+                        pixmap: Arc::downgrade(pixmap),
+                        id,
+                        view: view.clone(),
+                        bytes: pixmap.data_as_u8_slice().len() as u64,
                     },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: TextureFormat::Rgba8Unorm,
-                    usage: TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                },
-                wgpu::util::TextureDataOrder::LayerMajor,
-                pixmap.data_as_u8_slice(),
-            );
-            let id = TextureId(self.vello.next_texture);
-            self.vello.next_texture += 1;
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            self.vello.textures.insert(
-                address,
-                Upload {
-                    pixmap: Arc::downgrade(pixmap),
-                    id,
-                    view: view.clone(),
-                    bytes: pixmap.data_as_u8_slice().len() as u64,
-                },
-            );
-            (id, view)
-        });
+                );
+                (id, view)
+            }
+        };
         self.bindings.insert(id, view);
-        ImageSource::external_texture(id, TextureRegion::Full, true)
+        Ok(ImageSource::external_texture(id, TextureRegion::Full, true))
     }
 }
 

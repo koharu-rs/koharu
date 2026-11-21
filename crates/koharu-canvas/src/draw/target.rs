@@ -13,31 +13,35 @@ pub(crate) struct Target {
 }
 
 impl Target {
-    pub fn new(gpu: &Arc<Gpu>, width: u32, height: u32) -> Self {
+    /// Fails when the GPU has no memory for it, so the canvas keeps no
+    /// invalid texture and the next redraw makes it again.
+    pub fn new(gpu: &Arc<Gpu>, width: u32, height: u32) -> anyhow::Result<Self> {
         // Rendered into by vello_gpu, sampled by the host, and copied out
         // for a snapshot.
-        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("koharu canvas"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let texture = gpu.checked(|| {
+            Ok(gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("koharu canvas"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: TextureFormat::Rgba8Unorm,
+                usage: TextureUsages::RENDER_ATTACHMENT
+                    | TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_SRC,
+                view_formats: &[],
+            }))
+        })?;
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        Self {
+        Ok(Self {
             gpu: Arc::clone(gpu),
             texture,
             view,
-        }
+        })
     }
 
     pub fn size(&self) -> (u32, u32) {
