@@ -1,3 +1,9 @@
+## [0.90.3](https://github.com/koharu-rs/koharu/compare/0.90.2..0.90.3) - 2026-11-21
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Restore macOS editing keys and shortcuts ([#1448](https://github.com/koharu-rs/koharu/issues/1448)) - ([9dc7458](https://github.com/koharu-rs/koharu/commit/9dc745854753b782f0cc8f4b21ddd47c7f799cec))
+
 ## [0.90.2](https://github.com/koharu-rs/koharu/compare/0.90.1..0.90.2) - 2026-11-21
 
 ### 🐛 Bug Fixes
