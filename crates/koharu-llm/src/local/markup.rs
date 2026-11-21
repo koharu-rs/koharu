@@ -85,7 +85,8 @@ pub(crate) struct Parser {
     tools: Vec<Arc<ToolDefinition>>,
     state: State,
     held: String,
-    /// Whitespace right after a marker belongs to no item.
+    /// Whitespace right after a marker, or before an answer, belongs to no
+    /// item.
     skip_space: bool,
     /// Only initial reasoning counts; after answer text starts, markers are literal.
     once: bool,
@@ -114,7 +115,7 @@ impl Parser {
         prompt: &str,
     ) -> Self {
         let reasoning = markup.reasoning;
-        let open = reasoning.is_some_and(|(open, _)| prompt.trim_end().ends_with(open));
+        let open = reasoning.is_some_and(|(open, _)| opened(open, prompt));
         Self {
             reasoning,
             call: markup.call.as_ref().filter(|_| !tools.is_empty()),
@@ -132,6 +133,7 @@ impl Parser {
     pub(crate) fn answer(markup: &'static Markup, prompt: &str) -> Self {
         let mut parser = Self::new(markup, Vec::new(), prompt);
         parser.once = true;
+        parser.skip_space = true;
         parser
     }
 
@@ -275,6 +277,12 @@ impl Parser {
     }
 }
 
+/// Whether `prompt` ends in reasoning its template opened with `open`, so the
+/// reply starts in it.
+pub(crate) fn opened(open: &str, prompt: &str) -> bool {
+    prompt.trim_end().ends_with(open)
+}
+
 /// How many of `text`'s last bytes could be the start of one of `markers`.
 fn partial<'a>(text: &str, markers: impl Iterator<Item = &'a str>) -> usize {
     markers
@@ -330,15 +338,17 @@ mod tests {
         items
     }
 
-    /// The same items whether the reply arrives whole or cut anywhere.
+    /// [`reads`] by a parser for `prompt` that's offered the tools.
     fn parses(markup: &'static Markup, prompt: &str, reply: &str, expected: &[Item]) {
-        let whole = all(&mut Parser::new(markup, tools(), prompt), &[reply]);
+        reads(|| Parser::new(markup, tools(), prompt), reply, expected);
+    }
+
+    /// The same items whether the reply arrives whole or cut anywhere.
+    fn reads(parser: impl Fn() -> Parser, reply: &str, expected: &[Item]) {
+        let whole = all(&mut parser(), &[reply]);
         assert_eq!(whole, expected, "whole");
         for (at, _) in reply.char_indices().skip(1) {
-            let cut = all(
-                &mut Parser::new(markup, tools(), prompt),
-                &[&reply[..at], &reply[at..]],
-            );
+            let cut = all(&mut parser(), &[&reply[..at], &reply[at..]]);
             assert_eq!(cut, expected, "cut at byte {at}");
         }
     }
@@ -530,17 +540,7 @@ mod tests {
             Item::Text("{\"01\": \"<think>a</think>\"}".to_owned()),
         ];
         let prompt = "<|im_start|>assistant\n<think>\n";
-        assert_eq!(
-            all(&mut Parser::answer(&FUNCTION_TAGS, prompt), &[reply]),
-            expected
-        );
-        for (at, _) in reply.char_indices().skip(1) {
-            let cut = all(
-                &mut Parser::answer(&FUNCTION_TAGS, prompt),
-                &[&reply[..at], &reply[at..]],
-            );
-            assert_eq!(cut, expected, "cut at byte {at}");
-        }
+        reads(|| Parser::answer(&FUNCTION_TAGS, prompt), reply, &expected);
         // With reasoning off the reply is all answer.
         let closed = "<|im_start|>assistant\n<think>\n\n</think>\n\n";
         assert_eq!(
@@ -561,10 +561,11 @@ mod tests {
                 "<|channel>thought\nReading it.\n<channel|>\n{\"01\": \"<|channel>thought\\n<channel|>\"}",
                 "{\"01\": \"<|channel>thought\\n<channel|>\"}",
             ),
+            // Whitespace before the reasoning belongs to no item.
             (
                 &FUNCTION_TAGS,
                 "<|im_start|>assistant\n",
-                "<think>\nReading it.\n</think>\n{\"01\": \"<think>a</think>\"}",
+                "\n<think>\nReading it.\n</think>\n{\"01\": \"<think>a</think>\"}",
                 "{\"01\": \"<think>a</think>\"}",
             ),
         ] {
@@ -572,17 +573,7 @@ mod tests {
                 Item::Reasoning("Reading it.\n".to_owned()),
                 Item::Text(answer.to_owned()),
             ];
-            assert_eq!(all(&mut Parser::answer(markup, prompt), &[reply]), expected);
-            for (at, _) in reply.char_indices().skip(1) {
-                assert_eq!(
-                    all(
-                        &mut Parser::answer(markup, prompt),
-                        &[&reply[..at], &reply[at..]],
-                    ),
-                    expected,
-                    "cut at byte {at}",
-                );
-            }
+            reads(|| Parser::answer(markup, prompt), reply, &expected);
         }
     }
 
@@ -590,18 +581,8 @@ mod tests {
     fn an_answer_without_reasoning_reads_markers_as_text() {
         let reply = " \n{\"01\": \"<|channel>thought\\n<channel|><think>a</think>\"}";
         for markup in [&GEMMA4, &FUNCTION_TAGS] {
-            let expected = [Item::Text(reply.to_owned())];
-            assert_eq!(all(&mut Parser::answer(markup, ""), &[reply]), expected);
-            for (at, _) in reply.char_indices().skip(1) {
-                assert_eq!(
-                    all(
-                        &mut Parser::answer(markup, ""),
-                        &[&reply[..at], &reply[at..]],
-                    ),
-                    expected,
-                    "cut at byte {at}",
-                );
-            }
+            let expected = [Item::Text(reply.trim_start().to_owned())];
+            reads(|| Parser::answer(markup, ""), reply, &expected);
         }
     }
 }

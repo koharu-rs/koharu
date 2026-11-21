@@ -325,9 +325,9 @@ pub(crate) struct Prompt {
     images: Vec<Vec<u8>>,
     sampling: Sampling,
     schema: Option<String>,
-    /// The marker after which the schema holds the reply, which reasons
-    /// freely before it.
-    answer_after: Option<&'static str>,
+    /// The markers of the reasoning the reply may write before the schema
+    /// holds it.
+    answer_after: Option<(&'static str, &'static str)>,
     parser: Parser,
 }
 
@@ -374,7 +374,6 @@ impl Wire for Gguf {
             (Some(_), true) => Some(
                 self.markup
                     .and_then(|markup| markup.reasoning)
-                    .map(|(_, close)| close)
                     .ok_or_else(|| EncodeError::request("this local model doesn't reason"))?,
             ),
             _ => None,
