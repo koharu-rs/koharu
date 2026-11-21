@@ -36,6 +36,7 @@ export function ColorWell(props: ColorWellProps) {
   const [draft, setDraft] = useState(value ?? '#000000')
   const [transparent, setTransparent] = useState(value === null)
   const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState<{ text: string; color: string } | null>(null)
   const opened = useRef(draft)
   const sampling = useColorSampling()
   const recent = useColorHistory((state) => state.colors)
@@ -56,6 +57,7 @@ export function ColorWell(props: ColorWellProps) {
     setTransparent(false)
     if (props.allowTransparent) props.onChange(normalized)
     else props.onChange(normalized)
+    return normalized
   }
 
   const clear = () => {
@@ -121,12 +123,15 @@ export function ColorWell(props: ColorWellProps) {
           />
         </div>
         <div className='mt-3 flex gap-2'>
+          {/* The field resets its text whenever `color` changes, so it keeps the text typed while
+              that names the colour applied: the expanded colour would turn a typed `ff0` into
+              `FFFF00` and cut off the code's remaining digits. */}
           <HexColorInput
             prefixed
-            color={draft}
+            color={typed?.color === draft ? typed.text : draft}
             aria-label={t('colorPicker.hexCode')}
             className='h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 font-mono text-[11px] uppercase outline-none focus:border-ring'
-            onChange={set}
+            onChange={(text) => setTyped({ text, color: set(text) })}
           />
           {sampling && (
             <Button
