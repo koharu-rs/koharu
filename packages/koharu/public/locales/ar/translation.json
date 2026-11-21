@@ -47,6 +47,8 @@
   "colorPicker": {
     "brushColor": "لون الفرشاة",
     "hexCode": "رمز اللون الست عشري",
+    "recent": "الألوان المستخدمة مؤخرًا",
+    "recentColor": "لون مستخدم مؤخرًا {{color}}",
     "sampleCanvas": "اختيار لون من اللوحة",
     "transparent": "شفاف"
   },
