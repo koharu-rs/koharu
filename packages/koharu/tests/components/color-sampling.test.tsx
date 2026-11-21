@@ -42,6 +42,20 @@ describe('canvas color sampling', () => {
     expect(onChange).toHaveBeenCalledWith('#FFFFFF')
   })
 
+  it('takes a hex code typed digit by digit past its valid shorthand', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<ColorWell value='#111111' onChange={onChange} />)
+
+    await user.click(screen.getByRole('button', { name: 'Brush color' }))
+    const hex = screen.getByRole('textbox', { name: 'Hex color code' })
+    await user.clear(hex)
+    await user.type(hex, 'ff0000')
+
+    expect(onChange).toHaveBeenLastCalledWith('#FF0000')
+    expect(hex).toHaveValue('#ff0000')
+  })
+
   it('commits the final picker color when its window-level drag ends', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
