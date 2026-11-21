@@ -75,7 +75,7 @@ impl Template {
 impl Template {
     pub(super) fn from_source(source: &str) -> Self {
         Self {
-            environment: environment(source.to_owned()).unwrap(),
+            environment: environment(source.to_owned()).expect("a test's template compiles"),
             bos: "<bos>".to_owned(),
             eos: "<eos>".to_owned(),
             adds_bos: true,

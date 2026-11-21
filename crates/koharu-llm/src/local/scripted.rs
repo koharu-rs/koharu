@@ -13,7 +13,7 @@ use rig_core::{
 use serde_json::Map;
 
 use super::{
-    Engine, Gguf,
+    Gguf, Queue,
     engine::{Job, Step},
     markup::Markup,
     spec,
@@ -85,7 +85,7 @@ pub(crate) fn scripted_kind(
         facts: ModelFacts::new(spec("scripted", markup, kind).with_context_window(window)),
     };
     Scripted {
-        model: RigModel::new(wire, Engine(jobs)).erase(),
+        model: RigModel::new(wire, Queue(jobs)).erase(),
         prompts,
     }
 }

@@ -168,10 +168,8 @@ impl Parser {
     /// needs more of the reply.
     fn read_text(&mut self, end: bool, items: &mut Vec<Result<Item, String>>) -> bool {
         if self.once
-            && self.reasoning.is_some_and(|(open, _)| {
-                let start = self.held.trim_start();
-                !start.starts_with(open) && !open.starts_with(start)
-            })
+            && let Some((open, _)) = self.reasoning
+            && opens(open, self.held.as_bytes()) == Some(false)
         {
             self.reasoning = None;
         }
@@ -283,6 +281,21 @@ pub(crate) fn opened(open: &str, prompt: &str) -> bool {
     prompt.trim_end().ends_with(open)
 }
 
+/// Whether a reply that starts with `start` opens reasoning with `open`, past
+/// ASCII whitespace: `None` while `start` could still begin `open`. Reasoning
+/// the prompt didn't open comes only there, which the engine and [`Parser`]
+/// both read by this.
+pub(crate) fn opens(open: &str, start: &[u8]) -> Option<bool> {
+    let start = start.trim_ascii_start();
+    if start.starts_with(open.as_bytes()) {
+        Some(true)
+    } else if open.as_bytes().starts_with(start) {
+        None
+    } else {
+        Some(false)
+    }
+}
+
 /// How many of `text`'s last bytes could be the start of one of `markers`.
 fn partial<'a>(text: &str, markers: impl Iterator<Item = &'a str>) -> usize {
     markers
@@ -305,7 +318,7 @@ mod tests {
 
     fn tools() -> Vec<Arc<ToolDefinition>> {
         vec![Arc::new(ToolDefinition {
-            name: ToolName::new("get_page").unwrap(),
+            name: ToolName::new("get_page").expect("`get_page` names a tool"),
             description: String::new(),
             parameters: json!({
                 "type": "object",
@@ -327,7 +340,7 @@ mod tests {
         }
         results.extend(parser.finish());
         for result in results {
-            let item = result.unwrap();
+            let item = result.expect("every item reads");
             // Streaming splits text and reasoning at arbitrary points.
             match (items.last_mut(), item) {
                 (Some(Item::Text(held)), Item::Text(more))
@@ -364,7 +377,7 @@ mod tests {
         let Item::Call(call) = item else {
             panic!("a call");
         };
-        serde_json::from_str(&call.arguments).unwrap()
+        serde_json::from_str(&call.arguments).expect("the arguments are JSON")
     }
 
     #[test]
