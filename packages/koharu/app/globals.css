@@ -40,6 +40,16 @@
   --shadow-floating: 0 12px 32px rgb(17 17 17 / 0.16), 0 2px 8px rgb(17 17 17 / 0.08);
 }
 
+/* A CJK interface keeps Noto Sans CJK first: Noto Sans has `…`, `—`, and `·` too, but draws
+   them as Latin punctuation, not the full-width forms CJK text sets. */
+html:lang(ja),
+html:lang(zh),
+html:lang(ko),
+html:lang(wuu) {
+  --font-sans:
+    var(--font-noto-sans-cjk), var(--font-noto-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
 .dark {
   --background: #000000;
   --foreground: #f5f5f5;
