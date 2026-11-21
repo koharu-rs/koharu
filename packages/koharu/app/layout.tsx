@@ -1,9 +1,15 @@
 import type { Metadata } from 'next'
-import localFont from 'next/font/local'
 import { ThemeProvider } from 'next-themes'
+import localFont from 'next/font/local'
 
 import './globals.css'
 import Providers from '@/app/providers'
+
+const notoSans = localFont({
+  src: './fonts/NotoSans-VF.ttf',
+  weight: '100 900',
+  variable: '--font-noto-sans',
+})
 
 const notoSansCJK = localFont({
   src: './fonts/NotoSansCJK-VF.otf',
@@ -21,11 +27,13 @@ function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang='en-US' suppressHydrationWarning style={{ backgroundColor: 'transparent' }}>
-      <body
-        className={`${notoSansCJK.variable} antialiased`}
-        style={{ backgroundColor: 'transparent' }}
-      >
+    <html
+      lang='en-US'
+      className={`${notoSans.variable} ${notoSansCJK.variable}`}
+      suppressHydrationWarning
+      style={{ backgroundColor: 'transparent' }}
+    >
+      <body className='antialiased' style={{ backgroundColor: 'transparent' }}>
         <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
           <Providers>{children}</Providers>
         </ThemeProvider>

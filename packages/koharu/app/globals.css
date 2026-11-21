@@ -1,6 +1,8 @@
 @import '@koharu/ui/globals.css';
 
 :root {
+  --font-sans:
+    var(--font-noto-sans), var(--font-noto-sans-cjk), ui-sans-serif, system-ui, sans-serif;
   --radius: 0.75rem;
   --background: #ffffff;
   --foreground: #111111;
@@ -78,7 +80,7 @@
     @apply text-foreground select-none;
     background-color: transparent;
     overflow: hidden;
-    font-family: var(--font-noto-sans-cjk), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-feature-settings:
       'cv02' 1,
       'cv03' 1,
