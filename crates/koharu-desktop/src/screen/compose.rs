@@ -14,6 +14,9 @@ use winit::window::Window;
 
 use super::paint::{Paint, Painted};
 
+#[cfg(target_os = "linux")]
+mod x11;
+
 /// Draws a texture into a rectangle given in normalized device coordinates,
 /// as a four-vertex strip.
 const SHADER: &str = r"
@@ -47,6 +50,9 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
 
 pub struct Compositor {
     surface: wgpu::Surface<'static>,
+    /// On X11, the window the surface is on, inside the window's own.
+    #[cfg(target_os = "linux")]
+    child: Option<Arc<x11::Child>>,
     config: wgpu::SurfaceConfiguration,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -74,9 +80,18 @@ struct Source {
 
 impl Compositor {
     pub fn new(gpu: &Gpu, window: Arc<dyn Window>) -> Result<Self> {
+        #[cfg(target_os = "linux")]
+        let child = x11::Child::new(&window)?.map(Arc::new);
+        #[cfg(target_os = "linux")]
+        let target = match &child {
+            Some(child) => wgpu::SurfaceTarget::from(Arc::clone(child)),
+            None => window.into(),
+        };
+        #[cfg(not(target_os = "linux"))]
+        let target = window;
         let surface = gpu
             .instance
-            .create_surface(window)
+            .create_surface(target)
             .context("failed to create the window's surface")?;
         let capabilities = surface.get_capabilities(&gpu.adapter);
         let format = capabilities
@@ -188,6 +203,8 @@ impl Compositor {
         };
         Ok(Self {
             surface,
+            #[cfg(target_os = "linux")]
+            child,
             config,
             layout,
             sampler,
@@ -211,7 +228,11 @@ impl Compositor {
     ) -> Result<()> {
         if (self.config.width, self.config.height) != size {
             (self.config.width, self.config.height) = size;
-            self.surface.configure(&gpu.device, &self.config);
+            #[cfg(target_os = "linux")]
+            if let Some(child) = &self.child {
+                child.resize(size)?;
+            }
+            self.configure(gpu)?;
         }
         self.view.rect = match &painted.view_frame {
             Some(frame) => self
@@ -256,13 +277,11 @@ impl Compositor {
                 return Ok(());
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&gpu.device, &self.config);
+                self.configure(gpu)?;
                 return Ok(());
             }
-            // wgpu drops a surface's configuration before applying a new one,
-            // so a configure that failed leaves it unconfigured, and every
-            // frame after fails validation; a lost surface takes a new one,
-            // as wgpu documents. Either way the caller draws on a new one.
+            // A lost surface takes a new one, as wgpu documents, and so does
+            // one failing validation: the caller draws on a new one.
             wgpu::CurrentSurfaceTexture::Lost => bail!("the window's surface was lost"),
             wgpu::CurrentSurfaceTexture::Validation => {
                 bail!("the window's surface failed validation")
@@ -281,6 +300,17 @@ impl Compositor {
             }
         }
         Ok(())
+    }
+
+    /// Configures the surface for `config`. wgpu reports a failed configure
+    /// to the device rather than to the call, and drops the configuration
+    /// first, so the surface it leaves unconfigured would panic on the next
+    /// frame; this fails instead.
+    fn configure(&self, gpu: &Gpu) -> Result<()> {
+        gpu.catch(|| {
+            self.surface.configure(&gpu.device, &self.config);
+            Ok(())
+        })
     }
 
     fn draw(&self, gpu: &Gpu, target: &wgpu::TextureView) {

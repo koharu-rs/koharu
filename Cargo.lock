@@ -5642,6 +5642,7 @@ dependencies = [
  "wgpu",
  "windows",
  "winit-common",
+ "x11rb",
  "zip 9.7.3",
 ]
 

@@ -22,7 +22,7 @@ whoever changed it last: the user, a model's run, or an agent.
 |---|---|---|
 | interface | the React interface renders off-screen in CEF, which hands over each paint's pixels and the rectangles that changed | a windowless CEF browser paints into a BGRA buffer, with the rectangles that need repainting [CEF render handler]; Electron renders a page off-screen on the same engine [Electron offscreen rendering] |
 | canvas | `koharu-canvas` draws the page with the process's GPU | |
-| frame | the canvas, then the interface over it, then the interface's popup, such as an open `<select>`, on the window's own surface | |
+| frame | the canvas, then the interface over it, then the interface's popup, such as an open `<select>`, on the window's own surface; on X11, on a child window covering it that takes no input, since GTK draws its own window with OpenGL and NVIDIA's driver lets one graphics API at a time present to a window | Chromium presents Vulkan to a child window of its own, on its parent's depth and visual and resized with it [Chromium X11 Vulkan surface] |
 | pointer | goes to the canvas where the interface painted nothing over it, and to the interface everywhere else | |
 | keys | go to the side a press last landed on: after a press on the canvas, to the canvas first, and on to the interface when the canvas doesn't take the key; Tab passed on hands the keys back, as it moves the interface's focus. The input method's composition goes to the canvas while it types, its candidate window at the caret, and to the interface otherwise; the canvas's copy and paste go through the system clipboard | Photoshop's document window takes the keys once clicked |
 
@@ -85,11 +85,13 @@ Read in November 2026.
 
 - Chromium Embedded Framework and Electron: [CEF render handler], [Electron
   offscreen rendering]
+- Chromium: [Chromium X11 Vulkan surface]
 - Tauri: [Tauri installer], [Tauri app directories]
 - Clip Studio Paint: [Clip Studio Paint user data]
 
 [CEF render handler]: https://github.com/chromiumembedded/cef/blob/14c5a089e8452874cb1a556dc3fde26ed2d87723/include/cef_render_handler.h#L132-L150
 [Electron offscreen rendering]: https://github.com/electron/electron/blob/6d9ec3d7433a01587615a23881ed64ed94e1fa6d/docs/tutorial/offscreen-rendering.md
+[Chromium X11 Vulkan surface]: https://chromium.googlesource.com/chromium/src/+/ef290da170d481d1ef1c9ca4e11d156cfaf09afe/gpu/vulkan/x/vulkan_surface_x11.cc#51
 [Tauri installer]: https://github.com/tauri-apps/tauri/blob/17a527316d3aee46f7185c178d3b3122d8ebfd7b/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi#L546-L547
 [Tauri app directories]: https://github.com/tauri-apps/tauri/blob/17a527316d3aee46f7185c178d3b3122d8ebfd7b/crates/tauri-utils/src/config.rs#L3617-L3637
 [Clip Studio Paint user data]: https://support.clip-studio.com/en-us/faq/articles/20210039
