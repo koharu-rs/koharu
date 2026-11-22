@@ -122,9 +122,10 @@ export function NumberField({
   placeholder?: string
   onChange: (value: number | null) => void
 }) {
-  // The label takes the room a wrapped neighbour's label adds, so inputs side by side line up.
+  // The label takes the room a wrapped neighbour's label adds, so inputs side by side line up. Its
+  // one column is the label's width, not the input's default 20-character width.
   return (
-    <label className='grid grid-rows-[1fr_auto] gap-1 text-[10px] text-muted-foreground'>
+    <label className='grid grid-cols-1 grid-rows-[1fr_auto] gap-1 text-[10px] text-muted-foreground'>
       {label}
       <NumberFieldRoot
         value={value}
