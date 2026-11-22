@@ -1,7 +1,7 @@
 //! Inference-only Hayai OCR network.
 //!
 //! Hayai architecture and generation implementation:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/f5f0f617f5148f760074f743e25576f381992c34/modeling_hayai.py
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/b00317ed69fccee5f787187d913fcf8a96f37f65/modeling_hayai.py
 //! Upstream generates through `_FastEngine`, an inference copy of the
 //! modules' math with fused weights; this port follows the modules and
 //! `_reference_generate`, which compute the same result. Upstream skips the

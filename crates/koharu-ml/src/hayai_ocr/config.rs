@@ -1,7 +1,7 @@
 //! Hayai OCR configuration.
 //!
 //! Upstream configuration:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/f5f0f617f5148f760074f743e25576f381992c34/configuration_hayai.py
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/b00317ed69fccee5f787187d913fcf8a96f37f65/configuration_hayai.py
 //! The vision encoder is the `Siglip2VisionModel` instantiated by
 //! `modeling_hayai.HayaiModel` from `google/siglip2-base-patch16-naflex`, whose
 //! released config only overrides the model type, so every value below is the
