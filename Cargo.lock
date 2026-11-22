@@ -5463,7 +5463,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "clap",
  "indoc",
@@ -5487,7 +5487,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -5521,7 +5521,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "bindgen",
  "fs-err",
@@ -5533,7 +5533,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -5564,7 +5564,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "age",
  "atomicwrites",
@@ -5585,7 +5585,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-desktop"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -5648,7 +5648,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
@@ -5658,7 +5658,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "koharu-bindgen",
  "libloading 0.9.1",
@@ -5666,7 +5666,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-leptonica"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "image",
  "thiserror 2.0.21",
@@ -5674,7 +5674,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -5690,7 +5690,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "koharu-bindgen",
  "libloading 0.9.1",
@@ -5698,7 +5698,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llm"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "backon",
@@ -5734,7 +5734,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -5763,7 +5763,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -5802,7 +5802,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -5820,7 +5820,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "fontique",
@@ -5858,7 +5858,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "anyhow",
  "backon",
@@ -5886,7 +5886,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-scene"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "blake3",
  "color",
@@ -5920,7 +5920,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-sentry"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "sentry",
  "serde",
@@ -5931,7 +5931,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "fs-err",
  "half",
@@ -5945,7 +5945,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.91.1"
+version = "0.92.0"
 dependencies = [
  "koharu-bindgen",
  "libloading 0.9.1",
