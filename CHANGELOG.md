@@ -1,3 +1,13 @@
+## [0.92.0](https://github.com/koharu-rs/koharu/compare/0.91.1..0.92.0) - 2026-11-22
+
+### ⛰️  Features
+
+- *(ml)* Update Hayai OCR to b00317e ([#1475](https://github.com/koharu-rs/koharu/issues/1475)) - ([491cabe](https://github.com/koharu-rs/koharu/commit/491cabec3c38a7e70e4cb1bc47f6f3f42609d4b9))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Keep the detector threshold inputs inside their column in a narrow settings window - ([beaafaa](https://github.com/koharu-rs/koharu/commit/beaafaa3a76d02b3479955310d1007f42f35cd56))
+
 ## [0.91.1](https://github.com/koharu-rs/koharu/compare/0.91.0..0.91.1) - 2026-11-22
 
 ### 🐛 Bug Fixes
