@@ -1,3 +1,13 @@
+## [0.91.1](https://github.com/koharu-rs/koharu/compare/0.91.0..0.91.1) - 2026-11-22
+
+### 🐛 Bug Fixes
+
+- *(linux)* Draw the window on a child X window of GTK's, so Koharu starts on NVIDIA under X11 - ([a142321](https://github.com/koharu-rs/koharu/commit/a142321f78d554339195c416be70706009f96a3e))
+
+### 🎨 Styling
+
+- *(linux)* Format the child window's input shape call - ([65557c9](https://github.com/koharu-rs/koharu/commit/65557c9ffab41de4e4f4f97ff8d4315cdc3de912))
+
 ## [0.91.0](https://github.com/koharu-rs/koharu/compare/0.90.3..0.91.0) - 2026-11-21
 
 ### ⛰️  Features
