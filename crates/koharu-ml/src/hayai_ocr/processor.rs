@@ -3,8 +3,8 @@
 //! Image preprocessing is Hayai's own `HayaiImageProcessor` with its released
 //! settings and the patch budget `HayaiModel.ocr` asks for by default,
 //! `max_patches="auto"`, which picks one per crop:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/f5f0f617f5148f760074f743e25576f381992c34/processing_hayai.py
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/f5f0f617f5148f760074f743e25576f381992c34/preprocessor_config.json
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/b00317ed69fccee5f787187d913fcf8a96f37f65/processing_hayai.py
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/blob/b00317ed69fccee5f787187d913fcf8a96f37f65/preprocessor_config.json
 
 use std::path::Path;
 

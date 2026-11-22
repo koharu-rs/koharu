@@ -6,7 +6,7 @@
 //! tokens, block-causal attention, and 2D multimodal RoPE.
 //!
 //! Upstream:
-//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/tree/f5f0f617f5148f760074f743e25576f381992c34
+//! https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova/tree/b00317ed69fccee5f787187d913fcf8a96f37f65
 
 mod config;
 mod model;
@@ -25,7 +25,7 @@ use self::{
 
 const REPOSITORY: Repository = Repository::model(
     "JustANormalTinkerer/hayai-ocr-v2.7-supernova",
-    "f5f0f617f5148f760074f743e25576f381992c34",
+    "b00317ed69fccee5f787187d913fcf8a96f37f65",
 );
 
 #[derive(Debug)]
