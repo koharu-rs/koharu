@@ -60,7 +60,15 @@ impl Child {
         // An empty input shape leaves the pointer in GTK's window, which
         // takes the pointer crossing into a child for the pointer leaving.
         connection
-            .shape_rectangles(SO::SET, SK::INPUT, ClipOrdering::UNSORTED, window, 0, 0, &[])?
+            .shape_rectangles(
+                SO::SET,
+                SK::INPUT,
+                ClipOrdering::UNSORTED,
+                window,
+                0,
+                0,
+                &[],
+            )?
             .check()?;
         connection.map_window(window)?.check()?;
         Ok(Some(Self {
