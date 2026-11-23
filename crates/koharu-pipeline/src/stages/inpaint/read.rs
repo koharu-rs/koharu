@@ -30,8 +30,9 @@ pub(super) fn blocks(member: &Member) -> Result<Option<Work>> {
     if cleanups.is_empty() {
         return Ok(None);
     }
+    let covered = covered(member, &project, width, height)?;
     let places = places(&project, member.page, width, height);
-    let (mask, regions) = tiers(&mut image, &mut cleanups, &places);
+    let (mask, regions) = tiers(&mut image, &covered, &mut cleanups, &places);
     Ok(Some(Work {
         image,
         mask,
@@ -91,23 +92,34 @@ fn cleanups(member: &Member, project: &Project, width: u32, height: u32) -> Resu
     Ok(cleanups)
 }
 
+/// Every block's mask on the page, which the tiers hold out of what they
+/// read: a block the run leaves, such as a locked one, keeps its lettering on
+/// the scan.
+fn covered(member: &Member, project: &Project, width: u32, height: u32) -> Result<GrayImage> {
+    let session = member.session.lock();
+    let mut covered = GrayImage::new(width, height);
+    for (_, block) in project.blocks(member.page).unwrap_or_default() {
+        if let Some((rect, mask)) = session.tiles(block.mask.id, None)?.coverage(width, height) {
+            stamp(&mut covered, rect, &mask);
+        }
+    }
+    Ok(covered)
+}
+
 /// Runs the fill tiers over `image`, recording each tier that filled a
 /// lettering; the rest, the model's, come back as its mask over the page and
 /// a region each.
 fn tiers(
     image: &mut RgbImage,
+    covered: &GrayImage,
     cleanups: &mut [Cleanup],
     places: &HashMap<LayerId, Place>,
 ) -> (GrayImage, Vec<Region>) {
     let (width, height) = image.dimensions();
-    let mut covered = GrayImage::new(width, height);
-    for cleanup in cleanups.iter() {
-        stamp(&mut covered, cleanup.rect, &cleanup.mask);
-    }
     let mut mask = GrayImage::new(width, height);
     let mut regions = Vec::new();
     let _span = tracing::info_span!("fill", letterings = cleanups.len()).entered();
-    let mut page = flat::Page::new(image, &covered);
+    let mut page = flat::Page::new(image, covered);
     for cleanup in cleanups.iter_mut() {
         let place = places.get(&cleanup.block).cloned().unwrap_or_default();
         let line = match page.fill(cleanup.rect, &cleanup.mask, &place) {
@@ -239,7 +251,63 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
-    use crate::RunId;
+    use crate::{
+        RunId,
+        stages::tests::{block, lock, page},
+    };
+
+    /// A locked block is left out of the run, but its lettering, still on the
+    /// scan, stays out of what the tiers read.
+    #[test]
+    fn a_locked_blocks_lettering_stays_out_of_what_the_fills_read() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[("locked", None, block(20.0)), ("free", None, block(220.0))],
+        )?;
+        let &[locked, free] = &ids[..] else {
+            anyhow::bail!("two blocks");
+        };
+        let project = session.project();
+        let mut ops = Vec::new();
+        for (id, x) in [(locked, 20), (free, 220)] {
+            let Content::Block(found) = &project.layer(id)?.content else {
+                anyhow::bail!("a block");
+            };
+            ops.push(Op::WritePixels {
+                layer: found.mask.id.into(),
+                rect: Rect {
+                    x,
+                    y: 20,
+                    width: 40,
+                    height: 120,
+                },
+                pixels: vec![255; 40 * 120],
+            });
+        }
+        session.apply(Edit {
+            label: "masks".to_owned(),
+            ops,
+        })?;
+        lock(&mut session, locked)?;
+        let project = session.project();
+        let member = Member {
+            run: RunId(1),
+            job: NodeIndex::new(0),
+            page: project.pages().next().expect("a page").id,
+            index: 0,
+            blocks: None,
+            session: Arc::new(Mutex::new(session)),
+            cancel: CancellationToken::new(),
+        };
+        let cleanups = cleanups(&member, &project, 400, 400)?;
+        let cleaned: Vec<LayerId> = cleanups.iter().map(|cleanup| cleanup.block).collect();
+        assert_eq!(cleaned, [free]);
+        let covered = covered(&member, &project, 400, 400)?;
+        assert_eq!(covered.get_pixel(40, 80).0[0], 255);
+        assert_eq!(covered.get_pixel(240, 80).0[0], 255);
+        Ok(())
+    }
 
     /// The Remove brush fills over its page as drawn: a raster painted over
     /// the scan shows to the model, as an earlier removal does, while a
