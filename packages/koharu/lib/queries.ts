@@ -179,9 +179,12 @@ let stored: Preferences | undefined
 export function usePreferences() {
   return useQuery({
     queryKey: preferencesKey,
-    queryFn: async () => {
-      stored = await commands.getPreferences()
-      return stored
+    queryFn: async ({ signal }) => {
+      const read = await commands.getPreferences()
+      // An edit cancels the read under way, which may still answer after the edit's save with the
+      // file as it was before.
+      if (!signal.aborted) stored = read
+      return read
     },
   })
 }

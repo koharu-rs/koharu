@@ -3,7 +3,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { queryClient, send, usePreferences, useSavePreferences } from '@/lib/queries'
+import {
+  preferencesKey,
+  queryClient,
+  refresh,
+  send,
+  usePreferences,
+  useSavePreferences,
+} from '@/lib/queries'
 import { commands, type Preferences } from '@koharu/ipc/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
@@ -69,6 +76,31 @@ describe('useSavePreferences', () => {
     expect(result.current.shown.data).toEqual(preferences('Newer'))
 
     await act(async () => newer.reject(new Error('config.toml is locked')))
+    await waitFor(() => expect(result.current.save.isError).toBe(true))
+    expect(result.current.shown.data).toEqual(preferences('Saved'))
+  })
+
+  it("doesn't let a read an edit cancelled bring back older preferences after a failed save", async () => {
+    const late = Promise.withResolvers<Preferences>()
+    vi.spyOn(commands, 'getPreferences')
+      .mockResolvedValueOnce(preferences('Read'))
+      .mockReturnValueOnce(late.promise)
+    vi.spyOn(commands, 'savePreferences')
+      .mockResolvedValueOnce(preferences('Saved'))
+      .mockRejectedValueOnce(new Error('config.toml is locked'))
+    const { result } = renderHook(() => ({ shown: usePreferences(), save: useSavePreferences() }), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children),
+    })
+    await waitFor(() => expect(result.current.shown.data).toEqual(preferences('Read')))
+
+    // Settings opens and reads the file again; an edit saves before that read answers.
+    act(() => void refresh(preferencesKey))
+    act(() => result.current.save.mutate(preferences('Typed')))
+    await waitFor(() => expect(result.current.shown.data).toEqual(preferences('Saved')))
+    await act(async () => late.resolve(preferences('Read')))
+
+    act(() => result.current.save.mutate(preferences('Failed')))
     await waitFor(() => expect(result.current.save.isError).toBe(true))
     expect(result.current.shown.data).toEqual(preferences('Saved'))
   })
