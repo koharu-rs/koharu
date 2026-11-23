@@ -88,9 +88,16 @@ export function send<Args extends unknown[]>(
   command: (...args: Args) => Promise<unknown>,
   ...args: Args
 ): void {
-  void new MutationObserver(queryClient, { mutationFn: () => command(...args) })
+  // TanStack Query never drops a mutation while an observer holds it, and nothing reads a
+  // settled command, so let go of it once it settles and let the cache drop it right away.
+  const observer = new MutationObserver(queryClient, {
+    mutationFn: () => command(...args),
+    gcTime: 0,
+  })
+  void observer
     .mutate()
     .catch(() => undefined)
+    .finally(() => observer.reset())
 }
 
 const projectQuery = queryOptions({
