@@ -14,10 +14,13 @@ use anyhow::{Context as _, bail};
 use fs_err::File;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use hayro::{
-    PixmapSettings, RenderCache, RenderSettings, hayro_interpret::InterpreterSettings,
-    hayro_syntax::Pdf, render, vello_cpu::color::palette::css::WHITE,
+    PixmapSettings, RenderCache, RenderSettings,
+    hayro_interpret::InterpreterSettings,
+    hayro_syntax::Pdf,
+    render,
+    vello_cpu::{Pixels, color::palette::css::WHITE, peniko::ImageAlphaType},
 };
-use image::ImageFormat;
+use image::{ExtendedColorType, ImageEncoder as _, ImageFormat, codecs::png::PngEncoder};
 use koharu_scene::{Edit, Hash, Op};
 use rars::ArchiveReader;
 use rayon::prelude::*;
@@ -43,8 +46,8 @@ const EXTENSIONS: [&str; 9] = [
 ];
 
 /// PDF points to pixels at 300 DPI, which keeps fine lettering and line art.
-/// An A4 page is about 33 MiB of RGBA at this scale; one page renders at a
-/// time, so its buffer goes before the next.
+/// An A4 page is about 33 MiB of RGBA at this scale; each thread renders one
+/// page at a time, so its buffer goes before the thread's next.
 const PDF_SCALE: f32 = 300.0 / 72.0;
 
 /// The files an OS leaves in a folder it archives, which aren't pages:
@@ -234,7 +237,8 @@ fn extract_rar(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
     in_name_order(path, images.take())
 }
 
-/// A PDF's pages, each rendered with hayro.
+/// A PDF's pages, each rendered with hayro, in parallel. hayro's cache isn't
+/// thread-safe, so each thread keeps its own.
 fn render_pdf(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
     let pdf = Pdf::new(fs_err::read(path)?)
         .map_err(|error| anyhow::anyhow!("failed to parse {}: {error:?}", path.display()))?;
@@ -242,25 +246,34 @@ fn render_pdf(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
     if pages.is_empty() {
         bail!("{} has no pages", path.display());
     }
-    let (interpreter, settings, cache) = (
-        InterpreterSettings::default(),
-        RenderSettings::default(),
-        RenderCache::new(),
-    );
     let pixmap = PixmapSettings {
         x_scale: PDF_SCALE,
         y_scale: PDF_SCALE,
         bg_color: WHITE,
     };
     pages
-        .iter()
+        .par_iter()
         .enumerate()
-        .map(|(index, page)| {
-            render(page, &cache, &interpreter, &settings, &pixmap)
-                .into_png()
+        .map_init(RenderCache::new, |cache, (index, page)| {
+            let rendered = render(
+                page,
+                cache,
+                &InterpreterSettings::default(),
+                &RenderSettings::default(),
+                &pixmap,
+            );
+            let (width, height) = (rendered.width().into(), rendered.height().into());
+            let (pixels, color) = match rendered.try_take_rgb8(ImageAlphaType::Alpha) {
+                Pixels::Rgb8(pixels) => (pixels, ExtendedColorType::Rgb8),
+                Pixels::Rgba8(pixels) => (pixels, ExtendedColorType::Rgba8),
+            };
+            let mut png = Vec::new();
+            PngEncoder::new(&mut png)
+                .write_image(&pixels, width, height, color)
                 .with_context(|| {
                     format!("failed to encode page {} of {}", index + 1, path.display())
-                })
+                })?;
+            Ok(png)
         })
         .collect()
 }
