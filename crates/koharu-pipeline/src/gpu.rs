@@ -92,18 +92,9 @@ impl Gpu {
     /// Gives back to the device what libtorch's caching allocator keeps of
     /// the tensors calls freed, ahead of the calls queued. The cache grows
     /// page by page, as pages need different sizes, and the device counts
-    /// it as used. It's left while no model is loaded: before the first,
-    /// the runtime hasn't loaded libtorch, as a project opening stops what
-    /// isn't running.
+    /// it as used.
     pub(crate) fn empty_cache(&self) {
-        self.run(Turn::Upkeep, |models| {
-            if !models.loaded.is_empty()
-                && Cuda::device_count() > 0
-                && let Err(error) = Cuda::empty_cache()
-            {
-                tracing::warn!("libtorch's cache wasn't emptied: {error}");
-            }
-        });
+        self.run(Turn::Upkeep, |models| models.empty_cache());
     }
 }
 
@@ -199,9 +190,27 @@ impl Models {
             .expect("a key loads one kind of model"))
     }
 
-    /// Unloads every model `wanted` doesn't hold.
+    /// Unloads every model `wanted` doesn't hold, and gives what they held
+    /// back to the device: libtorch's cache keeps it otherwise, and the
+    /// device counts it as used (koharu-rs/koharu#1484).
     pub(crate) fn retain(&mut self, wanted: &HashSet<Key>) {
+        let loaded = self.loaded.len();
         self.loaded.retain(|key, _| wanted.contains(key));
+        if self.loaded.len() < loaded {
+            self.empty_cache();
+        }
+    }
+
+    /// Empties libtorch's cache. It's left until a model has loaded on the
+    /// device: before, the runtime hasn't loaded libtorch, as a project
+    /// opening stops what isn't running.
+    fn empty_cache(&self) {
+        if self.device.is_some()
+            && Cuda::device_count() > 0
+            && let Err(error) = Cuda::empty_cache()
+        {
+            tracing::warn!("libtorch's cache wasn't emptied: {error}");
+        }
     }
 }
 
