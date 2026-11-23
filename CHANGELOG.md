@@ -1,3 +1,27 @@
+## [0.94.0](https://github.com/koharu-rs/koharu/compare/0.93.0..0.94.0) - 2026-11-23
+
+### ⛰️  Features
+
+- *(ui)* Keep the tool, brush, processing choices, and start tab between runs - ([78d1c38](https://github.com/koharu-rs/koharu/commit/78d1c38c74e94d0254169f80639c0124d369493a))
+
+### 🐛 Bug Fixes
+
+- *(pipeline)* Empty libtorch's cache when models unload, which kept their memory until Koharu quit ([#1484](https://github.com/koharu-rs/koharu/issues/1484)) - ([8e725fb](https://github.com/koharu-rs/koharu/commit/8e725fbf89608a6f76a5f00031311e17c3a0f122))
+- *(ui)* Let the mutation cache drop each send() command once it settles ([#1479](https://github.com/koharu-rs/koharu/issues/1479)) - ([547c291](https://github.com/koharu-rs/koharu/commit/547c291c0ab95f71bf434e76147ae6ae00036249))
+- *(ui)* Run commands while the browser reports no network - ([b43358d](https://github.com/koharu-rs/koharu/commit/b43358da7f883d709164b866398bdf4e8586eec4))
+
+### 🚜 Refactor
+
+- *(gallery)* Keep the shelf and chapter readings in the interface - ([4d26193](https://github.com/koharu-rs/koharu/commit/4d26193615a7c2e139574431531007144fbcaf69))
+
+### 📚 Documentation
+
+- Add gallery and reader guides - ([db9de2c](https://github.com/koharu-rs/koharu/commit/db9de2cdde63e884a31d399dcd77c2017b17392a))
+
+### ⚡ Performance
+
+- *(desktop)* Render a PDF's pages in parallel and save them with the fast PNG encoder - ([6a2bbb1](https://github.com/koharu-rs/koharu/commit/6a2bbb15f0adea39df6e7f63d10956b03e34b989))
+
 ## [0.93.0](https://github.com/koharu-rs/koharu/compare/0.92.0..0.93.0) - 2026-11-23
 
 ### ⛰️  Features
