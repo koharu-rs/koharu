@@ -594,7 +594,8 @@ fn update_layer_merges_and_fails_closed() {
     assert_eq!(f32::from(patched.cleanup.opacity), 0.4);
     assert!(!patched.mask.visible);
 
-    // Merging into a missing translation starts from an empty text.
+    // Merging into a missing translation starts from the one a text op adds,
+    // in its source's place.
     update(
         &mut session,
         block,
@@ -608,7 +609,7 @@ fn update_layer_merges_and_fails_closed() {
         patched.translation,
         Some(Text {
             direction: Direction::Vertical,
-            ..Text::default()
+            ..patched.source.clone()
         })
     );
     update(&mut session, block, json!({"translation": null})).expect("no translation");

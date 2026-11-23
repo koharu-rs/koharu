@@ -161,14 +161,18 @@ fn text_and_duplicates_survive_reopening() {
 #[test]
 fn a_blocks_translation_comes_and_goes_with_its_own_ops() {
     let (_dir, mut session, page) = session();
-    let block = add(&mut session, page, None, block(0.0));
+    let block = add(&mut session, page, None, block(24.0));
     set_text(&mut session, block, "Hello").expect("a translation");
+    // It starts in its source's place, as the Text tool starts it.
+    let Content::Block(added) = &layer(&session, block).content else {
+        panic!("not a block")
+    };
     assert_eq!(
-        text(&session, block),
-        Text {
+        added.translation,
+        Some(Text {
             content: RichText::from("Hello"),
-            ..Text::default()
-        }
+            ..added.source.clone()
+        })
     );
     apply(
         &mut session,
