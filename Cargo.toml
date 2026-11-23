@@ -118,7 +118,7 @@ prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 quick_cache = "0.7.0"
 quote = "1.0.47"
-rars = "0.12.2"
+rars = "0.13.0"
 rayon = "1.12.0"
 reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart", "cookies"] }
 rfd = "0.18.0"
