@@ -71,17 +71,20 @@ function report(error: unknown): void {
   toast.add({ type: 'error', title: i18n.t('errors.actionFailed'), description })
 }
 
-/** Every command runs as a query or a mutation, whose failure shows here. */
+/** Every command runs as a query or a mutation, whose failure shows here. Commands go to the
+ * desktop, not the network, so they run whether or not the browser reports being online. */
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: report }),
   mutationCache: new MutationCache({ onError: report }),
   defaultOptions: {
     queries: {
+      networkMode: 'always',
       staleTime: Number.POSITIVE_INFINITY,
       retry: false,
       refetchOnReconnect: false,
       refetchOnWindowFocus: false,
     },
+    mutations: { networkMode: 'always' },
   },
 })
 
