@@ -53,7 +53,9 @@ pub struct PageSummary {
     pub background: Option<Background>,
     /// Its blocks, hidden ones too.
     pub texts: usize,
-    /// Its blocks that hold a translation.
+    /// Its blocks whose translation has visible text. A cleared translation
+    /// keeps its style, and styling an untranslated block makes an empty one,
+    /// so neither counts.
     pub translated: usize,
 }
 
@@ -75,7 +77,12 @@ impl Session {
                             texts: blocks.len(),
                             translated: blocks
                                 .iter()
-                                .filter(|(_, block)| block.translation.is_some())
+                                .filter(|(_, block)| {
+                                    block
+                                        .translation
+                                        .as_ref()
+                                        .is_some_and(|text| !text.content.text().trim().is_empty())
+                                })
                                 .count(),
                         })
                     })

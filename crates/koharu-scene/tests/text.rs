@@ -2,7 +2,9 @@
 
 mod common;
 use common::*;
-use koharu_scene::{CharStyle, Content, Error, LayerId, Op, RichText, Session, Span, Text};
+use koharu_scene::{
+    Answer, CharStyle, Content, Error, LayerId, Op, Query, RichText, Session, Span, Text,
+};
 use serde_json::json;
 
 fn text(session: &Session, layer: LayerId) -> Text {
@@ -212,4 +214,28 @@ fn a_blocks_translation_comes_and_goes_with_its_own_ops() {
     assert!(matches!(error, Error::Locked { .. }), "{error}");
     let error = apply(&mut session, vec![set(json!(1))]).expect_err("locked");
     assert!(matches!(error, Error::Locked { .. }), "{error}");
+}
+
+#[test]
+fn a_block_counts_as_translated_only_while_its_translation_has_text() {
+    let (_dir, mut session, page) = session();
+    let block = add(&mut session, page, None, block(0.0));
+    let translated = |session: &Session| {
+        let Answer::Project(project) = session.query(Query::GetProject).expect("an answer") else {
+            panic!("not a project")
+        };
+        project.pages[0].translated
+    };
+    // The type bar styles an untranslated block's translation into being.
+    apply(
+        &mut session,
+        vec![json!({"op": "update_layer", "layer": block, "patch": {"translation": {"style": {"chars": {"size": 30.0}}}}})],
+    )
+    .expect("a style");
+    assert_eq!(translated(&session), 0);
+    set_text(&mut session, block, "Hello").expect("a translation");
+    assert_eq!(translated(&session), 1);
+    // Story clears it, keeping its style.
+    set_text(&mut session, block, "").expect("a cleared translation");
+    assert_eq!(translated(&session), 0);
 }

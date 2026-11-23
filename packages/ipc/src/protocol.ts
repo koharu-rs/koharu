@@ -692,7 +692,11 @@ export type PageSummary = {
   background: Background | null
   /**  Its blocks, hidden ones too. */
   texts: number
-  /**  Its blocks that hold a translation. */
+  /**
+   *  Its blocks whose translation has visible text. A cleared translation
+   *  keeps its style, and styling an untranslated block makes an empty one,
+   *  so neither counts.
+   */
   translated: number
 }
 
