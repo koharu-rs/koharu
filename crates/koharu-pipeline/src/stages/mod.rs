@@ -13,7 +13,7 @@ use std::{sync::Arc, time::Instant};
 
 use anyhow::anyhow;
 use image::DynamicImage;
-use koharu_scene::{Block, Edit, LayerId, Op, PageId, Project, Session};
+use koharu_scene::{Block, Content, Edit, LayerId, Op, PageId, Project, Session};
 use parking_lot::Mutex;
 use petgraph::stable_graph::NodeIndex;
 use serde_json::{Value, json};
@@ -65,9 +65,11 @@ impl Member {
         Ok(Some((project, image::load_from_memory(&bytes)?)))
     }
 
-    /// The blocks of `project`'s page the task works on, in reading order.
+    /// The blocks of `project`'s page the task works on, in reading order,
+    /// but those locked or in a locked layer, which a run leaves as they are.
     pub(crate) fn blocks<'p>(&self, project: &'p Project) -> Vec<(LayerId, &'p Block)> {
         let mut blocks = project.blocks(self.page).unwrap_or_default();
+        blocks.retain(|(id, _)| project.locked_at(*id).is_none());
         if let Some(only) = &self.blocks {
             blocks.retain(|(id, _)| only.contains(id));
         }
@@ -99,6 +101,19 @@ impl Member {
             Ok(())
         })
         .await?
+    }
+}
+
+/// Block `id` as `project` holds it when a stage writes, if it's still there
+/// and neither it nor a layer it's in is locked: a lock can come on while the
+/// stage runs, and the scene refuses a page's whole edit for one locked write.
+pub(crate) fn writable(project: &Project, id: LayerId) -> Option<&Block> {
+    if project.locked_at(id).is_some() {
+        return None;
+    }
+    match &project.layer(id).ok()?.content {
+        Content::Block(block) => Some(block),
+        _ => None,
     }
 }
 
@@ -255,4 +270,136 @@ pub(crate) fn action(action: &str, model: &str, parameters: Option<Value>) -> Va
         value["parameters"] = parameters;
     }
     value
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::sync::Arc;
+
+    use anyhow::{Context as _, Result};
+    use koharu_scene::{Created, Edit, LayerId, Session};
+    use parking_lot::Mutex;
+    use petgraph::stable_graph::NodeIndex;
+    use serde_json::{Value, json};
+    use tokio_util::sync::CancellationToken;
+
+    use super::{Member, writable};
+    use crate::RunId;
+
+    /// A project of one 400-pixel page holding `layers`, each `(label,
+    /// parent label, layer)`, and the labelled layers' ids in order.
+    pub(crate) fn page(
+        dir: &tempfile::TempDir,
+        layers: &[(&str, Option<&str>, Value)],
+    ) -> Result<(Session, Vec<LayerId>)> {
+        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut ops = vec![
+            json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 400}}),
+        ];
+        for (at, (label, parent, layer)) in layers.iter().enumerate() {
+            // Last among its siblings.
+            let index = layers[..at]
+                .iter()
+                .filter(|(_, other, _)| other == parent)
+                .count();
+            let mut op = json!({"op": "add_layer", "id": format!("${label}"), "page": "$p", "index": index, "layer": layer});
+            if let Some(parent) = parent {
+                op["parent"] = json!(format!("${parent}"));
+            }
+            ops.push(op);
+        }
+        let change = session.apply(Edit {
+            label: "test".to_owned(),
+            ops: ops
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<Result<_, _>>()?,
+        })?;
+        let ids = layers
+            .iter()
+            .map(|(label, ..)| {
+                change
+                    .created
+                    .iter()
+                    .find_map(|created| match created {
+                        Created::Layer {
+                            id,
+                            label: Some(found),
+                        } if found == label => Some(*id),
+                        _ => None,
+                    })
+                    .with_context(|| format!("no layer {label}"))
+            })
+            .collect::<Result<_>>()?;
+        Ok((session, ids))
+    }
+
+    /// A panel or a balloon, by `kind`, 200 by 160 pixels at the page's
+    /// corner.
+    pub(crate) fn holder(kind: &str) -> Value {
+        json!({"kind": kind, "outline": "M0 0 L200 0 L200 160 L0 160 Z"})
+    }
+
+    /// A block with its source's box at `x`.
+    pub(crate) fn block(x: f64) -> Value {
+        json!({"kind": "block", "source": {
+            "content": "テスト", "language": "ja",
+            "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 40.0, "height": 120.0}}},
+        }})
+    }
+
+    /// Locks `layer`.
+    pub(crate) fn lock(session: &mut Session, layer: LayerId) -> Result<()> {
+        session.apply(Edit {
+            label: "lock".to_owned(),
+            ops: vec![serde_json::from_value(
+                json!({"op": "update_layer", "layer": layer, "patch": {"locked": true}}),
+            )?],
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn a_run_leaves_out_a_locked_block_and_one_in_a_locked_layer() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("balloon", None, holder("balloon")),
+                ("inside", Some("balloon"), block(20.0)),
+                ("locked", None, block(120.0)),
+                ("free", None, block(220.0)),
+            ],
+        )?;
+        let &[balloon, inside, locked, free] = &ids[..] else {
+            anyhow::bail!("four layers");
+        };
+        lock(&mut session, balloon)?;
+        lock(&mut session, locked)?;
+        let project = session.project();
+        let page = project.pages().next().context("a page")?.id;
+        let session = Arc::new(Mutex::new(session));
+        let worked = |blocks: Option<Arc<[LayerId]>>| -> Vec<LayerId> {
+            let member = Member {
+                run: RunId(1),
+                job: NodeIndex::new(0),
+                page,
+                index: 0,
+                blocks,
+                session: session.clone(),
+                cancel: CancellationToken::new(),
+            };
+            member
+                .blocks(&project)
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect()
+        };
+        assert_eq!(worked(None), [free]);
+        assert_eq!(worked(Some(Arc::from([inside, locked, free]))), [free]);
+        assert!(writable(&project, inside).is_none());
+        assert!(writable(&project, locked).is_none());
+        assert!(writable(&project, free).is_some());
+        Ok(())
+    }
 }

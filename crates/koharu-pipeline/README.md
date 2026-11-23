@@ -31,8 +31,9 @@ only.
 - **A stage never runs another.** A stage with nothing to do, such as
   recognition on a page of artwork, does nothing, and that isn't a failure.
 - **A model can overwrite anything,** the user's own edits included, and undo
-  is the way back. A locked panel, balloon, or block is the exception:
-  detection leaves it.
+  is the way back. A lock is the exception: no stage writes a block that is
+  locked or in a locked layer, and detection leaves a locked layer with the
+  panels and balloons holding it.
 - **A request that can't run fails at once**: no stages, detection on blocks, a
   stage other than inpainting on an area, or a page or block the project
   doesn't hold.

@@ -159,64 +159,17 @@ fn filled(frame: &Frame) -> Value {
 mod tests {
     use anyhow::{Context as _, Result, bail};
     use icu_locale_core::langid;
-    use koharu_scene::{Created, Edit, Frame, Session, Text};
+    use koharu_scene::{Edit, Frame, Session, Text};
     use kurbo::BezPath;
 
     use super::*;
+    use crate::stages::tests::page;
 
     fn block(x: f64, role: &str) -> Value {
         json!({"kind": "block", "role": role, "source": {
             "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 40.0, "height": 120.0}}},
             "direction": "vertical",
         }})
-    }
-
-    /// A project of one 400-pixel page holding `layers`, each `(label,
-    /// parent label, layer)`, and the labelled layers' ids in order.
-    fn page(
-        dir: &tempfile::TempDir,
-        layers: &[(&str, Option<&str>, Value)],
-    ) -> Result<(Session, Vec<LayerId>)> {
-        let mut session = Session::create(dir.path().join("test.khr"))?;
-        let mut ops = vec![
-            json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 400}}),
-        ];
-        for (at, (label, parent, layer)) in layers.iter().enumerate() {
-            // Last among its siblings.
-            let index = layers[..at]
-                .iter()
-                .filter(|(_, other, _)| other == parent)
-                .count();
-            let mut op = json!({"op": "add_layer", "id": format!("${label}"), "page": "$p", "index": index, "layer": layer});
-            if let Some(parent) = parent {
-                op["parent"] = json!(format!("${parent}"));
-            }
-            ops.push(op);
-        }
-        let change = session.apply(Edit {
-            label: "test".to_owned(),
-            ops: ops
-                .into_iter()
-                .map(serde_json::from_value)
-                .collect::<Result<_, _>>()?,
-        })?;
-        let ids = layers
-            .iter()
-            .map(|(label, ..)| {
-                change
-                    .created
-                    .iter()
-                    .find_map(|created| match created {
-                        Created::Layer {
-                            id,
-                            label: Some(found),
-                        } if found == label => Some(*id),
-                        _ => None,
-                    })
-                    .with_context(|| format!("no layer {label}"))
-            })
-            .collect::<Result<_>>()?;
-        Ok((session, ids))
     }
 
     /// The translation `block` gets once placed into `target`.

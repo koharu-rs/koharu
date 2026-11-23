@@ -3,14 +3,14 @@
 
 use anyhow::Result;
 use image::{DynamicImage, RgbImage, imageops};
-use koharu_scene::{Content, Op, PageId, Project, Rect, Ref, Tile};
+use koharu_scene::{Op, PageId, Project, Rect, Ref, Tile};
 use serde_json::{Value, json};
 
 use super::{
     Cleanup, Target, Work,
     windows::{self, Window},
 };
-use crate::stages::action;
+use crate::stages::{action, writable};
 
 /// The ops for `work`; `made` is the model's action, `name` the area's layer
 /// name.
@@ -45,11 +45,10 @@ pub(super) fn ops(
 }
 
 /// Whether the block still holds the clean-up the run read, as a block
-/// detected again since holds another.
+/// detected again since holds another, and neither is locked now.
 fn current(project: &Project, cleanup: &Cleanup) -> bool {
-    project.layer(cleanup.block).is_ok_and(|layer| {
-        matches!(&layer.content, Content::Block(block) if block.cleanup.id == cleanup.cleanup)
-    })
+    writable(project, cleanup.block)
+        .is_some_and(|block| block.cleanup.id == cleanup.cleanup && !block.cleanup.locked)
 }
 
 /// The ops replacing a block's clean-up and recording what made it.
@@ -199,4 +198,72 @@ fn rgba(image: &RgbImage, rect: Rect, alpha: impl Fn(u32, u32) -> u8) -> Vec<u8>
             [r, g, b, alpha(x, y)]
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use image::GrayImage;
+    use koharu_scene::{Content, Edit, LayerId, Session};
+    use serde_json::json;
+
+    use super::*;
+    use crate::stages::tests::{block, holder, lock, page};
+
+    /// The clean-up a run reads of `block` now.
+    fn read(session: &Session, block: LayerId) -> Result<Cleanup> {
+        let project = session.project();
+        let Content::Block(found) = &project.layer(block)?.content else {
+            anyhow::bail!("not a block");
+        };
+        Ok(Cleanup {
+            block,
+            cleanup: found.cleanup.id,
+            old: session.tiles(found.cleanup.id, None)?,
+            rect: Rect {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+            mask: GrayImage::new(1, 1),
+            fill: None,
+            region: None,
+        })
+    }
+
+    #[test]
+    fn a_clean_up_locked_since_the_read_is_left_as_it_is() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("balloon", None, holder("balloon")),
+                ("inside", Some("balloon"), block(20.0)),
+                ("part", None, block(120.0)),
+                ("free", None, block(220.0)),
+            ],
+        )?;
+        let &[balloon, inside, part, free] = &ids[..] else {
+            anyhow::bail!("four layers");
+        };
+        let cleanups = [inside, part, free]
+            .map(|block| read(&session, block))
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
+        lock(&mut session, balloon)?;
+        session.apply(Edit {
+            label: "lock".to_owned(),
+            ops: vec![serde_json::from_value(json!({
+                "op": "update_layer", "layer": part, "patch": {"cleanup": {"locked": true}},
+            }))?],
+        })?;
+        let project = session.project();
+        let kept: Vec<bool> = cleanups
+            .iter()
+            .map(|cleanup| current(&project, cleanup))
+            .collect();
+        assert_eq!(kept, [false, false, true]);
+        Ok(())
+    }
 }

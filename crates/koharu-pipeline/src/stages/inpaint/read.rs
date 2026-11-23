@@ -67,11 +67,14 @@ pub(super) fn area(member: &Member, area: &Area) -> Result<Option<Work>> {
 }
 
 /// Each block with a mask on the page: its mask's coverage and its clean-up's
-/// tiles now.
+/// tiles now. A clean-up locked by itself is left as it is.
 fn cleanups(member: &Member, project: &Project, width: u32, height: u32) -> Result<Vec<Cleanup>> {
     let session = member.session.lock();
     let mut cleanups = Vec::new();
     for (id, block) in member.blocks(project) {
+        if block.cleanup.locked {
+            continue;
+        }
         let tiles = session.tiles(block.mask.id, None)?;
         if let Some((rect, mask)) = tiles.coverage(width, height) {
             cleanups.push(Cleanup {

@@ -114,7 +114,8 @@ pub(crate) fn ids(layers: &[Layer]) -> Vec<LayerId> {
 }
 
 /// The first locked layer in `layer`'s subtree.
-pub(crate) fn locked_inside(layer: &Layer) -> Option<LayerId> {
+#[must_use]
+pub fn locked_inside(layer: &Layer) -> Option<LayerId> {
     depth_first(slice::from_ref(layer))
         .into_iter()
         .find(|layer| layer.locked)
@@ -285,8 +286,10 @@ impl Project {
         self.tiles.get(&layer)
     }
 
-    /// The first of `layer` and the layers above it that is locked.
-    pub(crate) fn locked_at(&self, layer: LayerId) -> Option<LayerId> {
+    /// The first of `layer` and the layers above it that is locked; `None`
+    /// for one outside the pages' trees, such as a block's part.
+    #[must_use]
+    pub fn locked_at(&self, layer: LayerId) -> Option<LayerId> {
         let (page, path) = self.place(layer)?;
         let page = &self.pages[&page];
         (1..=path.len())

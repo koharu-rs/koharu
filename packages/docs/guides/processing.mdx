@@ -43,8 +43,10 @@ A stage with nothing to do, such as OCR on a page without text, does nothing and
 
 <Warning>
   A rerun replaces what is there, your own edits included, and undo is the way back. Detection
-  replaces a page's panels, balloons, and text blocks, but leaves locked ones as they are. OCR
-  rewrites source text, and translation rewrites each translation's wording and placement.
+  replaces a page's panels, balloons, and text blocks, but leaves locked ones as they are, with the
+  panels and balloons holding them. OCR rewrites source text, inpainting each clean-up, and
+  translation each translation's wording and placement, but none of them touches a locked text block
+  or one inside a locked layer.
 </Warning>
 
 Continue with [text review](/guides/review) or [cleanup](/guides/cleanup).

@@ -22,7 +22,7 @@ use icu_locale::LocaleExpander;
 use icu_locale_core::{LanguageIdentifier, Locale, langid, subtags::language};
 use indoc::formatdoc;
 use koharu_llm::rig::{completion::Reasoning, driver::DynModel};
-use koharu_scene::{Content, LayerId, Op, Project};
+use koharu_scene::{LayerId, Op, Project};
 use rayon::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use serde_json::json;
@@ -32,7 +32,7 @@ use tracing::{Instrument as _, info_span};
 pub(crate) use self::conversation::{Conversation, Conversations};
 pub use self::placement::placement;
 use self::turn::Turn;
-use super::{Member, Stopped, Task, action, key};
+use super::{Member, Stopped, Task, action, key, writable};
 use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -234,9 +234,7 @@ fn written(
     let placed: Vec<_> = translated
         .into_par_iter()
         .filter_map(|(block, source, text)| {
-            let Ok(Content::Block(found)) = project.layer(block).map(|layer| &layer.content) else {
-                return None;
-            };
+            let found = writable(project, block)?;
             // Its clean-up would erase the lettering for the translation to
             // redraw it in another hand.
             let unchanged = text.trim() == found.source.content.text().trim();
@@ -302,8 +300,45 @@ fn name(target: &LanguageIdentifier) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
+    use koharu_scene::{Content, Edit};
 
     use super::*;
+    use crate::stages::tests::{block, holder, lock, page};
+
+    #[test]
+    fn a_balloon_locked_while_translating_leaves_the_others_their_translation() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("balloon", None, holder("balloon")),
+                ("inside", Some("balloon"), block(20.0)),
+                ("free", None, block(220.0)),
+            ],
+        )?;
+        let &[balloon, inside, free] = &ids[..] else {
+            anyhow::bail!("three layers");
+        };
+        // The lock comes on after the page was read for the translator.
+        lock(&mut session, balloon)?;
+        let translated = vec![
+            (inside, langid!("ja"), "Cat".to_owned()),
+            (free, langid!("ja"), "Dog".to_owned()),
+        ];
+        let ops = written(&session.project(), translated, &TranslatorConfig::default())?;
+        session.apply(Edit {
+            label: "translate".to_owned(),
+            ops,
+        })?;
+        let project = session.project();
+        let translation = |id| match &project.layer(id).expect("a layer").content {
+            Content::Block(block) => block.translation.as_ref().map(|text| text.content.text()),
+            _ => None,
+        };
+        assert_eq!(translation(inside), None);
+        assert_eq!(translation(free).as_deref(), Some("Dog"));
+        Ok(())
+    }
 
     #[test]
     fn a_language_cldr_doesnt_name_fails() {

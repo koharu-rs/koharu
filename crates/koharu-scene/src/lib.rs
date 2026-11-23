@@ -24,7 +24,7 @@ pub use icu_locale_core::LanguageIdentifier;
 pub use ids::{Hash, LayerId, PageId, ProjectId, Ref, Revision, Uuid};
 pub use kinds::*;
 pub use layer::{Attributes, Layer, NewLayer, PixelFormat};
-pub use project::{Background, Page, Project};
+pub use project::{Background, Page, Project, locked_inside};
 pub use query::{Answer, PageSummary, ProjectAnswer, Query};
 pub use session::{EXTENSION, Session};
 pub use text::{CharStyle, RichText, Span, Text, TextStyle};
