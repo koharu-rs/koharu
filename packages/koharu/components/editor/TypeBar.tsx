@@ -18,7 +18,7 @@ import {
   walkLayers,
 } from '@/lib/document'
 import { readPage, send, useFonts, usePage, usePreferences } from '@/lib/queries'
-import { setStyle, updateLayer } from '@/lib/scene'
+import { setFit, setStyle, updateLayer } from '@/lib/scene'
 import { useKoharuStore, type CanvasTool } from '@/lib/store'
 import {
   commands,
@@ -103,7 +103,7 @@ export function TypeBar() {
   const mixed = new Set(shared.mixed.filter((key) => drafted?.chars?.[key] === undefined))
   const frame = lettering?.frame ?? 'point'
   // A box and a path fit their text alike, a balloon's translation in a path; point text has no fit.
-  const fitted = typeof frame !== 'object' ? null : frame.box ? 'box' : 'path'
+  const fitted = targets.some((layer) => typeof letteringOf(layer)?.frame === 'object')
   const fit = typeof frame === 'object' ? (frame.box ?? frame.path)?.fit : undefined
   const autoFit = fit === 'best'
 
@@ -233,16 +233,14 @@ export function TypeBar() {
           auto={{
             label: t('inspector.auto'),
             active: autoFit,
-            available: fitted !== null,
-            onPick: () => fitted && update({ frame: { [fitted]: { fit: 'best' } } }),
+            available: fitted,
+            onPick: () => send(setFit, targets, 'best'),
           }}
           onChange={(next) => {
             applyChars({ size: next })
             // A typed size is the size the text draws at, as in Photoshop and Clip Studio Paint, so
             // a frame that shrinks or grows its text stops fitting it; a growing box keeps the size.
-            if (fitted && fit !== 'none' && fit !== 'grow') {
-              update({ frame: { [fitted]: { fit: 'none' } } })
-            }
+            if (fitted) send(setFit, targets, 'none')
           }}
         />
       </div>
