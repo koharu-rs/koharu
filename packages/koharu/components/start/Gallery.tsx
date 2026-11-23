@@ -5,6 +5,7 @@ import { ArrowLeft, ChevronRight, Library, LoaderCircle, Lock, Search, X } from 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useGallery } from '@/lib/gallery'
 import { pageKey, projectKey, queryClient, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import {
@@ -31,7 +32,6 @@ import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { cn } from '@koharu/ui/lib/utils'
 
-const seriesKey = ['series'] as const
 const sitesKey = ['sites'] as const
 /** A site's answers are kept a few minutes, so going back or searching again doesn't ask it
  * again. */
@@ -78,36 +78,33 @@ export function Gallery() {
   const [removing, setRemoving] = useState<SeriesLink | null>(null)
   const setReading = useKoharuStore((state) => state.setReading)
   const sites = useQuery({ queryKey: sitesKey, queryFn: () => commands.listSites() }).data ?? []
-  const shelf = useQuery({ queryKey: seriesKey, queryFn: () => commands.listSeries() }).data ?? []
+  const shelf = useGallery((state) => state.shelf)
+  const keep = useGallery((state) => state.keep)
+  const forget = useGallery((state) => state.forget)
+  const remember = useGallery((state) => state.remember)
 
+  // An opened series goes first on the shelf.
+  const show = (opened: Opened) => {
+    setOpened(opened)
+    keep({ title: opened.series.title, url: opened.url, cover: opened.series.cover })
+  }
   const openSeries = useMutation({
     mutationFn: (url: string) => commands.openSeries(url),
-    onSuccess: async (series) => {
-      setOpened(series)
-      await refresh(seriesKey)
-    },
+    onSuccess: show,
   })
   // A chapter opens to edit; the user runs the pipeline on it when they choose.
   const read = useMutation({
     mutationFn: (url: string) => commands.readChapter(url),
     onMutate: () => setReading(false),
-    onSuccess: () => refresh(projectKey, pageKey),
+    onSuccess: (reading) => {
+      remember(reading)
+      return refresh(projectKey, pageKey)
+    },
   })
   // A pasted address opens its series, or reads its chapter when it's no series'.
   const openAddress = useMutation({
     mutationFn: (url: string) => commands.openSeries(url).catch(() => null),
-    onSuccess: async (series, url) => {
-      if (!series) return read.mutate(url)
-      setOpened(series)
-      await refresh(seriesKey)
-    },
-  })
-  const remove = useMutation({
-    mutationFn: (url: string) => commands.forgetSeries(url),
-    onSuccess: async () => {
-      setRemoving(null)
-      await refresh(seriesKey)
-    },
+    onSuccess: (series, url) => (series ? show(series) : read.mutate(url)),
   })
   const busy = openSeries.isPending || read.isPending || openAddress.isPending
 
@@ -209,10 +206,7 @@ export function Gallery() {
         </ScrollArea>
       )}
 
-      <AlertDialog
-        open={removing !== null}
-        onOpenChange={(open) => !open && !remove.isPending && setRemoving(null)}
-      >
+      <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogMedia className='bg-destructive/10 text-destructive'>
@@ -224,12 +218,13 @@ export function Gallery() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={remove.isPending}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               variant='destructive'
-              disabled={remove.isPending}
-              aria-busy={remove.isPending}
-              onClick={() => removing && remove.mutate(removing.url)}
+              onClick={() => {
+                if (removing) forget(removing.url)
+                setRemoving(null)
+              }}
             >
               {t('gallery.removeAction')}
             </AlertDialogAction>

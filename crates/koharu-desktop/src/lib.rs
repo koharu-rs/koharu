@@ -136,8 +136,6 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .plugin(koharu_sentry::plugin())
         .on_web_content_process_terminate(koharu_sentry::web_content_process_terminated)
         .manage(app)
-        .manage(gallery::Shelf::new(data.join("shelf.json")))
-        .manage(gallery::Readings::new(data.join("readings.json")))
         .invoke_handler(commands::handler())
         .setup(move |tauri| {
             tauri.manage(gallery::client(tauri.handle().clone())?);

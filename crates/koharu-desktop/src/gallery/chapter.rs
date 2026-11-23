@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use koharu_extensions::{Chapter, Extension};
+use koharu_extensions::{Chapter, Extension, PageSide, ReadingDirection};
 use koharu_scene::{Created, Edit, Hash, Op, PageId, Session};
 use parking_lot::Mutex;
 use sanitize_filename::Options;
@@ -14,12 +14,22 @@ use specta::Type;
 use tokio_util::task::AbortOnDropHandle;
 use url::Url;
 
-use super::{Reading, Readings};
 use crate::{app::App, events};
 
 /// The most characters of a title a project's name keeps, so its path stays
 /// under Windows' 260.
 const TITLE: usize = 100;
+
+/// A chapter read into a project: the project, and how its pages read, as
+/// its extension said, which the interface keeps for the reader.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Reading {
+    pub project: String,
+    pub direction: Option<ReadingDirection>,
+    /// Which side of a two-page spread its first page takes.
+    pub first_page: Option<PageSide>,
+}
 
 /// How far a chapter's loading went, which the `chapter` event carries.
 #[derive(Clone, Debug, Serialize, Type)]
@@ -32,24 +42,23 @@ pub struct Loading {
     pub error: Option<String>,
 }
 
-/// Opens the chapter at `url` as the open project, named after it, keeping
-/// how it reads in `readings`, and loads its pages into it through
-/// `extension`, which reads it, and `http`.
+/// Opens the chapter at `url` as the open project, named after it, and loads
+/// its pages into it through `extension`, which reads it, and `http`; says
+/// how the chapter reads.
 pub async fn read(
     app: &Arc<App>,
-    readings: &Readings,
     extension: &'static dyn Extension,
     http: reqwest::Client,
     url: &Url,
-) -> Result<()> {
+) -> Result<Reading> {
     let chapter = extension.chapter(&http, url).await?;
     let name = name(&chapter, url);
     tracing::info!(pages = chapter.pages.len(), "read chapter");
     let reading = Reading {
+        project: name.clone(),
         direction: chapter.direction,
         first_page: chapter.first_page,
     };
-    readings.put(&name, reading)?;
     let opening = Arc::clone(app);
     let opened = name.clone();
     tokio::task::spawn_blocking(move || {
@@ -81,7 +90,7 @@ pub async fn read(
     {
         project.loading = Some(loading);
     }
-    Ok(())
+    Ok(reading)
 }
 
 /// The project "‹title› – ‹site›", made a file name on every platform.

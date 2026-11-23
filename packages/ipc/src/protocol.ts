@@ -789,9 +789,12 @@ export type Raster = {
   offset?: Offset
 }
 
-/**  How a chapter's pages read, as its extension said. */
+/**
+ *  A chapter read into a project: the project, and how its pages read, as
+ *  its extension said, which the interface keeps for the reader.
+ */
 export type Reading = {
-  /**  How its pages turn. */
+  project: string
   direction: ReadingDirection | null
   /**  Which side of a two-page spread its first page takes. */
   firstPage: PageSide | null
@@ -1160,14 +1163,9 @@ export const commands = {
     runner('browse_site', (options) =>
       invoke<Listing>('browse_site', { site, catalog, next }, options),
     ),
-  /** The series at `url`, which goes first on the shelf. */
+  /** The series at `url`. */
   openSeries: (url: string) =>
     runner('open_series', (options) => invoke<Opened>('open_series', { url }, options)),
-  /** The series the gallery opened, the last first. */
-  listSeries: () =>
-    runner('list_series', (options) => invoke<SeriesLink[]>('list_series', {}, options)),
-  forgetSeries: (url: string) =>
-    runner('forget_series', (options) => invoke<null>('forget_series', { url }, options)),
   /** The cover at `url` of the series at `series`, through its extension, as sites refuse it to the main window's page. */
   getCover: (series: string, url: string) =>
     runner('get_cover', (options) => invoke<ArrayBuffer>('get_cover', { series, url }, options)),
@@ -1179,12 +1177,9 @@ export const commands = {
   /** The name of the account signed in to the site `site`, `None` when no one is. */
   getAccount: (site: string) =>
     runner('get_account', (options) => invoke<string | null>('get_account', { site }, options)),
-  /** Opens the chapter at `url` as the open project, and loads its pages into it; `chapter` tells how far that goes. */
+  /** Opens the chapter at `url` as the open project, and loads its pages into it, which `chapter` tells how far it went with; says how it reads. */
   readChapter: (url: string) =>
-    runner('read_chapter', (options) => invoke<null>('read_chapter', { url }, options)),
-  /** How the open project's chapter reads, when it's a chapter the gallery read. */
-  getReading: () =>
-    runner('get_reading', (options) => invoke<Reading | null>('get_reading', {}, options)),
+    runner('read_chapter', (options) => invoke<Reading>('read_chapter', { url }, options)),
   listFonts: () =>
     runner('list_fonts', (options) => invoke<FontFamily[]>('list_fonts', {}, options)),
   /** `family`'s name set in it, as WebP. */

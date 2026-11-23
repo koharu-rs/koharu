@@ -6,6 +6,7 @@ import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 
 import { useCanvasViewport } from '@/components/editor/CanvasWorkspace'
+import { useGallery } from '@/lib/gallery'
 import { send, useProject } from '@/lib/queries'
 import { commands, type FacingPage, type PageId, type PageSide } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
@@ -57,7 +58,7 @@ export function Reader() {
   const project = useProject().data
   const pages = project?.pages ?? []
   const index = pages.findIndex((page) => page.id === project?.page)
-  const reading = project?.reading
+  const reading = useGallery((state) => (project ? state.readings[project.name] : undefined))
   const [preferred, setPreferred] = useState<Turning>(storedDirection)
   // A chapter's own direction wins; a webtoon's strip turns forward downward and to the right.
   const direction: Turning =

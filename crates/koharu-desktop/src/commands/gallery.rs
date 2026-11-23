@@ -1,12 +1,11 @@
 //! The gallery's commands: searching the sites the built-in extensions read
 //! and browsing their catalogs, a series through the extension that reads
-//! its site, the shelf of the series the user opened, signing in to a site
-//! and who is, and reading a chapter, and how the open one reads.
+//! its site, signing in to a site and who is, and reading a chapter.
 
 use std::sync::Arc;
 
 use anyhow::Context as _;
-use koharu_extensions::{Catalog, EXTENSIONS, Extension, Listing, Series, SeriesLink};
+use koharu_extensions::{Catalog, EXTENSIONS, Extension, Listing, Series};
 use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
@@ -18,7 +17,7 @@ use url::Url;
 use super::{Bytes, Result};
 use crate::{
     app::App,
-    gallery::{self, Reading, Readings, Shelf},
+    gallery::{self, Reading},
 };
 
 /// A site the gallery searches and browses.
@@ -86,37 +85,14 @@ pub struct Opened {
     pub series: Series,
 }
 
-/// The series at `url`, which goes first on the shelf.
+/// The series at `url`.
 #[tauri::command]
 #[specta::specta]
-pub async fn open_series(
-    http: State<'_, reqwest::Client>,
-    shelf: State<'_, Shelf>,
-    url: Url,
-) -> Result<Opened> {
+pub async fn open_series(http: State<'_, reqwest::Client>, url: Url) -> Result<Opened> {
     let extension = reader(&url)?;
     tracing::info!(extension = extension.id(), "open series");
     let series = extension.series(&http, &url).await?;
-    shelf.put(SeriesLink {
-        title: series.title.clone(),
-        url: url.to_string(),
-        cover: series.cover.clone(),
-    })?;
     Ok(Opened { url, series })
-}
-
-/// The series the gallery opened, the last first.
-#[tauri::command]
-#[specta::specta]
-pub fn list_series(shelf: State<'_, Shelf>) -> Result<Vec<SeriesLink>> {
-    Ok(shelf.list()?)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn forget_series(shelf: State<'_, Shelf>, url: String) -> Result<()> {
-    tracing::info!("forget series");
-    Ok(shelf.remove(&url)?)
 }
 
 /// The cover at `url` of the series at `series`, through its extension, as
@@ -185,35 +161,15 @@ pub async fn sign_out_site(handle: AppHandle<CefRuntime>, site: String) -> Resul
 }
 
 /// Opens the chapter at `url` as the open project, and loads its pages into
-/// it; `chapter` tells how far that goes.
+/// it, which `chapter` tells how far it went with; says how it reads.
 #[tauri::command]
 #[specta::specta]
 pub async fn read_chapter(
     app: State<'_, Arc<App>>,
-    readings: State<'_, Readings>,
     http: State<'_, reqwest::Client>,
     url: Url,
-) -> Result<()> {
-    Ok(gallery::read(&app, &readings, reader(&url)?, http.inner().clone(), &url).await?)
-}
-
-/// How the open project's chapter reads, when it's a chapter the gallery
-/// read.
-#[tauri::command]
-#[specta::specta]
-pub fn get_reading(
-    app: State<'_, Arc<App>>,
-    readings: State<'_, Readings>,
-) -> Result<Option<Reading>> {
-    let name = app
-        .project
-        .lock()
-        .as_ref()
-        .map(|project| project.name.clone());
-    match name {
-        Some(name) => Ok(readings.get(&name)?),
-        None => Ok(None),
-    }
+) -> Result<Reading> {
+    Ok(gallery::read(&app, reader(&url)?, http.inner().clone(), &url).await?)
 }
 
 /// The built-in extension `id`.
