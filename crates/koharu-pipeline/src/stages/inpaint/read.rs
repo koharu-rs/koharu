@@ -30,7 +30,7 @@ pub(super) fn blocks(member: &Member) -> Result<Option<Work>> {
     if cleanups.is_empty() {
         return Ok(None);
     }
-    let covered = covered(member, &project, width, height)?;
+    let covered = covered(member, width, height)?;
     let places = places(&project, member.page, width, height);
     let (mask, regions) = tiers(&mut image, &covered, &mut cleanups, &places);
     Ok(Some(Work {
@@ -94,9 +94,11 @@ fn cleanups(member: &Member, project: &Project, width: u32, height: u32) -> Resu
 
 /// Every block's mask on the page, which the tiers hold out of what they
 /// read: a block the run leaves, such as a locked one, keeps its lettering on
-/// the scan.
-fn covered(member: &Member, project: &Project, width: u32, height: u32) -> Result<GrayImage> {
+/// the scan. The blocks come from the session as it is now, with their tiles,
+/// as one deleted since the scan was read has none.
+fn covered(member: &Member, width: u32, height: u32) -> Result<GrayImage> {
     let session = member.session.lock();
+    let project = session.project();
     let mut covered = GrayImage::new(width, height);
     for (_, block) in project.blocks(member.page).unwrap_or_default() {
         if let Some((rect, mask)) = session.tiles(block.mask.id, None)?.coverage(width, height) {
@@ -257,7 +259,8 @@ mod tests {
     };
 
     /// A locked block is left out of the run, but its lettering, still on the
-    /// scan, stays out of what the tiers read.
+    /// scan, stays out of what the tiers read; a block deleted since the read
+    /// is simply gone.
     #[test]
     fn a_locked_blocks_lettering_stays_out_of_what_the_fills_read() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
@@ -303,9 +306,13 @@ mod tests {
         let cleanups = cleanups(&member, &project, 400, 400)?;
         let cleaned: Vec<LayerId> = cleanups.iter().map(|cleanup| cleanup.block).collect();
         assert_eq!(cleaned, [free]);
-        let covered = covered(&member, &project, 400, 400)?;
+        member.session.lock().apply(Edit {
+            label: "delete".to_owned(),
+            ops: vec![Op::RemoveLayer { layer: free.into() }],
+        })?;
+        let covered = covered(&member, 400, 400)?;
         assert_eq!(covered.get_pixel(40, 80).0[0], 255);
-        assert_eq!(covered.get_pixel(240, 80).0[0], 255);
+        assert_eq!(covered.get_pixel(240, 80).0[0], 0);
         Ok(())
     }
 
