@@ -15,6 +15,7 @@ function ProjectFlow() {
 function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getOpenProject').mockImplementation(async () => open())
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
+  vi.spyOn(commands, 'getReading').mockResolvedValue(null)
   vi.spyOn(commands, 'query').mockImplementation(async (query) =>
     query.query === 'get_project'
       ? { id: 'project', version: '1', pages: [] }
