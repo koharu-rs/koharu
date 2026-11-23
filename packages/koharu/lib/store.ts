@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import type {
   Bounds,
   LayerId,
+  Loading,
   PageId,
   PipelineEvent,
   RunId,
@@ -83,6 +84,12 @@ interface KoharuStore {
   settingsOpen: boolean
   /** Whether the History window shows over the canvas. */
   historyOpen: boolean
+  /** Whether the start view shows the gallery, not the projects. */
+  galleryOpen: boolean
+  /** Whether the main window reads the open project, not edits it. */
+  reading: boolean
+  /** How far an extension's chapter loading into the open project went. */
+  loading: Loading | null
   selectPages: (pages: PageId[]) => void
   showPanel: (panel: Panel) => void
   setStoryHover: (layer: LayerId | null) => void
@@ -90,6 +97,8 @@ interface KoharuStore {
   setProcessingStages: (stages: Stage[]) => void
   setSettingsOpen: (open: boolean) => void
   setHistoryOpen: (open: boolean) => void
+  setGalleryOpen: (open: boolean) => void
+  setReading: (reading: boolean) => void
   selectLayers: (layers: LayerId[]) => void
   setTool: (tool: CanvasTool) => void
   setBrush: (brush: CanvasBrush) => void
@@ -117,6 +126,9 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   processingStages: [...pipelineStages],
   settingsOpen: false,
   historyOpen: false,
+  galleryOpen: false,
+  reading: false,
+  loading: null,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
   showPanel: (panel) => set({ panel, storyHover: null }),
   setStoryHover: (storyHover) => set({ storyHover }),
@@ -124,6 +136,8 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   setProcessingStages: (processingStages) => set({ processingStages }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
+  setGalleryOpen: (galleryOpen) => set({ galleryOpen }),
+  setReading: (reading) => set({ reading }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),
   setBrush: (brush) => set({ brush }),

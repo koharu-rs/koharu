@@ -11,6 +11,7 @@
     "downloadingFiles": "Скачивание файлов: {{count}}",
     "downloadingFiles_one": "Скачивание файлов: {{count}}",
     "downloadingFiles_other": "Скачивание файлов: {{count}}",
+    "loadingPages": "Загрузка страниц: {{loaded}} из {{total}}",
     "modelDownload": "Скачивание модели",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
@@ -107,6 +108,31 @@
     "noResults": "Нет шрифтов, соответствующих поиску",
     "removeFavorite": "Удалить {{name}} из избранного",
     "search": "Искать шрифты"
+  },
+  "gallery": {
+    "back": "Назад",
+    "chapters": "Глав: {{count}}",
+    "chapters_one": "Глав: {{count}}",
+    "chapters_other": "Глав: {{count}}",
+    "latest": "Новое",
+    "library": "Мои книги",
+    "locked": "Закрыто",
+    "noResults": "Ничего не найдено по запросу «{{query}}»",
+    "noSeries": "Серий пока нет",
+    "noSeriesHint": "Найдите серию выше или вставьте её адрес.",
+    "onShelf": "На вашей полке",
+    "ongoing": "Выходят сейчас",
+    "popular": "Популярное",
+    "removeAction": "Убрать серию",
+    "removeDescription": "Серия «{{title}}» будет убрана из ваших серий. Проекты её глав останутся в Koharu.",
+    "removeLabel": "Убрать {{title}}",
+    "removeTitle": "Убрать серию?",
+    "search": "Поиск",
+    "searchPlaceholder": "Найдите серию или вставьте адрес",
+    "searching": "Поиск…",
+    "seeAll": "Показать все",
+    "title": "Галерея",
+    "yourSeries": "Ваши серии"
   },
   "history": {
     "close": "Закрыть историю",
@@ -315,6 +341,18 @@
     "cleanup": "Очистка",
     "outline": "Контур"
   },
+  "reader": {
+    "coverAlone": "Обложка отдельно",
+    "edit": "Правка",
+    "loadFailed": "Не удалось загрузить главу",
+    "ltr": "Слева направо",
+    "mode": "Режим",
+    "next": "Следующая страница",
+    "noPages": "Страниц пока нет",
+    "previous": "Предыдущая страница",
+    "read": "Чтение",
+    "rtl": "Справа налево"
+  },
   "reasoning": {
     "high": "Высокий",
     "low": "Низкий",
@@ -339,6 +377,16 @@
       "title": "Оформление"
     },
     "backToEditor": "Вернуться в редактор",
+    "gallery": {
+      "accounts": "Учётные записи",
+      "description": "Войдите на сайт, чтобы читать то, что доступно вашей учётной записи, например купленные главы.",
+      "noSignIn": "Учётная запись не нужна",
+      "signIn": "Войти",
+      "signOut": "Выйти",
+      "signOutLabel": "Выйти из {{site}}",
+      "signedIn": "Вы вошли как {{name}}",
+      "title": "Галерея"
+    },
     "loading": "Загрузка настроек…",
     "pipeline": {
       "description": "Выберите модели и параметры обработки каждой страницы.",
@@ -406,6 +454,7 @@
     },
     "tabs": {
       "appearance": "Оформление",
+      "gallery": "Галерея",
       "pipeline": "Конвейер",
       "providers": "Провайдеры",
       "typesetting": "Рендерер"
@@ -449,6 +498,7 @@
     "search": "Поиск проектов",
     "storageHint": "Проекты хранятся локально на этом компьютере.",
     "title": "Проекты",
+    "views": "Вид",
     "yourProjects": "Ваши проекты"
   },
   "startup": {

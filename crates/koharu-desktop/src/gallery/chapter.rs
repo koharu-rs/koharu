@@ -1,0 +1,192 @@
+//! A chapter an extension reads, as a project: its name, how it reads, and
+//! loading its pages into it in order, which the user then translates when
+//! they choose.
+
+use std::sync::Arc;
+
+use anyhow::{Context as _, Result};
+use koharu_extensions::{Chapter, Extension};
+use koharu_scene::{Created, Edit, Hash, Op, PageId, Session};
+use parking_lot::Mutex;
+use sanitize_filename::Options;
+use serde::Serialize;
+use specta::Type;
+use tokio_util::task::AbortOnDropHandle;
+use url::Url;
+
+use super::{Reading, Readings};
+use crate::{app::App, events};
+
+/// The most characters of a title a project's name keeps, so its path stays
+/// under Windows' 260.
+const TITLE: usize = 100;
+
+/// How far a chapter's loading went, which the `chapter` event carries.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Loading {
+    /// Its pages in the project so far, and in the chapter.
+    pub loaded: u32,
+    pub total: u32,
+    /// Why it stopped, when it failed.
+    pub error: Option<String>,
+}
+
+/// Opens the chapter at `url` as the open project, named after it, keeping
+/// how it reads in `readings`, and loads its pages into it through
+/// `extension`, which reads it, and `http`.
+pub async fn read(
+    app: &Arc<App>,
+    readings: &Readings,
+    extension: &'static dyn Extension,
+    http: reqwest::Client,
+    url: &Url,
+) -> Result<()> {
+    let chapter = extension.chapter(&http, url).await?;
+    let name = name(&chapter, url);
+    tracing::info!(pages = chapter.pages.len(), "read chapter");
+    let reading = Reading {
+        direction: chapter.direction,
+        first_page: chapter.first_page,
+    };
+    readings.put(&name, reading)?;
+    let opening = Arc::clone(app);
+    let opened = name.clone();
+    tokio::task::spawn_blocking(move || {
+        let session = opening.library.open_or_create(&opened)?;
+        opening.open(opened, session)
+    })
+    .await??;
+    let total = u32::try_from(chapter.pages.len())?;
+    let telling = Arc::clone(app);
+    let loading = AbortOnDropHandle::new(tokio::spawn(load(
+        extension,
+        http,
+        chapter,
+        app.session()?,
+        move |loaded, error| {
+            let loading = Loading {
+                loaded,
+                total,
+                error,
+            };
+            telling.emit(events::CHAPTER, loading);
+        },
+    )));
+    if let Some(project) = app
+        .project
+        .lock()
+        .as_mut()
+        .filter(|project| project.name == name)
+    {
+        project.loading = Some(loading);
+    }
+    Ok(())
+}
+
+/// The project "‹title› – ‹site›", made a file name on every platform.
+fn name(chapter: &Chapter, url: &Url) -> String {
+    let site = url.host_str().unwrap_or_default();
+    let title = match &chapter.series {
+        Some(series) => format!("{series} {}", chapter.title),
+        None => chapter.title.clone(),
+    };
+    let title: String = title.trim().chars().take(TITLE).collect();
+    let name = if title.is_empty() {
+        site.to_owned()
+    } else {
+        format!("{title} – {site}")
+    };
+    let options = Options {
+        windows: true,
+        truncate: true,
+        replacement: "",
+    };
+    sanitize_filename::sanitize_with_options(name, options)
+}
+
+/// Loads `chapter`'s pages into `session` in order, through `extension` and
+/// `http`, telling `tell` how many are in after each, and why it stopped
+/// when one fails.
+async fn load(
+    extension: &'static dyn Extension,
+    http: reqwest::Client,
+    chapter: Chapter,
+    session: Arc<Mutex<Session>>,
+    tell: impl Fn(u32, Option<String>) + Send,
+) {
+    let mut loaded = 0;
+    let mut previous = None;
+    tell(loaded, None);
+    for page in &chapter.pages {
+        match self::page(extension, &http, page, &session, previous).await {
+            Ok(page) => {
+                previous = Some(page);
+                loaded += 1;
+                tell(loaded, None);
+            }
+            Err(error) => {
+                let error = format!("failed to load page {}: {error:#}", loaded + 1);
+                tracing::error!("{error}");
+                tell(loaded, Some(error));
+                return;
+            }
+        }
+    }
+}
+
+/// Loads `page`, the chapter's page after `previous`.
+async fn page(
+    extension: &dyn Extension,
+    http: &reqwest::Client,
+    page: &str,
+    session: &Arc<Mutex<Session>>,
+    previous: Option<PageId>,
+) -> Result<PageId> {
+    let bytes = extension.page(http, page).await?;
+    let placing = Arc::clone(session);
+    tokio::task::spawn_blocking(move || place(&placing, bytes, previous)).await?
+}
+
+/// The page the image `bytes` is: the page already made from it, or else a
+/// new one, added as import adds one, right after `previous`, at the start
+/// when there's none, and at the end when it's gone.
+fn place(session: &Mutex<Session>, bytes: Vec<u8>, previous: Option<PageId>) -> Result<PageId> {
+    let hash = Hash::of(&bytes);
+    let mut session = session.lock();
+    let project = session.project();
+    if let Some(page) = project.pages().find(|page| {
+        page.background
+            .is_some_and(|background| background.file == hash)
+    }) {
+        return Ok(page.id);
+    }
+    let index = match previous {
+        None => 0,
+        Some(previous) => project
+            .pages()
+            .position(|page| page.id == previous)
+            .map_or_else(|| project.pages().count(), |index| index + 1),
+    };
+    let change = session.apply(Edit {
+        label: "import".to_owned(),
+        ops: vec![
+            Op::AddFile { bytes },
+            Op::AddPage {
+                id: None,
+                index,
+                size: None,
+                background: Some(hash),
+            },
+        ],
+    })?;
+    let page = change
+        .created
+        .iter()
+        .find_map(|created| match created {
+            Created::Page { id, .. } => Some(*id),
+            Created::Layer { .. } => None,
+        })
+        .context("adding a page made none")?;
+    Ok(page)
+}

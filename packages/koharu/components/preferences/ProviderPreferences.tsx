@@ -24,6 +24,7 @@ import {
 } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
 const vendorsKey = ['vendors'] as const
 
@@ -139,15 +140,24 @@ function KeyField({ vendor }: { vendor: Vendor }) {
           }}
         />
         {vendor.connected && (
-          <Button
-            type='button'
-            variant='outline'
-            size='icon'
-            aria-label={t('settings.providers.clearCredential', { provider: name })}
-            onClick={() => store.mutate(null)}
-          >
-            <Eraser />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='destructive'
+                  size='icon'
+                  aria-label={t('settings.providers.clearCredential', { provider: name })}
+                  onClick={() => store.mutate(null)}
+                />
+              }
+            >
+              <Eraser />
+            </TooltipTrigger>
+            <TooltipContent>
+              {t('settings.providers.clearCredential', { provider: name })}
+            </TooltipContent>
+          </Tooltip>
         )}
       </div>
     </div>
@@ -220,7 +230,7 @@ function SignInField({ vendor }: { vendor: Vendor }) {
       ) : (
         <Button
           type='button'
-          variant='outline'
+          variant={vendor.connected ? 'destructive' : 'outline'}
           size='sm'
           className='justify-self-start'
           aria-label={

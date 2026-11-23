@@ -11,6 +11,7 @@
     "downloadingFiles": "{{count}}개 파일 다운로드 중",
     "downloadingFiles_one": "{{count}}개 파일 다운로드 중",
     "downloadingFiles_other": "{{count}}개 파일 다운로드 중",
+    "loadingPages": "페이지 불러오는 중: {{loaded}} / {{total}}",
     "modelDownload": "모델 다운로드",
     "processing": "처리 중",
     "processingFailed": "처리에 실패했습니다.",
@@ -107,6 +108,31 @@
     "noResults": "검색과 일치하는 글꼴이 없습니다",
     "removeFavorite": "{{name}}을(를) 즐겨찾기에서 제거",
     "search": "글꼴 검색"
+  },
+  "gallery": {
+    "back": "뒤로",
+    "chapters": "{{count}}화",
+    "chapters_one": "{{count}}화",
+    "chapters_other": "{{count}}화",
+    "latest": "최신",
+    "library": "내 책",
+    "locked": "잠김",
+    "noResults": "“{{query}}”에 대한 결과가 없습니다",
+    "noSeries": "아직 시리즈가 없습니다",
+    "noSeriesHint": "위에서 시리즈를 검색하거나 주소를 붙여 넣으세요.",
+    "onShelf": "내 책장에 있음",
+    "ongoing": "연재 중",
+    "popular": "인기",
+    "removeAction": "시리즈 제거",
+    "removeDescription": "“{{title}}”을(를) 내 시리즈에서 제거합니다. 회차 프로젝트는 Koharu에 남습니다.",
+    "removeLabel": "{{title}} 제거",
+    "removeTitle": "시리즈를 제거할까요?",
+    "search": "검색",
+    "searchPlaceholder": "시리즈를 검색하거나 주소를 붙여 넣으세요",
+    "searching": "검색 중…",
+    "seeAll": "모두 보기",
+    "title": "갤러리",
+    "yourSeries": "내 시리즈"
   },
   "history": {
     "close": "작업 내역 닫기",
@@ -315,6 +341,18 @@
     "cleanup": "정리",
     "outline": "윤곽선"
   },
+  "reader": {
+    "coverAlone": "표지 단독",
+    "edit": "편집",
+    "loadFailed": "회차를 불러오지 못했습니다",
+    "ltr": "왼쪽에서 오른쪽",
+    "mode": "모드",
+    "next": "다음 페이지",
+    "noPages": "아직 페이지가 없습니다",
+    "previous": "이전 페이지",
+    "read": "읽기",
+    "rtl": "오른쪽에서 왼쪽"
+  },
   "reasoning": {
     "high": "높음",
     "low": "낮음",
@@ -339,6 +377,16 @@
       "title": "모양"
     },
     "backToEditor": "편집기로 돌아가기",
+    "gallery": {
+      "accounts": "계정",
+      "description": "사이트에 로그인하면 구매한 화 등 계정으로 볼 수 있는 내용을 읽을 수 있습니다.",
+      "noSignIn": "계정 필요 없음",
+      "signIn": "로그인",
+      "signOut": "로그아웃",
+      "signOutLabel": "{{site}}에서 로그아웃",
+      "signedIn": "{{name}}(으)로 로그인됨",
+      "title": "갤러리"
+    },
     "loading": "환경 설정 불러오는 중…",
     "pipeline": {
       "description": "각 페이지 처리에 사용할 모델과 옵션을 선택합니다.",
@@ -406,6 +454,7 @@
     },
     "tabs": {
       "appearance": "모양",
+      "gallery": "갤러리",
       "pipeline": "파이프라인",
       "providers": "제공자",
       "typesetting": "렌더러"
@@ -449,6 +498,7 @@
     "search": "프로젝트 검색",
     "storageHint": "프로젝트는 이 컴퓨터에 로컬로 저장됩니다.",
     "title": "프로젝트",
+    "views": "보기",
     "yourProjects": "내 프로젝트"
   },
   "startup": {

@@ -12,6 +12,8 @@ use specta::{Type, Types, datatype::DataType};
 use tauri::{AppHandle, Emitter as _};
 use tauri_runtime_cef::CefRuntime;
 
+use crate::gallery::Loading;
+
 /// An event's name, typed by what it carries, so a send and the bindings
 /// agree.
 pub struct Event<T> {
@@ -67,6 +69,8 @@ pub const NOTICE: Event<Notice> = Event::new("notice");
 pub const PIPELINE: Event<PipelineEvent> = Event::new("pipeline");
 /// A model or font file's download, as it goes.
 pub const DOWNLOAD: Event<Transfer> = Event::new("download");
+/// An extension's chapter loading into the open project, as it goes.
+pub const CHAPTER: Event<Loading> = Event::new("chapter");
 
 /// Every event's name and payload, for the bindings.
 pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
@@ -84,5 +88,6 @@ pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
         NOTICE.binding(types),
         PIPELINE.binding(types),
         DOWNLOAD.binding(types),
+        CHAPTER.binding(types),
     ]
 }

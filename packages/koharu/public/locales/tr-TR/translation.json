@@ -11,6 +11,7 @@
     "downloadingFiles": "{{count}} dosya indiriliyor",
     "downloadingFiles_one": "{{count}} dosya indiriliyor",
     "downloadingFiles_other": "{{count}} dosya indiriliyor",
+    "loadingPages": "Sayfalar yükleniyor: {{loaded}} / {{total}}",
     "modelDownload": "Model indirme",
     "processing": "İşleniyor",
     "processingFailed": "İşleme başarısız oldu.",
@@ -107,6 +108,31 @@
     "noResults": "Bu aramayla eşleşen yazı tipi yok",
     "removeFavorite": "{{name}} yazı tipini favorilerden çıkar",
     "search": "Yazı tipi ara"
+  },
+  "gallery": {
+    "back": "Geri",
+    "chapters": "{{count}} bölüm",
+    "chapters_one": "{{count}} bölüm",
+    "chapters_other": "{{count}} bölüm",
+    "latest": "En yeni",
+    "library": "Kitaplarım",
+    "locked": "Kilitli",
+    "noResults": "“{{query}}” için sonuç yok",
+    "noSeries": "Henüz seri yok",
+    "noSeriesHint": "Yukarıdan bir seri arayın veya adresini yapıştırın.",
+    "onShelf": "Rafınızda",
+    "ongoing": "Devam eden",
+    "popular": "Popüler",
+    "removeAction": "Seriyi kaldır",
+    "removeDescription": "Bu, “{{title}}” serisini serilerinizden kaldırır. Bölümlerinin projeleri Koharu’da kalır.",
+    "removeLabel": "{{title}} serisini kaldır",
+    "removeTitle": "Seri kaldırılsın mı?",
+    "search": "Ara",
+    "searchPlaceholder": "Seri arayın veya bir adres yapıştırın",
+    "searching": "Aranıyor…",
+    "seeAll": "Tümünü gör",
+    "title": "Galeri",
+    "yourSeries": "Serileriniz"
   },
   "history": {
     "close": "Geçmişi kapat",
@@ -315,6 +341,18 @@
     "cleanup": "Temizleme",
     "outline": "Dış hat"
   },
+  "reader": {
+    "coverAlone": "Kapak tek başına",
+    "edit": "Düzenle",
+    "loadFailed": "Bölüm yüklenemedi",
+    "ltr": "Soldan sağa",
+    "mode": "Mod",
+    "next": "Sonraki sayfa",
+    "noPages": "Henüz sayfa yok",
+    "previous": "Önceki sayfa",
+    "read": "Oku",
+    "rtl": "Sağdan sola"
+  },
   "reasoning": {
     "high": "Yüksek",
     "low": "Düşük",
@@ -339,6 +377,16 @@
       "title": "Görünüm"
     },
     "backToEditor": "Düzenleyiciye dön",
+    "gallery": {
+      "accounts": "Hesaplar",
+      "description": "Hesabınızın erişebildiklerini, örneğin satın aldığınız bölümleri okumak için bir siteye giriş yapın.",
+      "noSignIn": "Hesap gerekmez",
+      "signIn": "Giriş yap",
+      "signOut": "Oturumu kapat",
+      "signOutLabel": "{{site}} oturumunu kapat",
+      "signedIn": "{{name}} olarak giriş yapıldı",
+      "title": "Galeri"
+    },
     "loading": "Tercihler yükleniyor…",
     "pipeline": {
       "description": "Her sayfayı işlemek için kullanılan modelleri ve seçenekleri seçin.",
@@ -406,6 +454,7 @@
     },
     "tabs": {
       "appearance": "Görünüm",
+      "gallery": "Galeri",
       "pipeline": "İşlem hattı",
       "providers": "Sağlayıcılar",
       "typesetting": "Oluşturucu"
@@ -449,6 +498,7 @@
     "search": "Proje ara",
     "storageHint": "Projeler bu bilgisayarda yerel olarak saklanır.",
     "title": "Projeler",
+    "views": "Görünüm",
     "yourProjects": "Projeleriniz"
   },
   "startup": {

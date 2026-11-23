@@ -24,6 +24,7 @@ import {
   type PageSummary,
   type Preferences,
   type ProjectAnswer,
+  type Reading,
 } from '@koharu/ipc/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
@@ -45,6 +46,8 @@ export interface ProjectView {
   page: PageId | null
   pages: PageSummary[]
   history: History
+  /** How its pages read, when it's a chapter the gallery read. */
+  reading: Reading | null
   /** Each page's revision when a change last came while it was shown, which its thumbnail
    * follows; a page keeps its own after another is shown, or after it's removed. */
   revisions: Record<PageId, string>
@@ -98,10 +101,11 @@ const projectQuery = queryOptions({
   queryFn: async (): Promise<ProjectView | null> => {
     const name = await commands.getOpenProject()
     if (name === null) return null
-    const [page, project, history] = await Promise.all([
+    const [page, project, history, reading] = await Promise.all([
       commands.getShownPage(),
       commands.query({ query: 'get_project' }),
       commands.query({ query: 'get_history' }),
+      commands.getReading(),
     ])
     const known = queryClient.getQueryData<ProjectView | null>(projectKey)
     return {
@@ -109,6 +113,7 @@ const projectQuery = queryOptions({
       page,
       pages: (project as ProjectAnswer).pages,
       history: history as History,
+      reading,
       revisions: known?.name === name ? known.revisions : {},
     }
   },

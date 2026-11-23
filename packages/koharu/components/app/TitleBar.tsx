@@ -2,7 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { FilePlus2, FolderOpen, LoaderCircle } from 'lucide-react'
+import { BookOpen, FilePlus2, FolderOpen, LoaderCircle, PenLine } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,6 +27,7 @@ import {
   MenubarSubTrigger,
   MenubarTrigger as UiMenubarTrigger,
 } from '@koharu/ui/components/menubar'
+import { ToggleGroup, ToggleGroupItem } from '@koharu/ui/components/toggle-group'
 import { cn } from '@koharu/ui/lib/utils'
 
 export function TitleBar() {
@@ -44,6 +45,9 @@ export function TitleBar() {
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const settingsOpen = useKoharuStore((state) => state.settingsOpen)
+  const reading = useKoharuStore((state) => state.reading)
+  const setReading = useKoharuStore((state) => state.setReading)
   const { importPages, importing } = useImportPages()
   const { run: exportProject, busy: exporting } = useCommand(
     ['export-project'],
@@ -270,6 +274,30 @@ export function TitleBar() {
           )}
         </div>
 
+        {project && !settingsOpen && (
+          <ToggleGroup
+            value={[reading ? 'read' : 'edit']}
+            onValueChange={([next]) => next && setReading(next === 'read')}
+            aria-label={t('reader.mode')}
+            className='relative z-10 mr-2 shrink-0 rounded-md border border-input bg-background p-0.5'
+          >
+            {(
+              [
+                ['read', BookOpen, t('reader.read')],
+                ['edit', PenLine, t('reader.edit')],
+              ] as const
+            ).map(([value, Icon, label]) => (
+              <ToggleGroupItem
+                key={value}
+                value={value}
+                className='h-6 gap-1 px-2 text-[10px] text-muted-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground hover:aria-pressed:bg-primary/90'
+              >
+                <Icon className='size-3' />
+                {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
         {!macOS && <WindowControls />}
       </header>
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />

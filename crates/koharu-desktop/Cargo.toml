@@ -27,6 +27,7 @@ indoc = { workspace = true }
 koharu-agent = { workspace = true }
 koharu-canvas = { workspace = true }
 koharu-config = { workspace = true }
+koharu-extensions = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-psd = { workspace = true }
@@ -39,6 +40,7 @@ parking_lot = { workspace = true }
 rars = { workspace = true }
 rayon = { workspace = true }
 rfd = { workspace = true }
+reqwest = { workspace = true }
 sanitize-filename = { workspace = true }
 sentry = { workspace = true }
 serde = { workspace = true }
@@ -60,6 +62,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 ui-events = { workspace = true }
+url = { workspace = true }
 webp = { workspace = true }
 wgpu = { workspace = true }
 zip = { workspace = true }

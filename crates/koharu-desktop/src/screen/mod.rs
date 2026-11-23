@@ -28,7 +28,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use koharu_canvas::{
-    Brush, Camera, Canvas, Colors, Effect, Rect, Snapshot, Story, Tool, Typed, Vec2,
+    Brush, Camera, Canvas, Colors, Effect, Facing, Rect, Snapshot, Story, Tool, Typed, Vec2,
 };
 use koharu_renderer::Gpu;
 use koharu_scene::{Bounds, CharStyle, LayerId, PageId};
@@ -124,11 +124,13 @@ impl Screen {
         self.change(move |main| main.set_canvas(canvas));
     }
 
-    /// What the canvas shows, after a change.
-    pub fn show(&self, snapshot: Snapshot) {
+    /// What the canvas shows, after a change, with the page facing it in a
+    /// two-page spread.
+    pub fn show(&self, snapshot: Snapshot, facing: Option<Facing>) {
         self.change(move |main| {
             if let Some(canvas) = &mut main.canvas {
                 canvas.show(snapshot);
+                canvas.face(facing);
             }
         });
     }

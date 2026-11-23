@@ -6,6 +6,7 @@ mod canvas;
 mod debug;
 mod export;
 mod fonts;
+mod gallery;
 mod import;
 mod pages;
 mod preferences;
@@ -84,6 +85,18 @@ pub fn handler() -> impl Fn(Invoke<CefRuntime>) -> bool + Send + Sync + 'static 
         preferences::sign_in,
         preferences::stop_sign_in,
         preferences::sign_out,
+        gallery::list_sites,
+        gallery::search_site,
+        gallery::browse_site,
+        gallery::open_series,
+        gallery::list_series,
+        gallery::forget_series,
+        gallery::get_cover,
+        gallery::sign_in_site,
+        gallery::sign_out_site,
+        gallery::get_account,
+        gallery::read_chapter,
+        gallery::get_reading,
         fonts::list_fonts,
         fonts::get_font_preview,
         import::import,
@@ -156,6 +169,18 @@ pub fn bindings(types: &mut Types) -> Vec<Function> {
         preferences::sign_in,
         preferences::stop_sign_in,
         preferences::sign_out,
+        gallery::list_sites,
+        gallery::search_site,
+        gallery::browse_site,
+        gallery::open_series,
+        gallery::list_series,
+        gallery::forget_series,
+        gallery::get_cover,
+        gallery::sign_in_site,
+        gallery::sign_out_site,
+        gallery::get_account,
+        gallery::read_chapter,
+        gallery::get_reading,
         fonts::list_fonts,
         fonts::get_font_preview,
         import::import,

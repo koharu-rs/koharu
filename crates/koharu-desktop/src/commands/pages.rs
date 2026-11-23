@@ -7,7 +7,10 @@ use koharu_scene::PageId;
 use tauri::State;
 
 use super::{Bytes, Result};
-use crate::{app::App, events};
+use crate::{
+    app::{App, FacingPage},
+    events,
+};
 
 /// How tall a thumbnail is, in pixels.
 const HEIGHT: u32 = 256;
@@ -38,10 +41,14 @@ pub fn get_shown_page(app: State<'_, Arc<App>>) -> Option<PageId> {
     app.project.lock().as_ref().and_then(|project| project.page)
 }
 
-/// Shows `page` on the canvas.
+/// Shows `page` on the canvas, with `facing` beside it in a two-page spread.
 #[tauri::command]
 #[specta::specta]
-pub async fn show(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
+pub async fn show(
+    app: State<'_, Arc<App>>,
+    page: PageId,
+    facing: Option<FacingPage>,
+) -> Result<()> {
     let app = Arc::clone(&app);
     // Typing on the page shown commits before the page changes.
     app.screen.finish_typing(Arc::clone(&app));
@@ -49,8 +56,13 @@ pub async fn show(app: State<'_, Arc<App>>, page: PageId) -> Result<()> {
         {
             let mut project = app.project.lock();
             let project = project.as_mut().context("no project is open")?;
-            project.session.lock().project().page(page)?;
+            let pages = project.session.lock().project();
+            pages.page(page)?;
+            if let Some(facing) = facing {
+                pages.page(facing.page)?;
+            }
             project.page = Some(page);
+            project.facing = facing;
         }
         app.emit(events::PAGE, Some(page));
         app.refresh()

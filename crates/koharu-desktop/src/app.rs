@@ -11,12 +11,12 @@ use std::{
 use anyhow::{Context as _, Result};
 use futures::StreamExt as _;
 use koharu_agent::{Agent, McpServer, Tools};
-use koharu_canvas::{Canvas, Effect, Snapshot};
+use koharu_canvas::{Canvas, Effect, Facing, Side, Snapshot};
 use koharu_pipeline::{Area, Pipeline, PipelineConfig, Request, RunId, Stage, Target};
 use koharu_renderer::Renderer;
 use koharu_scene::{Change, Edit, PageId, Session};
 use parking_lot::Mutex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager as _};
 use tauri_runtime_cef::CefRuntime;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
@@ -40,16 +40,32 @@ pub struct App {
     mcp: OnceLock<McpServer>,
 }
 
+/// The page facing the shown one in a two-page spread, and its side.
+#[derive(Clone, Copy, Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FacingPage {
+    pub page: PageId,
+    pub side: Side,
+}
+
+/// What the canvas shows of the open project: its session, its page, and
+/// the page facing that one in a spread.
+type Shown = (Arc<Mutex<Session>>, Option<PageId>, Option<FacingPage>);
+
 /// The open project, and what runs on it, which go when it closes.
 pub struct Project {
     pub name: String,
     pub session: Arc<Mutex<Session>>,
     /// The page the canvas shows; `None` when the project has none.
     pub page: Option<PageId>,
+    /// The page facing it, while the reader shows a two-page spread.
+    pub facing: Option<FacingPage>,
     /// The conversation with the agent, on the model it was made with.
     pub conversation: Option<(String, Arc<tokio::sync::Mutex<Agent>>)>,
     /// The agent's run going on, numbered, which closing aborts.
     pub run: Option<(u64, AbortOnDropHandle<()>)>,
+    /// An extension's chapter loading into it, which closing stops.
+    pub loading: Option<AbortOnDropHandle<()>>,
     /// Shows and tells the session's changes.
     _relay: AbortOnDropHandle<()>,
 }
@@ -142,8 +158,10 @@ impl App {
                 name: name.clone(),
                 session,
                 page,
+                facing: None,
                 conversation: None,
                 run: None,
+                loading: None,
                 _relay: relay,
             });
             if let Some(server) = self.mcp.get() {
@@ -270,9 +288,10 @@ impl App {
     }
 
     /// The open project's session and the page it shows, which moves to the
-    /// first when it went away, telling the interface so.
-    fn settle(&self) -> Option<(Arc<Mutex<Session>>, Option<PageId>)> {
-        let (session, page, moved) = {
+    /// first when it went away, telling the interface so; a facing page
+    /// that went away leaves the page on its own.
+    fn settle(&self) -> Option<Shown> {
+        let (session, page, facing, moved) = {
             let mut project = self.project.lock();
             let project = project.as_mut()?;
             let pages = project.session.lock().project();
@@ -280,19 +299,41 @@ impl App {
             if moved {
                 project.page = pages.pages().next().map(|page| page.id);
             }
-            (Arc::clone(&project.session), project.page, moved)
+            if moved
+                || project
+                    .facing
+                    .is_some_and(|facing| pages.page(facing.page).is_err())
+            {
+                project.facing = None;
+            }
+            (
+                Arc::clone(&project.session),
+                project.page,
+                project.facing,
+                moved,
+            )
         };
         if moved {
             self.emit(events::PAGE, page);
         }
-        Some((session, page))
+        Some((session, page, facing))
     }
 
-    /// Shows `page` of `session` on the canvas, or an empty canvas when the
-    /// project has no page.
-    fn show(&self, (session, page): (Arc<Mutex<Session>>, Option<PageId>)) -> Result<()> {
+    /// Shows `page` of `session` on the canvas, with the page facing it, or
+    /// an empty canvas when the project has no page.
+    fn show(&self, (session, page, facing): Shown) -> Result<()> {
         match page {
-            Some(page) => self.screen.show(self.render(&session, page)?),
+            Some(page) => {
+                let facing = facing
+                    .map(|facing| {
+                        anyhow::Ok(Facing {
+                            snapshot: self.render(&session, facing.page)?,
+                            side: facing.side,
+                        })
+                    })
+                    .transpose()?;
+                self.screen.show(self.render(&session, page)?, facing);
+            }
             None => self
                 .screen
                 .set_canvas(Some(Canvas::new(session, self.renderer.clone()))),

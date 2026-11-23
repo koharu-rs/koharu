@@ -91,6 +91,7 @@ jieba-rs = "0.11.0"
 json-patch = { version = "5.0.0", default-features = false }
 jsonptr = "0.8.2"
 keyring = "4.2.0"
+koharu-extensions = { git = "https://github.com/koharu-rs/extensions", rev = "814d90444b6ffa0b3afa1f78366a281b8383400f" }
 kurbo = "0.13.1"
 libloading = "0.9.0"
 llguidance = "1.9.1"
@@ -119,7 +120,7 @@ quick_cache = "0.7.0"
 quote = "1.0.47"
 rars = "0.12.2"
 rayon = "1.12.0"
-reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart"] }
+reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart", "cookies"] }
 rfd = "0.18.0"
 # rig breaks its API in every release.
 rig-agent = { version = "=0.46.0", default-features = false }
@@ -242,6 +243,11 @@ wgpu = { git = "https://github.com/mayocream/wgpu", rev = "d1a03ed3a2fe5a670d467
 # panicked when every pixel started a component of its own, as a layout
 # detection's 1×1 glyph mask does.
 imageproc = { git = "https://github.com/mayocream/imageproc", rev = "8c64b41c0c715449b250d6c4e06516fe8310a7fa" }
+# The published 156.6.0+156.0.30 with tauri-apps/cef-rs#522: under Cargo
+# 1.100's build-dir layout it copied CEF's runtime files into
+# `target/<profile>/build`, not beside the binary, so a debug run failed with
+# STATUS_DLL_NOT_FOUND.
+cef-dll-sys = { git = "https://github.com/mayocream/cef-rs", rev = "da25c86f606796bc2868bb4a43ec364340b2aa56" }
 
 [profile.dev]
 # Image decoding and the models' pre- and post-processing ran 10 to 40 times

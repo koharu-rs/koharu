@@ -2,11 +2,12 @@
 
 import { useMutation } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Folder, FolderPlus, Plus, Settings, Trash2 } from 'lucide-react'
+import { Folder, FolderPlus, Library, Plus, Settings, Trash2 } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ListSearch } from '@/components/controls/PickerSearch'
+import { Gallery } from '@/components/start/Gallery'
 import { pageKey, projectKey, projectsKey, refresh, useProjects } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands } from '@koharu/ipc/protocol'
@@ -25,11 +26,15 @@ import { Button } from '@koharu/ui/components/button'
 import { useComboboxFilter } from '@koharu/ui/components/combobox'
 import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
+import { ToggleGroup, ToggleGroupItem } from '@koharu/ui/components/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
 export function StartView() {
   const { t } = useTranslation()
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const galleryOpen = useKoharuStore((state) => state.galleryOpen)
+  const setGalleryOpen = useKoharuStore((state) => state.setGalleryOpen)
+  const setReading = useKoharuStore((state) => state.setReading)
   const list = useProjects()
   const projects = list.data ?? []
   const [query, setQuery] = useState('')
@@ -39,6 +44,7 @@ export function StartView() {
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
   const creation = useMutation({
     mutationFn: (projectName: string) => commands.create(projectName),
+    onMutate: () => setReading(false),
     onSuccess: async () => {
       await refresh(projectKey, pageKey)
       setName('')
@@ -46,6 +52,7 @@ export function StartView() {
   })
   const opening = useMutation({
     mutationFn: (projectName: string) => commands.open(projectName),
+    onMutate: () => setReading(false),
     onSuccess: () => refresh(projectKey, pageKey),
   })
   const deletion = useMutation({
@@ -64,12 +71,7 @@ export function StartView() {
   }
 
   return (
-    <AlertDialog
-      open={projectToDelete !== null}
-      onOpenChange={(open) => {
-        if (!open && !busy) setProjectToDelete(null)
-      }}
-    >
+    <>
       {/* The page scrolls only in a window too short for the panel, which otherwise fills the
           window, its list scrolling inside it. */}
       <main className='min-h-0 flex-1 overflow-y-auto bg-[var(--surface-canvas)]'>
@@ -86,28 +88,53 @@ export function StartView() {
                 {t('start.description')}
               </p>
             </div>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon-sm'
-                    className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
-                    aria-label={t('menu.settings')}
-                    onClick={() => setSettingsOpen(true)}
-                  />
-                }
+            <div className='flex shrink-0 items-center gap-2'>
+              <ToggleGroup
+                value={[galleryOpen ? 'gallery' : 'projects']}
+                onValueChange={([next]) => next && setGalleryOpen(next === 'gallery')}
+                aria-label={t('start.views')}
+                className='rounded-lg border border-input bg-background p-0.5'
               >
-                <Settings className='size-4' />
-              </TooltipTrigger>
-              <TooltipContent side='bottom'>{t('menu.settings')}</TooltipContent>
-            </Tooltip>
+                <ToggleGroupItem
+                  value='projects'
+                  className='h-7 gap-1.5 px-2.5 text-[10px] text-muted-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground hover:aria-pressed:bg-primary/90'
+                >
+                  <Folder className='size-3' /> {t('start.projectList')}
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value='gallery'
+                  className='h-7 gap-1.5 px-2.5 text-[10px] text-muted-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground hover:aria-pressed:bg-primary/90'
+                >
+                  <Library className='size-3' /> {t('gallery.title')}
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon-sm'
+                      className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
+                      aria-label={t('menu.settings')}
+                      onClick={() => setSettingsOpen(true)}
+                    />
+                  }
+                >
+                  <Settings className='size-4' />
+                </TooltipTrigger>
+                <TooltipContent side='bottom'>{t('menu.settings')}</TooltipContent>
+              </Tooltip>
+            </div>
           </header>
 
           {/* A 0 px basis, not flex-1's 0 %, which a column of no set height reads as the
               panel's content, so the panel takes the window's height and its list scrolls. */}
-          <div className='mt-7 grid min-h-[390px] grow basis-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-border/80 bg-[var(--surface-panel)] md:grid-cols-[300px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]'>
+          {galleryOpen && <Gallery />}
+          <div
+            hidden={galleryOpen}
+            className='mt-7 grid min-h-[390px] grow basis-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-border/80 bg-[var(--surface-panel)] md:grid-cols-[300px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]'
+          >
             <aside className='flex flex-col border-b border-border/80 bg-[var(--surface-titlebar)]/55 p-6 md:border-r md:border-b-0'>
               <span className='grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground'>
                 <FolderPlus className='size-[18px]' />
@@ -218,29 +245,36 @@ export function StartView() {
         </section>
       </main>
 
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogMedia className='bg-destructive/10 text-destructive'>
-            <Trash2 className='size-5' />
-          </AlertDialogMedia>
-          <AlertDialogTitle>{t('start.deleteTitle')}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('start.deleteDescription', { name: projectToDelete })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy}>{t('common.cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            variant='destructive'
-            disabled={busy}
-            aria-busy={busy}
-            onClick={() => projectToDelete && !busy && deletion.mutate(projectToDelete)}
-          >
-            {busy ? t('start.deleting') : t('start.deleteAction')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog
+        open={projectToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setProjectToDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className='bg-destructive/10 text-destructive'>
+              <Trash2 className='size-5' />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{t('start.deleteTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('start.deleteDescription', { name: projectToDelete })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant='destructive'
+              disabled={busy}
+              aria-busy={busy}
+              onClick={() => projectToDelete && !busy && deletion.mutate(projectToDelete)}
+            >
+              {busy ? t('start.deleting') : t('start.deleteAction')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 

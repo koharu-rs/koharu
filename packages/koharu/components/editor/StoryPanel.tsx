@@ -114,7 +114,7 @@ function useShowPage() {
       const { selectPages, selectLayers } = useKoharuStore.getState()
       selectPages([page])
       selectLayers([])
-      return commands.show(page)
+      return commands.show(page, null)
     },
   })
 }

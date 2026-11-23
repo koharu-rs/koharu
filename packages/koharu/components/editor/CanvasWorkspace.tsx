@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 
@@ -30,17 +30,8 @@ const nudges: Record<string, [number, number] | undefined> = {
   arrowdown: [0, 1],
 }
 
-/** The canvas's place in the window. The native canvas draws the page under the web interface
- * wherever this element and its ancestors paint nothing, and takes the pointer there; the
- * interface sets its tool, brush, and colours, and hears its camera and selection. */
-export function CanvasWorkspace() {
-  const { t } = useTranslation()
-  const surface = useRef<HTMLDivElement>(null)
-  const page = usePage().data
-  const tool = useKoharuStore((state) => state.tool)
-  const brush = useKoharuStore((state) => state.brush)
-  const colorSampling = useColorSampling()
-
+/** Tells the native canvas where `surface` lies in the window, for as long as it's mounted. */
+export function useCanvasViewport(surface: RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     const element = surface.current
     if (!element) return
@@ -60,7 +51,21 @@ export function CanvasWorkspace() {
       // Nothing to draw while the editor is away, as under the preferences.
       send(commands.setViewport, 0, 0, 0, 0)
     }
-  }, [])
+  }, [surface])
+}
+
+/** The canvas's place in the window. The native canvas draws the page under the web interface
+ * wherever this element and its ancestors paint nothing, and takes the pointer there; the
+ * interface sets its tool, brush, and colours, and hears its camera and selection. */
+export function CanvasWorkspace() {
+  const { t } = useTranslation()
+  const surface = useRef<HTMLDivElement>(null)
+  const page = usePage().data
+  const tool = useKoharuStore((state) => state.tool)
+  const brush = useKoharuStore((state) => state.brush)
+  const colorSampling = useColorSampling()
+
+  useCanvasViewport(surface)
 
   useEffect(() => send(commands.setTool, tool), [tool])
   // The canvas numbers the texts and outlines their frames while Story shows.

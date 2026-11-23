@@ -11,6 +11,7 @@
     "downloadingFiles": "正在下载 {{count}} 个文件",
     "downloadingFiles_one": "正在下载 {{count}} 个文件",
     "downloadingFiles_other": "正在下载 {{count}} 个文件",
+    "loadingPages": "正在加载页面：{{loaded}} / {{total}}",
     "modelDownload": "模型下载",
     "processing": "正在处理",
     "processingFailed": "处理失败。",
@@ -107,6 +108,31 @@
     "noResults": "没有与此搜索匹配的字体",
     "removeFavorite": "将 {{name}} 从收藏中移除",
     "search": "搜索字体"
+  },
+  "gallery": {
+    "back": "返回",
+    "chapters": "{{count}} 话",
+    "chapters_one": "{{count}} 话",
+    "chapters_other": "{{count}} 话",
+    "latest": "最新",
+    "library": "我的图书",
+    "locked": "已锁定",
+    "noResults": "没有“{{query}}”的结果",
+    "noSeries": "还没有系列",
+    "noSeriesHint": "在上方搜索系列，或粘贴它的地址。",
+    "onShelf": "在书架上",
+    "ongoing": "连载中",
+    "popular": "热门",
+    "removeAction": "移除系列",
+    "removeDescription": "这会将“{{title}}”从你的系列中移除。其章节的项目仍保留在 Koharu 中。",
+    "removeLabel": "移除{{title}}",
+    "removeTitle": "移除系列？",
+    "search": "搜索",
+    "searchPlaceholder": "搜索系列，或粘贴地址",
+    "searching": "正在搜索…",
+    "seeAll": "查看全部",
+    "title": "图库",
+    "yourSeries": "你的系列"
   },
   "history": {
     "close": "关闭历史记录",
@@ -315,6 +341,18 @@
     "cleanup": "清理",
     "outline": "轮廓"
   },
+  "reader": {
+    "coverAlone": "封面单独",
+    "edit": "编辑",
+    "loadFailed": "无法加载章节",
+    "ltr": "从左到右",
+    "mode": "模式",
+    "next": "下一页",
+    "noPages": "还没有页面",
+    "previous": "上一页",
+    "read": "阅读",
+    "rtl": "从右到左"
+  },
   "reasoning": {
     "high": "高",
     "low": "低",
@@ -339,6 +377,16 @@
       "title": "外观"
     },
     "backToEditor": "返回编辑器",
+    "gallery": {
+      "accounts": "账号",
+      "description": "登录网站后，可以阅读账号能看的内容，例如已购买的章节。",
+      "noSignIn": "无需账号",
+      "signIn": "登录",
+      "signOut": "退出登录",
+      "signOutLabel": "退出 {{site}} 登录",
+      "signedIn": "已登录为 {{name}}",
+      "title": "图库"
+    },
     "loading": "正在加载偏好设置…",
     "pipeline": {
       "description": "选择用于处理每个页面的模型和选项。",
@@ -406,6 +454,7 @@
     },
     "tabs": {
       "appearance": "外观",
+      "gallery": "图库",
       "pipeline": "流水线",
       "providers": "提供商",
       "typesetting": "渲染器"
@@ -449,6 +498,7 @@
     "search": "搜索项目",
     "storageHint": "项目存储在这台电脑上。",
     "title": "项目",
+    "views": "视图",
     "yourProjects": "你的项目"
   },
   "startup": {

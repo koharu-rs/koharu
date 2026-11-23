@@ -1,6 +1,6 @@
 'use client'
 
-import { commands, events, type Change, type PageId } from '@koharu/ipc/protocol'
+import { commands, events, type Change, type Loading, type PageId } from '@koharu/ipc/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
 import { toHex } from './color'
@@ -48,10 +48,22 @@ export function hear(active: () => boolean): Promise<void> {
     ),
     listen(events.pipeline, receivePipeline),
     listen(events.download, receiveDownload),
+    listen(events.chapter, receiveChapter),
   ])
     .then(() => commands.getPipelineEvents())
     .then((runs) => {
       if (active()) receiveRuns(runs)
+    })
+}
+
+/** An extension's chapter loading into the open project went further, or failed. */
+function receiveChapter(loading: Loading): void {
+  useKoharuStore.setState({ loading })
+  if (loading.error)
+    toast.add({
+      type: 'error',
+      title: i18n.t('reader.loadFailed'),
+      description: loading.error,
     })
 }
 
@@ -63,6 +75,8 @@ function receiveProject(name: string | null): void {
     const store = useKoharuStore.getState()
     store.selectPages([])
     store.selectLayers([])
+    // A chapter loads only into the project that's open.
+    useKoharuStore.setState({ loading: null })
   }
   if (name === null) {
     queryClient.setQueryData(projectKey, null)

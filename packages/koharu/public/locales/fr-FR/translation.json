@@ -11,6 +11,7 @@
     "downloadingFiles": "Téléchargement de {{count}} fichiers",
     "downloadingFiles_one": "Téléchargement de {{count}} fichier",
     "downloadingFiles_other": "Téléchargement de {{count}} fichiers",
+    "loadingPages": "Chargement des pages : {{loaded}} sur {{total}}",
     "modelDownload": "Téléchargement du modèle",
     "processing": "Traitement",
     "processingFailed": "Échec du traitement.",
@@ -107,6 +108,31 @@
     "noResults": "Aucune police ne correspond à cette recherche",
     "removeFavorite": "Retirer {{name}} des favoris",
     "search": "Rechercher des polices"
+  },
+  "gallery": {
+    "back": "Retour",
+    "chapters": "{{count}} chapitres",
+    "chapters_one": "{{count}} chapitre",
+    "chapters_other": "{{count}} chapitres",
+    "latest": "Nouveautés",
+    "library": "Mes livres",
+    "locked": "Verrouillé",
+    "noResults": "Aucun résultat pour « {{query}} »",
+    "noSeries": "Aucune série pour l’instant",
+    "noSeriesHint": "Recherchez une série ci-dessus ou collez son adresse.",
+    "onShelf": "Dans votre étagère",
+    "ongoing": "En cours",
+    "popular": "Populaires",
+    "removeAction": "Retirer la série",
+    "removeDescription": "Cela retire « {{title}} » de vos séries. Les projets de ses chapitres restent dans Koharu.",
+    "removeLabel": "Retirer {{title}}",
+    "removeTitle": "Retirer la série ?",
+    "search": "Rechercher",
+    "searchPlaceholder": "Recherchez une série ou collez une adresse",
+    "searching": "Recherche…",
+    "seeAll": "Tout voir",
+    "title": "Galerie",
+    "yourSeries": "Vos séries"
   },
   "history": {
     "close": "Fermer l’historique",
@@ -315,6 +341,18 @@
     "cleanup": "Nettoyage",
     "outline": "Contour"
   },
+  "reader": {
+    "coverAlone": "Couverture seule",
+    "edit": "Modifier",
+    "loadFailed": "Impossible de charger le chapitre",
+    "ltr": "De gauche à droite",
+    "mode": "Mode",
+    "next": "Page suivante",
+    "noPages": "Aucune page pour l’instant",
+    "previous": "Page précédente",
+    "read": "Lire",
+    "rtl": "De droite à gauche"
+  },
   "reasoning": {
     "high": "Élevé",
     "low": "Faible",
@@ -339,6 +377,16 @@
       "title": "Apparence"
     },
     "backToEditor": "Retour à l’éditeur",
+    "gallery": {
+      "accounts": "Comptes",
+      "description": "Connectez-vous à un site pour lire ce que votre compte permet, comme les chapitres achetés.",
+      "noSignIn": "Aucun compte requis",
+      "signIn": "Se connecter",
+      "signOut": "Se déconnecter",
+      "signOutLabel": "Se déconnecter de {{site}}",
+      "signedIn": "Connecté en tant que {{name}}",
+      "title": "Galerie"
+    },
     "loading": "Chargement des préférences…",
     "pipeline": {
       "description": "Choisissez les modèles et les options utilisés pour traiter chaque page.",
@@ -406,6 +454,7 @@
     },
     "tabs": {
       "appearance": "Apparence",
+      "gallery": "Galerie",
       "pipeline": "Pipeline",
       "providers": "Fournisseurs",
       "typesetting": "Moteur de rendu"
@@ -449,6 +498,7 @@
     "search": "Rechercher un projet",
     "storageHint": "Les projets sont stockés localement sur cet ordinateur.",
     "title": "Projets",
+    "views": "Vue",
     "yourProjects": "Vos projets"
   },
   "startup": {
