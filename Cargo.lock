@@ -1105,6 +1105,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake2s_simd"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2380c0236432f7b22a70229df30f218f5293870c056beb76f5ca068e3273a366"
+dependencies = [
+ "arrayvec",
+ "constant_time_eq 0.4.2",
+]
+
+[[package]]
 name = "blake3"
 version = "1.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8996,15 +9006,17 @@ dependencies = [
 
 [[package]]
 name = "rars"
-version = "0.12.4"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f10c4922c8ceb429e2eed0b2f61672f673d53a42fdfeb07fd0e143777ee9a979"
+checksum = "1da01c12cc3255e4c42fbd643820efad0c179e98362770f992eff6ba436cba3c"
 dependencies = [
  "aes 0.9.4",
  "aho-corasick",
+ "blake2s_simd",
  "crc32fast",
  "getrandom 0.4.3",
  "hmac 0.13.0",
+ "libc",
  "rayon",
  "sha1",
  "sha2 0.11.1",
