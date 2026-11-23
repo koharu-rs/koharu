@@ -106,9 +106,15 @@ function receiveChange(change: Change): void {
       ? {
           ...project,
           history: change.history,
-          revisions: project.page
-            ? { ...project.revisions, [project.page]: change.revision }
-            : project.revisions,
+          revisions: {
+            ...project.revisions,
+            ...Object.fromEntries(
+              [...change.pages.added, ...change.pages.changed].map((page) => [
+                page,
+                change.revision,
+              ]),
+            ),
+          },
         }
       : project,
   )

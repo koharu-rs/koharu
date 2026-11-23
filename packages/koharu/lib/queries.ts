@@ -45,8 +45,8 @@ export interface ProjectView {
   page: PageId | null
   pages: PageSummary[]
   history: History
-  /** Each page's revision when a change last came while it was shown, which its thumbnail
-   * follows; a page keeps its own after another is shown, or after it's removed. */
+  /** Each page's revision when a change last named it, added or changed, which its thumbnail
+   * follows whichever page is shown. */
   revisions: Record<PageId, string>
 }
 
