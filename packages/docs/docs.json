@@ -105,8 +105,10 @@
             "group": "Translate a project",
             "pages": [
               "guides/projects",
+              "guides/gallery",
               "guides/processing",
               "guides/review",
+              "guides/reader",
               "guides/canvas",
               "guides/cleanup",
               "guides/typesetting",
@@ -228,8 +230,10 @@
             "group": "翻訳ワークフロー",
             "pages": [
               "ja/guides/projects",
+              "ja/guides/gallery",
               "ja/guides/processing",
               "ja/guides/review",
+              "ja/guides/reader",
               "ja/guides/canvas",
               "ja/guides/cleanup",
               "ja/guides/typesetting",
@@ -351,8 +355,10 @@
             "group": "翻译项目",
             "pages": [
               "zh/guides/projects",
+              "zh/guides/gallery",
               "zh/guides/processing",
               "zh/guides/review",
+              "zh/guides/reader",
               "zh/guides/canvas",
               "zh/guides/cleanup",
               "zh/guides/typesetting",

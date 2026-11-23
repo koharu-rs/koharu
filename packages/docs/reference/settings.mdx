@@ -1,6 +1,6 @@
 ---
 title: 'Settings'
-description: 'Find the controls for appearance, models, providers, translation, and fonts.'
+description: 'Find the controls for appearance, models, providers, translation, fonts, and site sign-ins.'
 icon: 'gear'
 ---
 
@@ -21,6 +21,10 @@ Add API keys, sign in to subscriptions, and set base URLs for the connections li
 ## Renderer
 
 Set the ordered preferred fonts, CCWildWords and then Adobe 黑体 Std unless you change them. Koharu uses them for a text with no font of its own and when a font cannot supply a glyph, then falls back to system fonts. Individual text layers still own their typography.
+
+## Gallery
+
+Lists the sites the [gallery](/guides/gallery) reads. **Sign in** opens a site's own sign-in page in a window of its own; when you close it, the row shows the account the site reports, and **Sign out** clears that site's sign-in. A site without accounts says **No account needed**.
 
 <Note>
   Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]` (including
