@@ -1,3 +1,13 @@
+## [0.93.0](https://github.com/koharu-rs/koharu/compare/0.92.0..0.93.0) - 2026-11-23
+
+### ⛰️  Features
+
+- Read manga sites in a gallery, with a two-page reader - ([1cc4738](https://github.com/koharu-rs/koharu/commit/1cc47386c7e7cc58f9426ea37bed34d17786c6b4))
+
+### 🧪 Testing
+
+- *(ui)* Answer getReading in the fake desktop - ([fcad568](https://github.com/koharu-rs/koharu/commit/fcad5682a16dd3b1d48aab0230ad0a6b2d4117d3))
+
 ## [0.92.0](https://github.com/koharu-rs/koharu/compare/0.91.1..0.92.0) - 2026-11-22
 
 ### ⛰️  Features
