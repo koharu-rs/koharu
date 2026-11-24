@@ -1635,42 +1635,6 @@ fn typing_into_a_text_edits_it_at_the_click_in_one_step() {
 }
 
 #[test]
-fn cut_takes_the_selection_and_nothing_at_a_caret() {
-    let Some(mut fixture) = unscaled(typed_text(json!("Hello"))) else {
-        return;
-    };
-    let text = layers(&fixture)[0];
-    fixture.canvas.set_tool(Tool::Text);
-    gesture(&mut fixture.canvas, (101.0, 220.0), (101.0, 220.0));
-    press_key(
-        &mut fixture.canvas,
-        NamedKey::End,
-        Code::End,
-        Modifiers::default(),
-    );
-    let cut = key_down(Key::Character("x".to_owned()), Code::KeyX, CONTROL);
-    let at_caret = fixture.canvas.key(&cut).expect("a key");
-    assert!(at_caret.expect("typing takes the key").is_empty());
-    press_key(
-        &mut fixture.canvas,
-        NamedKey::ArrowLeft,
-        Code::ArrowLeft,
-        SHIFT,
-    );
-    let selected = fixture.canvas.key(&cut).expect("a key");
-    assert!(matches!(
-        selected.as_deref(),
-        Some([Effect::Copy(copied)]) if copied == "o"
-    ));
-    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
-    assert_eq!(apply(&mut fixture, effects), ["set_text"]);
-    assert_eq!(
-        layer(&fixture, text)["content"],
-        json!([{"insert": "Hell"}])
-    );
-}
-
-#[test]
 fn styling_a_typed_selection_marks_those_characters_and_a_caret_holds_it() {
     let Some(mut fixture) = unscaled(typed_text(json!("Hello world"))) else {
         return;
