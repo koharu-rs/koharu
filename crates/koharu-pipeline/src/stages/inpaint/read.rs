@@ -21,17 +21,17 @@ use crate::{Area, stages::Member};
 /// Every block's mask, the fill tiers run, and the regions they left for the
 /// model.
 pub(super) fn blocks(member: &Member) -> Result<Option<Work>> {
-    let Some((project, scan)) = member.scan()? else {
+    let Some((_, scan)) = member.scan()? else {
         return Ok(None);
     };
     let mut image = scan.to_rgb8();
     let (width, height) = image.dimensions();
-    let mut cleanups = cleanups(member, &project, width, height)?;
+    let (project, mut cleanups, left) = cleanups(member, width, height)?;
     if cleanups.is_empty() {
         return Ok(None);
     }
     let places = places(&project, member.page, width, height);
-    let (mask, regions) = tiers(&mut image, &mut cleanups, &places);
+    let (mask, regions) = tiers(&mut image, left, &mut cleanups, &places);
     Ok(Some(Work {
         image,
         mask,
@@ -66,42 +66,62 @@ pub(super) fn area(member: &Member, area: &Area) -> Result<Option<Work>> {
     }))
 }
 
-/// Each block with a mask on the page: its mask's coverage and its clean-up's
-/// tiles now.
-fn cleanups(member: &Member, project: &Project, width: u32, height: u32) -> Result<Vec<Cleanup>> {
+/// The project as it is once the scan is decoded, and its page's blocks with
+/// a mask: each the run cleans, with its mask's coverage and its clean-up's
+/// tiles, and the masks of the others, whose lettering the run leaves on the
+/// scan. A clean-up locked by itself is left.
+fn cleanups(
+    member: &Member,
+    width: u32,
+    height: u32,
+) -> Result<(Project, Vec<Cleanup>, GrayImage)> {
     let session = member.session.lock();
+    let project = session.project();
+    let cleaned: Vec<LayerId> = member
+        .blocks(&project)
+        .into_iter()
+        .filter(|(_, block)| !block.cleanup.locked)
+        .map(|(id, _)| id)
+        .collect();
     let mut cleanups = Vec::new();
-    for (id, block) in member.blocks(project) {
+    let mut left = GrayImage::new(width, height);
+    for (id, block) in project.blocks(member.page).unwrap_or_default() {
         let tiles = session.tiles(block.mask.id, None)?;
-        if let Some((rect, mask)) = tiles.coverage(width, height) {
-            cleanups.push(Cleanup {
-                block: id,
-                cleanup: block.cleanup.id,
-                old: session.tiles(block.cleanup.id, None)?,
-                rect,
-                mask,
-                fill: None,
-                region: None,
-            });
+        let Some((rect, mask)) = tiles.coverage(width, height) else {
+            continue;
+        };
+        if !cleaned.contains(&id) {
+            stamp(&mut left, rect, &mask);
+            continue;
         }
+        cleanups.push(Cleanup {
+            block: id,
+            cleanup: block.cleanup.id,
+            old: session.tiles(block.cleanup.id, None)?,
+            rect,
+            mask,
+            fill: None,
+            region: None,
+        });
     }
-    Ok(cleanups)
+    Ok((project, cleanups, left))
 }
 
 /// Runs the fill tiers over `image`, recording each tier that filled a
 /// lettering; the rest, the model's, come back as its mask over the page and
-/// a region each.
+/// a region each. The letterings the run leaves, `left`, are held out of what
+/// the tiers read, and shown to the model as its own are.
 fn tiers(
     image: &mut RgbImage,
+    left: GrayImage,
     cleanups: &mut [Cleanup],
     places: &HashMap<LayerId, Place>,
 ) -> (GrayImage, Vec<Region>) {
-    let (width, height) = image.dimensions();
-    let mut covered = GrayImage::new(width, height);
+    let mut covered = left.clone();
     for cleanup in cleanups.iter() {
         stamp(&mut covered, cleanup.rect, &cleanup.mask);
     }
-    let mut mask = GrayImage::new(width, height);
+    let mut mask = left;
     let mut regions = Vec::new();
     let _span = tracing::info_span!("fill", letterings = cleanups.len()).entered();
     let mut page = flat::Page::new(image, &covered);

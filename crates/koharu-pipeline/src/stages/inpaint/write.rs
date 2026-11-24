@@ -3,14 +3,14 @@
 
 use anyhow::Result;
 use image::{DynamicImage, RgbImage, imageops};
-use koharu_scene::{Content, Op, PageId, Project, Rect, Ref, Tile};
+use koharu_scene::{Op, PageId, Project, Rect, Ref, Tile};
 use serde_json::{Value, json};
 
 use super::{
     Cleanup, Target, Work,
     windows::{self, Window},
 };
-use crate::stages::action;
+use crate::stages::{action, writable};
 
 /// The ops for `work`; `made` is the model's action, `name` the area's layer
 /// name.
@@ -45,11 +45,10 @@ pub(super) fn ops(
 }
 
 /// Whether the block still holds the clean-up the run read, as a block
-/// detected again since holds another.
+/// detected again since holds another, and neither is locked now.
 fn current(project: &Project, cleanup: &Cleanup) -> bool {
-    project.layer(cleanup.block).is_ok_and(|layer| {
-        matches!(&layer.content, Content::Block(block) if block.cleanup.id == cleanup.cleanup)
-    })
+    writable(project, cleanup.block)
+        .is_some_and(|block| block.cleanup.id == cleanup.cleanup && !block.cleanup.locked)
 }
 
 /// The ops replacing a block's clean-up and recording what made it.

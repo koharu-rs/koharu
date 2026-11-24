@@ -7,12 +7,12 @@
 mod model;
 
 use image::{DynamicImage, GrayImage, Rgb, RgbImage};
-use koharu_scene::{Content, LayerId, Rect};
+use koharu_scene::{LayerId, Rect};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub use self::model::Recognizer;
-use super::{Member, Task, action, key};
+use super::{Member, Task, action, key, writable};
 use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -73,10 +73,7 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
             .apply(Stage::Recognize, move |project| {
                 let mut ops = Vec::new();
                 for (block, text) in texts {
-                    if !matches!(
-                        project.layer(block).map(|layer| &layer.content),
-                        Ok(Content::Block(_))
-                    ) {
+                    if writable(project, block).is_none() {
                         continue;
                     }
                     ops.push(koharu_scene::Op::UpdateLayer {

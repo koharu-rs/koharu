@@ -1,6 +1,12 @@
 //! The layout as a layer tree in reading order.
 
-use koharu_ml::koharu_layout_highres::Layout;
+use koharu_ml::koharu_layout_highres::{Layout, Lettering};
+use kurbo::Rect;
+
+/// A lettering with more than this share of its box in a kept block's is
+/// that block's: found again, its box is the one the block got, unless the
+/// user resized the block's.
+const HELD: f64 = 0.5;
 
 /// A detected part of the page and the parts inside it.
 pub(super) struct Node {
@@ -19,6 +25,7 @@ pub(super) enum Part {
 /// balloon in the panel it's read in, and each lettering in its balloon, else
 /// free in the panel it's read in, though it reaches past the panel's border.
 /// The layout reads a panel's lettering together, so the tree keeps its order.
+/// A lettering that a block kept on the page holds is left out.
 pub(super) struct Tree<'l> {
     layout: &'l Layout,
     pub(super) top: Vec<Node>,
@@ -29,7 +36,7 @@ pub(super) struct Tree<'l> {
 }
 
 impl<'l> Tree<'l> {
-    pub(super) fn new(layout: &'l Layout) -> Self {
+    pub(super) fn new(layout: &'l Layout, kept: &[Rect]) -> Self {
         let mut tree = Self {
             layout,
             top: Vec::new(),
@@ -37,6 +44,9 @@ impl<'l> Tree<'l> {
             bubbles: vec![None; layout.bubbles.len()],
         };
         for (at, lettering) in layout.lettering.iter().enumerate() {
+            if held(lettering, kept) {
+                continue;
+            }
             let node = Node {
                 part: Part::Lettering(at),
                 children: Vec::new(),
@@ -99,6 +109,14 @@ impl<'l> Tree<'l> {
         };
         &mut self.holder(panel)[index].children
     }
+}
+
+/// Whether one of the `kept` boxes holds `lettering`.
+fn held(lettering: &Lettering, kept: &[Rect]) -> bool {
+    let [x0, y0, x1, y1] = lettering.bbox.map(f64::from);
+    let own = Rect::new(x0, y0, x1, y1);
+    kept.iter()
+        .any(|kept| own.intersect(*kept).area() > HELD * own.area())
 }
 
 #[cfg(test)]
@@ -176,7 +194,10 @@ mod tests {
             bubbles: vec![bubble(vec![1], Some(1)), bubble(Vec::new(), None)],
             panels: vec![panel(), panel(), panel()],
         };
-        assert_eq!(shown(&Tree::new(&layout).top), "P0 P1(L0 B0(L1)) L2 P2 B1");
+        assert_eq!(
+            shown(&Tree::new(&layout, &[]).top),
+            "P0 P1(L0 B0(L1)) L2 P2 B1"
+        );
     }
 
     /// A balloon over its panel's top border, read between the panel's texts
@@ -212,6 +233,6 @@ mod tests {
             bubbles: vec![crossing],
             panels: vec![panel],
         };
-        assert_eq!(shown(&Tree::new(&layout).top), "P0(L0 B0(L1) L2)");
+        assert_eq!(shown(&Tree::new(&layout, &[]).top), "P0(L0 B0(L1) L2)");
     }
 }

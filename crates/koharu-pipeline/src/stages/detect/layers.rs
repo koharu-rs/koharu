@@ -12,18 +12,56 @@ use serde_json::{Value, json};
 use super::tree::{Node, Part, Tree};
 use crate::stages::action;
 
+/// A lettering's mask, grown, over the rectangle it covers.
+pub(super) type Grown = (Rect, Vec<u8>);
+
+/// Each of the layout's letterings' masks; `None` for an empty one.
+pub(super) fn masks(layout: &Layout, typography: &[Option<Typography>]) -> Vec<Option<Grown>> {
+    layout
+        .lettering
+        .iter()
+        .enumerate()
+        .map(|(at, lettering)| {
+            grown(
+                &lettering.mask,
+                lettering.bbox,
+                // Along its lines: a glyph's size, past either end.
+                typography[at]
+                    .as_ref()
+                    .map_or([0.0; 2], |found| match found.vertical {
+                        true => [0.0, found.size],
+                        false => [found.size, 0.0],
+                    }),
+                &layout
+                    .lettering
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != at)
+                    .map(|(_, other)| other.bbox)
+                    .collect::<Vec<_>>(),
+                layout.width,
+                layout.height,
+            )
+        })
+        .collect()
+}
+
 /// The ops adding the layout's parts at the top of the page, before the
-/// layers left there, with each block's mask.
+/// layers left there, with each block's mask; no block for a lettering one of
+/// the `kept` boxes holds.
 pub(super) fn additions(
     layout: &Layout,
     typography: &[Option<Typography>],
+    masks: Vec<Option<Grown>>,
+    kept: &[kurbo::Rect],
     page: PageId,
     model: &str,
 ) -> Result<Vec<Op>> {
-    let tree = Tree::new(layout);
+    let tree = Tree::new(layout, kept);
     let mut adding = Adding {
         layout,
         typography,
+        masks,
         page,
         model,
         ops: Vec::new(),
@@ -36,6 +74,7 @@ pub(super) fn additions(
 struct Adding<'a> {
     layout: &'a Layout,
     typography: &'a [Option<Typography>],
+    masks: Vec<Option<Grown>>,
     page: PageId,
     model: &'a str,
     ops: Vec<Op>,
@@ -82,27 +121,7 @@ impl Adding<'_> {
                 "layer": layer,
             }))?);
             if let Part::Lettering(at) = node.part
-                && let Some((rect, pixels)) = grown(
-                    &self.layout.lettering[at].mask,
-                    self.layout.lettering[at].bbox,
-                    // Along its lines: a glyph's size, past either end.
-                    self.typography[at]
-                        .as_ref()
-                        .map_or([0.0; 2], |found| match found.vertical {
-                            true => [0.0, found.size],
-                            false => [found.size, 0.0],
-                        }),
-                    &self
-                        .layout
-                        .lettering
-                        .iter()
-                        .enumerate()
-                        .filter(|(other, _)| *other != at)
-                        .map(|(_, other)| other.bbox)
-                        .collect::<Vec<_>>(),
-                    self.layout.width,
-                    self.layout.height,
-                )
+                && let Some((rect, pixels)) = self.masks[at].take()
             {
                 self.ops.push(Op::WritePixels {
                     layer: Ref::try_from(format!("${label}.mask")).map_err(anyhow::Error::msg)?,
@@ -138,7 +157,7 @@ fn grown(
     others: &[[f32; 4]],
     width: u32,
     height: u32,
-) -> Option<(Rect, Vec<u8>)> {
+) -> Option<Grown> {
     if mask.width == 0 || mask.height == 0 {
         return None;
     }

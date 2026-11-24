@@ -13,7 +13,7 @@ use std::{sync::Arc, time::Instant};
 
 use anyhow::anyhow;
 use image::DynamicImage;
-use koharu_scene::{Block, Edit, LayerId, Op, PageId, Project, Session};
+use koharu_scene::{Block, Content, Edit, LayerId, Op, PageId, Project, Session};
 use parking_lot::Mutex;
 use petgraph::stable_graph::NodeIndex;
 use serde_json::{Value, json};
@@ -65,9 +65,11 @@ impl Member {
         Ok(Some((project, image::load_from_memory(&bytes)?)))
     }
 
-    /// The blocks of `project`'s page the task works on, in reading order.
+    /// The blocks of `project`'s page the task works on, in reading order,
+    /// but those locked or in a locked layer, which a run leaves as they are.
     pub(crate) fn blocks<'p>(&self, project: &'p Project) -> Vec<(LayerId, &'p Block)> {
         let mut blocks = project.blocks(self.page).unwrap_or_default();
+        blocks.retain(|(id, _)| project.locked_at(*id).is_none());
         if let Some(only) = &self.blocks {
             blocks.retain(|(id, _)| only.contains(id));
         }
@@ -99,6 +101,19 @@ impl Member {
             Ok(())
         })
         .await?
+    }
+}
+
+/// Block `id` as `project` holds it when a stage writes, if it's still there
+/// and neither it nor a layer it's in is locked: a lock can come on while the
+/// stage runs, and the scene refuses a page's whole edit for one locked write.
+pub(crate) fn writable(project: &Project, id: LayerId) -> Option<&Block> {
+    if project.locked_at(id).is_some() {
+        return None;
+    }
+    match &project.layer(id).ok()?.content {
+        Content::Block(block) => Some(block),
+        _ => None,
     }
 }
 

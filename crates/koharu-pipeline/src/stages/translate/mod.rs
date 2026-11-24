@@ -22,7 +22,7 @@ use icu_locale::LocaleExpander;
 use icu_locale_core::{LanguageIdentifier, Locale, langid, subtags::language};
 use indoc::formatdoc;
 use koharu_llm::rig::{completion::Reasoning, driver::DynModel};
-use koharu_scene::{Content, LayerId, Op, Project};
+use koharu_scene::{LayerId, Op, Project};
 use rayon::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use serde_json::json;
@@ -32,7 +32,7 @@ use tracing::{Instrument as _, info_span};
 pub(crate) use self::conversation::{Conversation, Conversations};
 pub use self::placement::placement;
 use self::turn::Turn;
-use super::{Member, Stopped, Task, action, key};
+use super::{Member, Stopped, Task, action, key, writable};
 use crate::{PipelineConfig, Stage};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -234,9 +234,7 @@ fn written(
     let placed: Vec<_> = translated
         .into_par_iter()
         .filter_map(|(block, source, text)| {
-            let Ok(Content::Block(found)) = project.layer(block).map(|layer| &layer.content) else {
-                return None;
-            };
+            let found = writable(project, block)?;
             // Its clean-up would erase the lettering for the translation to
             // redraw it in another hand.
             let unchanged = text.trim() == found.source.content.text().trim();
@@ -302,8 +300,54 @@ fn name(target: &LanguageIdentifier) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
+    use koharu_scene::{Edit, Session};
 
     use super::*;
+
+    #[test]
+    fn a_balloon_locked_while_translating_leaves_the_others_their_translation() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let block = |x: f64| {
+            json!({"kind": "block", "source": {
+                "content": "猫", "language": "ja",
+                "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 40.0, "height": 120.0}}},
+            }})
+        };
+        session.apply(Edit {
+            label: "test".to_owned(),
+            ops: serde_json::from_value(json!([
+                {"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 400}},
+                {"op": "add_layer", "id": "$balloon", "page": "$p", "index": 0,
+                    "layer": {"kind": "balloon", "outline": "M0 0 L200 0 L200 160 L0 160 Z"}},
+                {"op": "add_layer", "page": "$p", "parent": "$balloon", "index": 0,
+                    "layer": block(20.0)},
+                {"op": "add_layer", "page": "$p", "index": 1, "layer": block(220.0)},
+                // The lock comes on after the translator read the page.
+                {"op": "update_layer", "layer": "$balloon", "patch": {"locked": true}},
+            ]))?,
+        })?;
+        let project = session.project();
+        let page = project.pages().next().context("a page")?.id;
+        let translated = project
+            .blocks(page)?
+            .into_iter()
+            .map(|(id, _)| (id, langid!("ja"), "Cat".to_owned()))
+            .collect();
+        let ops = written(&project, translated, &TranslatorConfig::default())?;
+        session.apply(Edit {
+            label: "translate".to_owned(),
+            ops,
+        })?;
+        let translations: Vec<Option<String>> = session
+            .project()
+            .blocks(page)?
+            .into_iter()
+            .map(|(_, block)| block.translation.as_ref().map(|text| text.content.text()))
+            .collect();
+        assert_eq!(translations, [None, Some("Cat".to_owned())]);
+        Ok(())
+    }
 
     #[test]
     fn a_language_cldr_doesnt_name_fails() {
