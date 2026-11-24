@@ -12,6 +12,8 @@ export const shortcuts = {
   fit: 'mod+0',
   /** Lightroom's Before and After. */
   original: '\\',
+  /** Photoshop's Layers panel. */
+  layers: 'f7',
   delete: 'delete',
 } as const
 

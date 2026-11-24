@@ -11,14 +11,19 @@ type CommitTextareaProps = Omit<ComponentProps<typeof Textarea>, 'value' | 'onCh
   onCommit: (value: string) => void
 }
 
-/** A textarea that commits its text once typing pauses, or as it loses the focus, and never
- * mid-composition; the value it's given replaces its text only while nothing waits to commit. */
+/** A textarea that commits its text once typing pauses, or as it loses the focus or goes away, and
+ * never mid-composition; the value it's given replaces its text only while nothing waits to
+ * commit. */
 export function CommitTextarea({ value, delay = 360, onCommit, ...props }: CommitTextareaProps) {
   const [draft, setDraft] = useState(value)
   const composing = useRef(false)
-  const commit = useDebouncedCallback((next: string) => {
-    if (next !== value) onCommit(next)
-  }, delay)
+  const commit = useDebouncedCallback(
+    (next: string) => {
+      if (next !== value) onCommit(next)
+    },
+    delay,
+    { flushOnExit: true },
+  )
 
   useEffect(() => {
     if (!composing.current && !commit.isPending()) setDraft(value)

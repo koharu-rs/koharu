@@ -3,7 +3,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { Languages, MoreHorizontal } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
@@ -37,7 +37,7 @@ import { cn } from '@koharu/ui/lib/utils'
  * A page's texts load as the list reaches them. Editing a field edits its layer; focusing it
  * selects the layer, showing its page first when the canvas shows another, as the page rail does.
  * Scrolling only browses: the list scrolls to the page the canvas shows when that changes, unless
- * the change came from the list itself. */
+ * the change came from the list itself, and to a text the canvas or Layers selects. */
 export function StoryPanel() {
   const { t } = useTranslation()
   const project = useProject().data
@@ -72,6 +72,19 @@ export function StoryPanel() {
     virtualizer.scrollToIndex(shownIndex, { align: 'start' })
   }, [shownIndex, virtualizer])
 
+  // The selected text moves as its page and those before it load and are measured, each a render
+  // of this list, so it's kept in view until the user scrolls.
+  const selected = useKoharuStore((state) => state.selectedLayers)
+  const following = useRef(true)
+  useLayoutEffect(() => {
+    following.current = true
+  }, [selected])
+  useLayoutEffect(() => {
+    if (!following.current) return
+    const text = list.current?.querySelector('[data-selected=true]')
+    if (text && !text.contains(document.activeElement)) text.scrollIntoView({ block: 'nearest' })
+  })
+
   if (pages.length === 0) {
     return (
       <p className='px-4 py-8 text-center text-[10px] leading-4 text-muted-foreground'>
@@ -80,7 +93,17 @@ export function StoryPanel() {
     )
   }
   return (
-    <ScrollArea className='min-h-0 flex-1' viewportClassName='p-1' viewportRef={list}>
+    <ScrollArea
+      className='min-h-0 flex-1'
+      viewportClassName='p-1'
+      viewportRef={list}
+      onWheel={() => {
+        following.current = false
+      }}
+      onPointerDown={() => {
+        following.current = false
+      }}
+    >
       <div className='relative w-full' style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const page = pages[item.index]
@@ -187,9 +210,9 @@ function ReadingNumber({ number, sfx }: { number: number; sfx: boolean }) {
 }
 
 /** A text's number and fields, highlighted while its layer, or one of a block's parts, is
- * selected, and scrolled into view when the canvas or Layers selects it. Under its number, while
- * the pointer is on it or it's selected, a block shows a button that translates it alone, and
- * every text a menu that deletes it, and reads or cleans up a block alone. */
+ * selected. Under its number, while the pointer is on it or it's selected, a block shows a button
+ * that translates it alone, and every text a menu that deletes it, and reads or cleans up a block
+ * alone. */
 function StoryText({
   page,
   shown,
@@ -205,7 +228,6 @@ function StoryText({
   locked: boolean
 }) {
   const { t } = useTranslation()
-  const row = useRef<HTMLDivElement>(null)
   const ids = isBlockLayer(layer)
     ? [layer.id, layer.cleanup?.id, layer.mask?.id].filter((id): id is LayerId => id !== undefined)
     : [layer.id]
@@ -214,13 +236,6 @@ function StoryText({
   )
   const setStoryHover = useKoharuStore((state) => state.setStoryHover)
   const show = useShowPage()
-
-  useEffect(() => {
-    const element = row.current
-    if (selected && element && !element.contains(document.activeElement)) {
-      element.scrollIntoView({ block: 'nearest' })
-    }
-  }, [selected])
 
   const focus = () => {
     const { selectedLayers, selectLayers } = useKoharuStore.getState()
@@ -246,7 +261,6 @@ function StoryText({
     'min-h-8 w-full max-w-full min-w-0 resize-none overflow-hidden rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
   return (
     <div
-      ref={row}
       data-selected={selected}
       className='group grid grid-cols-[auto_minmax(0,1fr)] gap-1 rounded-md p-1 data-[selected=true]:bg-accent'
       onFocus={focus}
