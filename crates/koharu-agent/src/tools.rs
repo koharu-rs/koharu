@@ -7,10 +7,13 @@
 use std::{collections::BTreeSet, io::Cursor, sync::Arc, time::Duration};
 
 use base64::Engine as _;
-use image::{DynamicImage, ImageFormat, Rgba, RgbaImage, imageops};
+use image::{
+    DynamicImage, ImageFormat, Rgba, RgbaImage,
+    imageops::{self, FilterType},
+};
 use koharu_pipeline::{Event, Pipeline, Request, RunId, Stage, Target};
-use koharu_renderer::{Frame, Renderer};
-use koharu_scene::{Answer, Change, LayerId, Op, PageId, Query, Session};
+use koharu_renderer::Renderer;
+use koharu_scene::{Answer, Bounds, Change, LayerId, Op, PageId, Query, Session};
 use parking_lot::Mutex;
 use rig_agent::tool::ToolSet;
 use rig_core::{
@@ -29,7 +32,7 @@ use serde_json::Value;
 /// up to 30 seconds before it answers.
 const WAIT: Duration = Duration::from_secs(30);
 
-/// The longest side of a page `view_page` shows, as translation's sight is.
+/// The longer side of what `view_page` shows, as translation's sight is.
 const SIGHT: u32 = 1280;
 
 /// What the tools work on: one open project, with the pipeline that runs its
@@ -117,6 +120,21 @@ struct RunArgs {
 struct WaitArgs {
     /// The run, as `run` answered it.
     run: RunId,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ViewArgs {
+    /// The page.
+    page: PageId,
+    /// Look at the page's scan alone, as it was imported, without its layers:
+    /// what a block's source says, whether or not it's been cleaned up.
+    #[serde(default)]
+    original: bool,
+    /// The part of the page to look at, in page pixels, such as a block's
+    /// source bounds with some room around them; the whole page when left
+    /// out.
+    region: Option<Bounds>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -329,18 +347,19 @@ struct ViewPage;
 
 impl Tool for ViewPage {
     const NAME: &'static str = "view_page";
-    type Args = PageArgs;
+    type Args = ViewArgs;
     type Output = ToolResultContent;
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Look at a page as the editor draws it, its translations and clean-ups included, at most \
-         1,280 pixels on its longer side."
+        "Look at a page as the editor draws it, its translations and clean-ups included, or at its \
+         scan alone, 1,280 pixels on its longer side. A region fills those, so look at one to read \
+         small text."
             .to_owned()
     }
 
     fn parameters(&self) -> Value {
-        schema::<PageArgs>()
+        schema::<ViewArgs>()
     }
 
     fn annotations(&self) -> ToolAnnotations {
@@ -350,15 +369,28 @@ impl Tool for ViewPage {
     async fn call(
         &self,
         context: &mut ToolContext,
-        args: PageArgs,
+        args: ViewArgs,
     ) -> Result<ToolResultContent, Self::Error> {
         let tools = project(context)?;
         let jpeg = tokio::task::spawn_blocking(move || {
-            let frame = tools
+            let mut frame = tools
                 .renderer
                 .render(&tools.session.lock(), args.page)
                 .map_err(failed)?;
-            seen(&frame)
+            let mut area = frame.area();
+            if let Some(region) = args.region {
+                area = area.intersect(region.into());
+                if area.is_zero_area() {
+                    return Err(failed("the region is outside the page"));
+                }
+            }
+            if args.original {
+                frame = frame
+                    .background()
+                    .ok_or_else(|| failed("the page has no scan"))?
+                    .cropped();
+            }
+            seen(&frame.rasterize_rect(area.expand()).map_err(failed)?)
         })
         .await
         .map_err(failed)??;
@@ -414,19 +446,20 @@ fn schema<T: JsonSchema>() -> Value {
     serde_json::to_value(schema).unwrap_or_default()
 }
 
-/// `frame` as the model sees it: over white, fit to `SIGHT`, as a JPEG in
+/// `drawn` as the model sees it: over white, scaled to `SIGHT`, as a JPEG in
 /// base 64.
-fn seen(frame: &Frame) -> Result<String, ToolExecutionError> {
-    let raster = frame.rasterize().map_err(failed)?;
-    let (width, height) = raster.image.dimensions();
-    let mut page = RgbaImage::from_pixel(width, height, Rgba([255; 4]));
-    imageops::overlay(&mut page, &raster.image, 0, 0);
-    let mut page = DynamicImage::ImageRgba8(page);
-    if width.max(height) > SIGHT {
-        page = page.thumbnail(SIGHT, SIGHT);
-    }
+fn seen(drawn: &RgbaImage) -> Result<String, ToolExecutionError> {
+    let (width, height) = drawn.dimensions();
+    let mut view = RgbaImage::from_pixel(width, height, Rgba([255; 4]));
+    imageops::overlay(&mut view, drawn, 0, 0);
+    let view = DynamicImage::ImageRgba8(view);
+    let view = if width.max(height) > SIGHT {
+        view.thumbnail(SIGHT, SIGHT)
+    } else {
+        view.resize(SIGHT, SIGHT, FilterType::CatmullRom)
+    };
     let mut bytes = Vec::new();
-    DynamicImage::ImageRgb8(page.to_rgb8())
+    DynamicImage::ImageRgb8(view.to_rgb8())
         .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Jpeg)
         .map_err(failed)?;
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
@@ -434,9 +467,10 @@ fn seen(frame: &Frame) -> Result<String, ToolExecutionError> {
 
 #[cfg(test)]
 mod tests {
+    use image::Rgb;
     use koharu_pipeline::PipelineConfig;
     use koharu_renderer::RendererConfig;
-    use koharu_scene::Created;
+    use koharu_scene::{Background, Created, Hash, Ref};
     use rig_core::completion::message::DocumentSourceKind;
     use serde_json::json;
 
@@ -537,14 +571,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn a_page_view_fits_in_1280_pixels() {
-        let (_dir, tools) = open();
-        let page = add_page(&tools, 2000, 3000);
-        let view = ViewPage
-            .call(&mut tools.tool_context(), PageArgs { page })
-            .await
-            .expect("a view");
+    async fn view(tools: &Tools, args: Value) -> Result<DynamicImage, ToolExecutionError> {
+        let args = serde_json::from_value(args).expect("a view's arguments");
+        let view = ViewPage.call(&mut tools.tool_context(), args).await?;
         let ToolResultContent::Image(image) = view else {
             panic!("{view:?}");
         };
@@ -555,7 +584,78 @@ mod tests {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(data)
             .expect("base 64");
-        let decoded = image::load_from_memory(&bytes).expect("a JPEG");
-        assert_eq!(decoded.width().max(decoded.height()), 1280);
+        Ok(image::load_from_memory(&bytes).expect("a JPEG"))
+    }
+
+    #[tokio::test]
+    async fn a_page_view_fits_in_1280_pixels() {
+        let (_dir, tools) = open();
+        let page = add_page(&tools, 2000, 3000);
+        let view = view(&tools, json!({"page": page})).await.expect("a view");
+        assert_eq!(view.width().max(view.height()), 1280);
+    }
+
+    /// A block's source is read off the scan, whatever was drawn over it
+    /// since.
+    #[tokio::test]
+    async fn a_view_shows_a_region_of_the_scan_under_the_layers() {
+        // Under a red layer, a scan whose left half is green and right blue.
+        let (_dir, tools) = open();
+        let page = add_page(&tools, 200, 100);
+        let region = json!({"x": 100, "y": 20, "width": 60, "height": 120});
+        let original = json!({"page": page, "original": true, "region": region});
+        let error = view(&tools, original.clone()).await.expect_err("no scan");
+        assert_eq!(error.message(), "the page has no scan");
+        let scan = image::RgbImage::from_fn(200, 100, |x, _| match x < 100 {
+            true => Rgb([0, 255, 0]),
+            false => Rgb([0, 0, 255]),
+        });
+        let mut bytes = Vec::new();
+        scan.write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+            .expect("a PNG");
+        let background = Background {
+            file: Hash::of(&bytes),
+            visible: true,
+        };
+        let layer = json!({"op": "add_layer", "page": page, "index": 0, "layer": {
+            "kind": "shape", "path": "M0 0 H200 V100 H0 Z", "fill": [1.0, 0.0, 0.0, 1.0],
+        }});
+        let ops = vec![
+            Op::AddFile { bytes },
+            Op::SetBackground {
+                page: Ref::from(page),
+                background: Some(background),
+            },
+            serde_json::from_value(layer).expect("an op"),
+        ];
+        tools
+            .session
+            .lock()
+            .apply(koharu_scene::Edit {
+                label: "test".to_owned(),
+                ops,
+            })
+            .expect("a scan under a layer");
+        // The middle's strongest channel, as a JPEG keeps it.
+        let strongest = |view: &DynamicImage| {
+            let pixel = view
+                .to_rgb8()
+                .get_pixel(view.width() / 2, view.height() / 2)
+                .0;
+            (0..3).max_by_key(|&channel| pixel[channel])
+        };
+        let scan = view(&tools, original).await.expect("a view");
+        // 60 by the 80 of its 120 the page has.
+        assert_eq!((scan.width(), scan.height()), (960, 1280));
+        assert_eq!(strongest(&scan), Some(2));
+        let drawn = view(&tools, json!({"page": page, "region": region}))
+            .await
+            .expect("a view");
+        assert_eq!(strongest(&drawn), Some(0));
+        let outside = json!({"x": 200.5, "y": 0, "width": 10, "height": 10});
+        let error = view(&tools, json!({"page": page, "region": outside}))
+            .await
+            .expect_err("outside");
+        assert_eq!(error.message(), "the region is outside the page");
     }
 }

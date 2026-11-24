@@ -12,12 +12,15 @@ Give the Agent a concrete goal within the open project. Name the pages, the chan
   <Tab title="Text review">
     > Review pages 3–5. Correct obvious OCR errors and translate into natural English while preserving honorifics. Keep typography unchanged.
   </Tab>
+  <Tab title="OCR review">
+    > On page 4, look closely at each text block on the scan and correct its source text. Leave the translations as they are.
+  </Tab>
   <Tab title="Visual review">
     > Check whether the text on page 8 overflows its bubble. Adjust only the size and line breaks.
   </Tab>
 </Tabs>
 
-Reading the project's layers is enough for many text edits. Ask for visual inspection when appearance matters.
+Reading the project's layers is enough for many text edits. Ask for visual inspection when appearance matters. The Agent can look at the page as drawn or at its scan alone, so it can check a reading before or after inpainting, and at a part of a page enlarged, for small text. Looking takes a model that reads images.
 
 ## Available tools
 
@@ -30,7 +33,7 @@ Reading the project's layers is enough for many text edits. Ask for visual inspe
 | `run`         | Starts a pipeline run on the project, some pages, some text blocks, or a painted area          |
 | `wait`        | Waits up to 30 seconds for a run to end and reports what it has done so far                    |
 | `stop`        | Stops every pipeline run                                                                       |
-| `view_page`   | Renders a page as the editor draws it                                                          |
+| `view_page`   | Shows a page as the editor draws it, or its scan alone, whole or a part of it enlarged         |
 
 <Note>
   The tools do not import or export files, manage provider credentials, or work outside the open
