@@ -69,93 +69,44 @@ Start with the complete error in the activity center or the error message. Ident
   </Accordion>
 </AccordionGroup>
 
-## Collect detailed logs
+## Find the log file
 
-Koharu always writes INFO messages and above to a log file; see [data locations](/reference/data#logs). For more detail, start Koharu from a terminal with `RUST_LOG` set, which enables debug logging on the terminal for that process. A terminal runs commands you type or paste; leave it open while reproducing the problem.
+Koharu writes messages of INFO and above to `koharu.log`, in this folder:
 
-<Warning>
-  Close Koharu first. Launching it while it runs only brings the open window forward, and logging
-  applies only to a newly started process.
-</Warning>
+| Platform | Folder                                                                                   |
+| -------- | ---------------------------------------------------------------------------------------- |
+| Windows  | `%LOCALAPPDATA%\Koharu\logs`                                                             |
+| macOS    | `~/Library/Logs/Koharu`                                                                  |
+| Linux    | `$XDG_DATA_HOME/Koharu/logs`, or `~/.local/share/Koharu/logs` if that variable isn't set |
 
-<Tabs>
-  <Tab title="Windows">
-    <Steps>
-      <Step title="Open PowerShell">
-        Open Start, search for **PowerShell**, and launch **Windows PowerShell**. Windows Terminal also works with a PowerShell tab. Use PowerShell rather than Command Prompt.
-      </Step>
-      <Step title="Start Koharu">
-        Paste the command with `Ctrl+V` or right-click, then press Enter. Do not paste the `PS C:\Users\YourName>` prompt.
+To open the folder, paste its path into File Explorer's address bar on Windows, or into **Go → Go to Folder** in Finder on macOS.
 
-        ```powershell
-        $env:RUST_LOG="debug"; koharu.exe
-        ```
-      </Step>
-      <Step title="Use a full path if needed">
-        If `koharu.exe` is not recognized, search for Koharu in Start, right-click **Open file location**, then open the shortcut's **Properties** and copy **Target**. Replace the example below with that path, keeping `&` and the quotes.
-
-        ```powershell
-        $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
-        ```
-      </Step>
-    </Steps>
-
-    The environment setting lasts only in this PowerShell window. Closing it clears the setting.
-
-  </Tab>
-  <Tab title="macOS">
-    Press `Command+Space`, search for **Terminal**, and press Return. Paste with `Command+V`, then press Return:
-
-    ```bash
-    RUST_LOG=debug koharu
-    ```
-
-    If the command is not found, launch the app from its installed path:
-
-    ```bash
-    RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
-    ```
-
-    If that path does not exist, check the app's location in Finder and substitute its actual path.
-
-  </Tab>
-  <Tab title="Linux">
-    Search the application menu for **Terminal**, or try `Ctrl+Alt+T`. Paste with `Ctrl+Shift+V`, then press Enter:
-
-    ```bash
-    RUST_LOG=debug koharu
-    ```
-
-    If the command is not found, try the Debian/RPM package location:
-
-    ```bash
-    RUST_LOG=debug /usr/bin/koharu
-    ```
-
-    If that file is missing, check or reinstall the package for your distribution.
-
-  </Tab>
-</Tabs>
-
-Reproduce the problem with this copy of Koharu. The terminal may remain busy until the app closes; keep the complete surrounding output, not just the last error. Close Koharu normally afterward, or press `Ctrl+C` once in the terminal if the launched process is frozen.
-
-## Save a log file
-
-In a new terminal, run the command for your platform, reproduce the problem, and close Koharu. The log is written to your home directory. Substitute the full executable path if the short command was unavailable.
-
-<Tabs>
-  <Tab title="Windows">
-    ```powershell
-    $env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
-    ```
-  </Tab>
-  <Tab title="macOS and Linux">
-    ```bash
-    RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
-    ```
-  </Tab>
-</Tabs>
+The file carries over from one launch to the next, and its times are in UTC. When it reaches 1 MB, Koharu deletes it and starts a new one, so copy it soon after the problem.
 
 Before sharing, replace credentials, private filenames, and private page text with `[removed]`, keeping surrounding diagnostics. Include your OS, Koharu version, intended action, reproduction steps, and approximate error time.
 
-Attach the text log to a [GitHub issue](https://github.com/koharu-rs/koharu/issues) or ask on [Discord](https://discord.gg/mHvHkxGnUY).
+Attach the log to a [GitHub issue](https://github.com/koharu-rs/koharu/issues) or ask on [Discord](https://discord.gg/mHvHkxGnUY).
+
+## Get more detailed logs
+
+Close Koharu, since launching it while it runs only brings the open window forward, then start it from a terminal with `RUST_LOG` set:
+
+<CodeGroup>
+
+```powershell Windows (PowerShell)
+$env:RUST_LOG="debug"; & "$env:LOCALAPPDATA\Koharu\koharu.exe"
+```
+
+```bash macOS
+RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
+```
+
+```bash Linux
+RUST_LOG=debug koharu
+```
+
+</CodeGroup>
+
+If Koharu is installed elsewhere, use its path instead.
+
+`RUST_LOG` takes a level, such as `debug` or `trace`, or [filter directives](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives), such as `info,koharu_pipeline=debug`. The extra messages appear only in the terminal; the log file keeps to INFO and above.

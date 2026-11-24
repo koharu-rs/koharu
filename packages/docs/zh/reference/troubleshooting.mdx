@@ -65,92 +65,44 @@ icon: 'circle-question'
   </Accordion>
 </AccordionGroup>
 
-## 收集详细日志
+## 查找日志文件
 
-Koharu 始终会把 INFO 及以上级别的消息写入日志文件，参见[数据位置](/zh/reference/data)。如需更多细节，请设置 `RUST_LOG` 并从终端启动 Koharu，该进程的调试日志会显示在终端中。终端是运行输入或粘贴命令的窗口，复现期间请保持打开。
+Koharu 会把 INFO 及以上级别的消息写入 `koharu.log`，位于以下文件夹：
 
-<Warning>
-  请先关闭 Koharu。在它运行时再次启动只会把已打开的窗口调到前面，日志设置只对新启动的进程生效。
-</Warning>
+| 平台    | 文件夹                                                                      |
+| ------- | --------------------------------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\Koharu\logs`                                                |
+| macOS   | `~/Library/Logs/Koharu`                                                     |
+| Linux   | `$XDG_DATA_HOME/Koharu/logs`；未设置该变量时为 `~/.local/share/Koharu/logs` |
 
-<Tabs>
-  <Tab title="Windows">
-    <Steps>
-      <Step title="打开 PowerShell">
-        在开始菜单搜索 **PowerShell**，打开 **Windows PowerShell**。Windows Terminal 的 PowerShell 标签也可以。不要在命令提示符中运行这些命令。
-      </Step>
-      <Step title="启动 Koharu">
-        使用 `Ctrl+V` 或右键粘贴，然后按 Enter。不要复制窗口中的 `PS C:\Users\YourName>` 提示符。
+要打开该文件夹，在 Windows 上把路径粘贴到文件资源管理器的地址栏，在 macOS 上粘贴到访达的**前往 → 前往文件夹**。
 
-        ```powershell
-        $env:RUST_LOG="debug"; koharu.exe
-        ```
-      </Step>
-      <Step title="需要时使用完整路径">
-        如果无法识别命令，在开始菜单搜索 Koharu，右键选择**打开文件所在的位置**。打开快捷方式的**属性**并复制**目标**。替换下方示例路径，保留 `&` 和引号。
-
-        ```powershell
-        $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
-        ```
-      </Step>
-    </Steps>
-
-    环境变量仅在这个 PowerShell 窗口中有效，关闭窗口即可清除。
-
-  </Tab>
-  <Tab title="macOS">
-    按 `Command+Space` 搜索 **Terminal** 并回车。用 `Command+V` 粘贴并运行：
-
-    ```bash
-    RUST_LOG=debug koharu
-    ```
-
-    如果找不到命令，使用安装路径：
-
-    ```bash
-    RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
-    ```
-
-    路径不存在时，请在 Finder 中确认应用位置并替换为实际路径。
-
-  </Tab>
-  <Tab title="Linux">
-    在应用菜单搜索 **Terminal**，或尝试 `Ctrl+Alt+T`。用 `Ctrl+Shift+V` 粘贴后按 Enter：
-
-    ```bash
-    RUST_LOG=debug koharu
-    ```
-
-    找不到命令时，尝试 Debian/RPM 软件包的默认位置：
-
-    ```bash
-    RUST_LOG=debug /usr/bin/koharu
-    ```
-
-    文件不存在时，检查或重新安装对应发行版的软件包。
-
-  </Tab>
-</Tabs>
-
-用这次启动的 Koharu 复现问题。应用关闭前，终端可能一直输出而不出现新提示符。保留错误前后的内容，不要只复制最后一行。之后正常关闭应用；如果启动的进程卡住，可在终端按一次 `Ctrl+C`。
-
-## 保存日志文件
-
-打开新终端，运行对应平台的命令，复现问题后关闭 Koharu。日志会保存到用户主目录。如果短命令不可用，替换为之前使用的完整可执行文件路径。
-
-<Tabs>
-  <Tab title="Windows">
-    ```powershell
-    $env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
-    ```
-  </Tab>
-  <Tab title="macOS 与 Linux">
-    ```bash
-    RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
-    ```
-  </Tab>
-</Tabs>
+每次启动都会接着写入同一个文件，其中的时间为 UTC。文件达到 1 MB 时，Koharu 会将其删除并重新开始，因此请在问题出现后尽快复制。
 
 共享前，把凭据、私密文件名和页面文本替换为 `[removed]`，保留周围诊断信息。同时附上操作系统、Koharu 版本、目标操作、复现步骤和错误的大致时间。
 
-将文本日志附到 [GitHub issue](https://github.com/koharu-rs/koharu/issues)，或在 [Discord](https://discord.gg/mHvHkxGnUY)寻求帮助。
+将日志附到 [GitHub issue](https://github.com/koharu-rs/koharu/issues)，或在 [Discord](https://discord.gg/mHvHkxGnUY)寻求帮助。
+
+## 获取更详细的日志
+
+请先关闭 Koharu（在它运行时再次启动只会把已打开的窗口调到前面），然后设置 `RUST_LOG` 并从终端启动：
+
+<CodeGroup>
+
+```powershell Windows (PowerShell)
+$env:RUST_LOG="debug"; & "$env:LOCALAPPDATA\Koharu\koharu.exe"
+```
+
+```bash macOS
+RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
+```
+
+```bash Linux
+RUST_LOG=debug koharu
+```
+
+</CodeGroup>
+
+如果 Koharu 安装在其他位置，请换成实际路径。
+
+`RUST_LOG` 可以是 `debug`、`trace` 等级别，也可以是 `info,koharu_pipeline=debug` 这样的[过滤指令](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives)。更详细的消息只显示在终端中；日志文件始终只记录 INFO 及以上级别。

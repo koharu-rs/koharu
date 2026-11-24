@@ -69,93 +69,44 @@ icon: 'circle-question'
   </Accordion>
 </AccordionGroup>
 
-## 詳細ログを取る
+## ログファイルを探す
 
-Koharu は常に INFO 以上のメッセージをログファイルに書き込みます。[データの保存場所](/ja/reference/data)を参照してください。さらに詳しく調べるには、`RUST_LOG` を設定してターミナルから Koharu を起動すると、そのプロセスのデバッグログがターミナルに表示されます。ターミナルは入力・貼り付けしたコマンドを実行するウィンドウです。再現中は開いたままにします。
+Koharu は INFO 以上のメッセージを `koharu.log` に書き込みます。保存先は次のフォルダーです。
 
-<Warning>
-  先に Koharu
-  を終了してください。実行中に起動しても開いているウィンドウが前面に出るだけで、ログ設定は新しく起動したプロセスにだけ適用されます。
-</Warning>
+| プラットフォーム | フォルダー                                                                  |
+| ---------------- | --------------------------------------------------------------------------- |
+| Windows          | `%LOCALAPPDATA%\Koharu\logs`                                                |
+| macOS            | `~/Library/Logs/Koharu`                                                     |
+| Linux            | `$XDG_DATA_HOME/Koharu/logs`。変数が未設定なら `~/.local/share/Koharu/logs` |
 
-<Tabs>
-  <Tab title="Windows">
-    <Steps>
-      <Step title="PowerShell を開く">
-        スタートで **PowerShell** を検索し、**Windows PowerShell** を開きます。Windows Terminal の PowerShell タブでも構いません。コマンドプロンプトでは実行しません。
-      </Step>
-      <Step title="Koharu を起動する">
-        `Ctrl+V` または右クリックで貼り付け、Enter を押します。`PS C:\Users\YourName>` の表示はコピーしません。
+フォルダーを開くには、Windows ではエクスプローラーのアドレスバーに、macOS では Finder の**移動 → フォルダへ移動**にパスを貼り付けます。
 
-        ```powershell
-        $env:RUST_LOG="debug"; koharu.exe
-        ```
-      </Step>
-      <Step title="必要ならフルパスを使う">
-        コマンドが認識されなければ、スタートで Koharu を検索し、右クリックして**ファイルの場所を開く**を選びます。ショートカットの**プロパティ**から**リンク先**をコピーし、次の例を置き換えます。`&` と引用符は残してください。
-
-        ```powershell
-        $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
-        ```
-      </Step>
-    </Steps>
-
-    環境変数はこの PowerShell ウィンドウ内でだけ有効です。閉じると解除されます。
-
-  </Tab>
-  <Tab title="macOS">
-    `Command+Space` で **Terminal** を検索し Return を押します。`Command+V` で貼り付けて実行します。
-
-    ```bash
-    RUST_LOG=debug koharu
-    ```
-
-    コマンドが見つからない場合はインストール先から起動します。
-
-    ```bash
-    RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
-    ```
-
-    パスが存在しなければ Finder でアプリの場所を確認し、実際のパスへ置き換えてください。
-
-  </Tab>
-  <Tab title="Linux">
-    アプリ一覧で **Terminal** を検索するか `Ctrl+Alt+T` を試します。`Ctrl+Shift+V` で貼り付けて Enter を押します。
-
-    ```bash
-    RUST_LOG=debug koharu
-    ```
-
-    見つからなければ Debian/RPM パッケージの場所を試します。
-
-    ```bash
-    RUST_LOG=debug /usr/bin/koharu
-    ```
-
-    ファイルがなければディストリビューション向けパッケージを確認・再インストールします。
-
-  </Tab>
-</Tabs>
-
-この方法で起動した Koharu で問題を再現します。終了までターミナルが入力待ちに戻らない場合があります。最後のエラーだけでなく前後の出力を残してください。通常どおり Koharu を閉じ、起動したプロセスが固まった場合はターミナルで `Ctrl+C` を一度押します。
-
-## ログをファイルに保存する
-
-新しいターミナルで対応するコマンドを実行し、問題を再現してから Koharu を閉じます。ホームフォルダーにログができます。短いコマンドが使えなかった場合は同じフルパスへ置き換えてください。
-
-<Tabs>
-  <Tab title="Windows">
-    ```powershell
-    $env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
-    ```
-  </Tab>
-  <Tab title="macOS と Linux">
-    ```bash
-    RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
-    ```
-  </Tab>
-</Tabs>
+ログは起動するたびに同じファイルへ追記され、時刻は UTC です。1 MB に達すると Koharu はファイルを削除して新しく書き始めるため、問題が起きたら早めにコピーしてください。
 
 共有前に資格情報、非公開のファイル名、ページ本文を `[removed]` に置き換え、周囲の診断情報は残します。OS、Koharu のバージョン、目的、再現手順、エラーのおおよその時刻を添えます。
 
-テキストログを [GitHub issue](https://github.com/koharu-rs/koharu/issues) に添付するか、[Discord](https://discord.gg/mHvHkxGnUY)で相談してください。
+ログを [GitHub issue](https://github.com/koharu-rs/koharu/issues) に添付するか、[Discord](https://discord.gg/mHvHkxGnUY)で相談してください。
+
+## より詳しいログを取る
+
+Koharu を終了してから（実行中に起動しても開いているウィンドウが前面に出るだけです）、`RUST_LOG` を設定してターミナルから起動します。
+
+<CodeGroup>
+
+```powershell Windows (PowerShell)
+$env:RUST_LOG="debug"; & "$env:LOCALAPPDATA\Koharu\koharu.exe"
+```
+
+```bash macOS
+RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
+```
+
+```bash Linux
+RUST_LOG=debug koharu
+```
+
+</CodeGroup>
+
+別の場所にインストールした場合は、そのパスに置き換えてください。
+
+`RUST_LOG` には `debug` や `trace` などのレベルか、`info,koharu_pipeline=debug` のような[フィルターディレクティブ](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives)を指定します。追加のメッセージはターミナルにだけ表示され、ログファイルは INFO 以上のままです。
