@@ -1,3 +1,33 @@
+## [0.95.0](https://github.com/koharu-rs/koharu/compare/0.94.1..0.95.0) - 2026-11-24
+
+### ⛰️  Features
+
+- *(agent)* Let view_page show a page's scan alone, and a region of it enlarged (part of #1517) - ([6d61cb8](https://github.com/koharu-rs/koharu/commit/6d61cb8195a9a7142bf28657515733893ad0127a))
+- *(canvas)* Show a page's scan alone with Show Original, changing nothing in the project (part of #1517) - ([387b954](https://github.com/koharu-rs/koharu/commit/387b954bbc094bf6064651ebde1c6bb4887947a7))
+- *(canvas)* Draw a text block over text detection missed, and read or clean up one block from Story (part of #1517) - ([23fe490](https://github.com/koharu-rs/koharu/commit/23fe4901ece4a5345b2b78c63854f9bc012eac45))
+- *(canvas)* Put a Remove stroke on the selected raster or clean-up, or on one new raster that stays selected for the next (part of #1517) - ([3c2ea40](https://github.com/koharu-rs/koharu/commit/3c2ea40ac760bf1e0a245c200f94468805cc993f))
+- *(desktop)* Export to PDF, and export only the selected pages - ([2d882af](https://github.com/koharu-rs/koharu/commit/2d882afcf527b7d1a4aae1dd77c01f46a7412632))
+- *(llm)* Ask OpenAI and xAI not to store replies - ([5369aa1](https://github.com/koharu-rs/koharu/commit/5369aa1e766a4cd4efba3a64f7d865786ac0e613))
+- *(llm)* Update rig to 0.47, whose catalog has Claude Fable 5.2, GPT-6.2 and Gemini 4, and compact conversations its way, during an agent's run too - ([dc74e90](https://github.com/koharu-rs/koharu/commit/dc74e90a6a64282ebea170cf3db8263f592a625a))
+- *(ui)* Switch between Layers and Story with F7, each scrolled to what's selected, saving a field's edit as it goes (part of #1517) - ([3ff8214](https://github.com/koharu-rs/koharu/commit/3ff8214bde7d1301365c66c4b59401c72e1b74ed))
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Keep the cookies' key in a keychain item of Koharu's own, as macOS asked for the password of the one Chromium apps share ([#1393](https://github.com/koharu-rs/koharu/issues/1393)) - ([34ab775](https://github.com/koharu-rs/koharu/commit/34ab775e02466feddf5855a9184c7f41e370de47))
+- *(llm)* Name Koharu on ChatGPT's sign-in page - ([596db8c](https://github.com/koharu-rs/koharu/commit/596db8cdd3f60c42df31b0090a7bac938f2daddd))
+- *(llm)* Never run a local model's call its token limit cut off, and give its reply all the time it needs - ([63037c7](https://github.com/koharu-rs/koharu/commit/63037c77bd2d553e2ca83fc336b2ae02bd5a7387))
+- *(llm)* Wait as long as a reply or its rate-limit headers ask, up to two minutes, send a request again whose connection was lost, and never one whose quota is spent - ([2870c37](https://github.com/koharu-rs/koharu/commit/2870c37be7d77a7af7d7ba3c5d7ed66dab3ecf4b))
+- *(llm,pipeline)* Read a translation in a code fence or prose, and ask once more for one that doesn't fit its page - ([d06891e](https://github.com/koharu-rs/koharu/commit/d06891e68cea483c3c84c62b368be234b5aa7e87))
+- *(ml)* Pad LaMa's input to a multiple of 128 on MPS, where libtorch keeps the graphs it compiles for each window size until Koharu runs out of memory ([#1295](https://github.com/koharu-rs/koharu/issues/1295)) - ([1672f93](https://github.com/koharu-rs/koharu/commit/1672f93caf8c624470f1f1ee9c6f732fd0af95eb))
+- *(pipeline)* Fill each piece of a lettering's mask from its own paper, leave lines and art under it to the model, and find the balloon's pixels once (part of #1517) - ([43ea786](https://github.com/koharu-rs/koharu/commit/43ea786db2dfb4c38dde4e90f38058fe23adfa41))
+- *(ui)* Keep the agent's conversation and the message being written through Settings and Read, until the project closes - ([ceafd09](https://github.com/koharu-rs/koharu/commit/ceafd09fd4753ab8937b87afe2a1a7fbbeef10cc))
+- *(ui)* Drag a selected layer once, with those inside it, so layers move with their masks and a group keeps its layers ([#1529](https://github.com/koharu-rs/koharu/issues/1529)) - ([e69998c](https://github.com/koharu-rs/koharu/commit/e69998c1a87a4af6bdc33f22ecbf3d24a7f135c3))
+- *(ui)* Delete a selected layer once, with those inside it, so a Shift range of layers and their masks no longer fails as not found ([#1529](https://github.com/koharu-rs/koharu/issues/1529)) - ([96f8130](https://github.com/koharu-rs/koharu/commit/96f81304b4bcdd74aeb45c9677abd1ee28814209))
+
+### ⚙️ Miscellaneous Tasks
+
+- Cancel the earlier Build, Lint and Test runs of a branch or pull request when a newer one starts - ([f2f01e4](https://github.com/koharu-rs/koharu/commit/f2f01e43213446bd8313b00058c14097e679e686))
+
 ## [0.94.1](https://github.com/koharu-rs/koharu/compare/0.94.0..0.94.1) - 2026-11-24
 
 ### 🐛 Bug Fixes
