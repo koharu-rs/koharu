@@ -33,7 +33,8 @@ only.
 - **A model can overwrite anything,** the user's own edits included, and undo
   is the way back. A lock is the exception: no stage writes a block that is
   locked or in a locked layer, and detection leaves a locked layer with the
-  panels and balloons holding it.
+  panels and balloons holding it, and adds no second block over a block it
+  leaves.
 - **A request that can't run fails at once**: no stages, detection on blocks, a
   stage other than inpainting on an area, or a page or block the project
   doesn't hold.
@@ -113,8 +114,8 @@ Translation is one conversation per open project, a turn per page in page
 order, and translating blocks is a turn of the same conversation. Changing the
 model, the target, or the instructions starts a new one.
 
-- **A page** is its texts as a JSON object keyed by reading order, and the
-  answer must keep the keys. A broken answer, a missing key, or a blank
+- **A page** is its unlocked texts as a JSON object keyed by reading order, and
+  the answer must keep the keys. A broken answer, a missing key, or a blank
   translation fails the page, which never enters the history.
 - **An answer copying the page before's** for different texts is asked again
   without the history it copied.

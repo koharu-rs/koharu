@@ -300,43 +300,52 @@ fn name(target: &LanguageIdentifier) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
-    use koharu_scene::{Content, Edit};
+    use koharu_scene::{Edit, Session};
 
     use super::*;
-    use crate::stages::tests::{block, holder, lock, page};
 
     #[test]
     fn a_balloon_locked_while_translating_leaves_the_others_their_translation() -> Result<()> {
         let dir = tempfile::tempdir()?;
-        let (mut session, ids) = page(
-            &dir,
-            &[
-                ("balloon", None, holder("balloon")),
-                ("inside", Some("balloon"), block(20.0)),
-                ("free", None, block(220.0)),
-            ],
-        )?;
-        let &[balloon, inside, free] = &ids[..] else {
-            anyhow::bail!("three layers");
+        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let block = |x: f64| {
+            json!({"kind": "block", "source": {
+                "content": "猫", "language": "ja",
+                "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 40.0, "height": 120.0}}},
+            }})
         };
-        // The lock comes on after the page was read for the translator.
-        lock(&mut session, balloon)?;
-        let translated = vec![
-            (inside, langid!("ja"), "Cat".to_owned()),
-            (free, langid!("ja"), "Dog".to_owned()),
-        ];
-        let ops = written(&session.project(), translated, &TranslatorConfig::default())?;
+        session.apply(Edit {
+            label: "test".to_owned(),
+            ops: serde_json::from_value(json!([
+                {"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 400}},
+                {"op": "add_layer", "id": "$balloon", "page": "$p", "index": 0,
+                    "layer": {"kind": "balloon", "outline": "M0 0 L200 0 L200 160 L0 160 Z"}},
+                {"op": "add_layer", "page": "$p", "parent": "$balloon", "index": 0,
+                    "layer": block(20.0)},
+                {"op": "add_layer", "page": "$p", "index": 1, "layer": block(220.0)},
+                // The lock comes on after the translator read the page.
+                {"op": "update_layer", "layer": "$balloon", "patch": {"locked": true}},
+            ]))?,
+        })?;
+        let project = session.project();
+        let page = project.pages().next().context("a page")?.id;
+        let translated = project
+            .blocks(page)?
+            .into_iter()
+            .map(|(id, _)| (id, langid!("ja"), "Cat".to_owned()))
+            .collect();
+        let ops = written(&project, translated, &TranslatorConfig::default())?;
         session.apply(Edit {
             label: "translate".to_owned(),
             ops,
         })?;
-        let project = session.project();
-        let translation = |id| match &project.layer(id).expect("a layer").content {
-            Content::Block(block) => block.translation.as_ref().map(|text| text.content.text()),
-            _ => None,
-        };
-        assert_eq!(translation(inside), None);
-        assert_eq!(translation(free).as_deref(), Some("Dog"));
+        let translations: Vec<Option<String>> = session
+            .project()
+            .blocks(page)?
+            .into_iter()
+            .map(|(_, block)| block.translation.as_ref().map(|text| text.content.text()))
+            .collect();
+        assert_eq!(translations, [None, Some("Cat".to_owned())]);
         Ok(())
     }
 

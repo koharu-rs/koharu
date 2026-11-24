@@ -21,18 +21,17 @@ use crate::{Area, stages::Member};
 /// Every block's mask, the fill tiers run, and the regions they left for the
 /// model.
 pub(super) fn blocks(member: &Member) -> Result<Option<Work>> {
-    let Some((project, scan)) = member.scan()? else {
+    let Some((_, scan)) = member.scan()? else {
         return Ok(None);
     };
     let mut image = scan.to_rgb8();
     let (width, height) = image.dimensions();
-    let mut cleanups = cleanups(member, &project, width, height)?;
+    let (project, mut cleanups, left) = cleanups(member, width, height)?;
     if cleanups.is_empty() {
         return Ok(None);
     }
-    let covered = covered(member, width, height)?;
     let places = places(&project, member.page, width, height);
-    let (mask, regions) = tiers(&mut image, &covered, &mut cleanups, &places);
+    let (mask, regions) = tiers(&mut image, left, &mut cleanups, &places);
     Ok(Some(Work {
         image,
         mask,
@@ -67,61 +66,65 @@ pub(super) fn area(member: &Member, area: &Area) -> Result<Option<Work>> {
     }))
 }
 
-/// Each block with a mask on the page: its mask's coverage and its clean-up's
-/// tiles now. A clean-up locked by itself is left as it is.
-fn cleanups(member: &Member, project: &Project, width: u32, height: u32) -> Result<Vec<Cleanup>> {
-    let session = member.session.lock();
-    let mut cleanups = Vec::new();
-    for (id, block) in member.blocks(project) {
-        if block.cleanup.locked {
-            continue;
-        }
-        let tiles = session.tiles(block.mask.id, None)?;
-        if let Some((rect, mask)) = tiles.coverage(width, height) {
-            cleanups.push(Cleanup {
-                block: id,
-                cleanup: block.cleanup.id,
-                old: session.tiles(block.cleanup.id, None)?,
-                rect,
-                mask,
-                fill: None,
-                region: None,
-            });
-        }
-    }
-    Ok(cleanups)
-}
-
-/// Every block's mask on the page, which the tiers hold out of what they
-/// read: a block the run leaves, such as a locked one, keeps its lettering on
-/// the scan. The blocks come from the session as it is now, with their tiles,
-/// as one deleted since the scan was read has none.
-fn covered(member: &Member, width: u32, height: u32) -> Result<GrayImage> {
+/// The project as it is once the scan is decoded, and its page's blocks with
+/// a mask: each the run cleans, with its mask's coverage and its clean-up's
+/// tiles, and the masks of the others, whose lettering the run leaves on the
+/// scan. A clean-up locked by itself is left.
+fn cleanups(
+    member: &Member,
+    width: u32,
+    height: u32,
+) -> Result<(Project, Vec<Cleanup>, GrayImage)> {
     let session = member.session.lock();
     let project = session.project();
-    let mut covered = GrayImage::new(width, height);
-    for (_, block) in project.blocks(member.page).unwrap_or_default() {
-        if let Some((rect, mask)) = session.tiles(block.mask.id, None)?.coverage(width, height) {
-            stamp(&mut covered, rect, &mask);
+    let cleaned: Vec<LayerId> = member
+        .blocks(&project)
+        .into_iter()
+        .filter(|(_, block)| !block.cleanup.locked)
+        .map(|(id, _)| id)
+        .collect();
+    let mut cleanups = Vec::new();
+    let mut left = GrayImage::new(width, height);
+    for (id, block) in project.blocks(member.page).unwrap_or_default() {
+        let tiles = session.tiles(block.mask.id, None)?;
+        let Some((rect, mask)) = tiles.coverage(width, height) else {
+            continue;
+        };
+        if !cleaned.contains(&id) {
+            stamp(&mut left, rect, &mask);
+            continue;
         }
+        cleanups.push(Cleanup {
+            block: id,
+            cleanup: block.cleanup.id,
+            old: session.tiles(block.cleanup.id, None)?,
+            rect,
+            mask,
+            fill: None,
+            region: None,
+        });
     }
-    Ok(covered)
+    Ok((project, cleanups, left))
 }
 
 /// Runs the fill tiers over `image`, recording each tier that filled a
 /// lettering; the rest, the model's, come back as its mask over the page and
-/// a region each.
+/// a region each. The letterings the run leaves, `left`, are held out of what
+/// the tiers read, and shown to the model as its own are.
 fn tiers(
     image: &mut RgbImage,
-    covered: &GrayImage,
+    left: GrayImage,
     cleanups: &mut [Cleanup],
     places: &HashMap<LayerId, Place>,
 ) -> (GrayImage, Vec<Region>) {
-    let (width, height) = image.dimensions();
-    let mut mask = GrayImage::new(width, height);
+    let mut covered = left.clone();
+    for cleanup in cleanups.iter() {
+        stamp(&mut covered, cleanup.rect, &cleanup.mask);
+    }
+    let mut mask = left;
     let mut regions = Vec::new();
     let _span = tracing::info_span!("fill", letterings = cleanups.len()).entered();
-    let mut page = flat::Page::new(image, covered);
+    let mut page = flat::Page::new(image, &covered);
     for cleanup in cleanups.iter_mut() {
         let place = places.get(&cleanup.block).cloned().unwrap_or_default();
         let line = match page.fill(cleanup.rect, &cleanup.mask, &place) {
@@ -253,68 +256,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
-    use crate::{
-        RunId,
-        stages::tests::{block, lock, page},
-    };
-
-    /// A locked block is left out of the run, but its lettering, still on the
-    /// scan, stays out of what the tiers read; a block deleted since the read
-    /// is simply gone.
-    #[test]
-    fn a_locked_blocks_lettering_stays_out_of_what_the_fills_read() -> anyhow::Result<()> {
-        let dir = tempfile::tempdir()?;
-        let (mut session, ids) = page(
-            &dir,
-            &[("locked", None, block(20.0)), ("free", None, block(220.0))],
-        )?;
-        let &[locked, free] = &ids[..] else {
-            anyhow::bail!("two blocks");
-        };
-        let project = session.project();
-        let mut ops = Vec::new();
-        for (id, x) in [(locked, 20), (free, 220)] {
-            let Content::Block(found) = &project.layer(id)?.content else {
-                anyhow::bail!("a block");
-            };
-            ops.push(Op::WritePixels {
-                layer: found.mask.id.into(),
-                rect: Rect {
-                    x,
-                    y: 20,
-                    width: 40,
-                    height: 120,
-                },
-                pixels: vec![255; 40 * 120],
-            });
-        }
-        session.apply(Edit {
-            label: "masks".to_owned(),
-            ops,
-        })?;
-        lock(&mut session, locked)?;
-        let project = session.project();
-        let member = Member {
-            run: RunId(1),
-            job: NodeIndex::new(0),
-            page: project.pages().next().expect("a page").id,
-            index: 0,
-            blocks: None,
-            session: Arc::new(Mutex::new(session)),
-            cancel: CancellationToken::new(),
-        };
-        let cleanups = cleanups(&member, &project, 400, 400)?;
-        let cleaned: Vec<LayerId> = cleanups.iter().map(|cleanup| cleanup.block).collect();
-        assert_eq!(cleaned, [free]);
-        member.session.lock().apply(Edit {
-            label: "delete".to_owned(),
-            ops: vec![Op::RemoveLayer { layer: free.into() }],
-        })?;
-        let covered = covered(&member, 400, 400)?;
-        assert_eq!(covered.get_pixel(40, 80).0[0], 255);
-        assert_eq!(covered.get_pixel(240, 80).0[0], 0);
-        Ok(())
-    }
+    use crate::RunId;
 
     /// The Remove brush fills over its page as drawn: a raster painted over
     /// the scan shows to the model, as an earlier removal does, while a

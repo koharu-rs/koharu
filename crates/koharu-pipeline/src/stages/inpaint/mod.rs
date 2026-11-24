@@ -76,7 +76,8 @@ pub(crate) struct AreaWork {
 /// A page's scan as it's being filled, and what the model redraws in it.
 struct Work {
     image: RgbImage,
-    /// What the model redraws, over the page.
+    /// What the model redraws, with the letterings the run leaves, over the
+    /// page.
     mask: GrayImage,
     regions: Vec<Region>,
     target: Target,
