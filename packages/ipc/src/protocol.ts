@@ -1218,6 +1218,9 @@ export const commands = {
   /** Whether the Story panel shows, and the text whose entry the pointer is on, which the canvas numbers and outlines. */
   setStory: (story: Story) =>
     runner('set_story', (options) => invoke<null>('set_story', { story }, options)),
+  /** Whether the page shows its scan alone, as Lightroom's Before view shows a photo without its edits. */
+  setOriginal: (original: boolean) =>
+    runner('set_original', (options) => invoke<null>('set_original', { original }, options)),
   /** The type bar's character settings for the text being typed: the selected characters take them, or at a caret the next ones typed. */
   styleTyping: (patch: CharStyle) =>
     runner('style_typing', (options) => invoke<null>('style_typing', { patch }, options)),

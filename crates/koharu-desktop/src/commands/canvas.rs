@@ -44,6 +44,14 @@ pub fn set_story(app: State<'_, Arc<App>>, story: Story) {
     app.screen.set_story(story);
 }
 
+/// Whether the page shows its scan alone, as Lightroom's Before view shows a
+/// photo without its edits.
+#[tauri::command]
+#[specta::specta]
+pub fn set_original(app: State<'_, Arc<App>>, original: bool) {
+    app.screen.set_original(original);
+}
+
 /// Fits the page in the canvas, as the fit shortcut does.
 #[tauri::command]
 #[specta::specta]

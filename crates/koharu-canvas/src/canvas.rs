@@ -72,6 +72,7 @@ pub struct Canvas {
     tool: Tool,
     brush: Brush,
     story: Story,
+    original: bool,
     /// Story's numbers laid out, by number and whether it's a sound
     /// effect's, until the colours change.
     numbers: RefCell<HashMap<(usize, bool), Label>>,
@@ -113,6 +114,7 @@ struct Look {
     tool: Tool,
     brush: Brush,
     story: Story,
+    original: bool,
     selection: Vec<LayerId>,
     hover: Option<LayerId>,
     anchors: Vec<usize>,
@@ -143,6 +145,7 @@ impl Canvas {
             tool: Tool::default(),
             brush: Brush::default(),
             story: Story::default(),
+            original: false,
             numbers: RefCell::new(HashMap::new()),
             selection: Selection::default(),
             area: None,
@@ -226,6 +229,11 @@ impl Canvas {
     /// What the Story panel shows, which the canvas numbers the texts for.
     pub fn set_story(&mut self, story: Story) {
         self.story = story;
+    }
+
+    /// Whether the page shows its scan alone, without its layers.
+    pub fn set_original(&mut self, original: bool) {
+        self.original = original;
     }
 
     pub fn camera(&self) -> TranslateScale {
@@ -812,6 +820,7 @@ impl Canvas {
             tool: self.tool,
             brush: self.brush,
             story: self.story,
+            original: self.original,
             selection: self.selection.ids().to_vec(),
             hover: self.selection.hover(),
             anchors: self.selection.anchors().to_vec(),
@@ -1070,10 +1079,15 @@ impl Canvas {
             .as_ref()
             .and_then(Typing::target)
             .map(|layer| snapshot.frame().without(&[layer]));
-        let frame = self
+        let scan = snapshot.frame().background().filter(|_| self.original);
+        let scan = scan.map(|scan| scan.cropped());
+        let under = self
             .gesture
             .as_ref()
-            .and_then(|active| active.gesture.under())
+            .and_then(|active| active.gesture.under());
+        let frame = scan
+            .as_ref()
+            .or(under)
             .or(typed.as_ref())
             .unwrap_or(snapshot.frame());
         let (place, facing) = self.places();

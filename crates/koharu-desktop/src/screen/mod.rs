@@ -228,6 +228,15 @@ impl Screen {
         });
     }
 
+    pub fn set_original(&self, original: bool) {
+        self.change(move |main| {
+            main.settings.original = original;
+            if let Some(canvas) = &mut main.canvas {
+                canvas.set_original(original);
+            }
+        });
+    }
+
     /// Fits the page in the canvas.
     pub fn fit(&self) {
         self.change(|main| {
@@ -395,6 +404,7 @@ struct Settings {
     brush: Brush,
     colors: Colors,
     story: Story,
+    original: bool,
 }
 
 impl Main {
@@ -432,6 +442,7 @@ impl Main {
             canvas.set_brush(settings.brush);
             canvas.set_colors(settings.colors);
             canvas.set_story(settings.story);
+            canvas.set_original(settings.original);
             canvas
         });
         if self.canvas.is_none() {

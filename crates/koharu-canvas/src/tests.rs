@@ -1,10 +1,11 @@
 //! The canvas's behaviour, through its public API, on a real project and
 //! GPU.
 
-use std::sync::Arc;
+use std::{io::Cursor, sync::Arc};
 
+use image::{ImageFormat, Rgb, RgbImage};
 use koharu_renderer::{Gpu, Renderer, RendererConfig};
-use koharu_scene::{Edit, LayerId, Op, PageId, Ref, Rgba, Session};
+use koharu_scene::{Background, Edit, Hash, LayerId, Op, PageId, Ref, Rgba, Session};
 use kurbo::{Affine, BezPath, Point, Rect, Shape as _, TranslateScale, Vec2};
 use parking_lot::Mutex;
 use serde_json::{Value, json};
@@ -116,6 +117,49 @@ fn a_page_shows_where_the_camera_puts_it() {
     assert_eq!(at(75, 75), [255, 0, 0, 255]);
     assert_eq!(at(25, 25), [255; 4]);
     assert_eq!(at(350, 250), [0, 0, 255, 255]);
+}
+
+/// Showing the original draws the scan alone, and leaves the page as it was.
+#[test]
+fn the_original_shows_the_scan_without_the_layers() {
+    let Some(mut fixture) = unscaled_of((200, 200), red_square()) else {
+        return;
+    };
+    let mut scan = Vec::new();
+    RgbImage::from_pixel(200, 200, Rgb([0, 0, 255]))
+        .write_to(&mut Cursor::new(&mut scan), ImageFormat::Png)
+        .expect("a PNG");
+    let background = Background {
+        file: Hash::of(&scan),
+        visible: true,
+    };
+    let ops = vec![
+        Op::AddFile { bytes: scan },
+        Op::SetBackground {
+            page: Ref::from(fixture.page),
+            background: Some(background),
+        },
+    ];
+    fixture
+        .session
+        .lock()
+        .apply(Edit {
+            label: "test".into(),
+            ops,
+        })
+        .expect("a scan");
+    fixture.render();
+    for (original, square) in [
+        (false, [255, 0, 0, 255]),
+        (true, [0, 0, 255, 255]),
+        (false, [255, 0, 0, 255]),
+    ] {
+        fixture.canvas.set_original(original);
+        assert!(fixture.canvas.draw().expect("a draw").is_some());
+        let snapshot = fixture.canvas.snapshot().expect("pixels");
+        assert_eq!(snapshot.get_pixel(75, 75).0, square);
+        assert_eq!(snapshot.get_pixel(25, 25).0, [0, 0, 255, 255]);
+    }
 }
 
 /// A shape of `width`×`height` at `(x, y)`, drawn in order at `index`,

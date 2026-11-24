@@ -10,6 +10,8 @@ export const shortcuts = {
   deselect: 'mod+d',
   /** Fit on Screen. */
   fit: 'mod+0',
+  /** Lightroom's Before and After. */
+  original: '\\',
   delete: 'delete',
 } as const
 

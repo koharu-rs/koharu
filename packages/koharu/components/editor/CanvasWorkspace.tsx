@@ -76,6 +76,13 @@ export function CanvasWorkspace() {
     [panel, storyHover],
   )
 
+  // The reader draws its pages on the same canvas, as they are.
+  const original = useKoharuStore((state) => state.original)
+  useEffect(() => {
+    send(commands.setOriginal, original)
+    return () => send(commands.setOriginal, false)
+  }, [original])
+
   useEffect(
     () =>
       send(commands.setBrush, {
@@ -111,7 +118,7 @@ export function CanvasWorkspace() {
 
   // Photoshop's shortcuts, which leave a focused field's or control's keys to it.
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
-  const { selectLayers, setTool } = useKoharuStore.getState()
+  const { selectLayers, setOriginal, setTool } = useKoharuStore.getState()
   useHotkeys(shortcuts.undo, () => send(commands.undo), command)
   useHotkeys(shortcuts.redo, () => send(commands.redo), command)
   useHotkeys(
@@ -121,6 +128,7 @@ export function CanvasWorkspace() {
   )
   useHotkeys(shortcuts.deselect, () => send(commands.deselect), command)
   useHotkeys(shortcuts.fit, () => send(commands.fit), command)
+  useHotkeys(shortcuts.original, () => setOriginal(!original), command)
   useHotkeys(
     [shortcuts.delete, 'backspace'],
     () => {
