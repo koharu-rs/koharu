@@ -118,7 +118,7 @@ prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 quick_cache = "0.7.0"
 quote = "1.0.47"
-rars = "0.12.2"
+rars = "0.13.0"
 rayon = "1.12.0"
 reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking", "multipart", "cookies"] }
 rfd = "0.18.0"
@@ -225,7 +225,7 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
 ] }
-x11rb = { version = "0.13.2", features = ["shape"] }
+x11rb = { version = "0.14.0", features = ["shape"] }
 zip = { version = "9.5.0", features = ["deflate"] }
 
 [patch.crates-io]

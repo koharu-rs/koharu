@@ -16,9 +16,10 @@ use url::Url;
 
 use crate::{app::App, events};
 
-/// The most characters of a title a project's name keeps, so its path stays
-/// under Windows' 260.
-const TITLE: usize = 100;
+/// The most bytes of a series and title a project's name keeps, so its path
+/// stays under Windows' 260 characters, and its file's name under the 255
+/// bytes of Linux and macOS.
+const TITLE: usize = 150;
 
 /// A chapter read into a project: the project, and how its pages read, as
 /// its extension said, which the interface keeps for the reader.
@@ -93,14 +94,20 @@ pub async fn read(
     Ok(reading)
 }
 
-/// The project "‹title› – ‹site›", made a file name on every platform.
+/// The project "‹series› ‹title› – ‹site›", made a file name on every
+/// platform. The series is cut before the title, which tells its chapters
+/// apart.
 fn name(chapter: &Chapter, url: &Url) -> String {
     let site = url.host_str().unwrap_or_default();
+    let title = &chapter.title[..chapter.title.floor_char_boundary(TITLE)];
     let title = match &chapter.series {
-        Some(series) => format!("{series} {}", chapter.title),
-        None => chapter.title.clone(),
+        Some(series) => {
+            let end = series.floor_char_boundary(TITLE - title.len());
+            format!("{} {title}", &series[..end])
+        }
+        None => title.to_owned(),
     };
-    let title: String = title.trim().chars().take(TITLE).collect();
+    let title = title.trim();
     let name = if title.is_empty() {
         site.to_owned()
     } else {

@@ -8,6 +8,7 @@ import {
   type LayerId,
   type Op,
   type PageId,
+  type PathFit,
   type TextStyle,
   type Value,
 } from '@koharu/ipc/protocol'
@@ -112,6 +113,27 @@ export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
         }))
         return [restyle, { op: 'set_rich_text', layer: layer.id, spans: unmarked }]
       }),
+  )
+}
+
+/** Sets the fit of each layer's own frame, a box or a path: a text's, or a block's translation's.
+ * Point text and a block with no translation have no frame to fit, and a growing box draws its
+ * text at the set size already, so `none` leaves it growing. */
+export function setFit(layers: Layer[], fit: PathFit): Promise<Change> {
+  return edit(
+    'update_layer',
+    layers.flatMap((layer): Op[] => {
+      const frame = letteringOf(layer)?.frame
+      if (typeof frame !== 'object' || (fit === 'none' && frame.box?.fit === 'grow')) return []
+      const patch = { frame: { [frame.box ? 'box' : 'path']: { fit } } }
+      return [
+        {
+          op: 'update_layer',
+          layer: layer.id,
+          patch: isBlockLayer(layer) ? { translation: patch } : patch,
+        },
+      ]
+    }),
   )
 }
 
