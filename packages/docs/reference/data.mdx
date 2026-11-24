@@ -26,7 +26,9 @@ Each project is one `.khr` file in the projects folder: `projects` in Koharu's i
 
 Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]`, `[providers]`, `[renderer]`, and `[agent]`. Settings you leave at their defaults are not written, so later default changes reach you. A file that is not valid TOML, or a value of the wrong type, is an error rather than a silent default; fix it or use the Settings screen.
 
-API keys and sign-ins are encrypted in `~/.koharu/secrets.age`. Its key is the only thing Koharu keeps in the operating system's credential store; on Linux that needs a Secret Service such as GNOME Keyring, KWallet, or KeePassXC. If the key is lost, the file cannot be read again and is deleted, so you sign in again. A project backup includes no keys or sign-ins.
+API keys and provider sign-ins are encrypted in `~/.koharu/secrets.age`. Its key is kept in the operating system's credential store; on Linux that needs a Secret Service such as GNOME Keyring, KWallet, or KeePassXC. If the key is lost, the file cannot be read again and is deleted, so you sign in again. A project backup includes no keys or sign-ins.
+
+Sign-ins to the [gallery](/guides/gallery)'s sites are cookies in Koharu's built-in browser. On macOS, the key they are encrypted with is **Koharu Safe Storage** in the keychain.
 
 ## Runtime and model store
 

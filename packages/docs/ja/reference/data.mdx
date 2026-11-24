@@ -25,7 +25,9 @@ icon: 'database'
 
 設定は `~/.koharu/config.toml` に、コンポーネントごとのテーブル（`[pipeline]`、`[providers]`、`[renderer]`、`[agent]`）として保存されます。既定値のままの設定は書き込まれないため、後で既定値が変わればそれが反映されます。TOML として正しくないファイルや型の違う値は、黙って既定値にはならずエラーになります。ファイルを直すか、設定画面を使ってください。
 
-API キーとサインイン情報は `~/.koharu/secrets.age` に暗号化されています。Koharu が OS の資格情報ストアに保管するのはその鍵だけです。Linux では GNOME Keyring、KWallet、KeePassXC などの Secret Service が必要です。鍵が失われるとファイルは二度と読めないため削除され、再度サインインすることになります。プロジェクトのバックアップにはキーやサインイン情報は含まれません。
+API キーとプロバイダーのサインイン情報は `~/.koharu/secrets.age` に暗号化されています。その鍵は OS の資格情報ストアに保管されます。Linux では GNOME Keyring、KWallet、KeePassXC などの Secret Service が必要です。鍵が失われるとファイルは二度と読めないため削除され、再度サインインすることになります。プロジェクトのバックアップにはキーやサインイン情報は含まれません。
+
+[ギャラリー](/ja/guides/gallery)のサイトへのログインは、Koharu の内蔵ブラウザーの Cookie です。macOS では、その暗号化の鍵はキーチェーンの **Koharu Safe Storage** です。
 
 ## ランタイムとモデルのストア
 
