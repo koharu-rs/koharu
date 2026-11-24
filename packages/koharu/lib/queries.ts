@@ -33,6 +33,8 @@ export const projectKey = ['project'] as const
 export const pageKey = ['page'] as const
 /** Each page Story lists, by its id, whether or not the canvas shows it. */
 export const pagesKey = ['pages'] as const
+/** Each page's thumbnails, by its id and what they show. */
+export const thumbnailKey = ['thumbnail'] as const
 export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
 export const preferencesKey = ['preferences'] as const
@@ -45,8 +47,8 @@ export interface ProjectView {
   page: PageId | null
   pages: PageSummary[]
   history: History
-  /** Each page's revision when a change last came while it was shown, which its thumbnail
-   * follows; a page keeps its own after another is shown, or after it's removed. */
+  /** Each page's revision when a change last named it, added or changed, which its thumbnail
+   * follows whichever page is shown. */
   revisions: Record<PageId, string>
 }
 

@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from 'use-debounce'
 
-import { send, useImportPages, usePage, useProject } from '@/lib/queries'
+import { send, thumbnailKey, useImportPages, usePage, useProject } from '@/lib/queries'
 import { deletePages, movePage } from '@/lib/scene'
 import { pipelineStages, useKoharuStore } from '@/lib/store'
 import { commands, type ImportSource, type PageSummary, type Stage } from '@koharu/ipc/protocol'
@@ -518,7 +518,7 @@ function PageThumbnail({ page, version, label }: { page: string; version: string
   const [settled] = useDebounce(version, 100)
 
   const thumbnail = useQuery({
-    queryKey: ['thumbnail', page, settled],
+    queryKey: [...thumbnailKey, page, settled],
     queryFn: async () => new Uint8Array(await commands.getPageThumbnail(page)),
     staleTime: Number.POSITIVE_INFINITY,
     notifyOnChangeProps: ['data'],
