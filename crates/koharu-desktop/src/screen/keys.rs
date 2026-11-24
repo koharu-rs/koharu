@@ -11,7 +11,7 @@ use tauri_runtime_cef::cef::{
 use winit::platform::scancode::PhysicalKeyExtScancode as _;
 use winit::{
     event::{ElementState, Ime, KeyEvent},
-    keyboard::{Key, KeyCode, ModifiersState, PhysicalKey},
+    keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey},
 };
 
 // `c_uint` everywhere but Windows, where bindgen makes it a `c_int`.
@@ -63,7 +63,7 @@ pub fn send_key(host: &BrowserHost, event: &KeyEvent, modifiers: ModifiersState,
             KeyEventType::KEYUP
         },
         modifiers: flags,
-        windows_key_code: windows_key_code(event),
+        windows_key_code: windows_key_code(event, field),
         native_key_code: native_key_code(event),
         // Windows sends Alt's chords as system keys, which aren't text.
         is_system_key: i32::from(modifiers.alt_key() && !modifiers.control_key()),
@@ -256,8 +256,15 @@ fn characters(event: &KeyEvent) -> (u16, u16) {
 
 /// The Windows virtual-key code Chromium identifies a key by. A letter is the
 /// layout's, as Windows reports it; every other key is its position's on a US
-/// layout.
-fn windows_key_code(event: &KeyEvent) -> i32 {
+/// layout. A key the input method took in a field of the page's is
+/// `VK_PROCESSKEY`, which Blink does nothing for [Blink key events]; without
+/// a field it composes nothing, and stays the key a shortcut names.
+///
+/// [Blink key events]: https://chromium.googlesource.com/chromium/src/+/161066f3d4245f28c30e428514ff38725b47e31c/third_party/blink/renderer/core/input/keyboard_event_manager.cc#448
+fn windows_key_code(event: &KeyEvent, field: bool) -> i32 {
+    if field && event.logical_key == NamedKey::Process {
+        return 0xe5;
+    }
     if let Key::Character(text) = &event.logical_key
         && let Some(letter) = text.chars().next().filter(char::is_ascii_alphabetic)
     {
