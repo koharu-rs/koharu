@@ -693,9 +693,9 @@ export type PageSummary = {
   /**  Its blocks, hidden ones too. */
   texts: number
   /**
-   *  Its blocks whose translation has visible text. A cleared translation
-   *  keeps its style, and styling an untranslated block makes an empty one,
-   *  so neither counts.
+   *  Its blocks whose translation isn't blank. A cleared translation keeps
+   *  its style, and styling an untranslated block makes an empty one, so
+   *  neither counts.
    */
   translated: number
 }
