@@ -40,8 +40,8 @@ import {
   isContainer,
   isLockedLayer,
   isTextLayer,
+  outermostLayers,
   plainText,
-  walkLayers,
   type BlockLayer,
   type Drop,
   type Part,
@@ -126,13 +126,10 @@ export function LayersPanel() {
     return layers.length > 1 ? `${name} +${layers.length - 1}` : name
   }
 
-  /** A drag carries every selected layer when it starts on a selected row, else that row's. */
+  /** A drag carries every selected layer, with those inside it, when it starts on a selected row,
+   * else that row's. */
   const carried = (layer: LayerId) =>
-    selected.includes(layer)
-      ? walkLayers(page.layers)
-          .map(({ layer }) => layer.id)
-          .filter((id) => selected.includes(id))
-      : [layer]
+    selected.includes(layer) ? outermostLayers(page.layers, selected) : [layer]
 
   /** Where the pointer is over the row under it: its top or bottom quarter puts the layers above
    * or below it, and a container's middle into it; another row's halves, above or below. Above is
@@ -238,7 +235,7 @@ export function LayersPanel() {
                   onToggle={() => send(setVisibility, [layer.id], !layer.visible, null)}
                   onLock={() => send(setLocked, [layer.id], !layer.locked)}
                   movable={!isLockedLayer(placed)}
-                  carried={drag?.layers.includes(layer.id) ?? false}
+                  carried={[...placed.ancestors, layer].some(({ id }) => drag?.layers.includes(id))}
                   drop={drag?.drop?.target === layer.id ? drag.drop.zone : undefined}
                   onDelete={() => deletion.mutate(layer.id)}
                 />

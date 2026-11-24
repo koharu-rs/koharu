@@ -17,7 +17,7 @@ import {
   isBlockLayer,
   isTextLayer,
   letteringOf,
-  walkLayers,
+  outermostLayers,
   type Move,
   type Part,
 } from './document'
@@ -66,16 +66,11 @@ export function deleteLayers(layers: LayerId[]): Promise<Change> {
   )
 }
 
-/** What Delete does when the page has the keys: deletes the page's selected layers, leaving out
- * those inside another, which go with it. A block's selected part goes only with its block; the
- * eraser clears a clean-up, and hiding a mask stops it limiting the clean-up. */
+/** What Delete does when the page has the keys: deletes the selected layers with those inside
+ * them. A block's selected part goes only with its block; the eraser clears a clean-up, and hiding
+ * a mask stops it limiting the clean-up. */
 export async function deleteSelection(selected: LayerId[], layers: Layer[]): Promise<void> {
-  const outermost = walkLayers(layers)
-    .filter(
-      ({ layer, ancestors }) =>
-        selected.includes(layer.id) && !ancestors.some(({ id }) => selected.includes(id)),
-    )
-    .map(({ layer }) => layer.id)
+  const outermost = outermostLayers(layers, selected)
   if (outermost.length) await deleteLayers(outermost)
 }
 

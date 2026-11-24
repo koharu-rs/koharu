@@ -42,6 +42,17 @@ export function findLayer(layers: Layer[], id: LayerId): Placed | undefined {
   return walkLayers(layers).find((placed) => placed.layer.id === id)
 }
 
+/** The page's layers among `selected`, in drawing order, leaving out those inside another, which
+ * go where it goes. */
+export function outermostLayers(layers: Layer[], selected: LayerId[]): LayerId[] {
+  return walkLayers(layers)
+    .filter(
+      ({ layer, ancestors }) =>
+        selected.includes(layer.id) && !ancestors.some(({ id }) => selected.includes(id)),
+    )
+    .map(({ layer }) => layer.id)
+}
+
 /** A block's own picture layers: its clean-up, and the mask it shows through. */
 export type Part = 'cleanup' | 'mask'
 
