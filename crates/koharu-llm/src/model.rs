@@ -1,28 +1,55 @@
 //! How each vendor's models keep to a JSON schema, which rig's catalog
 //! doesn't say.
 
-use rig_agent::agent::{AgentBuilder, OutputMode};
+use rig_agent::agent::{
+    AgentBuilder, AgentHook, HookContext, ModelTurnAction, ModelTurnFinished, OutputMode,
+};
 use rig_core::{
+    completion::{AssistantContent, FinishReason},
     driver::DynModel,
     operation::Completion,
     providers::{chatgpt, deepseek, minimax, openrouter},
+    structured_output::json_in_text,
 };
+use serde::de::IgnoredAny;
 use serde_json::{Value, json};
 
 use crate::hosted::openai_compatible;
 
 /// rig's agent builder on `model`, asking for answers `schema` describes in
-/// the way its vendor keeps to one. `prompt_typed` checks an answer; a caller
-/// of plain `prompt` checks it itself, as rig fails open on structured output.
+/// the way its vendor keeps to one. An answer that doesn't fit it is asked for
+/// once more, and fails the run if that one doesn't either.
 #[must_use]
 pub fn answers(model: &DynModel<Completion>, schema: schemars::Schema) -> AgentBuilder {
     let vendor = model.spec().map_or("", |spec| spec.provider.vendor());
     let builder = AgentBuilder::new(model.clone())
         .output_schema_raw(schema)
-        .output_mode(output_mode(vendor));
+        .output_mode(output_mode(vendor))
+        .default_max_turns(2)
+        .add_hook(Whole);
     match params(vendor) {
         Some(params) => builder.additional_params(params),
         None => builder,
+    }
+}
+
+/// Stops a run at an answer its token limit cut off: asked for again, it would
+/// have less room, as the cut one goes with the request.
+struct Whole;
+
+impl AgentHook for Whole {
+    async fn on_model_turn_finished(
+        &self,
+        _ctx: &HookContext,
+        event: ModelTurnFinished<'_>,
+    ) -> ModelTurnAction {
+        let answer = AssistantContent::concat_text(event.content);
+        if event.finish_reason == Some(&FinishReason::Length)
+            && json_in_text::<IgnoredAny>(&answer).is_err()
+        {
+            return ModelTurnAction::Stop("the answer reached the model's token limit".to_owned());
+        }
+        ModelTurnAction::Continue
     }
 }
 

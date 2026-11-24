@@ -16,7 +16,7 @@ LFM3 1.7B is made for a limited set of target languages. Other local and hosted 
 
 Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the instructions starts a new one.
 
-Each page is sent as its texts in reading order, and the answer must return every one. A malformed answer, a missing text, or a blank translation fails that page. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
+Each page is sent as its texts in reading order, and the answer must return every one. A malformed answer or a missing text is asked for once more. If that answer falls short too, or a translation is blank, the page fails. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
 
 ## Options
 

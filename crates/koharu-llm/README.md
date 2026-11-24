@@ -45,8 +45,9 @@ vendor keeps to one:
 | `openai-compatible` | optional key | asking in the prompt, as the server may take no schema |
 | `ollama`, `lmstudio` | optional key | the server's own |
 
-An answer is checked against its schema whichever way it was kept, because rig
-fails open on structured output.
+rig checks an answer against its schema whichever way it was kept. One that
+doesn't fit is asked for once more and then fails; one the token limit cut off
+fails at once, as the cut answer would leave the next less room.
 
 ## 3. Local models
 

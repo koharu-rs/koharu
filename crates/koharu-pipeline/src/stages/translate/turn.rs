@@ -2,14 +2,18 @@
 
 use std::future::IntoFuture;
 
-use anyhow::{Context as _, Result, bail, ensure};
-use koharu_llm::rig::{
-    completion::{
-        AssistantContent, GenerationOptions, Message, Reasoning, Usage,
-        message::{DocumentSourceKind, Image, ImageMediaType, UserContent},
+use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use koharu_llm::{
+    PromptError,
+    rig::{
+        completion::{
+            AssistantContent, GenerationOptions, Message, Reasoning, Usage,
+            message::{DocumentSourceKind, Image, ImageMediaType, UserContent},
+        },
+        driver::DynModel,
+        operation::Completion,
+        structured_output::json_in_text,
     },
-    driver::DynModel,
-    operation::Completion,
 };
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
@@ -115,13 +119,19 @@ impl<'a> Turn<'a> {
             .prompt(Message::from(content))
             .history(history);
         let response = tokio::select! {
-            response = request.into_future() => response?,
+            response = request.into_future() => response.map_err(|error| match error {
+                // The answer was cut off, which rig words as a cancelled run.
+                PromptError::Cancelled { reason, .. } => anyhow!(reason),
+                error => error.into(),
+            })?,
             () = self.cancel.cancelled() => return Ok(None),
         };
         let translations = answers(&response.output(), &self.keys)?;
+        // The first call's covers the history, the page, and an answer, as the
+        // conversation keeps them; one asked again also read the first answer.
         let usage = response
             .completion_calls
-            .last()
+            .first()
             .map_or_else(Usage::default, |call| call.usage);
         Ok(Some((translations, response.messages, usage)))
     }
@@ -142,11 +152,15 @@ impl<'a> Turn<'a> {
 }
 
 /// A turn's messages as the conversation keeps them: the page's texts and
-/// the answer. The image and the reasoning served this turn alone; kept, every
-/// later turn would send them again, and they'd fill the context.
-fn remembered(messages: Vec<Message>) -> Vec<Message> {
+/// the answer. The image, the reasoning, and an answer that had to be asked for
+/// again served this turn alone; kept, every later turn would send them again,
+/// and they'd fill the context.
+fn remembered(mut messages: Vec<Message>) -> Vec<Message> {
+    let answer = messages.pop();
+    messages.truncate(1);
     messages
         .into_iter()
+        .chain(answer)
         .map(|message| match message {
             Message::User { mut content } => {
                 content.retain(|part| !matches!(part, UserContent::Image(_)));
@@ -198,13 +212,11 @@ fn schema(keys: &[String]) -> Result<schemars::Schema> {
 }
 
 /// The translation for each of `keys` in `answer`, which must hold exactly
-/// those keys, each a text that isn't blank.
+/// those keys, each a text that isn't blank. A model asked in its prompt can
+/// write prose or a code fence around it.
 fn answers(answer: &str, keys: &[String]) -> Result<Vec<String>> {
-    let Value::Object(mut answer) =
-        serde_json::from_str(answer).context("the answer isn't JSON")?
-    else {
-        bail!("the answer isn't a JSON object");
-    };
+    let mut answer: Map<String, Value> =
+        json_in_text(answer).context("the answer isn't a JSON object")?;
     let translations = keys
         .iter()
         .map(|key| match answer.remove(key) {
@@ -220,12 +232,13 @@ fn answers(answer: &str, keys: &[String]) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
     use koharu_llm::rig::completion::AssistantMessage;
 
     use super::*;
 
     #[test]
-    fn the_conversation_keeps_no_image_or_reasoning() {
+    fn the_conversation_keeps_no_image_reasoning_or_refused_answer() {
         let image = UserContent::Image(Image {
             data: DocumentSourceKind::Base64("AAAA".to_owned()),
             media_type: Some(ImageMediaType::JPEG),
@@ -238,6 +251,8 @@ mod tests {
         ]);
         let kept = remembered(vec![
             Message::from(vec![image, UserContent::text("{\"01\": \"やあ\"}")]),
+            Message::assistant("{}"),
+            Message::user("Answer again."),
             Message::Assistant(answer),
         ]);
         assert_eq!(
@@ -268,5 +283,11 @@ mod tests {
         assert!(answers(r#"{"1": "One", "2": " "}"#, &keys).is_err());
         assert!(answers(r#"{"1": "One", "2": "Two", "3": "Three"}"#, &keys).is_err());
         assert!(answers("One, Two", &keys).is_err());
+        let fenced = indoc! {r#"
+            ```json
+            {"1": "One", "2": "Two"}
+            ```"#
+        };
+        assert_eq!(answers(fenced, &keys).expect("an answer"), ["One", "Two"]);
     }
 }

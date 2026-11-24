@@ -15,7 +15,7 @@ pub use context::{Context, SummaryPrompts};
 pub use hosted::{Endpoint, Providers, SignInPrompt, VENDORS, sign_in, sign_out};
 pub use local::{Local, Quantization, Sampling, Size, local};
 pub use model::answers;
-pub use rig_agent::agent::AgentBuilder;
+pub use rig_agent::{agent::AgentBuilder, completion::PromptError};
 /// rig, whose requests and streams every model here takes and gives.
 pub use rig_core as rig;
 

@@ -120,8 +120,9 @@ order, and translating blocks is a turn of the same conversation. Changing the
 model, the target, or the instructions starts a new one.
 
 - **A page** is its unlocked texts as a JSON object keyed by reading order, and
-  the answer must keep the keys. A broken answer, a missing key, or a blank
-  translation fails the page, which never enters the history.
+  the answer must keep the keys. A broken answer or a missing key is asked for
+  once more; a second one, or a blank translation, fails the page, which never
+  enters the history.
 - **An answer copying the page before's** for different texts is asked again
   without the history it copied.
 - **A text given back unchanged**, such as a copyright line, keeps its own
