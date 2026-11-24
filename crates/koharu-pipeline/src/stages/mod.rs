@@ -76,13 +76,13 @@ impl Member {
         blocks
     }
 
-    /// Applies the ops `write` makes of the project as it is then, which a
-    /// layer removed meanwhile isn't in, as one undo step named for `stage`;
-    /// nothing once the run stopped.
+    /// Applies the ops `write` makes of the session as it is then, whose
+    /// project a layer removed meanwhile isn't in, as one undo step named for
+    /// `stage`; nothing once the run stopped.
     pub(crate) async fn apply(
         &self,
         stage: Stage,
-        write: impl FnOnce(&Project) -> anyhow::Result<Vec<Op>> + Send + 'static,
+        write: impl FnOnce(&Session) -> anyhow::Result<Vec<Op>> + Send + 'static,
     ) -> anyhow::Result<()> {
         let member = self.clone();
         tokio::task::spawn_blocking(move || {
@@ -91,7 +91,7 @@ impl Member {
             if member.cancel.is_cancelled() {
                 return Ok(());
             }
-            let ops = write(&session.project())?;
+            let ops = write(&session)?;
             if !ops.is_empty() {
                 session.apply(Edit {
                     label: stage.to_string(),

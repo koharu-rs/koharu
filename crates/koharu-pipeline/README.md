@@ -23,7 +23,7 @@ only.
 |---|---|---|
 | the project, or some pages | any of detect, recognize, inpaint, and translate | one click; detection again with new thresholds |
 | some blocks | recognize, inpaint, and translate | reading a block you drew; translating again after fixing a line |
-| a painted area | inpaint, with an optional prompt | the remove brush, as Photoshop's Content-Aware Fill [Photoshop Content-Aware Fill] and Generative Fill [Photoshop Generative Fill] fill a selection |
+| a painted area | inpaint, with an optional prompt, onto a raster or a clean-up it names, or a new raster | the remove brush, as Photoshop's Content-Aware Fill [Photoshop Content-Aware Fill] and Generative Fill [Photoshop Generative Fill] fill a selection |
 
 - **A run starts fresh.** It runs every stage it's given on everything it
   names, replacing what's there. To go on with an unfinished chapter, run the
@@ -54,7 +54,7 @@ more. Only a stage knows its models.
 |---|---|---|---|
 | detect | Koharu Layout HighRes | the scan | panels, balloons with outlines, and blocks in reading order, in place of the ones there; each block's source frame, tilt, direction, and mask |
 | recognize | Manga OCR AR | the scan inside each block's source frame, with other blocks' glyphs blanked | the source's wording and its language |
-| inpaint | LaMa | the scan, each block's mask, its balloon, and its panel; for an area, the page as drawn without its lettering | the block's clean-up under its mask; for an area, a new raster limited to it by a layer mask |
+| inpaint | LaMa | the scan, each block's mask, its balloon, and its panel; for an area, the page as drawn without its lettering | the block's clean-up under its mask; for an area, that part of the raster or the clean-up it names, whose mask opens there, or a new raster limited to it by a layer mask |
 | translate | Index-Translate 9B | the page's sources in reading order, and with vision the scan | each block's translation: wording, language, and placement |
 
 Every stage also records its C2PA action on the layers it wrote, and detection

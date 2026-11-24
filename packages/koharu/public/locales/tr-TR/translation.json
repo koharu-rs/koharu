@@ -138,6 +138,7 @@
     "close": "Geçmişi kapat",
     "opened": "Açıldığında",
     "steps": {
+      "add_layer": "Yeni katman",
       "add_text": "Metin ekle",
       "delete_layers": "Katmanları sil",
       "delete_pages": "Sayfaları sil",

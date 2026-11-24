@@ -17,9 +17,11 @@ pub enum Effect {
     Camera(TranslateScale),
     /// The colour picked, opaque.
     Color(Rgba),
-    /// An area to run inpainting on: its pixels and their 8-bit coverage.
+    /// An area to run inpainting on, its pixels and their 8-bit coverage, and
+    /// the raster or clean-up the result goes onto.
     Inpaint {
         page: PageId,
+        layer: LayerId,
         rect: koharu_scene::Rect,
         mask: Vec<u8>,
     },

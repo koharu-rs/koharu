@@ -70,10 +70,11 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
     for (member, texts) in members.iter().zip(texts) {
         let name = name.clone();
         member
-            .apply(Stage::Recognize, move |project| {
+            .apply(Stage::Recognize, move |session| {
+                let project = session.project();
                 let mut ops = Vec::new();
                 for (block, text) in texts {
-                    if writable(project, block).is_none() {
+                    if writable(&project, block).is_none() {
                         continue;
                     }
                     ops.push(koharu_scene::Op::UpdateLayer {

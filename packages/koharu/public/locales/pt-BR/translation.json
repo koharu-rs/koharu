@@ -138,6 +138,7 @@
     "close": "Fechar histórico",
     "opened": "Ao abrir",
     "steps": {
+      "add_layer": "Nova camada",
       "add_text": "Adicionar texto",
       "delete_layers": "Excluir camadas",
       "delete_pages": "Excluir páginas",

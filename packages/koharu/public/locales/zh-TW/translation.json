@@ -138,6 +138,7 @@
     "close": "關閉步驟記錄",
     "opened": "開啟時",
     "steps": {
+      "add_layer": "新增圖層",
       "add_text": "新增文字",
       "delete_layers": "刪除圖層",
       "delete_pages": "刪除頁面",

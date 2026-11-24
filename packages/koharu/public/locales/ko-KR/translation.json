@@ -138,6 +138,7 @@
     "close": "작업 내역 닫기",
     "opened": "열었을 때",
     "steps": {
+      "add_layer": "새 레이어",
       "add_text": "텍스트 추가",
       "delete_layers": "레이어 삭제",
       "delete_pages": "페이지 삭제",

@@ -138,6 +138,7 @@
     "close": "Cerrar historia",
     "opened": "Al abrir",
     "steps": {
+      "add_layer": "Nueva capa",
       "add_text": "Añadir texto",
       "delete_layers": "Eliminar capas",
       "delete_pages": "Eliminar páginas",

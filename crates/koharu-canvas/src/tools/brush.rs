@@ -22,16 +22,16 @@ use crate::{
 /// pixels.
 const TOLERANCE: f64 = 0.1;
 
-/// A brush tool's press starts a stroke: the draw tool's onto the one
-/// selected raster or a new one, the eraser's onto the one selected.
+/// A brush tool's press starts a stroke: the draw tool's and the remove
+/// tool's onto the one selected raster or a new one, the eraser's onto the one
+/// selected.
 pub(crate) fn press(cx: &Context, sample: Sample) -> Press {
-    let target = match cx.tool {
-        Tool::Remove => None,
-        _ => cx
-            .selection
-            .single()
-            .filter(|&layer| cx.snapshot.writable(layer).is_some()),
-    };
+    let target = cx.selection.single().filter(|&layer| {
+        // A mask takes no colours, which the remove tool's result is.
+        cx.snapshot
+            .writable(layer)
+            .is_some_and(|(_, format)| cx.tool != Tool::Remove || format == PixelFormat::Rgba8)
+    });
     if cx.tool == Tool::Eraser && target.is_none() {
         return Press::answers(vec![Effect::Notice(Notice::EraserNeedsRaster)]);
     }
@@ -45,7 +45,7 @@ pub(crate) fn press(cx: &Context, sample: Sample) -> Press {
 }
 
 /// A brush stroke through page points, onto `target` or, for the draw tool
-/// with none, a new raster.
+/// and the remove tool with none, a new raster.
 pub(crate) struct Stroke {
     tool: Tool,
     points: Vec<Point>,
@@ -68,19 +68,33 @@ impl Stroke {
         Vec::new()
     }
 
-    /// The remove tool's inpaint request, or the draw tool's or the eraser's
-    /// edit.
+    /// The remove tool's inpaint request, with the raster it adds when it has
+    /// none, or the draw tool's or the eraser's edit.
     pub fn finish(self, cx: &Context) -> anyhow::Result<Vec<Effect>> {
         let page = cx.snapshot.page().id;
         let Some((rect, coverage)) = coverage(&self.outline, cx.snapshot.size()) else {
             return Ok(Vec::new());
         };
         if self.tool == Tool::Remove {
-            return Ok(vec![Effect::Inpaint {
+            let mut effects = Vec::new();
+            let layer = self.target.unwrap_or_else(|| {
+                // Added at once, so a stroke made while this one is redrawn
+                // goes onto it too.
+                let (id, add) = added(cx.snapshot.page(), Content::Raster(Raster::default()));
+                let edit = Edit {
+                    label: "add_layer".to_owned(),
+                    ops: vec![add],
+                };
+                effects = vec![Effect::Edit(edit), Effect::Selection(vec![id])];
+                id
+            });
+            effects.push(Effect::Inpaint {
                 page,
+                layer,
                 rect,
                 mask: coverage,
-            }]);
+            });
+            return Ok(effects);
         }
         self.stroked(cx, rect, &coverage)
     }

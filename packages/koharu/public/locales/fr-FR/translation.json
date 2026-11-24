@@ -138,6 +138,7 @@
     "close": "Fermer l’historique",
     "opened": "À l’ouverture",
     "steps": {
+      "add_layer": "Nouveau calque",
       "add_text": "Ajouter du texte",
       "delete_layers": "Supprimer des calques",
       "delete_pages": "Supprimer des pages",

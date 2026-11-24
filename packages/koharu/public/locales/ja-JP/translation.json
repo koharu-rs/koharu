@@ -138,6 +138,7 @@
     "close": "ヒストリーを閉じる",
     "opened": "開いた状態",
     "steps": {
+      "add_layer": "新規レイヤー",
       "add_text": "テキストを追加",
       "delete_layers": "レイヤーを削除",
       "delete_pages": "ページを削除",

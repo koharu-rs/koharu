@@ -44,7 +44,7 @@ pointer hits is what the user sees.
 | marquee, lasso | mark a rectangle, or a freehand shape closed as the pointer lifts, of the page's pixels as the area | the Rectangular Marquee [Photoshop marquee] and the Lasso, which closes its border on release [Photoshop lasso] |
 | text | types point text from a click and a text box over a drag, added when typing commits; a click on a text types into it at the click, as a double click with the select tool does | Photoshop's point type starts at the point you select on the canvas, and its paragraph type sits inside a bounding box [Photoshop type] |
 | draw, eraser | paint and erase a raster's or a block's clean-up's pixels along a stroke; on a block's mask, the draw tool uncovers the clean-up whatever its colour, and the eraser hides it | a layer mask is drawn on an alpha scale: the eraser masks more, and any colour uncovers more [CSP layer masks] |
-| remove | paints the area for the inpainting model to redraw, as the pipeline's area run takes it | |
+| remove | paints the area for the inpainting model to redraw, as the pipeline's area run takes it, onto the selected raster or clean-up, or a raster it adds and selects | |
 | colour picker | the page's own pixel under the pointer, not the screen's | |
 | pan | drags the view; the wheel and a pinch move and zoom it | |
 

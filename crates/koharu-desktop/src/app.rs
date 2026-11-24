@@ -388,12 +388,18 @@ impl App {
                     .and_then(|mut clipboard| clipboard.get_text())
                     .map(|text| self.screen.insert(text.replace("\r\n", "\n")))
                     .context("the clipboard has no text"),
-                Effect::Inpaint { page, rect, mask } => self
+                Effect::Inpaint {
+                    page,
+                    layer,
+                    rect,
+                    mask,
+                } => self
                     .process(
                         Target::Area {
                             page,
                             area: Area { rect, pixels: mask },
                             prompt: None,
+                            layer: Some(layer),
                         },
                         BTreeSet::from([Stage::Inpaint]),
                         None,

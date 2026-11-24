@@ -653,7 +653,13 @@ fn a_remove_stroke_asks_to_inpaint_what_it_covered() {
     fixture.canvas.set_tool(Tool::Remove);
     fixture.canvas.set_brush(brush(8.0, [0.0, 0.0, 0.0, 1.0]));
     let effects = gesture(&mut fixture.canvas, (20.0, 20.0), (40.0, 20.0));
-    let [Effect::Inpaint { page, rect, mask }] = &effects[..] else {
+    let Some(Effect::Inpaint {
+        page,
+        layer,
+        rect,
+        mask,
+    }) = effects.last()
+    else {
         panic!("{effects:?}");
     };
     assert_eq!(*page, fixture.page);
@@ -661,6 +667,39 @@ fn a_remove_stroke_asks_to_inpaint_what_it_covered() {
     assert!(rect.x + rect.width as i32 >= 44 && rect.y + rect.height as i32 >= 24);
     let at = ((20 - rect.y) * rect.width as i32 + (30 - rect.x)) as usize;
     assert_eq!(mask[at], 255);
+
+    // Onto a raster it adds and selects, which the next stroke goes onto.
+    let layer = *layer;
+    assert_eq!(apply(&mut fixture, effects), ["add_layer"]);
+    assert_eq!(layers(&fixture), [layer]);
+    assert_eq!(fixture.canvas.selection(), [layer]);
+    let effects = gesture(&mut fixture.canvas, (60.0, 60.0), (70.0, 60.0));
+    assert!(matches!(effects[..], [Effect::Inpaint { layer: next, .. }] if next == layer));
+}
+
+/// The remove tool paints a selected clean-up, and no mask.
+#[test]
+fn a_remove_stroke_goes_onto_the_selected_cleanup() {
+    let Some((mut fixture, block, cleanup)) = painted_cleanup() else {
+        return;
+    };
+    let mask: LayerId =
+        serde_json::from_value(layer(&fixture, block)["mask"]["id"].clone()).expect("a mask");
+    fixture.canvas.set_tool(Tool::Remove);
+    fixture.canvas.set_brush(brush(8.0, [0.0, 0.0, 0.0, 1.0]));
+    fixture.canvas.select(vec![cleanup]);
+    let effects = gesture(&mut fixture.canvas, (40.0, 40.0), (60.0, 40.0));
+    assert!(matches!(effects[..], [Effect::Inpaint { layer, .. }] if layer == cleanup));
+    fixture.canvas.select(vec![mask]);
+    let effects = gesture(&mut fixture.canvas, (40.0, 40.0), (60.0, 40.0));
+    assert!(matches!(
+        effects[..],
+        [
+            Effect::Edit(_),
+            Effect::Selection(_),
+            Effect::Inpaint { .. }
+        ]
+    ));
 }
 
 #[test]

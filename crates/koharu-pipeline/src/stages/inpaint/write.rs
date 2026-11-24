@@ -1,9 +1,10 @@
 //! The ops a run writes: each block's clean-up, or the area's raster and its
-//! mask, with the C2PA action recording what made them.
+//! mask, or the area of the layer it goes onto, with the C2PA action recording
+//! what made them.
 
 use anyhow::Result;
-use image::{DynamicImage, RgbImage, imageops};
-use koharu_scene::{Op, PageId, Project, Rect, Ref, Tile};
+use image::{DynamicImage, GrayImage, RgbImage, imageops};
+use koharu_scene::{LayerId, Op, PageId, Project, Rect, Ref, Session, Tile};
 use serde_json::{Value, json};
 
 use super::{
@@ -12,12 +13,13 @@ use super::{
 };
 use crate::stages::{action, writable};
 
-/// The ops for `work`; `made` is the model's action, `name` the area's layer
-/// name.
+/// The ops for `work`; an area's goes onto layer `to`, or a new one named
+/// `name`, and `made` is the model's action.
 pub(super) fn ops(
-    project: &Project,
+    session: &Session,
     page: PageId,
     work: Work,
+    to: Option<LayerId>,
     made: &Value,
     name: &str,
 ) -> Result<Vec<Op>> {
@@ -27,6 +29,7 @@ pub(super) fn ops(
         windows,
         ..
     } = work;
+    let project = &session.project();
     match target {
         Target::Blocks(cleanups) => Ok(cleanups
             .iter()
@@ -34,6 +37,9 @@ pub(super) fn ops(
             .flat_map(|cleanup| cleaned(cleanup, &image, &windows, made))
             .collect()),
         Target::Area { rect, mask } => {
+            if let Some(layer) = to {
+                return onto(session, page, layer, (rect, &mask), &image, made);
+            }
             // An area is one region, so an edit model drew it in one window.
             let drawn = match windows.as_slice() {
                 [(window, drawn)] => (window.rect, opaque(drawn)),
@@ -136,6 +142,60 @@ fn pixels(cleanup: &Cleanup, image: &RgbImage, windows: &[(Window, RgbImage)]) -
     }
 }
 
+/// The ops laying `image` on `layer` in an area, and opening a clean-up's mask
+/// there; none when it was removed meanwhile.
+fn onto(
+    session: &Session,
+    page: PageId,
+    layer: LayerId,
+    (rect, area): (Rect, &GrayImage),
+    image: &RgbImage,
+    made: &Value,
+) -> Result<Vec<Op>> {
+    if session.tiles(layer, Some(rect)).is_err() {
+        return Ok(Vec::new());
+    }
+    let project = session.project();
+    let blocks = project.blocks(page)?;
+    let block = blocks.iter().find(|(_, block)| block.cleanup.id == layer);
+    let drawn = rgba(image, rect, |_, _| 255);
+    let mut ops = vec![laid(session, layer, rect, area, &drawn)?];
+    if let Some((_, block)) = block {
+        ops.push(laid(session, block.mask.id, rect, area, area)?);
+    }
+    ops.push(Op::SetAttribute {
+        layer: block.map_or(layer, |(id, _)| *id).into(),
+        namespace: "c2pa".to_owned(),
+        key: "inpainting".to_owned(),
+        value: Some(made.clone()),
+    });
+    Ok(ops)
+}
+
+/// The op giving `layer` the pixels `new` over `rect` of the page, in its own
+/// format, where `mask` is set.
+fn laid(session: &Session, layer: LayerId, rect: Rect, mask: &GrayImage, new: &[u8]) -> Result<Op> {
+    let bytes = new.len() / mask.len();
+    let offset = session.tiles(layer, Some(rect))?.offset;
+    let own = Rect {
+        x: rect.x - offset.x,
+        y: rect.y - offset.y,
+        ..rect
+    };
+    let mut pixels = session.pixels(layer, own)?;
+    let new = new.chunks_exact(bytes).zip(mask.pixels());
+    for (pixel, (new, set)) in pixels.chunks_exact_mut(bytes).zip(new) {
+        if set.0[0] != 0 {
+            pixel.copy_from_slice(new);
+        }
+    }
+    Ok(Op::WritePixels {
+        layer: layer.into(),
+        rect: own,
+        pixels,
+    })
+}
+
 /// The area's new raster, named after its prompt, on top of the page, with
 /// `drawn` as its pixels and `limit`, the area, as its mask.
 fn layer(
@@ -198,4 +258,74 @@ fn rgba(image: &RgbImage, rect: Rect, alpha: impl Fn(u32, u32) -> u8) -> Vec<u8>
             [r, g, b, alpha(x, y)]
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use image::{GrayImage, Luma, Rgb};
+    use koharu_scene::{Edit, Session};
+
+    use super::*;
+
+    /// A raster and a clean-up take an area's result in the area only, each
+    /// in its own coordinates, and the clean-up's mask opens there.
+    #[test]
+    fn an_area_goes_onto_the_layer_it_names() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let change = session.apply(Edit {
+            label: "test".to_owned(),
+            ops: serde_json::from_value(json!([
+                {"op": "add_page", "id": "$p", "index": 0, "size": {"width": 64, "height": 64}},
+                {"op": "add_layer", "page": "$p", "index": 0,
+                    "layer": {"kind": "raster", "offset": {"x": 10, "y": 10}}},
+                {"op": "add_layer", "page": "$p", "index": 1,
+                    "layer": {"kind": "block", "source": {}}},
+            ]))?,
+        })?;
+        let page = change.pages.added[0];
+        let project = session.project();
+        let raster = project.layers_of(page)?[0].id;
+        let block = project.blocks(page)?[0].1;
+        let rect = Rect {
+            x: 20,
+            y: 20,
+            width: 4,
+            height: 2,
+        };
+        // All of it but its first pixel.
+        let mut area = GrayImage::from_pixel(4, 2, Luma([255]));
+        area.put_pixel(0, 0, Luma([0]));
+        for layer in [raster, block.cleanup.id] {
+            let work = Work {
+                image: RgbImage::from_pixel(64, 64, Rgb([0, 0, 255])),
+                mask: GrayImage::new(64, 64),
+                regions: Vec::new(),
+                target: Target::Area {
+                    rect,
+                    mask: area.clone(),
+                },
+                windows: Vec::new(),
+            };
+            let ops = ops(&session, page, work, Some(layer), &json!({}), "")?;
+            session.apply(Edit {
+                label: "inpaint".to_owned(),
+                ops,
+            })?;
+        }
+        let first = |layer, x| {
+            let two = Rect {
+                x,
+                y: x,
+                width: 2,
+                height: 1,
+            };
+            session.pixels(layer, two)
+        };
+        assert_eq!(first(raster, 10)?, [0, 0, 0, 0, 0, 0, 255, 255]);
+        assert_eq!(first(block.cleanup.id, 20)?, [0, 0, 0, 0, 0, 0, 255, 255]);
+        assert_eq!(first(block.mask.id, 20)?, [0, 255]);
+        assert_eq!(session.project().layers_of(page)?.len(), 2);
+        Ok(())
+    }
 }

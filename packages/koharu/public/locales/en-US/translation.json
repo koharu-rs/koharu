@@ -138,6 +138,7 @@
     "close": "Close history",
     "opened": "Opened",
     "steps": {
+      "add_layer": "New layer",
       "add_text": "Add text",
       "delete_layers": "Delete layers",
       "delete_pages": "Delete pages",

@@ -93,8 +93,9 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
     })
     .await?;
     member
-        .apply(Stage::Detect, move |project| {
-            ops(project, page, &layout, &typography, masks, &name)
+        .apply(Stage::Detect, move |session| {
+            let project = session.project();
+            ops(&project, page, &layout, &typography, masks, &name)
         })
         .await
 }

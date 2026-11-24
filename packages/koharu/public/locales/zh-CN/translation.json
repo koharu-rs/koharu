@@ -138,6 +138,7 @@
     "close": "关闭历史记录",
     "opened": "打开时",
     "steps": {
+      "add_layer": "新建图层",
       "add_text": "添加文字",
       "delete_layers": "删除图层",
       "delete_pages": "删除页面",

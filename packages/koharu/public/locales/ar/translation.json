@@ -138,6 +138,7 @@
     "close": "إغلاق السجل",
     "opened": "عند الفتح",
     "steps": {
+      "add_layer": "طبقة جديدة",
       "add_text": "إضافة نص",
       "delete_layers": "حذف الطبقات",
       "delete_pages": "حذف الصفحات",

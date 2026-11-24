@@ -138,6 +138,7 @@
     "close": "关脱历史记录",
     "opened": "打开辰光",
     "steps": {
+      "add_layer": "新建图层",
       "add_text": "加文字",
       "delete_layers": "删脱图层",
       "delete_pages": "删脱页面",

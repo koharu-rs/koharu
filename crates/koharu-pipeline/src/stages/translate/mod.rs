@@ -170,8 +170,8 @@ pub(crate) async fn translate(
         .map(|((block, source), text)| (block, source, text))
         .collect();
     member
-        .apply(Stage::Translate, move |project| {
-            written(project, translated, &translator)
+        .apply(Stage::Translate, move |session| {
+            written(&session.project(), translated, &translator)
         })
         .await
 }
