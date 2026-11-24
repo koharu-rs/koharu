@@ -105,8 +105,8 @@ pub enum Op {
     RemoveLayer { layer: Ref },
     /// Change a layer's values with a JSON Merge Patch (RFC 7396): `null`
     /// clears an optional value, and `{"translation": null}` removes a
-    /// block's translation. A frame of another kind replaces the old one, and
-    /// a patch into a missing translation merges into the one `set_text` adds.
+    /// block's translation. A patch into a missing one merges into the one
+    /// `set_text` adds.
     UpdateLayer {
         layer: Ref,
         #[schemars(schema_with = "schema::layer_patch")]

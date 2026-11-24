@@ -51,9 +51,7 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
             let [[a, _, _], [d, _, _]] = this.source.transform.0;
             let turn = Affine::rotate_about(d.atan2(a), room.bounding_box().center());
             (
-                // A source reshaped by hand has no inset, which the translation
-                // would keep.
-                json!({"path": {"path": (turn.inverse() * room).to_svg(), "fit": "best", "anchor": "center", "inset": Frame::DEFAULT_INSET}}),
+                json!({"path": {"path": (turn.inverse() * room).to_svg(), "fit": "best", "anchor": "center", "inset": Frame::DEFAULT_INSET}, "box": null}),
                 json!(Transform::from(turn)),
             )
         }
@@ -148,10 +146,11 @@ fn filled(frame: &Frame) -> Value {
     match frame {
         Frame::Point => json!("point"),
         Frame::Box { bounds, .. } => {
-            json!({"box": {"bounds": bounds, "fit": "best", "anchor": "center"}})
+            json!({"box": {"bounds": bounds, "fit": "best", "anchor": "center"}, "path": null})
         }
         Frame::Path { path, inset, .. } => json!({
             "path": {"path": path, "fit": "best", "anchor": "center", "inset": inset},
+            "box": null,
         }),
     }
 }

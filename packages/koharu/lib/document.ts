@@ -1,4 +1,4 @@
-import type { Frame, Layer, LayerId, Text } from '@koharu/ipc/protocol'
+import type { Layer, LayerId, Text } from '@koharu/ipc/protocol'
 
 export type TextLayer = Extract<Layer, { kind: 'text' }>
 export type BlockLayer = Extract<Layer, { kind: 'block' }>
@@ -22,17 +22,12 @@ export function isContainer(layer: Layer): boolean {
   return layer.kind === 'group' || layer.kind === 'panel' || layer.kind === 'balloon'
 }
 
-/** The lettering a layer draws: a text's own, or a block's translation. */
+/** The lettering a layer draws: a text's own, or a block's translation, which starts as its source
+ * without the words. */
 export function letteringOf(layer: Layer): Text | null {
   if (isTextLayer(layer)) return layer
-  if (isBlockLayer(layer)) return layer.translation ?? null
+  if (isBlockLayer(layer)) return layer.translation ?? { ...layer.source, content: [] }
   return null
-}
-
-/** The frame a layer's lettering lies in: its own, or its source's, where a block's translation
- * starts. */
-export function frameOf(layer: Layer): Frame | undefined {
-  return (letteringOf(layer) ?? (isBlockLayer(layer) ? layer.source : null))?.frame
 }
 
 /** Every layer of `layers` and their children, parents first, in drawing order. */

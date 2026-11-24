@@ -13,15 +13,7 @@ import {
   type Value,
 } from '@koharu/ipc/protocol'
 
-import {
-  findPart,
-  frameOf,
-  isBlockLayer,
-  isTextLayer,
-  letteringOf,
-  type Move,
-  type Part,
-} from './document'
+import { findPart, isBlockLayer, isTextLayer, letteringOf, type Move, type Part } from './document'
 
 /** The panels' edits, each one undo step through the scene's own `edit`, labelled by a key the
  * History panel translates. */
@@ -124,14 +116,14 @@ export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
   )
 }
 
-/** Sets the fit of each layer's own frame, a box or a path: a text's, or a block's translation's,
- * started in its source's when it has none. Point text has no frame to fit, and a growing box
- * draws its text at the set size already, so `none` leaves it growing. */
+/** Sets the fit of each layer's own frame, a box or a path: a text's, or a block's translation's.
+ * Point text has no frame to fit, and a growing box draws its text at the set size already, so
+ * `none` leaves it growing. */
 export function setFit(layers: Layer[], fit: PathFit): Promise<Change> {
   return edit(
     'update_layer',
     layers.flatMap((layer): Op[] => {
-      const frame = frameOf(layer)
+      const frame = letteringOf(layer)?.frame
       if (typeof frame !== 'object' || (fit === 'none' && frame.box?.fit === 'grow')) return []
       const patch = { frame: { [frame.box ? 'box' : 'path']: { fit } } }
       return [

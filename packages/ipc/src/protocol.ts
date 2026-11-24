@@ -351,8 +351,8 @@ export type FontFamily = {
 }
 
 /**
- *  Where a text lays out. Externally tagged, and a patch naming another variant
- *  replaces the old one: `{"frame": {"path": {...}}}` over a box.
+ *  Where a text lays out. Externally tagged, so a merge patch switches
+ *  variants by clearing the old one: `{"frame": {"path": {...}, "box": null}}`.
  */
 export type Frame =
   /**  Point text: the line grows as it is typed. */
@@ -608,8 +608,8 @@ export type Op =
   /**
    *  Change a layer's values with a JSON Merge Patch (RFC 7396): `null`
    *  clears an optional value, and `{"translation": null}` removes a
-   *  block's translation. A frame of another kind replaces the old one, and
-   *  a patch into a missing translation merges into the one `set_text` adds.
+   *  block's translation. A patch into a missing one merges into the one
+   *  `set_text` adds.
    */
   | { op: 'update_layer'; layer: Ref; patch: Value }
   /**

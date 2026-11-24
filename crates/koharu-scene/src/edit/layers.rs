@@ -204,8 +204,6 @@ impl Run<'_, '_> {
     /// result back, so a misspelt field or a value of the wrong shape fails
     /// and nothing changes. A patch into a block's missing translation, such
     /// as a style set before any words, merges into the one a text op adds.
-    /// A frame is one kind, so a patch naming another replaces it, where a
-    /// merge alone would leave both.
     pub(super) fn update_layer(&mut self, op: usize, layer: &Ref, patch: &Value) -> Result<()> {
         let place = self.place(layer)?;
         let old = self.get(&place).own();
@@ -237,16 +235,6 @@ impl Run<'_, '_> {
                 .get_or_insert_with(|| block.source.blank());
         }
         let mut json = serde_json::to_value(&base).expect("layers serialize");
-        for frame in ["/frame", "/source/frame", "/translation/frame"] {
-            if let (Some(Value::Object(old)), Some(Value::Object(new))) =
-                (json.pointer_mut(frame), patch.pointer(frame))
-                && new
-                    .iter()
-                    .any(|(kind, value)| !value.is_null() && !old.contains_key(kind))
-            {
-                old.clear();
-            }
-        }
         json_patch::merge(&mut json, patch);
         let new: Layer =
             serde_json::from_value(json).map_err(|error| Error::invalid(op, error.to_string()))?;
