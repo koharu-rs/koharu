@@ -78,7 +78,11 @@ impl Typing {
                 "c" => Keyed::Taken(self.copied()),
                 "x" => {
                     let copied = self.copied();
-                    self.delete(false, false)?;
+                    // A caret has nothing to cut; `delete` there would take
+                    // the grapheme before it.
+                    if !copied.is_empty() {
+                        self.delete(false, false)?;
+                    }
                     Keyed::Taken(copied)
                 }
                 "v" => Keyed::Taken(vec![Effect::Paste]),
