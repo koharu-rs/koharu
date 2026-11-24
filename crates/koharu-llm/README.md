@@ -60,7 +60,7 @@ fails at once, as the cut answer would leave the next less room.
 | prompts | the model's own chat template from its GGUF, rendered as llama.cpp renders it with its Jinja engine | |
 | decoding | one thread owns the model, and its sequences decode together | llama.cpp's parallel decoding [llama.cpp parallel] |
 | reuse | a request reuses the longest prefix any sequence holds, at least 64 tokens; a recurrent model keeps a checkpoint of its state short of each prompt's end to go back to, with the same answer as decoding the whole prompt again | |
-| reasoning and tool calls | read from the reply as it streams, by markers its template writes; a reply held to a schema may reason first, where its prompt left reasoning open or by opening it at its start, and the grammar holds the rest, so markers in the answer are text | llama.cpp's Gemma 4 grammar: an optional thought, then the schema [llama.cpp Gemma 4] |
+| reasoning and tool calls | read from the reply as it streams, by markers its template writes; a reply held to a schema may reason first, where its prompt left reasoning open or by opening it at its start, and the grammar holds the rest, so markers in the answer are text; a call the token limit cut off never runs | llama.cpp's Gemma 4 grammar: an optional thought, then the schema [llama.cpp Gemma 4] |
 
 ## 4. Context
 

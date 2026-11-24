@@ -68,6 +68,8 @@ pub(crate) enum Item {
     Text(String),
     Reasoning(String),
     Call(Call),
+    /// A call the reply ended in the middle of.
+    Unfinished(Call),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -243,7 +245,7 @@ impl Parser {
             }
             None if end => {
                 if !self.held.trim().is_empty() {
-                    items.push((call.parse)(&self.held, &self.tools).map(Item::Call));
+                    items.push((call.parse)(&self.held, &self.tools).map(Item::Unfinished));
                 }
                 self.held.clear();
                 true
@@ -529,7 +531,7 @@ mod tests {
         );
         assert_eq!(
             items,
-            [Item::Call(Call {
+            [Item::Unfinished(Call {
                 name: "get_page".to_owned(),
                 arguments: "<parameter=page>3".to_owned(),
             })]

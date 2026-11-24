@@ -291,7 +291,11 @@ pub(crate) async fn load(loading: Loading, size: Size) -> Result<DynModel<Comple
             markup,
             facts: ModelFacts::new(spec),
         };
-        Ok(Model::new(wire, Queue(jobs)).erase())
+        // A reply says nothing while its prompt decodes or it writes a call,
+        // which can take longer than rig waits for a stream's next part.
+        Ok(Model::new(wire, Queue(jobs))
+            .with_idle_timeout(None)
+            .erase())
     })
     .await?
 }

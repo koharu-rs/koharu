@@ -23,7 +23,7 @@ use serde_json::{Map, Value, json};
 
 use super::{
     Sampling, conversation,
-    markup::{Item, Markup, Parser},
+    markup::{Call, Item, Markup, Parser},
     template::{Rendering, Template},
 };
 use crate::KOHARU;
@@ -121,6 +121,7 @@ impl Wire for Gguf {
     fn decoder<'id>(&self) -> Reply<'id> {
         Reply {
             called: false,
+            open: None,
             id: PhantomData,
         }
     }
@@ -279,6 +280,8 @@ pub(crate) enum Part {
     Call {
         name: String,
         arguments: String,
+        /// Whether the call closed before the reply ended.
+        finished: bool,
     },
     /// The reply ended: at an end-of-generation token, or at its token limit
     /// or the end of its sequence's context.
@@ -294,9 +297,15 @@ impl From<Item> for Part {
         match item {
             Item::Text(text) => Self::Text(text),
             Item::Reasoning(text) => Self::Reasoning(text),
-            Item::Call(call) => Self::Call {
-                name: call.name,
-                arguments: call.arguments,
+            Item::Call(Call { name, arguments }) => Self::Call {
+                name,
+                arguments,
+                finished: true,
+            },
+            Item::Unfinished(Call { name, arguments }) => Self::Call {
+                name,
+                arguments,
+                finished: false,
             },
         }
     }
@@ -305,6 +314,8 @@ impl From<Item> for Part {
 /// The decoder: a reply's parts as rig's blocks, then the end.
 pub(crate) struct Reply<'id> {
     called: bool,
+    /// The call the reply ended in the middle of.
+    open: Option<usize>,
     id: PhantomData<fn(&'id ()) -> &'id ()>,
 }
 
@@ -325,7 +336,11 @@ impl<'id> Decoder<'id, Completion, Part> for Reply<'id> {
                 out.run(Block::Reasoning { redacted: false }, &text)?;
                 Ok(Flow::More)
             }
-            Part::Call { name, arguments } => {
+            Part::Call {
+                name,
+                arguments,
+                finished,
+            } => {
                 out.end_run()?;
                 let block = Block::Call {
                     // These models write no ids.
@@ -337,7 +352,13 @@ impl<'id> Decoder<'id, Completion, Part> for Reply<'id> {
                 let index = out.fresh_index();
                 // rig reads arguments that aren't JSON as a malformed call and
                 // answers it, so they don't end the reply.
-                out.whole(index, block, Value::Null, &arguments)?;
+                out.open(index, block, Value::Null)?;
+                out.push(index, &arguments)?;
+                if finished {
+                    out.finish(index)?;
+                } else {
+                    self.open = Some(index);
+                }
                 self.called = true;
                 Ok(Flow::More)
             }
@@ -347,6 +368,13 @@ impl<'id> Decoder<'id, Completion, Part> for Reply<'id> {
                 output_tokens,
             } => {
                 out.end_run()?;
+                // A call the token limit cut stays open, so rig doesn't run it.
+                // One the model left unclosed itself is as it meant it.
+                if let Some(index) = self.open.take()
+                    && !length
+                {
+                    out.finish(index)?;
+                }
                 let mut usage = Usage::default();
                 usage.input_tokens = Some(prompt_tokens);
                 usage.output_tokens = Some(output_tokens);
@@ -382,7 +410,9 @@ impl Reassemble<Part> for Document {
         match part {
             Part::Text(text) => self.text.push_str(text),
             Part::Reasoning(text) => self.reasoning.push_str(text),
-            Part::Call { name, arguments } => {
+            Part::Call {
+                name, arguments, ..
+            } => {
                 self.calls
                     .push(json!({"name": name, "arguments": arguments}));
             }
@@ -413,7 +443,10 @@ impl Reassemble<Part> for Document {
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
-    use rig_core::completion::{AssistantContent, Message};
+    use rig_core::{
+        completion::{AssistantContent, Message},
+        message::StopReason,
+    };
     use serde_json::json;
 
     use super::*;
@@ -485,6 +518,21 @@ mod tests {
             _ => None,
         });
         assert!(call.unwrap().function.invalid_arguments.is_some());
+    }
+
+    /// A model can end its reply without closing its call, and rig fails a
+    /// reply with a call left open that its token limit didn't cut.
+    #[tokio::test]
+    async fn a_call_the_model_leaves_unclosed_is_a_call() {
+        let script = scripted(
+            Some(&FUNCTION_TAGS),
+            4096,
+            vec![Ok(
+                "<tool_call><function=get_page><parameter=page>3</parameter></function>",
+            )],
+        );
+        let reply = script.model.call(with_tools()).await.unwrap();
+        assert!(matches!(reply.stop(), StopReason::ToolUse));
     }
 
     #[tokio::test]
