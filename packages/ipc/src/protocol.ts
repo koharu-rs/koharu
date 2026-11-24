@@ -19,6 +19,12 @@ export function setRunner(next: Runner): void {
   runner = next
 }
 
+/**  An account signed in to a site. */
+export type Account = {
+  /**  `None` when the site doesn't say it. */
+  name: string | null
+}
+
 /**
  *  `[agent]`: the agent's model, how much it reasons, and how long a run
  *  goes.
@@ -1185,9 +1191,9 @@ export const commands = {
     runner('sign_in_site', (options) => invoke<null>('sign_in_site', { site }, options)),
   signOutSite: (site: string) =>
     runner('sign_out_site', (options) => invoke<null>('sign_out_site', { site }, options)),
-  /** The name of the account signed in to the site `site`, `None` when no one is. */
+  /** The account signed in to the site `site`, `None` when no one is. */
   getAccount: (site: string) =>
-    runner('get_account', (options) => invoke<string | null>('get_account', { site }, options)),
+    runner('get_account', (options) => invoke<Account | null>('get_account', { site }, options)),
   /** Opens the chapter at `url` as the open project, and loads its pages into it, which `chapter` tells how far it went with; says how it reads. */
   readChapter: (url: string) =>
     runner('read_chapter', (options) => invoke<Reading>('read_chapter', { url }, options)),

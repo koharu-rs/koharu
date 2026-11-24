@@ -5521,16 +5521,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "json5"
-version = "1.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c1d229cedc4e210dd2e2a6cdc59e36ce28e7338fb69367d0d2566e26de7d599"
-dependencies = [
- "serde",
- "ucd-trie",
-]
-
-[[package]]
 name = "jsonptr"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5826,7 +5816,7 @@ dependencies = [
 [[package]]
 name = "koharu-extensions"
 version = "0.1.0"
-source = "git+https://github.com/koharu-rs/extensions?rev=814d90444b6ffa0b3afa1f78366a281b8383400f#814d90444b6ffa0b3afa1f78366a281b8383400f"
+source = "git+https://github.com/koharu-rs/extensions?rev=f5bb72d340c19c852d72a2598ab574cce8d6162f#f5bb72d340c19c852d72a2598ab574cce8d6162f"
 dependencies = [
  "aes-gcm 0.11.1",
  "anyhow",
@@ -5835,7 +5825,6 @@ dependencies = [
  "futures",
  "hex",
  "image",
- "json5",
  "pbkdf2 0.13.0",
  "rand_xoshiro",
  "reqwest",
@@ -12312,12 +12301,6 @@ name = "typewit"
 version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "214ca0b2191785cbc06209b9ca1861e048e39b5ba33574b3cedd58363d5bb5f6"
-
-[[package]]
-name = "ucd-trie"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f20bdbfc9915686faa18fb5bbe8b4552778505defbf9f12289beefbc44092a6"
 
 [[package]]
 name = "uds"

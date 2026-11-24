@@ -68,11 +68,11 @@ function SiteRow({ site }: { site: Site }) {
           <LoaderCircle className='size-3.5 animate-spin text-muted-foreground' />
         ) : (
           <>
-            {account.data && (
+            {account.data?.name && (
               <span className='flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground'>
                 <CircleCheck className='size-3.5 shrink-0 text-primary' />
-                <span className='truncate' title={account.data}>
-                  {t('settings.gallery.signedIn', { name: account.data })}
+                <span className='truncate' title={account.data.name}>
+                  {t('settings.gallery.signedIn', { name: account.data.name })}
                 </span>
               </span>
             )}

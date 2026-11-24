@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::Context as _;
-use koharu_extensions::{Catalog, EXTENSIONS, Extension, Listing, Series};
+use koharu_extensions::{Account, Catalog, EXTENSIONS, Extension, Listing, Series};
 use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
@@ -138,11 +138,13 @@ pub async fn sign_in_site(handle: AppHandle<CefRuntime>, site: String) -> Result
     Ok(())
 }
 
-/// The name of the account signed in to the site `site`, `None` when no one
-/// is.
+/// The account signed in to the site `site`, `None` when no one is.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_account(http: State<'_, reqwest::Client>, site: String) -> Result<Option<String>> {
+pub async fn get_account(
+    http: State<'_, reqwest::Client>,
+    site: String,
+) -> Result<Option<Account>> {
     Ok(extension(&site)?.account(&http).await?)
 }
 
