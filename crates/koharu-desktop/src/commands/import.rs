@@ -48,7 +48,7 @@ const EXTENSIONS: [&str; 9] = [
 /// PDF points to pixels at 300 DPI, which keeps fine lettering and line art.
 /// An A4 page is about 33 MiB of RGBA at this scale; each thread renders one
 /// page at a time, so its buffer goes before the thread's next.
-const PDF_SCALE: f32 = 300.0 / 72.0;
+pub(super) const PDF_SCALE: f32 = 300.0 / 72.0;
 
 /// The files an OS leaves in a folder it archives, which aren't pages:
 /// macOS's resource forks and Finder settings, and Windows's thumbnail cache

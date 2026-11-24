@@ -92,6 +92,7 @@ json-patch = { version = "5.0.0", default-features = false }
 jsonptr = "0.8.2"
 keyring = "4.2.0"
 koharu-extensions = { git = "https://github.com/koharu-rs/extensions", rev = "814d90444b6ffa0b3afa1f78366a281b8383400f" }
+krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
 kurbo = "0.13.1"
 libloading = "0.9.0"
 llguidance = "1.9.1"

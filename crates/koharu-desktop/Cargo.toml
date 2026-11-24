@@ -35,6 +35,7 @@ koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-sentry = { workspace = true }
+krilla = { workspace = true }
 kurbo = { workspace = true }
 parking_lot = { workspace = true }
 rars = { workspace = true }

@@ -1,10 +1,10 @@
 ---
-title: 'Export PNG, PSD, and CBZ'
-description: 'Export every page as flattened images, layered documents, or a comic archive.'
+title: 'Export PNG, PSD, CBZ, and PDF'
+description: 'Export every page, or the selected ones, as flattened images, layered documents, a comic archive, or a PDF.'
 icon: 'file-export'
 ---
 
-Review the pages before choosing **File → Export Project**. Export always writes every page of the project, in project order.
+Review the pages before exporting. **File → Export Project** writes every page of the project, and **File → Export Selected Pages** writes only the pages selected in the page list with `Ctrl`, `Command`, or `Shift`. Both write them in project order.
 
 <Steps>
   <Step title="Choose a format">
@@ -18,17 +18,22 @@ Review the pages before choosing **File → Export Project**. Export always writ
       <Tab title="CBZ">
         One comic archive of the flattened PNG pages, for readers that open CBZ files.
       </Tab>
+      <Tab title="PDF">
+        One document with a flattened image per page, without loss, at 300 DPI. Its text is part of the image, so it cannot be selected or searched.
+      </Tab>
     </Tabs>
   </Step>
   <Step title="Choose a destination">
-    For PNG and PSD, select a folder in the native dialog. Files are numbered in page order with at least three digits:
+    For PNG and PSD, select a folder in the native dialog. Files are numbered by the page's place in the project, with at least three digits:
 
     ```text
     001.png
     002.png
     ```
 
-    For CBZ, choose where to save the archive; it is named after the project by default, and its pages are numbered the same way. Existing files with the same names are overwritten.
+    A selected page keeps the number it has in the project, so exporting it again replaces its own file.
+
+    For CBZ and PDF, choose where to save the file; it is named after the project by default. A CBZ's pages are numbered the same way. Existing files with the same names are overwritten.
 
   </Step>
 </Steps>
@@ -40,6 +45,6 @@ Review the pages before choosing **File → Export Project**. Export always writ
 
 ## Check consistency
 
-The canvas, PNG, CBZ, and PSD all draw through the same renderer. If they differ, report the page, format, and images through [troubleshooting](/reference/troubleshooting).
+The canvas, PNG, CBZ, PDF, and PSD all draw through the same renderer. If they differ, report the page, format, and images through [troubleshooting](/reference/troubleshooting).
 
 There is no separate “inpainted image only” export.

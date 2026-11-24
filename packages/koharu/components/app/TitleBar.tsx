@@ -1,6 +1,7 @@
 'use client'
 
 import * as Sentry from '@sentry/nextjs'
+import { useIsMutating } from '@tanstack/react-query'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { BookOpen, FilePlus2, FolderOpen, LoaderCircle, PenLine } from 'lucide-react'
 import Image from 'next/image'
@@ -13,7 +14,7 @@ import { send, useCommand, useImportPages, usePage, useProject } from '@/lib/que
 import { deleteSelection } from '@/lib/scene'
 import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
 import { useKoharuStore } from '@/lib/store'
-import { commands } from '@koharu/ipc/protocol'
+import { commands, type PageId } from '@koharu/ipc/protocol'
 import {
   Menubar,
   MenubarCheckboxItem,
@@ -44,22 +45,14 @@ export function TitleBar() {
   const setHistoryOpen = useKoharuStore((state) => state.setHistoryOpen)
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
+  const selectedPages = useKoharuStore((state) => state.selectedPages)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const settingsOpen = useKoharuStore((state) => state.settingsOpen)
   const reading = useKoharuStore((state) => state.reading)
   const setReading = useKoharuStore((state) => state.setReading)
   const { importPages, importing } = useImportPages()
-  const { run: exportProject, busy: exporting } = useCommand(
-    ['export-project'],
-    commands.export,
-    'menu.export',
-  )
-
-  const psdLabels = {
-    background: t('psd.background'),
-    cleanup: t('psd.cleanup'),
-    outline: t('psd.outline'),
-  }
+  // The selection keeps a page an undo or an agent took away.
+  const exportable = pages.map(({ id }) => id).filter((id) => selectedPages.includes(id))
 
   /** Sentry's feedback form, in the interface's language; it leaves the page when it closes. */
   const sendFeedback = async () => {
@@ -137,26 +130,12 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
-              <MenubarSub>
-                <MenubarSubTrigger
-                  disabled={!project || pages.length === 0 || exporting}
-                  aria-busy={exporting}
-                >
-                  {exporting && <LoaderCircle className='animate-spin' aria-hidden='true' />}
-                  {t('menu.export')}
-                </MenubarSubTrigger>
-                <MenubarSubContent>
-                  {(['png', 'psd', 'cbz'] as const).map((format) => (
-                    <MenubarItem
-                      key={format}
-                      disabled={exporting}
-                      onClick={() => exportProject(format, psdLabels)}
-                    >
-                      {format.toUpperCase()}…
-                    </MenubarItem>
-                  ))}
-                </MenubarSubContent>
-              </MenubarSub>
+              <ExportMenu label='menu.export' pages={null} disabled={pages.length === 0} />
+              <ExportMenu
+                label='menu.exportSelected'
+                pages={exportable}
+                disabled={exportable.length === 0}
+              />
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={() => send(commands.close)}>
                 {t('menu.closeProject')}
@@ -302,6 +281,46 @@ export function TitleBar() {
       </header>
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
+  )
+}
+
+/** The formats the pages go out in, all of them when `pages` is null. One export runs at a time. */
+function ExportMenu({
+  label,
+  pages,
+  disabled,
+}: {
+  label: 'menu.export' | 'menu.exportSelected'
+  pages: PageId[] | null
+  disabled: boolean
+}) {
+  const { t } = useTranslation()
+  const { run, busy } = useCommand(['export', label], commands.export, label)
+  const exporting = useIsMutating({ mutationKey: ['export'] }) > 0
+  const psdLabels = {
+    background: t('psd.background'),
+    cleanup: t('psd.cleanup'),
+    outline: t('psd.outline'),
+  }
+
+  return (
+    <MenubarSub>
+      <MenubarSubTrigger disabled={disabled || exporting} aria-busy={busy}>
+        {busy && <LoaderCircle className='animate-spin' aria-hidden='true' />}
+        {t(label)}
+      </MenubarSubTrigger>
+      <MenubarSubContent>
+        {(['png', 'psd', 'cbz', 'pdf'] as const).map((format) => (
+          <MenubarItem
+            key={format}
+            disabled={exporting}
+            onClick={() => run(pages, format, psdLabels)}
+          >
+            {format.toUpperCase()}…
+          </MenubarItem>
+        ))}
+      </MenubarSubContent>
+    </MenubarSub>
   )
 }
 

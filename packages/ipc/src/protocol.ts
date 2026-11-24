@@ -303,7 +303,7 @@ export type Event =
   | { type: 'tool_started'; tool: string; arguments: Value }
   | { type: 'tool_finished'; tool: string; error: string | null }
 
-export type ExportFormat = 'png' | 'psd' | 'cbz'
+export type ExportFormat = 'png' | 'psd' | 'cbz' | 'pdf'
 
 /**  The page facing the shown one in a two-page spread, and its side. */
 export type FacingPage = {
@@ -1198,9 +1198,9 @@ export const commands = {
   /** Picks files or a folder and adds their pages after the project's last: the files in name order, numbers by value, an archive's or a PDF's own pages in theirs. */
   import: (source: ImportSource) =>
     runner('import', (options) => invoke<null>('import', { source }, options)),
-  /** Picks where the open project's pages go, and writes them there. `labels` names a PSD's layers the scene names nothing, in the interface's language. */
-  export: (format: ExportFormat, labels: Labels) =>
-    runner('export', (options) => invoke<null>('export', { format, labels }, options)),
+  /** Picks where the open project's pages go, and writes them there: `pages` alone, or every page when it's `None`, in the project's order. `labels` names a PSD's layers the scene names nothing, in the interface's language. */
+  export: (pages: PageId[] | null, format: ExportFormat, labels: Labels) =>
+    runner('export', (options) => invoke<null>('export', { pages, format, labels }, options)),
   /** The canvas element's rectangle, in CSS pixels from the window's corner. */
   setViewport: (x: number, y: number, width: number, height: number) =>
     runner('set_viewport', (options) =>

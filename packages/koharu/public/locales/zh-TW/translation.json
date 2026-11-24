@@ -268,6 +268,7 @@
     "donate": "贊助",
     "edit": "編輯",
     "export": "匯出專案",
+    "exportSelected": "匯出選取的頁面",
     "feedback": "傳送意見回饋",
     "file": "檔案",
     "fit": "適應視窗",

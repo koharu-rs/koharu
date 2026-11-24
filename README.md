@@ -41,7 +41,7 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 - [Proofreading](https://koharu.rs/guides/review) for correcting OCR and translation output
 - [GPU-based canvas](https://koharu.rs/guides/canvas) for manual cleanup, text placement, and page composition
 - [Multilingual text shaping and layout](https://koharu.rs/guides/typesetting) with automatic fitting, font fallback, vertical CJK, and right-to-left text
-- [PNG, CBZ, and layered PSD export](https://koharu.rs/guides/export) for flattened delivery and layered editing
+- [PNG, CBZ, PDF, and layered PSD export](https://koharu.rs/guides/export) for flattened delivery and layered editing
 - [Agent-driven workflow](https://koharu.rs/agent/projects) with an [MCP server](https://koharu.rs/agent/setup) for AI agents
 
 ## Hardware Acceleration
