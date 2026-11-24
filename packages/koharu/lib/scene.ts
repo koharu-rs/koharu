@@ -13,7 +13,14 @@ import {
   type Value,
 } from '@koharu/ipc/protocol'
 
-import { findPart, isBlockLayer, isTextLayer, letteringOf, type Move, type Part } from './document'
+import {
+  isBlockLayer,
+  isTextLayer,
+  letteringOf,
+  walkLayers,
+  type Move,
+  type Part,
+} from './document'
 
 /** The panels' edits, each one undo step through the scene's own `edit`, labelled by a key the
  * History panel translates. */
@@ -59,12 +66,17 @@ export function deleteLayers(layers: LayerId[]): Promise<Change> {
   )
 }
 
-/** What Delete does when the page has the keys: deletes the selected layers, skipping a block's
- * selected part, which goes only with its block; the eraser clears a clean-up, and hiding a mask
- * stops it limiting the clean-up. */
+/** What Delete does when the page has the keys: deletes the page's selected layers, leaving out
+ * those inside another, which go with it. A block's selected part goes only with its block; the
+ * eraser clears a clean-up, and hiding a mask stops it limiting the clean-up. */
 export async function deleteSelection(selected: LayerId[], layers: Layer[]): Promise<void> {
-  const whole = selected.filter((id) => !findPart(layers, id))
-  if (whole.length) await deleteLayers(whole)
+  const outermost = walkLayers(layers)
+    .filter(
+      ({ layer, ancestors }) =>
+        selected.includes(layer.id) && !ancestors.some(({ id }) => selected.includes(id)),
+    )
+    .map(({ layer }) => layer.id)
+  if (outermost.length) await deleteLayers(outermost)
 }
 
 /** Moves layers in one undo step, each under its parent, or to the page's top level, at its

@@ -45,19 +45,6 @@ export function findLayer(layers: Layer[], id: LayerId): Placed | undefined {
 /** A block's own picture layers: its clean-up, and the mask it shows through. */
 export type Part = 'cleanup' | 'mask'
 
-/** The block whose part `id` names, and which part it is. */
-export function findPart(
-  layers: Layer[],
-  id: LayerId,
-): { block: BlockLayer; part: Part } | undefined {
-  for (const { layer } of walkLayers(layers)) {
-    if (!isBlockLayer(layer)) continue
-    if (layer.cleanup?.id === id) return { block: layer, part: 'cleanup' }
-    if (layer.mask?.id === id) return { block: layer, part: 'mask' }
-  }
-  return undefined
-}
-
 /** Where a drag over a Layers row puts what it carries: before the row's layer in the scene,
  * after it, or into it, as its last children, which draw on top. */
 export interface Drop {
