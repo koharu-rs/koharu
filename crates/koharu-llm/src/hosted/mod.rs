@@ -11,12 +11,15 @@ use std::{collections::BTreeMap, num::NonZeroU32};
 
 use anyhow::{Context, Result, bail, ensure};
 use rig_core::{
-    catalog::{Catalog, ModelSpec, ReasoningSupport},
+    catalog::{Catalog, ModelFacts, ModelSpec, ReasoningSupport},
     driver::DynModel,
+    http_client::DynHttpClient,
     operation::Completion,
     providers::{
-        anthropic, deepseek, gemini, minimax, ollama, openai, openrouter,
-        registry::{ConnectOptions, ProviderConfig, ProviderId},
+        anthropic, deepseek, gemini, minimax, ollama,
+        openai::{self, wire::OpenAiWire},
+        openrouter,
+        registry::{ProviderConfig, ProviderId},
         xai,
     },
 };
@@ -142,30 +145,54 @@ pub(crate) fn connect(vendor: &str, id: &str) -> Result<DynModel<Completion>> {
         }
         _ => {}
     }
-    let selection = catalog_id(vendor)?;
-    let options = match vendor {
+    let filed = catalog_id(vendor)?;
+    let (key, http) = match vendor {
         // The HTTP client puts the sign-in's credential on each request.
-        chatgpt::PROVIDER_NAME => ConnectOptions::new()
-            .api_key(String::new())
-            .http(chatgpt::http()?),
+        chatgpt::PROVIDER_NAME => (String::new(), chatgpt::http()?),
         _ => {
             // Given a key, even an empty one, rig reads no environment
             // variable; an optional bearer then sends none.
             let key = key(vendor)?;
             ensure!(
-                key.is_some() || !selection.requires_credential(),
+                key.is_some() || !filed.requires_credential(),
                 "{vendor} has no API key"
             );
-            ConnectOptions::new()
-                .api_key(key.unwrap_or_default())
-                .http(Http::default())
+            (key.unwrap_or_default(), Http::default())
         }
     };
-    let options = match base_url {
-        Some(base_url) => options.base_url(base_url),
-        None => options,
+    Ok(model(
+        config(filed, key, base_url)?,
+        spec(filed, id),
+        DynHttpClient::new(http),
+    ))
+}
+
+/// How rig reaches `filed`'s vendor, at `base_url` or its own.
+fn config(filed: ProviderId, key: String, base_url: Option<String>) -> Result<ProviderConfig> {
+    let config = filed
+        .config(key)
+        .with_context(|| format!("rig can't configure {}", filed.vendor()))?;
+    Ok(match base_url {
+        Some(base_url) => config.with_base_url(base_url),
+        None => config,
+    })
+}
+
+/// The model `spec` describes, as rig's catalog connects it, but that in the
+/// Responses format its vendor is asked not to store replies, which OpenAI and
+/// xAI otherwise do for 30 days.
+fn model(config: ProviderConfig, spec: ModelSpec, http: DynHttpClient) -> DynModel<Completion> {
+    let id = spec.id.clone();
+    let facts = ModelFacts::new(spec).with_catalog(Catalog::builtin());
+    let ProviderConfig::OpenAi(config) = config else {
+        return config.completion_model(&id, http, facts);
     };
-    Ok(Catalog::builtin().connect_with(&spec(selection, id), options)?)
+    let mut model = config.connect(http).completion(id);
+    model.wire = match model.wire.with_facts(facts) {
+        OpenAiWire::Responses(wire) => OpenAiWire::Responses(wire.with_store(false)),
+        chat => chat,
+    };
+    model.erase()
 }
 
 /// What the catalog says of `id`, or nothing certain of a model newer than it.
@@ -209,15 +236,8 @@ pub(crate) async fn models(vendor: &str) -> Result<Vec<ModelSpec>> {
     if key.is_none() && filed.requires_credential() {
         return Ok(Vec::new());
     }
-    let config = filed
-        .config(key.unwrap_or_default())
-        .with_context(|| format!("rig can't configure {vendor}"))?;
-    let config = match base_url(vendor)? {
-        Some(base_url) => config.with_base_url(base_url),
-        None => config,
-    };
     let http = Http::default();
-    let listed = match config {
+    let listed = match config(filed, key.unwrap_or_default(), base_url(vendor)?)? {
         ProviderConfig::OpenAi(config) => config.connect(http).list_models().await?,
         ProviderConfig::Anthropic(config) => config.connect(http).list_models().await?,
         ProviderConfig::Gemini(config) => config.connect(http).list_models().await?,
@@ -262,9 +282,12 @@ mod tests {
             ]
             .contains(vendor)
         }) {
-            let spec = spec(catalog_id(vendor).unwrap(), "a-model-from-next-year");
-            let options = ConnectOptions::new().api_key("key").http(Http::default());
-            let model = Catalog::builtin().connect_with(&spec, options).unwrap();
+            let filed = catalog_id(vendor).unwrap();
+            let model = model(
+                config(filed, "key".to_owned(), None).unwrap(),
+                spec(filed, "a-model-from-next-year"),
+                DynHttpClient::new(Http::default()),
+            );
             assert_eq!(model.spec().unwrap().id, "a-model-from-next-year");
         }
     }

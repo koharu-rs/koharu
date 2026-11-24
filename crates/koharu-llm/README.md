@@ -28,6 +28,7 @@ provider only when the user picked that provider.
 | listing | every model the user can pick, from each vendor with a key; one that needs a key and has none lists nothing, and a list that fails is left out | LM Studio's own list says what its models can do [LM Studio list] |
 | what a model can do | rig's catalog says; a model it knows as neither calling tools nor keeping to a schema, such as an embedding model, is dropped, and one it doesn't know is offered with its limits unknown | |
 | retries | a request is sent again up to 3 times when its reply says it failed for now, as a 429 or 5xx does, or its connection was lost before one: after the wait the reply names, else until its rate-limit headers say a spent allowance resets, else a growing one. A spent quota, a wait over 2 minutes, and a server that can't be reached fail at once | OpenAI's Python library doesn't retry past 2 minutes [OpenAI retries] |
+| storing | a vendor is asked not to store replies in the Responses format, which OpenAI and xAI otherwise do for 30 days; the Grok plan's own endpoint isn't asked | [OpenAI data controls], [xAI Responses] |
 
 ## 2. Structured answers
 
@@ -85,7 +86,7 @@ coding agent's [pi compaction]:
 Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
-- Hosted requests: [OpenAI retries]
+- Hosted requests: [OpenAI retries], [OpenAI data controls], [xAI Responses]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - Context: [pi compaction]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp Gemma 4]
@@ -97,6 +98,8 @@ Read in November 2026.
 [LM Studio list]: https://lmstudio.ai/docs/developer/rest/list
 [Zed providers]: https://zed.dev/docs/ai/llm-providers#openai-api-compatible
 [OpenAI retries]: https://github.com/openai/openai-python/blob/804a9af5a5199f36d28dfdf84c7981f0253a3a3f/src/openai/_base_client.py#L922-L930
+[OpenAI data controls]: https://platform.openai.com/docs/guides/your-data
+[xAI Responses]: https://docs.x.ai/developers/rest-api-reference/inference/responses
 [Hermes xAI]: https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth_xai.py
 [OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
 [pi compaction]: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/compaction.md
