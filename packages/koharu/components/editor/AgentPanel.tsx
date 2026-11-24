@@ -9,8 +9,10 @@ import { useTranslation } from 'react-i18next'
 import { Choice } from '@/components/controls/Choice'
 import { Markdown } from '@/components/controls/Markdown'
 import { ModelPicker } from '@/components/controls/ModelPicker'
+import { useConversation, type Part, type Turn } from '@/lib/agent'
 import { modelName, REASONING } from '@/lib/models'
 import { send, useModels, usePreferences, useSavePreferences } from '@/lib/queries'
+import { useKoharuStore } from '@/lib/store'
 import { commands, type AgentConfig, type AgentEvent, type Event } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
@@ -25,37 +27,13 @@ import { Textarea } from '@koharu/ui/components/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
 
-/** What a turn of the agent's showed, in the order it came. */
-type Part =
-  | { type: 'text'; text: string }
-  /** Its reasoning, with when it began and, once text or a tool follows, ended. */
-  | { type: 'thinking'; text: string; started: number; ended: number | null }
-  | {
-      type: 'tool'
-      tool: string
-      arguments: unknown
-      state: 'running' | 'done' | 'failed'
-      error: string | null
-    }
-
-type Turn =
-  | { id: string; role: 'user'; text: string }
-  | {
-      id: string
-      role: 'assistant'
-      parts: Part[]
-      state: 'running' | 'done' | 'failed' | 'cancelled'
-      error?: string
-    }
-
 /** The in-app agent's conversation about the open project, as Claude Desktop and Codex lay a chat
  * out: the user's messages in bubbles, the agent's replies as plain text with its thinking and
  * tool calls folded beside them, and a composer holding the model, its reasoning, and New chat. */
 export function AgentPanel() {
   const { t } = useTranslation()
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [prompt, setPrompt] = useState('')
-  const [running, setRunning] = useState<number | null>(null)
+  const { turns, prompt, running } = useConversation()
+  const shown = useKoharuStore((state) => state.panel === 'agent')
   const [choosing, setChoosing] = useState(false)
   const busy = turns.some((turn) => turn.role === 'assistant' && turn.state === 'running')
   const models = (useModels().data ?? []).filter((model) => model.tools)
@@ -67,15 +45,16 @@ export function AgentPanel() {
   const reset = useMutation({
     mutationFn: () => commands.resetAgent(),
     onSettled: () => {
-      setTurns([])
+      useConversation.setState({ turns: [] })
       following.current = true
     },
   })
 
+  // Hidden behind another tab it has nowhere to scroll, so it catches up once shown.
   useEffect(() => {
     const viewport = list.current
     if (viewport && following.current) viewport.scrollTop = viewport.scrollHeight
-  }, [turns])
+  }, [turns, shown])
 
   if (!preferences) {
     return (
@@ -140,7 +119,7 @@ export function AgentPanel() {
             aria-label={t('agent.message')}
             placeholder={t('agent.placeholder')}
             className='max-h-40 min-h-10 resize-none border-0 bg-transparent px-1 py-0.5 text-xs leading-5 shadow-none focus-visible:ring-0 dark:bg-transparent'
-            onChange={(event) => setPrompt(event.target.value)}
+            onChange={(event) => useConversation.setState({ prompt: event.target.value })}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault()
@@ -247,28 +226,30 @@ export function AgentPanel() {
 
   function cancel() {
     if (running !== null) send(commands.stopAgent, running)
-    // A cancelled run tells nothing more.
-    setRunning(null)
-    setTurns((current) =>
-      current.map((turn) =>
+    useConversation.setState(({ turns }) => ({
+      // A cancelled run tells nothing more.
+      running: null,
+      turns: turns.map((turn) =>
         turn.role === 'assistant' && turn.state === 'running'
           ? { ...turn, parts: settle(turn.parts), state: 'cancelled' }
           : turn,
       ),
-    )
+    }))
   }
 
   async function submit() {
     const message = prompt.trim()
     if (!message || busy || !model) return
     const assistant = crypto.randomUUID()
-    setPrompt('')
     following.current = true
-    setTurns((current) => [
-      ...current,
-      { id: crypto.randomUUID(), role: 'user', text: message },
-      { id: assistant, role: 'assistant', parts: [], state: 'running' },
-    ])
+    useConversation.setState(({ turns }) => ({
+      prompt: '',
+      turns: [
+        ...turns,
+        { id: crypto.randomUUID(), role: 'user', text: message },
+        { id: assistant, role: 'assistant', parts: [], state: 'running' },
+      ],
+    }))
     // A run can end before its id arrives.
     let settled = false
 
@@ -279,7 +260,7 @@ export function AgentPanel() {
         return
       }
       settled = true
-      setRunning(null)
+      useConversation.setState({ running: null })
       updateAssistant((turn) =>
         update.type === 'completed'
           ? {
@@ -295,7 +276,7 @@ export function AgentPanel() {
     }
     try {
       const run = await commands.runAgent(message, channel)
-      if (!settled) setRunning(run)
+      if (!settled) useConversation.setState({ running: run })
     } catch (error) {
       updateAssistant((turn) => ({
         ...turn,
@@ -303,19 +284,19 @@ export function AgentPanel() {
         state: 'failed',
         error: error instanceof Error ? error.message : t('agent.failed'),
       }))
-      setRunning(null)
+      useConversation.setState({ running: null })
     }
 
     function updateAssistant(
       update: (turn: Extract<Turn, { role: 'assistant' }>) => Extract<Turn, { role: 'assistant' }>,
     ) {
-      setTurns((current) =>
-        current.map((turn) =>
+      useConversation.setState(({ turns }) => ({
+        turns: turns.map((turn) =>
           turn.id === assistant && turn.role === 'assistant' && turn.state === 'running'
             ? update(turn)
             : turn,
         ),
-      )
+      }))
     }
   }
 }

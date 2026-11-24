@@ -3,6 +3,7 @@
 import { commands, events, type Change, type Loading, type PageId } from '@koharu/ipc/protocol'
 import { toast } from '@koharu/ui/components/toast'
 
+import { useConversation } from './agent'
 import { toHex } from './color'
 import i18n from './i18n'
 import {
@@ -75,15 +76,16 @@ function receiveChapter(loading: Loading): void {
     })
 }
 
-/** Another project opened, or the open one closed: its selection starts empty, and no thumbnail is
- * kept, since its pages' revisions aren't. A project told again, after changes the interface
- * missed, is read again, its thumbnails too. */
+/** Another project opened, or the open one closed: its selection and its conversation start empty,
+ * and no thumbnail is kept, since its pages' revisions aren't. A project told again, after changes
+ * the interface missed, is read again, its thumbnails too. */
 function receiveProject(name: string | null): void {
   const previous = queryClient.getQueryData<ProjectView | null>(projectKey)
   if (previous?.name !== name) {
     const store = useKoharuStore.getState()
     store.selectPages([])
     store.selectLayers([])
+    useConversation.setState(useConversation.getInitialState())
     // A chapter loads only into the project that's open.
     useKoharuStore.setState({ loading: null })
     queryClient.removeQueries({ queryKey: thumbnailKey })

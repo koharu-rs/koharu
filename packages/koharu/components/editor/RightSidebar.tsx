@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next'
 import { AgentPanel } from '@/components/editor/AgentPanel'
 import { LayersPanel } from '@/components/editor/LayersPanel'
 import { StoryPanel } from '@/components/editor/StoryPanel'
-import { useProject } from '@/lib/queries'
 import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
 import { useKoharuStore, type Panel } from '@/lib/store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@koharu/ui/components/tabs'
@@ -20,11 +19,9 @@ const tabs = [
 ] as const satisfies ReadonlyArray<readonly [Panel, typeof Layers3]>
 
 /** The right pane: Layers, Story, and Agent as tabs, each its full height, as Photoshop groups its
- * panels. The agent's tab stays mounted, so its conversation outlives a switch, and starts over
- * with another project, as the desktop's conversation does. */
+ * panels. The agent's tab stays mounted, so a switch leaves its transcript where it was. */
 export function RightSidebar() {
   const { t } = useTranslation()
-  const project = useProject().data?.name ?? null
   const panel = useKoharuStore((state) => state.panel)
   const showPanel = useKoharuStore((state) => state.showPanel)
   // Photoshop's key for Layers, which shows Story in its place when it's in front. It works from a
@@ -68,7 +65,7 @@ export function RightSidebar() {
           <StoryPanel />
         </TabsContent>
         <TabsContent value='agent' keepMounted className='flex min-h-0 flex-col'>
-          <AgentPanel key={project} />
+          <AgentPanel />
         </TabsContent>
       </Tabs>
     </aside>
