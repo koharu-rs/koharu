@@ -91,9 +91,14 @@ mask:
 
 | Tier | When | Fill |
 |---|---|---|
-| one colour | the ring is within 10 levels of its median on average, with no pixel 64 away | the median |
+| one colour | every ring pixel, in its balloon or not, is within 16 levels of their median; or the ring is within 10 levels of its median on average, with no pixel 64 away | the median |
 | a smooth background | the same, after a plane fitted to the ring | Telea's fast marching, ported from OpenCV [OpenCV inpaint] |
 | the model | anything else: lettering crossing its balloon's outline, a line or art against it, screentone, or a ring too small to read | the inpainting model |
+
+The second is read again around each separate piece of the mask, since
+detection can mask a stray piece on other paper or on a balloon's line. What of
+a piece is past its balloon's outline, or is a line or art that goes on outside
+the mask, is left to the model.
 
 The model redraws in windows at the page's own scale, each lettering with 256
 pixels of context around it, merged with the windows it overlaps while the

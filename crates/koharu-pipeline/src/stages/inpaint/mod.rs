@@ -102,9 +102,9 @@ struct Cleanup {
     old: Tiles,
     rect: Rect,
     mask: GrayImage,
-    /// The tier that filled it, or `None` when the model redraws it.
+    /// The tier that filled it, or `None` when the model redraws any of it.
     fill: Option<Fill>,
-    /// Its region, when the model redraws it.
+    /// Its region, when the model redraws any of it.
     region: Option<usize>,
 }
 

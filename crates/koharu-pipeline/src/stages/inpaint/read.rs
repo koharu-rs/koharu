@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use image::{DynamicImage, GrayImage, Luma, RgbImage, imageops};
-use imageproc::{distance_transform::Norm, morphology::dilate};
 use koharu_renderer::Renderer;
 use koharu_scene::{Content, Layer, LayerId, PageId, Project, Rect};
 use kurbo::{BezPath, Shape as _};
@@ -127,18 +126,12 @@ fn tiers(
     let mut page = flat::Page::new(image, &covered);
     for cleanup in cleanups.iter_mut() {
         let place = places.get(&cleanup.block).cloned().unwrap_or_default();
-        let line = match page.fill(cleanup.rect, &cleanup.mask, &place) {
+        let redrawn = match page.fill(cleanup.rect, &cleanup.mask, &place) {
             Verdict::Filled(fill) => {
                 cleanup.fill = Some(fill);
                 continue;
             }
-            Verdict::Model { line } => line,
-        };
-        // A line under the mask goes with a pixel around it.
-        let redrawn = if line {
-            dilate(&cleanup.mask, Norm::LInf, 1)
-        } else {
-            cleanup.mask.clone()
+            Verdict::Model(redrawn) => redrawn,
         };
         stamp(&mut mask, cleanup.rect, &redrawn);
         cleanup.region = Some(regions.len());
