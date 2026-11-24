@@ -1,3 +1,13 @@
+## [0.95.1](https://github.com/koharu-rs/koharu/compare/0.95.0..0.95.1) - 2026-11-24
+
+### 🐛 Bug Fixes
+
+- *(gallery)* Show a signed-in Kindle account without its name, as Amazon's store page it was read from can be a robot check instead - ([547fc5d](https://github.com/koharu-rs/koharu/commit/547fc5dba06bf48e1d625b5420f3e52261cabbeb))
+
+### 📚 Documentation
+
+- Say where the log file is in troubleshooting, and keep RUST_LOG for more detailed logs - ([31c8090](https://github.com/koharu-rs/koharu/commit/31c80900aed28b54cd6ef311d649da364a1ec94f))
+
 ## [0.95.0](https://github.com/koharu-rs/koharu/compare/0.94.1..0.95.0) - 2026-11-24
 
 ### ⛰️  Features
