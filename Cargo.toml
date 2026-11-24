@@ -124,7 +124,7 @@ reqwest = { version = "0.13.5", features = ["stream", "json", "form", "blocking"
 rfd = "0.18.0"
 # rig breaks its API in every release.
 rig-agent = { version = "=0.46.0", default-features = false }
-rig-core = { version = "=0.46.0", default-features = false }
+rig-core = { version = "=0.47.0", default-features = false }
 rig-memory = { version = "=0.46.0", default-features = false }
 rig-reqwest = { version = "=0.46.0", default-features = false }
 rmcp = { version = "3.10.0", default-features = false, features = ["server", "transport-streamable-http-server"] }

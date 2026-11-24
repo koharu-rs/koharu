@@ -1041,7 +1041,7 @@ dependencies = [
  "regex",
  "rustc-hash 2.1.3",
  "shlex",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -2305,7 +2305,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -5637,7 +5637,7 @@ dependencies = [
  "parking_lot 0.13.0",
  "reqwest",
  "rig-agent",
- "rig-core",
+ "rig-core 0.47.0",
  "rig-memory",
  "rmcp",
  "schemars 1.2.3",
@@ -5878,7 +5878,7 @@ dependencies = [
  "oauth2",
  "reqwest",
  "rig-agent",
- "rig-core",
+ "rig-core 0.47.0",
  "rig-memory",
  "rig-reqwest",
  "schemars 1.2.3",
@@ -9415,7 +9415,7 @@ dependencies = [
  "futures",
  "http 1.5.0",
  "indexmap 2.14.2",
- "rig-core",
+ "rig-core 0.46.0",
  "rig-memory",
  "schemars 1.2.3",
  "serde",
@@ -9443,12 +9443,43 @@ dependencies = [
  "mime",
  "mime_guess",
  "ordered-float",
- "rig-http",
+ "rig-http 0.46.0",
  "schemars 1.2.3",
  "serde",
  "serde_json",
  "serde_path_to_error",
  "sha2 0.10.9",
+ "thiserror 2.0.21",
+ "tracing",
+ "url",
+ "uuid",
+ "web-time",
+]
+
+[[package]]
+name = "rig-core"
+version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5b60ad1761accbb5ef3ef97a038903345d60768d7a5a5a09e01e16dfac0f699"
+dependencies = [
+ "async-stream",
+ "base64 0.23.1",
+ "bytes",
+ "fastrand",
+ "futures",
+ "glob",
+ "http 1.5.0",
+ "httpdate",
+ "indexmap 2.14.2",
+ "mime",
+ "mime_guess",
+ "ordered-float",
+ "rig-http 0.47.0",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sha2 0.11.1",
  "thiserror 2.0.21",
  "tracing",
  "tracing-subscriber",
@@ -9474,6 +9505,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rig-http"
+version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "041fa0a6e1d1236cbc502516e3fa71ac3dddbd91c3594a81436c6bee9c8acc41"
+dependencies = [
+ "bytes",
+ "futures",
+ "futures-timer",
+ "http 1.5.0",
+ "mime",
+ "thiserror 2.0.21",
+ "url",
+]
+
+[[package]]
 name = "rig-memory"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9481,7 +9527,7 @@ checksum = "6d4423dfa0337714345615cdfefee141605f166be1c174211139bdcbbe25403c"
 dependencies = [
  "base64 0.22.1",
  "memchr",
- "rig-core",
+ "rig-core 0.46.0",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -9498,7 +9544,7 @@ dependencies = [
  "futures",
  "http 1.5.0",
  "reqwest",
- "rig-http",
+ "rig-http 0.46.0",
  "thiserror 2.0.21",
  "url",
 ]
