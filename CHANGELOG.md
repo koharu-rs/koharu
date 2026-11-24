@@ -1,3 +1,23 @@
+## [0.94.1](https://github.com/koharu-rs/koharu/compare/0.94.0..0.94.1) - 2026-11-24
+
+### 🐛 Bug Fixes
+
+- *(canvas)* Cut nothing at a caret while typing, so Ctrl+X no longer deletes the character before it ([#1495](https://github.com/koharu-rs/koharu/issues/1495)) - ([635c639](https://github.com/koharu-rs/koharu/commit/635c639629315ca29f9b855b7618af04f752c54b))
+- *(desktop)* Leave the keys an input method takes in a field to it, so PageUp and PageDown turn its candidates without scrolling the page ([#1514](https://github.com/koharu-rs/koharu/issues/1514)) - ([5a13f16](https://github.com/koharu-rs/koharu/commit/5a13f16ed6beb6aef07de3195d448d857b0bf2cc))
+- *(gallery)* Keep a long chapter's project name within Linux's 255-byte file names, cutting the series first ([#1516](https://github.com/koharu-rs/koharu/issues/1516)) - ([ed745a2](https://github.com/koharu-rs/koharu/commit/ed745a238cf62a5122ad5c42857dc966524f65ce))
+- *(pipeline)* Blur an edit's local tone differences without clamping, and leave out what the edit redrew - ([cb47e35](https://github.com/koharu-rs/koharu/commit/cb47e35994d4958bbac7913b93c812f99ace9ac4))
+- *(pipeline)* Leave a locked text block as it is on a rerun, so no stage fails its page ([#1503](https://github.com/koharu-rs/koharu/issues/1503)) - ([3dbef8c](https://github.com/koharu-rs/koharu/commit/3dbef8ce3188381627e7dd290655c8c995f14628))
+- *(scene)* Start a block's first translation in its source's place, whichever panel adds it ([#1494](https://github.com/koharu-rs/koharu/issues/1494)) - ([294e319](https://github.com/koharu-rs/koharu/commit/294e319bf1bd15f0fb52d87e606c33c0a98dc5f4))
+- *(scene)* Count a block as translated only when its translation has visible text ([#1500](https://github.com/koharu-rs/koharu/issues/1500)) - ([e58b9c6](https://github.com/koharu-rs/koharu/commit/e58b9c6387ae967d048fd1b7425fca0ca0e97f4a))
+- *(ui)* Refresh the thumbnail of each page a change names, not the shown page's ([#1496](https://github.com/koharu-rs/koharu/issues/1496)) - ([6c51328](https://github.com/koharu-rs/koharu/commit/6c51328e70d6b15b1c64246591e99d608d80fb8c))
+- *(ui)* Show the stored preferences again after a save fails ([#1498](https://github.com/koharu-rs/koharu/issues/1498)) - ([08f4888](https://github.com/koharu-rs/koharu/commit/08f48886810b52ccd8553c309dd6c4fb6574a5f1))
+- *(ui)* Fit or size each selected text in its own frame, a box or a path, from the type bar ([#1499](https://github.com/koharu-rs/koharu/issues/1499)) - ([baf9b1c](https://github.com/koharu-rs/koharu/commit/baf9b1c2963412e6de8b2a0c1cff60d652dade3c))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update sponsors ([#1312](https://github.com/koharu-rs/koharu/issues/1312)) - ([b17d065](https://github.com/koharu-rs/koharu/commit/b17d0657b57afa0db4734dc5f6e0e7ecd770f737))
+- Remove standalone Kindle script - ([b4e87c0](https://github.com/koharu-rs/koharu/commit/b4e87c006ebc0cf63d3cfcb693e13bf501ff6b7f))
+
 ## [0.94.0](https://github.com/koharu-rs/koharu/compare/0.93.0..0.94.0) - 2026-11-23
 
 ### ⛰️  Features
