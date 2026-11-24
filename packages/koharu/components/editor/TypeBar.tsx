@@ -18,7 +18,7 @@ import {
   walkLayers,
 } from '@/lib/document'
 import { readPage, send, useFonts, usePage, usePreferences } from '@/lib/queries'
-import { setStyle, updateLayer } from '@/lib/scene'
+import { setFit, setStyle, updateLayer } from '@/lib/scene'
 import { useKoharuStore, type CanvasTool } from '@/lib/store'
 import {
   commands,
@@ -101,11 +101,15 @@ export function TypeBar() {
   }
   const chars = style.chars ?? {}
   const mixed = new Set(shared.mixed.filter((key) => drafted?.chars?.[key] === undefined))
-  const frame = lettering?.frame ?? 'point'
   // A box and a path fit their text alike, a balloon's translation in a path; point text has no fit.
-  const fitted = typeof frame !== 'object' ? null : frame.box ? 'box' : 'path'
-  const fit = typeof frame === 'object' ? (frame.box ?? frame.path)?.fit : undefined
-  const autoFit = fit === 'best'
+  const fits = targets.flatMap((layer) => {
+    const frame = letteringOf(layer)?.frame
+    return typeof frame === 'object' ? [(frame.box ?? frame.path)?.fit] : []
+  })
+  const fitted = fits.length > 0
+  const autoFit = fitted && fits.every((fit) => fit === 'best')
+  // Frames that don't share Auto share no size.
+  const mixedFit = !autoFit && fits.includes('best')
 
   /** Merges `patch` into each target's style, shown at once on the first. */
   const apply = (patch: TextStyle) => {
@@ -146,7 +150,7 @@ export function TypeBar() {
   const italic = Boolean(chars.italic) && italics
   const weight = chars.weight ?? 400
   const weights = usableFontWeights(selectedFamily, italic)
-  const size = mixed.has('size') ? null : Math.round((chars.size ?? 24) * 100) / 100
+  const size = mixed.has('size') || mixedFit ? null : Math.round((chars.size ?? 24) * 100) / 100
   const strokeWidth = chars.stroke_width ?? 0
   const stroke = chars.stroke ?? null
   const strokeEnabled = stroke !== null && stroke[3] > 0 && strokeWidth > 0
@@ -233,16 +237,14 @@ export function TypeBar() {
           auto={{
             label: t('inspector.auto'),
             active: autoFit,
-            available: fitted !== null,
-            onPick: () => fitted && update({ frame: { [fitted]: { fit: 'best' } } }),
+            available: fitted,
+            onPick: () => send(setFit, targets, 'best'),
           }}
           onChange={(next) => {
             applyChars({ size: next })
             // A typed size is the size the text draws at, as in Photoshop and Clip Studio Paint, so
             // a frame that shrinks or grows its text stops fitting it; a growing box keeps the size.
-            if (fitted && fit !== 'none' && fit !== 'grow') {
-              update({ frame: { [fitted]: { fit: 'none' } } })
-            }
+            if (fitted) send(setFit, targets, 'none')
           }}
         />
       </div>
