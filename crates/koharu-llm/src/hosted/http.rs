@@ -90,24 +90,19 @@ impl Http {
             sign_in
                 .authorize(&mut parts)
                 .await
-                .map_err(|error| http_client::Error::Instance(error.into()))?;
+                .map_err(http_client::Error::permanent)?;
         }
         Ok(parts)
     }
 }
 
 impl HttpClientExt for Http {
-    fn send<T, U>(
+    fn send(
         &self,
-        request: http::Request<T>,
-    ) -> impl Future<Output = http_client::Result<http::Response<LazyBody<U>>>> + Send + 'static
-    where
-        T: Into<Bytes> + Send,
-        U: From<Bytes> + Send + 'static,
-    {
+        request: http::Request<Bytes>,
+    ) -> impl Future<Output = http_client::Result<http::Response<LazyBody>>> + Send + 'static {
         let http = self.clone();
         let (parts, body) = request.into_parts();
-        let body: Bytes = body.into();
         async move {
             (|| async {
                 let parts = http.authorized(parts.clone()).await?;
@@ -122,26 +117,19 @@ impl HttpClientExt for Http {
         }
     }
 
-    fn send_multipart<U>(
+    fn send_multipart(
         &self,
         request: http::Request<MultipartForm>,
-    ) -> impl Future<Output = http_client::Result<http::Response<LazyBody<U>>>> + Send + 'static
-    where
-        U: From<Bytes> + Send + 'static,
-    {
+    ) -> impl Future<Output = http_client::Result<http::Response<LazyBody>>> + Send + 'static {
         self.client.send_multipart(request)
     }
 
-    fn send_streaming<T>(
+    fn send_streaming(
         &self,
-        request: http::Request<T>,
-    ) -> impl Future<Output = http_client::Result<StreamingResponse>> + Send
-    where
-        T: Into<Bytes> + Send,
-    {
+        request: http::Request<Bytes>,
+    ) -> impl Future<Output = http_client::Result<StreamingResponse>> + Send {
         let http = self.clone();
         let (parts, body) = request.into_parts();
-        let body: Bytes = body.into();
         async move {
             (|| async {
                 let parts = http.authorized(parts.clone()).await?;

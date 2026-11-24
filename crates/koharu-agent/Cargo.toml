@@ -26,7 +26,6 @@ koharu-scene = { workspace = true }
 parking_lot = { workspace = true }
 rig-agent = { workspace = true }
 rig-core = { workspace = true }
-rig-memory = { workspace = true }
 rmcp = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }

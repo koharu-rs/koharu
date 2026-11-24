@@ -54,7 +54,10 @@ impl<'a> Turn<'a> {
         conversation: &mut Conversation,
         model: &DynModel<Completion>,
     ) -> Result<Option<Vec<String>>> {
-        conversation.context.fit(model).await?;
+        conversation
+            .context
+            .fit(model, &Message::user(self.page.clone()))
+            .await;
         let history: Vec<Message> = conversation
             .context
             .messages()

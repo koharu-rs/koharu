@@ -28,7 +28,7 @@ use koharu_llama::{
     token::LlamaToken,
 };
 use llguidance::ParserFactory;
-use rig_core::error::{ErrorReport, ProviderError};
+use rig_core::error::{ErrorKind, ErrorReport, ProviderError};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::{Sampling, Size, template::Template};
@@ -453,7 +453,10 @@ fn text_tokens(chunks: &MtmdInputChunks) -> Vec<LlamaToken> {
 fn failure(error: &anyhow::Error) -> ProviderError {
     let message = format!("{error:#}");
     if error.is::<TooLong>() {
-        return ProviderError::Relayed(Box::new(ErrorReport::context_overflow(message)));
+        // The code `ErrorReport::is_context_overflow` reads.
+        let report =
+            ErrorReport::new(ErrorKind::Request, message).with_code("context_length_exceeded");
+        return ProviderError::Relayed(Box::new(report));
     }
     ProviderError::Provider(message)
 }

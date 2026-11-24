@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use icu_locale_core::LanguageIdentifier;
 use indoc::indoc;
@@ -90,26 +90,24 @@ impl Conversations {
     }
 }
 
-/// What a general model is asked when the conversation is full. rig's own
-/// are written for a coding agent.
+/// What a general model is asked when the conversation is full.
 fn prompts() -> SummaryPrompts {
     SummaryPrompts {
-        system: Cow::Borrowed(indoc! {"
+        system: indoc! {"
             You summarize a manga's translation so far, so that its translator can go on with the next pages from the summary alone. Read the conversation and write the summary in the exact format asked for.
 
-            Do not translate anything new. Output only the summary."}),
-        initial: Cow::Borrowed(indoc! {"
-        The conversation above is a manga's pages and their translations so far. Summarize it for the translator of the next pages."}),
-        update: Cow::Borrowed(indoc! {"
-        The conversation above is the NEW part of a translation whose earlier part is summarized in <previous-summary>. Update that summary with it, keeping everything in it that still holds."}),
-        format: Cow::Borrowed(indoc! {"
+            Do not translate anything new. Output only the summary."},
+        initial: indoc! {"
+        The conversation above is a manga's pages and their translations so far. Summarize it for the translator of the next pages."},
+        update: indoc! {"
+        The conversation above is the NEW part of a translation whose earlier part is summarized in <previous-summary>. Update that summary with it, keeping everything in it that still holds."},
+        format: indoc! {"
             Write three sections:
             ## Characters
             Each character's name as translated, and how they speak.
             ## Terms
             Recurring names and terms, and their translations.
             ## Story
-            What has happened so far, briefly."}),
-        ..SummaryPrompts::DEFAULT
+            What has happened so far, briefly."},
     }
 }

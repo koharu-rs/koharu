@@ -19,6 +19,7 @@ bytes = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
+indoc = { workspace = true }
 koharu-config = { workspace = true }
 koharu-llama = { workspace = true }
 koharu-llama-sys = { workspace = true }
@@ -42,5 +43,4 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-indoc = { workspace = true }
 toml = { workspace = true }

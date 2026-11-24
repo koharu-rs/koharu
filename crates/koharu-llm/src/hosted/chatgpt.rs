@@ -9,10 +9,8 @@ use http::{HeaderValue, header::AUTHORIZATION, request::Parts};
 use rig_core::{
     catalog::{Catalog, ModelSpec, ReasoningSupport},
     error::BoxError,
-    providers::chatgpt::auth::{
-        self, AuthSource, Authenticator, DeviceCodeHandler, DeviceCodePrompt, SignInMethod,
-        TokenStore,
-    },
+    providers::auth::{DeviceCodeHandler, DeviceCodePrompt, TokenStore},
+    providers::chatgpt::auth::{self, AuthSource, Authenticator, SignInMethod},
     providers::registry::ProviderId,
     wasm_compat::WasmBoxedFuture,
 };

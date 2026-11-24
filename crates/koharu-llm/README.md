@@ -62,18 +62,22 @@ fails open on structured output.
 
 ## 4. Context
 
-A conversation keeps inside its model's window:
+A conversation keeps inside its model's window with rig's compaction, the pi
+coding agent's [pi compaction]:
 
-- **Fitting** clears old tool outputs first, then summarizes older messages if
-  that isn't enough. **Compacting** summarizes now, because the user asked or
-  the model refused a request as too long.
+- **Fitting** summarizes older messages before a request that wouldn't leave the
+  model's reserve free; a summary that fails leaves the conversation as it was.
+  **Compacting** summarizes now, because the model refused a request as too
+  long.
 - **A translation model** can't summarize, so its oldest turns are dropped,
   each reply with its turn.
-- **Counting** starts from the tokens a provider last reported, because an
-  estimate of four bytes a token undercounts Japanese and Chinese.
-- **Summaries** are written for a translator, not a coding agent, and the room
-  they keep is capped at a quarter of the model's window, which rig's defaults,
-  made for large windows, would overrun.
+- **Counting** starts from the tokens a provider last reported, because rig's
+  estimate of four characters a token undercounts Japanese and Chinese. What a
+  compaction keeps is scaled by them too, or it would keep all of a Japanese
+  conversation.
+- **Summaries** are written for a translator by its own prompts and for the
+  agent by rig's, and the room they keep is capped at a quarter of the model's
+  window, which rig's defaults, made for large windows, would overrun.
 
 ## Sources
 
@@ -81,6 +85,7 @@ Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
+- Context: [pi compaction]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp Gemma 4]
 
 [rig]: https://github.com/0xPlaygrounds/rig
@@ -91,6 +96,7 @@ Read in November 2026.
 [Zed providers]: https://zed.dev/docs/ai/llm-providers#openai-api-compatible
 [Hermes xAI]: https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth_xai.py
 [OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
+[pi compaction]: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/compaction.md
 [llama.cpp fit]: https://github.com/ggml-org/llama.cpp/blob/785322d17f2d/common/fit.h
 [llama.cpp parallel]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/examples/parallel/parallel.cpp#L264-L476
 [llama.cpp Gemma 4]: https://github.com/ggml-org/llama.cpp/blob/d7d1b632da766f1247456b4f42406a96a0609d93/common/parsers/gemma4.cpp#L344-L351

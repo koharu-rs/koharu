@@ -9,7 +9,7 @@ use std::sync::{
 
 use anyhow::Context as _;
 use koharu_agent::{Agent, AgentConfig};
-use koharu_llm::{Context, Size, SummaryPrompts};
+use koharu_llm::{Context, Size};
 use serde::Serialize;
 use specta::Type;
 use tauri::{State, ipc::Channel};
@@ -127,7 +127,7 @@ async fn conversation(app: &App, model: &str) -> anyhow::Result<Arc<tokio::sync:
     let conversation = Arc::new(tokio::sync::Mutex::new(Agent::new(
         tools,
         connected,
-        Context::new(SummaryPrompts::DEFAULT),
+        Context::default(),
     )));
     // Kept only while its project is still the open one: one made during a
     // close goes with the run that made it.

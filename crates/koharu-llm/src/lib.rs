@@ -11,14 +11,13 @@ pub mod reasoning;
 use anyhow::{Context as _, Result};
 use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};
 
-pub use context::Context;
+pub use context::{Context, SummaryPrompts};
 pub use hosted::{Endpoint, Providers, SignInPrompt, VENDORS, sign_in, sign_out};
 pub use local::{Local, Quantization, Sampling, Size, local};
 pub use model::answers;
 pub use rig_agent::agent::AgentBuilder;
 /// rig, whose requests and streams every model here takes and gives.
 pub use rig_core as rig;
-pub use rig_memory::{CompactReason, SummaryPrompts};
 
 /// The vendor of the models Koharu runs itself, on llama.cpp.
 pub const KOHARU: &str = "koharu";

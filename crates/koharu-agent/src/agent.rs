@@ -4,12 +4,12 @@
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex, PoisonError,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Result, anyhow};
 use futures::StreamExt;
 use indoc::indoc;
 use rig_agent::{
@@ -22,16 +22,15 @@ use rig_agent::{
     tool::server::ToolServer,
 };
 use rig_core::{
-    catalog::ModelSpec,
     completion::{Document, GenerationOptions, Message, Reasoning, Usage},
     driver::DynModel,
     effect::{Answered, EffectKind},
     operation::Completion,
     streaming::{Item, StreamEvent},
 };
-use rig_memory::{CompactReason, CompactionPolicy, estimate_tokens};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::Mutex;
 
 use koharu_llm::{Context, KOHARU};
 
@@ -139,13 +138,10 @@ impl Agent {
         prompt: &str,
         events: impl Fn(Event) + Send + Sync + 'static,
     ) -> Result<String> {
-        self.context.fit(&self.model).await?;
         let events: Events = Arc::new(events);
         match self.attempt(prompt, &events).await {
             Err(Failure::Overflow(_)) => {
-                self.context
-                    .compact(&self.model, CompactReason::Overflow)
-                    .await?;
+                self.context.compact(&self.model).await?;
                 self.attempt(prompt, &events)
                     .await
                     .map_err(|failure| match failure {
@@ -159,12 +155,12 @@ impl Agent {
 
     async fn attempt(&mut self, prompt: &str, events: &Events) -> Result<String, Failure> {
         let acted = Arc::new(AtomicBool::new(false));
-        let spec = self
-            .model
-            .spec()
-            .context("the model says nothing of its limits")
-            .map_err(Failure::Other)?
-            .clone();
+        let earlier = self.context.messages().len();
+        let run = Arc::new(Mutex::new(Run {
+            context: self.context.clone(),
+            seen: earlier,
+            usage: Usage::default(),
+        }));
         let toolset = Tools::toolset();
         let calls = Calls {
             schemas: toolset
@@ -180,12 +176,19 @@ impl Agent {
         let mut agent = AgentBuilder::new(self.model.clone())
             .preamble(PROMPT)
             .tool_server_handle(tools)
-            .add_hook(Window::new(self.context.policy(&spec), spec.clone()))
+            .add_hook(Window {
+                model: self.model.clone(),
+                run: Arc::clone(&run),
+            })
             .add_hook(calls);
         if let Some(reasoning) = self.config.reasoning {
             agent = agent.options(GenerationOptions::default().reasoning(reasoning));
         }
-        if spec.provider.vendor() == KOHARU {
+        if self
+            .model
+            .spec()
+            .is_some_and(|spec| spec.provider.vendor() == KOHARU)
+        {
             // The catalog's settings are for translation: a repeat penalty
             // would penalize repeated call markers.
             agent = agent.additional_params(json!({"repeat_penalty": 1.0}));
@@ -230,12 +233,11 @@ impl Agent {
                     ..
                 })) => events(Event::Reasoning { delta: text }),
                 MultiTurnStreamItem::FinalResponse(response) => {
-                    let usage = response
-                        .completion_calls()
-                        .last()
-                        .map_or_else(Usage::default, |call| call.usage);
                     let answer = response.output();
-                    self.context.record([(response.messages, usage)]);
+                    let mut run = run.lock().await;
+                    let seen = run.seen - earlier;
+                    run.record(response.messages.into_iter().skip(seen).collect());
+                    self.context = run.context.clone();
                     return Ok(answer);
                 }
                 _ => {}
@@ -306,26 +308,28 @@ impl AgentHook for Calls {
     }
 }
 
-/// Keeps a run inside the model's window: over the threshold, a turn is sent
-/// with older tool outputs cleared on a copy of its history. Clearing needs no
-/// model call, and any earlier would drop outputs for no reason and invalidate
-/// prompt caches.
+/// Keeps a run inside the model's window, as rig's own agent does: before each
+/// model call, older messages are summarized if the call wouldn't fit.
 struct Window {
-    policy: CompactionPolicy,
-    spec: ModelSpec,
-    /// How long the history was at the last model call.
-    asked: AtomicUsize,
-    /// The tokens the last turn reported, and how many messages they cover.
-    count: Mutex<Option<(u64, usize)>>,
+    model: DynModel<Completion>,
+    run: Arc<Mutex<Run>>,
 }
 
-impl Window {
-    fn new(policy: CompactionPolicy, spec: ModelSpec) -> Self {
-        Self {
-            policy,
-            spec,
-            asked: AtomicUsize::new(0),
-            count: Mutex::new(None),
+/// A run's own copy of the conversation, which goes with a run that fails.
+struct Run {
+    context: Context,
+    /// How much of rig's history of the run it has.
+    seen: usize,
+    /// What the last model call reported, which covers its reply.
+    usage: Usage,
+}
+
+impl Run {
+    /// Adds what rig's history gained, which ends in the last reply.
+    fn record(&mut self, messages: Vec<Message>) {
+        if !messages.is_empty() {
+            self.seen += messages.len();
+            self.context.record([(messages, self.usage)]);
         }
     }
 }
@@ -336,23 +340,17 @@ impl AgentHook for Window {
         _ctx: &HookContext,
         event: CompletionCallEvent<'_>,
     ) -> CompletionCallAction {
-        let history = event.history;
-        self.asked.store(history.len(), Ordering::Relaxed);
-        let count = *self.count.lock().unwrap_or_else(PoisonError::into_inner);
-        let earlier = match count {
-            Some((tokens, through)) => {
-                tokens.saturating_add(estimate_tokens(history.get(through..).unwrap_or_default()))
-            }
-            None => estimate_tokens(history),
-        };
-        let tokens = earlier.saturating_add(estimate_tokens(std::slice::from_ref(event.prompt)));
-        if !self.policy.over_threshold(tokens, &self.spec) {
-            return CompletionCallAction::continue_run();
-        }
-        let mut history = history.to_vec();
-        self.policy.clearing.clear(&mut history);
+        let mut run = self.run.lock().await;
+        let gained = event.history.get(run.seen..).unwrap_or_default();
+        run.record(
+            gained
+                .iter()
+                .map(|message| Message::clone(message))
+                .collect(),
+        );
+        run.context.fit(&self.model, event.prompt).await;
         let mut patch = RequestPatch::new();
-        patch.history = Some(history);
+        patch.history = Some(run.context.messages().to_vec());
         CompletionCallAction::patch(patch)
     }
 
@@ -361,16 +359,15 @@ impl AgentHook for Window {
         _ctx: &HookContext,
         event: ModelTurnFinished<'_>,
     ) -> ModelTurnAction {
-        // It covers the history, the prompt, and the reply.
-        let through = self.asked.load(Ordering::Relaxed) + 2;
-        *self.count.lock().unwrap_or_else(PoisonError::into_inner) =
-            event.usage.context_tokens().map(|tokens| (tokens, through));
+        self.run.lock().await.usage = event.usage;
         ModelTurnAction::Continue
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, PoisonError};
+
     use rig_core::{
         catalog::ModelSpec,
         providers::registry::ProviderId,
@@ -423,6 +420,12 @@ mod tests {
             MockStreamEvent::tool_call(id, tool, arguments),
             MockStreamEvent::final_response_with_default_usage(),
         ]
+    }
+
+    fn usage(tokens: u64) -> Usage {
+        let mut usage = Usage::default();
+        usage.input_tokens = Some(tokens);
+        usage
     }
 
     #[tokio::test]
@@ -479,6 +482,46 @@ mod tests {
         assert_eq!(answer, "Done.");
         let second = format!("{:?}", model.requests()[1]);
         assert!(second.contains("the arguments don't fit the tool's schema"));
+    }
+
+    /// The summary goes out between the run's calls, in place of older
+    /// messages, and the call it was made for keeps its tool call and result.
+    #[tokio::test]
+    async fn a_run_that_fills_the_window_is_summarized_and_goes_on() {
+        let (_dir, tools, page) = project();
+        let model = model(vec![
+            vec![
+                MockStreamEvent::tool_call("1", "get_page", json!({"page": page})),
+                MockStreamEvent::final_response(usage(13_000)),
+            ],
+            reply("The story so far."),
+            reply("Done."),
+        ]);
+        let mut context = Context::default();
+        let earlier = (0..20)
+            .flat_map(|_| {
+                [
+                    Message::user("x".repeat(1000)),
+                    Message::assistant("y".repeat(1000)),
+                ]
+            })
+            .collect();
+        context.record([(earlier, usage(10_000))]);
+        let mut agent = Agent::new(tools, model.clone().erase(), context);
+        let answer = agent
+            .run("Read the page.", |_| {})
+            .await
+            .expect("an answer");
+        assert_eq!(answer, "Done.");
+        assert_eq!(model.request_count(), 3);
+        let last = format!("{:?}", model.requests()[2].chat_history);
+        assert!(last.contains("The story so far."));
+        assert!(last.contains("ToolCall") && last.contains("ToolResult"));
+        // The conversation goes on from the summary, with the whole run.
+        let kept = agent.context().messages();
+        assert!(kept.len() < 40, "{}", kept.len());
+        assert!(format!("{:?}", kept[0]).contains("The story so far."));
+        assert_eq!(*kept[kept.len() - 4], Message::user("Read the page."));
     }
 
     #[tokio::test]
