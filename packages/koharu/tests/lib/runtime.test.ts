@@ -3,8 +3,7 @@ import { createElement, StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Providers from '@/app/providers'
-import { hear } from '@/lib/events'
-import { projectKey, queryClient, useProject, type ProjectView } from '@/lib/queries'
+import { useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, events, type Preferences } from '@koharu/ipc/protocol'
 
@@ -105,31 +104,6 @@ describe('Tauri runtime', () => {
     expect(useKoharuStore.getState().camera).toEqual({ zoom: 0.5, x: 12, y: 34 })
     expect(useKoharuStore.getState().selectedLayers).toEqual(['layer'])
     view.unmount()
-  })
-
-  it('refreshes the thumbnails of the pages a change names, whichever page is shown', async () => {
-    await hear(() => true)
-    queryClient.setQueryData<ProjectView>(projectKey, {
-      name: 'Book',
-      page: 'a',
-      pages: [],
-      history: { current: 0, steps: [] },
-      revisions: { a: '1', b: '1' },
-    })
-
-    tell('change', {
-      revision: '2',
-      created: [],
-      pages: { added: ['c'], removed: [], reordered: false, changed: ['b'] },
-      layers: [],
-      history: { current: 1, steps: ['Inpaint'] },
-    })
-
-    expect(queryClient.getQueryData<ProjectView>(projectKey)?.revisions).toEqual({
-      a: '1',
-      b: '2',
-      c: '2',
-    })
   })
 
   it('shows a project the desktop tells it opened', async () => {

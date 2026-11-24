@@ -33,6 +33,8 @@ export const projectKey = ['project'] as const
 export const pageKey = ['page'] as const
 /** Each page Story lists, by its id, whether or not the canvas shows it. */
 export const pagesKey = ['pages'] as const
+/** Each page's thumbnails, by its id and what they show. */
+export const thumbnailKey = ['thumbnail'] as const
 export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
 export const preferencesKey = ['preferences'] as const

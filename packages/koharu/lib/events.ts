@@ -5,7 +5,15 @@ import { toast } from '@koharu/ui/components/toast'
 
 import { toHex } from './color'
 import i18n from './i18n'
-import { pageKey, pagesKey, projectKey, queryClient, refresh, type ProjectView } from './queries'
+import {
+  pageKey,
+  pagesKey,
+  projectKey,
+  queryClient,
+  refresh,
+  thumbnailKey,
+  type ProjectView,
+} from './queries'
 import {
   receiveCanvasSelection,
   receiveDownload,
@@ -67,8 +75,9 @@ function receiveChapter(loading: Loading): void {
     })
 }
 
-/** Another project opened, or the open one closed: its selection starts empty. A project told
- * again, after changes the interface missed, is read again. */
+/** Another project opened, or the open one closed: its selection starts empty, and no thumbnail is
+ * kept, since its pages' revisions aren't. A project told again, after changes the interface
+ * missed, is read again, its thumbnails too. */
 function receiveProject(name: string | null): void {
   const previous = queryClient.getQueryData<ProjectView | null>(projectKey)
   if (previous?.name !== name) {
@@ -77,12 +86,13 @@ function receiveProject(name: string | null): void {
     store.selectLayers([])
     // A chapter loads only into the project that's open.
     useKoharuStore.setState({ loading: null })
+    queryClient.removeQueries({ queryKey: thumbnailKey })
   }
   if (name === null) {
     queryClient.setQueryData(projectKey, null)
     queryClient.setQueryData(pageKey, null)
   } else {
-    void refresh(projectKey, pageKey).catch(() => undefined)
+    void refresh(projectKey, pageKey, thumbnailKey).catch(() => undefined)
   }
 }
 
@@ -99,8 +109,9 @@ function receivePage(page: PageId | null): void {
 }
 
 /** An edit, undo, or redo, from whichever writer: the project and its shown page are read again,
- * and so are the pages Story lists, which a change to one of their layers doesn't name. */
+ * and so are the pages Story lists. */
 function receiveChange(change: Change): void {
+  const named = [...change.pages.added, ...change.pages.changed]
   queryClient.setQueryData<ProjectView | null>(projectKey, (project) =>
     project
       ? {
@@ -108,15 +119,17 @@ function receiveChange(change: Change): void {
           history: change.history,
           revisions: {
             ...project.revisions,
-            ...Object.fromEntries(
-              [...change.pages.added, ...change.pages.changed].map((page) => [
-                page,
-                change.revision,
-              ]),
-            ),
+            ...Object.fromEntries(named.map((page) => [page, change.revision])),
           },
         }
       : project,
   )
+  // Undo and redo bring a revision back, but not always its thumbnail: the desktop draws the page
+  // as it is when the read gets there, which can be after a later change.
+  queryClient.removeQueries({
+    queryKey: thumbnailKey,
+    type: 'inactive',
+    predicate: ({ queryKey }) => named.includes(queryKey[1] as PageId),
+  })
   void refresh(projectKey, pageKey, pagesKey).catch(() => undefined)
 }
