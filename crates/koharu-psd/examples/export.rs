@@ -36,7 +36,7 @@ fn main() -> Result<()> {
         json!({"op": "set_text", "layer": "$line", "text": "Did you hear? There's a meteor shower tonight!"}),
         json!({"op": "update_layer", "layer": "$line", "patch": {"translation": {
             "language": "en", "style": {"chars": {"size": 20.0}, "align": "center"},
-            "frame": {"path": {"path": balloon, "anchor": "center"}},
+            "frame": {"path": {"path": balloon, "anchor": "center"}}, "direction": "horizontal",
         }}}),
         json!({"op": "add_layer", "id": "$sound", "page": "$page", "index": 1, "layer": {"kind": "block", "name": "Sound", "role": "sfx", "source": {
             "frame": {"box": {"bounds": {"x": 200.0, "y": 190.0, "width": 100.0, "height": 40.0}}}, "content": "ザアア",
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         json!({"op": "set_text", "layer": "$sound", "text": "FSSHHH"}),
         json!({"op": "update_layer", "layer": "$sound", "patch": {"translation": {
             "language": "en", "style": {"chars": {"size": 28.0, "stroke": [1.0, 1.0, 1.0, 1.0], "stroke_width": 3.0}},
-            "transform": [[1.0, 0.0, 200.0], [0.0, 1.0, 200.0]],
+            "frame": "point", "transform": [[1.0, 0.0, 200.0], [0.0, 1.0, 200.0]],
         }}}),
     ];
     let change = session.apply(Edit {

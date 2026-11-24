@@ -1,4 +1,4 @@
-import type { Layer, LayerId, Text } from '@koharu/ipc/protocol'
+import type { Frame, Layer, LayerId, Text } from '@koharu/ipc/protocol'
 
 export type TextLayer = Extract<Layer, { kind: 'text' }>
 export type BlockLayer = Extract<Layer, { kind: 'block' }>
@@ -27,6 +27,12 @@ export function letteringOf(layer: Layer): Text | null {
   if (isTextLayer(layer)) return layer
   if (isBlockLayer(layer)) return layer.translation ?? null
   return null
+}
+
+/** The frame a layer's lettering lies in: its own, or its source's, where a block's translation
+ * starts. */
+export function frameOf(layer: Layer): Frame | undefined {
+  return (letteringOf(layer) ?? (isBlockLayer(layer) ? layer.source : null))?.frame
 }
 
 /** Every layer of `layers` and their children, parents first, in drawing order. */

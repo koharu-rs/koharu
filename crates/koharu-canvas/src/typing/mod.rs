@@ -25,8 +25,8 @@ const BLINK: u128 = 530;
 /// What a session types into.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Target {
-    /// A text layer, or a block's translation, which the scene adds in its
-    /// source's place when the block has none.
+    /// A text layer, or a block's translation, which the scene adds when the
+    /// block has none.
     Layer(LayerId),
     /// A new text, which the commit adds.
     New,
@@ -66,19 +66,14 @@ pub(crate) struct Typing {
 }
 
 impl Typing {
-    /// Typing into `layer`'s `text`; with `untranslated`, `text` is a block's
-    /// source standing in for the translation it doesn't have yet.
-    pub fn layer(
-        renderer: &Renderer,
-        layer: LayerId,
-        text: &Text,
-        untranslated: bool,
-    ) -> anyhow::Result<Self> {
-        let content = match untranslated {
-            true => RichText::default(),
-            false => text.content.clone(),
-        };
-        Self::start(renderer, Target::Layer(layer), text.clone(), content)
+    /// Typing into `layer`'s `text`.
+    pub fn layer(renderer: &Renderer, layer: LayerId, text: &Text) -> anyhow::Result<Self> {
+        Self::start(
+            renderer,
+            Target::Layer(layer),
+            text.clone(),
+            text.content.clone(),
+        )
     }
 
     /// Typing a new text, `text` giving its frame and place.

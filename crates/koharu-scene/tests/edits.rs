@@ -4,7 +4,8 @@
 mod common;
 use common::*;
 use koharu_scene::{
-    Content, Direction, Error, LayerId, LayerKind, Op, PageId, Ref, RichText, Session, Text,
+    Content, Direction, Error, Frame, LanguageIdentifier, LayerId, LayerKind, Op, PageId, Ref,
+    RichText, Session, Text,
 };
 use serde_json::{Value, json};
 
@@ -597,8 +598,13 @@ fn update_layer_merges_and_fails_closed() {
     assert!(!patched.mask.visible);
 
     // Merging into a missing translation starts from the one a text op adds,
-    // in its source's place but without its words.
-    update(&mut session, block, json!({"source": {"content": "原文"}})).expect("a source");
+    // in its source's place but without its words or its language.
+    update(
+        &mut session,
+        block,
+        json!({"source": {"content": "原文", "language": "ja"}}),
+    )
+    .expect("a source");
     update(
         &mut session,
         block,
@@ -614,9 +620,24 @@ fn update_layer_merges_and_fails_closed() {
         Some(Text {
             content: RichText::default(),
             direction: Direction::Vertical,
+            language: LanguageIdentifier::UNKNOWN,
             ..patched.source.clone()
         })
     );
+    // A frame of another kind replaces the source's.
+    update(
+        &mut session,
+        block,
+        json!({"translation": {"frame": {"path": {"path": outline()}}}}),
+    )
+    .expect("a path");
+    let Content::Block(patched) = &layer(&session, block).content else {
+        panic!("not a block")
+    };
+    assert!(matches!(
+        patched.translation.as_ref().map(|text| &text.frame),
+        Some(Frame::Path { .. })
+    ));
     update(&mut session, block, json!({"translation": null})).expect("no translation");
     let Content::Block(patched) = &layer(&session, block).content else {
         panic!("not a block")

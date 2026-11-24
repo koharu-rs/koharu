@@ -12,7 +12,6 @@ use kurbo::{
     Affine, BezPath, CubicBez, Line, ParamCurveNearest as _, PathEl, PathSeg, Point, QuadBez, Rect,
     Shape as _, Vec2,
 };
-use serde_json::Value;
 
 use super::transform::Lettering;
 use crate::{
@@ -213,9 +212,7 @@ impl Shape {
             },
             TextFrame::Point => return None,
         };
-        let mut frame = serde_json::to_value(frame).ok()?;
-        // A merge patch switches a box to a path by clearing the box.
-        frame["box"] = Value::Null;
+        let frame = serde_json::to_value(frame).ok()?;
         Some(Effect::Edit(Edit {
             label: "edit_frame".to_owned(),
             ops: vec![Op::UpdateLayer {

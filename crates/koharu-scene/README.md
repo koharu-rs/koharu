@@ -270,6 +270,8 @@ each is cleaned, translated, fixed, and removed on its own:
   new lettering.
 - Painting its mask hides its clean-up there at once, so an over-reaching
   clean-up is fixed where it happened, without a rerun.
+- A translation starts as its source without its words or its language,
+  whichever writer adds it, so new lettering lies where the original did.
 - Each text gets its own translation, framed by its own room in its balloon, or
   by its source's frame when it's free, and filling it. Texts never flow from one frame into
   another, as Clip Studio Paint adds several texts to one balloon [CSP text
@@ -381,6 +383,7 @@ Each model also writes its `c2pa` action on the layers it wrote.
 | Add a text detection missed | Draw a box on the page | a block in the balloon under the box, else free in the panel or on the page there, whose source frame and mask are the box. Paint the mask smaller to keep art |
 | Read it | Run OCR on that block | its source's wording |
 | Fix what OCR read | Edit the source in the Story panel | its source's wording |
+| Translate it yourself | Type into the block, in the Story panel or on the canvas | its translation's wording, in its source's place and style |
 | Translate again after a fix | Run translation on that block | its translation's wording, placed again in its room |
 | Undo an over-reaching clean-up | Paint the block's mask, or clear its clean-up, and run inpainting on it again if needed | that block's clean-up only |
 | Reletter a text | Delete its translation | the block keeps its clean-up, and its area stays clean |
@@ -449,10 +452,11 @@ agent.
   edit that changes nothing adds no step.
 - **A patch** is a JSON Merge Patch [RFC 7396] over a layer's values, read back
   into the layer's types, so a misspelt property or a value of the wrong shape
-  fails and the layer stays as it was. A patch can't name a layer's id,
-  children, kind, or attributes. A text's wording changes only through the text
-  edits, a block's translation included; a block's source takes its wording
-  from a patch, as OCR writes it.
+  fails and the layer stays as it was. A frame of another kind replaces the old
+  one, and a patch into a missing translation merges into what it starts as. A
+  patch can't name a layer's id, children, kind, or attributes. A text's wording
+  changes only through the text edits, a block's translation included; a block's
+  source takes its wording from a patch, as OCR writes it.
 - **History** lists every step's label, oldest first, and goes back or forward
   to any of them in one step, as selecting a state in Photoshop's History
   panel does. It keeps the 20 most recent steps, Photoshop's default, and lasts

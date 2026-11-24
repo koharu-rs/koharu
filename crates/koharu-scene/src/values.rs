@@ -261,8 +261,8 @@ pub enum Anchor {
     End,
 }
 
-/// Where a text lays out. Externally tagged, so a merge patch switches
-/// variants by clearing the old one: `{"frame": {"path": {...}, "box": null}}`.
+/// Where a text lays out. Externally tagged, and a patch naming another variant
+/// replaces the old one: `{"frame": {"path": {...}}}` over a box.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Frame {

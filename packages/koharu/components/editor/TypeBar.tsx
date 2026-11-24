@@ -12,6 +12,7 @@ import { ContextBar } from '@/components/editor/ContextBar'
 import { toHex, toRgba } from '@/lib/color'
 import {
   expandLayerSelection,
+  frameOf,
   isBlockLayer,
   isTextLayer,
   letteringOf,
@@ -106,8 +107,8 @@ export function TypeBar() {
     const frame = letteringOf(layer)?.frame
     return typeof frame === 'object' ? [(frame.box ?? frame.path)?.fit] : []
   })
-  const fitted = fits.length > 0
-  const autoFit = fitted && fits.every((fit) => fit === 'best')
+  const fitted = targets.some((layer) => typeof frameOf(layer) === 'object')
+  const autoFit = fits.length > 0 && fits.every((fit) => fit === 'best')
   // Frames that don't share Auto share no size.
   const mixedFit = !autoFit && fits.includes('best')
 

@@ -3,26 +3,18 @@
 use serde_json::Value;
 
 use super::Run;
-use crate::{Block, Content, Error, Layer, Ref, Result, RichText, Span, Text, text};
-
-/// A block's translation. One a text op or a patch adds starts as the source
-/// without its words, in the source's place and style, so new lettering lies
-/// where the original did, whichever tool or panel sent the op.
-pub(super) fn translation(block: &mut Block) -> &mut Text {
-    let source = &block.source;
-    block.translation.get_or_insert_with(|| Text {
-        content: RichText::default(),
-        ..source.clone()
-    })
-}
+use crate::{Content, Error, Layer, Ref, Result, RichText, Span, Text, text};
 
 impl Run<'_, '_> {
-    /// A text layer's text, or a block's [`translation`].
+    /// A text layer's text, or a block's translation, added as its source's
+    /// [`Text::blank`] when the block has none.
     fn text_mut<'l>(&self, op: usize, layer: &'l mut Layer) -> Result<&'l mut Text> {
         let id = layer.id;
         match &mut layer.content {
             Content::Text(text) => Ok(text),
-            Content::Block(block) => Ok(translation(block)),
+            Content::Block(block) => Ok(block
+                .translation
+                .get_or_insert_with(|| block.source.blank())),
             _ => Err(Error::invalid(op, format!("layer {id} holds no text"))),
         }
     }
