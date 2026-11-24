@@ -10,6 +10,10 @@ use imageproc::{distance_transform::Norm, morphology::dilate};
 /// How far from the mask a pixel must be to count as one the edit should
 /// have kept.
 const CLEAR: u8 = 8;
+/// How far a kept pixel's channels may drift. Past it the edit changed what's
+/// drawn there, as it erases lettering the mask leaves out, and matching that
+/// tinted the window and smeared the fill.
+const DRIFT: u8 = 32;
 /// How far the local differences spread, as a Gaussian's sigma.
 const SPREAD: f32 = 24.0;
 
@@ -18,8 +22,12 @@ type Field = ImageBuffer<Luma<f32>, Vec<f32>>;
 /// `edited` with its colours matched to `original` outside `mask`.
 pub(super) fn matched(original: &RgbImage, edited: &RgbImage, mask: &GrayImage) -> RgbImage {
     let near = dilate(mask, Norm::LInf, CLEAR);
-    let kept = |x: u32, y: u32| near.get_pixel(x, y).0[0] == 0;
-    if !near.pixels().any(|pixel| pixel.0[0] == 0) {
+    let kept = |x: u32, y: u32| {
+        let (original, edited) = (original.get_pixel(x, y).0, edited.get_pixel(x, y).0);
+        near.get_pixel(x, y).0[0] == 0
+            && (0..3).all(|channel| original[channel].abs_diff(edited[channel]) <= DRIFT)
+    };
+    if !edited.enumerate_pixels().any(|(x, y, _)| kept(x, y)) {
         return edited.clone();
     }
     let transform = fit(original, edited, &kept);
@@ -30,14 +38,14 @@ pub(super) fn matched(original: &RgbImage, edited: &RgbImage, mask: &GrayImage) 
         }))
     });
     let (width, height) = edited.dimensions();
-    let weight = imageops::fast_blur(
+    let weight = imageops::blur(
         &Field::from_fn(width, height, |x, y| {
             Luma([if kept(x, y) { 1.0 } else { 0.0 }])
         }),
         SPREAD,
     );
     let residuals: [Field; 3] = std::array::from_fn(|channel| {
-        imageops::fast_blur(
+        imageops::blur(
             &Field::from_fn(width, height, |x, y| {
                 Luma([if kept(x, y) {
                     f32::from(original.get_pixel(x, y).0[channel])
@@ -131,6 +139,43 @@ fn byte(value: f64) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An edit that darkened one side of the window and brightened the other,
+    /// which one colour transform can't undo, comes back to the original's
+    /// colours under a mask on each side, and a black bar it erased by the
+    /// left one leaves no smear there.
+    #[test]
+    fn a_tone_shift_that_varies_is_undone_under_the_mask() {
+        let paper = |y: u32| 64 + 2 * y as u8;
+        let original = RgbImage::from_fn(256, 64, |x, y| {
+            Rgb([if (52..60).contains(&x) { 0 } else { paper(y) }; 3])
+        });
+        let edited = RgbImage::from_fn(256, 64, |x, y| {
+            let shade = if x < 128 {
+                paper(y) - 20
+            } else {
+                paper(y) + 20
+            };
+            Rgb([shade; 3])
+        });
+        let mask = GrayImage::from_fn(256, 64, |x, y| {
+            Luma([
+                if ((24..40).contains(&x) || (216..232).contains(&x)) && (24..40).contains(&y) {
+                    255
+                } else {
+                    0
+                },
+            ])
+        });
+        let matched = matched(&original, &edited, &mask);
+        for x in [32, 224] {
+            let got = matched.get_pixel(x, 32).0;
+            assert!(
+                got.iter().all(|got| got.abs_diff(paper(32)) <= 2),
+                "{x}: {got:?}"
+            );
+        }
+    }
 
     /// An edit that brightened the whole window comes back to the original's
     /// colours, inside the mask as well as out.
