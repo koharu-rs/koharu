@@ -172,13 +172,22 @@ export function useFonts(enabled = true) {
   return useQuery({ ...fontsQuery, enabled })
 }
 
+/** The preferences as the desktop last read or saved them, which a failed save shows again: a
+ * file that can't be written may not read either. */
+let stored: Preferences | undefined
+
 export function usePreferences() {
-  return useQuery({ queryKey: preferencesKey, queryFn: () => commands.getPreferences() })
+  return useQuery({
+    queryKey: preferencesKey,
+    queryFn: async () => (stored = await commands.getPreferences()),
+    // The cache keeps the very object a save sent, which the save is known by.
+    structuralSharing: false,
+  })
 }
 
 /** Saves the preferences one save after another. Each save shows at once; what the file holds
- * replaces it only while the cache still holds that save, so an answer never undoes a newer
- * edit, saved or still waiting to be. */
+ * after it, or held before it if it failed, replaces it only while the cache still holds that
+ * save, so an answer never undoes a newer edit, saved or still waiting to be. */
 export function useSavePreferences() {
   return useMutation({
     mutationKey: preferencesKey,
@@ -189,9 +198,10 @@ export function useSavePreferences() {
       queryClient.setQueryData(preferencesKey, preferences)
     },
     onSettled: (saved, _, preferences) => {
-      if (queryClient.getQueryData(preferencesKey) !== preferences) return
-      if (saved) queryClient.setQueryData(preferencesKey, saved)
-      else void queryClient.invalidateQueries({ queryKey: preferencesKey })
+      stored = saved ?? stored
+      if (queryClient.getQueryData(preferencesKey) === preferences) {
+        queryClient.setQueryData(preferencesKey, stored)
+      }
     },
   })
 }
