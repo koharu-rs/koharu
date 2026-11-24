@@ -27,7 +27,7 @@ provider only when the user picked that provider.
 | sign-in | `chatgpt` and `grok` sign in with the user's plan in place of a key: ChatGPT through rig's sign-in, the route Codex takes, and Grok, a SuperGrok or X Premium plan, with xAI's device code through xAI's shared client, its requests going to the endpoint the Grok CLI uses | Hermes Agent and OpenClaw sign in to xAI so [Hermes xAI] [OpenClaw xAI] |
 | listing | every model the user can pick, from each vendor with a key; one that needs a key and has none lists nothing, and a list that fails is left out | LM Studio's own list says what its models can do [LM Studio list] |
 | what a model can do | rig's catalog says; a model it knows as neither calling tools nor keeping to a schema, such as an embedding model, is dropped, and one it doesn't know is offered with its limits unknown | |
-| retries | a 429 or 5xx reply is sent again up to 3 times, after the wait the reply names or a growing one | |
+| retries | a request is sent again up to 3 times when its reply says it failed for now, as a 429 or 5xx does, or its connection was lost before one: after the wait the reply names, else until its rate-limit headers say a spent allowance resets, else a growing one. A spent quota, a wait over 2 minutes, and a server that can't be reached fail at once | OpenAI's Python library doesn't retry past 2 minutes [OpenAI retries] |
 
 ## 2. Structured answers
 
@@ -84,6 +84,7 @@ coding agent's [pi compaction]:
 Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
+- Hosted requests: [OpenAI retries]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - Context: [pi compaction]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp Gemma 4]
@@ -94,6 +95,7 @@ Read in November 2026.
 [OpenAI structured outputs]: https://developers.openai.com/api/docs/guides/structured-outputs
 [LM Studio list]: https://lmstudio.ai/docs/developer/rest/list
 [Zed providers]: https://zed.dev/docs/ai/llm-providers#openai-api-compatible
+[OpenAI retries]: https://github.com/openai/openai-python/blob/804a9af5a5199f36d28dfdf84c7981f0253a3a3f/src/openai/_base_client.py#L922-L930
 [Hermes xAI]: https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth_xai.py
 [OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
 [pi compaction]: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/compaction.md
