@@ -89,9 +89,9 @@ impl Lama {
         })
     }
 
-    /// IOPaint's `_pad_forward`: the image and mask padded to a multiple of 8,
-    /// through the network, cropped back, and blended over the image by the
-    /// mask, its default `sd_keep_unmasked_area`.
+    /// IOPaint's `_pad_forward`: the image and mask padded, through the network,
+    /// cropped back, and blended over the image by the mask, its default
+    /// `sd_keep_unmasked_area`.
     fn pad_forward(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
         let width = image.width();
         let height = image.height();
@@ -107,10 +107,20 @@ impl Lama {
             .unsqueeze(0)?
             .unsqueeze(0)?
             .contiguous(koharu_torch::MemoryFormat::Contiguous)?;
-        let model_image =
-            processor::pad_img_to_modulo(image_tensor.to_kind(Kind::Float)?.div_scalar(255.0)?, 8)?;
-        let model_mask =
-            processor::pad_img_to_modulo(mask_tensor.gt_scalar(0.0)?.to_kind(Kind::Float)?, 8)?;
+        // Upstream pads to a multiple of 8. libtorch's MPS backend compiles a
+        // graph for each operator at each input shape, about 27 for a run
+        // here, and keeps them all, so windows of any size ran Koharu out of
+        // memory after some 600 of them (koharu-rs/koharu#1295). A multiple of
+        // 128 leaves at most 49 shapes within `WHOLE`.
+        let modulo = if self.device == Device::Mps { 128 } else { 8 };
+        let model_image = processor::pad_img_to_modulo(
+            image_tensor.to_kind(Kind::Float)?.div_scalar(255.0)?,
+            modulo,
+        )?;
+        let model_mask = processor::pad_img_to_modulo(
+            mask_tensor.gt_scalar(0.0)?.to_kind(Kind::Float)?,
+            modulo,
+        )?;
         let output = (self
             .model
             .forward(&model_image, &model_mask)?
