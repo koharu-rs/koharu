@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Eraser } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -248,10 +248,15 @@ function SignInField({ vendor }: { vendor: Vendor }) {
 }
 
 /** A base URL, which reaches the preferences when the field loses the focus holding a URL, or
- * nothing for the vendor's own server. */
+ * nothing for the vendor's own server, and shows what they then hold. */
 function BaseUrlField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation()
   const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
   const valid = draft === '' || URL.canParse(draft)
   return (
     <label className='grid gap-1 text-[10px] text-muted-foreground'>

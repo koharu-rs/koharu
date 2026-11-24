@@ -179,13 +179,9 @@ let stored: Preferences | undefined
 export function usePreferences() {
   return useQuery({
     queryKey: preferencesKey,
-    queryFn: async ({ signal }) => {
-      const read = await commands.getPreferences()
-      // An edit cancels the read under way, which may still answer after the edit's save with the
-      // file as it was before.
-      if (!signal.aborted) stored = read
-      return read
-    },
+    queryFn: async () => (stored = await commands.getPreferences()),
+    // The cache keeps the very object a save sent, which the save is known by.
+    structuralSharing: false,
   })
 }
 
@@ -197,17 +193,13 @@ export function useSavePreferences() {
     mutationKey: preferencesKey,
     scope: { id: 'preferences' },
     mutationFn: (preferences: Preferences) => commands.savePreferences(preferences),
-    // The cache keeps a structurally shared copy, not `preferences` itself, so the save is known
-    // by that copy.
     onMutate: async (preferences) => {
       await queryClient.cancelQueries({ queryKey: preferencesKey })
-      return queryClient.setQueryData(preferencesKey, preferences)
+      queryClient.setQueryData(preferencesKey, preferences)
     },
-    onSuccess: (saved) => {
-      stored = saved
-    },
-    onSettled: (_saved, _error, _preferences, shown) => {
-      if (queryClient.getQueryData(preferencesKey) === shown) {
+    onSettled: (saved, _, preferences) => {
+      stored = saved ?? stored
+      if (queryClient.getQueryData(preferencesKey) === preferences) {
         queryClient.setQueryData(preferencesKey, stored)
       }
     },
