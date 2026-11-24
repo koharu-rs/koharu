@@ -14,7 +14,6 @@ use icu_segmenter::{GraphemeClusterSegmenter, WordSegmenter, options::WordBreakI
 use koharu_renderer::{Lettering, Renderer};
 use koharu_scene::{CharStyle, Content, Edit, LayerId, Op, Page, RichText, Text, Uuid};
 use kurbo::{Affine, Line, Point, Rect};
-use serde_json::json;
 
 pub(crate) use self::keys::Keyed;
 pub use self::style::{CharKey, Typed};
@@ -26,11 +25,9 @@ const BLINK: u128 = 530;
 /// What a session types into.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Target {
-    /// A text layer, or a block's translation.
+    /// A text layer, or a block's translation, which the scene adds when the
+    /// block has none.
     Layer(LayerId),
-    /// A block without a translation, which the commit gives one in its
-    /// source's place.
-    Untranslated(LayerId),
     /// A new text, which the commit adds.
     New,
 }
@@ -69,19 +66,14 @@ pub(crate) struct Typing {
 }
 
 impl Typing {
-    /// Typing into `layer`'s `text`; with `untranslated`, `text` is a block's
-    /// source standing in for the translation it doesn't have yet.
-    pub fn layer(
-        renderer: &Renderer,
-        layer: LayerId,
-        text: &Text,
-        untranslated: bool,
-    ) -> anyhow::Result<Self> {
-        let (target, content) = match untranslated {
-            true => (Target::Untranslated(layer), RichText::default()),
-            false => (Target::Layer(layer), text.content.clone()),
-        };
-        Self::start(renderer, target, text.clone(), content)
+    /// Typing into `layer`'s `text`.
+    pub fn layer(renderer: &Renderer, layer: LayerId, text: &Text) -> anyhow::Result<Self> {
+        Self::start(
+            renderer,
+            Target::Layer(layer),
+            text.clone(),
+            text.content.clone(),
+        )
     }
 
     /// Typing a new text, `text` giving its frame and place.
@@ -123,7 +115,7 @@ impl Typing {
     /// The layer typed into; `None` for a new text.
     pub fn target(&self) -> Option<LayerId> {
         match self.target {
-            Target::Layer(layer) | Target::Untranslated(layer) => Some(layer),
+            Target::Layer(layer) => Some(layer),
             Target::New => None,
         }
     }
@@ -476,19 +468,6 @@ impl Typing {
         match self.target {
             Target::Layer(layer) if self.content != self.original => {
                 vec![edit("set_text", vec![spans(layer, self.content)])]
-            }
-            Target::Untranslated(layer) if !self.content.0.is_empty() => {
-                // The translation takes its source's place and style; its
-                // characters come only through the text ops.
-                let mut placed = serde_json::to_value(&self.base).expect("a text serializes");
-                if let Some(fields) = placed.as_object_mut() {
-                    fields.remove("content");
-                }
-                let place = Op::UpdateLayer {
-                    layer: layer.into(),
-                    patch: json!({ "translation": placed }),
-                };
-                vec![edit("set_text", vec![place, spans(layer, self.content)])]
             }
             Target::New if !self.content.0.is_empty() => {
                 let text = Text {

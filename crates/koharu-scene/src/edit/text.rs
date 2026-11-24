@@ -6,13 +6,15 @@ use super::Run;
 use crate::{Content, Error, Layer, Ref, Result, RichText, Span, Text, text};
 
 impl Run<'_, '_> {
-    /// A text layer's text, or a block's translation, added empty when the
-    /// block has none.
+    /// A text layer's text, or a block's translation, added as its source's
+    /// [`Text::blank`] when the block has none.
     fn text_mut<'l>(&self, op: usize, layer: &'l mut Layer) -> Result<&'l mut Text> {
         let id = layer.id;
         match &mut layer.content {
             Content::Text(text) => Ok(text),
-            Content::Block(block) => Ok(block.translation.get_or_insert_default()),
+            Content::Block(block) => Ok(block
+                .translation
+                .get_or_insert_with(|| block.source.blank())),
             _ => Err(Error::invalid(op, format!("layer {id} holds no text"))),
         }
     }

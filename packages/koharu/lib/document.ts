@@ -22,10 +22,11 @@ export function isContainer(layer: Layer): boolean {
   return layer.kind === 'group' || layer.kind === 'panel' || layer.kind === 'balloon'
 }
 
-/** The lettering a layer draws: a text's own, or a block's translation. */
+/** The lettering a layer draws: a text's own, or a block's translation, which starts as its source
+ * without the words. */
 export function letteringOf(layer: Layer): Text | null {
   if (isTextLayer(layer)) return layer
-  if (isBlockLayer(layer)) return layer.translation ?? null
+  if (isBlockLayer(layer)) return layer.translation ?? { ...layer.source, content: [] }
   return null
 }
 

@@ -117,8 +117,8 @@ export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
 }
 
 /** Sets the fit of each layer's own frame, a box or a path: a text's, or a block's translation's.
- * Point text and a block with no translation have no frame to fit, and a growing box draws its
- * text at the set size already, so `none` leaves it growing. */
+ * Point text has no frame to fit, and a growing box draws its text at the set size already, so
+ * `none` leaves it growing. */
 export function setFit(layers: Layer[], fit: PathFit): Promise<Change> {
   return edit(
     'update_layer',

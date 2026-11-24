@@ -105,7 +105,8 @@ pub enum Op {
     RemoveLayer { layer: Ref },
     /// Change a layer's values with a JSON Merge Patch (RFC 7396): `null`
     /// clears an optional value, and `{"translation": null}` removes a
-    /// block's translation.
+    /// block's translation. A patch into a missing one merges into the one
+    /// `set_text` adds.
     UpdateLayer {
         layer: Ref,
         #[schemars(schema_with = "schema::layer_patch")]
@@ -117,8 +118,9 @@ pub enum Op {
     /// a panel's or a balloon's `outline`. A raster, a mask, and a block's
     /// `cleanup` or `mask` only move, by whole pixels. A group fails.
     TransformLayer { layer: Ref, transform: Transform },
-    /// Replace a text layer's text, or a block's translation, adding one if
-    /// the block has none. Styling on unchanged characters is kept.
+    /// Replace a text layer's text, or a block's translation. A block without
+    /// one gets one with its source's frame, transform, direction, and style.
+    /// Styling on unchanged characters is kept.
     SetText { layer: Ref, text: String },
     /// Replace a text's spans, from the rich editor.
     #[schemars(skip)]

@@ -51,7 +51,7 @@ pub fn placement(project: &Project, block: LayerId, target: &LanguageIdentifier)
             let [[a, _, _], [d, _, _]] = this.source.transform.0;
             let turn = Affine::rotate_about(d.atan2(a), room.bounding_box().center());
             (
-                json!({"path": {"path": (turn.inverse() * room).to_svg(), "fit": "best", "anchor": "center"}, "box": null}),
+                json!({"path": {"path": (turn.inverse() * room).to_svg(), "fit": "best", "anchor": "center", "inset": Frame::DEFAULT_INSET}, "box": null}),
                 json!(Transform::from(turn)),
             )
         }

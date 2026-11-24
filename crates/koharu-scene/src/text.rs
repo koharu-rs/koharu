@@ -251,6 +251,18 @@ impl Text {
         };
         Some(Affine::from(self.transform).transform_rect_bbox(rect))
     }
+
+    /// Its place and style without its words or their language: what a block's
+    /// translation starts as, from its source, whichever writer adds it, so
+    /// new lettering lies where the original did.
+    #[must_use]
+    pub fn blank(&self) -> Self {
+        Self {
+            content: RichText::default(),
+            language: und(),
+            ..self.clone()
+        }
+    }
 }
 
 /// Empty point text in an undetermined language.

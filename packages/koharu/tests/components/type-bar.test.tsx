@@ -41,7 +41,13 @@ async function chooseSize(fit: 'none' | 'best', choice: string): Promise<() => O
       frame: { box: { bounds, fit: 'grow' } },
     },
     { ...base, id: 'caption', name: 'caption', kind: 'text', content, frame: 'point' },
-    { ...base, id: 'untranslated', name: 'untranslated', kind: 'block', source: { content } },
+    {
+      ...base,
+      id: 'untranslated',
+      name: 'untranslated',
+      kind: 'block',
+      source: { content, frame: { box: { bounds } } },
+    },
   ]
   queryClient.setQueryData(pageKey, { id: 'p', size: bounds, background: null, layers })
   queryClient.setQueryData(preferencesKey, { renderer: {} })
@@ -76,7 +82,11 @@ describe('type bar font size', () => {
     const frameEdits = await chooseSize('best', '24')
     await waitFor(() =>
       expect(frameEdits()).toEqual([
-        [translated('balloon', 'path', 'none'), translated('sign', 'box', 'none')],
+        [
+          translated('balloon', 'path', 'none'),
+          translated('sign', 'box', 'none'),
+          translated('untranslated', 'box', 'none'),
+        ],
       ]),
     )
   })
@@ -89,6 +99,7 @@ describe('type bar font size', () => {
           translated('balloon', 'path', 'best'),
           translated('sign', 'box', 'best'),
           { op: 'update_layer', layer: 'note', patch: { frame: { box: { fit: 'best' } } } },
+          translated('untranslated', 'box', 'best'),
         ],
       ]),
     )

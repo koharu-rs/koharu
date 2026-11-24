@@ -270,6 +270,9 @@ each is cleaned, translated, fixed, and removed on its own:
   new lettering.
 - Painting its mask hides its clean-up there at once, so an over-reaching
   clean-up is fixed where it happened, without a rerun.
+- A translation starts as its source without its words or its language,
+  whether a text edit or a patch adds it, so new lettering lies where the
+  original did.
 - Each text gets its own translation, framed by its own room in its balloon, or
   by its source's frame when it's free, and filling it. Texts never flow from one frame into
   another, as Clip Studio Paint adds several texts to one balloon [CSP text
