@@ -519,6 +519,7 @@
     "translate": "Translate {{name}}"
   },
   "tools": {
+    "block": "Text block",
     "brushSize": "Brush size",
     "brushSizeInput": "Brush size",
     "brushSizePixels": "Brush size: {{size}} pixels",

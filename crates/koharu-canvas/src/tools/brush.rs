@@ -80,7 +80,8 @@ impl Stroke {
             let layer = self.target.unwrap_or_else(|| {
                 // Added at once, so a stroke made while this one is redrawn
                 // goes onto it too.
-                let (id, add) = added(cx.snapshot.page(), Content::Raster(Raster::default()));
+                let raster = Content::Raster(Raster::default());
+                let (id, add) = added(cx.snapshot.page(), None, raster);
                 let edit = Edit {
                     label: "add_layer".to_owned(),
                     ops: vec![add],
@@ -171,7 +172,8 @@ impl Stroke {
             }
             None if self.tool == Tool::Draw => {
                 let pixels = paint(rect, coverage, cx.brush.color).into_raw();
-                let (id, add) = added(cx.snapshot.page(), Content::Raster(Raster::default()));
+                let raster = Content::Raster(Raster::default());
+                let (id, add) = added(cx.snapshot.page(), None, raster);
                 let write = Op::WritePixels {
                     layer: Ref::from(id),
                     rect,

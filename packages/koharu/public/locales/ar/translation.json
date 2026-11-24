@@ -519,6 +519,7 @@
     "translate": "ترجمة {{name}}"
   },
   "tools": {
+    "block": "كتلة نص",
     "brushSize": "حجم الفرشاة",
     "brushSizeInput": "حجم الفرشاة",
     "brushSizePixels": "حجم الفرشاة: {{size}} بكسل",

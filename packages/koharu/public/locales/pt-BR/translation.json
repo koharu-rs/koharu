@@ -519,6 +519,7 @@
     "translate": "Traduzir {{name}}"
   },
   "tools": {
+    "block": "Bloco de texto",
     "brushSize": "Tamanho do pincel",
     "brushSizeInput": "Tamanho do pincel",
     "brushSizePixels": "Tamanho do pincel: {{size}} pixels",

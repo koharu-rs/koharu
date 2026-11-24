@@ -1,13 +1,13 @@
 //! The text tool's draft: point text at a click, box text over a drag,
-//! which typing then fills.
+//! which typing then fills. The text block tool drags a box with it too.
 
 use koharu_scene::{Bounds, Frame, LanguageIdentifier, RichText, Text, TextStyle, Transform};
 use kurbo::{Point, Rect};
 
 use crate::{draw::overlay::Overlay, gesture::Context, view::Sample};
 
-/// A text drag shorter than this on both sides, in device-independent
-/// pixels, is a click, which makes point text, as the editor's was.
+/// A drag shorter than this on both sides, in device-independent pixels, is a
+/// click, which makes point text, as the editor's was.
 const CLICK: f64 = 4.0;
 
 /// A text frame being dragged out, in page points.
@@ -34,12 +34,17 @@ impl Draft {
         }
     }
 
+    /// Whether the drag was a click.
+    pub fn clicked(&self, cx: &Context) -> bool {
+        let (rect, click) = (self.rect(), cx.view.page_length(CLICK));
+        rect.width() < click && rect.height() < click
+    }
+
     /// The new text where the drag went: point text at a click, box text
     /// over a drag, empty, for typing to fill and add.
     pub fn text(&self, cx: &Context) -> Text {
         let rect = self.rect();
-        let click = cx.view.page_length(CLICK);
-        let (origin, frame) = match rect.width() < click && rect.height() < click {
+        let (origin, frame) = match self.clicked(cx) {
             true => (self.start, Frame::Point),
             false => (
                 rect.origin(),

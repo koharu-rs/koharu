@@ -519,6 +519,7 @@
     "translate": "翻译 {{name}}"
   },
   "tools": {
+    "block": "文本块",
     "brushSize": "笔刷大小",
     "brushSizeInput": "笔刷大小",
     "brushSizePixels": "笔刷大小：{{size}} 像素",

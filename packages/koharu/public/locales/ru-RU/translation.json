@@ -519,6 +519,7 @@
     "translate": "Перевести {{name}}"
   },
   "tools": {
+    "block": "Текстовый блок",
     "brushSize": "Размер кисти",
     "brushSizeInput": "Размер кисти",
     "brushSizePixels": "Размер кисти: {{size}} пикс.",

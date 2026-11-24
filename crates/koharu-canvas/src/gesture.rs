@@ -15,6 +15,7 @@ use crate::{
     selection::Selection,
     snapshot::Snapshot,
     tools::{
+        block,
         brush::Stroke,
         direct::{Pick, Reshape},
         mark::Mark,
@@ -81,6 +82,8 @@ pub(crate) enum Gesture {
     Marquee(Marquee),
     Transform(Transform),
     Draft(Draft),
+    /// A text block's box being drawn.
+    Block(Draft),
     Pan(Pan),
     Stroke(Stroke),
     Reshape(Reshape),
@@ -94,7 +97,7 @@ impl Gesture {
         match self {
             Self::Marquee(marquee) => marquee.moved(samples),
             Self::Transform(transform) => transform.moved(samples),
-            Self::Draft(draft) => draft.moved(samples),
+            Self::Draft(draft) | Self::Block(draft) => draft.moved(samples),
             Self::Pan(pan) => return pan.moved(samples),
             Self::Stroke(stroke) => return stroke.moved(cx, samples),
             Self::Reshape(reshape) => reshape.moved(samples),
@@ -111,6 +114,7 @@ impl Gesture {
             Self::Transform(transform) => Ok(transform.finish(cx)),
             // The canvas types into a draft itself.
             Self::Draft(_) => Ok(Vec::new()),
+            Self::Block(draft) => block::finish(&draft, cx),
             Self::Pan(_) => Ok(Vec::new()),
             Self::Stroke(stroke) => stroke.finish(cx),
             Self::Reshape(reshape) => Ok(reshape.finish()),
@@ -124,7 +128,7 @@ impl Gesture {
         match self {
             Self::Marquee(marquee) => marquee.preview(overlay),
             Self::Transform(transform) => return transform.preview(overlay),
-            Self::Draft(draft) => draft.preview(overlay),
+            Self::Draft(draft) | Self::Block(draft) => draft.preview(overlay),
             Self::Pan(_) => {}
             Self::Stroke(stroke) => stroke.preview(cx, overlay),
             Self::Reshape(reshape) => reshape.preview(overlay),
@@ -144,7 +148,7 @@ impl Gesture {
             Self::Stroke(_) => None,
             Self::Reshape(reshape) => Some(reshape.cursor()),
             Self::Pick(_) => Some(CursorIcon::Default),
-            Self::Mark(_) => Some(CursorIcon::Crosshair),
+            Self::Block(_) | Self::Mark(_) => Some(CursorIcon::Crosshair),
         }
     }
 
@@ -174,7 +178,7 @@ impl Gesture {
         match self {
             Self::Marquee(marquee) => GestureLook::Rect(marquee.rect()),
             Self::Transform(transform) => GestureLook::Pointer(transform.current()),
-            Self::Draft(draft) => GestureLook::Rect(draft.rect()),
+            Self::Draft(draft) | Self::Block(draft) => GestureLook::Rect(draft.rect()),
             Self::Pan(_) => GestureLook::None,
             Self::Stroke(stroke) => stroke.look(),
             Self::Reshape(reshape) => GestureLook::Pointer(reshape.current()),

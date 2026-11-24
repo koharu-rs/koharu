@@ -644,6 +644,9 @@ impl Canvas {
             (Tool::Text, Some(PointerButton::Primary)) => {
                 Press::starts(Gesture::Draft(Draft::new(sample)))
             }
+            (Tool::Block, Some(PointerButton::Primary)) => {
+                Press::starts(Gesture::Block(Draft::new(sample)))
+            }
             (Tool::ColorPicker, Some(PointerButton::Primary)) => {
                 Press::answers(tools::picker::pick(&cx, sample)?)
             }

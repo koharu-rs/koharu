@@ -189,7 +189,7 @@ function ReadingNumber({ number, sfx }: { number: number; sfx: boolean }) {
 /** A text's number and fields, highlighted while its layer, or one of a block's parts, is
  * selected, and scrolled into view when the canvas or Layers selects it. Under its number, while
  * the pointer is on it or it's selected, a block shows a button that translates it alone, and
- * every text a menu that deletes it. */
+ * every text a menu that deletes it, and reads or cleans up a block alone. */
 function StoryText({
   page,
   shown,
@@ -293,6 +293,16 @@ function StoryText({
             <MoreHorizontal className='size-3' />
           </DropdownMenuTrigger>
           <DropdownMenuContent align='start' className='w-auto min-w-20'>
+            {isBlockLayer(layer) &&
+              (['recognize', 'inpaint'] as const).map((stage) => (
+                <DropdownMenuItem
+                  key={stage}
+                  disabled={locked}
+                  onClick={() => send(commands.runPipeline, { blocks: [layer.id] }, [stage])}
+                >
+                  {t(`phase.${stage}`)}
+                </DropdownMenuItem>
+              ))}
             <DropdownMenuItem
               variant='destructive'
               disabled={locked}

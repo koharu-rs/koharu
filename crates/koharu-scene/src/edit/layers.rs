@@ -59,6 +59,7 @@ impl Run<'_, '_> {
                 format!("index {index} is past the end ({len})"),
             ));
         }
+        let given = id.is_some();
         let (uuid, label) = self.new_id(op, id)?;
         let id = LayerId(uuid);
         let mut layer = Layer::new(id, new.clone());
@@ -68,6 +69,7 @@ impl Run<'_, '_> {
             id,
             label: label.clone(),
         });
+        let label = label.or_else(|| given.then(|| uuid.to_string()));
         self.number_parts(op, &mut layer, label.as_deref())?;
         self.project.insert(page, &list, index, layer);
         Ok(())

@@ -43,6 +43,7 @@ pointer hits is what the user sees.
 | direct selection | reshapes the selected text's frame by its anchors: a press on an anchor or a segment drags what it picks, Shift adds to the picked anchors, and a marquee picks those it encloses; the text fits the new shape when the drag ends. A box becomes a path through its corners at its first edit. Delete removes the picked anchors and joins their neighbours, never leaving a ring fewer than three, so a frame stays closed | the Direct Selection tool reshapes a text's path by dragging its anchors [Photoshop text paths], picks segments and anchors by click or marquee, Shift adding [Photoshop path selection], and drags a segment [InDesign paths]; its Delete key would cut the segments at a point, where the Delete Anchor Point tool joins them [Photoshop anchor points] |
 | marquee, lasso | mark a rectangle, or a freehand shape closed as the pointer lifts, of the page's pixels as the area | the Rectangular Marquee [Photoshop marquee] and the Lasso, which closes its border on release [Photoshop lasso] |
 | text | types point text from a click and a text box over a drag, added when typing commits; a click on a text types into it at the click, as a double click with the select tool does | Photoshop's point type starts at the point you select on the canvas, and its paragraph type sits inside a bounding box [Photoshop type] |
+| text block | adds a block over the box a drag draws, in the balloon under the box's middle, else the panel, else the page; its source's frame and its mask are the box | a FineReader text area is drawn by dragging over the image [FineReader areas], and Clip Studio Paint's Rectangle frame adds a frame border folder where it's dragged [CSP frames] |
 | draw, eraser | paint and erase a raster's or a block's clean-up's pixels along a stroke; on a block's mask, the draw tool uncovers the clean-up whatever its colour, and the eraser hides it | a layer mask is drawn on an alpha scale: the eraser masks more, and any colour uncovers more [CSP layer masks] |
 | remove | paints the area for the inpainting model to redraw, as the pipeline's area run takes it, onto the selected raster or clean-up, or a raster it adds and selects | |
 | colour picker | the page's own pixel under the pointer, not the screen's | |
@@ -72,7 +73,8 @@ Read in November 2026.
   paths], [Photoshop path selection], [Photoshop anchor points], [InDesign paths], [Photoshop
   inline input], [Photoshop marquee], [Photoshop lasso], [Photoshop selections], [Photoshop
   Generative Fill]
-- Clip Studio Paint: [CSP layer masks]
+- Clip Studio Paint: [CSP layer masks], [CSP frames]
+- ABBYY: [FineReader areas]
 
 [Pointer Events]: https://www.w3.org/TR/pointerevents3/
 [UI Events key]: https://www.w3.org/TR/uievents-key/
@@ -86,6 +88,8 @@ Read in November 2026.
 [InDesign paths]: https://helpx.adobe.com/indesign/desktop/create-lines-and-shapes/edit-and-style-paths/edit-and-reshape-paths.html
 [Photoshop inline input]: https://community.adobe.com/bug-reports-711/p-characters-are-not-displayed-when-typing-japanese-in-photoshop-23-0-and-22-5-2-for-windows-658744
 [CSP layer masks]: https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_masks.htm
+[CSP frames]: https://help.clip-studio.com/en-us/manual_en/540_comic/Frames_and_Panels.htm
+[FineReader areas]: https://help.abbyy.com/en-us/finereader/16/user_guide/editareas
 [Photoshop layer masks]: https://helpx.adobe.com/photoshop/using/masking-layers.html
 [Photoshop marquee]: https://helpx.adobe.com/photoshop/desktop/make-selections/get-started-selections/make-selections-with-marquee-tools.html
 [Photoshop lasso]: https://helpx.adobe.com/photoshop/desktop/make-selections/get-started-selections/isolate-specific-areas-in-images-with-lasso-tool.html

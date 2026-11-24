@@ -474,7 +474,7 @@ impl Typing {
                     content: self.content,
                     ..self.base
                 };
-                let (id, add) = added(page, Content::Text(Box::new(text)));
+                let (id, add) = added(page, None, Content::Text(Box::new(text)));
                 vec![edit("add_text", vec![add]), Effect::Selection(vec![id])]
             }
             _ => Vec::new(),

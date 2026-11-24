@@ -137,7 +137,8 @@ pub enum Op {
     /// Replace pixels of a layer's picture, in its own pixel coordinates:
     /// RGBA8 for a raster or a block's `cleanup`, grey8 for a mask or a
     /// block's `mask`, each named by its own id. A block's parts take the
-    /// labels `$label.mask` and `$label.cleanup` from the block's.
+    /// labels `$label.mask` and `$label.cleanup` from the label, or the id, it's
+    /// added under.
     #[schemars(skip)]
     WritePixels {
         layer: Ref,

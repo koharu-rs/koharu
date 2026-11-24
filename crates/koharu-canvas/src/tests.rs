@@ -702,6 +702,67 @@ fn a_remove_stroke_goes_onto_the_selected_cleanup() {
     ));
 }
 
+/// A box drawn with the text block tool adds a block in the balloon under it,
+/// else in the panel, else on the page: its source's frame and its mask are
+/// the box. A click adds nothing.
+#[test]
+fn a_drawn_box_adds_a_text_block_where_it_lies() {
+    let Some(mut fixture) = unscaled_of(
+        (200, 200),
+        vec![
+            json!({"op": "add_layer", "id": "$panel", "page": "$page", "index": 0, "layer": {
+                "kind": "panel", "outline": "M0 0 H100 V200 H0 Z",
+            }}),
+            json!({"op": "add_layer", "page": "$page", "parent": "$panel", "index": 0, "layer": {
+                "kind": "balloon", "outline": "M10 10 H90 V90 H10 Z",
+            }}),
+        ],
+    ) else {
+        return;
+    };
+    let panel = layers(&fixture)[0];
+    let balloon = fixture
+        .session
+        .lock()
+        .project()
+        .layer(panel)
+        .expect("a panel")
+        .children[0]
+        .id;
+    fixture.canvas.set_tool(Tool::Block);
+    let effects = gesture(&mut fixture.canvas, (20.0, 20.0), (20.0, 20.0));
+    assert!(effects.is_empty(), "{effects:?}");
+    for (from, to, holder) in [
+        ((20.0, 20.0), (40.0, 60.0), Some(balloon)),
+        ((20.0, 120.0), (60.0, 140.0), Some(panel)),
+        ((120.0, 20.0), (160.0, 40.0), None),
+    ] {
+        let effects = gesture(&mut fixture.canvas, from, to);
+        assert_eq!(apply(&mut fixture, effects), ["add_text"]);
+        let [id] = fixture.canvas.selection()[..] else {
+            panic!("the block selected");
+        };
+        let session = fixture.session.lock();
+        let project = session.project();
+        let parent = project
+            .parent(id)
+            .expect("a parent")
+            .1
+            .map(|layer| layer.id);
+        assert_eq!(parent, holder);
+        let blocks = project.blocks(fixture.page).expect("blocks");
+        let (_, block) = blocks
+            .iter()
+            .find(|(found, _)| *found == id)
+            .expect("a block");
+        let drawn = kurbo::Rect::from_points(from, to);
+        assert_eq!(block.source.bounds(), Some(drawn));
+        let rect = koharu_scene::Rect::covering(drawn, 200, 200).expect("a box");
+        let mask = session.pixels(block.mask.id, rect).expect("a mask");
+        assert!(mask.iter().all(|&value| value == 255));
+    }
+}
+
 #[test]
 fn the_marquee_marks_an_area_shift_adds_to_alt_takes_from_and_a_click_drops() {
     let Some(mut fixture) = unscaled_of((100, 100), Vec::new()) else {

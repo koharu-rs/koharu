@@ -519,6 +519,7 @@
     "translate": "{{name}} öğesini çevir"
   },
   "tools": {
+    "block": "Metin bloğu",
     "brushSize": "Fırça boyutu",
     "brushSizeInput": "Fırça boyutu",
     "brushSizePixels": "Fırça boyutu: {{size}} piksel",

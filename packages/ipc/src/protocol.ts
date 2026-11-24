@@ -637,7 +637,8 @@ export type Op =
    *  Replace pixels of a layer's picture, in its own pixel coordinates:
    *  RGBA8 for a raster or a block's `cleanup`, grey8 for a mask or a
    *  block's `mask`, each named by its own id. A block's parts take the
-   *  labels `$label.mask` and `$label.cleanup` from the block's.
+   *  labels `$label.mask` and `$label.cleanup` from the label, or the id, it's
+   *  added under.
    */
   | { op: 'write_pixels'; layer: Ref; rect: Rect; pixels: number[] }
   /**  Add an imported file, stored once by its content hash. */
@@ -1007,6 +1008,8 @@ export type Tool =
   /**  Photoshop's Lasso: marks a freehand shape of the page's pixels. */
   | 'lasso'
   | 'text'
+  /**  Draws a text block, for a text detection missed. */
+  | 'block'
   | 'draw'
   | 'eraser'
   | 'color_picker'

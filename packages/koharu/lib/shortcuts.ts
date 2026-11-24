@@ -14,14 +14,15 @@ export const shortcuts = {
 } as const
 
 /** Each tool's key, Photoshop's for its counterpart: the Move tool's V, the Direct Selection
- * tool's A, the Type tool's T, the Brush's B, the Eraser's E, the Eyedropper's I, the Remove
- * tool's J, and the Hand's H. */
+ * tool's A, the Type tool's T, the Frame tool's K, the Brush's B, the Eraser's E, the Eyedropper's
+ * I, the Remove tool's J, and the Hand's H. */
 export const toolKeys: Record<Tool, string> = {
   select: 'v',
   direct_select: 'a',
   marquee: 'm',
   lasso: 'l',
   text: 't',
+  block: 'k',
   draw: 'b',
   eraser: 'e',
   color_picker: 'i',

@@ -519,6 +519,7 @@
     "translate": "{{name}}を翻訳"
   },
   "tools": {
+    "block": "テキストブロック",
     "brushSize": "ブラシサイズ",
     "brushSizeInput": "ブラシサイズ",
     "brushSizePixels": "ブラシサイズ: {{size}}ピクセル",
