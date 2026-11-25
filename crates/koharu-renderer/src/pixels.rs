@@ -111,9 +111,9 @@ impl Pixels {
 }
 
 /// Halves a level, averaging each 2×2 block of premultiplied pixels. An odd
-/// side rounds up, and the block's pixels past it count as transparent: a
-/// level draws at exactly half the scale of the one before, so its last
-/// column or row reaches past the image and covers only half its area.
+/// side rounds up, repeating its last column or row: a level draws at exactly
+/// half the scale of the one before, so it reaches past the image, and the
+/// painter fills only the image's own rectangle with it.
 // fast_image_resize keeps this grid only on a padded copy, which on an odd
 // side costs as much as its SIMD saves.
 fn half(pixmap: &Pixmap) -> Pixmap {
@@ -125,21 +125,16 @@ fn half(pixmap: &Pixmap) -> Pixmap {
     data.par_chunks_exact_mut(half_width * 4)
         .enumerate()
         .for_each(|(y, row)| {
-            let rows = [2 * y, 2 * y + 1].map(|sy| {
-                source
-                    .get(sy * stride..(sy + 1) * stride)
-                    .map(|row| row.as_chunks::<4>().0)
-            });
-            for (x, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                let mut sum = [0u32; 4];
-                for source in rows.iter().flatten() {
-                    for value in [2 * x, 2 * x + 1].iter().filter_map(|sx| source.get(*sx)) {
-                        for (total, channel) in sum.iter_mut().zip(value) {
-                            *total += u32::from(*channel);
-                        }
-                    }
+            // Two pixels at a time, the last of an odd width alone.
+            let [upper, lower] = [2 * y, (2 * y + 1).min(height - 1)]
+                .map(|sy| source[sy * stride..(sy + 1) * stride].chunks(8));
+            let pixels = row.as_chunks_mut::<4>().0.iter_mut();
+            for ((pixel, upper), lower) in pixels.zip(upper).zip(lower) {
+                for (at, channel) in pixel.iter_mut().enumerate() {
+                    let [upper, lower] = [upper, lower]
+                        .map(|two| u32::from(two[at]) + u32::from(two[two.len() - 4 + at]));
+                    *channel = ((upper + lower) / 4) as u8;
                 }
-                *pixel = sum.map(|total| (total / 4) as u8);
             }
         });
     Pixmap::from_parts(
@@ -317,13 +312,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_halved_odd_side_covers_only_the_image() {
+    fn a_halved_odd_side_repeats_its_last_column() {
         let image = RgbaImage::from_pixel(3, 2, image::Rgba([200, 100, 50, 255]));
         let half = half(&Pixels::new(Offset::default(), image).nth(0));
         assert_eq!((half.width(), half.height()), (2, 1));
         let pixels = half.data_as_u8_slice();
         assert_eq!(pixels[..4], [200, 100, 50, 255]);
-        // Premultiplied: half the area, so half of each channel.
-        assert_eq!(pixels[4..], [100, 50, 25, 127]);
+        assert_eq!(pixels[4..], [200, 100, 50, 255]);
     }
 }

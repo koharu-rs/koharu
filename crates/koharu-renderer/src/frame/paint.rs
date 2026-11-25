@@ -137,12 +137,12 @@ impl<'n> Painter<'_, '_, 'n> {
                         alpha: 1.0,
                     },
                 }));
-                scene.fill_rect(&Rect::new(
-                    0.0,
-                    0.0,
-                    f64::from(level.width()),
-                    f64::from(level.height()),
-                ));
+                // A level may reach past the image.
+                scene.fill_rect(
+                    &to_layer
+                        .inverse()
+                        .transform_rect_bbox(pixels.bounds(Affine::IDENTITY)),
+                );
             }
             Content::Coverage(shape) => {
                 let scene = &mut self.drawing.scene;
