@@ -15,7 +15,7 @@ use imageproc::{
     contours::{BorderType, find_contours_with_threshold},
     distance_transform::euclidean_squared_distance_transform,
     drawing::draw_polygon_mut,
-    geometry::{approximate_polygon_dp, arc_length, contour_area, convex_hull},
+    geometry::{approximate_polygon_dp, arc_length, contour_area},
 };
 use kurbo::{BezPath, Line, PathEl, PathSeg, Point, Rect, Shape};
 
@@ -413,21 +413,7 @@ fn waist(
 /// pocket between corners of its convex hull, the vertex farthest from the
 /// hull, as OpenCV's `convexityDefects` finds them.
 fn notches(polygon: &[Point], depth: f64) -> Vec<usize> {
-    let hull = convex_hull(
-        polygon
-            .iter()
-            .map(|point| imageproc::point::Point::new(point.x, point.y))
-            .collect::<Vec<_>>(),
-    );
-    let mut corners: Vec<usize> = hull
-        .iter()
-        .filter_map(|corner| {
-            polygon
-                .iter()
-                .position(|point| point.x == corner.x && point.y == corner.y)
-        })
-        .collect();
-    corners.sort_unstable();
+    let corners = hull(polygon);
     let count = polygon.len();
     let mut found: Vec<usize> = corners
         .iter()
@@ -450,9 +436,39 @@ fn notches(polygon: &[Point], depth: f64) -> Vec<usize> {
     found
 }
 
+/// The indices of the corners of `polygon`'s convex hull, in order, by
+/// Andrew's monotone chain. imageproc's `convex_hull` cuts coordinates to
+/// whole numbers to order points by, so it can misplace or panic over those of
+/// a balloon moved or resized off whole pixels.
+fn hull(polygon: &[Point]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..polygon.len()).collect();
+    order.sort_by(|&left, &right| {
+        let (left, right) = (polygon[left], polygon[right]);
+        left.x.total_cmp(&right.x).then(left.y.total_cmp(&right.y))
+    });
+    // One side of the hull from left to right, then the other back.
+    let mut corners = Vec::new();
+    for _ in 0..2 {
+        let mut side: Vec<usize> = Vec::new();
+        for &index in &order {
+            while let [.., before, last] = side[..]
+                && (polygon[last] - polygon[before]).cross(polygon[index] - polygon[before]) <= 0.0
+            {
+                side.pop();
+            }
+            side.push(index);
+        }
+        corners.append(&mut side);
+        order.reverse();
+    }
+    corners.sort_unstable();
+    corners.dedup();
+    corners
+}
+
 #[cfg(test)]
 mod tests {
-    use kurbo::{BezPath, Point, Rect, Shape, Vec2};
+    use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 
     use super::{closed, rooms};
 
@@ -510,6 +526,32 @@ mod tests {
         let [left_room, right_room] = [found[0].bounding_box(), found[1].bounding_box()];
         assert!((left_room.x1 - 100.0).abs() <= 3.0, "{left_room:?}");
         assert!((right_room.x0 - 100.0).abs() <= 3.0, "{right_room:?}");
+    }
+
+    #[test]
+    fn a_balloon_resized_off_whole_pixels_splits_at_its_waist() {
+        // The same two circles in 64 points, resized to 0.37 of their size.
+        let outline = ellipses(
+            Point::new(100.0, 100.0),
+            &[
+                (Point::new(50.0, 100.0), Vec2::new(60.0, 60.0)),
+                (Point::new(150.0, 100.0), Vec2::new(60.0, 60.0)),
+            ],
+        );
+        let outline: BezPath = outline.elements().iter().copied().step_by(4).collect();
+        let resize = Affine::scale(0.37);
+
+        let found = rooms(
+            &(resize * outline),
+            &[
+                vec![resize.transform_rect_bbox(Rect::new(20.0, 80.0, 60.0, 120.0))],
+                vec![resize.transform_rect_bbox(Rect::new(140.0, 80.0, 180.0, 120.0))],
+            ],
+        );
+
+        let [left_room, right_room] = [found[0].bounding_box(), found[1].bounding_box()];
+        assert!((left_room.x1 - 37.0).abs() <= 3.0, "{left_room:?}");
+        assert!((right_room.x0 - 37.0).abs() <= 3.0, "{right_room:?}");
     }
 
     #[test]
