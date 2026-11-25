@@ -1,3 +1,14 @@
+## [0.97.0](https://github.com/koharu-rs/koharu/compare/0.96.2..0.97.0) - 2026-11-25
+
+### ⛰️  Features
+
+- *(ui)* Keep the type bar on one row, running past the canvas when the canvas is narrower - ([64621ea](https://github.com/koharu-rs/koharu/commit/64621ea5eadbf77070f255d840a18ba73863e014))
+- Set ruby over part of a text, and let the agent style and annotate parts of one, in project format 1.1.0 - ([62d0ac2](https://github.com/koharu-rs/koharu/commit/62d0ac2571d16ec2c900c71f407637d0dca362ac))
+
+### 📚 Documentation
+
+- Give the MCP address in the agent setup page, which the Agent panel no longer shows - ([f67226a](https://github.com/koharu-rs/koharu/commit/f67226aab971935ae6fb435aaa93552ca4fed5c7))
+
 ## [0.96.2](https://github.com/koharu-rs/koharu/compare/0.96.1..0.96.2) - 2026-11-25
 
 ### 🐛 Bug Fixes
