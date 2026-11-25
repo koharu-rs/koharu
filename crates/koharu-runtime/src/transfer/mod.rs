@@ -14,6 +14,7 @@ use tokio::sync::{OnceCell, broadcast};
 use tokio_stream::wrappers::BroadcastStream;
 
 pub(crate) use activity::Activity;
+pub(crate) use download::BACKOFF;
 
 /// The user agent every transfer sends.
 pub(crate) const USER_AGENT: &str = concat!("koharu/", env!("CARGO_PKG_VERSION"));

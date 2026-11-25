@@ -80,7 +80,8 @@ a later start.
   server takes ranges, and as one stream otherwise. Each retries a few times,
   backing off.
 - **Model files** come through Hugging Face's own client at the pinned commit,
-  one after another, each as one stream.
+  one after another, each as one stream. The client retries a request, waiting
+  up to 15 seconds in all, and a file that breaks off starts over a few times.
 - **Progress.** Every transfer's state goes to whoever is listening, which the
   app shows as its list of downloads.
 

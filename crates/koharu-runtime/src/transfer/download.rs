@@ -22,7 +22,7 @@ use super::Activity;
 const RANGE_SIZE: u64 = 64 * 1024 * 1024;
 const WRITE_BUFFER_SIZE: usize = 256 * 1024;
 /// The one retry policy for transfers.
-const BACKOFF: ExponentialBuilder = ExponentialBuilder::new()
+pub(crate) const BACKOFF: ExponentialBuilder = ExponentialBuilder::new()
     .with_min_delay(Duration::from_millis(250))
     .with_max_delay(Duration::from_secs(5))
     .with_max_times(3)

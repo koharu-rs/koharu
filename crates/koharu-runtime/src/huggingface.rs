@@ -1,15 +1,16 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
+use backon::Retryable;
 use hf_hub::{
-    HFClient, RepoType, RepoTypeAny,
+    HFClient, HFError, RepoType, RepoTypeAny,
     progress::{DownloadEvent, ProgressEvent, ProgressHandler},
 };
 use tokio::sync::OnceCell;
 
 use crate::{
     store,
-    transfer::{self, Activity, USER_AGENT},
+    transfer::{self, Activity, BACKOFF, USER_AGENT},
 };
 
 /// A Hugging Face model or dataset at a pinned commit.
@@ -73,23 +74,28 @@ impl Repository {
     /// Fetches `name` into `folder` through the Hub's client and returns where
     /// it put it. The client's local-folder download follows the Hub's
     /// redirect before it reads the Xet hash on it, so it never takes Xet's
-    /// chunks: the file comes as one plain stream.
+    /// chunks: the file comes as one plain stream, which starts over when it
+    /// breaks off.
     async fn fetch(&self, name: &str, folder: PathBuf) -> Result<PathBuf> {
         let (owner, repository) = hf_hub::split_id(self.id);
         let activity = Arc::new(Activity::start(name.rsplit('/').next().unwrap_or(name)));
-        let fetched = async {
+        let fetched = (|| async {
             Ok(client()
                 .await?
                 .repository(self.kind, owner, repository)
                 .download_file()
                 .filename(name)
                 .revision(self.commit)
-                .local_dir(folder)
+                .local_dir(folder.clone())
                 .progress(Arc::clone(&activity))
                 .send()
                 .await?)
-        };
-        activity.finish(fetched.await)
+        })
+        .retry(BACKOFF)
+        .when(broke_off)
+        .notify(|error, delay| tracing::warn!(?delay, "retrying {name}: {error:#}"))
+        .await;
+        activity.finish(fetched)
     }
 
     fn path(&self, name: &str) -> PathBuf {
@@ -101,6 +107,15 @@ impl Repository {
             .join(self.commit)
             .join(name)
     }
+}
+
+/// Whether a file broke off on its way: the client retries the request for a
+/// file, but not what comes of it.
+fn broke_off(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref(),
+        Some(HFError::Request { source, .. }) if source.is_decode()
+    )
 }
 
 /// The Hub's client, over the transfers' own. Files go to the store, not the
@@ -115,6 +130,9 @@ async fn client() -> Result<&'static HFClient> {
                 // redirects takes it from here.
                 .user_agent(USER_AGENT)
                 .cache_enabled(false)
+                // It waits half a second before it asks again, then one, and so
+                // on to eight, each cut short at random.
+                .retry_base_delay(Duration::from_millis(250))
                 .build()
                 .context("couldn't build the Hugging Face client")
         })
