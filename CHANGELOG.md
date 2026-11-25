@@ -1,3 +1,18 @@
+## [0.96.0](https://github.com/koharu-rs/koharu/compare/0.95.4..0.96.0) - 2026-11-25
+
+### ⛰️  Features
+
+- *(pipeline)* Bring a translation smaller than its page's up to it, by its balloon's margin or a wider frame outside one, outline text outside balloons, and hyphenate a long word where that keeps it a good deal larger ([#465](https://github.com/koharu-rs/koharu/issues/465)) - ([6140809](https://github.com/koharu-rs/koharu/commit/6140809dc75680c7858925afee4959384889deb5))
+
+### 🐛 Bug Fixes
+
+- *(agent)* Keep a local model's first request inside its context, with a layer's schema naming each type once, a project outline and get_page without what get_layer has, and Gemma's sliding window kept at its own length, where it was cached as long as the whole context - ([4b55dff](https://github.com/koharu-rs/koharu/commit/4b55dffaf97169bcf314516cbde4c4c201cad2cf))
+- *(desktop)* Let an idle app rest on Linux, where a GLib source CEF's pump leaves behind kept the main thread at a whole CPU core - ([3210ba9](https://github.com/koharu-rs/koharu/commit/3210ba9d564dd4011aca8526682df867c8b0fe0f))
+- *(ml)* Measure outlined lettering by its glyphs, whose outline was taken for the ink over dark art, inverting a translation's colours, and the art's dots for glyphs on a screentone, greying it - ([14b750d](https://github.com/koharu-rs/koharu/commit/14b750d417ee486869666f2bce95da8cac5c2ba5))
+- *(ml)* Give a glyph two masks take in to the lettering whose box is nearer it, as clean-up left the last glyphs of a conjoined balloon's text, which were in neither mask - ([2cac72f](https://github.com/koharu-rs/koharu/commit/2cac72fa033bfe964c92c74da249781a794c518d))
+- *(pipeline)* Letter a page at what its texts' rooms hold, even past its sources' size, which kept small text smaller ([#465](https://github.com/koharu-rs/koharu/issues/465)) - ([50bbb5a](https://github.com/koharu-rs/koharu/commit/50bbb5a277dbc21a77a57197de983e3205de8f72))
+- *(pipeline)* Widen a small sound effect's frame to its source's size, and try every margin and frame in whole words before hyphenating ([#465](https://github.com/koharu-rs/koharu/issues/465)) - ([ec73a05](https://github.com/koharu-rs/koharu/commit/ec73a058969a9ead0ed2f1cb16f842b3042ab3f6))
+
 ## [0.95.4](https://github.com/koharu-rs/koharu/compare/0.95.3..0.95.4) - 2026-11-25
 
 ### 🐛 Bug Fixes
