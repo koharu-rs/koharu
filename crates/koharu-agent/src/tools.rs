@@ -137,8 +137,11 @@ struct ViewArgs {
     region: Option<Bounds>,
 }
 
+// schemars leaves `properties` out of a struct without fields, and LM Studio
+// refuses a request when one of its tools has none.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(extend("properties" = {}))]
 struct NoArgs {}
 
 struct GetProject;
