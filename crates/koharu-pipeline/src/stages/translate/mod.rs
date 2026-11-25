@@ -12,6 +12,8 @@ mod model;
 mod placement;
 mod turn;
 
+use std::collections::HashMap;
+
 use anyhow::{Context as _, Result, ensure};
 use base64::Engine as _;
 use icu_experimental::displaynames::{
@@ -22,15 +24,13 @@ use icu_locale::LocaleExpander;
 use icu_locale_core::{LanguageIdentifier, Locale, langid, subtags::language};
 use indoc::formatdoc;
 use koharu_llm::rig::{completion::Reasoning, driver::DynModel};
-use koharu_scene::{LayerId, Op, Project};
-use rayon::prelude::*;
+use koharu_scene::{Block, LayerId, Op, PageId, Project};
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::OwnedMutexGuard;
 use tracing::{Instrument as _, info_span};
 
 pub(crate) use self::conversation::{Conversation, Conversations};
-pub use self::placement::placement;
 use self::turn::Turn;
 use super::{Member, Stopped, Task, action, key, writable};
 use crate::{PipelineConfig, Stage};
@@ -163,15 +163,29 @@ pub(crate) async fn translate(
     else {
         return Err(Stopped.into());
     };
-    let translated: Vec<(LayerId, LanguageIdentifier, String)> = page
+    let translated = page
         .blocks
         .into_iter()
         .zip(translations)
-        .map(|((block, source), text)| (block, source, text))
+        .map(|((block, source), text)| Translated {
+            block,
+            source,
+            text,
+            placed: None,
+        })
         .collect();
+    // Placing measures the texts, which waits for a font that isn't in yet,
+    // so it's done before the project is held to write them.
+    let (read, target) = (member.clone(), translator.target.clone());
+    let translated = tokio::task::spawn_blocking(move || {
+        let _span = info_span!("place", stage = %Stage::Translate, page = read.index + 1).entered();
+        let project = read.session.lock().project();
+        placed(&project, read.page, translated, &target)
+    })
+    .await??;
     member
         .apply(Stage::Translate, move |session| {
-            written(&session.project(), translated, &translator)
+            Ok(written(&session.project(), translated, &translator))
         })
         .await
 }
@@ -220,47 +234,80 @@ fn sight(scan: &image::DynamicImage) -> Result<String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
-/// The ops writing each block's translation, placed, into the project as it
-/// is now.
-fn written(
+/// A block's new translation.
+struct Translated {
+    block: LayerId,
+    /// Its source's language.
+    source: LanguageIdentifier,
+    text: String,
+    /// The patch placing it, unless it isn't written.
+    placed: Option<Value>,
+}
+
+/// Whether `text` is `block`'s source given back: its clean-up would erase
+/// the lettering for the translation to redraw it in another hand.
+fn unchanged(block: &Block, text: &str) -> bool {
+    text.trim() == block.source.content.text().trim()
+}
+
+/// `translated` placed on `page`, as it is now.
+fn placed(
     project: &Project,
-    translated: Vec<(LayerId, LanguageIdentifier, String)>,
-    config: &TranslatorConfig,
-) -> Result<Vec<Op>> {
-    let target = &config.target;
-    // Each block's placement reads the project as it is before any of them,
-    // so they're found in parallel: a balloon's room split is a flood over
-    // its pixels, run for each of its texts.
-    let placed: Vec<_> = translated
-        .into_par_iter()
-        .filter_map(|(block, source, text)| {
-            let found = writable(project, block)?;
-            // Its clean-up would erase the lettering for the translation to
-            // redraw it in another hand.
-            let unchanged = text.trim() == found.source.content.text().trim();
-            let placed = (!unchanged).then(|| placement(project, block, target));
-            Some((block, source, text, placed))
+    page: PageId,
+    mut translated: Vec<Translated>,
+    target: &LanguageIdentifier,
+) -> Result<Vec<Translated>> {
+    let texts: Vec<(LayerId, String)> = translated
+        .iter()
+        .filter(|each| {
+            writable(project, each.block).is_some_and(|block| !unchanged(block, &each.text))
         })
+        .map(|each| (each.block, each.text.clone()))
         .collect();
+    if texts.is_empty() {
+        return Ok(translated);
+    }
+    let mut patches: HashMap<LayerId, Value> = placement::place(project, page, &texts, target)?
+        .into_iter()
+        .collect();
+    for each in &mut translated {
+        each.placed = patches.remove(&each.block);
+    }
+    Ok(translated)
+}
+
+/// The ops writing each block's translation, as it's placed, into the project
+/// as it is now.
+fn written(project: &Project, translated: Vec<Translated>, config: &TranslatorConfig) -> Vec<Op> {
+    let target = &config.target;
     let mut ops = Vec::new();
-    for (block, source, text, placed) in placed {
-        let Some(placed) = placed else {
-            ops.push(Op::UpdateLayer {
-                layer: block.into(),
-                patch: json!({"translation": null, "cleanup": {"visible": false}}),
-            });
+    for each in translated {
+        let block = each.block;
+        let Some(found) = writable(project, block) else {
+            continue;
+        };
+        let Some(placed) = each.placed else {
+            if unchanged(found, &each.text) {
+                ops.push(Op::UpdateLayer {
+                    layer: block.into(),
+                    patch: json!({"translation": null, "cleanup": {"visible": false}}),
+                });
+            }
             continue;
         };
         ops.push(Op::SetText {
             layer: block.into(),
-            text,
+            text: each.text,
         });
-        ops.push(placed?);
+        ops.push(Op::UpdateLayer {
+            layer: block.into(),
+            patch: placed,
+        });
         ops.push(Op::UpdateLayer {
             layer: block.into(),
             patch: json!({"translation": {"language": target}, "cleanup": {"visible": true}}),
         });
-        let parameters = json!({"sourceLanguage": source, "targetLanguage": target});
+        let parameters = json!({"sourceLanguage": each.source, "targetLanguage": target});
         ops.push(Op::SetAttribute {
             layer: block.into(),
             namespace: "c2pa".to_owned(),
@@ -268,7 +315,7 @@ fn written(
             value: Some(action("c2pa.translated", &config.model, Some(parameters))),
         });
     }
-    Ok(ops)
+    ops
 }
 
 /// The target's plain English name from CLDR, such as Simplified Chinese.
@@ -332,9 +379,14 @@ mod tests {
         let translated = project
             .blocks(page)?
             .into_iter()
-            .map(|(id, _)| (id, langid!("ja"), "Cat".to_owned()))
+            .map(|(block, _)| Translated {
+                block,
+                source: langid!("ja"),
+                text: "Cat".to_owned(),
+                placed: Some(json!({})),
+            })
             .collect();
-        let ops = written(&project, translated, &TranslatorConfig::default())?;
+        let ops = written(&project, translated, &TranslatorConfig::default());
         session.apply(Edit {
             label: "translate".to_owned(),
             ops,

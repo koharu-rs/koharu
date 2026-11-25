@@ -64,6 +64,19 @@ fn canonical(value: &impl serde::Serialize) -> Result<Hash> {
     Ok(Hash::of(&bytes))
 }
 
+/// Text layer `id`'s text laid out, falling back on `families`; `None` when
+/// it has no characters.
+pub(super) fn laid(
+    id: LayerId,
+    layer: &Text,
+    families: &[String],
+) -> Result<Option<text::TextLayout>> {
+    text::layout(layer, |style, characters| {
+        fonts::chain(style, families, characters, &layer.language)
+    })
+    .with_context(|| format!("text layer {id} couldn't be laid out"))
+}
+
 impl Renderer {
     /// What `key` holds, `build` building it when nothing does. Two renders
     /// may both build it: one waiting on the other's build inside rayon could
@@ -81,8 +94,8 @@ impl Renderer {
         Ok(retained)
     }
 
-    /// Text layer `id`'s text laid out, falling back on the renderer's
-    /// families; `None` when it has no characters.
+    /// Text layer `id`'s text laid out with the renderer's families, retained;
+    /// `None` when it has no characters.
     pub(super) fn text(&self, id: LayerId, layer: &Text) -> Result<Option<Content>> {
         // The transform places the layout when it's drawn, so moving a text
         // keeps its layout. Naming every field fails to build when one is
@@ -98,10 +111,7 @@ impl Renderer {
         let families = self.0.config.read().font_families.clone();
         let key = canonical(&(content, style, frame, direction, language, &families))?;
         self.retain(key, || {
-            let layout = text::layout(layer, |style, characters| {
-                fonts::chain(style, &families, characters, language)
-            })
-            .with_context(|| format!("text layer {id} couldn't be laid out"))?;
+            let layout = laid(id, layer, &families)?;
             Ok(layout.map(|layout| Content::Text(Arc::new(layout))))
         })
     }

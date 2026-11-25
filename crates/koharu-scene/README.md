@@ -151,10 +151,11 @@ size across a page and shrinks only where a translation runs long:
   slide placeholder, so `shrink` is the default.
 
 So a set size comes from the source text, not from the balloon, and the
-balloon only bounds it. A translation is the exception: it can't know the
-page's dialogue size, and its length differs from its source's, so it's
-written `best` and takes the size its room holds, as Publisher's Best Fit
-fills a box [Publisher copyfitting]. Typing a size gives it one again, drawn at
+balloon only bounds it. A translation is the exception: its length differs from
+its source's, so it's written `best` and takes the size its room holds, as
+Publisher's Best Fit fills a box [Publisher copyfitting], and where that's under
+the page's size its room gives way first: its balloon's margin, or its frame
+outside one. Typing a size gives it one again, drawn at
 that size, so it turns the fitting off with `none`, as Photoshop and Clip Studio
 Paint draw a text at the size it's set [Photoshop type] [CSP text]: two texts
 set alike look alike, and one too long for its frame runs past it until the
@@ -373,7 +374,7 @@ fields of them.
 | Detection | the background | a `panel` for each panel it finds; a `balloon` for each balloon, inside the panel it's read in, though it crosses the border, or on the page when it's read in none; a `block` for each text or sound effect, inside its balloon if it has one, else free in its panel or on the page, with its `role`, its source's frame, tilt, and direction, and its mask; all in reading order |
 | OCR | the background inside each block's source frame | the source's `content` and `language` |
 | Inpainting | the background, each block's mask, and its balloon's outline when it has one | the block's clean-up, only in the tiles it changes |
-| Translation | the page's sources in reading order, for context, and in a balloon, the balloon's outline and its other texts | each given block's translation: `content` and `language`; its `frame`, its room in its balloon, or its source's frame when it's free, with `best` fit; `anchor` and `direction` |
+| Translation | the page's sources in reading order, for context, and in a balloon, the balloon's outline and its other texts | each given block's translation: `content` and `language`; its `frame`, its room in its balloon, with the margin its size needs, or its source's frame when it's free, as wide as its size needs, with `best` fit; `anchor` and `direction` |
 
 Each model also writes its `c2pa` action on the layers it wrote.
 
@@ -418,11 +419,12 @@ Each model also writes its `c2pa` action on the layers it wrote.
 - **Translation places a balloon's texts from its outline, and a free text from
   its source's frame**, and resizing the frame reflows the text, as resizing a
   Clip Studio Paint balloon moves its text [CSP balloons].
-- **Translation stores its decisions, not their result:** the frame, the
-  anchor, the direction, and `best` fit. The size a `best` or `shrink` frame
-  draws at is worked out at each render, and PSD export writes the size it
-  drew. PowerPoint caches its shrink as `fontScale` [OOXML autofit], but Koharu
-  has one renderer, and a cached scale would go stale when a font loads.
+- **Translation stores its decisions, not their result:** the frame and its
+  margin, the anchor, the direction, and `best` fit. The size a `best` or
+  `shrink` frame draws at is worked out at each render, and PSD export writes
+  the size it drew. PowerPoint caches its shrink as `fontScale` [OOXML autofit],
+  but Koharu has one renderer, and a cached scale would go stale when a font
+  loads.
 - **Reruns find their fields by kind.** A translation rerun rewrites each given
   block's translation, its wording and its placement. Whether a rerun leaves alone what you changed is
   the workflow's choice ([Writes](#writes)).

@@ -65,14 +65,31 @@ There's no typesetting stage. Placement puts a translation in its room in its
 balloon, or in its source's frame when it's free or a sound effect, and fits it
 `best`, so resizing a balloon reflows the text.
 
-- **Size.** A new translation starts at the page's lettering size, the median
-  of its sources', as a letterer keeps one size for a page's dialogue [Manga
-  balloon basics], with its lines centred, or in Japanese and Chinese
-  started together at the top or the left, as JLREQ aligns a line to its head
-  [JLREQ], and with its source's fill and stroke. A
-  sound effect whose source has no outline gets a stroke a sixteenth of its
-  size, black around a light fill and white around any other, which keeps it
-  legible over art.
+- **Size.** A letterer keeps one size for a page's dialogue [Manga balloon
+  basics]. A page's is the median of the largest its texts' rooms hold in whole
+  words, measured with the renderer, and at most the median of its sources'. A
+  text that would draw smaller is brought up to it as far as its room allows,
+  and one that fits larger stays so: small text can't be read, and a large line
+  in a large balloon is a shout. A run on some blocks measures the page's other
+  translations too.
+- **Margin.** A balloon's text has a letter's width of air [Comicraft glossary].
+  One under the page's size has as much of it as holds that size, down to half:
+  half holds it 15 to 17% larger, where a line height of 1 rather than 1.2 gives
+  2%.
+- **Free text.** A vertical source's column holds a word or two of a horizontal
+  translation, so its frame widens until it holds the page's size: along the
+  lines to two and a half times its width but not past its longer side, then
+  across them to three lines, in its panel and off the page's other texts and
+  balloons. Without that limit a text covered a face beside it.
+- **Lines** are centred, or in Japanese and Chinese started together at the top
+  or the left, as JLREQ aligns a line to its head [JLREQ].
+- **Fill and stroke** are its source's, the stroke's width in proportion to its
+  size. One that lies on art and whose source has no outline gets a stroke,
+  black around a light fill and white around any other, which keeps it legible:
+  a sound effect a sixteenth of its size, and a text outside a balloon an
+  eighth. On paper of the stroke's colour it can't be seen, and looking for low
+  contrast under the text missed one over foliage and those crossing a panel's
+  border.
 - **Direction.** It's vertical only when its source is and the target is
   Japanese or Chinese; any other language runs horizontally, turned by its
   source's tilt.
@@ -201,7 +218,7 @@ Read in November 2026.
   [Photoshop combine variations]
 - Editing models: [FLUX.3 Klein], [Qwen-Image 2.1]
 - [ComfyUI routes], [Ollama keep_alive], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ]
-- Lettering: [Manga balloon basics]
+- Lettering: [Manga balloon basics], [Comicraft glossary]
 
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
@@ -214,4 +231,5 @@ Read in November 2026.
 [CLDR]: https://cldr.unicode.org/
 [Index-Translate]: https://huggingface.co/IndexTeam/Index-Translate-9B
 [Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie
+[Comicraft glossary]: https://balloontales.com/?p=418
 [JLREQ]: https://www.w3.org/TR/jlreq/

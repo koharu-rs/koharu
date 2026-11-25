@@ -108,14 +108,12 @@ impl Renderer {
         })))
     }
 
-    /// Lays out `text`, which `layer` holds, as a render would: for a text
-    /// nothing draws, such as a block's source in a PSD. `None` when it has no
-    /// characters.
+    /// Lays out `text`, which `layer` holds, as a render would, retaining
+    /// nothing: for a text nothing draws, such as a block's source in a PSD,
+    /// or one tried at a size. `None` when it has no characters.
     pub fn layout(&self, layer: LayerId, text: &Text) -> Result<Option<ResolvedText>> {
-        Ok(match self.text(layer, text)? {
-            Some(Content::Text(layout)) => Some(layout.resolved.clone()),
-            _ => None,
-        })
+        let families = self.0.config.read().font_families.clone();
+        Ok(retained::laid(layer, text, &families)?.map(|layout| layout.resolved))
     }
 
     /// `text`, which `layer` holds, laid out as a render lays it out, for

@@ -1,9 +1,10 @@
 //! Lines fitted to a text's room: at its size when they fit, or in a best-fit
 //! frame at the largest scale above it that fits; else, as the frame allows,
 //! at the largest scale down to half that fits with whole words, then at half
-//! with a path's inset halved, then hyphenated, and a best-fit text below half
-//! as it last broke until it fits. A word is never split without a hyphen:
-//! what still doesn't fit runs past its room whole.
+//! with a path's inset halved, unless one hyphen a word keeps the text a good
+//! deal larger, then hyphenated, and a best-fit text below half as it last
+//! broke until it fits. A word is never split without a hyphen: what still
+//! doesn't fit runs past its room whole.
 
 use std::ops::{Range, RangeInclusive};
 
@@ -21,6 +22,11 @@ use super::{
 /// it shrinks to, bounds that only text no room limits, such as one with no
 /// line height, or a room too small for anything, reaches.
 const CEILING: f32 = 256.0;
+
+/// Whole words drawn at less of their size than this hyphenate when that
+/// makes them `GAIN` times larger.
+const SMALL: f32 = 0.75;
+const GAIN: f32 = 1.25;
 
 /// Lines placed at one scale.
 #[derive(Clone, Debug)]
@@ -62,9 +68,11 @@ pub(super) fn fit(
         return (words, placed);
     }
     // Shrinking stops at half the set size. Whole words shrink first, as
-    // Comicraft avoids a hyphen whenever it can.
+    // Comicraft avoids a hyphen whenever it can, and at the floor a balloon's
+    // margin narrows to half, short of letters on its border, which read as
+    // cut off.
     let floor = if shrinks(&styled.frame) { 0.5 } else { 1.0 };
-    let placed = largest_fit(
+    let mut placed = largest_fit(
         floor,
         |scale| overflows(styled, room, &words, scale),
         |scale| match scale == 1.0 {
@@ -73,28 +81,44 @@ pub(super) fn fit(
             false => place(styled, room, &words, scale),
         },
     );
-    if !placed.overflowed {
-        return (words, placed);
-    }
-    // At the floor, a balloon's margin narrows to half, before a hyphen and
-    // short of letters on its border, which read as cut off; then words
-    // hyphenate, where the fewest need it, as text whose language hyphenates
-    // does, vertical too; CJK breaks between characters already.
-    let (placed, inset) = match room {
+    let inset = match room {
         Room::Path {
             outline,
             anchor,
             inset,
-        } => {
+        } if placed.overflowed => {
             let inset = inset / 2.0;
-            let narrowed = in_path(styled, &words, floor, outline, *anchor, inset).place();
-            if !narrowed.overflowed {
-                return (words, narrowed);
-            }
-            (narrowed, Some((outline, *anchor, inset)))
+            placed = in_path(styled, &words, floor, outline, *anchor, inset).place();
+            Some((outline, *anchor, inset))
         }
-        Room::Point | Room::Box { .. } => (placed, None),
+        _ => None,
     };
+    // A hyphen is the lesser evil where a long word would leave the text
+    // small.
+    if styled.hyphenation.is_some()
+        && shrinks(&styled.frame)
+        && (placed.overflowed || placed.scale < SMALL)
+    {
+        let least = match placed.overflowed {
+            true => floor,
+            false => GAIN * placed.scale,
+        };
+        let halves = segments(Breaking::Halves);
+        let halved = largest_fit(
+            least,
+            |scale| overflows(styled, room, &halves, scale),
+            |scale| place(styled, room, &halves, scale),
+        );
+        if !halved.overflowed {
+            return (halves, halved);
+        }
+    }
+    if !placed.overflowed {
+        return (words, placed);
+    }
+    // Then words hyphenate at the floor, where the fewest need it, as text
+    // whose language hyphenates does, vertical too; CJK breaks between
+    // characters already.
     let at = |segments: &[Segment], scale: f32| match inset {
         Some((outline, anchor, inset)) => {
             in_path(styled, segments, scale, outline, anchor, inset).place()
@@ -744,7 +768,9 @@ mod tests {
     fn long(breaking: Breaking) -> Vec<Segment> {
         match breaking {
             Breaking::Words => vec![word(150.0, Break::End)],
-            Breaking::Hyphens => vec![word(75.0, Break::Hyphen), word(75.0, Break::End)],
+            Breaking::Halves | Breaking::Hyphens => {
+                vec![word(75.0, Break::Hyphen), word(75.0, Break::End)]
+            }
         }
     }
 
@@ -857,16 +883,39 @@ mod tests {
     }
 
     #[test]
+    fn a_long_word_hyphenates_only_where_that_makes_it_a_good_deal_larger() -> Result<()> {
+        // In a box 90 wide it fits whole at 0.6 of its size, and its halves
+        // at theirs.
+        let (styled, room) = in_box(90.0, 100.0, "shrink")?;
+        let (segments, placed) = fit(&styled, &room, long);
+        assert_eq!((segments.len(), placed.scale), (2, 1.0));
+        // In one 115 wide it fits whole above three quarters.
+        let (styled, room) = in_box(115.0, 100.0, "shrink")?;
+        let (segments, placed) = fit(&styled, &room, long);
+        assert_eq!(segments.len(), 1);
+        assert!((0.75..0.77).contains(&placed.scale), "{}", placed.scale);
+        // In one 90 wide and 16 tall, a line of it at 0.6 is 7.2 tall and
+        // two of its halves fit at 0.67, not a quarter larger.
+        let (styled, room) = in_box(90.0, 16.0, "shrink")?;
+        let (segments, placed) = fit(&styled, &room, long);
+        assert_eq!(segments.len(), 1);
+        assert!((0.59..=0.6).contains(&placed.scale), "{}", placed.scale);
+        Ok(())
+    }
+
+    #[test]
     fn a_vertical_latin_word_too_long_for_its_column_at_half_size_hyphenates() -> Result<()> {
         // Sideways Latin down a column 60 long, whose one word is 75 long at
-        // half size.
+        // half size, and whose halves with a hyphen are 60 long at three
+        // quarters.
         let (styled, room) = in_box(60.0, 100.0, "shrink")?;
         let styled = Styled {
             vertical: true,
             ..styled
         };
         let (segments, placed) = fit(&styled, &room, long);
-        assert_eq!((segments.len(), placed.scale), (2, 0.5));
+        assert_eq!(segments.len(), 2);
+        assert!((0.74..=0.75).contains(&placed.scale), "{}", placed.scale);
         Ok(())
     }
 }

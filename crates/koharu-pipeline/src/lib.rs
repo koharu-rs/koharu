@@ -20,5 +20,5 @@ pub use stages::{
     detect::{Detector, DetectorConfig},
     inpaint::{Inpainter, InpainterConfig},
     recognize::{Recognizer, RecognizerConfig},
-    translate::{TranslatorConfig, placement},
+    translate::TranslatorConfig,
 };

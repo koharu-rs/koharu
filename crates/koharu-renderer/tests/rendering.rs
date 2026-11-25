@@ -130,10 +130,10 @@ fn a_long_word_shrinks_before_it_hyphenates_and_never_breaks_between_letters() {
         assert!(shrunk.hyphens.is_empty() && !shrunk.overflowed);
     }
 
-    // Too narrow to set whole even at half size: it hyphenates there.
+    // Too narrow to set whole even at half size: it hyphenates.
     let hyphenated = word_in_box(120.0, "en");
     assert!(
-        hyphenated.scale == 0.5 && !hyphenated.hyphens.is_empty(),
+        hyphenated.scale >= 0.5 && !hyphenated.hyphens.is_empty(),
         "{hyphenated:?}"
     );
     assert!(!hyphenated.overflowed);
