@@ -25,10 +25,7 @@ export type Account = {
   name: string | null
 }
 
-/**
- *  `[agent]`: the agent's model, how much it reasons, and how long a run
- *  goes.
- */
+/**  `[agent]`: the agent's model and how much it reasons. */
 export type AgentConfig = {
   /**  A `vendor/model` reference, as koharu-llm connects one. */
   model?: string | null
@@ -39,10 +36,6 @@ export type AgentConfig = {
    *  can't stop reasoning.
    */
   reasoning?: string | null
-  /**  How many model calls a run makes at most. */
-  max_turns?: number
-  /**  How many times a run lets the model correct a call it wrote wrong. */
-  corrections?: number
 }
 
 /**

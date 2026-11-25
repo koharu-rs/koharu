@@ -64,8 +64,9 @@ can't. The scene and the pipeline know nothing of tools.
 | Part | Model | Cite |
 |---|---|---|
 | request | the system prompt, Koharu's own and not a setting, since it describes Koharu's tools and project document, then the project's outline as a document ahead of the history, kept out of it, so the model sees only the project's latest state | |
-| turns | at most `max_turns` model calls a run | |
+| turns | as many model calls as the request takes: a run ends when the model answers without a tool call, or is stopped | |
 | arguments | every call is held to its tool's schema before it runs, and a call that doesn't fit is skipped with the reason, since a local model has no grammar holding it to the schema | |
+| corrections | a call whose arguments aren't a JSON object goes back to the model with what's wrong, and the third turn in a row with one fails the run; a call to a tool that isn't there goes back with the tools' names, and a run's third fails it | |
 | window | before each of a run's model calls, older messages are summarized if the call wouldn't fit the model's window, a tool call kept with its result | pi compacts before a prompt and before a request after tool results [pi compaction] |
 | too long | a request refused as too long before any tool ran compacts the conversation and starts over once; after a tool ran, the project may have changed, so the run fails | |
 | stopping | dropping a run stops it; an edit already applying finishes whole | |
@@ -86,8 +87,6 @@ can't. The scene and the pipeline know nothing of tools.
 |---|---|---|
 | `model` | none | the agent's model, a `vendor/model` reference |
 | `reasoning` | the model's own | how much the model reasons: `off` or an effort level, one word |
-| `max_turns` | 20 | model calls a run makes at most |
-| `corrections` | 2 | how many times a call the agent can't take goes back to the model before the run fails |
 
 ## Sources
 

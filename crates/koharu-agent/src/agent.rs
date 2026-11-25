@@ -15,8 +15,8 @@ use indoc::indoc;
 use rig_agent::{
     agent::{
         AgentBuilder, AgentHook, CompletionCallAction, CompletionCallEvent, DispatchAction,
-        DispatchEvent, HookContext, ModelTurnAction, ModelTurnFinished, MultiTurnStreamItem,
-        OutcomeAction, OutcomeEvent, RequestPatch,
+        DispatchEvent, HookContext, InvalidToolCallAction, InvalidToolCallContext,
+        InvalidToolCallReason, MultiTurnStreamItem, OutcomeAction, OutcomeEvent, RequestPatch,
     },
     completion::PromptError,
     tool::server::ToolServer,
@@ -45,9 +45,8 @@ const PROMPT: &str = indoc! {"
     All project changes are revisioned and reversible. Do not ask for permission. Continue using tools until the request is complete or cannot be completed.
     Do not invent identifiers. Preserve artwork and existing authored content unless the user asks to change them."};
 
-/// `[agent]`: the agent's model, how much it reasons, and how long a run
-/// goes.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+/// `[agent]`: the agent's model and how much it reasons.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 #[derive(specta::Type)]
 pub struct AgentConfig {
@@ -60,22 +59,6 @@ pub struct AgentConfig {
     #[serde(with = "koharu_llm::reasoning")]
     #[specta(type = Option<String>)]
     pub reasoning: Option<Reasoning>,
-    /// How many model calls a run makes at most.
-    pub max_turns: usize,
-    /// How many times a run lets the model correct a call it wrote wrong.
-    pub corrections: usize,
-}
-
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            model: None,
-            reasoning: None,
-            // rig's default is one, which ends a run at its first tool call.
-            max_turns: 20,
-            corrections: 2,
-        }
-    }
 }
 
 impl koharu_config::Section for AgentConfig {
@@ -211,9 +194,11 @@ impl Agent {
                 additional_props: Default::default(),
             })
             .tool_context(self.tools.tool_context())
-            .max_turns(self.config.max_turns)
-            .max_invalid_tool_call_retries(self.config.corrections)
-            .max_consecutive_malformed_tool_calls(self.config.corrections)
+            // rig always has a limit, and its default of one ends a run at its
+            // first tool call.
+            .max_turns(usize::MAX)
+            .max_invalid_tool_call_retries(2)
+            .max_consecutive_malformed_tool_calls(2)
             .stream();
         while let Some(item) = stream.next().await {
             let item = match item {
@@ -232,6 +217,9 @@ impl Agent {
                     text,
                     ..
                 })) => events(Event::Reasoning { delta: text }),
+                // Every call tells its usage here, one rig asks again for
+                // included, which finishes no turn.
+                MultiTurnStreamItem::CompletionCall(call) => run.lock().await.usage = call.usage,
                 MultiTurnStreamItem::FinalResponse(response) => {
                     let answer = response.output();
                     let mut run = run.lock().await;
@@ -256,7 +244,8 @@ fn overflowed(error: &PromptError) -> bool {
 }
 
 /// Holds each tool call to its tool's schema, as rig-agent doesn't and a
-/// local model has no grammar holding it to, and tells the panel about it.
+/// local model has no grammar holding it to, sends one to a tool that isn't
+/// there back to the model, and tells the panel about the rest.
 struct Calls {
     schemas: HashMap<String, Value>,
     events: Events,
@@ -265,6 +254,22 @@ struct Calls {
 }
 
 impl AgentHook for Calls {
+    async fn on_invalid_tool_call(
+        &self,
+        _ctx: &HookContext,
+        event: &InvalidToolCallContext,
+    ) -> Option<InvalidToolCallAction> {
+        // rig sends malformed arguments back by itself, but ends a run at a
+        // tool it doesn't have.
+        matches!(event.reason, InvalidToolCallReason::UnknownTool).then(|| {
+            InvalidToolCallAction::retry(format!(
+                "no tool is named {}; the tools are {}",
+                event.tool_name,
+                event.available_tools.join(", ")
+            ))
+        })
+    }
+
     async fn on_dispatch(&self, _ctx: &HookContext, event: DispatchEvent<'_>) -> DispatchAction {
         let EffectKind::ToolCall { name, args } = event.kind else {
             return DispatchAction::proceed();
@@ -352,15 +357,6 @@ impl AgentHook for Window {
         let mut patch = RequestPatch::new();
         patch.history = Some(run.context.messages().to_vec());
         CompletionCallAction::patch(patch)
-    }
-
-    async fn on_model_turn_finished(
-        &self,
-        _ctx: &HookContext,
-        event: ModelTurnFinished<'_>,
-    ) -> ModelTurnAction {
-        self.run.lock().await.usage = event.usage;
-        ModelTurnAction::Continue
     }
 }
 

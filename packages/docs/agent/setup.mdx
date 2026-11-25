@@ -29,9 +29,7 @@ Each request starts with the open project's outline: its pages and their layers.
 <Note>
   The Agent and translation share provider connections, but not models: the Agent's model and
   reasoning are saved in the `[agent]` section of `~/.koharu/config.toml`, apart from translation's.
-  That section also holds `max_turns` (20 model calls per request by default) and `corrections` (how
-  many times a malformed tool call goes back to the model, 2 by default). The Agent's system prompt
-  is Koharu's own and can't be changed.
+  The Agent's system prompt is Koharu's own and can't be changed.
 </Note>
 
 ## Connect other agents over MCP
