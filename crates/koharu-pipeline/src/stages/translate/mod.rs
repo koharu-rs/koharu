@@ -51,7 +51,7 @@ pub struct TranslatorConfig {
     pub instructions: String,
     /// Whether each page's turn shows the model the page itself beside its
     /// texts, as an image goes with a chat message to OpenAI's and Gemini's
-    /// models; only for a model that reads images.
+    /// models; a model that reads no images goes without it.
     pub vision: bool,
     /// How much the model reasons before it answers: off, or one of rig's
     /// portable levels after OpenAI's `reasoning_effort`, written as one word;

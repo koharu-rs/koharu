@@ -1,9 +1,8 @@
 //! The HTTP client hosted models go through: rig's own, shared by the process,
-//! sending a request that failed for now again, up to three times, after the
-//! wait rig reads from its reply, or a second, then two, then four when it names
-//! none; rig itself retries nothing. For a vendor the user signs in to, it also
-//! puts the sign-in's current credential on each request, so a long-lived model
-//! outlives any one token.
+//! sending a request that failed for now again, after the wait rig reads from
+//! its reply, or a growing one when it names none; rig itself retries nothing.
+//! For a vendor the user signs in to, it also puts the sign-in's current
+//! credential on each request, so a long-lived model outlives any one token.
 
 use std::{
     sync::Arc,
@@ -14,7 +13,7 @@ use anyhow::{Context, Result};
 use backon::{ExponentialBuilder, Retryable};
 use bytes::Bytes;
 use futures::future::BoxFuture;
-use http::request::Parts;
+use http::{Method, request::Parts};
 use rig_core::{
     error::{ErrorReport, ProviderError, RateLimits},
     http_client::{self, HttpClientExt, LazyBody, MultipartForm, StreamingResponse},
@@ -34,8 +33,16 @@ pub(crate) struct Http {
     sign_in: Option<Arc<dyn SignIn>>,
 }
 
-/// A second, then two, then four.
-const BACKOFF: ExponentialBuilder = ExponentialBuilder::new();
+/// A reply is asked for ten times, a second apart, then two, and so on to
+/// thirty: an overloaded provider takes minutes to recover, and Gemini CLI asks
+/// as often and waits as long (`DEFAULT_RETRY_OPTIONS`,
+/// packages/core/src/utils/retry.ts at 60f8082b).
+const REPLY: ExponentialBuilder = ExponentialBuilder::new()
+    .with_max_delay(Duration::from_secs(30))
+    .with_max_times(9);
+
+/// A model list is asked for four times, as the interface waits for it.
+const LIST: ExponentialBuilder = ExponentialBuilder::new();
 
 /// rig's own client, for the requests Koharu makes outside rig.
 pub(crate) fn reqwest() -> Result<reqwest::Client> {
@@ -127,6 +134,25 @@ impl Http {
         }
         Ok(parts)
     }
+
+    /// `send` of `parts` as the sign-in authorizes them, again while it fails
+    /// for now.
+    #[expect(clippy::result_large_err, reason = "rig's HTTP error is rig's")]
+    async fn retried<T, F>(&self, parts: Parts, send: impl Fn(Parts) -> F) -> http_client::Result<T>
+    where
+        F: Future<Output = http_client::Result<T>>,
+    {
+        let backoff = match parts.method {
+            Method::GET => LIST,
+            _ => REPLY,
+        };
+        (|| async { send(self.authorized(parts.clone()).await?).await })
+            .retry(backoff)
+            .when(retryable)
+            .adjust(wait)
+            .notify(|error, wait| tracing::warn!("{error}; asking again in {wait:?}"))
+            .await
+    }
 }
 
 impl HttpClientExt for Http {
@@ -137,15 +163,10 @@ impl HttpClientExt for Http {
         let http = self.clone();
         let (parts, body) = request.into_parts();
         async move {
-            (|| async {
-                let parts = http.authorized(parts.clone()).await?;
+            http.retried(parts, |parts| {
                 http.client
                     .send(http::Request::from_parts(parts, body.clone()))
-                    .await
             })
-            .retry(BACKOFF)
-            .when(retryable)
-            .adjust(wait)
             .await
         }
     }
@@ -164,15 +185,10 @@ impl HttpClientExt for Http {
         let http = self.clone();
         let (parts, body) = request.into_parts();
         async move {
-            (|| async {
-                let parts = http.authorized(parts.clone()).await?;
+            http.retried(parts, |parts| {
                 http.client
                     .send_streaming(http::Request::from_parts(parts, body.clone()))
-                    .await
             })
-            .retry(BACKOFF)
-            .when(retryable)
-            .adjust(wait)
             .await
         }
     }

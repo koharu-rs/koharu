@@ -144,23 +144,25 @@ order, and translating blocks is a turn of the same conversation. Changing the
 model, the target, or the instructions starts a new one.
 
 - **A page** is its unlocked texts as a JSON object keyed by reading order, and
-  the answer must keep the keys. A broken answer or a missing key is asked for
-  once more; a second one, or a blank translation, fails the page, which never
-  enters the history.
-- **A page its provider blocks**, or whose answer it filters, is asked again
-  without the history, whose pages may be what it blocked, and then fails.
-- **A local model's answer that is cut off**, as one that repeats itself is, is
-  asked for again at a higher temperature, twice at most, as Whisper falls back
-  [Whisper]: greedy, it would come out the same.
-- **An answer copying the page before's** for different texts is asked again
-  without the history it copied.
+  the answer must keep the keys. One still without an answer after it's asked
+  again, or with a blank translation, fails and never enters the history.
+- **A page that got no answer** is asked again by why:
+
+  | Why | Asked again |
+  |---|---|
+  | its answer is broken or misses a key | once, told what's wrong |
+  | its answer copies the page before's for different texts | once, without the history it copied |
+  | its provider blocked it, or its answer, for its content | once, without the history, which may be what's blocked |
+  | it doesn't fit the model's window, or a model that doesn't say its window cut its answer off | once, with the older half of the history dropped |
+  | a local model's answer was cut off, as one that repeats itself is | twice, at 0.4 and 0.8, as Whisper falls back [Whisper]: greedy, it would come out the same |
 - **A text given back unchanged**, such as a copyright line, keeps its own
   lettering: its clean-up is hidden and it gets no translation.
 - **Vision** shows the model the scan, 1,280 pixels on its longer side, ahead
-  of the texts. **Reasoning** lets it think first, and the answer is held to the
-  schema once the thinking ends, at the model's own level unless set, or off.
-  On 16 pages with Index-Translate 9B, neither read better and both cost time,
-  so vision is off and reasoning the model's own unless set.
+  of the texts; a model that reads no images goes without it. **Reasoning** lets
+  it think first, and the answer is held to the schema once the thinking ends,
+  at the model's own level unless set, or off. On 16 pages with Index-Translate
+  9B, neither read better and both cost time, so vision is off and reasoning the
+  model's own unless set.
 - **The history** keeps each page's texts and answer, not its image or the
   model's reasoning, so it grows as it does without them, and a local model
   reuses it from turn to turn.
@@ -194,8 +196,9 @@ model, the target, or the instructions starts a new one.
   pages in the order they came, so an interactive run goes ahead at its next
   model call. Recognition takes up to eight pages waiting for the same model at
   once.
-- **Failure.** A page the translation model blocks, or answers with nothing it
-  can take, fails alone: it's named with the reason, and the run goes on. Any other
+- **Failure.** A page the translation model blocks, can't fit, or answers with
+  nothing it can take, fails alone: it's named with the reason, and the run goes
+  on. Any other
   failure would come again with the next page, so it ends its run, a panic
   included. What it finished stays. Stopping is the same without the error, for
   every run, and cuts short a diffusion model's redraw under way.

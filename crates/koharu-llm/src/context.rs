@@ -102,6 +102,12 @@ impl Context {
         self.compact_with(model, spec, true).await
     }
 
+    /// Drops the older half, for a model that filled its window, which it may
+    /// not say, and a summary might not fit either.
+    pub fn halve(&mut self) {
+        self.drop_turns(estimate_tokens(self.messages()) / 2, true);
+    }
+
     /// Summarizes older messages, or, for a model whose spec says it only
     /// translates, which can't summarize, drops them, keeping the newest.
     async fn compact_with(

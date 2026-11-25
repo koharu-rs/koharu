@@ -152,10 +152,13 @@ impl Events {
                     reason,
                     ..
                 } => {
-                    tracing::warn!("{reason}");
+                    tracing::warn!("a page failed: {reason}");
                     record.stages.remove(&(*page, *stage));
                 }
                 Event::Ended { outcome, .. } => {
+                    if let Outcome::Failed { reason, .. } = outcome {
+                        tracing::warn!("a run failed: {reason}");
+                    }
                     record.ended.send_replace(true);
                     // A failed or stopped run leaves stages it never finished.
                     record.stages.clear();

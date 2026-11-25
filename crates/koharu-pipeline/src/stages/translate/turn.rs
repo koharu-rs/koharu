@@ -2,7 +2,7 @@
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use koharu_llm::{
-    KOHARU, PromptError,
+    Context, KOHARU, PromptError,
     rig::{
         completion::{
             AssistantContent, GenerationOptions, Message, Reasoning, Usage,
@@ -17,12 +17,6 @@ use serde_json::{Map, Value, json};
 
 use super::Conversation;
 use crate::stages::Failed;
-
-/// The temperatures a local model is asked at again after its answer was cut
-/// off, as one that kept repeating itself is: greedy, it would answer the same
-/// way. OpenAI's Whisper falls back so (`decode_with_fallback`,
-/// whisper/transcribe.py at 86098128).
-const FALLBACK: [f64; 2] = [0.4, 0.8];
 
 pub(super) struct Turn<'a> {
     system: String,
@@ -52,8 +46,7 @@ impl<'a> Turn<'a> {
         }
     }
 
-    /// The page's translations, recorded in `conversation` once they pass;
-    /// dropping it leaves the conversation as it was.
+    /// The page's translations, recorded in `conversation` once they pass.
     pub(super) async fn take(
         self,
         conversation: &mut Conversation,
@@ -61,19 +54,13 @@ impl<'a> Turn<'a> {
     ) -> Result<Vec<String>> {
         let next = Message::user(self.page.clone());
         conversation.context.fit(model, &next).await;
-        let history: Vec<Message> = conversation
-            .context
-            .messages()
-            .iter()
-            .map(|message| Message::clone(message))
-            .collect();
-        let mut asked = self.ask(model, history).await?;
+        let mut asked = self.ask(model, &mut conversation.context).await?;
         // A small model can answer a page with its answer to the page
         // before, word for word, as Index-Translate 2B did on one of 16
         // Blue Archive pages; without that answer to copy, it reads the page.
         if self.echoes(&asked.0, conversation.last.as_ref()) {
             tracing::info!("the answer echoed the page before's; asking again without the history");
-            asked = self.ask(model, Vec::new()).await?;
+            asked = self.ask(model, &mut Context::default()).await?;
         }
         let (translations, messages, usage) = asked;
         conversation.context.record([(remembered(messages), usage)]);
@@ -81,29 +68,14 @@ impl<'a> Turn<'a> {
         Ok(translations)
     }
 
-    /// The page asked after `history`, and again when it was blocked or its
-    /// answer was cut off: its translations, the turn's messages, and their
-    /// usage.
+    /// The page asked after `context`, and again with each remedy for why it
+    /// got no answer: its translations, the turn's messages, and their usage.
     async fn ask(
         &self,
         model: &DynModel<Completion>,
-        history: Vec<Message>,
+        context: &mut Context,
     ) -> Result<(Vec<String>, Vec<Message>, Usage)> {
-        let mut content = Vec::new();
-        if let Some(image) = self.image {
-            ensure!(
-                model.spec().is_some_and(|spec| spec.input.image),
-                "the translation model reads no images; turn vision off"
-            );
-            content.push(UserContent::Image(Image {
-                data: DocumentSourceKind::Base64(image.to_owned()),
-                media_type: Some(ImageMediaType::JPEG),
-                detail: None,
-                native: None,
-            }));
-        }
-        content.push(UserContent::text(self.page.clone()));
-        let page = Message::from(content);
+        let page = self.message(model);
         let mut options = GenerationOptions::default();
         if let Some(reasoning) = self.reasoning {
             options = options.reasoning(reasoning);
@@ -112,23 +84,32 @@ impl<'a> Turn<'a> {
             .preamble(&self.system)
             .options(options)
             .build();
-        let request = |history| agent.prompt(page.clone()).history(history);
-        let mut answer = request(history.clone()).await;
-        if !history.is_empty() && answer.as_ref().is_err_and(blocked) {
-            tracing::info!("the page was blocked; asking again without the history");
-            answer = request(Vec::new()).await;
-        }
-        let local = model
-            .spec()
-            .is_some_and(|spec| spec.provider.vendor() == KOHARU);
-        for temperature in FALLBACK.into_iter().filter(|_| local) {
-            if !matches!(answer, Err(PromptError::Cancelled { .. })) {
+        let request = |context: &Context| {
+            let history = context.messages().iter();
+            agent
+                .prompt(page.clone())
+                .history(history.map(|message| Message::clone(message)))
+        };
+        let mut answer = request(context).await;
+        let remedies = match &answer {
+            Ok(_) => &[],
+            Err(error) => remedies(error, model, context),
+        };
+        for remedy in remedies {
+            tracing::info!(?remedy, "asking the page again");
+            answer = match remedy {
+                Remedy::Alone => request(&Context::default()).await,
+                Remedy::Halved => {
+                    context.halve();
+                    request(context).await
+                }
+                Remedy::Warmer(temperature) => request(context).temperature(*temperature).await,
+            };
+            if answer.is_ok() {
                 break;
             }
-            tracing::info!("the answer was cut off; asking again at temperature {temperature}");
-            answer = request(history.clone()).temperature(temperature).await;
         }
-        let response = answer.map_err(refused)?;
+        let response = answer.map_err(failure)?;
         let translations = answers(&response.output(), &self.keys).map_err(Failed)?;
         // The first call's covers the history, the page, and an answer, as the
         // conversation keeps them; one asked again also read the first answer.
@@ -137,6 +118,28 @@ impl<'a> Turn<'a> {
             .first()
             .map_or_else(Usage::default, |call| call.usage);
         Ok((translations, response.messages, usage))
+    }
+
+    /// The page's texts, after the page itself when the model sees it, which
+    /// one that reads no images doesn't.
+    fn message(&self, model: &DynModel<Completion>) -> Message {
+        let mut content = Vec::new();
+        match self.image {
+            Some(image) if model.spec().is_some_and(|spec| spec.input.image) => {
+                content.push(UserContent::Image(Image {
+                    data: DocumentSourceKind::Base64(image.to_owned()),
+                    media_type: Some(ImageMediaType::JPEG),
+                    detail: None,
+                    native: None,
+                }));
+            }
+            Some(_) => {
+                tracing::warn!("the translation model reads no images; leaving the page's out")
+            }
+            None => {}
+        }
+        content.push(UserContent::text(self.page.clone()));
+        Message::from(content)
     }
 
     /// Whether `translations` repeat the `last` page's, in order, for at least
@@ -154,21 +157,79 @@ impl<'a> Turn<'a> {
     }
 }
 
-/// Whether the provider refused the page, or its answer, for its content.
-fn blocked(error: &PromptError) -> bool {
-    matches!(error, PromptError::Report(report) if report.refusal)
+/// Why a page got no answer it can take, which is the page's alone: a request
+/// that failed otherwise would fail for the next page too.
+enum Refusal {
+    /// The provider blocked the page, or its answer, for its content.
+    Blocked,
+    /// The page doesn't fit the model's window.
+    TooLong,
+    /// The answer was cut off.
+    CutOff,
+    /// The answer doesn't fit the page.
+    Misfit,
 }
 
-/// `error` as the page's alone when its provider blocked it, or the model
-/// answered it with nothing it can take; a request that failed would fail for
-/// the next page too.
-fn refused(error: PromptError) -> anyhow::Error {
-    match error {
-        // The answer was cut off, which rig words as a cancelled run.
-        PromptError::Cancelled { reason, .. } => Failed(anyhow!(reason)).into(),
-        PromptError::OutputSchemaMismatch { .. } => Failed(error.into()).into(),
-        error if blocked(&error) => Failed(error.into()).into(),
+impl Refusal {
+    fn of(error: &PromptError) -> Option<Self> {
+        match error {
+            PromptError::Report(report) if report.refusal => Some(Self::Blocked),
+            PromptError::Report(report) if report.is_context_overflow() => Some(Self::TooLong),
+            // rig words an answer that was cut off as a cancelled run.
+            PromptError::Cancelled { .. } => Some(Self::CutOff),
+            PromptError::OutputSchemaMismatch { .. } => Some(Self::Misfit),
+            _ => None,
+        }
+    }
+}
+
+/// How a page that got no answer is asked again.
+#[derive(Debug)]
+enum Remedy {
+    /// Without the history.
+    Alone,
+    /// With the newer half of the history.
+    Halved,
+    /// At a temperature above the model's own.
+    Warmer(f64),
+}
+
+/// How a page `error` left without an answer is asked again, in turn.
+fn remedies(
+    error: &PromptError,
+    model: &DynModel<Completion>,
+    context: &Context,
+) -> &'static [Remedy] {
+    let spec = model.spec();
+    match Refusal::of(error) {
+        // A local model decodes greedily, and would answer the same way, such
+        // as one that kept repeating itself. OpenAI's Whisper falls back so
+        // (`decode_with_fallback`, whisper/transcribe.py at 86098128).
+        Some(Refusal::CutOff) if spec.is_some_and(|it| it.provider.vendor() == KOHARU) => {
+            &[Remedy::Warmer(0.4), Remedy::Warmer(0.8)]
+        }
+        _ if context.messages().is_empty() => &[],
+        // The history may be what's blocked.
+        Some(Refusal::Blocked) => &[Remedy::Alone],
+        Some(Refusal::TooLong) => &[Remedy::Halved],
+        // A model that doesn't say its window cuts an answer off at its end.
+        Some(Refusal::CutOff) if spec.is_none_or(|it| it.input_limit().is_none()) => {
+            &[Remedy::Halved]
+        }
+        _ => &[],
+    }
+}
+
+/// `error`, as its page's alone when the page was refused.
+fn failure(error: PromptError) -> anyhow::Error {
+    let refused = Refusal::of(&error).is_some();
+    let error = match error {
+        PromptError::Cancelled { reason, .. } => anyhow!(reason),
         error => error.into(),
+    };
+    match refused {
+        true => Failed(error).into(),
+        false => error,
     }
 }
 
@@ -277,7 +338,7 @@ mod tests {
         assert_eq!(answer, ["Argh!"]);
         let requests = mock.requests();
         let temperatures: Vec<_> = requests.iter().map(|asked| asked.temperature).collect();
-        assert_eq!(temperatures, [None, Some(FALLBACK[0])]);
+        assert_eq!(temperatures, [None, Some(0.4)]);
         Ok(())
     }
 

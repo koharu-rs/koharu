@@ -27,7 +27,7 @@ provider only when the user picked that provider.
 | sign-in | `chatgpt` and `grok` sign in with the user's plan in place of a key: ChatGPT through rig's sign-in, the route Codex takes, and Grok, a SuperGrok or X Premium plan, with xAI's device code through xAI's shared client, its requests going to the endpoint the Grok CLI uses | Hermes Agent and OpenClaw sign in to xAI so [Hermes xAI] [OpenClaw xAI] |
 | listing | every model the user can pick, from each vendor with a key; one that needs a key and has none lists nothing, and a list that fails is left out | LM Studio's own list says what its models can do [LM Studio list] |
 | what a model can do | rig's catalog says; a model it knows as neither calling tools nor keeping to a schema, such as an embedding model, is dropped, and one it doesn't know is offered with its limits unknown | |
-| retries | a request is sent again up to 3 times when its reply says it failed for now, as a 429 or 5xx does, or its connection was lost before one: after the wait the reply names, else until its rate-limit headers say a spent allowance resets, else a growing one. A spent quota, a wait over 2 minutes, and a server that can't be reached fail at once | OpenAI's Python library doesn't retry past 2 minutes [OpenAI retries] |
+| retries | a request is sent again when its reply says it failed for now, as a 429 or 5xx does, or its connection was lost before one: up to 9 times, or 3 for a model list, which the interface waits for, after the wait the reply names, else until its rate-limit headers say a spent allowance resets, else one growing from 1 second to 30. A spent quota, a wait over 2 minutes, and a server that can't be reached fail at once | Gemini CLI tries 10 times, up to 30 seconds apart [Gemini CLI retries]; OpenAI's Python library doesn't retry past 2 minutes [OpenAI retries] |
 | waiting | a reply is waited for until it ends or the user stops it, however long its server says nothing, as while it loads a model, reads a long prompt, or thinks | |
 | storing | a vendor is asked not to store replies in the Responses format, which OpenAI and xAI otherwise do for 30 days; the Grok plan's own endpoint isn't asked | [OpenAI data controls], [xAI Responses] |
 
@@ -74,7 +74,8 @@ coding agent's [pi compaction]:
 - **Fitting** summarizes older messages before a request that wouldn't leave the
   model's reserve free; a summary that fails leaves the conversation as it was.
   **Compacting** summarizes now, because the model refused a request as too
-  long.
+  long. **Halving** drops the older half, for a model that filled its window,
+  which a summary might not fit either.
 - **A translation model** can't summarize, so its oldest turns are dropped,
   each reply with its turn.
 - **Counting** starts from the tokens a provider last reported, because rig's
@@ -90,7 +91,7 @@ coding agent's [pi compaction]:
 Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
-- Hosted requests: [OpenAI retries], [OpenAI data controls], [xAI Responses]
+- Hosted requests: [Gemini CLI retries], [OpenAI retries], [OpenAI data controls], [xAI Responses]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - Context: [pi compaction]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp SWA], [llama.cpp checkpoints], [llama.cpp Gemma 4]
@@ -102,6 +103,7 @@ Read in November 2026.
 [OpenAI structured outputs]: https://developers.openai.com/api/docs/guides/structured-outputs
 [LM Studio list]: https://lmstudio.ai/docs/developer/rest/list
 [Zed providers]: https://zed.dev/docs/ai/llm-providers#openai-api-compatible
+[Gemini CLI retries]: https://github.com/google-gemini/gemini-cli/blob/60f8082b14ffa7f10b608270232f3f57b5abbec8/packages/core/src/utils/retry.ts#L42-L46
 [OpenAI retries]: https://github.com/openai/openai-python/blob/804a9af5a5199f36d28dfdf84c7981f0253a3a3f/src/openai/_base_client.py#L922-L930
 [OpenAI data controls]: https://platform.openai.com/docs/guides/your-data
 [xAI Responses]: https://docs.x.ai/developers/rest-api-reference/inference/responses
