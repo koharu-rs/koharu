@@ -98,7 +98,9 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
 
 A block's mask reaches 3 pixels past its glyphs, or slivers of letter outlines
 stay outside it, but never into another lettering's box, where its clean-up
-would cover the neighbour's translation.
+would cover the neighbour's translation. A glyph two masks take in is the one's
+whose box is nearer it, and the smaller box's inside both, or it would be in
+neither.
 
 Most lettering sits on plain paper or a gradient, which a fill rebuilds
 exactly without a model call, so the model comes last. Each lettering's

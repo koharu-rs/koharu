@@ -65,11 +65,13 @@ pub(super) fn merge(detections: &mut Vec<Detection>) {
     *detections = kept;
 }
 
-/// Gives each glyph pixel two lettering masks share to the lettering with
-/// the smaller box. A box reaching over a smaller lettering beside it, as a
-/// balloon's text over a remark in its balloon, takes that lettering's glyphs
-/// in as its own on plain paper; its clean-up, drawn after, would cover the
-/// smaller lettering's translation.
+/// Gives each glyph pixel two lettering masks share to the lettering whose box
+/// is nearer it, and one inside both, to the smaller box. A box reaching over a
+/// smaller lettering beside it, as a balloon's text over a remark in its
+/// balloon, takes that lettering's glyphs in as its own on plain paper; its
+/// clean-up, drawn after, would cover the smaller lettering's translation. And
+/// a mask takes in what's in line with its box on its own paper, such as the
+/// last glyphs of the text above it in a conjoined balloon.
 pub(super) fn disjoint(detections: &mut [Detection]) {
     let mut lettering: Vec<usize> = (0..detections.len())
         .filter(|&at| matches!(detections[at].label.as_str(), "text" | "onomatopoeia"))
@@ -78,20 +80,37 @@ pub(super) fn disjoint(detections: &mut [Detection]) {
         area(detections[left].bbox).total_cmp(&area(detections[right].bbox))
     });
     for (rank, &small) in lettering.iter().enumerate() {
-        let glyphs = detections[small].mask.clone();
+        let (mut glyphs, bbox) = (detections[small].mask.clone(), detections[small].bbox);
         for &large in &lettering[rank + 1..] {
-            let mask = &mut detections[large].mask;
+            let Detection {
+                mask, bbox: other, ..
+            } = &mut detections[large];
             for (at, value) in mask.pixels.iter_mut().enumerate() {
                 let (x, y) = (
                     mask.x + at as u32 % mask.width,
                     mask.y + at as u32 / mask.width,
                 );
-                if *value != 0 && glyphs.contains(x, y) {
+                if *value == 0 || !glyphs.contains(x, y) {
+                    continue;
+                }
+                if distance(*other, x, y) < distance(bbox, x, y) {
+                    let at = (y - glyphs.y) * glyphs.width + x - glyphs.x;
+                    glyphs.pixels[at as usize] = 0;
+                } else {
                     *value = 0;
                 }
             }
         }
+        detections[small].mask = glyphs;
     }
+}
+
+/// How far pixel (`x`, `y`)'s centre lies outside `bbox`, squared.
+fn distance([left, top, right, bottom]: [f32; 4], x: u32, y: u32) -> f32 {
+    let (x, y) = (x as f32 + 0.5, y as f32 + 0.5);
+    let across = (left - x).max(x - right).max(0.0);
+    let down = (top - y).max(y - bottom).max(0.0);
+    across * across + down * down
 }
 
 /// Merges each onomatopoeia into the first more confident one it
@@ -317,5 +336,37 @@ mod tests {
         disjoint(&mut page);
         assert!(!page[0].mask.contains(80, 50) && page[0].mask.contains(50, 50));
         assert!(page[1].mask.contains(80, 50));
+    }
+
+    #[test]
+    fn a_glyph_stays_with_the_text_whose_box_holds_it() {
+        // A text, and a smaller one under it whose mask took in its last
+        // glyphs, in line with its own.
+        let glyphs = |[x0, y0, x1, y1]: [u32; 4]| Mask {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            pixels: (0..100)
+                .flat_map(|y| (0..100).map(move |x| (x, y)))
+                .map(|(x, y)| u8::from((x0..x1).contains(&x) && (y0..y1).contains(&y)) * u8::MAX)
+                .collect(),
+        };
+        let mut page = vec![
+            Detection {
+                mask: glyphs([10, 5, 40, 58]),
+                ..detection("text", 0.9, [10.0, 5.0, 40.0, 55.0])
+            },
+            Detection {
+                mask: glyphs([10, 40, 40, 95]),
+                ..detection("text", 0.9, [10.0, 70.0, 40.0, 95.0])
+            },
+        ];
+        disjoint(&mut page);
+        // The glyphs in the upper's box, and those past it but nearer it.
+        for y in [45, 57] {
+            assert!(page[0].mask.contains(20, y) && !page[1].mask.contains(20, y));
+        }
+        assert!(page[1].mask.contains(20, 60) && page[1].mask.contains(20, 80));
     }
 }
