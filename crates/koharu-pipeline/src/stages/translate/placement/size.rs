@@ -25,9 +25,9 @@ pub(super) fn median(mut values: Vec<f64>) -> Option<f64> {
 }
 
 /// The size of the page `letterings` are on: the median of the largest its
-/// texts' rooms hold in whole words, and at most `source`, its sources' own.
-/// Page medians agree within a work, where a size over its pages followed the
-/// tightest one.
+/// texts' rooms hold in whole words, each measured from its sources' size,
+/// `source`. Page medians agree within a work, where a size over its pages
+/// followed the tightest one.
 pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Option<f64>> {
     let mut held = letterings
         .par_iter()
@@ -45,7 +45,7 @@ pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Opti
         .collect::<Result<Vec<_>>>()?;
     // A text of no characters draws at none.
     held.retain(|size| *size > 0.0);
-    Ok(median(held).map(|size| source.map_or(size, |source| size.min(source))))
+    Ok(median(held))
 }
 
 /// Brings `lettering` up to `size` in the least of its rooms that holds it so,

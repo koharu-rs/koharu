@@ -554,16 +554,21 @@ mod tests {
             ],
         )?;
 
-        // At the page's size of 20, half the source's 40, the outline halves.
-        let text = placed(&mut session, ids[0], &langid!("en"))?;
-        assert_eq!(text.style.align, Some(Align::Center));
-        assert_eq!(text.style.chars.size, Some(20.0));
-        assert_eq!(text.style.chars.fill, Some(Rgba([1.0, 0.0, 0.0, 1.0])));
-        assert_eq!(text.style.chars.stroke, Some(Rgba([1.0; 4])));
-        assert_eq!(text.style.chars.stroke_width, Some(2.0));
-        // Placed again, its own outline keeps its share of its size.
-        let text = placed(&mut session, ids[0], &langid!("en"))?;
-        assert_eq!(text.style.chars.stroke_width, Some(2.0));
+        // At the page's size, what its room holds and not its sources' 20,
+        // its outline is as broad for it as for its source's 40, and stays so
+        // when it's placed again.
+        for _ in 0..2 {
+            let text = placed(&mut session, ids[0], &langid!("en"))?;
+            let chars = &text.style.chars;
+            assert_eq!(text.style.align, Some(Align::Center));
+            assert_eq!(chars.fill, Some(Rgba([1.0, 0.0, 0.0, 1.0])));
+            assert_eq!(chars.stroke, Some(Rgba([1.0; 4])));
+            let (size, width) = chars.size.zip(chars.stroke_width).context("sizes")?;
+            assert!(
+                size > 40.0 && (width - size / 10.0).abs() < 1e-6,
+                "{chars:?}"
+            );
+        }
         let text = placed(&mut session, ids[1], &langid!("en"))?;
         assert_eq!(text.style.chars.fill, None);
         Ok(())
@@ -594,22 +599,23 @@ mod tests {
         let (black, white) = (Rgba([0.0, 0.0, 0.0, 1.0]), Rgba([1.0; 4]));
 
         // A balloon's paper is behind its text already; on art, a sixteenth
-        // of the page's size of 32 for a sound effect, and an eighth for a
-        // text.
+        // of its size for a sound effect, and an eighth for a text.
         let mut outline = |block| -> Result<_> {
             let chars = placed(&mut session, block, &langid!("en"))?.style.chars;
-            Ok(chars.stroke.zip(chars.stroke_width))
+            let size = chars.size.context("a size")?;
+            let width = chars.stroke_width.map(|width| width / size);
+            Ok(chars.stroke.zip(width))
         };
         assert_eq!(outline(ids[1])?, None);
-        assert_eq!(outline(ids[2])?, Some((black, 2.0)));
-        assert_eq!(outline(ids[3])?, Some((white, 4.0)));
+        assert_eq!(outline(ids[2])?, Some((black, 1.0 / 16.0)));
+        assert_eq!(outline(ids[3])?, Some((white, 1.0 / 8.0)));
         Ok(())
     }
 
     #[test]
     fn a_text_smaller_than_its_page_s_narrows_its_margin_as_far_as_that_takes() -> Result<()> {
-        // Two roomy balloons, and one whose word reaches their texts' size of
-        // 40 with a margin under an em.
+        // Two balloons of one width, and a narrower one whose word reaches
+        // their texts' size with a margin under an em.
         let balloon = |x: f64, y: f64, width: f64| {
             let (right, bottom) = (x + width, y + 190.0);
             json!({"kind": "balloon", "outline":
@@ -629,7 +635,7 @@ mod tests {
                 ("roomy", Some("a"), text(70.0, 40.0)),
                 ("b", None, balloon(200.0, 0.0, 200.0)),
                 ("other", Some("b"), text(270.0, 40.0)),
-                ("c", None, balloon(0.0, 200.0, 170.0)),
+                ("c", None, balloon(0.0, 200.0, 184.0)),
                 ("tight", Some("c"), text(55.0, 240.0)),
             ],
         )?;
@@ -641,16 +647,17 @@ mod tests {
 
         let texts = lettered(
             &mut session,
-            &[(roomy, "HI"), (other, "HI"), (tight, "HHHH")],
+            &[(roomy, "HHHH"), (other, "HHHH"), (tight, "HHHH")],
             &langid!("en"),
         )?;
-        assert_eq!(texts[2].style.chars.size, Some(40.0));
+        let size = texts[2].style.chars.size.context("a size")?;
         assert_eq!((margin(&texts[0])?, margin(&texts[1])?), (1.0, 1.0));
         assert!((0.5..1.0).contains(&margin(&texts[2])?), "{:?}", texts[2]);
-        assert!(size::drawn(tight, &texts[2])? >= 39.9);
+        assert!(size::drawn(tight, &texts[2])? >= 0.99 * size);
         // Placed alone, the texts it leaves set the size still.
         let alone = placed(&mut session, tight, &langid!("en"))?;
-        assert_eq!(alone.style.chars.size, Some(40.0));
+        let again = alone.style.chars.size.context("a size")?;
+        assert!((again - size).abs() < 0.01 * size, "{again} against {size}");
         Ok(())
     }
 
@@ -735,13 +742,17 @@ mod tests {
             &dir,
             &[
                 ("long", None, block("text", 0.0, 110.0, 190.0, 20.0)),
-                ("roomy", None, block("text", 200.0, 110.0, 90.0, 20.0)),
+                ("broad", None, block("text", 200.0, 190.0, 90.0, 20.0)),
                 ("sound", None, block("sfx", 300.0, 20.0, 80.0, 16.0)),
             ],
         )?;
         let texts = lettered(
             &mut session,
-            &[(ids[0], "COMMUNICATION"), (ids[1], "HO"), (ids[2], "SURI")],
+            &[
+                (ids[0], "COMMUNICATION"),
+                (ids[1], "COMMUNICATION"),
+                (ids[2], "SURI"),
+            ],
             &langid!("en"),
         )?;
         let long = Renderer::get()

@@ -70,10 +70,10 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
 
 - **Size.** A letterer keeps one size for a page's dialogue [Manga balloon
   basics]. A page's is the median of the largest its texts' rooms hold in whole
-  words, measured with the renderer, and at most the median of its sources'. A
-  text that would draw smaller is brought up to it as far as its room allows,
-  and one that fits larger stays so: small text can't be read, and a large line
-  in a large balloon is a shout. A run on some blocks measures the page's other
+  words, measured with the renderer, whatever its sources' own. A text that
+  would draw smaller is brought up to it as far as its room allows, and one that
+  fits larger stays so: small text can't be read, and a large line in a large
+  balloon is a shout. A run on some blocks measures the page's other
   translations too.
 - **Margin.** A balloon's text has a letter's width of air [Comicraft glossary].
   One under the page's size has as much of it as holds that size, down to half:
