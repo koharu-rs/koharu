@@ -5648,6 +5648,7 @@ dependencies = [
  "koharu-pipeline",
  "koharu-renderer",
  "koharu-scene",
+ "kurbo",
  "parking_lot 0.13.0",
  "reqwest",
  "rig-agent",

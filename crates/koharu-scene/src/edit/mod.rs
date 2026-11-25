@@ -4,14 +4,13 @@
 mod layers;
 mod pages;
 mod pixels;
-mod schema;
 mod text;
 
 use std::collections::HashMap;
 
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema, schema_for};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use specta::Type;
 
 use crate::{
@@ -81,6 +80,7 @@ pub enum Op {
         #[serde(default)]
         parent: Option<Ref>,
         index: usize,
+        #[schemars(schema_with = "new_layer")]
         layer: Box<NewLayer>,
     },
     /// Copy a layer with everything inside it, its pixels, text, and
@@ -109,7 +109,11 @@ pub enum Op {
     /// `set_text` adds.
     UpdateLayer {
         layer: Ref,
-        #[schemars(schema_with = "schema::layer_patch")]
+        /// The values to change, as `add_layer` takes them, such as
+        /// `{"translation": {"style": {"chars": {"stroke_width": 8}}}}` for the
+        /// border of a block's lettering; not `kind`, `attributes`, or what
+        /// `set_text` writes.
+        #[schemars(with = "Map<String, Value>")]
         patch: Value,
     },
     /// Transform a layer by an affine in page space, by its kind, as
@@ -148,6 +152,15 @@ pub enum Op {
     /// Add an imported file, stored once by its content hash.
     #[schemars(skip)]
     AddFile { bytes: Vec<u8> },
+}
+
+/// A new layer's schema as agents get it, described by its own, which names each
+/// type once. Some providers refuse a schema that refers to definitions, and
+/// with every type inlined wherever it's held, a layer's takes more than a small
+/// model's context.
+fn new_layer(_: &mut SchemaGenerator) -> Schema {
+    let schema = schema_for!(NewLayer).to_value();
+    json_schema!({"type": "object", "description": schema.to_string()})
 }
 
 pub(crate) struct Run<'a, 'c> {

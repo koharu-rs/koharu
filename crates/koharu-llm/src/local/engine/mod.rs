@@ -4,9 +4,10 @@
 //! A sequence keeps what it decoded after its request ends, and a new request
 //! reuses the longest common prefix any sequence holds, as llama-server picks a
 //! slot (`get_available_slot`, tools/server/server-context.cpp at b12143). A
-//! recurrent or hybrid model's state can't be cut back to that prefix, so its
-//! sequences keep a checkpoint of their recurrent state just short of each
-//! prompt's end, and go back to it, as llama-server's context checkpoints do.
+//! recurrent or hybrid model's state can't be cut back to that prefix, nor a
+//! sliding window to one it has moved past, so their sequences keep a checkpoint
+//! of that state just short of each prompt's end, and go back to it, as
+//! llama-server's context checkpoints do.
 
 mod load;
 mod picker;
@@ -133,7 +134,10 @@ struct Engine<'m> {
     held: Vec<Vec<LlamaToken>>,
     /// Whether the model's state is recurrent, in whole or in part.
     recurrent: bool,
-    /// Each sequence's recurrent state after its first `at` held tokens.
+    /// How many positions the model's sliding window sees; 0 without one.
+    window: i32,
+    /// Each sequence's recurrent state and sliding window after its first `at`
+    /// held tokens.
     checkpoints: Vec<Option<Checkpoint>>,
 }
 
@@ -181,6 +185,7 @@ impl<'m> Engine<'m> {
             grammars: None,
             held: vec![Vec::new(); size.sequences as usize],
             recurrent: model.is_recurrent() || model.is_hybrid(),
+            window: model.n_swa(),
             checkpoints: (0..size.sequences).map(|_| None).collect(),
         })
     }

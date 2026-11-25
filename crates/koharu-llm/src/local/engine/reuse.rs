@@ -1,6 +1,7 @@
 //! What a sequence keeps after its request ends: a new prompt goes to the
-//! sequence that holds the longest prefix of it, and a recurrent model's
-//! sequence goes back to a checkpoint of its state within that prefix.
+//! sequence that holds the longest prefix of it, and a sequence whose state
+//! can't be cut back to that prefix, being recurrent or a sliding window past
+//! it, goes back to a checkpoint of that state within it.
 
 use anyhow::{Context, Result};
 use koharu_llama::{LlamaStateSeqFlags, SeqState, token::LlamaToken};
@@ -11,9 +12,9 @@ use super::{Engine, Job};
 /// the chat template's header.
 const MIN_SHARED: usize = 64;
 
-/// How far short of a prompt's end a recurrent model's checkpoint is taken
-/// at least: past the chat template's generation prompt, which the next turn
-/// renders otherwise, as Qwen3.5's empty think block that history leaves out.
+/// How far short of a prompt's end a checkpoint is taken at least: past the
+/// chat template's generation prompt, which the next turn renders otherwise, as
+/// Qwen3.5's empty think block that history leaves out.
 const CHECKPOINT_BACK: usize = 16;
 
 pub(super) struct Checkpoint {
@@ -60,26 +61,35 @@ impl Engine<'_> {
             self.held[id as usize] = self.held[best as usize].clone();
             self.checkpoints[id as usize] = None;
         }
-        let kept =
-            match self
-                .context
-                .clear_kv_cache_seq(Some(id as u32), Some(common as u32), None)?
-            {
-                true => Some(common),
-                false => self.rewind(id, common),
-            };
+        let cut = self
+            .context
+            .clear_kv_cache_seq(Some(id as u32), Some(common as u32), None)?;
+        let kept = match cut && self.holds_window(id, common) {
+            true => Some(common),
+            false => self.rewind(id, common),
+        };
         let Some(kept) = kept else {
             self.forget(id);
             return Ok((id, 0));
         };
         self.held[id as usize].truncate(kept);
+        // A checkpoint past what's kept is of tokens the sequence held before.
+        self.checkpoints[id as usize].take_if(|checkpoint| checkpoint.at > kept);
         Ok((id, kept))
     }
 
+    /// Whether sequence `id`, cut back to `common` tokens, still has the sliding
+    /// window they end in. Cutting back doesn't say: a sliding-window cache
+    /// drops positions as its window passes them.
+    fn holds_window(&self, id: i32, common: usize) -> bool {
+        let start = (common as i32 - self.window).max(0);
+        self.window == 0 || (0..=start).contains(&self.context.kv_cache_seq_pos_min(id))
+    }
+
     /// Takes sequence `id` back to its checkpoint, if one lies within the
-    /// `common` tokens a new prompt shares: its recurrent state is restored,
-    /// and its attention cache cut back to match. Answers the tokens it
-    /// then holds.
+    /// `common` tokens a new prompt shares: its recurrent state and sliding
+    /// window are restored, and the rest of its cache cut back to match.
+    /// Answers the tokens it then holds.
     fn rewind(&mut self, id: i32, common: usize) -> Option<usize> {
         let checkpoint = self.checkpoints[id as usize]
             .as_ref()
@@ -105,8 +115,9 @@ impl Engine<'_> {
     }
 
     /// Decodes `head` in sequence `id` from `start` up to a checkpoint short
-    /// of its end, which it saves, when the model is recurrent; answers where
-    /// decoding goes on, or `None` when the request ended.
+    /// of its end, which it saves, when the model is recurrent or has a sliding
+    /// window; answers where decoding goes on, or `None` when the request
+    /// ended.
     pub(super) fn checkpoint(
         &mut self,
         job: &Job,
@@ -116,12 +127,14 @@ impl Engine<'_> {
     ) -> Result<Option<usize>> {
         // On a micro-batch boundary from position 0, so every token decodes
         // in the micro-batch it would with the whole prompt decoded at once,
-        // and the logits, the answer included, come out the same.
+        // and a recurrent model's logits, the answer included, come out the
+        // same.
         let ubatch = self.context.n_ubatch() as usize;
         let mark = head.len().saturating_sub(CHECKPOINT_BACK) / ubatch * ubatch;
         // Before any image too: a page's turn shows it after the history,
         // which the next turn shares.
-        if !(self.recurrent && mark > start && mark >= MIN_SHARED) {
+        let partial = self.recurrent || self.window > 0;
+        if !(partial && mark > start && mark >= MIN_SHARED) {
             return Ok(Some(start));
         }
         if !self.feed(job, id, head, start..mark, false)? {

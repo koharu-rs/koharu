@@ -129,13 +129,16 @@ pub(super) fn batch_size(size: Size) -> usize {
 }
 
 /// A context for `size`. Separate KV streams, so each sequence holds its own
-/// tokens; a whole context of `None` is for fit to choose.
+/// tokens; a whole context of `None` is for fit to choose. A layer that attends
+/// to a sliding window keeps that window, as llama.cpp's own tools have it
+/// (common/common.h), where its library keeps the whole context by default.
 fn context_params(size: Size, context: Option<u32>, n_ubatch: Option<usize>) -> LlamaContextParams {
     let n_batch = batch_size(size);
     LlamaContextParams::default()
         .with_n_ctx(context.and_then(NonZeroU32::new))
         .with_n_seq_max(size.sequences)
         .with_kv_unified(false)
+        .with_swa_full(false)
         .with_n_batch(n_batch as u32)
         .with_n_ubatch(n_ubatch.unwrap_or_else(|| n_batch.min(512)) as u32)
 }

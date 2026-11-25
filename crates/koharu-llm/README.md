@@ -59,7 +59,8 @@ fails at once, as the cut answer would leave the next less room.
 | loading | llama.cpp's fit measures free memory and shrinks the context, down to 4,096 tokens a sequence, then moves layers to system memory, leaving 1 GiB and the projector free; a projector loads only when images are asked for | llama.cpp's own fit [llama.cpp fit] |
 | prompts | the model's own chat template from its GGUF, rendered as llama.cpp renders it with its Jinja engine | |
 | decoding | one thread owns the model, and its sequences decode together | llama.cpp's parallel decoding [llama.cpp parallel] |
-| reuse | a request reuses the longest prefix any sequence holds, at least 64 tokens; a recurrent model keeps a checkpoint of its state short of each prompt's end to go back to, with the same answer as decoding the whole prompt again | |
+| sliding windows | a layer that attends to a sliding window keeps that window, not the whole context | llama.cpp's own tools, where its library keeps the whole context by default [llama.cpp SWA] |
+| reuse | a request reuses the longest prefix any sequence holds, at least 64 tokens; a recurrent model keeps a checkpoint of its state short of each prompt's end to go back to, with the same answer as decoding the whole prompt again, and one with a sliding window keeps the window there, for a prompt the window has moved past | llama-server's context checkpoints [llama.cpp checkpoints] |
 | reasoning and tool calls | read from the reply as it streams, by markers its template writes; a reply held to a schema may reason first, where its prompt left reasoning open or by opening it at its start, and the grammar holds the rest, so markers in the answer are text; a call the token limit cut off never runs | llama.cpp's Gemma 4 grammar: an optional thought, then the schema [llama.cpp Gemma 4] |
 
 ## 4. Context
@@ -89,7 +90,7 @@ Read in November 2026.
 - Hosted requests: [OpenAI retries], [OpenAI data controls], [xAI Responses]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - Context: [pi compaction]
-- llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp Gemma 4]
+- llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp SWA], [llama.cpp checkpoints], [llama.cpp Gemma 4]
 
 [rig]: https://github.com/0xPlaygrounds/rig
 [Ollama API]: https://github.com/ollama/ollama/blob/main/docs/api.md
@@ -105,4 +106,6 @@ Read in November 2026.
 [pi compaction]: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/compaction.md
 [llama.cpp fit]: https://github.com/ggml-org/llama.cpp/blob/785322d17f2d/common/fit.h
 [llama.cpp parallel]: https://github.com/ggml-org/llama.cpp/blob/7aca0d2ea8d92b56911233b822db01f9fbb1ae50/examples/parallel/parallel.cpp#L264-L476
+[llama.cpp SWA]: https://github.com/ggml-org/llama.cpp/pull/13194
+[llama.cpp checkpoints]: https://github.com/ggml-org/llama.cpp/pull/15293
 [llama.cpp Gemma 4]: https://github.com/ggml-org/llama.cpp/blob/d7d1b632da766f1247456b4f42406a96a0609d93/common/parsers/gemma4.cpp#L344-L351

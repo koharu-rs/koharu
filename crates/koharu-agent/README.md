@@ -18,9 +18,9 @@ can't. The scene and the pipeline know nothing of tools.
 
 | Tool | Does | Only reads |
 |---|---|---|
-| `get_project` | the pages in order, each with its size and scan | yes |
-| `get_page` | a page's layers nested in reading order: panels, balloons, and blocks, each block with its source and translation | yes |
-| `get_layer` | one layer with everything inside it | yes |
+| `get_project` | the pages in order, each with how many blocks it has and how many are translated | yes |
+| `get_page` | a page's size, its scan, and its layers nested in reading order: panels, balloons, and blocks, each block with its source and translation | yes |
+| `get_layer` | one layer with all its values, and what's inside it as `get_page` answers it | yes |
 | `edit` | the scene's ops, applied as one undo step under a label, or not at all | no |
 | `run` | starts a pipeline run on the project, some pages, some blocks, or a painted area, and answers its id at once | no |
 | `wait` | waits up to 30 seconds for a run to end, and answers what it told so far | yes |
@@ -29,7 +29,15 @@ can't. The scene and the pipeline know nothing of tools.
 
 - **Schemas** inline every subschema, because some providers refuse one that
   refers to definitions. `edit`'s schema leaves out what an agent never sends,
-  such as file bytes and raw pixels.
+  such as file bytes and raw pixels, and gives a new layer's schema in its
+  description, where it names each type once: inlined, they repeat until it
+  takes more than a small model's context. An edit that doesn't fit it fails
+  with what's wrong.
+- **What's sent whole is small.** The outline that goes with every request has
+  each page's id and progress and no more, and `get_page` gives a path's bounds
+  for the path and leaves out attributes, masks, and clean-ups, as Figma's
+  `get_metadata` answers "just basic properties such as the layer IDs, names,
+  types, position and sizes" for a closer call to fill in [Figma MCP].
 - **Read-only tools say so**, with MCP's tool annotations [MCP schema].
 - **No undo history.** The scene's history query isn't a tool: an agent has no
   undo to act on it with, and each `edit` answers the history with what it
@@ -84,10 +92,11 @@ can't. The scene and the pipeline know nothing of tools.
 Read in November 2026.
 
 - Model Context Protocol: [MCP schema], [MCP transports]
-- Agents: [pi compaction], [Codex unified exec], [Claude computer use]
+- Agents: [pi compaction], [Codex unified exec], [Claude computer use], [Figma MCP]
 
 [MCP schema]: https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations
 [MCP transports]: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
 [pi compaction]: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/compaction.md
 [Codex unified exec]: https://github.com/openai/codex/blob/71a4c070369fb761e51fd71009107f398d9f0f81/codex-rs/core/src/unified_exec/mod.rs#L66-L70
 [Claude computer use]: https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
+[Figma MCP]: https://developers.figma.com/docs/figma-mcp-server/tools-and-prompts

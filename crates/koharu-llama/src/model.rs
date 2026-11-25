@@ -212,6 +212,11 @@ impl LlamaModel {
         unsafe { koharu_llama_sys::llama_model_is_hybrid(self.model.as_ptr()) }
     }
 
+    /// Returns how many positions the model's sliding-window attention sees, or 0 if it has none.
+    pub fn n_swa(&self) -> i32 {
+        unsafe { koharu_llama_sys::llama_model_n_swa(self.model.as_ptr()) }
+    }
+
     /// Returns the number of layers within the model.
     pub fn n_layer(&self) -> u32 {
         // It's never possible for this to panic because while the API interface is defined as an int32_t,
