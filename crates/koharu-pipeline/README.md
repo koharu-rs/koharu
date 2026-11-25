@@ -80,10 +80,12 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
   half holds it 15 to 17% larger, where a line height of 1 rather than 1.2 gives
   2%.
 - **Free text.** A vertical source's column holds a word or two of a horizontal
-  translation, so its frame widens until it holds the page's size: along the
-  lines to two and a half times its width but not past its longer side, then
-  across them to three lines, in its panel and off the page's other texts and
-  balloons. Without that limit a text covered a face beside it.
+  translation, so its frame widens until it holds the page's size, or a sound
+  effect's its source's when that's smaller: along the lines to two and a half
+  times its width but not past its longer side, then across them to three lines,
+  in its panel and off the page's other texts and balloons. Without that limit a
+  text covered a face beside it. A margin narrows and a frame widens as far as
+  they may before a word is hyphenated to reach the size.
 - **Lines** are centred, or in Japanese and Chinese started together at the top
   or the left, as JLREQ aligns a line to its head [JLREQ].
 - **Fill and stroke** are its source's, the stroke's width in proportion to its

@@ -1,4 +1,4 @@
-use koharu_scene::{Content, Frame, Layer, LayerId, Page, Role, Text};
+use koharu_scene::{Content, Frame, Layer, LayerId, Page, Text};
 use kurbo::{Affine, BezPath, Rect, Shape as _};
 
 /// How many times its width a box widens to at most. Without a limit a text
@@ -128,8 +128,7 @@ fn collect(layers: &[Layer], id: LayerId, enclosed: bool, found: &mut Vec<(Rect,
                 inside = true;
             }
             Content::Block(block) if layer.id != id => {
-                let grows = !enclosed && block.role == Role::Text;
-                found.extend(block.source.bounds().map(|rect| (rect, grows)));
+                found.extend(block.source.bounds().map(|rect| (rect, !enclosed)));
             }
             _ => {}
         }

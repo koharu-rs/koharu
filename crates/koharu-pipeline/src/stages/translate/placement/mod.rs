@@ -38,8 +38,8 @@ struct Lettering<'p> {
 /// lines centred, as a Western balloon's are lettered, or in Japanese and
 /// Chinese started together at the top or the left, as JLREQ aligns a line to
 /// its head. A text that would draw smaller than the page's size, which every
-/// text of the page has a say in, is brought up to it; a sound effect keeps
-/// its frame.
+/// text of the page has a say in, is brought up to it, and a sound effect to
+/// its source's size when that's smaller.
 pub(super) fn place(
     project: &Project,
     page: PageId,
@@ -73,12 +73,13 @@ pub(super) fn place(
     let size = size::page(&letterings, source)?;
     letterings.retain(|lettering| words.contains_key(&lettering.id));
     letterings.par_iter_mut().try_for_each(|lettering| {
-        let text = lettering.block.role == Role::Text;
-        lettering.letter(if text { size } else { source });
-        match size {
-            Some(size) if text => size::lift(lettering, size),
-            _ => Ok(()),
-        }
+        let own = lettering.block.source.style.chars.size;
+        let size = match lettering.block.role {
+            Role::Text => size,
+            Role::Sfx => [own, size].into_iter().flatten().reduce(f64::min),
+        };
+        lettering.letter(size);
+        size.map_or(Ok(()), |size| size::lift(lettering, size))
     })?;
     Ok(letterings
         .iter()
@@ -144,9 +145,9 @@ fn lettering<'p>(
         true => Align::Start,
         false => Align::Center,
     });
-    let widest = match block.role {
-        Role::Text if !enclosed && !vertical => free::widest(page, holder, id, source, line),
-        _ => None,
+    let widest = match enclosed || vertical {
+        true => None,
+        false => free::widest(page, holder, id, source, line),
     };
     Ok(Lettering {
         id,
@@ -716,6 +717,39 @@ mod tests {
         let widened = bounds(&texts[3])?;
         assert!((widened.x1 - 145.0).abs() < 0.01, "{widened:?}");
         assert!((widened.x0 - 70.0).abs() < 0.01, "{widened:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_frame_widens_before_its_word_hyphenates_and_a_sound_effect_s_to_its_source_s_size()
+    -> Result<()> {
+        let block = |role: &str, y: f64, width: f64, height: f64, size: f64| {
+            json!({"kind": "block", "role": role, "source": {
+                "frame": {"box": {"bounds": {"x": 150.0, "y": y, "width": width, "height": height}}},
+                "direction": "vertical",
+                "style": {"chars": {"size": size}},
+            }})
+        };
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("long", None, block("text", 0.0, 110.0, 190.0, 20.0)),
+                ("roomy", None, block("text", 200.0, 110.0, 90.0, 20.0)),
+                ("sound", None, block("sfx", 300.0, 20.0, 80.0, 16.0)),
+            ],
+        )?;
+        let texts = lettered(
+            &mut session,
+            &[(ids[0], "COMMUNICATION"), (ids[1], "HO"), (ids[2], "SURI")],
+            &langid!("en"),
+        )?;
+        let long = Renderer::get()
+            .layout(ids[0], &texts[0])?
+            .context("a layout")?;
+        assert!(long.hyphens.is_empty() && long.scale >= 0.999, "{long:?}");
+        assert_eq!(texts[2].style.chars.size, Some(16.0));
+        assert!(size::drawn(ids[2], &texts[2])? >= 15.9);
         Ok(())
     }
 }

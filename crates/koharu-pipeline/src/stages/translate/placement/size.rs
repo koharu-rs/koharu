@@ -10,10 +10,13 @@ use rayon::prelude::*;
 
 use super::{Lettering, boxed};
 
-/// The margins a balloon's text narrows to, in ems, the widest first. Half
-/// the one it starts with holds it 15 to 17% larger, and less puts letters on
-/// the balloon's border.
-const MARGINS: [f64; 4] = [0.875, 0.75, 0.625, 0.5];
+/// The margins a balloon's text may have, in ems, the widest first. Half holds
+/// it 15 to 17% larger than the whole, and less puts letters on the balloon's
+/// border.
+const MARGINS: [f64; 5] = [1.0, 0.875, 0.75, 0.625, 0.5];
+/// The steps a frame widens in, along its lines and across them.
+const ALONG: u32 = 16;
+const ACROSS: u32 = 4;
 
 /// The middle of `values`, the larger of two.
 pub(super) fn median(mut values: Vec<f64>) -> Option<f64> {
@@ -45,73 +48,75 @@ pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Opti
     Ok(median(held).map(|size| source.map_or(size, |source| size.min(source))))
 }
 
-/// Brings `lettering` up to `size`, as far as its room allows: in a balloon
-/// by its margin, and outside one by its frame, each by no more than that
-/// takes.
+/// Brings `lettering` up to `size` in the least of its rooms that holds it so,
+/// in whole words if one does, or else in the most it may take.
 pub(super) fn lift(lettering: &mut Lettering, size: f64) -> Result<()> {
-    if holds(lettering.id, &lettering.text, size)? {
+    let rooms = rooms(lettering);
+    let Some(most) = rooms.last() else {
         return Ok(());
-    }
-    match (&lettering.text.frame, lettering.widest) {
-        (Frame::Path { .. }, _) => narrow(lettering.id, &mut lettering.text, size),
-        (Frame::Box { bounds, .. }, Some(widest)) => {
-            let from = Rect::from(*bounds);
-            widen(lettering.id, &mut lettering.text, from, widest, size)
-        }
-        _ => Ok(()),
-    }
-}
-
-/// Narrows `text`'s margin to the widest that holds it at `size`, or the
-/// narrowest.
-fn narrow(id: LayerId, text: &mut Text, size: f64) -> Result<()> {
-    for margin in MARGINS {
-        if let Frame::Path { inset, .. } = &mut text.frame {
-            *inset = inset.min(margin);
-        }
-        if holds(id, text, size)? {
-            break;
-        }
-    }
-    Ok(())
-}
-
-/// Widens `text`'s box from `from` toward `widest`, along its lines first and
-/// then across them, until it holds the text at `size`.
-fn widen(id: LayerId, text: &mut Text, from: Rect, widest: Rect, size: f64) -> Result<()> {
-    let between = |along: f64, across: f64| {
-        let mix = |from: f64, to: f64, share: f64| from + (to - from) * share;
-        boxed(Rect::new(
-            mix(from.x0, widest.x0, along),
-            mix(from.y0, widest.y0, across),
-            mix(from.x1, widest.x1, along),
-            mix(from.y1, widest.y1, across),
-        ))
     };
-    for across in 0..=4 {
-        let across = f64::from(across) / 4.0;
-        text.frame = between(1.0, across);
-        if !holds(id, text, size)? {
+    let mut text = lettering.text.clone();
+    for language in [LanguageIdentifier::UNKNOWN, text.language.clone()] {
+        text.language = language;
+        let mut holds = |room: &Frame| -> Result<bool> {
+            text.frame = room.clone();
+            Ok(drawn(lettering.id, &text)? >= 0.999 * size)
+        };
+        if !holds(most)? {
             continue;
         }
-        let (mut low, mut high) = (0.0, 1.0);
-        for _ in 0..5 {
-            let middle = (low + high) / 2.0;
-            text.frame = between(middle, across);
-            match holds(id, text, size)? {
-                true => high = middle,
-                false => low = middle,
+        for room in &rooms {
+            if holds(room)? {
+                lettering.text.frame = room.clone();
+                return Ok(());
             }
         }
-        text.frame = between(high, across);
-        break;
     }
+    lettering.text.frame = most.clone();
     Ok(())
 }
 
-/// Whether `text` draws at `size` or larger.
-fn holds(id: LayerId, text: &Text, size: f64) -> Result<bool> {
-    Ok(drawn(id, text)? >= 0.999 * size)
+/// The rooms `lettering`'s text may take, from the one it has to the most: in a
+/// balloon narrower margins, and outside one wider frames, along its lines
+/// first and then across them.
+fn rooms(lettering: &Lettering) -> Vec<Frame> {
+    match (&lettering.text.frame, lettering.widest) {
+        (
+            Frame::Path {
+                path,
+                fit,
+                anchor,
+                inset,
+            },
+            _,
+        ) => MARGINS
+            .into_iter()
+            .map(|margin| Frame::Path {
+                path: path.clone(),
+                fit: *fit,
+                anchor: *anchor,
+                inset: inset.min(margin),
+            })
+            .collect(),
+        (Frame::Box { bounds, .. }, Some(widest)) => {
+            let own = Rect::from(*bounds);
+            let mix = |from: f64, to: f64, share: f64| from + (to - from) * share;
+            (0..=ACROSS)
+                .flat_map(|across| (0..=ALONG).map(move |along| (along, across)))
+                .map(|(along, across)| {
+                    let along = f64::from(along) / f64::from(ALONG);
+                    let across = f64::from(across) / f64::from(ACROSS);
+                    boxed(Rect::new(
+                        mix(own.x0, widest.x0, along),
+                        mix(own.y0, widest.y0, across),
+                        mix(own.x1, widest.x1, along),
+                        mix(own.y1, widest.y1, across),
+                    ))
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// The size `text`, block `id`'s, draws at; 0 when it has no characters.
