@@ -36,7 +36,13 @@ Each request starts with the open project's outline: its pages and their layers.
 
 ## Connect other agents over MCP
 
-While Koharu runs, it serves the same tools to agents in other programs over MCP's Streamable HTTP transport at `http://127.0.0.1:7878/mcp`, shown at the top of the Agent panel. Add that URL to an MCP client on the same machine. The server works on whichever project is open, accepts connections from this machine only, and refuses requests from web pages.
+While Koharu runs, it serves the same tools to agents in other programs over MCP's Streamable HTTP transport. Add this URL to an MCP client on the same machine:
+
+```text
+http://127.0.0.1:7878/mcp
+```
+
+The URL is the same at every launch; if another program already uses port 7878 when Koharu starts, the server doesn't run. The server works on whichever project is open, accepts connections from this machine only, and refuses requests from web pages.
 
 <Card title='Work with a project' icon='comment' href='/agent/projects'>
   Give the Agent a precise scope, review its edits, and use project history.
