@@ -101,14 +101,12 @@ export function TitleBar() {
           <div className='w-[84px] shrink-0' />
         ) : (
           <div className='relative z-10 flex h-full w-10 shrink-0 items-center justify-center rounded-br-lg'>
-            {/* Its weight is in its top, its feet pale, so centred it reads 2 px above the
-                menus' words; lowered by that to sit on their line. */}
             <Image
-              className='pointer-events-none translate-y-0.5'
+              className='pointer-events-none'
               src='/icon.png'
               alt='Koharu'
-              width={17}
-              height={17}
+              width={16}
+              height={16}
               draggable={false}
               priority
             />
