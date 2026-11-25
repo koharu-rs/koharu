@@ -97,8 +97,8 @@ fn text<'a>(frame: &'a Frame, change: &Change, name: &str) -> &'a ResolvedText {
         .expect("a laid-out text")
 }
 
-/// The resolved text of one word in a box `width` wide, shrinking to fit.
-fn word_in_box(width: f64, language: &str) -> ResolvedText {
+/// The resolved text of one word in `frame`.
+fn word(frame: Value, language: &str) -> ResolvedText {
     let (_dir, session, page, change) = page(
         400,
         400,
@@ -108,7 +108,7 @@ fn word_in_box(width: f64, language: &str) -> ResolvedText {
                 "content": "Incomprehensibilities",
                 "style": {"chars": {"family": "Arial", "size": 40.0}},
                 "language": language,
-                "frame": {"box": {"bounds": {"x": 0.0, "y": 0.0, "width": width, "height": 400.0}}},
+                "frame": frame,
             },
         })],
     );
@@ -119,19 +119,27 @@ fn word_in_box(width: f64, language: &str) -> ResolvedText {
 
 #[test]
 fn a_long_word_shrinks_before_it_hyphenates_and_never_breaks_between_letters() {
+    // Boxes are shares of the word's width, which differs by the font this
+    // machine has for Arial, and they shrink to fit.
+    let width = word(json!("point"), "en").frame.width();
+    let word_in_box = |share: f64, language| {
+        let bounds = json!({"x": 0.0, "y": 0.0, "width": share * width, "height": 400.0});
+        word(json!({"box": {"bounds": bounds}}), language)
+    };
+
     // With room, the word sets at its size.
-    assert_eq!(word_in_box(4000.0, "en").scale, 1.0);
+    assert_eq!(word_in_box(2.0, "en").scale, 1.0);
 
     // A box a little narrower than the word: it shrinks and stays whole,
     // whether its language hyphenates or not.
     for language in ["en", "und"] {
-        let shrunk = word_in_box(300.0, language);
+        let shrunk = word_in_box(0.9, language);
         assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.5, "{shrunk:?}");
         assert!(shrunk.hyphens.is_empty() && !shrunk.overflowed);
     }
 
     // Too narrow to set whole even at half size: it hyphenates.
-    let hyphenated = word_in_box(120.0, "en");
+    let hyphenated = word_in_box(0.3, "en");
     assert!(
         hyphenated.scale >= 0.5 && !hyphenated.hyphens.is_empty(),
         "{hyphenated:?}"
@@ -139,7 +147,7 @@ fn a_long_word_shrinks_before_it_hyphenates_and_never_breaks_between_letters() {
     assert!(!hyphenated.overflowed);
 
     // And without hyphenation points it runs past the box whole.
-    let whole = word_in_box(120.0, "und");
+    let whole = word_in_box(0.3, "und");
     assert!(whole.hyphens.is_empty() && whole.overflowed, "{whole:?}");
 }
 
