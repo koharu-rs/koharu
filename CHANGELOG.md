@@ -1,3 +1,9 @@
+## [0.95.3](https://github.com/koharu-rs/koharu/compare/0.95.2..0.95.3) - 2026-11-25
+
+### 🐛 Bug Fixes
+
+- *(agent)* Send an empty properties object for tools without arguments, which LM Studio refuses a request without - ([432fbb9](https://github.com/koharu-rs/koharu/commit/432fbb981af921c348f68e70d36b37a0b9045965))
+
 ## [0.95.2](https://github.com/koharu-rs/koharu/compare/0.95.1..0.95.2) - 2026-11-25
 
 ### 🐛 Bug Fixes
