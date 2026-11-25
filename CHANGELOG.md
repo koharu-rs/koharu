@@ -1,3 +1,9 @@
+## [0.98.0](https://github.com/koharu-rs/koharu/compare/0.97.0..0.98.0) - 2026-11-25
+
+### ⛰️  Features
+
+- Set bold and italic in any font, faking a face it lacks, from the type bar and its shortcuts and into PSD - ([e924354](https://github.com/koharu-rs/koharu/commit/e92435418bfd1a7187ffe134684c3c585817bb77))
+
 ## [0.97.0](https://github.com/koharu-rs/koharu/compare/0.96.2..0.97.0) - 2026-11-25
 
 ### ⛰️  Features
