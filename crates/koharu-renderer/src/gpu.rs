@@ -13,8 +13,9 @@ use image::RgbaImage;
 use kurbo::{Affine, Stroke};
 use parking_lot::{Mutex, MutexGuard};
 use vello_gpu::{
-    ImageSource, Pixmap, RenderOptions, RenderTarget, RenderTargetConfig, Renderer, Resources,
-    Scene, TextureBindings, TextureId, TextureRegion,
+    ImageSource, LayersConfig, MemorySettings, Pixmap, RenderOptions, RenderSettings, RenderTarget,
+    RenderTargetConfig, Renderer, Resources, Scene, SizeU16, TextureBindings, TextureId,
+    TextureRegion,
 };
 use wgpu::{
     BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d, TexelCopyBufferInfo,
@@ -143,9 +144,19 @@ impl Gpu {
                 tracing::error!("the GPU device was lost ({reason:?}): {message}");
             }
         });
+        // A layer is as large as its drawing at most, and vello_gpu fails a
+        // drawing with one past its default of 4096 pixels, as a canvas on a
+        // 5K screen draws. Past the device's own limit, it uses that.
+        let memory = MemorySettings {
+            layers_config: LayersConfig {
+                max_texture_size: SizeU16::new(u16::MAX),
+                ..LayersConfig::default()
+            },
+            ..MemorySettings::default()
+        };
         // A render takes its size from its target; this only sizes the
         // renderer's first buffers.
-        let (renderer, resources) = Renderer::new(
+        let (renderer, resources) = Renderer::new_with(
             &device,
             &queue,
             &RenderTargetConfig {
@@ -153,6 +164,7 @@ impl Gpu {
                 width: 1,
                 height: 1,
             },
+            RenderSettings::default().with_memory_settings(memory),
         );
         Ok(Self {
             instance,
