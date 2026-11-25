@@ -4,7 +4,7 @@
 use std::{fmt, sync::Arc};
 
 use anyhow::Result;
-use image::{GenericImage as _, RgbaImage};
+use image::RgbaImage;
 use koharu_scene::{Blend, LayerId, MaskMode, Offset, PageId, Revision};
 use kurbo::{Affine, Rect, Shape as _};
 
@@ -300,23 +300,20 @@ impl Frame {
         let gpu = Gpu::get()?;
         let side = PIECE.min(gpu.largest_texture());
         let (x0, y0) = (rect.x0.floor(), rect.y0.floor());
-        let piece = |left: u32, top: u32| {
-            let (width, height) = (side.min(width - left), side.min(height - top));
-            let mut drawing = gpu.drawing(width as u16, height as u16);
-            self.paint(
-                Affine::translate((-(x0 + f64::from(left)), -(y0 + f64::from(top)))),
-                Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
-                &mut drawing,
-            )?;
-            drawing.read()
-        };
-        if width <= side && height <= side {
-            return piece(0, 0);
-        }
         let mut image = RgbaImage::new(width, height);
+        // One drawing for all the pieces, so an image past `TEXTURE_BYTES`,
+        // which isn't kept, uploads once.
+        let mut drawing = gpu.drawing(side as u16, side as u16);
         for top in (0..height).step_by(side as usize) {
             for left in (0..width).step_by(side as usize) {
-                image.copy_from(&piece(left, top)?, left, top)?;
+                let (width, height) = (side.min(width - left), side.min(height - top));
+                drawing.scene.reset_and_resize(width as u16, height as u16);
+                self.paint(
+                    Affine::translate((-(x0 + f64::from(left)), -(y0 + f64::from(top)))),
+                    Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
+                    &mut drawing,
+                )?;
+                drawing.read_into(&mut image, left, top)?;
             }
         }
         Ok(image)

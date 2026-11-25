@@ -1,10 +1,13 @@
 //! The GPU: one wgpu device and a vello_gpu renderer, which draws every page
 //! Koharu shows or exports.
 
-use std::sync::{
-    Arc, Weak,
-    atomic::{AtomicBool, Ordering},
-    mpsc,
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Weak,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -190,7 +193,7 @@ impl Gpu {
     }
 
     /// A drawing for a `width`×`height` target. It holds the renderer until
-    /// it's rendered.
+    /// it's rendered, and between `read_into`s, but not while one reads back.
     pub fn drawing(&self, width: u16, height: u16) -> Drawing<'_> {
         let mut vello = self.vello.lock();
         // A texture whose pixmap has gone, as an evicted layer's, goes too.
@@ -202,6 +205,7 @@ impl Gpu {
             vello,
             scene: Scene::new(width, height),
             bindings: TextureBindings::new(),
+            images: HashMap::new(),
         }
     }
 
@@ -227,6 +231,19 @@ impl Gpu {
     /// premultiplied RGBA, as vello_gpu draws it, read back as straight
     /// alpha.
     pub fn read_texture(&self, texture: &Texture) -> Result<RgbaImage> {
+        let mut image = RgbaImage::new(texture.width(), texture.height());
+        self.read_texture_into(texture, &mut image, 0, 0)?;
+        Ok(image)
+    }
+
+    /// `read_texture` into `image`, at its `left` and `top`.
+    fn read_texture_into(
+        &self,
+        texture: &Texture,
+        image: &mut RgbaImage,
+        left: u32,
+        top: u32,
+    ) -> Result<()> {
         self.catch(|| {
             let (width, height) = (texture.width(), texture.height());
             let padded_width = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -277,25 +294,28 @@ impl Gpu {
             let mapped = slice
                 .get_mapped_range()
                 .context("failed to read the readback buffer")?;
-            let row = (width * 4) as usize;
-            let mut pixels = Vec::with_capacity(row * height as usize);
-            for line in mapped
-                .chunks_exact(padded_width as usize)
-                .take(height as usize)
+            let (start, row) = ((left * 4) as usize, (width * 4) as usize);
+            let line = (image.width() * 4) as usize;
+            for (to, from) in image
+                .chunks_exact_mut(line)
+                .skip(top as usize)
+                .zip(mapped.chunks_exact(padded_width as usize))
             {
-                pixels.extend_from_slice(&line[..row]);
-            }
-            drop(mapped);
-            readback.unmap();
-            for pixel in pixels.as_chunks_mut::<4>().0 {
-                let alpha = u32::from(pixel[3]);
-                if alpha != 0 && alpha != 255 {
-                    for channel in &mut pixel[..3] {
-                        *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                let to = &mut to[start..start + row];
+                to.copy_from_slice(&from[..row]);
+                for pixel in to.as_chunks_mut::<4>().0 {
+                    let alpha = u32::from(pixel[3]);
+                    if alpha != 0 && alpha != 255 {
+                        for channel in &mut pixel[..3] {
+                            *channel =
+                                ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                        }
                     }
                 }
             }
-            RgbaImage::from_raw(width, height, pixels).context("the readback has the wrong size")
+            drop(mapped);
+            readback.unmap();
+            Ok(())
         })
     }
 }
@@ -316,21 +336,33 @@ fn open(backends: wgpu::Backends) -> Result<(wgpu::Instance, wgpu::Adapter)> {
     Ok((instance, adapter))
 }
 
-/// A scene for one render on the GPU, with the textures its images name.
+/// A scene drawn on the GPU, with the textures its images name.
 pub struct Drawing<'a> {
     pub(crate) gpu: &'a Gpu,
     vello: MutexGuard<'a, State>,
     /// What the canvas draws over the page goes here too.
     pub scene: Scene,
     bindings: TextureBindings,
+    /// The id of each image drawn, by its pixmap's address, which holding the
+    /// pixmap keeps its own, so the next scene draws it from the same texture.
+    images: HashMap<usize, (Arc<Pixmap>, TextureId)>,
 }
 
 impl Drawing<'_> {
-    /// Renders into a texture the drawing's size and reads it back as
+    /// Renders into a texture the scene's size and reads it back as
     /// straight-alpha RGBA.
-    pub(crate) fn read(self) -> Result<RgbaImage> {
+    pub(crate) fn read(mut self) -> Result<RgbaImage> {
+        let (width, height) = (self.scene.width(), self.scene.height());
+        let mut image = RgbaImage::new(width.into(), height.into());
+        self.read_into(&mut image, 0, 0)?;
+        Ok(image)
+    }
+
+    /// `read` into `image`, at its `left` and `top`, leaving the drawing for
+    /// another scene.
+    pub(crate) fn read_into(&mut self, image: &mut RgbaImage, left: u32, top: u32) -> Result<()> {
         let gpu = self.gpu;
-        gpu.catch(move || {
+        gpu.catch(|| {
             let texture = gpu.device.create_texture(&TextureDescriptor {
                 label: Some("koharu raster"),
                 size: Extent3d {
@@ -345,14 +377,20 @@ impl Drawing<'_> {
                 usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
-            self.render(&texture.create_view(&wgpu::TextureViewDescriptor::default()))?;
-            gpu.read_texture(&texture)
+            self.draw(&texture.create_view(&wgpu::TextureViewDescriptor::default()))?;
+            MutexGuard::unlocked(&mut self.vello, || {
+                gpu.read_texture_into(&texture, image, left, top)
+            })
         })
     }
 
-    /// Renders into `target`, an `Rgba8Unorm` render attachment the drawing's
+    /// Renders into `target`, an `Rgba8Unorm` render attachment the scene's
     /// size, as premultiplied RGBA.
     pub fn render(mut self, target: &TextureView) -> Result<()> {
+        self.draw(target)
+    }
+
+    fn draw(&mut self, target: &TextureView) -> Result<()> {
         // vello_gpu uploads through wgpu's `create_buffer_init`, which panics
         // on a lost device's buffers.
         if self.gpu.lost() {
@@ -426,10 +464,13 @@ impl Drawing<'_> {
 
     /// `pixmap` as an image the scene samples: uploaded as a texture of its
     /// own unless one is kept, and named by its id. The drawing holds the
-    /// texture until it renders, kept or not; one the GPU had no memory for
-    /// fails the drawing and isn't kept.
+    /// texture, kept or not, and draws the image from it again; one the GPU
+    /// had no memory for fails the drawing and isn't kept.
     pub(crate) fn image(&mut self, pixmap: &Arc<Pixmap>) -> Result<ImageSource> {
         let address = Arc::as_ptr(pixmap) as usize;
+        if let Some(&(_, id)) = self.images.get(&address) {
+            return Ok(ImageSource::external_texture(id, TextureRegion::Full, true));
+        }
         let uploaded = self
             .vello
             .textures
@@ -477,6 +518,7 @@ impl Drawing<'_> {
             }
         };
         self.bindings.insert(id, view);
+        self.images.insert(address, (Arc::clone(pixmap), id));
         Ok(ImageSource::external_texture(id, TextureRegion::Full, true))
     }
 }
