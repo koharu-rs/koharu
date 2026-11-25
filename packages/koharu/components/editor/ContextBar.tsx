@@ -1,6 +1,13 @@
 'use client'
 
-import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom'
+import {
+  autoUpdate,
+  flip,
+  offset,
+  shift,
+  useFloating,
+  type MiddlewareState,
+} from '@floating-ui/react-dom'
 import { useLayoutEffect, type ComponentProps } from 'react'
 
 import { useKoharuStore } from '@/lib/store'
@@ -12,7 +19,8 @@ const GAP = 8
 
 /** A bar beside a selection on the canvas, as Photoshop's Contextual Task Bar sits by one: centred
  * below `bounds`, in page pixels the camera places, or above when there's no room below, kept
- * inside the canvas, which clips it. */
+ * inside the canvas element, its parent. A bar the canvas is too narrow for starts at its left edge
+ * and runs past its right one, which clips no fixed element. */
 export function ContextBar({
   bounds,
   className,
@@ -22,18 +30,26 @@ export function ContextBar({
   const camera = useKoharuStore((state) => state.camera)
   const { refs, floatingStyles, isPositioned } = useFloating({
     placement: 'bottom',
-    middleware: [offset(GAP), flip({ padding: GAP }), shift({ padding: GAP, crossAxis: true })],
+    strategy: 'fixed',
+    middleware: [
+      offset(GAP),
+      flip(inCanvas),
+      shift((state) => ({ ...inCanvas(state), crossAxis: true })),
+    ],
     whileElementsMounted: autoUpdate,
   })
 
-  // The selection as the canvas element shows it, the bar's parent.
+  // The selection as the canvas shows it, which moves and resizes with the canvas.
   useLayoutEffect(() => {
+    const canvas = refs.floating.current?.parentElement
+    if (!canvas) return
     refs.setReference({
+      contextElement: canvas,
       getBoundingClientRect: () => {
-        const canvas = refs.floating.current?.parentElement?.getBoundingClientRect()
+        const { left, top } = canvas.getBoundingClientRect()
         return new DOMRect(
-          (canvas?.left ?? 0) + bounds.x * camera.zoom + camera.x,
-          (canvas?.top ?? 0) + bounds.y * camera.zoom + camera.y,
+          left + bounds.x * camera.zoom + camera.x,
+          top + bounds.y * camera.zoom + camera.y,
           bounds.width * camera.zoom,
           bounds.height * camera.zoom,
         )
@@ -46,11 +62,16 @@ export function ContextBar({
       ref={refs.setFloating}
       role='toolbar'
       className={cn(
-        'z-20 flex max-w-[calc(100%-16px)] items-center gap-1 rounded-xl border border-border bg-[var(--surface-floating)] p-1.5 shadow-[var(--shadow-toolrail)]',
+        'z-20 flex w-max items-center gap-1 rounded-xl border border-border bg-[var(--surface-floating)] p-1.5 shadow-[var(--shadow-toolrail)]',
         className,
       )}
       style={{ ...style, ...floatingStyles, visibility: isPositioned ? 'visible' : 'hidden' }}
       {...props}
     />
   )
+}
+
+/** The canvas, which a fixed bar's own clipping ancestors leave out. */
+function inCanvas({ elements }: MiddlewareState) {
+  return { boundary: elements.floating.parentElement ?? undefined, padding: GAP }
 }

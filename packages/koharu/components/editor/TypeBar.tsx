@@ -54,8 +54,8 @@ const WHITE = '#FFFFFF'
 const TOOLS: CanvasTool[] = ['select', 'direct_select', 'text']
 
 /** The selected texts' type settings in a bar beside them on the canvas, as Photoshop's Contextual
- * Task Bar shows a selection's type settings on the canvas: centred below the texts, or above when
- * there's no room below, kept inside the canvas, on one row or two when the canvas is narrower.
+ * Task Bar shows a selection's type settings on the canvas: one row, centred below the texts, or
+ * above when there's no room below, past the canvas's edge when the canvas is narrower.
  * Every setting a text's lettering has: the style it draws with, its direction, and its box's
  * fit. As Photoshop's Character panel, while the canvas types, a character setting styles the
  * selected characters, or the next ones typed at a caret; otherwise every character of every text
@@ -170,12 +170,7 @@ export function TypeBar() {
   const toggle =
     'h-6 w-6 min-w-6 rounded-md bg-background px-0 text-muted-foreground data-[pressed]:border-primary data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary/90'
   return (
-    <ContextBar
-      bounds={selectionBounds}
-      aria-label={t('inspector.type')}
-      data-testid='type-bar'
-      className='flex-wrap'
-    >
+    <ContextBar bounds={selectionBounds} aria-label={t('inspector.type')} data-testid='type-bar'>
       <div className='w-28'>
         <FontPicker
           value={family}
