@@ -1,3 +1,11 @@
+## [0.95.4](https://github.com/koharu-rs/koharu/compare/0.95.3..0.95.4) - 2026-11-25
+
+### 🐛 Bug Fixes
+
+- *(ml)* Split a balloon moved or resized off whole pixels by its exact hull, where imageproc's cut the coordinates and could panic - ([67c01d6](https://github.com/koharu-rs/koharu/commit/67c01d6d55dddfabb9246d9bd280e033948de8d5))
+- *(pipeline)* Frame a balloon's translation in the few smooth anchors that keep its shape, where its traced outline had one every few pixels - ([fd0544b](https://github.com/koharu-rs/koharu/commit/fd0544bba64ccbfe75a9c93b526d229947033547))
+- *(runtime)* Run llama.cpp and stable-diffusion.cpp in turns on CUDA, and libtorch too on ROCm, where one spoiled the other's graph capture and ggml aborted the app - ([83af5a2](https://github.com/koharu-rs/koharu/commit/83af5a28b87408e79fc37e0e05f33074e8b7231d))
+
 ## [0.95.3](https://github.com/koharu-rs/koharu/compare/0.95.2..0.95.3) - 2026-11-25
 
 ### 🐛 Bug Fixes
