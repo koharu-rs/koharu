@@ -288,18 +288,35 @@ impl Frame {
     }
 
     /// `rect`, in page pixels, drawn at one output pixel per page pixel, its
-    /// corner rounded down to a whole pixel: in pieces when it's larger than
-    /// `PIECE` or the GPU's largest texture.
+    /// corner rounded down to a whole pixel.
     pub fn rasterize_rect(&self, rect: Rect) -> Result<RgbaImage> {
         let (width, height) = (rect.width().ceil() as u32, rect.height().ceil() as u32);
         // What draws nothing, such as a block with no clean-up, is empty.
         if width == 0 || height == 0 {
             return Ok(RgbaImage::new(width, height));
         }
+        let corner = Affine::translate((-rect.x0.floor(), -rect.y0.floor()));
+        self.draw(corner, width, height)
+    }
+
+    /// The frame's area drawn at `width`×`height` pixels, as a thumbnail is.
+    pub fn rasterize_scaled(&self, width: u32, height: u32) -> Result<RgbaImage> {
+        let area = self.area();
+        let (x, y) = (
+            f64::from(width) / area.width(),
+            f64::from(height) / area.height(),
+        );
+        let corner = Affine::translate((-area.x0, -area.y0));
+        self.draw(Affine::scale_non_uniform(x, y) * corner, width, height)
+    }
+
+    /// The frame drawn through `to_output`, from page pixels to output pixels,
+    /// onto a `width`×`height` image: in pieces when it's larger than `PIECE`
+    /// or the GPU's largest texture.
+    fn draw(&self, to_output: Affine, width: u32, height: u32) -> Result<RgbaImage> {
         check_size(width, height)?;
         let gpu = Gpu::get()?;
         let side = PIECE.min(gpu.largest_texture());
-        let (x0, y0) = (rect.x0.floor(), rect.y0.floor());
         let mut image = RgbaImage::new(width, height);
         // One drawing for all the pieces, so an image past `TEXTURE_BYTES`,
         // which isn't kept, uploads once.
@@ -309,7 +326,7 @@ impl Frame {
                 let (width, height) = (side.min(width - left), side.min(height - top));
                 drawing.scene.reset_and_resize(width as u16, height as u16);
                 self.paint(
-                    Affine::translate((-(x0 + f64::from(left)), -(y0 + f64::from(top)))),
+                    Affine::translate((-f64::from(left), -f64::from(top))) * to_output,
                     Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
                     &mut drawing,
                 )?;
@@ -440,6 +457,47 @@ mod tests {
         let raster = frame.rasterize().expect("a raster's pixels").image;
         assert!(view.pixels().all(|pixel| pixel.0 == [255, 0, 0, 128]));
         assert!(raster == view, "a raster draws what a view does");
+    }
+
+    /// A page drawn smaller than it is stays opaque to its edges, though an
+    /// odd side's halved level reaches past them.
+    #[test]
+    fn a_page_drawn_smaller_is_opaque_to_its_edges() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let ops = vec![
+            json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1001, "height": 1025}}),
+            json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
+        ];
+        let mut ops: Vec<Op> = ops
+            .into_iter()
+            .map(|op| serde_json::from_value(op).expect("an op"))
+            .collect();
+        ops.push(Op::WritePixels {
+            layer: Ref::try_from("$paper".to_owned()).expect("a label"),
+            rect: PixelRect {
+                x: 0,
+                y: 0,
+                width: 1001,
+                height: 1025,
+            },
+            pixels: vec![255; 1001 * 1025 * 4],
+        });
+        let change = session
+            .apply(Edit {
+                label: "test".into(),
+                ops,
+            })
+            .expect("an edit");
+        if Gpu::get().is_err() {
+            eprintln!("skipped without a GPU");
+            return;
+        }
+        let image = Renderer::new(RendererConfig::default())
+            .render(&session, change.pages.added[0])
+            .and_then(|frame| frame.rasterize_scaled(250, 256))
+            .expect("pixels");
+        assert!(image.pixels().all(|pixel| pixel.0 == [255; 4]));
     }
 
     /// The canvas draws a frame without the layers a move is dragging, so

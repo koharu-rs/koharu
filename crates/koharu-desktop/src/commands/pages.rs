@@ -15,7 +15,8 @@ use crate::{
 /// How tall a thumbnail is, in pixels.
 const HEIGHT: u32 = 256;
 
-/// The page as it renders, `HEIGHT` pixels tall, as WebP.
+/// The page as it renders, `HEIGHT` pixels tall, as WebP: drawn twice as large
+/// and shrunk, as masks' edges are jagged drawn at that size.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_page_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Result<Bytes> {
@@ -23,11 +24,11 @@ pub async fn get_page_thumbnail(app: State<'_, Arc<App>>, page: PageId) -> Resul
     Ok(tokio::task::spawn_blocking(move || {
         let session = app.session()?;
         let frame = app.renderer.render(&session.lock(), page)?;
-        let raster = frame.rasterize()?;
-        let (width, height) = raster.image.dimensions();
-        ensure!(width > 0 && height > 0, "the page is empty");
-        let scaled = (u64::from(width) * u64::from(HEIGHT) / u64::from(height)).max(1);
-        let image = image::imageops::thumbnail(&raster.image, u32::try_from(scaled)?, HEIGHT);
+        let area = frame.area();
+        ensure!(!area.is_zero_area(), "the page is empty");
+        let width = (area.width() * f64::from(HEIGHT) / area.height()).max(1.0) as u32;
+        let drawn = frame.rasterize_scaled(width * 2, HEIGHT * 2)?;
+        let image = image::imageops::thumbnail(&drawn, width, HEIGHT);
         let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
         Ok(Bytes(encoder.encode(80.0).to_vec()))
     })
