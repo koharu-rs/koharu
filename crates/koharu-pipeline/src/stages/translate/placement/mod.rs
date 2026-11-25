@@ -1,7 +1,9 @@
 //! Where a block's translation goes, written when the block is translated. Its
-//! frame is a copy of its room, so a later edit of the balloon leaves it as is.
+//! frame is its room, simplified, so a later edit of the balloon leaves it as
+//! is.
 
 mod room;
+mod simplify;
 
 use icu_locale_core::{LanguageIdentifier, subtags::language};
 use koharu_scene::{

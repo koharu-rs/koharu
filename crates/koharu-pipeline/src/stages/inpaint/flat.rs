@@ -23,9 +23,10 @@ use imageproc::{
     region_labelling::{Connectivity, connected_components},
 };
 use koharu_scene::Rect;
-use kurbo::{BezPath, ParamCurve as _};
+use kurbo::BezPath;
 
 use super::{inside, masked, telea};
+use crate::stages::held;
 
 /// How far past the grown mask its surroundings are read.
 const RING: u32 = 4;
@@ -347,43 +348,6 @@ impl Stray {
 /// `mask` with a pixel around it, where a line running against it goes on.
 fn bordered(mask: &GrayImage) -> GrayImage {
     dilate(mask, Norm::LInf, 1)
-}
-
-/// The pixels of `rect` whose centres `outline` holds, as `Shape::contains`
-/// tells them, a row at a time.
-fn held(outline: &BezPath, rect: Rect) -> GrayImage {
-    let mut lines = BezPath::new();
-    kurbo::flatten(outline, 0.1, |element| lines.push(element));
-    // Where the outline crosses each row's middle, and which way.
-    let mut crossings = vec![Vec::new(); rect.height as usize];
-    let row = |y: f64| (y - f64::from(rect.y) - 0.5).ceil().max(0.0) as usize;
-    for line in lines.segments() {
-        let (start, end) = (line.start(), line.end());
-        let (top, bottom, way) = match start.y < end.y {
-            true => (start, end, 1),
-            false => (end, start, -1),
-        };
-        for at in row(top.y)..row(bottom.y).min(crossings.len()) {
-            let y = f64::from(rect.y) + at as f64 + 0.5;
-            let x = top.x + (bottom.x - top.x) * (y - top.y) / (bottom.y - top.y);
-            crossings[at].push((x - f64::from(rect.x), way));
-        }
-    }
-    let mut pixels = GrayImage::new(rect.width, rect.height);
-    for (y, crossings) in crossings.iter_mut().enumerate() {
-        crossings.sort_by(|(left, _), (right, _)| left.total_cmp(right));
-        let mut winding = 0;
-        for pair in crossings.windows(2) {
-            winding += pair[0].1;
-            if winding != 0 {
-                let column = |x: f64| ((x - 0.5).ceil().max(0.0) as u32).min(rect.width);
-                for x in column(pair[0].0)..column(pair[1].0) {
-                    pixels.put_pixel(x, y as u32, Luma([255]));
-                }
-            }
-        }
-    }
-    pixels
 }
 
 /// The separate pieces of `mask` over `rect`, each over its own rectangle.
