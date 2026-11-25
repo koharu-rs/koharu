@@ -18,7 +18,7 @@ use rig_memory::{
     summary_author, summary_request, summary_text,
 };
 
-use crate::TRANSLATION;
+use crate::{TRANSLATION, hosted::routing};
 
 /// What a model is asked for a summary in place of rig's prompts, which are
 /// written for a coding agent.
@@ -202,7 +202,10 @@ async fn summarize(
         Some(prompts) => prompted_request(prompts, &older, previous, spec)?,
         None => summary_request(&older, (previous, ""), spec, None)?,
     };
-    let response = model.stream(request)?.finish().await?;
+    let response = model
+        .stream(routing::route(request, spec)?)?
+        .finish()
+        .await?;
     Ok(SummaryState {
         summary: summary_text(&response, "the summary")?,
         ..SummaryState::default()

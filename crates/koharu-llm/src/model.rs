@@ -75,7 +75,7 @@ fn params(vendor: &str, id: &str) -> Result<Option<Value>> {
         deepseek::PROVIDER_NAME => Some(json!({"response_format": {"type": "json_object"}})),
         // Only hosts that keep to the schema serve the request, in the order
         // or on the host the user chose.
-        openrouter::PROVIDER_NAME => Some(json!({"provider": routing::request(id)?})),
+        openrouter::PROVIDER_NAME => Some(routing::params(id)?),
         _ => None,
     })
 }

@@ -3,7 +3,10 @@
 //! host it pins for one, and the hosts OpenRouter lists for a model.
 
 use anyhow::{Context, Result, ensure};
-use rig_core::{driver::DynModel, operation::Completion, providers::openrouter::PROVIDER_NAME};
+use rig_core::{
+    catalog::ModelSpec, completion::CompletionRequest, driver::DynModel, operation::Completion,
+    providers::openrouter::PROVIDER_NAME,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -51,9 +54,19 @@ fn saved(id: &str) -> Result<(Option<Routing>, Option<String>)> {
     ))
 }
 
-pub(crate) fn request(id: &str) -> Result<Value> {
+/// The request body fields that route a request to model `id`.
+pub(crate) fn params(id: &str) -> Result<Value> {
     let (routing, pin) = saved(id)?;
-    Ok(provider(routing, pin.as_deref()))
+    Ok(json!({"provider": provider(routing, pin.as_deref())}))
+}
+
+/// `request`, routed as the user chose if it goes to OpenRouter, for the
+/// requests rig builds that don't pass through `answers`.
+pub(crate) fn route(request: CompletionRequest, spec: &ModelSpec) -> Result<CompletionRequest> {
+    if spec.provider.vendor() != PROVIDER_NAME {
+        return Ok(request);
+    }
+    Ok(request.additional_params(params(&spec.id)?))
 }
 
 /// `error`, a failed request to `model`, with what a pinned host's refusal
