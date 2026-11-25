@@ -1,5 +1,5 @@
-//! A text layout drawn: its glyph runs filled, over their strokes, with a
-//! face's synthetic bold and slant.
+//! A text layout drawn: its glyph runs filled, over their strokes, with the
+//! bold and slant their faces lack.
 
 use anyhow::Result;
 use kurbo::{Affine, Join, Stroke};
@@ -29,26 +29,6 @@ pub(crate) fn draw(
                 (false, _) => (run.fill, 0.0, Join::Miter),
             };
             let font = &glyphs.font;
-            // A synthetic bold grows each side by a fiftieth of the size.
-            let bold = match font.synthesis.embolden() {
-                true => f64::from(run.size) * 0.02,
-                false => 0.0,
-            };
-            // In the glyphs' own space, where y runs down: glifo flips an
-            // outline before this transform (`glyph_transform * FLIP_Y` in
-            // glifo 0.5's `glyph.rs`). A quarter turn clockwise on the page for
-            // sideways text, which maps (x, y) to (-y, x), after a synthetic
-            // slant.
-            let skew = font
-                .synthesis
-                .skew()
-                .map(|angle| Affine::skew(-f64::from(angle.to_radians().tan()), 0.0));
-            let turn = match glyphs.sideways {
-                true => Some(
-                    Affine::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]) * skew.unwrap_or(Affine::IDENTITY),
-                ),
-                false => skew,
-            };
             // Glyphs grow under a stroke twice as wide, as Skia fakes a bold,
             // not by glifo's embolden: kurbo 0.13.1's `expand_path` fits one
             // cubic to each segment's offset, so a short handle turning back,
@@ -56,7 +36,7 @@ pub(crate) fn draw(
             // and it grows every contour one way, by the glyph's area, so a
             // contour wound against the rest, like some fonts' dots on i and
             // j, shrinks instead (koharu-rs/koharu#1073).
-            let grow = bold + width;
+            let grow = f64::from(font.growth(run.size)) + width;
             let stroke = (grow > 0.0).then(|| Stroke::new(2.0 * grow).with_join(join));
             // The stroke overlaps the fill inside the outline, so a
             // translucent paint draws opaque in a layer of its alpha, or the
@@ -71,7 +51,10 @@ pub(crate) fn draw(
                 true => color.with_alpha(1.0),
                 false => color,
             });
-            drawing.glyphs(font, run.size, turn, stroke, &glyphs.glyphs)?;
+            // y runs down where a glyph turns: glifo flips an outline before
+            // this transform (`glyph_transform * FLIP_Y` in glifo 0.5's
+            // `glyph.rs`).
+            drawing.glyphs(font, run.size, glyphs.turn(), stroke, &glyphs.glyphs)?;
             if layered {
                 drawing.scene.pop_layer();
             }

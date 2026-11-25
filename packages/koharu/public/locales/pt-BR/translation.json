@@ -211,6 +211,9 @@
     "font": "Fonte",
     "fontSize": "Tamanho da fonte",
     "fontStyles": {
+      "bold": "Negrito",
+      "fauxBold": "Negrito falso",
+      "fauxItalic": "Itálico falso",
       "italic": "Itálico",
       "oblique": "Oblíquo"
     },

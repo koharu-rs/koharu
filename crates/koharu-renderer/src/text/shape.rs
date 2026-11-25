@@ -206,7 +206,7 @@ fn shape_text(
     )
     .context("failed to shape text with HarfRust")?;
     let scale = font.scale(span.size);
-    Ok(buffer
+    let mut glyphs: Vec<Glyph> = buffer
         .glyph_infos()
         .iter()
         .zip(buffer.glyph_positions())
@@ -221,7 +221,26 @@ fn shape_text(
             y_offset: position.y_offset as f32 * scale,
             unsafe_to_break: info.unsafe_to_break(),
         })
-        .collect())
+        .collect();
+    // A faux bold takes the room its glyphs grow into, as HarfBuzz's synthetic
+    // bold does. A full em keeps its width, as it does in a CJK family's own
+    // bold, and so do a column's cells.
+    let growth = font.growth(span.size);
+    if growth > 0.0 && !vertical && run.orientation != Orientation::TateChuYoko {
+        for glyphs in glyphs.chunk_by_mut(|a, b| a.cluster == b.cluster) {
+            let advance: f32 = glyphs.iter().map(|glyph| glyph.advance).sum();
+            if advance <= 0.0 || (advance - span.size).abs() < span.size * 1e-3 {
+                continue;
+            }
+            for glyph in &mut *glyphs {
+                glyph.x_offset += growth;
+            }
+            if let Some(last) = glyphs.last_mut() {
+                last.advance += growth * 2.0;
+            }
+        }
+    }
+    Ok(glyphs)
 }
 
 /// `text` with `!` and `?` in their full-width forms, or in their

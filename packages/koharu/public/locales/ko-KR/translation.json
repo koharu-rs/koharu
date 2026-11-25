@@ -211,6 +211,9 @@
     "font": "글꼴",
     "fontSize": "글꼴 크기",
     "fontStyles": {
+      "bold": "굵게",
+      "fauxBold": "포 볼드",
+      "fauxItalic": "포 이탤릭",
       "italic": "기울임꼴",
       "oblique": "기울임"
     },

@@ -211,6 +211,9 @@
     "font": "الخط",
     "fontSize": "حجم الخط",
     "fontStyles": {
+      "bold": "عريض",
+      "fauxBold": "عريض زائف",
+      "fauxItalic": "مائل زائف",
       "italic": "مائل",
       "oblique": "منحرف"
     },

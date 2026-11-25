@@ -11,11 +11,14 @@ pub(crate) enum Shape {
     Box(f64, f64),
 }
 
-/// A style run: its length in UTF-16 units, its index in the font set, its
-/// size, and its fill as straight RGBA from 0 to 1.
+/// A style run: its length in UTF-16 units, its index in the font set, the
+/// bold and italic faked for its face, its size, and its fill as straight RGBA
+/// from 0 to 1.
 pub(crate) struct Run {
     pub length: usize,
     pub font: usize,
+    pub faux_bold: bool,
+    pub faux_italic: bool,
     pub size: f64,
     pub fill: [f32; 4],
 }
@@ -259,8 +262,8 @@ fn style(run: &Run) -> Value {
     Dict(vec![
         ("Font", Int(run.font as i32)),
         ("FontSize", Float(run.size)),
-        ("FauxBold", Bool(false)),
-        ("FauxItalic", Bool(false)),
+        ("FauxBold", Bool(run.faux_bold)),
+        ("FauxItalic", Bool(run.faux_italic)),
         ("AutoLeading", Bool(true)),
         ("AutoKerning", Bool(true)),
         ("Kerning", Int(0)),

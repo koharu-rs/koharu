@@ -34,6 +34,10 @@ pub struct TextRun {
     /// UTF-16 code units of the text.
     pub range: Range<usize>,
     pub post_script_name: String,
+    /// The face isn't bold, and was drawn bolder.
+    pub faux_bold: bool,
+    /// The face is upright, and was drawn leaning.
+    pub faux_italic: bool,
     /// The size it was drawn at.
     pub size: f32,
     pub fill: Color,

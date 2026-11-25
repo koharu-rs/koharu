@@ -211,6 +211,9 @@
     "font": "Yazı tipi",
     "fontSize": "Yazı tipi boyutu",
     "fontStyles": {
+      "bold": "Kalın",
+      "fauxBold": "Sahte Kalın",
+      "fauxItalic": "Sahte İtalik",
       "italic": "İtalik",
       "oblique": "Eğik"
     },

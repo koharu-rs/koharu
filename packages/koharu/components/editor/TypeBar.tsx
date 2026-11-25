@@ -1,8 +1,9 @@
 'use client'
 
 import { useMutation } from '@tanstack/react-query'
-import { AlignCenter, AlignLeft, AlignRight, ChevronDown, Italic } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Italic } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 
 import { Choice } from '@/components/controls/Choice'
@@ -20,6 +21,7 @@ import {
 } from '@/lib/document'
 import { readPage, send, useFonts, usePage, usePreferences } from '@/lib/queries'
 import { setFit, setStyle, updateLayer } from '@/lib/scene'
+import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
 import { useKoharuStore, type CanvasTool } from '@/lib/store'
 import {
   commands,
@@ -27,6 +29,7 @@ import {
   type CharKey,
   type CharStyle,
   type Direction,
+  type FontFace,
   type FontFamily,
   type Layer,
   type LayerId,
@@ -50,6 +53,9 @@ import { cn } from '@koharu/ui/lib/utils'
 const FALLBACK_FONT = 'CCWildWords'
 const BLACK = '#000000'
 const WHITE = '#FFFFFF'
+/** The weight bold starts from, as the renderer counts it, and the one it sets. */
+const SEMIBOLD = 600
+const BOLD = 700
 
 /** The tools whose selection the bar follows; a brush's settings are on the tool rail. */
 const TOOLS: CanvasTool[] = ['select', 'direct_select', 'text']
@@ -147,10 +153,12 @@ export function TypeBar() {
   }, [availableFonts, defaultFont])
   const family = mixed.has('family') ? '' : (chars.family ?? defaultFont)
   const selectedFamily = families.find((candidate) => sameFont(candidate.name, family))
-  const italics = hasItalic(selectedFamily)
-  const italic = Boolean(chars.italic) && italics
+  const italic = Boolean(chars.italic)
   const weight = chars.weight ?? 400
-  const weights = usableFontWeights(selectedFamily, italic)
+  const bold = !mixed.has('weight') && weight >= SEMIBOLD
+  const weights = usableFontWeights(selectedFamily)
+  // What the selected family has no face for, the renderer fakes.
+  const faux = fauxStyles(selectedFamily, italic)
   const size = mixed.has('size') || mixedFit ? null : Math.round((chars.size ?? 24) * 100) / 100
   const strokeWidth = chars.stroke_width ?? 0
   const stroke = chars.stroke ?? null
@@ -163,62 +171,79 @@ export function TypeBar() {
   const selectionBounds = useKoharuStore((state) => state.selectionBounds)
   // A new text being typed has no layer yet for its paragraph to go to.
   const paragraph = targets.length > 0
-  if (!selectionBounds || !(targets.length || typing) || !TOOLS.includes(tool)) return null
+  const shown =
+    selectionBounds && (targets.length > 0 || typing) && TOOLS.includes(tool)
+      ? selectionBounds
+      : null
+  const toggleBold = () => applyChars({ weight: bold ? 400 : BOLD })
+  const toggleItalic = () => applyChars({ italic: !italic })
+  const styling = { enabled: shown !== null, preventDefault: true, useKey: true }
+  useHotkeys(shortcuts.bold, toggleBold, styling)
+  useHotkeys(shortcuts.italic, toggleItalic, styling)
+  if (!shown) return null
 
   // One row, as Photoshop's type options bar, at the user's choice: the face, its size, and its
-  // colour, then the paragraph; italic and vertical text are toggles, and the border's colour and
-  // width close the row, as Clip Studio Paint's text tool shows a text's edge beside its colour.
+  // colour, then the paragraph; bold, italic, and vertical text are toggles, and the border's colour
+  // and width close the row, as Clip Studio Paint's text tool shows a text's edge beside its colour.
   const toggle =
     'h-6 w-6 min-w-6 rounded-md bg-background px-0 text-muted-foreground data-[pressed]:border-primary data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary/90'
   return (
-    <ContextBar bounds={selectionBounds} aria-label={t('inspector.type')} data-testid='type-bar'>
+    <ContextBar bounds={shown} aria-label={t('inspector.type')} data-testid='type-bar'>
       <div className='w-28'>
         <FontPicker
           value={family}
           families={families}
           size='sm'
-          onChange={(next) => {
-            const nextFamily = families.find((candidate) => sameFont(candidate.name, next))
-            const nextItalic = italic && hasItalic(nextFamily)
-            applyChars({
-              family: next,
-              italic: nextItalic,
-              weight: nearestFontWeight(usableFontWeights(nextFamily, nextItalic), weight),
-            })
-          }}
+          onChange={(next) => applyChars({ family: next })}
         />
       </div>
       <Choice
         size='sm'
-        value={mixed.has('weight') ? '' : String(weight)}
+        value={mixed.has('weight') ? '' : String(nearestFontWeight(weights, weight))}
         choices={Object.fromEntries(weights.map((value) => [value, String(value)]))}
         label={t('inspector.fontWeight')}
         className='w-14'
         onChange={(next) => applyChars({ weight: Number(next) })}
       />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              variant='outline'
-              size='sm'
-              aria-label={t('inspector.fontStyles.italic')}
-              className={toggle}
-              disabled={!italics && !italic}
-              pressed={italic}
-              onPressedChange={(nextItalic) =>
-                applyChars({
-                  italic: nextItalic,
-                  weight: nearestFontWeight(usableFontWeights(selectedFamily, nextItalic), weight),
-                })
-              }
-            />
-          }
-        >
-          <Italic className='size-3.5' />
-        </TooltipTrigger>
-        <TooltipContent>{t('inspector.fontStyles.italic')}</TooltipContent>
-      </Tooltip>
+      {(
+        [
+          [
+            shortcuts.bold,
+            Bold,
+            faux.bold ? t('inspector.fontStyles.fauxBold') : t('inspector.fontStyles.bold'),
+            bold,
+            toggleBold,
+          ],
+          [
+            shortcuts.italic,
+            Italic,
+            faux.italic ? t('inspector.fontStyles.fauxItalic') : t('inspector.fontStyles.italic'),
+            italic,
+            toggleItalic,
+          ],
+        ] as const
+      ).map(([shortcut, Icon, label, pressed, onToggle]) => (
+        <Tooltip key={shortcut}>
+          <TooltipTrigger
+            render={
+              <Toggle
+                variant='outline'
+                size='sm'
+                aria-label={label}
+                className={toggle}
+                pressed={pressed}
+                onPressedChange={onToggle}
+              />
+            }
+          >
+            <Icon className='size-3.5' />
+          </TooltipTrigger>
+          <TooltipContent>
+            {label}
+            <span className='ml-2 opacity-60'>{shortcutLabel(shortcut)}</span>
+          </TooltipContent>
+        </Tooltip>
+      ))}
       <div className='w-15'>
         <PresetField
           name='font-size'
@@ -400,15 +425,26 @@ function sharedChars(texts: Text[]): { chars: CharStyle; mixed: CharKey[] } {
   return { chars, mixed }
 }
 
-function hasItalic(family: FontFamily | undefined): boolean {
-  return Boolean(family?.faces.some((face) => face.italic))
+/** Whether `family` has no bold face for text as upright or `italic` as it is, and no italic one:
+ * a text takes a face of its slant first. */
+function fauxStyles(family: FontFamily | undefined, italic: boolean) {
+  if (!family) return { bold: false, italic: false }
+  const styled = family.faces.filter((face) => face.italic === italic)
+  return {
+    bold: !(styled.length ? styled : family.faces).some((face) => heaviest(face) >= SEMIBOLD),
+    italic: !family.faces.some((face) => face.italic),
+  }
 }
 
-function usableFontWeights(family: FontFamily | undefined, italic: boolean): number[] {
-  if (!family) return [400]
-  const styled = family.faces.filter((face) => face.italic === italic)
-  const faces = styled.length ? styled : family.faces
-  const weights = new Set(faces.map((face) => face.weight))
+function heaviest(face: FontFace): number {
+  return face.weight_range?.end ?? face.weight
+}
+
+/** The weights of `family`'s faces, and bold, which the renderer fakes for a family without it. */
+function usableFontWeights(family: FontFamily | undefined): number[] {
+  const faces = family?.faces ?? []
+  const weights = new Set(faces.length ? faces.map((face) => face.weight) : [400])
+  if (!faces.some((face) => heaviest(face) >= SEMIBOLD)) weights.add(BOLD)
   for (const face of faces) {
     if (!face.weight_range) continue
     const { start, end } = face.weight_range

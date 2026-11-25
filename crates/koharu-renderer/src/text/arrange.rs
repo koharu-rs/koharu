@@ -7,7 +7,7 @@ use std::ops::Range;
 use anyhow::Result;
 use harfrust::Buffer;
 use koharu_scene::Align;
-use kurbo::Rect;
+use kurbo::{Affine, Rect};
 use unicode_bidi::{BidiInfo, Level};
 
 use super::{
@@ -42,6 +42,32 @@ pub(crate) struct GlyphRun {
     /// Its glyphs are turned a quarter clockwise around their origins, as
     /// vertical text sets Latin.
     pub sideways: bool,
+}
+
+impl GlyphRun {
+    /// What each glyph draws through, around its origin with y down: a faux
+    /// italic's lean, and then a sideways glyph's quarter turn clockwise on
+    /// the page, which maps (x, y) to (-y, x).
+    pub(crate) fn turn(&self) -> Option<Affine> {
+        let lean = f64::from(self.font.lean());
+        let skew = (lean != 0.0).then(|| Affine::skew(-lean, 0.0));
+        match self.sideways {
+            true => Some(
+                Affine::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]) * skew.unwrap_or(Affine::IDENTITY),
+            ),
+            false => skew,
+        }
+    }
+
+    /// Where its glyphs ink at `size`, each through its turn.
+    fn ink(&self, size: f32) -> impl Iterator<Item = Rect> + '_ {
+        let turn = self.turn().unwrap_or_default();
+        self.glyphs.iter().filter_map(move |glyph| {
+            let ink = self.font.ink(glyph.id, size)?;
+            let at = Affine::translate((f64::from(glyph.x), f64::from(glyph.y)));
+            Some((at * turn).transform_rect_bbox(Rect::new(ink.x0, -ink.y1, ink.x1, -ink.y0)))
+        })
+    }
 }
 
 /// A glyph as positioned: what groups it into a run, its run's span, font,
@@ -119,10 +145,18 @@ pub(super) fn arrange(
 
     let (mut runs, text_runs) = runs(shaped, &glyphs, scale);
     runs.extend(ruby_runs);
-    let stroke = styled
-        .spans
-        .iter()
-        .filter_map(|span| span.stroke.map(|(_, width)| width * scale))
+    let drawn = || runs.iter().zip(text_runs.iter().chain(&ruby_text_runs));
+    // A faux italic leans past its line's box, and a faux bold and a stroke
+    // grow past both.
+    let bounds = drawn()
+        .filter(|(glyphs, _)| glyphs.font.lean() != 0.0)
+        .flat_map(|(glyphs, run)| glyphs.ink(run.size))
+        .chain(bounds)
+        .reduce(|bounds, ink| bounds.union(ink));
+    let grown = drawn()
+        .map(|(glyphs, run)| {
+            glyphs.font.growth(run.size) + run.stroke.map_or(0.0, |(_, width)| width)
+        })
         .fold(0.0, f32::max);
     let utf16 = |at: &usize| utf16(&styled.text, *at);
     Ok(TextLayout {
@@ -143,7 +177,7 @@ pub(super) fn arrange(
         },
         bounds: bounds
             .unwrap_or(placed.frame)
-            .inflate(f64::from(stroke), f64::from(stroke)),
+            .inflate(f64::from(grown), f64::from(grown)),
     })
 }
 
@@ -353,7 +387,14 @@ fn position(
             }
         };
         let size = styled.spans[run.span].size * scale;
-        let (ascent, descent) = shaped.font(run).extent(size);
+        let font = shaped.font(run);
+        let (ascent, descent) = font.extent(size);
+        // How far above its baseline an upright glyph's centre is. A faux
+        // italic leans about the baseline, which carries the centre right, so
+        // a column's glyphs are set back as far: they lean about their
+        // centres, as CSS skews vertical text's, and stay on its centre line.
+        let centre = (ascent - descent) * 0.5;
+        let lean = font.lean();
         let baseline = top + (pitch - (ascent + descent)) * 0.5 + ascent;
         first.get_or_insert(if vertical { -block_center } else { baseline });
         let sideways = run.orientation == Orientation::Sideways;
@@ -371,7 +412,7 @@ fn position(
             let cell_baseline = cell_start + (size - (ascent + descent)) * 0.5 + ascent;
             let end = pen + shaped.cell(run) * scale;
             for glyph in &piece {
-                let x = -block_center + across + glyph.x_offset * scale;
+                let x = -block_center + across + glyph.x_offset * scale - centre * lean;
                 push(x, cell_baseline - glyph.y_offset * scale, glyph);
                 placed(glyph.cluster, pen..end);
                 across += glyph.advance * scale;
@@ -382,7 +423,7 @@ fn position(
         // A sideways run's baseline runs down the column, as far left of its
         // centre line as halfway between the ascent and descent is above the
         // baseline, which centres the run across the column.
-        let sideways_baseline = -block_center - (ascent - descent) * 0.5;
+        let sideways_baseline = -block_center - centre;
         for glyph in &piece {
             if glyph.cluster >= hang {
                 continue;
@@ -393,7 +434,7 @@ fn position(
             // and dashes; its font centres its em box, which a Western `…`
             // or a Chinese `！` inks off the middle of.
             let ink = (vertical && centred(&styled.text, glyph.cluster, styled.chinese))
-                .then(|| shaped.font(run).ink(glyph.id, size))
+                .then(|| font.ink(glyph.id, size))
                 .flatten();
             // Chinese centres a stop along its cell too, which its font's
             // vertical form sets in the corner.
@@ -401,8 +442,9 @@ fn position(
             match (vertical, sideways) {
                 (false, _) => push(pen + x_offset, baseline - y_offset, glyph),
                 (true, false) => {
-                    let x = ink.map_or(-block_center + x_offset, |ink| {
-                        -block_center - ((ink.x0 + ink.x1) * 0.5) as f32
+                    let x = ink.map_or(-block_center + x_offset - centre * lean, |ink| {
+                        let up = ((ink.y0 + ink.y1) * 0.5) as f32;
+                        -block_center - ((ink.x0 + ink.x1) * 0.5) as f32 - up * lean
                     });
                     let y = match ink {
                         Some(ink) if middle => {
@@ -500,6 +542,8 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
         text_runs.push(TextRun {
             range: utf16(&styled.text, start)..utf16(&styled.text, end),
             post_script_name: font.post_script_name.clone(),
+            faux_bold: font.faux_bold,
+            faux_italic: font.lean() != 0.0,
             size: span.size * scale,
             fill: span.fill,
             stroke: span.stroke.map(|(color, width)| (color, width * scale)),

@@ -132,6 +132,13 @@ A typed character takes the marks of the one before it, or the first one's at
 the start, as typing does in an editor, and spans whose marks end up alike
 join.
 
+Weight and italic are what a text asks for, whether or not its family has such
+a face. One it lacks is faked, as CSS synthesizes faces [CSS font synthesis] and
+as Photoshop's Bold and Italic shortcuts set Faux Bold and Faux Italic in a font
+without the style [Photoshop type shortcuts], so a text keeps both when its font
+changes. Clip Studio Paint's Bold and Italic are styles of the text too, apart
+from its font [CSP font].
+
 A ruby reads its base, so it's no style: a character typed inside a base is part
 of it, and one typed at its edge isn't. Typing out some of a base leaves its ruby
 on the rest, one reworded loses it, as a translation rerun rewords a text, and one
@@ -499,7 +506,8 @@ agent.
 Read in October and November 2026.
 
 - Adobe: [PSD spec], [Photoshop Background], [Photoshop type], [Photoshop
-  characters], [Photoshop text in shapes], [Photoshop smart objects],
+  characters], [Photoshop type shortcuts], [Photoshop text in shapes],
+  [Photoshop smart objects],
   [Photoshop Smart Object copies], [Photoshop artboards], [Photoshop Generative
   Fill], [Photoshop Content-Aware Fill], [Photoshop Content Credentials],
   [Photoshop leading], [Photoshop History panel], [Photoshop combine
@@ -508,8 +516,8 @@ Read in October and November 2026.
   character styles], [Acrobat OCR]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP layer
   masks], [CSP file objects], [CSP text], [CSP text editing], [CSP vertical
-  text], [CSP balloons], [CSP text frame], [CSP text tool], [CSP frames], [CSP
-  Story Editor], [CSP file format]
+  text], [CSP balloons], [CSP text frame], [CSP text tool], [CSP font], [CSP
+  frames], [CSP Story Editor], [CSP file format]
 - Figma: [Figma nodes], [Figma node properties], [Figma property types],
   [Figma image paint], [Figma text resize], [Figma text properties], [Figma
   plugin data], [Figma multiplayer]
@@ -519,7 +527,7 @@ Read in October and November 2026.
   minimum scale]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
   inside shapes dropped], [CSS masking], [CSS text], [CSS align], [CSS
-  line-height], [JLREQ]
+  line-height], [CSS font synthesis], [JLREQ]
 - Document and translation formats: [PAGE-XML], [XLIFF]
 - Lettering and manga translation: [Comics Kingdom], [Manga balloon basics],
   [Search and Destroy letters], [Manga translation II]
@@ -531,6 +539,7 @@ Read in October and November 2026.
 [Photoshop Background]: https://web.archive.org/web/20241224024227/https://helpx.adobe.com/photoshop/using/layer-basics.html
 [Photoshop type]: https://helpx.adobe.com/photoshop/desktop/text-typography/type-layers-creation/type-layers-in-photoshop.html
 [Photoshop characters]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/format-characters.html
+[Photoshop type shortcuts]: https://jkost.com/blog/2020/09/30-tips-tricks-and-shortcuts-for-working-with-type-in-photoshop.html
 [Photoshop text in shapes]: https://helpx.adobe.com/photoshop/desktop/text-typography/text-on-paths-shapes/add-text-along-paths-or-inside-shapes.html
 [Photoshop smart objects]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/smart-objects/export-the-contents-of-an-embedded-smart-object.html
 [Photoshop Smart Object copies]: https://helpx.adobe.com/photoshop/desktop/create-manage-layers/smart-objects/duplicate-an-embedded-smart-object.html
@@ -557,6 +566,7 @@ Read in October and November 2026.
 [CSP balloons]: https://help.clip-studio.com/en-us/manual_en/540_comic/Balloons.htm
 [CSP text frame]: https://help.clip-studio.com/en-us/manual_en/810_subtools/L.htm
 [CSP text tool]: https://help.clip-studio.com/en-us/manual_en/810_subtools/E.htm
+[CSP font]: https://www.clip-studio.com/site/gd_en/csp/toolguide/csp_toolguide/100_reference/Font.htm
 [CSP frames]: https://help.clip-studio.com/en-us/manual_en/540_comic/Frames_and_Panels.htm
 [CSP Story Editor]: https://help.clip-studio.com/en-us/manual_en/570_pages/Use_Story_Editor.htm
 [CSP file format]: https://docs.rs/crate/csp-format/latest/source/src/lib.rs
@@ -586,6 +596,7 @@ Read in October and November 2026.
 [CSS masking]: https://www.w3.org/TR/css-masking-1/#the-mask-composite
 [CSS text]: https://www.w3.org/TR/css-text-3/#text-align-property
 [CSS align]: https://www.w3.org/TR/css-align-3/#distribution-block
+[CSS font synthesis]: https://www.w3.org/TR/css-fonts-4/#font-synthesis-intro
 [CSS line-height]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/line-height
 [JLREQ]: https://www.w3.org/TR/jlreq/
 [PAGE-XML]: https://www.primaresearch.org/schema/PAGE/gts/pagecontent/2019-07-15/pagecontent.xsd

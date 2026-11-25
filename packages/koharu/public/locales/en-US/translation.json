@@ -211,6 +211,9 @@
     "font": "Font",
     "fontSize": "Font size",
     "fontStyles": {
+      "bold": "Bold",
+      "fauxBold": "Faux Bold",
+      "fauxItalic": "Faux Italic",
       "italic": "Italic",
       "oblique": "Oblique"
     },

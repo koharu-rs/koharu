@@ -27,8 +27,12 @@ pub(crate) struct Font {
     pub data: FontData,
     pub family_name: String,
     pub post_script_name: String,
-    /// The bold and slant fontique fakes for a face that lacks them.
+    /// The instance of a variable face, and the slant fontique fakes for a
+    /// face without one.
     pub synthesis: Synthesis,
+    /// Drawn bolder than its face, for a text that asks for bold of one that
+    /// isn't.
+    pub faux_bold: bool,
     charmap: CharmapIndex,
     pub shaper: harfrust::Font,
     /// Shape plans, shared by the font's clones.
@@ -66,13 +70,15 @@ impl fmt::Debug for Font {
             .field("family_name", &self.family_name)
             .field("post_script_name", &self.post_script_name)
             .field("synthesis", &self.synthesis)
+            .field("faux_bold", &self.faux_bold)
             .finish_non_exhaustive()
     }
 }
 
 impl Font {
-    /// The face fontique `found`, of family `family_name`.
-    pub(super) fn new(found: QueryFont, family_name: String) -> Result<Self> {
+    /// The face fontique `found`, of family `family_name`, drawn bolder when
+    /// `faux_bold` says so.
+    pub(super) fn new(found: QueryFont, family_name: String, faux_bold: bool) -> Result<Self> {
         let variations = found
             .synthesis
             .variation_settings()
@@ -105,6 +111,7 @@ impl Font {
             family_name,
             post_script_name,
             synthesis: found.synthesis,
+            faux_bold,
             charmap: found.charmap_index,
             shaper,
             plans: Arc::new(quick_cache::sync::Cache::new(64)),
@@ -129,6 +136,19 @@ impl Font {
     pub(crate) fn extent(&self, size: f32) -> (f32, f32) {
         let scale = self.scale(size);
         (self.ascent * scale, self.descent * scale)
+    }
+
+    /// How far a faux bold grows each side of a glyph at `size`: CC Wild
+    /// Words' own bold is twice this thicker and as much wider.
+    pub(crate) fn growth(&self, size: f32) -> f32 {
+        if self.faux_bold { size * 0.02 } else { 0.0 }
+    }
+
+    /// How far right a faux italic leans for each pixel up from the baseline.
+    pub(crate) fn lean(&self) -> f32 {
+        self.synthesis
+            .skew()
+            .map_or(0.0, |angle| angle.to_radians().tan())
     }
 
     /// The plan HarfRust shapes with these settings by, made the first time

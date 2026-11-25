@@ -84,6 +84,8 @@ far as that allows.
 | language | a text with none takes Japanese from kana and Korean from Hangul, and Han alone falls back as Simplified Chinese, so Chinese never takes the system language's font, such as a Japanese one | |
 | graphemes | fallback never splits one, and a character no font in the chain has is listed for the inspector | |
 | marks | a character of no script of its own, such as a mark, a digit, or a space, takes the font of the text beside it when that font has it, so a CJK sentence's marks come from its CJK font even where a Latin font earlier in the chain has them | |
+| faux bold | a text at 600 or more in a face under 600 draws 0.02 em bolder on each side and is set 0.04 em wider a character, as CC Wild Words' own bold is; a full em, a column's cells, and an upright group keep their width, as a full em does in a CJK family's own bold; a variable face's own weights come first | CSS synthesizes the face a family lacks [CSS font synthesis]; Firefox counts 600 and up as bold [Firefox fonts]; HarfBuzz's synthetic bold widens every advance by what it adds [HarfBuzz fonts] |
+| faux italic | italic text in an upright face leans 14° to the right, about each glyph's centre where it stands upright in a column, so it stays on the column's centre line; a text's bounds hold what leans past its line | CSS's default oblique angle, and its skew about the centre in vertical text [CSS font synthesis]; Clip Studio Paint's Italic leans letters to the right [CSP font], where CSS skews a column's along it |
 | bundled fonts | a family of the chain the system lacks can come from Koharu's font dataset, in its place in the chain, pinned to one commit so its index, faces, and previews match | the `mayocream/fonts` dataset [Koharu fonts] |
 | font downloads | a face a text needs downloads as the text lays out, and the render waits for it; a family the dataset lacks, or one that fails to download, falls back down the chain | |
 
@@ -91,26 +93,32 @@ far as that allows.
 
 Read in November 2026.
 
-- Libraries: [vello], [HarfRust], [ICU4X], [jieba], [fontique], [Koharu fonts]
+- Libraries: [vello], [HarfRust], [HarfBuzz fonts], [ICU4X], [jieba], [fontique],
+  [Koharu fonts], [Firefox fonts]
 - Unicode and W3C: [UAX 14], [UAX 9], [UAX 50], [CSS writing modes], [CSS ruby], [Simple ruby],
-  [JLREQ], [CLREQ]
+  [CSS font synthesis], [JLREQ], [CLREQ]
 - Adobe: [Photoshop hyphenation], [Photoshop text in shapes]
+- Clip Studio Paint: [CSP font]
 - Lettering: [Comicraft glossary]
 
 [vello]: https://github.com/linebender/vello
 [HarfRust]: https://github.com/harfbuzz/harfrust
+[HarfBuzz fonts]: https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-font.hh
 [ICU4X]: https://github.com/unicode-org/icu4x
 [jieba]: https://github.com/fxsjy/jieba
 [fontique]: https://github.com/linebender/parley/tree/main/fontique
 [Koharu fonts]: https://huggingface.co/datasets/mayocream/fonts
+[Firefox fonts]: https://github.com/mozilla-firefox/firefox/blob/main/gfx/thebes/gfxFontEntry.h
 [UAX 14]: https://www.unicode.org/reports/tr14/
 [UAX 9]: https://www.unicode.org/reports/tr9/
 [UAX 50]: https://www.unicode.org/reports/tr50/
 [CSS writing modes]: https://www.w3.org/TR/css-writing-modes-4/
 [CSS ruby]: https://drafts.csswg.org/css-ruby-1/
+[CSS font synthesis]: https://www.w3.org/TR/css-fonts-4/#font-synthesis-intro
 [Simple ruby]: https://www.w3.org/TR/simple-ruby/
 [JLREQ]: https://www.w3.org/TR/jlreq/
 [CLREQ]: https://www.w3.org/TR/clreq/
 [Photoshop hyphenation]: https://developer.adobe.com/photoshop/uxp/2022/ps_reference/objects/options/hyphenationproperties/
 [Photoshop text in shapes]: https://helpx.adobe.com/photoshop/desktop/text-typography/text-on-paths-shapes/add-text-along-paths-or-inside-shapes.html
+[CSP font]: https://www.clip-studio.com/site/gd_en/csp/toolguide/csp_toolguide/100_reference/Font.htm
 [Comicraft glossary]: https://balloontales.com/?p=418

@@ -6,13 +6,14 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    ops::RangeInclusive,
     sync::LazyLock,
 };
 
 use anyhow::{Context, Result, bail, ensure};
 use fontique::{
-    Attributes, Blob, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle, GenericFamily,
-    Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
+    Attributes, Blob, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride, FontStyle,
+    FontWeight, GenericFamily, Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
 use parking_lot::Mutex;
 
@@ -58,7 +59,8 @@ pub(super) fn preload() {
 pub(crate) struct Library {
     collection: fontique::Collection,
     sources: SourceCache,
-    /// Built fonts by file and index, one for each synthesis asked for.
+    /// Built fonts by file and index, one for each instance and each bold and
+    /// slant faked.
     fonts: HashMap<(u64, u32), Vec<Font>>,
 }
 
@@ -132,7 +134,7 @@ impl Library {
             // A face that can't be read, such as one with no units per em,
             // is left out, as it couldn't draw the text.
             if seen.insert((found.blob.id(), found.index))
-                && let Ok(font) = self.font(found)
+                && let Ok(font) = self.font(found, request.attributes.weight)
             {
                 fonts.push(font);
             }
@@ -192,21 +194,32 @@ impl Library {
         found
     }
 
-    /// The font `found` is, built the first time it's asked for.
-    fn font(&mut self, found: QueryFont) -> Result<Font> {
+    /// The font `found` is in a text of `weight`, built the first time it's
+    /// asked for.
+    fn font(&mut self, found: QueryFont, weight: FontWeight) -> Result<Font> {
+        let (id, index) = found.family;
+        let family = self.collection.family(id);
+        // Bold is 600 and up, as Firefox counts it. fontique fakes any weight
+        // more than 200 over the face's, which leaves a medium face medium in
+        // bold, and thickens a thin one in regular text.
+        let bold = FontWeight::SEMI_BOLD.value();
+        let face = family.as_ref().and_then(|family| family.fonts().get(index));
+        let faux_bold = weight.value() >= bold
+            && face.is_some_and(|face| {
+                weights(face).map_or(face.weight().value(), |range| f32::from(*range.end())) < bold
+            });
         let built = self
             .fonts
             .entry((found.blob.id(), found.index))
             .or_default();
-        if let Some(font) = built.iter().find(|font| font.synthesis == found.synthesis) {
+        if let Some(font) = built
+            .iter()
+            .find(|font| font.synthesis == found.synthesis && font.faux_bold == faux_bold)
+        {
             return Ok(font.clone());
         }
-        let family = self
-            .collection
-            .family_name(found.family.0)
-            .unwrap_or("Unknown")
-            .to_owned();
-        let font = Font::new(found, family)?;
+        let name = family.as_ref().map_or("Unknown", |family| family.name());
+        let font = Font::new(found, name.to_owned(), faux_bold)?;
         built.push(font.clone());
         Ok(font)
     }
@@ -271,7 +284,7 @@ impl Library {
                     post_script_name: font::post_script_name(&file)
                         .unwrap_or_else(|| family.name.clone()),
                     weight: face.weight().value().round() as u16,
-                    weight_range: None,
+                    weight_range: weights(face),
                     italic: face.style() != FontStyle::Normal,
                 });
             }
@@ -281,6 +294,15 @@ impl Library {
         }
         families
     }
+}
+
+/// A variable face's weights.
+fn weights(face: &FontInfo) -> Option<RangeInclusive<u16>> {
+    let axis = face
+        .axes()
+        .iter()
+        .find(|axis| axis.tag.to_be_bytes() == *b"wght")?;
+    Some(axis.min.round() as u16..=axis.max.round() as u16)
 }
 
 #[cfg(test)]

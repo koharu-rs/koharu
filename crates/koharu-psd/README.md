@@ -27,7 +27,7 @@ its source, and its translation each stay a layer.
 | block | a folder holding its clean-up as a pixel layer, whose layer mask is the block's mask while that's shown, its source as a hidden type layer, and its translation as a type layer |
 | image, raster | a pixel layer, cropped to what it draws |
 | shape | a shape layer: its path as a vector mask, its fill, and its stroke |
-| text | a type layer, with its stroke as a layer effect; its ruby, which Photoshop's type doesn't have, is in its pixels only |
+| text | a type layer, with its stroke as a layer effect and the bold and italic its fonts lack as Faux Bold and Faux Italic; its ruby, which Photoshop's type doesn't have, is in its pixels only |
 | mask | no layer of its own: it's its parent's mask |
 
 - **Every layer** keeps its name, visibility, opacity, and blend mode, and a

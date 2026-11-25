@@ -211,6 +211,9 @@
     "font": "フォント",
     "fontSize": "フォントサイズ",
     "fontStyles": {
+      "bold": "太字",
+      "fauxBold": "疑似太字",
+      "fauxItalic": "疑似斜体",
       "italic": "斜体",
       "oblique": "オブリーク"
     },

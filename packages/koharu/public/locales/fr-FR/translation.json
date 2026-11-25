@@ -211,6 +211,9 @@
     "font": "Police",
     "fontSize": "Taille de police",
     "fontStyles": {
+      "bold": "Gras",
+      "fauxBold": "Faux gras",
+      "fauxItalic": "Faux italique",
       "italic": "Italique",
       "oblique": "Oblique"
     },

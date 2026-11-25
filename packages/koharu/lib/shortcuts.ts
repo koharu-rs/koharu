@@ -15,6 +15,9 @@ export const shortcuts = {
   /** Photoshop's Layers panel. */
   layers: 'f7',
   delete: 'delete',
+  /** Photoshop's Bold and Italic, which fake what the font lacks. */
+  bold: 'mod+shift+b',
+  italic: 'mod+shift+i',
 } as const
 
 /** Each tool's key, Photoshop's for its counterpart: the Move tool's V, the Direct Selection

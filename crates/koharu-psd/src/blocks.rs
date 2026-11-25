@@ -285,6 +285,8 @@ pub(crate) fn type_layer(layer: &Text, text: &ResolvedText, index: i32) -> Vec<T
         runs.push(Run {
             length: end - start,
             font,
+            faux_bold: run.faux_bold,
+            faux_italic: run.faux_italic,
             size: f64::from(run.size),
             fill: run.fill.components,
         });
