@@ -1,3 +1,14 @@
+## [0.98.1](https://github.com/koharu-rs/koharu/compare/0.98.0..0.98.1) - 2026-11-25
+
+### 🐛 Bug Fixes
+
+- *(agent)* Run without a limit on model calls, fix corrections at two, and send a call to an unknown tool back to the model - ([8d5b7cb](https://github.com/koharu-rs/koharu/commit/8d5b7cbe07aaead7ec96c5ac00c216be72a57f0c))
+- *(pipeline,llm)* Go past a page whose translation fails, which ended the whole run, and first ask again for one whose answer repeats itself or is blocked - ([3cf6b96](https://github.com/koharu-rs/koharu/commit/3cf6b9646035d8a778bc89f8e4991382fe3ab221))
+
+### ⚙️ Miscellaneous Tasks
+
+- Install LLVM for Windows bindings with the action rust-bindgen's CI uses, since choco passed without installing it while its feed was down - ([58af0aa](https://github.com/koharu-rs/koharu/commit/58af0aaa564f864a2357e4a38069306cbf86180e))
+
 ## [0.98.0](https://github.com/koharu-rs/koharu/compare/0.97.0..0.98.0) - 2026-11-25
 
 ### ⛰️  Features
