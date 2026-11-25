@@ -238,6 +238,10 @@ tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "5f3beceb3bf73
 # The published 0.31.0-beta.3 with tauri-apps/winit-gtk4#5, which scales X11
 # windows by the font DPI as KDE's fractional scales set it (#1425).
 tauri-winit-gtk4 = { git = "https://github.com/mayocream/winit-gtk4", rev = "bf2978ad27b8f2d4a04de00afdaa882a4c28ab79" }
+# The published 0.31.0-beta.3 with rust-windowing/winit#4798, on a branch of
+# the winit-gtk4 fork: on Windows, enabling the input method held the window's
+# state lock, so a message it caused that took the lock hung the app (#1542).
+winit-win32 = { git = "https://github.com/mayocream/winit-gtk4", rev = "d22efc82f3774f43c7aaffc8e201fe436a41f5e7" }
 # The published 30.0.2 with a fix for gfx-rs/wgpu#9029: on Windows, Vulkan
 # lost the device when a frame's acquire waited past 1 s, as it does while a
 # model keeps the GPU busy (#1408).

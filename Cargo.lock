@@ -13819,8 +13819,7 @@ dependencies = [
 [[package]]
 name = "winit-win32"
 version = "0.31.0-beta.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25fb480c41df01d351f656cbf3ad74013f8a9d22bb5b2dcab59f9167e7a0b6ec"
+source = "git+https://github.com/mayocream/winit-gtk4?rev=d22efc82f3774f43c7aaffc8e201fe436a41f5e7#d22efc82f3774f43c7aaffc8e201fe436a41f5e7"
 dependencies = [
  "bitflags 2.13.2",
  "cursor-icon",
