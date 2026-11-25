@@ -61,8 +61,9 @@ pub(super) struct Job {
 #[derive(Clone, Debug)]
 pub(super) enum Step {
     Text(String),
-    /// The reply ended: at an end-of-generation token, or at its token
-    /// limit or the end of its sequence's context.
+    /// The reply ended: at an end-of-generation token, or cut off, at its
+    /// token limit or the end of its sequence's context, or once it kept
+    /// repeating itself.
     End {
         length: bool,
         prompt_tokens: u64,
@@ -150,7 +151,8 @@ struct Sequence {
     position: i32,
     max_tokens: Option<u64>,
     prompt_tokens: u64,
-    output_tokens: u64,
+    /// The tokens sampled so far.
+    reply: Vec<LlamaToken>,
     /// The bytes of a character whose last token hasn't come yet.
     pending: Vec<u8>,
     /// Whether `held` records this sequence's tokens: not past an image.
@@ -158,11 +160,20 @@ struct Sequence {
 }
 
 impl Sequence {
+    /// Whether the reply is cut off here: at its token limit, at the end of
+    /// its `context`, or repeating itself.
+    fn cut_off(&self, context: u32) -> bool {
+        let limit = self
+            .max_tokens
+            .is_some_and(|max| self.reply.len() as u64 >= max);
+        limit || self.position >= context as i32 || repeats(&self.reply)
+    }
+
     fn end(&self, length: bool) -> Step {
         Step::End {
             length,
             prompt_tokens: self.prompt_tokens,
-            output_tokens: self.output_tokens,
+            output_tokens: self.reply.len() as u64,
         }
     }
 }
@@ -327,7 +338,7 @@ impl<'m> Engine<'m> {
             position,
             max_tokens: job.sampling.max_tokens,
             prompt_tokens: prompt_tokens as u64,
-            output_tokens: 0,
+            reply: Vec::new(),
             pending: Vec::new(),
             tracked: chunks.is_none(),
         };
@@ -396,7 +407,7 @@ impl<'m> Engine<'m> {
             let _ = sequence.frames.send(Ok(sequence.end(false)));
             return Ok(false);
         }
-        sequence.output_tokens += 1;
+        sequence.reply.push(token);
         sequence
             .pending
             .extend(vocab.token_to_piece(token, true, None));
@@ -412,10 +423,7 @@ impl<'m> Engine<'m> {
                 return Ok(false);
             }
         }
-        let limit = sequence
-            .max_tokens
-            .is_some_and(|max| sequence.output_tokens >= max);
-        if limit || sequence.position >= self.size.context as i32 {
+        if sequence.cut_off(self.size.context) {
             let _ = sequence.frames.send(Ok(sequence.end(true)));
             return Ok(false);
         }
@@ -451,6 +459,20 @@ impl<'m> Engine<'m> {
         }
         Ok(true)
     }
+}
+
+/// Whether `reply` ends in one pattern over and over, as vLLM finds one
+/// (`check_sequence_repetition`, vllm/v1/core/sched/utils.py at 85a084c),
+/// which leaves the sizes to its caller. A scream or a row of dots repeats
+/// too, but not for 128 tokens.
+fn repeats(reply: &[LlamaToken]) -> bool {
+    (1..=128).any(|pattern| {
+        let length = 128.max(4 * pattern);
+        reply
+            .len()
+            .checked_sub(length)
+            .is_some_and(|start| reply[start + pattern..] == reply[start..reply.len() - pattern])
+    })
 }
 
 fn text_tokens(chunks: &MtmdInputChunks) -> Vec<LlamaToken> {

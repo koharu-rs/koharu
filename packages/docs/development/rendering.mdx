@@ -16,7 +16,7 @@ icon: 'layer-group'
 
 A run is a graph of its pages' stages: detection before a page's other stages, OCR before its translation, and each page's translation before the next page's, since translation is one conversation in page order. A stage never runs another, and a stage with nothing to do succeeds without work. Runs on blocks or an area go first, then runs on pages in the order they came. Up to three pages are in flight: one reading its input, one on the model, and one writing its result.
 
-Each stage writes its result for a page as one undo step labelled with the stage's name. The first failure ends its run, naming the page, the stage, and the reason; what the run finished stays.
+Each stage writes its result for a page as one undo step labelled with the stage's name. A page the translation model blocks, or answers with nothing it can take, fails alone, and the run goes on. Any other failure ends its run, naming the page, the stage, and the reason; what the run finished stays.
 
 ```mermaid
 flowchart LR

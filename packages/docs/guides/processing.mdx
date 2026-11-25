@@ -38,7 +38,7 @@ Detection finds panels, speech bubbles, and text blocks, with a mask over each b
 
 The activity center shows each run's stage, page, progress, and failures. Runs started while another is going wait their turn; runs on text blocks or a painted area go first. **Stop** stops every run, running and queued.
 
-Each stage writes its result for a page as one undo step as soon as it finishes. Completed work stays when a later stage fails or the run stops. The first failure ends its run and names the page, stage, and reason.
+Each stage writes its result for a page as one undo step as soon as it finishes. Completed work stays when a later stage fails or the run stops. A page the translation model blocks or can't answer, even when [Koharu retries it](/models/translation#how-pages-are-translated), is left untranslated and the run goes on; the activity center names it once the run ends. Any other failure ends its run and names the page, stage, and reason.
 
 A stage with nothing to do, such as OCR on a page without text, does nothing and does not fail.
 

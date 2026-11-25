@@ -154,14 +154,13 @@ pub(crate) async fn translate(
         &page.texts,
         page.image.as_deref(),
         translator.reasoning,
-        &member.cancel,
     );
-    let Some(translations) = turn
+    let answer = turn
         .take(conversation, &model)
-        .instrument(info_span!("llm", texts = page.texts.len()))
-        .await?
-    else {
-        return Err(Stopped.into());
+        .instrument(info_span!("llm", texts = page.texts.len()));
+    let translations = tokio::select! {
+        answer = answer => answer?,
+        () = member.cancel.cancelled() => return Err(Stopped.into()),
     };
     let translated = page
         .blocks

@@ -54,6 +54,8 @@ export interface Job {
   stage: Stage | null
   page: PageId | null
   error: string | null
+  /** The pages a stage failed on. */
+  failed: PageId[]
 }
 
 interface KoharuStore {
@@ -190,6 +192,11 @@ export function receivePipeline(event: PipelineEvent): void {
   }))
 }
 
+/** `job` with a page a stage failed on, which shows once the run ends. */
+function failed(job: Job, { page, reason }: { page: PageId; reason: string }): Job {
+  return { ...job, error: reason, failed: [...job.failed, page] }
+}
+
 function fold(job: Job | undefined, event: PipelineEvent): Job {
   const current: Job = job ?? {
     id: event.run,
@@ -199,6 +206,7 @@ function fold(job: Job | undefined, event: PipelineEvent): Job {
     stage: null,
     page: null,
     error: null,
+    failed: [],
   }
   switch (event.kind) {
     case 'queued':
@@ -207,17 +215,13 @@ function fold(job: Job | undefined, event: PipelineEvent): Job {
       return { ...current, stage: event.stage, page: event.page }
     case 'finished':
       return { ...current, completed: current.completed + 1 }
-    case 'ended':
-      // A failure names its own page and stage: the last started may be another page in flight.
-      return event.outcome.kind === 'failed'
-        ? {
-            ...current,
-            state: 'failed',
-            stage: event.outcome.stage,
-            page: event.outcome.page,
-            error: event.outcome.reason,
-          }
-        : { ...current, state: event.outcome.kind, error: null }
+    case 'failed':
+      return { ...failed(current, event), completed: current.completed + 1 }
+    case 'ended': {
+      const { outcome } = event
+      const ended = outcome.kind === 'failed' ? failed(current, outcome) : current
+      return { ...ended, state: ended.failed.length > 0 ? 'failed' : outcome.kind }
+    }
   }
 }
 

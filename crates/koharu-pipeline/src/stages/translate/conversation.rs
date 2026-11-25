@@ -23,7 +23,7 @@ pub(crate) struct Conversation {
 }
 
 impl Conversation {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             with: None,
             context: Context::new(prompts()),

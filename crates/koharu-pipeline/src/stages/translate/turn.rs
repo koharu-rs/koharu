@@ -1,10 +1,8 @@
 //! A page's turn of the conversation.
 
-use std::future::IntoFuture;
-
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use koharu_llm::{
-    PromptError,
+    KOHARU, PromptError,
     rig::{
         completion::{
             AssistantContent, GenerationOptions, Message, Reasoning, Usage,
@@ -16,9 +14,15 @@ use koharu_llm::{
     },
 };
 use serde_json::{Map, Value, json};
-use tokio_util::sync::CancellationToken;
 
 use super::Conversation;
+use crate::stages::Failed;
+
+/// The temperatures a local model is asked at again after its answer was cut
+/// off, as one that kept repeating itself is: greedy, it would answer the same
+/// way. OpenAI's Whisper falls back so (`decode_with_fallback`,
+/// whisper/transcribe.py at 86098128).
+const FALLBACK: [f64; 2] = [0.4, 0.8];
 
 pub(super) struct Turn<'a> {
     system: String,
@@ -28,7 +32,6 @@ pub(super) struct Turn<'a> {
     /// The page, which the model sees with its texts.
     image: Option<&'a str>,
     reasoning: Option<Reasoning>,
-    cancel: &'a CancellationToken,
 }
 
 impl<'a> Turn<'a> {
@@ -37,7 +40,6 @@ impl<'a> Turn<'a> {
         texts: &'a [String],
         image: Option<&'a str>,
         reasoning: Option<Reasoning>,
-        cancel: &'a CancellationToken,
     ) -> Self {
         let keys = keys(texts.len());
         Self {
@@ -47,54 +49,46 @@ impl<'a> Turn<'a> {
             texts,
             image,
             reasoning,
-            cancel,
         }
     }
 
     /// The page's translations, recorded in `conversation` once they pass;
-    /// `None` when the run stopped first.
+    /// dropping it leaves the conversation as it was.
     pub(super) async fn take(
         self,
         conversation: &mut Conversation,
         model: &DynModel<Completion>,
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<Vec<String>> {
         let next = Message::user(self.page.clone());
-        tokio::select! {
-            () = conversation.context.fit(model, &next) => {}
-            () = self.cancel.cancelled() => return Ok(None),
-        }
+        conversation.context.fit(model, &next).await;
         let history: Vec<Message> = conversation
             .context
             .messages()
             .iter()
             .map(|message| Message::clone(message))
             .collect();
-        let Some(mut asked) = self.ask(model, history).await? else {
-            return Ok(None);
-        };
+        let mut asked = self.ask(model, history).await?;
         // A small model can answer a page with its answer to the page
         // before, word for word, as Index-Translate 2B did on one of 16
         // Blue Archive pages; without that answer to copy, it reads the page.
         if self.echoes(&asked.0, conversation.last.as_ref()) {
             tracing::info!("the answer echoed the page before's; asking again without the history");
-            let Some(again) = self.ask(model, Vec::new()).await? else {
-                return Ok(None);
-            };
-            asked = again;
+            asked = self.ask(model, Vec::new()).await?;
         }
         let (translations, messages, usage) = asked;
         conversation.context.record([(remembered(messages), usage)]);
         conversation.last = Some((self.texts.to_vec(), translations.clone()));
-        Ok(Some(translations))
+        Ok(translations)
     }
 
-    /// The page asked after `history`: its translations, the turn's
-    /// messages, and their usage; `None` when the run stopped first.
+    /// The page asked after `history`, and again when it was blocked or its
+    /// answer was cut off: its translations, the turn's messages, and their
+    /// usage.
     async fn ask(
         &self,
         model: &DynModel<Completion>,
         history: Vec<Message>,
-    ) -> Result<Option<(Vec<String>, Vec<Message>, Usage)>> {
+    ) -> Result<(Vec<String>, Vec<Message>, Usage)> {
         let mut content = Vec::new();
         if let Some(image) = self.image {
             ensure!(
@@ -109,32 +103,40 @@ impl<'a> Turn<'a> {
             }));
         }
         content.push(UserContent::text(self.page.clone()));
+        let page = Message::from(content);
         let mut options = GenerationOptions::default();
         if let Some(reasoning) = self.reasoning {
             options = options.reasoning(reasoning);
         }
-        let request = koharu_llm::answers(model, schema(&self.keys)?)
+        let agent = koharu_llm::answers(model, schema(&self.keys)?)
             .preamble(&self.system)
             .options(options)
-            .build()
-            .prompt(Message::from(content))
-            .history(history);
-        let response = tokio::select! {
-            response = request.into_future() => response.map_err(|error| match error {
-                // The answer was cut off, which rig words as a cancelled run.
-                PromptError::Cancelled { reason, .. } => anyhow!(reason),
-                error => error.into(),
-            })?,
-            () = self.cancel.cancelled() => return Ok(None),
-        };
-        let translations = answers(&response.output(), &self.keys)?;
+            .build();
+        let request = |history| agent.prompt(page.clone()).history(history);
+        let mut answer = request(history.clone()).await;
+        if !history.is_empty() && answer.as_ref().is_err_and(blocked) {
+            tracing::info!("the page was blocked; asking again without the history");
+            answer = request(Vec::new()).await;
+        }
+        let local = model
+            .spec()
+            .is_some_and(|spec| spec.provider.vendor() == KOHARU);
+        for temperature in FALLBACK.into_iter().filter(|_| local) {
+            if !matches!(answer, Err(PromptError::Cancelled { .. })) {
+                break;
+            }
+            tracing::info!("the answer was cut off; asking again at temperature {temperature}");
+            answer = request(history.clone()).temperature(temperature).await;
+        }
+        let response = answer.map_err(refused)?;
+        let translations = answers(&response.output(), &self.keys).map_err(Failed)?;
         // The first call's covers the history, the page, and an answer, as the
         // conversation keeps them; one asked again also read the first answer.
         let usage = response
             .completion_calls
             .first()
             .map_or_else(Usage::default, |call| call.usage);
-        Ok(Some((translations, response.messages, usage)))
+        Ok((translations, response.messages, usage))
     }
 
     /// Whether `translations` repeat the `last` page's, in order, for at least
@@ -149,6 +151,24 @@ impl<'a> Turn<'a> {
             .filter(|(new, old)| new == old)
             .count();
         texts.as_slice() != self.texts && same >= 2 && 2 * same >= translations.len()
+    }
+}
+
+/// Whether the provider refused the page, or its answer, for its content.
+fn blocked(error: &PromptError) -> bool {
+    matches!(error, PromptError::Report(report) if report.refusal)
+}
+
+/// `error` as the page's alone when its provider blocked it, or the model
+/// answered it with nothing it can take; a request that failed would fail for
+/// the next page too.
+fn refused(error: PromptError) -> anyhow::Error {
+    match error {
+        // The answer was cut off, which rig words as a cancelled run.
+        PromptError::Cancelled { reason, .. } => Failed(anyhow!(reason)).into(),
+        PromptError::OutputSchemaMismatch { .. } => Failed(error.into()).into(),
+        error if blocked(&error) => Failed(error.into()).into(),
+        error => error.into(),
     }
 }
 
@@ -234,9 +254,32 @@ fn answers(answer: &str, keys: &[String]) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
-    use koharu_llm::rig::completion::AssistantMessage;
+    use koharu_llm::rig::completion::{AssistantMessage, FinishReason};
+    use rig_core::{
+        catalog::ModelSpec,
+        providers::registry::ProviderId,
+        test_utils::{MockCompletionModel, MockTurn},
+    };
 
     use super::*;
+
+    #[tokio::test]
+    async fn a_local_answer_cut_off_is_asked_for_again_sampled() -> Result<()> {
+        let mock = MockCompletionModel::from_turns([
+            MockTurn::text(r#"{"1": "Aaaaaa"#).with_finish_reason(FinishReason::Length),
+            MockTurn::text(r#"{"1": "Argh!"}"#),
+        ])
+        .priced_as(ModelSpec::new(ProviderId::declare(KOHARU)?, "mock"));
+        let texts = ["ぎゃああ".to_owned()];
+        let answer = Turn::new("Translate.".to_owned(), &texts, None, None)
+            .take(&mut Conversation::new(), &mock.clone().erase())
+            .await?;
+        assert_eq!(answer, ["Argh!"]);
+        let requests = mock.requests();
+        let temperatures: Vec<_> = requests.iter().map(|asked| asked.temperature).collect();
+        assert_eq!(temperatures, [None, Some(FALLBACK[0])]);
+        Ok(())
+    }
 
     #[test]
     fn the_conversation_keeps_no_image_reasoning_or_refused_answer() {

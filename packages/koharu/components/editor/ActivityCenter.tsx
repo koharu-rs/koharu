@@ -103,14 +103,16 @@ function JobItem({ job }: { job: Job }) {
   const dismiss = useKoharuStore((state) => state.dismissJob)
   // Numbered by position in the rail, so the row says where in the run this is.
   const pages = usePages(job.page !== null).data
-  const pageIndex = job.page ? (pages?.findIndex((page) => page.id === job.page) ?? -1) : -1
-  const pageLabel =
-    pageIndex >= 0 ? t('navigator.pageNumber', { number: pageIndex + 1 }) : undefined
+  const detail = (job.state === 'failed' ? job.failed : [job.page])
+    .map((id) => pages?.findIndex((page) => page.id === id) ?? -1)
+    .filter((index) => index >= 0)
+    .map((index) => t('navigator.pageNumber', { number: index + 1 }))
+    .join(', ')
   if (job.state === 'failed') {
     return (
       <Failure
         message={job.error || t('activity.processingFailed')}
-        detail={pageLabel}
+        detail={detail}
         onDismiss={() => dismiss(String(job.id))}
       />
     )
@@ -121,7 +123,7 @@ function JobItem({ job }: { job: Job }) {
       label={
         job.stage ? t(`phase.${job.stage}`, { defaultValue: job.stage }) : t('activity.processing')
       }
-      detail={pageLabel}
+      detail={detail}
       completed={job.completed}
       total={job.total}
       action={

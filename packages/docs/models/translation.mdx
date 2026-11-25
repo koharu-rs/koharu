@@ -16,7 +16,16 @@ LFM3 1.7B is made for a limited set of target languages. Other local and hosted 
 
 Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the instructions starts a new one.
 
-Each page is sent as its texts in reading order, and the answer must return every one. A malformed answer or a missing text is asked for once more. If that answer falls short too, or a translation is blank, the page fails. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
+Each page is sent as its texts in reading order, and the answer must return every one. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
+
+Koharu retries a page's translation when:
+
+- The answer is malformed or misses a text: once.
+- The answer copies the page before's: once, without the earlier pages.
+- The provider blocks the page or its answer for its content: once, without the earlier pages, which may be what it blocked.
+- A local model's answer is cut off, as when it keeps repeating itself: up to twice, with more randomness, since it would otherwise answer the same way.
+
+A page that still fails, or whose translation is blank, is left untranslated, and [the run goes on](/guides/processing#follow-progress-and-stop-work). With a hosted model, each retry is another request.
 
 ## Options
 

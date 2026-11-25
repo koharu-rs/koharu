@@ -29,16 +29,16 @@ const EVENTS: usize = 1024;
 #[derive(specta::Type)]
 pub struct RunId(pub u64);
 
-/// A run was queued, a stage started or finished on a page, or a run ended.
-/// A stage starts when the GPU takes it, or for a hosted translation when
-/// it's sent.
+/// A run was queued, a stage started, finished, or failed on a page, or a run
+/// ended. A stage starts when the GPU takes it, or for a hosted translation
+/// when it's sent.
 #[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
 // Named apart from the agent's own `Event`, which crosses to the interface
 // too; JSON carries no container name.
 #[serde(rename = "PipelineEvent", tag = "kind", rename_all = "snake_case")]
 pub enum Event {
     /// The run's first event: the page stages it does, each of which starts
-    /// and finishes once unless the run ends first.
+    /// once, and finishes or fails, unless the run ends first.
     Queued {
         run: RunId,
         steps: usize,
@@ -53,6 +53,13 @@ pub enum Event {
         page: PageId,
         stage: Stage,
     },
+    /// A failure that is the page's alone: the run goes on.
+    Failed {
+        run: RunId,
+        page: PageId,
+        stage: Stage,
+        reason: String,
+    },
     Ended {
         run: RunId,
         outcome: Outcome,
@@ -63,7 +70,8 @@ pub enum Event {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Outcome {
     Done,
-    /// The first failure ends the run; what it finished stays.
+    /// A failure that isn't one page's alone ends the run; what it finished
+    /// stays.
     Failed {
         page: PageId,
         stage: Stage,
@@ -107,6 +115,7 @@ impl Events {
         let (Event::Queued { run, .. }
         | Event::Started { run, .. }
         | Event::Finished { run, .. }
+        | Event::Failed { run, .. }
         | Event::Ended { run, .. }) = &event;
         {
             let mut runs = self.runs.lock();
@@ -135,6 +144,15 @@ impl Events {
                     }
                 }
                 Event::Finished { page, stage, .. } => {
+                    record.stages.remove(&(*page, *stage));
+                }
+                Event::Failed {
+                    page,
+                    stage,
+                    reason,
+                    ..
+                } => {
+                    tracing::warn!("{reason}");
                     record.stages.remove(&(*page, *stage));
                 }
                 Event::Ended { outcome, .. } => {

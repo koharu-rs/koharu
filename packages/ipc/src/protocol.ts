@@ -675,7 +675,10 @@ export type Opened = {
 
 export type Outcome =
   | { kind: 'done' }
-  /**  The first failure ends the run; what it finished stays. */
+  /**
+   *  A failure that isn't one page's alone ends the run; what it finished
+   *  stays.
+   */
   | { kind: 'failed'; page: PageId; stage: Stage; reason: string }
   | { kind: 'stopped' }
 
@@ -747,18 +750,20 @@ export type PipelineConfig = {
 }
 
 /**
- *  A run was queued, a stage started or finished on a page, or a run ended.
- *  A stage starts when the GPU takes it, or for a hosted translation when
- *  it's sent.
+ *  A run was queued, a stage started, finished, or failed on a page, or a run
+ *  ended. A stage starts when the GPU takes it, or for a hosted translation
+ *  when it's sent.
  */
 export type PipelineEvent =
   /**
    *  The run's first event: the page stages it does, each of which starts
-   *  and finishes once unless the run ends first.
+   *  once, and finishes or fails, unless the run ends first.
    */
   | { kind: 'queued'; run: RunId; steps: number }
   | { kind: 'started'; run: RunId; page: PageId; stage: Stage }
   | { kind: 'finished'; run: RunId; page: PageId; stage: Stage }
+  /**  A failure that is the page's alone: the run goes on. */
+  | { kind: 'failed'; run: RunId; page: PageId; stage: Stage; reason: string }
   | { kind: 'ended'; run: RunId; outcome: Outcome }
 
 export type Preferences = {

@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info_span;
 
 use crate::{
-    Error, Event, PipelineConfig, RunId, Stage,
+    Event, PipelineConfig, RunId, Stage,
     event::Events,
     gpu::{Gpu, Key, Models, Turn},
     scheduler::Priority,
@@ -128,6 +128,11 @@ pub(crate) struct Task {
     pub(crate) events: Events,
 }
 
+/// A stage's failure on one page alone, which its run goes past.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub(crate) struct Failed(pub(crate) anyhow::Error);
+
 /// A stage's end once its run stopped, which isn't a failure.
 #[derive(Debug, thiserror::Error)]
 #[error("the run stopped")]
@@ -200,11 +205,10 @@ pub(crate) struct Inputs {
     pub(crate) conversation: Option<OwnedMutexGuard<translate::Conversation>>,
 }
 
-/// Runs `task`'s stage: its failure, if any, as the run reports it.
-pub(crate) async fn run(task: Task, inputs: Inputs) -> Result<(), String> {
-    let stage = task.stage;
+/// Runs `task`'s stage; a stopped run's end isn't a failure.
+pub(crate) async fn run(task: Task, inputs: Inputs) -> anyhow::Result<()> {
     let config = &inputs.config;
-    let result = match stage {
+    let result = match task.stage {
         Stage::Detect => detect::detect(&task, config).await,
         Stage::Recognize => recognize::recognize(&task, config).await,
         Stage::Inpaint => inpaint::inpaint(&task, config, inputs.area).await,
@@ -216,14 +220,8 @@ pub(crate) async fn run(task: Task, inputs: Inputs) -> Result<(), String> {
         }
     };
     match result {
-        Err(error) if !error.is::<Stopped>() => {
-            let error = anyhow::Error::from(Error::Stage {
-                stage,
-                source: error,
-            });
-            Err(format!("{error:#}"))
-        }
-        _ => Ok(()),
+        Err(error) if error.is::<Stopped>() => Ok(()),
+        result => result,
     }
 }
 

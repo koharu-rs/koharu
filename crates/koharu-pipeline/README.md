@@ -147,6 +147,11 @@ model, the target, or the instructions starts a new one.
   the answer must keep the keys. A broken answer or a missing key is asked for
   once more; a second one, or a blank translation, fails the page, which never
   enters the history.
+- **A page its provider blocks**, or whose answer it filters, is asked again
+  without the history, whose pages may be what it blocked, and then fails.
+- **A local model's answer that is cut off**, as one that repeats itself is, is
+  asked for again at a higher temperature, twice at most, as Whisper falls back
+  [Whisper]: greedy, it would come out the same.
 - **An answer copying the page before's** for different texts is asked again
   without the history it copied.
 - **A text given back unchanged**, such as a copyright line, keeps its own
@@ -189,10 +194,11 @@ model, the target, or the instructions starts a new one.
   pages in the order they came, so an interactive run goes ahead at its next
   model call. Recognition takes up to eight pages waiting for the same model at
   once.
-- **Failure.** The first failure ends its run, naming the page, the stage, and
-  the reason, a panic included. What it finished stays. Stopping is the same
-  without the error, for every run, and cuts short a diffusion model's redraw
-  under way.
+- **Failure.** A page the translation model blocks, or answers with nothing it
+  can take, fails alone: it's named with the reason, and the run goes on. Any other
+  failure would come again with the next page, so it ends its run, a panic
+  included. What it finished stays. Stopping is the same without the error, for
+  every run, and cuts short a diffusion model's redraw under way.
 
 ## 6. Settings
 
@@ -224,7 +230,7 @@ Read in November 2026.
 - Adobe: [Photoshop Content-Aware Fill], [Photoshop Generative Fill],
   [Photoshop combine variations]
 - Editing models: [FLUX.3 Klein], [Qwen-Image 2.1]
-- [ComfyUI routes], [Ollama keep_alive], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ]
+- [ComfyUI routes], [Ollama keep_alive], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ], [Whisper]
 - Lettering: [Manga balloon basics], [Comicraft glossary]
 
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
@@ -240,3 +246,4 @@ Read in November 2026.
 [Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie
 [Comicraft glossary]: https://balloontales.com/?p=418
 [JLREQ]: https://www.w3.org/TR/jlreq/
+[Whisper]: https://github.com/openai/whisper/blob/86098128c0b4f24f0e2aa2994de830614b474227/whisper/transcribe.py#L184-L224

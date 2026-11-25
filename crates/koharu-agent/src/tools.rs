@@ -326,8 +326,9 @@ impl Tool for Wait {
 
     fn description(&self) -> String {
         "Wait up to 30 seconds for a run to end, then answer what it told so far, in order: how \
-         many page stages it does, each page's stages as they started and finished, and last, \
-         once it ended, how: done, failed with its reason, or stopped."
+         many page stages it does, each page's stages as they started and finished, or failed \
+         on that page alone, and last, once it ended, how: done, failed with its reason, or \
+         stopped."
             .to_owned()
     }
 

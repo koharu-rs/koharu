@@ -6014,6 +6014,7 @@ dependencies = [
  "parking_lot 0.13.0",
  "petgraph 0.8.3",
  "rayon",
+ "rig-core",
  "schemars 1.2.3",
  "serde",
  "serde_json",

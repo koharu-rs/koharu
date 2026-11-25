@@ -22,12 +22,13 @@ use tokio::{
     time::{self, Instant},
 };
 
+use self::run::Job;
 pub(crate) use self::run::{Plan, Run};
 use crate::{
     Event, Outcome, PipelineConfig, RunId, Stage,
     event::Events,
     gpu::{Gpu, Key, Turn},
-    stages::{self, Inputs, Member, Task, translate::Conversations},
+    stages::{self, Failed, Inputs, Member, Task, translate::Conversations},
 };
 
 /// Pages admitted and not yet written: one reading its input, one on the
@@ -92,7 +93,7 @@ pub(crate) struct Scheduler {
     runs: Vec<Run>,
     /// A permit for each page in flight, which its task holds.
     ahead: Arc<Semaphore>,
-    tasks: JoinSet<Result<(), String>>,
+    tasks: JoinSet<anyhow::Result<()>>,
     running: HashMap<task::Id, Running>,
     conversations: Conversations,
     /// When the models no setting uses leave: `KEEP` after a run last ended.
@@ -177,67 +178,75 @@ impl Scheduler {
         }
     }
 
-    fn done(&mut self, joined: Result<(task::Id, Result<(), String>), JoinError>) {
-        let id = match &joined {
-            Ok((id, _)) => *id,
-            Err(error) => error.id(),
-        };
-        let Running { stage, jobs, page } = self
+    fn done(&mut self, joined: Result<(task::Id, anyhow::Result<()>), JoinError>) {
+        let (id, result) = joined.unwrap_or_else(|error| (error.id(), Err(error.into())));
+        let task = self
             .running
             .remove(&id)
             .expect("every task is recorded when it starts");
-        let result = match joined {
-            Ok((_, result)) => result,
-            Err(error) => Err(format!("{stage} failed: {error}")),
-        };
-        let runs = std::mem::take(&mut self.runs);
-        let mut ended = false;
+        let runs = self.runs.len();
         match result {
-            Ok(()) => {
-                for mut run in runs {
-                    for &(id, job) in &jobs {
-                        if id == run.id
-                            && let Some(job) = run.graph.remove_node(job)
-                        {
-                            self.emit(Event::Finished {
-                                run: id,
-                                page: job.page,
-                                stage: job.stage,
-                            });
-                        }
-                    }
-                    if run.graph.node_count() == 0 {
-                        ended = true;
-                        self.emit(Event::Ended {
-                            run: run.id,
-                            outcome: Outcome::Done,
-                        });
-                    } else {
-                        self.runs.push(run);
-                    }
-                }
-            }
-            Err(reason) => {
-                for run in runs {
-                    if jobs.iter().any(|&(id, _)| id == run.id) {
-                        ended = true;
-                        run.cancel.cancel();
-                        self.emit(Event::Ended {
-                            run: run.id,
-                            outcome: Outcome::Failed {
-                                page,
-                                stage,
-                                reason: reason.clone(),
-                            },
-                        });
-                    } else {
-                        self.runs.push(run);
-                    }
+            Ok(()) => self.leave(&task, None),
+            Err(error) => {
+                let reason = format!("{} failed: {error:#}", task.stage);
+                match error.is::<Failed>() {
+                    true => self.leave(&task, Some(&reason)),
+                    false => self.fail(&task, &reason),
                 }
             }
         }
-        if ended {
+        if self.runs.len() < runs {
             self.rest();
+        }
+    }
+
+    /// `task`'s jobs leave their runs, finished or failed for `reason`, and a
+    /// run ends with its last.
+    fn leave(&mut self, task: &Running, reason: Option<&str>) {
+        for mut run in std::mem::take(&mut self.runs) {
+            for &(id, job) in &task.jobs {
+                if id == run.id
+                    && let Some(Job { page, stage, .. }) = run.graph.remove_node(job)
+                {
+                    let run = id;
+                    self.emit(match reason {
+                        None => Event::Finished { run, page, stage },
+                        Some(reason) => Event::Failed {
+                            run,
+                            page,
+                            stage,
+                            reason: reason.to_owned(),
+                        },
+                    });
+                }
+            }
+            if run.graph.node_count() == 0 {
+                self.emit(Event::Ended {
+                    run: run.id,
+                    outcome: Outcome::Done,
+                });
+            } else {
+                self.runs.push(run);
+            }
+        }
+    }
+
+    /// The runs `task` worked for end, failed for `reason`.
+    fn fail(&mut self, task: &Running, reason: &str) {
+        for run in std::mem::take(&mut self.runs) {
+            if task.jobs.iter().any(|&(id, _)| id == run.id) {
+                run.cancel.cancel();
+                self.emit(Event::Ended {
+                    run: run.id,
+                    outcome: Outcome::Failed {
+                        page: task.page,
+                        stage: task.stage,
+                        reason: reason.to_owned(),
+                    },
+                });
+            } else {
+                self.runs.push(run);
+            }
         }
     }
 

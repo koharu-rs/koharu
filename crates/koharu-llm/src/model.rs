@@ -2,11 +2,14 @@
 //! doesn't say.
 
 use rig_agent::agent::{
-    AgentBuilder, AgentHook, HookContext, ModelTurnAction, ModelTurnFinished, OutputMode,
+    AgentBuilder, AgentHook, HookContext, ModelTurnAction, ModelTurnFinished, OutcomeAction,
+    OutcomeEvent, OutputMode,
 };
 use rig_core::{
     completion::{AssistantContent, FinishReason},
     driver::DynModel,
+    effect::Answered,
+    error::{ErrorKind, ErrorReport},
     operation::Completion,
     providers::{chatgpt, deepseek, minimax, openrouter},
     structured_output::json_in_text,
@@ -33,11 +36,27 @@ pub fn answers(model: &DynModel<Completion>, schema: schemars::Schema) -> AgentB
     }
 }
 
-/// Stops a run at an answer its token limit cut off: asked for again, it would
-/// have less room, as the cut one goes with the request.
+/// Stops a run at an answer its provider filtered, or its token limit cut off:
+/// asked for again, the cut one would have less room, as it goes with the
+/// request.
 struct Whole;
 
 impl AgentHook for Whole {
+    /// A filtered answer is refused, as a blocked request is.
+    async fn on_outcome(&self, _ctx: &HookContext, event: OutcomeEvent<'_>) -> OutcomeAction {
+        match event.outcome {
+            Ok(Answered::Completion(answer))
+                if answer.finish_reason() == Some(FinishReason::ContentFilter) =>
+            {
+                OutcomeAction::replace(Err(ErrorReport {
+                    refusal: true,
+                    ..ErrorReport::new(ErrorKind::Provider, "the provider blocked the answer")
+                }))
+            }
+            _ => OutcomeAction::proceed(),
+        }
+    }
+
     async fn on_model_turn_finished(
         &self,
         _ctx: &HookContext,
@@ -47,7 +66,7 @@ impl AgentHook for Whole {
         if event.finish_reason == Some(&FinishReason::Length)
             && json_in_text::<IgnoredAny>(&answer).is_err()
         {
-            return ModelTurnAction::Stop("the answer reached the model's token limit".to_owned());
+            return ModelTurnAction::stop("the model's answer ran on too long and was cut off");
         }
         ModelTurnAction::Continue
     }
