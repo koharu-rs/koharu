@@ -14,7 +14,7 @@ use rig_core::{
     },
 };
 
-use super::{Http, key, unlisted};
+use super::{Http, key, unlisted, untimed};
 
 pub(crate) const PROVIDER_NAME: &str = "openai-compatible";
 
@@ -37,7 +37,7 @@ pub(super) fn connect(
     model.wire = model
         .wire
         .with_facts(ModelFacts::new(spec(vendor, id, context_window)));
-    Ok(model.erase())
+    Ok(untimed(model))
 }
 
 /// The server's `/models` list, or none while it has no base URL. The list

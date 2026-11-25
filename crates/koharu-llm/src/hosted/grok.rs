@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
-use super::{Http, SignIn, reqwest, unlisted};
+use super::{Http, SignIn, reqwest, unlisted, untimed};
 use crate::SignInPrompt;
 
 pub(super) const PROVIDER_NAME: &str = "grok";
@@ -276,7 +276,7 @@ pub(super) fn connect(id: &str, base_url: Option<String>) -> Result<DynModel<Com
         .connect(Http::signed_in(Plan(id.to_owned())))
         .completion(id);
     model.wire = model.wire.with_facts(ModelFacts::new(spec(id)?));
-    Ok(model.erase())
+    Ok(untimed(model))
 }
 
 /// The plan's language models, from its endpoint's list, or none when

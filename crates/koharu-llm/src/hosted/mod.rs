@@ -12,7 +12,7 @@ use std::{collections::BTreeMap, num::NonZeroU32};
 use anyhow::{Context, Result, bail, ensure};
 use rig_core::{
     catalog::{Catalog, ModelFacts, ModelSpec, ReasoningSupport},
-    driver::DynModel,
+    driver::{DynModel, Model, Transport},
     http_client::DynHttpClient,
     operation::Completion,
     providers::{
@@ -22,6 +22,7 @@ use rig_core::{
         registry::{ProviderConfig, ProviderId},
         xai,
     },
+    wire::Wire,
 };
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
@@ -184,15 +185,33 @@ fn config(filed: ProviderId, key: String, base_url: Option<String>) -> Result<Pr
 fn model(config: ProviderConfig, spec: ModelSpec, http: DynHttpClient) -> DynModel<Completion> {
     let id = spec.id.clone();
     let facts = ModelFacts::new(spec).with_catalog(Catalog::builtin());
-    let ProviderConfig::OpenAi(config) = config else {
-        return config.completion_model(&id, http, facts);
-    };
-    let mut model = config.connect(http).completion(id);
-    model.wire = match model.wire.with_facts(facts) {
-        OpenAiWire::Responses(wire) => OpenAiWire::Responses(wire.with_store(false)),
-        chat => chat,
-    };
-    model.erase()
+    match config {
+        ProviderConfig::OpenAi(config) => {
+            let mut model = config.connect(http).completion(id);
+            model.wire = match model.wire.with_facts(facts) {
+                OpenAiWire::Responses(wire) => OpenAiWire::Responses(wire.with_store(false)),
+                chat => chat,
+            };
+            untimed(model)
+        }
+        ProviderConfig::Anthropic(config) => {
+            let mut model = config.connect(http).completion(id);
+            model.wire = model.wire.with_facts(facts);
+            untimed(model)
+        }
+        ProviderConfig::Gemini(config) => {
+            let mut model = config.connect(http).completion(id);
+            model.wire = model.wire.with_facts(facts);
+            untimed(model)
+        }
+    }
+}
+
+/// `model`, waiting for a reply until it ends or the user stops it. rig fails a
+/// streamed one that says nothing for five minutes, which a server can take to
+/// load a model, read a long prompt, or think.
+fn untimed<W: Wire, T: Transport<W>>(model: Model<W, T>) -> DynModel<W::Op> {
+    model.with_idle_timeout(None).erase()
 }
 
 /// What the catalog says of `id`, or nothing certain of a model newer than it.

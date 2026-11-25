@@ -28,6 +28,7 @@ provider only when the user picked that provider.
 | listing | every model the user can pick, from each vendor with a key; one that needs a key and has none lists nothing, and a list that fails is left out | LM Studio's own list says what its models can do [LM Studio list] |
 | what a model can do | rig's catalog says; a model it knows as neither calling tools nor keeping to a schema, such as an embedding model, is dropped, and one it doesn't know is offered with its limits unknown | |
 | retries | a request is sent again up to 3 times when its reply says it failed for now, as a 429 or 5xx does, or its connection was lost before one: after the wait the reply names, else until its rate-limit headers say a spent allowance resets, else a growing one. A spent quota, a wait over 2 minutes, and a server that can't be reached fail at once | OpenAI's Python library doesn't retry past 2 minutes [OpenAI retries] |
+| waiting | a reply is waited for until it ends or the user stops it, however long its server says nothing, as while it loads a model, reads a long prompt, or thinks | |
 | storing | a vendor is asked not to store replies in the Responses format, which OpenAI and xAI otherwise do for 30 days; the Grok plan's own endpoint isn't asked | [OpenAI data controls], [xAI Responses] |
 
 ## 2. Structured answers

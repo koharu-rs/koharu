@@ -10,7 +10,7 @@ use rig_core::{
 };
 use serde_json::Value;
 
-use super::{Http, key, reqwest, unlisted};
+use super::{Http, key, reqwest, unlisted, untimed};
 
 /// LM Studio, which rig has no dialect for, so Koharu declares it.
 pub(super) const PROVIDER_NAME: &str = "lmstudio";
@@ -26,7 +26,7 @@ pub(super) fn connect(id: &str, base_url: Option<String>) -> Result<DynModel<Com
         .chat(id);
     let vendor = ProviderId::declare(PROVIDER_NAME)?;
     model.wire = model.wire.with_facts(ModelFacts::new(unlisted(vendor, id)));
-    Ok(model.erase())
+    Ok(untimed(model))
 }
 
 /// LM Studio's language models, from its own list, which says what each can
