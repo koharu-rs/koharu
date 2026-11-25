@@ -58,10 +58,11 @@ impl<'a> Turn<'a> {
         conversation: &mut Conversation,
         model: &DynModel<Completion>,
     ) -> Result<Option<Vec<String>>> {
-        conversation
-            .context
-            .fit(model, &Message::user(self.page.clone()))
-            .await;
+        let next = Message::user(self.page.clone());
+        tokio::select! {
+            () = conversation.context.fit(model, &next) => {}
+            () = self.cancel.cancelled() => return Ok(None),
+        }
         let history: Vec<Message> = conversation
             .context
             .messages()
