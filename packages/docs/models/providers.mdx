@@ -34,14 +34,30 @@ Koharu's local models include Index-Translate (2B, 9B, and a 35B A3B preview), w
   </Step>
   <Step title='Select a model'>
     Open the processing selector's **Model** or **Settings → Pipeline → Translator → Model**.
-    Opening the processing selector refreshes the list. A provider without a key, or one that
-    cannot be reached, lists no models.
+    Opening the processing selector refreshes the list. A provider that requires a key but has
+    none, or one that cannot be reached, lists no models.
   </Step>
   <Step title='Try one page'>
     Check the source text, run translation on the current page, and review the result before
     processing a chapter.
   </Step>
 </Steps>
+
+## Rapid-MLX
+
+[Rapid-MLX](https://github.com/raullenchai/Rapid-MLX) runs a local OpenAI-compatible server on
+Apple Silicon. Install it with `brew install rapid-mlx` or `pip install rapid-mlx`, then start
+a model:
+
+```sh
+rapid-mlx serve qwen3.5-4b-4bit --port 8000
+```
+
+In **Settings → Providers**, set the **OpenAI-compatible** connection's **Base URL** to
+`http://localhost:8000/v1`. Leave **Credential** empty unless you configured the server to
+require a key. Set **Context length** to the model's serving window in tokens, reported as
+`max_model_len` in `GET http://localhost:8000/v1/models`; Koharu does not read this limit
+automatically. Select a model ID returned by that endpoint, then try one page as described above.
 
 ## Credentials and privacy
 
