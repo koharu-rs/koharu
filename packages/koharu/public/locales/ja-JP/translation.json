@@ -217,6 +217,8 @@
     "fontWeight": "フォントの太さ",
     "horizontal": "横書き",
     "opacity": "不透明度",
+    "removeRuby": "ルビを削除",
+    "ruby": "ルビ",
     "selectPage": "ページを選択してレイヤーを確認します。",
     "source": "原文",
     "text": "テキスト",

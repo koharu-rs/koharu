@@ -217,6 +217,8 @@
     "fontWeight": "Font weight",
     "horizontal": "Horizontal",
     "opacity": "Opacity",
+    "removeRuby": "Remove ruby",
+    "ruby": "Ruby",
     "selectPage": "Select a page to inspect its layers.",
     "source": "Source text",
     "text": "Text",

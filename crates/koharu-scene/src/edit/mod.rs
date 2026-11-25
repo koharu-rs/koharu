@@ -44,8 +44,8 @@ pub struct Edit {
     pub ops: Vec<Op>,
 }
 
-/// One op of an edit. Variants skipped by schemars carry bytes or the rich
-/// editor's spans, which tools never send.
+/// One op of an edit. Variants skipped by schemars carry bytes, which tools
+/// never send.
 #[derive(Clone, Debug, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Op {
@@ -124,10 +124,11 @@ pub enum Op {
     TransformLayer { layer: Ref, transform: Transform },
     /// Replace a text layer's text, or a block's translation. A block without
     /// one gets one with its source's frame, transform, direction, and style.
-    /// Styling on unchanged characters is kept.
+    /// Styling and ruby on unchanged characters are kept.
     SetText { layer: Ref, text: String },
-    /// Replace a text's spans, from the rich editor.
-    #[schemars(skip)]
+    /// Replace a text as `set_text` does, with spans, to style some of its
+    /// characters or set ruby over them. The spans are the whole text in order,
+    /// and a value a span's `attributes` leave out comes from the text's style.
     SetRichText { layer: Ref, spans: Vec<Span> },
     /// Set one attribute of a layer, or remove it when `value` is null.
     /// Attributes are data for tools: provenance goes under `c2pa`, by step.

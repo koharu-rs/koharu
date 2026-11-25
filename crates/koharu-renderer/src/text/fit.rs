@@ -47,8 +47,17 @@ pub(super) struct PlacedLine {
     /// The line box along the block axis.
     pub top: f32,
     pub pitch: f32,
+    /// How much of the box, at its top, is leading its ruby added.
+    pub lead: f32,
     /// The paragraph ends with this line.
     pub last: bool,
+}
+
+impl PlacedLine {
+    /// Its box without the leading its ruby added: its top and pitch.
+    pub(super) fn letters(&self) -> (f32, f32) {
+        (self.top + self.lead, self.pitch - self.lead)
+    }
 }
 
 /// `styled`'s segments and its lines in `room`, the segments broken as
@@ -278,9 +287,19 @@ fn place(styled: &Styled, room: &Room, segments: &[Segment], scale: f32) -> Plac
     }
 }
 
-/// A line's pitch: its largest size, scaled, times the line height.
-fn pitch(segments: &[Segment], scale: f32, line_height: f32) -> f32 {
-    segments.iter().map(|s| s.size).fold(0.0, f32::max) * scale * line_height
+/// A line's pitch, and how much of it is leading its ruby added: its largest
+/// size, scaled, times the line height, and as CSS adds leading to a line with
+/// ruby, enough that its ruby would clear the letters of a line of the same
+/// above it.
+fn pitch(segments: &[Segment], scale: f32, line_height: f32) -> (f32, f32) {
+    let largest = |of: fn(&Segment) -> f32| segments.iter().map(of).fold(0.0, f32::max);
+    let size = largest(|segment| segment.size);
+    let set = size * line_height;
+    let lead = match largest(|segment| segment.ruby) {
+        0.0 => 0.0,
+        rise => (rise + size * 0.5 - set).max(0.0),
+    };
+    ((set + lead) * scale, lead * scale)
 }
 
 /// Point text: each paragraph on one line, as long as the longest, lines
@@ -322,7 +341,7 @@ fn boxed(
     let total: f32 = lines
         .lines
         .iter()
-        .map(|range| pitch(&segments[range.clone()], scale, styled.line_height))
+        .map(|range| pitch(&segments[range.clone()], scale, styled.line_height).0)
         .sum();
     let (v0, v1) = (bounds.y0 as f32, bounds.y1 as f32);
     let (frame_v0, frame_v1) = match (grow, anchor) {
@@ -379,8 +398,8 @@ fn stack(
     for range in lines {
         let pitch = pitch(&segments[range.clone()], scale, styled.line_height);
         placed.push(line(segments, range, start, room, top, pitch));
-        top += pitch;
-        total += pitch;
+        top += pitch.0;
+        total += pitch.0;
     }
     (placed, total)
 }
@@ -391,7 +410,7 @@ fn line(
     start: f32,
     room: f32,
     top: f32,
-    pitch: f32,
+    (pitch, lead): (f32, f32),
 ) -> PlacedLine {
     let last = range
         .end
@@ -403,6 +422,7 @@ fn line(
         room,
         top,
         pitch,
+        lead,
         last,
     }
 }
@@ -418,6 +438,7 @@ struct InPath<'a> {
     /// centred.
     edge: Option<Side>,
     pitch: f32,
+    lead: f32,
     air: f32,
     frame: Rect,
 }
@@ -443,6 +464,7 @@ fn in_path<'a>(
     // does by its first paragraph's direction.
     let rtl = !styled.vertical
         && unicode_bidi::get_base_direction(styled.text.as_str()) == unicode_bidi::Direction::Rtl;
+    let (pitch, lead) = pitch(segments, scale, styled.line_height);
     InPath {
         segments,
         scale,
@@ -453,7 +475,8 @@ fn in_path<'a>(
             (Align::Start | Align::Justify, false) | (Align::End, true) => Some(Side::Low),
             (Align::End, false) | (Align::Start | Align::Justify, true) => Some(Side::High),
         },
-        pitch: pitch(segments, scale, styled.line_height).max(0.01),
+        pitch: pitch.max(0.01),
+        lead,
         air: size * scale * inset,
         frame: physical(
             styled.vertical,
@@ -648,7 +671,7 @@ impl InPath<'_> {
                     start,
                     room,
                     top + pitch * at as f32,
-                    pitch,
+                    (pitch, self.lead),
                 )
             })
             .collect();
@@ -697,7 +720,7 @@ impl InPath<'_> {
                         start as f32,
                         room,
                         top + pitch * at as f32,
-                        pitch,
+                        (pitch, self.lead),
                     )
                 })
                 .collect(),
@@ -726,6 +749,7 @@ mod tests {
             after,
             punctuation: false,
             size: 10.0,
+            ruby: 0.0,
         }
     }
 
@@ -745,6 +769,7 @@ mod tests {
                 hyphenation: Some(Lang::English),
                 chinese: false,
                 frame,
+                ruby: Vec::new(),
             },
             room,
         ))
@@ -814,6 +839,7 @@ mod tests {
             hyphenation: None,
             chinese: false,
             frame: frame.clone(),
+            ruby: Vec::new(),
         };
         let mut words = vec![word(30.0, Break::Normal); 11];
         words.push(word(30.0, Break::End));
@@ -857,6 +883,7 @@ mod tests {
             hyphenation: None,
             chinese: true,
             frame: frame.clone(),
+            ruby: Vec::new(),
         };
         let character = |after| Segment {
             range: 0..0,
@@ -867,6 +894,7 @@ mod tests {
             after,
             punctuation: false,
             size: 21.0,
+            ruby: 0.0,
         };
         let mut characters = vec![character(Break::Normal); 9];
         characters.push(character(Break::End));

@@ -28,7 +28,7 @@ use crate::{
 /// on it, so opening refuses any other database before reading its rows.
 const APPLICATION_ID: i32 = 0x4B48_5255;
 /// The format version this build writes.
-const VERSION: Version = Version::new(1, 0, 0);
+const VERSION: Version = Version::new(1, 1, 0);
 /// Most compressed tiles fit on a page of this size, which keeps them out of
 /// overflow chains, each of whose pages is a read of its own.
 const PAGE_SIZE: u32 = 16384;

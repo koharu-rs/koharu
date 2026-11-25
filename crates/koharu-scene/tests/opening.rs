@@ -4,7 +4,7 @@ mod common;
 use std::{io::Cursor, path::Path};
 
 use common::*;
-use koharu_scene::{Error, Hash, History, Op, Rect, Session};
+use koharu_scene::{Error, Hash, History, Op, PageId, Query, Rect, Session};
 use serde_json::json;
 
 /// Reopens the project at `path` after `change` alters its file by hand.
@@ -78,7 +78,7 @@ fn only_compatible_versions_open() {
     let (_dir, path) = path();
     drop(Session::create(&path).expect("a project"));
     let bytes = fs_err::read(&path).expect("its bytes");
-    for version in ["1.1.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
+    for version in ["1.2.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
         let copy = path.with_extension(format!("v{version}"));
         fs_err::copy(&path, &copy).expect("a copy");
         let conn = rusqlite::Connection::open(&copy).expect("the file opens");
@@ -94,7 +94,79 @@ fn only_compatible_versions_open() {
         assert_eq!(fs_err::read(&copy).expect("its bytes"), before, "{version}");
     }
     assert_eq!(fs_err::read(&path).expect("its bytes"), bytes);
-    Session::open(&path).expect("1.0.0 opens");
+    Session::open(&path).expect("1.1.0 opens");
+}
+
+/// Two texts of a page as 0.96.2 stored it, in version 1.0.0: a block's, with
+/// marked spans, and a text layer's.
+fn page_of_1_0_0() -> serde_json::Value {
+    let unset = json!({"family": null, "weight": null, "italic": null, "size": null,
+        "fill": null, "stroke": null, "stroke_width": null});
+    let plain = json!({"chars": unset, "align": null, "line_height": null});
+    let unmoved = json!([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+    let part = json!({"name": "", "visible": true, "locked": false, "opacity": 1.0,
+        "blend": "normal", "attributes": {}, "offset": {"x": 0, "y": 0}, "children": []});
+    let mut mask = part.clone();
+    mask["id"] = json!("01a21366-5ad3-77fe-91ad-fc0fdcffb0bd");
+    mask["mode"] = json!("add");
+    let mut cleanup = part;
+    cleanup["id"] = json!("01a21366-5ad3-77fe-91ad-fc10881f8725");
+    json!({"id": "01a21366-5ad3-77fe-91ad-fc0ae6132094", "size": {"width": 256, "height": 256},
+        "background": null, "layers": [
+        {"id": "01a21366-5ad3-77fe-91ad-fc0e0edc3213", "name": "", "visible": true,
+            "locked": false, "opacity": 1.0, "blend": "pass_through", "attributes": {},
+            "kind": "block", "role": "text",
+            "source": {"content": [{"insert": "漢字を読む"}], "style": plain, "frame": {"path":
+                {"path": "M10 10 L200 10 L200 200 L10 200 Z", "fit": "shrink",
+                    "anchor": "start", "inset": 1.0}},
+                "direction": "vertical", "language": "ja", "transform": unmoved},
+            "translation": {"content": [{"insert": "I "},
+                {"insert": "read", "attributes": {"family": null, "weight": 700, "italic": true,
+                    "size": 31.5, "fill": [1.0, 0.0, 0.0, 1.0], "stroke": null,
+                    "stroke_width": null}},
+                {"insert": " kanji"}],
+                "style": plain, "frame": "point", "direction": "horizontal", "language": "en",
+                "transform": unmoved},
+            "mask": mask, "cleanup": cleanup, "children": []},
+        {"id": "01a21366-5ad3-77fe-91ad-fc192b7fea51", "name": "", "visible": true,
+            "locked": false, "opacity": 1.0, "blend": "normal", "attributes": {}, "kind": "text",
+            "content": [{"insert": "point"}], "style": plain, "frame": "point",
+            "direction": "horizontal", "language": "und", "transform": unmoved, "children": []},
+    ]})
+}
+
+#[test]
+fn a_page_1_0_0_wrote_opens_as_it_was_and_takes_ruby() {
+    let (_dir, path) = path();
+    drop(Session::create(&path).expect("a project"));
+    let stored = page_of_1_0_0();
+    let id: PageId = serde_json::from_value(stored["id"].clone()).expect("the page's id");
+    let mut session = reopen_after(
+        &path,
+        &format!(
+            "UPDATE project SET version = '1.0.0', pages = '[\"{id}\"]';
+             INSERT INTO pages VALUES('{id}', '{stored}');"
+        ),
+    )
+    .expect("1.0.0 opens");
+    let answer = |session: &Session, query: Query| {
+        serde_json::to_value(session.query(query).expect("an answer")).expect("it serializes")
+    };
+    let version = |session: &Session| answer(session, Query::GetProject)["version"].clone();
+    assert_eq!(answer(&session, Query::GetPage { page: id }), stored);
+    assert_eq!(version(&session), "1.0.0");
+
+    // A write makes it this build's, and changes only what it writes.
+    let spans = json!([{"insert": "I "}, {"insert": "漢字", "ruby": "kanji"}]);
+    let block = &stored["layers"][0]["id"];
+    let op = json!({"op": "set_rich_text", "layer": block, "spans": spans});
+    apply(&mut session, vec![op]).expect("ruby");
+    drop(session);
+    let session = Session::open(&path).expect("it opens again");
+    assert_eq!(version(&session), "1.1.0");
+    let mut written = stored;
+    written["layers"][0]["translation"]["content"] = spans;
+    assert_eq!(answer(&session, Query::GetPage { page: id }), written);
 }
 
 #[test]

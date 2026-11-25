@@ -7,6 +7,7 @@ use anyhow::Result;
 use hypher::Lang;
 use koharu_scene::{Align, CharStyle, Color, Direction, Frame, Text};
 
+use super::ruby::{self, Ruby};
 use crate::fonts::Font;
 
 pub(super) struct Styled {
@@ -24,6 +25,8 @@ pub(super) struct Styled {
     pub chinese: bool,
     /// Where the text sets, in its own coordinates.
     pub frame: Frame,
+    /// In text order.
+    pub ruby: Vec<Ruby>,
 }
 
 pub(super) struct Span {
@@ -38,7 +41,8 @@ pub(super) struct Span {
 
 impl Styled {
     /// `text` with each span's style over the text's, set in the chain
-    /// `fonts` gives for that style and the span's characters.
+    /// `fonts` gives for that style and the span's characters, its ruby's
+    /// among them.
     pub(super) fn new(
         text: &Text,
         mut fonts: impl FnMut(&CharStyle, &str) -> Result<Vec<Font>>,
@@ -50,11 +54,12 @@ impl Styled {
                 continue;
             }
             let style = span.attributes.or(&text.style.chars);
+            let ruby = span.ruby.as_deref().unwrap_or_default();
             let start = plain.len();
             plain.push_str(&span.insert);
             spans.push(Span {
                 range: start..plain.len(),
-                fonts: fonts(&style, &span.insert)?,
+                fonts: fonts(&style, &[&span.insert, ruby].concat())?,
                 size: style.size.unwrap_or(24.0) as f32,
                 fill: style.fill.map_or(Color::BLACK, Color::from),
                 stroke: match (style.stroke, style.stroke_width) {
@@ -65,7 +70,7 @@ impl Styled {
                 },
             });
         }
-        Ok(Self {
+        let mut styled = Self {
             text: plain,
             spans,
             vertical: text.direction == Direction::Vertical,
@@ -82,7 +87,10 @@ impl Styled {
                 .and_then(Lang::from_iso),
             chinese: text.language.language.as_str() == "zh",
             frame: text.frame.clone(),
-        })
+            ruby: Vec::new(),
+        };
+        styled.ruby = ruby::style(&text.content, &styled);
+        Ok(styled)
     }
 
     /// The span holding byte `offset`, or the last at the text's end.

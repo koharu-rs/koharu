@@ -25,6 +25,9 @@ pub(super) struct Run {
     pub orientation: Orientation,
     /// Its glyphs in `ShapedText::glyphs`, in visual order.
     pub glyphs: Range<usize>,
+    /// The space before and after a tate-chu-yoko run's cell, under a ruby
+    /// longer than its base.
+    pub space: (f32, f32),
 }
 
 /// How a run stands in a vertical column. Horizontal text's runs are all
@@ -84,6 +87,7 @@ pub(super) fn itemize(styled: &Styled, levels: &[Level]) -> (Vec<Run>, Vec<char>
                         script: harfrust_script(script),
                         orientation,
                         glyphs: 0..0,
+                        space: (0.0, 0.0),
                     })
                 }));
             }
@@ -352,6 +356,7 @@ mod tests {
             hyphenation: None,
             chinese: false,
             frame: Frame::Point,
+            ruby: Vec::new(),
         }
     }
 

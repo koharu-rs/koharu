@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { TypeBar } from '@/components/editor/TypeBar'
 import { fontsKey, pageKey, preferencesKey, queryClient } from '@/lib/queries'
+import { setStyle } from '@/lib/scene'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type Change, type Layer, type Op } from '@koharu/ipc/protocol'
 
@@ -103,5 +104,25 @@ describe('type bar font size', () => {
         ],
       ]),
     )
+  })
+})
+
+describe('restyling a text', () => {
+  it('takes its characters own size off and keeps their ruby', async () => {
+    const edit = vi.spyOn(commands, 'edit').mockResolvedValue({
+      revision: '2',
+      created: [],
+      layers: [],
+      pages: { added: [], removed: [], changed: [], reordered: false },
+      history: { current: 1, steps: [] },
+    } satisfies Change)
+    const spans = [{ insert: 'sword', ruby: 'Excalibur', attributes: { size: 40, weight: 700 } }]
+    const layer: Layer = { ...base, id: 't', name: 't', kind: 'text', content: spans }
+    await setStyle([layer], { chars: { size: 24 } })
+    expect(edit.mock.lastCall?.[0].ops[1]).toEqual({
+      op: 'set_rich_text',
+      layer: 't',
+      spans: [{ insert: 'sword', ruby: 'Excalibur', attributes: { weight: 700 } }],
+    })
   })
 })

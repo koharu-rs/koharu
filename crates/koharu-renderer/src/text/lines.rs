@@ -215,6 +215,7 @@ mod tests {
             after: Break::Normal,
             punctuation: false,
             size: 0.0,
+            ruby: 0.0,
         }
     }
 

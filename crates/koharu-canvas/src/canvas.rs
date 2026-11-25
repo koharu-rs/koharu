@@ -34,7 +34,7 @@ use crate::{
     selection::Selection,
     snapshot::{Part, Snapshot},
     tools::{self, pan::Pan, text::Draft},
-    typing::{Keyed, Typed, Typing},
+    typing::{Keyed, RubyEdit, Typed, Typing},
     view::{Sample, View},
 };
 
@@ -378,6 +378,14 @@ impl Canvas {
     pub fn style_typing(&mut self, patch: &CharStyle) -> anyhow::Result<()> {
         match &mut self.typing {
             Some(typing) => typing.style(patch),
+            None => Ok(()),
+        }
+    }
+
+    /// What the host's ruby field does while typing.
+    pub fn annotate_typing(&mut self, edit: &RubyEdit) -> anyhow::Result<()> {
+        match &mut self.typing {
+            Some(typing) => typing.annotate(edit),
             None => Ok(()),
         }
     }

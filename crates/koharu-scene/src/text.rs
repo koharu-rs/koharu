@@ -70,13 +70,17 @@ pub struct TextStyle {
 #[specta(type = Vec<Span>)]
 pub struct RichText(pub Vec<Span>);
 
-/// A string with its character marks.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+/// A string with its character marks and its ruby.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Span {
     pub insert: String,
     #[serde(default, skip_serializing_if = "unmarked")]
     pub attributes: CharStyle,
+    /// The small text set beside `insert`, such as its reading. Neighbouring
+    /// spans with the same ruby are one base, which it's set over once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ruby: Option<String>,
 }
 
 fn unmarked(style: &CharStyle) -> bool {
@@ -106,9 +110,32 @@ impl RichText {
         self.0.iter().map(|span| span.insert.as_str()).collect()
     }
 
+    /// Each ruby with its base, the UTF-8 offsets it's set over, in text
+    /// order.
+    #[must_use]
+    pub fn ruby(&self) -> Vec<(Range<usize>, &str)> {
+        let mut start = 0;
+        let mut bases: Vec<(Range<usize>, &str)> = Vec::new();
+        for span in &self.0 {
+            let range = start..start + span.insert.len();
+            start = range.end;
+            let Some(ruby) = &span.ruby else { continue };
+            match bases.last_mut() {
+                Some((base, text)) if base.end == range.start && text == ruby => {
+                    base.end = range.end;
+                }
+                _ => bases.push((range, ruby)),
+            }
+        }
+        bases
+    }
+
     /// `new` carrying these marks on the characters that stayed. A new
     /// character takes the marks of the one before it, kept or replaced, or of
-    /// the first character at the start, as typing does in a text editor.
+    /// the first character at the start, as typing does in a text editor. A
+    /// base keeps its ruby when its characters all stay, together, or when the
+    /// change is all inside it, and to no more than half of it, which takes it
+    /// in; one reworded otherwise loses it, since it reads the old wording.
     #[must_use]
     pub fn replaced(&self, new: &str) -> Self {
         let plain = self.text();
@@ -120,30 +147,78 @@ impl RichText {
         let unmarked = CharStyle::default();
         let mut last = marks.first().copied().unwrap_or(&unmarked);
         let mut consumed = 0;
+        let (mut from, mut to) = (0, 0);
+        // Each old offset whose character stayed, with its new one.
+        let mut stayed: Vec<(usize, usize)> = Vec::new();
         let mut spans = Vec::new();
         for change in TextDiff::from_chars(plain.as_str(), new).iter_all_changes() {
+            let length = change.value().len();
+            if change.tag() == ChangeTag::Equal {
+                stayed.push((from, to));
+            }
             if change.tag() != ChangeTag::Insert {
                 last = marks[consumed];
                 consumed += 1;
+                from += length;
             }
             if change.tag() != ChangeTag::Delete {
                 spans.push(Span {
                     insert: change.value().to_owned(),
                     attributes: last.clone(),
+                    ruby: None,
                 });
+                to += length;
             }
+        }
+        let changed = changed(&plain, new);
+        let bases: Vec<(Range<usize>, &str)> = self
+            .ruby()
+            .into_iter()
+            .filter_map(|(base, ruby)| {
+                let inside = changed.as_ref().is_some_and(|(changed, _)| {
+                    base.start <= changed.start
+                        && changed.end <= base.end
+                        && 2 * changed.len() <= base.len()
+                        // Typed at either end, it's outside.
+                        && !(changed.is_empty()
+                            && (changed.start == base.start || changed.end == base.end))
+                });
+                if let (true, Some((changed, inserted))) = (inside, &changed) {
+                    return Some((base.start..base.end - changed.len() + inserted, ruby));
+                }
+                let kept = &stayed[stayed.partition_point(|(at, _)| *at < base.start)
+                    ..stayed.partition_point(|(at, _)| *at < base.end)];
+                let start = kept.first()?.1;
+                let whole = kept.len() == plain[base.clone()].chars().count()
+                    && kept.iter().all(|(at, to)| at - base.start == to - start);
+                whole.then(|| (start..start + base.len(), ruby))
+            })
+            .collect();
+        let mut at = 0;
+        for span in &mut spans {
+            span.ruby = bases
+                .iter()
+                .find(|(base, _)| base.contains(&at))
+                .map(|(_, ruby)| (*ruby).to_owned());
+            at += span.insert.len();
         }
         joined(spans)
     }
 
     /// `range`, UTF-8 offsets on character boundaries, replaced by `insert`
     /// carrying `marks`, as typing over a selection does; the other
-    /// characters keep theirs.
+    /// characters keep theirs. What's typed inside a base is part of it, and
+    /// at its edge isn't.
     #[must_use]
     pub fn spliced(&self, range: Range<usize>, insert: &str, marks: &CharStyle) -> Self {
         let inserted = Span {
             insert: insert.to_owned(),
             attributes: marks.clone(),
+            ruby: self
+                .ruby()
+                .into_iter()
+                .find(|(base, _)| base.start < range.start && range.end < base.end)
+                .map(|(_, ruby)| ruby.to_owned()),
         };
         joined(
             self.slice(0..range.start)
@@ -163,6 +238,34 @@ impl RichText {
             self.slice(0..range.start)
                 .chain(restyled)
                 .chain(self.slice(range.end..usize::MAX)),
+        )
+    }
+
+    /// `range`'s characters as one base with `ruby` over them, or with none.
+    /// A base the range cuts loses its ruby on the rest, which it no longer
+    /// reads.
+    #[must_use]
+    pub fn annotated(&self, range: Range<usize>, ruby: Option<&str>) -> Self {
+        let touched = self
+            .ruby()
+            .into_iter()
+            .filter(|(base, _)| base.start < range.end && range.start < base.end)
+            .fold(range.clone(), |touched, (base, _)| {
+                touched.start.min(base.start)..touched.end.max(base.end)
+            });
+        let with = |range: Range<usize>, ruby: Option<&str>| {
+            let ruby = ruby.map(str::to_owned);
+            self.slice(range).map(move |span| Span {
+                ruby: ruby.clone(),
+                ..span
+            })
+        };
+        joined(
+            self.slice(0..touched.start)
+                .chain(with(touched.start..range.start, None))
+                .chain(with(range.clone(), ruby))
+                .chain(with(range.end..touched.end, None))
+                .chain(self.slice(touched.end..usize::MAX)),
         )
     }
 
@@ -195,6 +298,7 @@ impl RichText {
             (cut_from < cut_to).then(|| Span {
                 insert: span.insert[cut_from - from..cut_to - from].to_owned(),
                 attributes: span.attributes.clone(),
+                ruby: span.ruby.clone(),
             })
         })
     }
@@ -206,7 +310,7 @@ impl From<&str> for RichText {
             true => Vec::new(),
             false => vec![Span {
                 insert: text.to_owned(),
-                attributes: CharStyle::default(),
+                ..Span::default()
             }],
         })
     }
@@ -279,13 +383,66 @@ impl Default for Text {
     }
 }
 
-/// `spans` with empty ones dropped and equal neighbours joined.
+/// The one stretch of `old` that differs in `new`, and how long it is there;
+/// `None` when they're the same.
+fn changed(old: &str, new: &str) -> Option<(Range<usize>, usize)> {
+    let start: usize = old
+        .chars()
+        .zip(new.chars())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum();
+    let (old, new) = (&old[start..], &new[start..]);
+    let after: usize = old
+        .chars()
+        .rev()
+        .zip(new.chars().rev())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum();
+    let changed = start..start + old.len() - after;
+    let inserted = new.len() - after;
+    (!changed.is_empty() || inserted > 0).then_some((changed, inserted))
+}
+
+/// `spans` with empty ones and empty ruby dropped and equal neighbours joined.
+/// White space at a base's ends isn't read, so its ruby isn't over it: there it
+/// would keep the line from breaking beside the word.
 pub(crate) fn joined(spans: impl IntoIterator<Item = Span>) -> RichText {
+    let text = merged(spans);
+    let plain = text.text();
+    let loose: Vec<Range<usize>> = text
+        .ruby()
+        .into_iter()
+        .flat_map(|(base, _)| {
+            let read = &plain[base.clone()];
+            let start = base.end - read.trim_start().len();
+            let end = (base.start + read.trim_end().len()).max(start);
+            [base.start..start, end..base.end]
+        })
+        .filter(|space| !space.is_empty())
+        .collect();
+    loose.into_iter().fold(text, |text, space| {
+        merged(
+            text.slice(0..space.start)
+                .chain(
+                    text.slice(space.clone())
+                        .map(|span| Span { ruby: None, ..span }),
+                )
+                .chain(text.slice(space.end..usize::MAX)),
+        )
+    })
+}
+
+fn merged(spans: impl IntoIterator<Item = Span>) -> RichText {
     let mut out: Vec<Span> = Vec::new();
-    for span in spans {
+    for mut span in spans {
+        span.ruby = span.ruby.filter(|ruby| !ruby.is_empty());
         match out.last_mut() {
             _ if span.insert.is_empty() => {}
-            Some(last) if last.attributes == span.attributes => last.insert.push_str(&span.insert),
+            Some(last) if last.attributes == span.attributes && last.ruby == span.ruby => {
+                last.insert.push_str(&span.insert);
+            }
             _ => out.push(span),
         }
     }

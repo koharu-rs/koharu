@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { Choice } from '@/components/controls/Choice'
 import { ColorWell } from '@/components/controls/ColorWell'
 import { FontPicker } from '@/components/controls/FontPicker'
+import { RubyField } from '@/components/controls/RubyField'
 import { ContextBar } from '@/components/editor/ContextBar'
 import { toHex, toRgba } from '@/lib/color'
 import {
@@ -249,6 +250,7 @@ export function TypeBar() {
         value={mixed.has('fill') ? '' : chars.fill ? toHex(chars.fill) : BLACK}
         onChange={(color) => color && applyChars({ fill: toRgba(color) })}
       />
+      <RubyField typing={typing} />
       <div
         role='group'
         aria-label={t('inspector.alignment')}

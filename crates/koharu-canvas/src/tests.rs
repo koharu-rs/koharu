@@ -18,7 +18,7 @@ use ui_events::{
     },
 };
 
-use crate::{Brush, Canvas, CharKey, Colors, Effect, Notice, Tool};
+use crate::{Brush, Canvas, CharKey, Colors, Effect, Notice, RubyEdit, Tool};
 
 /// One renderer for every test, as the app has one, setting text in
 /// installed fonts so no test downloads one.
@@ -1856,6 +1856,84 @@ fn styling_a_typed_selection_marks_those_characters_and_a_caret_holds_it() {
             (" world", None, None),
             ("!", None, Some(30.0))
         ]
+    );
+}
+
+#[test]
+fn ruby_goes_over_the_base_its_field_opened_on_until_anything_else_changes() {
+    let Some(mut fixture) = unscaled(typed_text(json!([
+        {"insert": "Hel"}, {"insert": "lo", "ruby": "o"}, {"insert": " world"},
+    ]))) else {
+        return;
+    };
+    let text = layers(&fixture)[0];
+    fixture.canvas.set_tool(Tool::Text);
+    gesture(&mut fixture.canvas, (101.0, 220.0), (101.0, 220.0));
+    let key = |fixture: &mut Fixture, key, code, modifiers| {
+        press_key(&mut fixture.canvas, key, code, modifiers);
+    };
+    let ruby = |fixture: &mut Fixture, edit: RubyEdit| {
+        fixture.canvas.annotate_typing(&edit).expect("a ruby");
+    };
+    let set = |ruby: &str| RubyEdit::Set {
+        ruby: (!ruby.is_empty()).then(|| ruby.to_owned()),
+    };
+    let base = |fixture: &Fixture| {
+        let typing = fixture.canvas.typing().expect("typing");
+        let base = typing.base?;
+        Some((base.text, base.ruby, typing.annotating))
+    };
+    let based = |text: &str, ruby: Option<&str>, open: bool| {
+        Some((text.to_owned(), ruby.map(str::to_owned), open))
+    };
+    let none = Modifiers::default();
+    key(&mut fixture, NamedKey::Home, Code::Home, none);
+    assert_eq!(base(&fixture), None);
+    for _ in 0..3 {
+        key(&mut fixture, NamedKey::ArrowRight, Code::ArrowRight, SHIFT);
+    }
+    ruby(&mut fixture, RubyEdit::Open);
+    assert_eq!(base(&fixture), based("Hel", None, true));
+    // Passing through the neighbour's ruby joins nothing, and one taken off
+    // leaves the field on its base.
+    for typed in ["o", "oh", ""] {
+        ruby(&mut fixture, set(typed));
+    }
+    assert_eq!(base(&fixture), based("Hel", None, true));
+    ruby(&mut fixture, set("he"));
+    ruby(&mut fixture, RubyEdit::Keep);
+    assert_eq!(base(&fixture), based("Hel", Some("he"), false));
+    // Closed, it sets nothing.
+    ruby(&mut fixture, set("late"));
+    assert_eq!(base(&fixture), based("Hel", Some("he"), false));
+    // Over parts of two bases, cancelling puts both back.
+    key(&mut fixture, NamedKey::Home, Code::Home, none);
+    key(&mut fixture, NamedKey::ArrowRight, Code::ArrowRight, none);
+    for _ in 0..3 {
+        key(&mut fixture, NamedKey::ArrowRight, Code::ArrowRight, SHIFT);
+    }
+    ruby(&mut fixture, RubyEdit::Open);
+    ruby(&mut fixture, set("x"));
+    assert_eq!(base(&fixture), based("ell", Some("x"), true));
+    ruby(&mut fixture, RubyEdit::Cancel);
+    // A caret in a base, at its end included, opens on it; the caret moving on
+    // closes the field.
+    key(&mut fixture, NamedKey::Home, Code::Home, none);
+    for _ in 0..5 {
+        key(&mut fixture, NamedKey::ArrowRight, Code::ArrowRight, none);
+    }
+    ruby(&mut fixture, RubyEdit::Open);
+    assert_eq!(base(&fixture), based("lo", Some("o"), true));
+    key(&mut fixture, NamedKey::ArrowRight, Code::ArrowRight, none);
+    assert_eq!(base(&fixture), None);
+    ruby(&mut fixture, set("late"));
+    let effects = press_key(&mut fixture.canvas, NamedKey::Enter, Code::Enter, CONTROL);
+    assert_eq!(apply(&mut fixture, effects), ["set_text"]);
+    assert_eq!(
+        layer(&fixture, text)["content"],
+        json!([
+            {"insert": "Hel", "ruby": "he"}, {"insert": "lo", "ruby": "o"}, {"insert": " world"},
+        ])
     );
 }
 

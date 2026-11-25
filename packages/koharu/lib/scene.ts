@@ -110,8 +110,8 @@ export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
         const spans = letteringOf(layer)?.content ?? []
         const marked = spans.some((span) => keys.some((key) => span.attributes?.[key] != null))
         if (!marked) return [restyle]
-        const unmarked = spans.map(({ insert, attributes }) => ({
-          insert,
+        const unmarked = spans.map(({ attributes, ...span }) => ({
+          ...span,
           attributes: Object.fromEntries(
             Object.entries(attributes ?? {}).filter(
               ([key]) => !keys.includes(key as keyof CharStyle),

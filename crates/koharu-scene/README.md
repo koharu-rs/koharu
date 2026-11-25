@@ -103,7 +103,8 @@ translation.
 
 | Property | Model | Cite |
 |---|---|---|
-| `content` | rich text: spans in order, each a string with its character marks; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
+| `content` | rich text: spans in order, each a string with its character marks and its ruby; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
+| `ruby` | a span's: a string set small beside its characters, such as their reading; neighbouring spans with the same ruby are one base, which it's set over once, so one base can hold several styles | Clip Studio Paint's Reading string, which goes over a selected target string [CSP vertical text]; InDesign's `rubyString`, on characters and not on a character style [InDesign characters] [InDesign character styles] |
 | `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
 | `frame` | none (point text), a box (paragraph text), or a closed path that the text fills; a box or path frame also has a `fit` and an `anchor` | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
 | `fit` | `shrink` (the default): text that would overflow shrinks just enough to fit, down to half its set size, and past that it overflows; `none`: the set size always; `grow`, for a box only: the box keeps its inline size, and its block size follows the text, growing away from its `anchor`; `best`: the text grows or shrinks to the largest size the frame holds, shrinking as `shrink` does down to half its set size and then on until it fits | PowerPoint shrinks placeholder text "as you type" by default, and with fitting stopped the text "will overfill the box" [PowerPoint placeholders] [PowerPoint autofit]; Google Slides "Shrink text on overflow" and "Resize shape to fit text" [Google Slides fitting]; Keynote fits text to most text boxes by default [Keynote autosize]; Figma `HEIGHT` [Figma text resize]; InDesign Auto-Size [InDesign auto-size]; a SwiftUI minimum scale factor of 0.5 draws text "as small as half" [SwiftUI minimum scale]; Publisher's Best Fit shrinks or grows text to fill its box [Publisher copyfitting] |
@@ -130,6 +131,13 @@ selected type layer [Photoshop type]; styling selected characters writes marks.
 A typed character takes the marks of the one before it, or the first one's at
 the start, as typing does in an editor, and spans whose marks end up alike
 join.
+
+A ruby reads its base, so it's no style: a character typed inside a base is part
+of it, and one typed at its edge isn't. Typing out some of a base leaves its ruby
+on the rest, one reworded loses it, as a translation rerun rewords a text, and one
+given a ruby on only some of its characters loses its own on the rest. White space
+at a base's ends has no ruby. Ruby has no size or place of its own: it's half its base's size,
+over a line or on the right of a column, as JLREQ sets it in principle [JLREQ].
 
 A text holds its own values. Nothing is shared between texts, because a
 balloon's text length and size differ from its neighbours', so no one style
@@ -442,7 +450,8 @@ Each model also writes its `c2pa` action on the layers it wrote.
   isn't visible [CSP Story Editor]. Editing a row edits that layer; a text is
   deleted from the Layers panel or the canvas.
 - **Agent tools** read a page as `get_page` answers it, its layers nested in
-  reading order, and edit one block at a time by its id.
+  reading order, and edit one block at a time by its id, its translation as plain
+  text or as spans.
 
 ## 5. Editing
 
@@ -495,7 +504,8 @@ Read in October and November 2026.
   Fill], [Photoshop Content-Aware Fill], [Photoshop Content Credentials],
   [Photoshop leading], [Photoshop History panel], [Photoshop combine
   variations], [Photoshop transform], [Lightroom masking],
-  [InDesign auto-size], [InDesign alignment], [Acrobat OCR]
+  [InDesign auto-size], [InDesign alignment], [InDesign characters], [InDesign
+  character styles], [Acrobat OCR]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP layer
   masks], [CSP file objects], [CSP text], [CSP text editing], [CSP vertical
   text], [CSP balloons], [CSP text frame], [CSP text tool], [CSP frames], [CSP
@@ -509,7 +519,7 @@ Read in October and November 2026.
   minimum scale]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
   inside shapes dropped], [CSS masking], [CSS text], [CSS align], [CSS
-  line-height]
+  line-height], [JLREQ]
 - Document and translation formats: [PAGE-XML], [XLIFF]
 - Lettering and manga translation: [Comics Kingdom], [Manga balloon basics],
   [Search and Destroy letters], [Manga translation II]
@@ -531,6 +541,8 @@ Read in October and November 2026.
 [Lightroom masking]: https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html
 [InDesign auto-size]: https://web.archive.org/web/20260209035437/https://helpx.adobe.com/indesign/using/text-frame-fitting.html
 [InDesign alignment]: https://helpx.adobe.com/indesign/using/aligning-text.html
+[InDesign characters]: https://developer.adobe.com/indesign/dom/api/c/Character/
+[InDesign character styles]: https://developer.adobe.com/indesign/dom/api/c/CharacterStyle/
 [Photoshop transform]: https://helpx.adobe.com/photoshop/using/free-transformations-images-shapes-paths.html
 [Photoshop leading]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/adjust-line-and-character-spacing.html
 [Photoshop History panel]: https://helpx.adobe.com/photoshop/desktop/get-started/set-up-toolbars-panels/history-panel-overview.html
@@ -575,6 +587,7 @@ Read in October and November 2026.
 [CSS text]: https://www.w3.org/TR/css-text-3/#text-align-property
 [CSS align]: https://www.w3.org/TR/css-align-3/#distribution-block
 [CSS line-height]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/line-height
+[JLREQ]: https://www.w3.org/TR/jlreq/
 [PAGE-XML]: https://www.primaresearch.org/schema/PAGE/gts/pagecontent/2019-07-15/pagecontent.xsd
 [XLIFF]: https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#segment
 [Comics Kingdom]: https://comicskingdom.com/trending/blog/2024/07/22/do-you-speak-comics-part-2-balloons-and-bubbles

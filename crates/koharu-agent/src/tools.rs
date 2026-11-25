@@ -592,10 +592,15 @@ mod tests {
     #[test]
     fn edit_offers_the_ops_agents_send() {
         let schema = Edit.parameters().to_string();
-        for op in ["update_layer", "set_text", "set_attribute", "translation"] {
+        for op in [
+            "update_layer",
+            "set_rich_text",
+            "set_attribute",
+            "translation",
+        ] {
             assert!(schema.contains(op), "{op}");
         }
-        for op in ["add_file", "write_pixels", "set_rich_text", "\"add_page\""] {
+        for op in ["add_file", "write_pixels", "\"add_page\""] {
             assert!(!schema.contains(op), "{op}");
         }
     }
@@ -645,6 +650,33 @@ mod tests {
             .expect("the balloon");
         assert_eq!(whole["outline"], "M10 20 H50 V40 H10 Z");
         assert_eq!(whole["children"][0], *inside);
+    }
+
+    #[tokio::test]
+    async fn rich_text_is_written_as_the_schema_offers_it_and_read_back() {
+        let (_dir, tools) = open();
+        let page = add_page(&tools, 100, 100);
+        let spans = json!([
+            {"insert": "The "},
+            {"insert": "Holy Sword", "ruby": "Excalibur", "attributes": {"weight": 700}},
+            {"insert": " rises"},
+        ]);
+        let args = json!({"label": "Letter", "ops": [
+            {"op": "add_layer", "id": "$block", "page": page, "index": 0,
+             "layer": {"kind": "block", "source": {}}},
+            {"op": "set_rich_text", "layer": "$block", "spans": spans},
+        ]});
+        assert_eq!(refusal(&Edit.parameters(), &args), None);
+        let mut context = tools.tool_context();
+        Edit.call(&mut context, serde_json::from_value(args).expect("an edit"))
+            .await
+            .expect("the block is lettered");
+        let read = GetPage
+            .call(&mut context, PageArgs { page })
+            .await
+            .expect("the page");
+        let content = &read["layers"][0]["translation"]["content"];
+        assert_eq!(*content, spans, "{read}");
     }
 
     #[tokio::test]

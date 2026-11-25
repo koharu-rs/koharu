@@ -21,5 +21,5 @@ pub use effect::{Effect, Notice};
 pub use kurbo::{Point, Rect, Size, TranslateScale, Vec2};
 pub use settings::{Brush, Colors, Story, Tool};
 pub use snapshot::Snapshot;
-pub use typing::{CharKey, Typed};
+pub use typing::{CharKey, RubyBase, RubyEdit, Typed};
 pub use view::Camera;

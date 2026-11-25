@@ -21,6 +21,7 @@ mod label;
 mod lettering;
 mod lines;
 mod room;
+mod ruby;
 mod shape;
 mod style;
 
@@ -44,6 +45,8 @@ pub struct TextRun {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedText {
     pub runs: Vec<TextRun>,
+    /// The runs its ruby is set in, each one's range its base's.
+    pub ruby: Vec<TextRun>,
     /// The box the text was laid out in, in its own coordinates: the frame's
     /// box, a grown box, a path's bounds, or a point text's lines.
     pub frame: Rect,

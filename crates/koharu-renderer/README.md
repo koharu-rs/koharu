@@ -60,6 +60,7 @@ lines centred on one axis in a balloon, or started together on it.
 | vertical text | columns run right to left; what Unicode sets sideways in vertical text, such as Latin letters and digits, turns a quarter clockwise, and so does what it transforms or else rotates, such as `〜`, in a font without a vertical form for it; `!` and `?` set full width, and a run of two or three sits upright in one cell, as does a number of one or two digits outside a Latin word; a hyphen, a dividing mark, a middle dot, or an inseparable mark, such as `〜`, `！`, `・`, `：`, `—`, or `…`, and Chinese's `·`, `⋯`, and `～`, centres its ink across the column; `、` and `。` keep their font's vertical forms in the column's corner, but Chinese centres its commas and full stops in their cells; ASCII `:` and `;` stay on a sideways run's baseline | Unicode's Vertical_Orientation [UAX 50]; CSS's `text-orientation: mixed` and `text-combine-upright: digits 2` [CSS writing modes]; JLREQ's character classes cl-03 to cl-08 and its Western characters, cl-27 [JLREQ]; CLREQ's interpunct, ellipsis, and connector, and its stops in the middle of their cells as Taiwan and Hong Kong set them [CLREQ] |
 | line head | a line opening with a full-width opening bracket, such as `「` or `『`, starts at the bracket's ink, without the half em before it | JLREQ counts an opening bracket half an em wide with half an em of space before it, and starts every line with no space, as JIS X 4051 does [JLREQ] |
 | right to left | a line's runs show in the order the bidirectional algorithm gives, and a right-to-left paragraph's lines start on the right | [UAX 9] |
+| ruby | half its base's size, over a line or on the right of a column, its em box on its base's; whichever of the two is shorter is spread to the other's length, full-width characters taking equal shares with half a share at each end and other text staying together, so they're centred and a ruby never reaches over its base's neighbours; a base never breaks; a line with ruby opens as far as its ruby and base need, and a path's lines, which share one pitch, all open with it | W3C's rules for simple ruby, which centre the two, space them 1-2-1, keep Western letters together, and let no ruby overhang [Simple ruby]; CSS's `ruby-align: space-around`, and the leading it adds so that equal lines of ruby don't overlap [CSS ruby]; JLREQ's half size [JLREQ] |
 | strokes | under every fill, so a stroke never covers a neighbouring letter | |
 | overflow | text that nothing holds still draws, past its frame | |
 | typing | a text laid out as a render lays it out says where a caret before any character stands, what a selection covers, which character a point lands nearest, and each line's characters; a ligature's characters share its width evenly, and an empty text has a caret a line tall where its first line would start | |
@@ -91,7 +92,8 @@ far as that allows.
 Read in November 2026.
 
 - Libraries: [vello], [HarfRust], [ICU4X], [jieba], [fontique], [Koharu fonts]
-- Unicode and W3C: [UAX 14], [UAX 9], [UAX 50], [CSS writing modes], [JLREQ], [CLREQ]
+- Unicode and W3C: [UAX 14], [UAX 9], [UAX 50], [CSS writing modes], [CSS ruby], [Simple ruby],
+  [JLREQ], [CLREQ]
 - Adobe: [Photoshop hyphenation], [Photoshop text in shapes]
 - Lettering: [Comicraft glossary]
 
@@ -105,6 +107,8 @@ Read in November 2026.
 [UAX 9]: https://www.unicode.org/reports/tr9/
 [UAX 50]: https://www.unicode.org/reports/tr50/
 [CSS writing modes]: https://www.w3.org/TR/css-writing-modes-4/
+[CSS ruby]: https://drafts.csswg.org/css-ruby-1/
+[Simple ruby]: https://www.w3.org/TR/simple-ruby/
 [JLREQ]: https://www.w3.org/TR/jlreq/
 [CLREQ]: https://www.w3.org/TR/clreq/
 [Photoshop hyphenation]: https://developer.adobe.com/photoshop/uxp/2022/ps_reference/objects/options/hyphenationproperties/

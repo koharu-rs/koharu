@@ -59,15 +59,12 @@ fn set_text_keeps_marks_on_the_characters_that_stayed() {
             spans: vec![
                 Span {
                     insert: "a".into(),
-                    attributes: Default::default(),
+                    ..Span::default()
                 },
-                Span {
-                    insert: "".into(),
-                    attributes: Default::default(),
-                },
+                Span::default(),
                 Span {
                     insert: "b".into(),
-                    attributes: Default::default(),
+                    ..Span::default()
                 },
             ],
         }]))
@@ -89,10 +86,11 @@ fn typing_splices_and_marks_rich_text_keeping_the_other_characters_marks() {
         Span {
             insert: "Hello".to_owned(),
             attributes: bold.clone(),
+            ruby: None,
         },
         Span {
             insert: " world".to_owned(),
-            attributes: CharStyle::default(),
+            ..Span::default()
         },
     ]);
     // A character typed at the bold word's end takes its marks.
@@ -119,6 +117,95 @@ fn typing_splices_and_marks_rich_text_keeping_the_other_characters_marks() {
     assert_eq!(text.marks_at(0), bold);
     assert_eq!(text.marks_at(6), CharStyle::default());
     assert_eq!(RichText::default().marks_at(0), CharStyle::default());
+}
+
+/// Each span's characters and its ruby.
+fn annotated(text: &RichText) -> Vec<(&str, Option<&str>)> {
+    text.0
+        .iter()
+        .map(|span| (span.insert.as_str(), span.ruby.as_deref()))
+        .collect()
+}
+
+#[test]
+fn a_base_keeps_its_ruby_until_it_is_reworded() {
+    let text = RichText::from("the Holy Sword rises").annotated(4..14, Some("Excalibur"));
+    let ruby = Some("Excalibur");
+    assert_eq!(
+        annotated(&text),
+        [("the ", None), ("Holy Sword", ruby), (" rises", None)]
+    );
+    // What's typed inside a base is part of it, and at its edges isn't.
+    let plain = CharStyle::default();
+    assert_eq!(
+        text.spliced(8..8, "y", &plain).ruby(),
+        [(4..15, "Excalibur")]
+    );
+    assert_eq!(
+        text.spliced(4..4, "x", &plain).ruby(),
+        [(5..15, "Excalibur")]
+    );
+    assert_eq!(
+        text.spliced(14..14, "s", &plain).ruby(),
+        [(4..14, "Excalibur")]
+    );
+    // Deleting from its middle leaves one base, and styling it two spans of one.
+    assert_eq!(
+        text.spliced(8..9, "", &plain).ruby(),
+        [(4..13, "Excalibur")]
+    );
+    let bold = CharStyle {
+        weight: Some(700),
+        ..CharStyle::default()
+    };
+    let styled = text.marked(9..14, &bold);
+    assert_eq!(styled.0.len(), 4);
+    assert_eq!(styled.ruby(), [(4..14, "Excalibur")]);
+
+    // A new wording keeps the ruby of a base it leaves alone or changes a part
+    // of, its last letter too, and drops that of one it runs past or rewords.
+    let replaced = |new: &str| text.replaced(new);
+    assert_eq!(
+        annotated(&replaced("and the Holy Swords rose")),
+        [("and the ", None), ("Holy Sword", ruby), ("s rose", None)]
+    );
+    assert_eq!(
+        annotated(&replaced("the Holy Sworn rises")),
+        [("the ", None), ("Holy Sworn", ruby), (" rises", None)]
+    );
+    for new in [
+        "the 8 rises",
+        "the Holy Grail sets",
+        "She left home yesterday.",
+    ] {
+        assert_eq!(annotated(&replaced(new)), [(new, None)]);
+    }
+    // Nor does a whole text's stay for the letters two wordings share.
+    let whole = RichText::from("Holy Sword").annotated(0..10, Some("Excalibur"));
+    assert_eq!(whole.replaced("High Steward").ruby(), []);
+}
+
+#[test]
+fn ruby_is_never_over_the_white_space_at_its_base_s_ends() {
+    let text = RichText::from(
+        "you shall
+ fall now",
+    );
+    assert_eq!(
+        text.annotated(9..16, Some("ruby")).ruby(),
+        [(11..15, "ruby")]
+    );
+    assert_eq!(text.annotated(9..11, Some("ruby")), text);
+}
+
+#[test]
+fn a_ruby_on_part_of_a_base_takes_the_rest_s_off() {
+    let text = RichText::from("東京都").annotated(0..9, Some("とうきょうと"));
+    assert_eq!(
+        annotated(&text.annotated(0..6, Some("とうきょう"))),
+        [("東京", Some("とうきょう")), ("都", None)]
+    );
+    assert_eq!(annotated(&text.annotated(3..6, None)), [("東京都", None)]);
 }
 
 #[test]

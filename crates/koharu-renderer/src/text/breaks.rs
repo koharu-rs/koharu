@@ -15,7 +15,7 @@ use icu_segmenter::{
 };
 use jieba_rs::Jieba;
 
-use super::{itemize::Orientation, shape::ShapedText};
+use super::{itemize::Orientation, ruby::Ruby, shape::ShapedText};
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
@@ -72,6 +72,8 @@ pub(super) struct Segment {
     pub punctuation: bool,
     /// Its largest span's size.
     pub size: f32,
+    /// How far its ruby reaches above its line's centre; 0 without any.
+    pub ruby: f32,
 }
 
 /// A piece of text between break opportunities: its range, without a line
@@ -194,16 +196,16 @@ fn points(text: &str, range: Range<usize>, breaking: Breaking, lang: Lang) -> Ve
 pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> {
     let styled = shaped.styled;
     // Where the text may break, where a run starts or ends or a cluster
-    // starts but not inside an upright group; and the advance of the text
-    // before each byte, each glyph's at its cluster and an upright group's
-    // cell at its start.
+    // starts but not inside an upright group or under a ruby; and the advance
+    // of the text before each byte, each glyph's at its cluster and an upright
+    // group's cell at its start.
     let mut breakable = vec![false; styled.text.len() + 1];
     let mut advances = vec![0.0; styled.text.len() + 1];
     for run in &shaped.runs {
         breakable[run.range.start] = true;
         breakable[run.range.end] = true;
         if run.orientation == Orientation::TateChuYoko {
-            advances[run.range.start] += f64::from(styled.spans[run.span].size);
+            advances[run.range.start] += f64::from(shaped.cell(run));
             continue;
         }
         for glyph in shaped.glyphs(run) {
@@ -211,12 +213,15 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
             advances[glyph.cluster] += f64::from(glyph.advance);
         }
     }
+    for ruby in &styled.ruby {
+        breakable[ruby.base.start + 1..ruby.base.end].fill(false);
+    }
     let mut sum = 0.0;
     for value in &mut advances {
         (*value, sum) = (sum, sum + *value);
     }
-    // A cut inside a cluster, such as a ligature, or inside an upright group
-    // joins the next piece.
+    // A cut inside a cluster, such as a ligature, inside an upright group, or
+    // under a ruby joins the next piece.
     let mut segments = Vec::new();
     let mut joined = None;
     for (range, next, after) in opportunities(&styled.text, breaking, styled.hyphenation) {
@@ -249,6 +254,12 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
         // An empty paragraph has no runs, and keeps its span's leading, as
         // Photoshop's does.
         .unwrap_or_else(|| styled.spans[styled.span_at(range.start)].size);
+    let ruby = styled
+        .ruby
+        .iter()
+        .filter(|ruby| ruby.base.start < range.end && range.start < ruby.base.end)
+        .map(Ruby::rise)
+        .fold(0.0, f32::max);
     Segment {
         visible_end,
         advance: advance(range.clone()),
@@ -260,6 +271,7 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
         after,
         punctuation,
         size,
+        ruby,
         range,
     }
 }
@@ -305,6 +317,7 @@ mod tests {
             hyphenation: None,
             chinese: false,
             frame: Frame::Point,
+            ruby: Vec::new(),
         }
     }
 

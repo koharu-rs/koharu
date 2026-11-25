@@ -217,6 +217,8 @@
     "fontWeight": "字体粗细",
     "horizontal": "横排",
     "opacity": "不透明度",
+    "removeRuby": "移除注音",
+    "ruby": "注音",
     "selectPage": "选择一个页面以检查其图层。",
     "source": "原文",
     "text": "文本",

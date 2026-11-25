@@ -217,6 +217,8 @@
     "fontWeight": "Grosor de fuente",
     "horizontal": "Horizontal",
     "opacity": "Opacidad",
+    "removeRuby": "Quitar ruby",
+    "ruby": "Ruby",
     "selectPage": "Selecciona una página para inspeccionar sus capas.",
     "source": "Texto original",
     "text": "Texto",

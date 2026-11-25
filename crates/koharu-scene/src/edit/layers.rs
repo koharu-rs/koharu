@@ -225,7 +225,10 @@ impl Run<'_, '_> {
         {
             return Err(Error::invalid(
                 op,
-                format!("{:?} changes only through set_text", content.as_str()),
+                format!(
+                    "{:?} changes only through set_text or set_rich_text",
+                    content.as_str()
+                ),
             ));
         }
         let mut base = old.clone();

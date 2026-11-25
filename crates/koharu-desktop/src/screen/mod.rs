@@ -28,7 +28,8 @@ use std::{
 use anyhow::{Context as _, Result};
 use image::{DynamicImage, RgbaImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use koharu_canvas::{
-    Brush, Camera, Canvas, Colors, Effect, Facing, Rect, Snapshot, Story, Tool, Typed, Vec2,
+    Brush, Camera, Canvas, Colors, Effect, Facing, Rect, RubyEdit, Snapshot, Story, Tool, Typed,
+    Vec2,
 };
 use koharu_renderer::Gpu;
 use koharu_scene::{Bounds, CharStyle, LayerId, PageId};
@@ -186,6 +187,17 @@ impl Screen {
                 && let Err(error) = canvas.style_typing(&patch)
             {
                 tracing::error!("the canvas failed to style its typing: {error:#}");
+            }
+        });
+    }
+
+    /// What the type bar's ruby field does while typing.
+    pub fn annotate_typing(&self, edit: RubyEdit) {
+        self.change(move |main| {
+            if let Some(canvas) = &mut main.canvas
+                && let Err(error) = canvas.annotate_typing(&edit)
+            {
+                tracing::error!("the canvas failed to set ruby on its typing: {error:#}");
             }
         });
     }

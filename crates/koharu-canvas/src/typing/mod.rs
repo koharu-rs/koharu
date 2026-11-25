@@ -16,7 +16,7 @@ use koharu_scene::{CharStyle, Content, Edit, LayerId, Op, Page, RichText, Text, 
 use kurbo::{Affine, Line, Point, Rect};
 
 pub(crate) use self::keys::Keyed;
-pub use self::style::{CharKey, Typed};
+pub use self::style::{CharKey, RubyBase, RubyEdit, Typed};
 use crate::{Effect, tools::added};
 
 /// How long the caret shows, and then hides, as Windows blinks one.
@@ -53,6 +53,10 @@ pub(crate) struct Typing {
     anchor: usize,
     /// The marks the next character typed takes, set at the caret.
     held: Option<CharStyle>,
+    /// While the ruby field is open, the base it's on and the content it
+    /// opened on, which each ruby typed is set in anew: a half-typed one that
+    /// matches its neighbour's would join the two bases.
+    annotating: Option<(Range<usize>, RichText)>,
     composition: Option<Composition>,
     /// Where moving up and down keeps the caret along the lines.
     goal: Option<f64>,
@@ -103,6 +107,7 @@ impl Typing {
             caret: 0,
             anchor: 0,
             held: None,
+            annotating: None,
             composition: None,
             goal: None,
             since: Instant::now(),
@@ -124,7 +129,7 @@ impl Typing {
     /// another change left them, keeping what's typed.
     pub fn rebase(&mut self, text: &Text) -> anyhow::Result<()> {
         self.base = text.clone();
-        self.relay()
+        self.relay_annotating()
     }
 
     pub fn version(&self) -> u64 {
@@ -234,8 +239,17 @@ impl Typing {
         Ok(())
     }
 
-    /// Marks a change the caret shows from.
+    /// Lays it out again as `relay` does, the ruby field staying open.
+    fn relay_annotating(&mut self) -> anyhow::Result<()> {
+        let annotating = self.annotating.take();
+        self.relay()?;
+        self.annotating = annotating;
+        Ok(())
+    }
+
+    /// Marks a change the caret shows from, which closes the ruby field.
     fn touch(&mut self) {
+        self.annotating = None;
         self.version += 1;
         self.since = Instant::now();
     }
@@ -404,6 +418,57 @@ impl Typing {
         self.relay()
     }
 
+    /// What a ruby goes over: the base the ruby field is on, the selection but
+    /// the white space at its ends, or the base of the character before the
+    /// caret, or of the first at the start.
+    fn base(&self) -> Option<Range<usize>> {
+        if let Some((base, _)) = &self.annotating {
+            return Some(base.clone());
+        }
+        let range = self.selected();
+        if !range.is_empty() {
+            let plain = self.content.text();
+            let selected = &plain[range.clone()];
+            let start = range.end - selected.trim_start().len();
+            let end = range.start + selected.trim_end().len();
+            return (start < end).then_some(start..end);
+        }
+        let at = range.start;
+        self.content
+            .ruby()
+            .into_iter()
+            .map(|(base, _)| base)
+            .find(|base| at <= base.end && (base.start < at || at == 0 && base.start == 0))
+    }
+
+    /// What the ruby field does: it opens on a base, and sets its ruby until it
+    /// closes.
+    pub fn annotate(&mut self, edit: &RubyEdit) -> anyhow::Result<()> {
+        match edit {
+            RubyEdit::Open => {
+                self.settle();
+                self.relay()?;
+                self.annotating = self.base().map(|base| (base, self.content.clone()));
+            }
+            RubyEdit::Set { ruby } => {
+                let Some((base, opened)) = &self.annotating else {
+                    return Ok(());
+                };
+                self.content = opened.annotated(base.clone(), ruby.as_deref());
+                self.relay_annotating()?;
+            }
+            RubyEdit::Keep => self.touch(),
+            RubyEdit::Cancel => {
+                let Some((_, opened)) = self.annotating.take() else {
+                    return Ok(());
+                };
+                self.content = opened;
+                self.relay()?;
+            }
+        }
+        Ok(())
+    }
+
     /// The input method's text as it composes, empty when it stops; it
     /// replaces the selection.
     pub fn compose(&mut self, text: &str, selected: Option<Range<usize>>) -> anyhow::Result<()> {
@@ -448,6 +513,16 @@ impl Typing {
             layer: self.target(),
             chars,
             mixed,
+            base: self.base().map(|base| RubyBase {
+                ruby: self
+                    .content
+                    .ruby()
+                    .into_iter()
+                    .find(|(of, _)| of.start <= base.start && base.end <= of.end)
+                    .map(|(_, ruby)| ruby.to_owned()),
+                text: self.content.text()[base].to_owned(),
+            }),
+            annotating: self.annotating.is_some(),
         }
     }
 

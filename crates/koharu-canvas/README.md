@@ -21,7 +21,7 @@ same way and undo the same way.
 | Part | Model | Cite |
 |---|---|---|
 | input | W3C pointer events: one stream for mouse, pen, and touch, each with its position, buttons, and pressure; and W3C keyboard events while the host gives the canvas the keys. A key it doesn't take goes back to the host, and a key whose press it took stays its own until released, so holding it never reaches the host halfway. While typing, the text takes its keys, repeats included, and the input method's composition | Pointer Events [Pointer Events]; UI Events [UI Events key] |
-| typing | the text typed into: its rich text as typed, its caret and selection, the style held at the caret for the next characters, and the input method's composition, laid out on every change and drawn in its layer's place. The type bar styles its selected characters. Leaving it commits one step, none when nothing changed, and a new text is added only with characters in it; Escape drops what was typed | Photoshop edits a type layer in place on its canvas, its input method composing inline [Photoshop inline input], and styles selected characters from its Character panel [Photoshop type] |
+| typing | the text typed into: its rich text as typed, its caret and selection, the style held at the caret for the next characters, and the input method's composition, laid out on every change and drawn in its layer's place. The type bar styles its selected characters and sets ruby over them, or changes the ruby of the base the caret is in, the text as it was kept until the field closes, so cancelling puts it back; moving the caret or changing the text closes it. Leaving it commits one step, none when nothing changed, and a new text is added only with characters in it; Escape drops what was typed | Photoshop edits a type layer in place on its canvas, its input method composing inline [Photoshop inline input], and styles selected characters from its Character panel [Photoshop type]; Clip Studio Paint sets a reading over the selected text [CSP readings] |
 | cursor | CSS cursors, which the host shows | the CSS `cursor` property [CSS UI] |
 | view | where the page shows: the canvas's place in the window, its scale factor, and the camera from page points to the screen's pixels, with pan and zoom. Pointer events become page points here and nowhere else | |
 | what's shown | the frame the renderer last drew, the page and project it drew, and what each shown layer offers: its frame, its handles, and how it resizes and turns | |
@@ -74,7 +74,7 @@ Read in November 2026.
   paths], [Photoshop path selection], [Photoshop anchor points], [InDesign paths], [Photoshop
   inline input], [Photoshop marquee], [Photoshop lasso], [Photoshop selections], [Photoshop
   Generative Fill]
-- Clip Studio Paint: [CSP layer masks], [CSP frames]
+- Clip Studio Paint: [CSP layer masks], [CSP frames], [CSP readings]
 - ABBYY: [FineReader areas]
 
 [Pointer Events]: https://www.w3.org/TR/pointerevents3/
@@ -90,6 +90,7 @@ Read in November 2026.
 [Photoshop inline input]: https://community.adobe.com/bug-reports-711/p-characters-are-not-displayed-when-typing-japanese-in-photoshop-23-0-and-22-5-2-for-windows-658744
 [CSP layer masks]: https://help.clip-studio.com/en-us/manual_en/180_layers/Layer_masks.htm
 [CSP frames]: https://help.clip-studio.com/en-us/manual_en/540_comic/Frames_and_Panels.htm
+[CSP readings]: https://help.clip-studio.com/en-us/manual_en/480_text/Vertical_text_and_readings.htm
 [FineReader areas]: https://help.abbyy.com/en-us/finereader/16/user_guide/editareas
 [Photoshop layer masks]: https://helpx.adobe.com/photoshop/using/masking-layers.html
 [Photoshop marquee]: https://helpx.adobe.com/photoshop/desktop/make-selections/get-started-selections/make-selections-with-marquee-tools.html

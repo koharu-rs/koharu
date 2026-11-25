@@ -217,6 +217,8 @@
     "fontWeight": "Graisse",
     "horizontal": "Horizontal",
     "opacity": "Opacité",
+    "removeRuby": "Retirer le ruby",
+    "ruby": "Ruby",
     "selectPage": "Sélectionnez une page pour inspecter ses calques.",
     "source": "Texte source",
     "text": "Texte",

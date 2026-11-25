@@ -33,6 +33,8 @@ can't. The scene and the pipeline know nothing of tools.
   description, where it names each type once: inlined, they repeat until it
   takes more than a small model's context. An edit that doesn't fit it fails
   with what's wrong.
+- **Part of a text** is styled, or given ruby, by its spans, the whole text in order
+  as `get_page` answers it, so a model counts no characters.
 - **What's sent whole is small.** The outline that goes with every request has
   each page's id and progress and no more, and `get_page` gives a path's bounds
   for the path and leaves out attributes, masks, and clean-ups, as Figma's
