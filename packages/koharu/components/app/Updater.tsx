@@ -1,10 +1,12 @@
 'use client'
 
+import { getVersion } from '@tauri-apps/api/app'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, type Update } from '@tauri-apps/plugin-updater'
-import { Download, RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { CircleCheck, Download, RefreshCw } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { create } from 'zustand'
 
 import { Markdown } from '@/components/controls/Markdown'
 import {
@@ -22,28 +24,33 @@ import { Progress, ProgressValue } from '@koharu/ui/components/progress'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'
 
 type UpdateState =
+  | { kind: 'latest'; version: string }
   | { kind: 'available'; update: Update }
   | { kind: 'downloading'; update: Update; downloaded: number; total: number | null }
   | { kind: 'error'; update: Update; message: string }
 
+/** What the dialog shows, closed while it's null. */
+const useUpdater = create<{ state: UpdateState | null }>()(() => ({ state: null }))
+
+const setState = (state: UpdateState | null) => useUpdater.setState({ state })
+
+/** Offers a newer release when there's one; a check the user `asked` for also says when there's
+ * none, as it does when the check fails, such as while a release's files are still being built.
+ * The check at launch and Help's can both find one; the dialog keeps the one it has. */
+export async function checkForUpdates(asked: boolean): Promise<void> {
+  const update = await check().catch(() => null)
+  if (useUpdater.getState().state) void update?.close()
+  else if (update) setState({ kind: 'available', update })
+  else if (asked) setState({ kind: 'latest', version: await getVersion() })
+}
+
 export function Updater() {
   const { t, i18n } = useTranslation()
-  const [state, setState] = useState<UpdateState | null>(null)
+  const state = useUpdater((updater) => updater.state)
+  const popup = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    let active = true
-    void check()
-      .then((update) => {
-        if (active && update) {
-          setState({ kind: 'available', update })
-        } else if (update) {
-          void update.close()
-        }
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
+    void checkForUpdates(false)
   }, [])
 
   const install = (update: Update) => {
@@ -81,33 +88,38 @@ export function Updater() {
       open
       onOpenChange={(open) => {
         if (!open && !downloading) {
-          void state.update.close()
+          if (state.kind !== 'latest') void state.update.close()
           setState(null)
         }
       }}
     >
-      <AlertDialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden'>
+      {/* Focus starts on the dialog, not on the first link in the release notes. */}
+      <AlertDialogContent
+        ref={popup}
+        initialFocus={state.kind === 'available' ? popup : true}
+        className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden'
+      >
         <AlertDialogHeader className='flex shrink-0 flex-row items-start gap-4 text-left'>
           <AlertDialogMedia className='mb-0 shrink-0'>
-            {state.kind === 'error' ? (
+            {state.kind === 'latest' ? (
+              <CircleCheck className='size-5' />
+            ) : state.kind === 'error' ? (
               <RefreshCw className='size-5' />
             ) : (
               <Download className='size-5' />
             )}
           </AlertDialogMedia>
-          <div className='min-w-0 space-y-1.5'>
-            <AlertDialogTitle>
-              {state.kind === 'available'
-                ? t('updater.available.title')
-                : state.kind === 'downloading'
-                  ? t('updater.downloading.title')
-                  : t('updater.error.title')}
+          <div className='min-w-0 space-y-0.5'>
+            <AlertDialogTitle className='text-sm'>
+              {t(`updater.${state.kind}.title`)}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {state.kind === 'available' ? (
+            <AlertDialogDescription className='text-xs'>
+              {state.kind === 'latest' || state.kind === 'available' ? (
                 <Trans
-                  i18nKey='updater.available.description'
-                  values={{ version: state.update.version }}
+                  i18nKey={`updater.${state.kind}.description`}
+                  values={{
+                    version: state.kind === 'latest' ? state.version : state.update.version,
+                  }}
                   components={{ strong: <strong className='font-medium text-foreground' /> }}
                 />
               ) : state.kind === 'downloading' ? (
@@ -150,13 +162,15 @@ export function Updater() {
         )}
 
         {!downloading && (
-          <AlertDialogFooter className='shrink-0'>
+          <AlertDialogFooter className='m-0 shrink-0 border-0 bg-transparent p-0'>
             <AlertDialogCancel>
               {state.kind === 'available' ? t('updater.later') : t('updater.close')}
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => install(state.update)}>
-              {state.kind === 'available' ? t('updater.update') : t('updater.retry')}
-            </AlertDialogAction>
+            {state.kind !== 'latest' && (
+              <AlertDialogAction onClick={() => install(state.update)}>
+                {state.kind === 'available' ? t('updater.update') : t('updater.retry')}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         )}
       </AlertDialogContent>

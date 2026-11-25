@@ -1,7 +1,7 @@
 'use client'
 
 import * as Sentry from '@sentry/nextjs'
-import { useIsMutating } from '@tanstack/react-query'
+import { useIsMutating, useMutation } from '@tanstack/react-query'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { BookOpen, FilePlus2, FolderOpen, LoaderCircle, PenLine } from 'lucide-react'
 import Image from 'next/image'
@@ -9,6 +9,7 @@ import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
+import { checkForUpdates } from '@/components/app/Updater'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { send, useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
 import { deleteSelection } from '@/lib/scene'
@@ -53,6 +54,7 @@ export function TitleBar() {
   const reading = useKoharuStore((state) => state.reading)
   const setReading = useKoharuStore((state) => state.setReading)
   const { importPages, importing } = useImportPages()
+  const updateCheck = useMutation({ mutationFn: () => checkForUpdates(true) })
   // The selection keeps a page an undo or an agent took away.
   const exportable = pages.map(({ id }) => id).filter((id) => selectedPages.includes(id))
 
@@ -242,6 +244,9 @@ export function TitleBar() {
                 {t('menu.feedback')}
               </MenubarItem>
               <MenubarSeparator />
+              <MenubarItem disabled={updateCheck.isPending} onClick={() => updateCheck.mutate()}>
+                {t('menu.checkForUpdates')}
+              </MenubarItem>
               <MenubarItem onClick={() => setAboutOpen(true)}>{t('menu.about')}</MenubarItem>
             </MenubarContent>
           </MenubarMenu>

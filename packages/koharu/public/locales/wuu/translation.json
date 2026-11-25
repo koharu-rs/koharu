@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "关于",
+    "checkForUpdates": "检查更新",
     "closeProject": "关闭项目",
     "delete": "删除拣中个内容",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "更新失败哉"
     },
     "later": "后首来再更新",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> 已经是最新版本哉",
+      "title": "呒没更新"
+    },
     "noNotes": "呒没发行说明。",
     "retry": "再试一趟",
     "update": "更新"

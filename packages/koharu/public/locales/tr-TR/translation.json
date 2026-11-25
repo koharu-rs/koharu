@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "Hakkında",
+    "checkForUpdates": "Güncellemeleri denetle",
     "closeProject": "Projeyi Kapat",
     "delete": "Seçilenleri Sil",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "Güncelleme başarısız"
     },
     "later": "Daha sonra",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> en son sürüm",
+      "title": "Güncelleme yok"
+    },
     "noNotes": "Sürüm notu sağlanmadı.",
     "retry": "Tekrar dene",
     "update": "Güncelle"

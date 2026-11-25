@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "About",
+    "checkForUpdates": "Check for Updates",
     "closeProject": "Close Project",
     "delete": "Delete Selected",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "Update failed"
     },
     "later": "Later",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> is the latest version",
+      "title": "You’re up to date"
+    },
     "noNotes": "No release notes provided.",
     "retry": "Retry",
     "update": "Update"

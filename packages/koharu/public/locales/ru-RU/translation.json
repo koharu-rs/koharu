@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "О программе",
+    "checkForUpdates": "Проверить обновления",
     "closeProject": "Закрыть проект",
     "delete": "Удалить выбранное",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "Ошибка обновления"
     },
     "later": "Позже",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> — последняя версия",
+      "title": "Обновлений нет"
+    },
     "noNotes": "Примечания к выпуску отсутствуют.",
     "retry": "Повторить",
     "update": "Обновить"

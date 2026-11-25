@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "關於",
+    "checkForUpdates": "檢查更新",
     "closeProject": "關閉專案",
     "delete": "刪除所選項目",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "更新失敗"
     },
     "later": "稍後",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> 已是最新版本",
+      "title": "沒有可用更新"
+    },
     "noNotes": "未提供發行說明。",
     "retry": "重試",
     "update": "更新"

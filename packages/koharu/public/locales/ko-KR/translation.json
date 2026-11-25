@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "정보",
+    "checkForUpdates": "업데이트 확인",
     "closeProject": "프로젝트 닫기",
     "delete": "선택 항목 삭제",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "업데이트 실패"
     },
     "later": "나중에",
+    "latest": {
+      "description": "코하루 <strong>{{version}}</strong>은(는) 최신 버전입니다",
+      "title": "업데이트 없음"
+    },
     "noNotes": "릴리스 노트가 제공되지 않았습니다.",
     "retry": "다시 시도",
     "update": "업데이트"

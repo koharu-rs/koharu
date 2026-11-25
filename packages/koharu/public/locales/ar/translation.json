@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "عن البرنامج",
+    "checkForUpdates": "التحقق من وجود تحديثات",
     "closeProject": "إغلاق المشروع",
     "delete": "حذف المحدّد",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "فشل التحديث"
     },
     "later": "لاحقًا",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> هو أحدث إصدار",
+      "title": "لا توجد تحديثات"
+    },
     "noNotes": "لا توجد ملاحظات إصدار.",
     "retry": "إعادة المحاولة",
     "update": "تحديث"

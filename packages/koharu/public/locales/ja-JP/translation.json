@@ -267,6 +267,7 @@
   },
   "menu": {
     "about": "Koharuについて",
+    "checkForUpdates": "アップデートを確認",
     "closeProject": "プロジェクトを閉じる",
     "delete": "選択項目を削除",
     "discord": "Discord",
@@ -558,6 +559,10 @@
       "title": "アップデートに失敗しました"
     },
     "later": "後で",
+    "latest": {
+      "description": "Koharu <strong>{{version}}</strong> は最新バージョンです",
+      "title": "アップデートはありません"
+    },
     "noNotes": "リリースノートはありません。",
     "retry": "再試行",
     "update": "更新"
