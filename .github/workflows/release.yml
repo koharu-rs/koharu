@@ -53,10 +53,13 @@ jobs:
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       # bindgen parses MSVC's standard library, which rejects a Clang older
-      # than its Visual Studio's; the runner's own LLVM can lag behind it.
+      # than its Visual Studio's; the runner's own LLVM can lag behind it. As in
+      # rust-bindgen's CI, a fork until KyleMayes/install-llvm-action#103 merges.
       - name: Install LLVM
         if: startsWith(matrix.platform, 'windows')
-        run: choco upgrade llvm --version 22.1.8 --allow-downgrade --no-progress -y
+        uses: momo5502/install-llvm-action@7372aab026498959cff47c82953ba378477d4b00
+        with:
+          version: '22.1.8'
 
       - name: install dependencies (ubuntu only)
         if: startsWith(matrix.platform, 'ubuntu')
