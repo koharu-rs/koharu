@@ -1,3 +1,15 @@
+## [0.99.0](https://github.com/koharu-rs/koharu/compare/0.98.1..0.99.0) - 2026-11-25
+
+### ⛰️  Features
+
+- *(ui)* Check for updates from Help, answered in the update dialog, which is more compact and no longer focuses a link in its notes - ([f723e79](https://github.com/koharu-rs/koharu/commit/f723e7988ddc47c47906e72f536a62831859c0a1))
+
+### 🐛 Bug Fixes
+
+- *(pipeline,llm)* Log why a run or page fails, drop the older half of a full history, ask an overloaded provider up to nine times, and leave the page image out for a model that reads none - ([eef34b0](https://github.com/koharu-rs/koharu/commit/eef34b092cba12e1cc15e410f12e6d376d2c9c1a))
+- *(runtime)* Download a Hugging Face file again when it breaks off, and wait longer before hf-hub gives up on a request - ([10e7a08](https://github.com/koharu-rs/koharu/commit/10e7a08e4fb46e3bbb355fcd3fd4cff62821d824))
+- *(ui)* Center the title bar's logo on the menus' words - ([7b47f92](https://github.com/koharu-rs/koharu/commit/7b47f92beae55f3b50fa329477bc739053c604c9))
+
 ## [0.98.1](https://github.com/koharu-rs/koharu/compare/0.98.0..0.98.1) - 2026-11-25
 
 ### 🐛 Bug Fixes
