@@ -1,3 +1,9 @@
+## [0.96.2](https://github.com/koharu-rs/koharu/compare/0.96.1..0.96.2) - 2026-11-25
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Release winit's window state before calling Windows' input method, where a message it caused hung the app as its window first took focus ([#1542](https://github.com/koharu-rs/koharu/issues/1542)) - ([e1d7fbd](https://github.com/koharu-rs/koharu/commit/e1d7fbd19e5546417f90b9ece998df669a5ad928))
+
 ## [0.96.1](https://github.com/koharu-rs/koharu/compare/0.96.0..0.96.1) - 2026-11-25
 
 ### 🐛 Bug Fixes
