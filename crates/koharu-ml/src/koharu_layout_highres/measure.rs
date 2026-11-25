@@ -16,7 +16,7 @@ use imageproc::{
 use koharu_leptonica::{color_segment, find_stroke_width, otsu_adaptive_threshold};
 use serde::Serialize;
 
-use super::{Lettering, Mask};
+use super::{Lettering, Mask, outlined::outlined};
 
 /// What a detection's lettering shows.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -118,51 +118,19 @@ impl Lettering {
         } else {
             extent_y > extent_x
         };
-        let stroke_width = find_stroke_width(&ink, 0.15);
         let length = extent_x.max(extent_y);
-        let resolution = (stroke_width.unwrap_or(1.0) / length).atan().to_degrees();
-        let tilt = if angle.abs() < resolution { 0.0 } else { angle };
-
-        let (sin, cos) = tilt.to_radians().sin_cos();
-        let across: Vec<f32> = ink
-            .enumerate_pixels()
-            .filter(|(_, _, pixel)| pixel.0[0] != 0)
-            .map(|(x, y, _)| {
-                let (x, y) = (x as f32, y as f32);
-                match vertical {
-                    true => x * cos + y * sin,
-                    false => y * cos - x * sin,
-                }
-            })
-            .collect();
-        let low = across.iter().copied().fold(f32::MAX, f32::min);
-        let mut profile = Vec::<u32>::new();
-        for position in &across {
-            let bin = (position - low) as usize;
-            if profile.len() <= bin {
-                profile.resize(bin + 1, 0);
-            }
-            profile[bin] += 1;
-        }
-        // Close lines' anti-aliased edges can meet, so a gap is where the
-        // profile falls below an eighth of its peak.
-        let gap = profile.iter().copied().max().unwrap_or(0) / 8;
-        let mut runs: Vec<(usize, u32)> = profile
-            .split(|count| *count <= gap)
-            .filter(|run| !run.is_empty())
-            .map(|run| (run.len(), run.iter().sum()))
-            .collect();
-        runs.sort_unstable();
-        let total: u32 = runs.iter().map(|(_, ink)| ink).sum();
-        let mut seen = 0;
-        let size = runs
-            .iter()
-            .find(|(_, ink)| {
-                seen += ink;
-                2 * seen >= total
-            })
-            .map(|(length, _)| *length)
-            .expect("the profile's peak is a run") as f32;
+        let strokes = |ink: &GrayImage| {
+            let stroke_width = find_stroke_width(ink, 0.15);
+            let resolution = (stroke_width.unwrap_or(1.0) / length).atan().to_degrees();
+            let tilt = if angle.abs() < resolution { 0.0 } else { angle };
+            (stroke_width, tilt)
+        };
+        let outlined = outlined(page, &block, &ink, [left, top], |ink| {
+            breadth(ink, vertical, strokes(ink).1)
+        });
+        let ink = outlined.as_ref().map_or(&ink, |outlined| &outlined.glyphs);
+        let (stroke_width, tilt) = strokes(ink);
+        let size = breadth(ink, vertical, tilt);
 
         let (ink_color, paper_color) = match color_segment(&crop, 60, 8, 1, 4) {
             Ok(Some(segments)) => {
@@ -187,11 +155,59 @@ impl Lettering {
             tilt,
             size,
             stroke_width,
-            ink: ink_color,
+            ink: outlined
+                .as_ref()
+                .map_or(ink_color, |outlined| Some(outlined.ink)),
             paper: paper_color,
-            outline: outline(page, &ink, [left, top], size, ink_color),
+            outline: match &outlined {
+                Some(outlined) => Some(outlined.outline),
+                None => outline(page, ink, [left, top], size, ink_color),
+            },
         })
     }
+}
+
+/// How broad `ink`'s lines, not all blank, are across at `tilt`.
+fn breadth(ink: &GrayImage, vertical: bool, tilt: f32) -> f32 {
+    let (sin, cos) = tilt.to_radians().sin_cos();
+    let across: Vec<f32> = ink
+        .enumerate_pixels()
+        .filter(|(_, _, pixel)| pixel.0[0] != 0)
+        .map(|(x, y, _)| {
+            let (x, y) = (x as f32, y as f32);
+            match vertical {
+                true => x * cos + y * sin,
+                false => y * cos - x * sin,
+            }
+        })
+        .collect();
+    let low = across.iter().copied().fold(f32::MAX, f32::min);
+    let mut profile = Vec::<u32>::new();
+    for position in &across {
+        let bin = (position - low) as usize;
+        if profile.len() <= bin {
+            profile.resize(bin + 1, 0);
+        }
+        profile[bin] += 1;
+    }
+    // Close lines' anti-aliased edges can meet, so a gap is where the
+    // profile falls below an eighth of its peak.
+    let gap = profile.iter().copied().max().unwrap_or(0) / 8;
+    let mut runs: Vec<(usize, u32)> = profile
+        .split(|count| *count <= gap)
+        .filter(|run| !run.is_empty())
+        .map(|run| (run.len(), run.iter().sum()))
+        .collect();
+    runs.sort_unstable();
+    let total: u32 = runs.iter().map(|(_, ink)| ink).sum();
+    let mut seen = 0;
+    runs.iter()
+        .find(|(_, ink)| {
+            seen += ink;
+            2 * seen >= total
+        })
+        .map(|(length, _)| *length)
+        .expect("the profile's peak is a run") as f32
 }
 
 /// How far from the band's median colour, in every channel, an outline's
@@ -210,7 +226,7 @@ const OUTLINE_TOLERANCE: u8 = 48;
 /// count. On paper of the band's colour it fades over many rings, toward a
 /// panel's border or the art, or never leaves, and the lettering has
 /// none.
-fn outline(
+pub(super) fn outline(
     page: &RgbImage,
     glyphs: &GrayImage,
     [left, top]: [u32; 2],
@@ -781,7 +797,7 @@ const PAPER_TOLERANCE: u8 = 32;
 const PLAIN_PAPER: f32 = 0.99;
 
 /// `per_1024` pixels for every 1024 of the page's longer side.
-fn scaled(per_1024: f32, page_width: u32, page_height: u32) -> u32 {
+pub(super) fn scaled(per_1024: f32, page_width: u32, page_height: u32) -> u32 {
     ((page_width.max(page_height) as f32 / 1024.0) * per_1024)
         .round()
         .clamp(1.0, 127.0) as u32

@@ -11,6 +11,7 @@ mod layout;
 mod measure;
 mod model;
 mod order;
+mod outlined;
 mod processor;
 mod rooms;
 mod suppress;

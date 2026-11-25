@@ -59,7 +59,10 @@ more. Only a stage knows its models.
 
 Every stage also records its C2PA action on the layers it wrote, and detection
 its scores in its own namespace. Detection records each source's size, line
-width, ink as its fill, and outline as its stroke.
+width, ink as its fill, and outline as its stroke. Lettering over art is
+outlined, such as in white around black, and the outline, the tone that lies
+all around what it encloses, isn't its ink: on 28 pages of four works, at most
+half of plain lettering's ink lies so around its counters.
 
 There's no typesetting stage. Placement puts a translation in its room in its
 balloon, or in its source's frame when it's free or a sound effect, and fits it
