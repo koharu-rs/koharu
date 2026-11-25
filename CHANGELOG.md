@@ -1,3 +1,14 @@
+## [0.96.1](https://github.com/koharu-rs/koharu/compare/0.96.0..0.96.1) - 2026-11-25
+
+### 🐛 Bug Fixes
+
+- *(llm)* Wait for a provider's reply as long as it takes, which rig failed after five minutes of silence, as while a slow server read the agent's prompt - ([78c7151](https://github.com/koharu-rs/koharu/commit/78c71514a28b5fb294d4593729cb4fb2bc0af1f7))
+- *(pipeline)* Stop a translation while it summarizes its conversation - ([b99856a](https://github.com/koharu-rs/koharu/commit/b99856a9242646549079c22f6ef3b9b7522d149a))
+
+### 🧪 Testing
+
+- *(renderer)* Size the long word's boxes by its own width, which a fixed 300 px is under three quarters of in CI's wider font for Arial, so it hyphenated - ([2018db4](https://github.com/koharu-rs/koharu/commit/2018db4165991d6489707c81b80bb875c7123262))
+
 ## [0.96.0](https://github.com/koharu-rs/koharu/compare/0.95.4..0.96.0) - 2026-11-25
 
 ### ⛰️  Features
