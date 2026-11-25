@@ -1,3 +1,15 @@
+## [0.95.2](https://github.com/koharu-rs/koharu/compare/0.95.1..0.95.2) - 2026-11-25
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Draw a zoomed-out image solid to its right and bottom edges, which faded where a halved level's side is odd - ([6a4fb67](https://github.com/koharu-rs/koharu/commit/6a4fb6789c214797e183b8fe4f5cea89cb6b7728))
+- *(renderer)* Draw layers larger than vello_gpu's default of 4096 px, as a 5K canvas or a large page has, and rasters in 4096 px pieces - ([decab3e](https://github.com/koharu-rs/koharu/commit/decab3e4f9934c9565745032ef6f48820dde5419))
+
+### ⚡ Performance
+
+- *(desktop)* Draw page thumbnails at twice their size instead of shrinking the whole page - ([802473e](https://github.com/koharu-rs/koharu/commit/802473e1ac8c15c85d44303df8acba5089200193))
+- *(renderer)* Upload an image once for all of a raster's pieces, and read each piece straight into place - ([93050f6](https://github.com/koharu-rs/koharu/commit/93050f69e8a5c59ca28245fbed282509b1e2d372))
+
 ## [0.95.1](https://github.com/koharu-rs/koharu/compare/0.95.0..0.95.1) - 2026-11-24
 
 ### 🐛 Bug Fixes
