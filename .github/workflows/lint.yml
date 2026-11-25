@@ -36,6 +36,8 @@ jobs:
             librsvg2-dev
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt -- --check
       - run: cargo check
       - run: cargo clippy -- -D warnings
@@ -46,10 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Lint UI
         run: bun run --filter @koharu/app lint

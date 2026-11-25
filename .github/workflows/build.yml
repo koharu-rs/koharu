@@ -23,6 +23,12 @@ jobs:
         # Linux builds on the oldest Ubuntu Koharu supports, since a binary
         # needs the glibc it was linked against or a newer one.
         os: [macos-latest, windows-latest, ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          # The release's macOS target: an explicit target builds into its own
+          # folder, so the release only restores dependencies built for it.
+          - os: macos-latest
+            args: --target aarch64-apple-darwin
+            out: target/aarch64-apple-darwin/release
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -57,16 +63,11 @@ jobs:
         uses: momo5502/install-llvm-action@7372aab026498959cff47c82953ba378477d4b00
         with:
           version: '22.1.8'
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ matrix.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install
-      - run: bun run build
+      - run: bun run build ${{ matrix.args }}
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
           name: koharu-${{ matrix.os }}
-          path: |
-            target/release/koharu*
+          path: ${{ matrix.out || 'target/release' }}/koharu*
           retention-days: 3

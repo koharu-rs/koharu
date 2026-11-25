@@ -77,11 +77,6 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ matrix.platform }}-bun-${{ hashFiles('**/bun.lock') }}
-
       - name: Install dependencies
         run: bun install
 

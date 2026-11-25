@@ -16,9 +16,15 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  rust:
+  # rust-cache keys a cache by job id, so this id must differ from Lint's
+  # `rust`, whose check-only cache would otherwise be the one restored here.
+  test:
     name: Rust
     runs-on: ubuntu-latest
+    env:
+      # Enough for file and line in panic backtraces; the dev profile's full
+      # debug info would only make this cache larger and its tests slower to link.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - run: |
           sudo apt update
@@ -37,6 +43,8 @@ jobs:
             gnome-keyring
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Run headless Rust tests
         run: |
           cargo test --workspace --tests
@@ -47,10 +55,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Run headless Vitest suite
         run: bun run --filter @koharu/app test
