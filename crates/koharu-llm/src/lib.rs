@@ -12,7 +12,10 @@ use anyhow::{Context as _, Result};
 use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};
 
 pub use context::{Context, SummaryPrompts};
-pub use hosted::{Endpoint, Providers, SignInPrompt, VENDORS, sign_in, sign_out};
+pub use hosted::{
+    Endpoint, Host, Providers, Routing, SignInPrompt, VENDORS, explain, hosts as openrouter_hosts,
+    sign_in, sign_out,
+};
 pub use local::{Local, Quantization, Sampling, Size, local};
 pub use model::answers;
 pub use rig_agent::{agent::AgentBuilder, completion::PromptError};

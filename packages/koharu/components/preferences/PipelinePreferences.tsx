@@ -1,5 +1,6 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,40 +13,57 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
+import { withEndpoint } from '@/components/preferences/ProviderPreferences'
 import { detectors, inpainters, modelName, REASONING, recognizers, vendorOf } from '@/lib/models'
 import { languageNames } from '@/lib/translation'
 import { vendorName } from '@/lib/vendors'
-import type {
-  Detector,
-  Inpainter,
-  Model,
-  PipelineConfig,
-  Recognizer,
-  TranslatorConfig,
+import {
+  commands,
+  type Detector,
+  type Inpainter,
+  type Model,
+  type PipelineConfig,
+  type Providers,
+  type Recognizer,
+  type TranslatorConfig,
 } from '@koharu/ipc/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
 
+const OPENROUTER = 'openrouter'
+
+/** The choice of no pin, which no OpenRouter tag is. */
+const AUTO = '/auto'
+
 type StageName = 'detect' | 'recognize' | 'inpaint' | 'translate'
 
 /** The `[pipeline]` stages in the order they run, a section each with its model first: the
  * detector with its thresholds, the recognizer, the inpainter with its prompt, and the translator
- * with its options. */
+ * with its options, and for an OpenRouter model the provider pinned for it, which `[providers]`
+ * keeps. */
 export function PipelinePreferences({
   value,
   models,
+  providers,
   onChange,
+  onProvidersChange,
 }: {
   value: PipelineConfig
   models: Model[]
+  providers: Providers
   onChange: (value: PipelineConfig) => void
+  onProvidersChange: (value: Providers) => void
 }) {
   const { t } = useTranslation()
   const detector = value.detector ?? {}
   const inpainter = value.inpainter ?? {}
   const translator = value.translator ?? {}
+  // The translator's model as OpenRouter names it, `author/slug`, when it is one of OpenRouter's.
+  const openrouterModel = translator.model?.startsWith(`${OPENROUTER}/`)
+    ? translator.model.slice(OPENROUTER.length + 1)
+    : null
   const thresholds = ['text', 'onomatopoeia', 'bubble', 'panel'] as const
 
   return (
@@ -138,6 +156,18 @@ export function PipelinePreferences({
           />
         }
       >
+        {openrouterModel && (
+          <OpenRouterHost
+            model={openrouterModel}
+            value={providers[OPENROUTER]?.pins?.[openrouterModel] ?? null}
+            onChange={(tag) => {
+              const pins = { ...providers[OPENROUTER]?.pins }
+              if (tag) pins[openrouterModel] = tag
+              else delete pins[openrouterModel]
+              onProvidersChange(withEndpoint(providers, OPENROUTER, { pins }))
+            }}
+          />
+        )}
         <TranslatorOptions
           value={translator}
           onChange={(next) => onChange({ ...value, translator: next })}
@@ -239,6 +269,68 @@ function TranslatorModel({
         />
       </PopoverContent>
     </Popover>
+  )
+}
+
+/** The provider an OpenRouter model's requests are pinned to, among those OpenRouter lists for
+ * it, or none, to follow the routing preference. */
+function OpenRouterHost({
+  model,
+  value,
+  onChange,
+}: {
+  model: string
+  value: string | null
+  onChange: (tag: string | null) => void
+}) {
+  const { t } = useTranslation()
+  const hosts = useQuery({
+    queryKey: ['openrouter-hosts', model],
+    queryFn: () => commands.listOpenrouterHosts(model),
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+  const choices: Record<string, string> = { [AUTO]: t('settings.pipeline.translator.hostAuto') }
+  const labelled = (hosts.data ?? []).map((host) => {
+    // What tells a host's endpoints apart: its quantization and the region or tier the rest of its
+    // tag names, as `Sail Research (fp4, us)` for `sail-research/fp4/us`.
+    const parts = [host.quantization, ...host.tag.split('/').slice(1)].filter(
+      (part, index, all): part is string => !!part && all.indexOf(part) === index,
+    )
+    return [host.tag, parts.length > 0 ? `${host.name} (${parts.join(', ')})` : host.name] as const
+  })
+  labelled.sort(([, a], [, b]) => a.localeCompare(b))
+  for (const [tag, label] of labelled) choices[tag] = label
+  // A pin the list doesn't show stays shown; once the list has loaded, it is one the model no
+  // longer has, which fails its requests.
+  const unavailable = hosts.isSuccess && !!value && !(value in choices)
+  if (value && !(value in choices)) {
+    choices[value] = unavailable
+      ? t('settings.pipeline.translator.hostUnavailable', { tag: value })
+      : value
+  }
+  return (
+    <PreferenceRow
+      title={t('settings.pipeline.translator.host')}
+      description={
+        hosts.isPending
+          ? t('settings.pipeline.translator.hostLoading')
+          : hosts.isError
+            ? t('settings.pipeline.translator.hostError')
+            : unavailable
+              ? t('settings.pipeline.translator.hostUnavailableDescription')
+              : hosts.data.length === 0
+                ? t('settings.pipeline.translator.hostNone')
+                : t('settings.pipeline.translator.hostDescription')
+      }
+    >
+      <Choice
+        value={value ?? AUTO}
+        choices={choices}
+        label={t('settings.pipeline.translator.host')}
+        onChange={(tag) => onChange(tag === AUTO ? null : tag)}
+      />
+    </PreferenceRow>
   )
 }
 

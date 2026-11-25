@@ -6,6 +6,7 @@ mod grok;
 mod http;
 mod lm_studio;
 pub(crate) mod openai_compatible;
+pub(crate) mod routing;
 
 use std::{collections::BTreeMap, num::NonZeroU32};
 
@@ -27,6 +28,7 @@ use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 
 pub(crate) use http::{Http, SignIn, reqwest};
+pub use routing::{Host, Routing, explain, hosts};
 
 /// The vendors Koharu lists models from, by rig's names.
 pub const VENDORS: &[&str] = &[
@@ -103,6 +105,14 @@ pub struct Endpoint {
     /// unset, it grows until the server cuts it off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<NonZeroU32>,
+    /// OpenRouter: what it orders a model's hosts by, for every model that
+    /// has no host pinned; unset, it balances price against uptime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing: Option<Routing>,
+    /// OpenRouter: the host pinned for a model, by the model's `author/slug`,
+    /// as OpenRouter tags the host's endpoint.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pins: BTreeMap<String, String>,
 }
 
 /// The base URL `[providers]` sets for `vendor`, if it sets one.

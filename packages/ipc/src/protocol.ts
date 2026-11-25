@@ -297,6 +297,16 @@ export type Endpoint = {
    *  unset, it grows until the server cuts it off.
    */
   context_window?: number | null
+  /**
+   *  OpenRouter: what it orders a model's hosts by, for every model that
+   *  has no host pinned; unset, it balances price against uptime.
+   */
+  routing?: Routing | null
+  /**
+   *  OpenRouter: the host pinned for a model, by the model's `author/slug`,
+   *  as OpenRouter tags the host's endpoint.
+   */
+  pins?: { [key in string]: string }
 }
 
 /**  A command's failure, as its message with its causes. */
@@ -406,6 +416,17 @@ export type History = {
    *  the steps after it can be redone.
    */
   current: number
+}
+
+/**  A host OpenRouter lists for a model. */
+export type Host = {
+  /**
+   *  What `provider.only` takes: the host and its quantization, as
+   *  OpenRouter tags the endpoint.
+   */
+  tag: string
+  name: string
+  quantization: string | null
 }
 
 /**  An imported file, kept byte for byte. */
@@ -873,6 +894,12 @@ export type RichText = {
  */
 export type Role = 'text' | 'sfx'
 
+/**
+ *  What OpenRouter orders a model's hosts by, as its `provider.sort` names it.
+ *  Unset, it balances price against uptime.
+ */
+export type Routing = 'price' | 'throughput' | 'latency'
+
 /**  A run, numbered in the order runs were asked for. */
 export type RunId = number
 
@@ -1154,6 +1181,11 @@ export const commands = {
     ),
   /** Koharu's own models, and each vendor's that has a key or a sign-in. */
   listModels: () => runner('list_models', (options) => invoke<Model[]>('list_models', {}, options)),
+  /** The hosts OpenRouter lists for its model `model`, `author/slug`, which a request may be pinned to. */
+  listOpenrouterHosts: (model: string) =>
+    runner('list_openrouter_hosts', (options) =>
+      invoke<Host[]>('list_openrouter_hosts', { model }, options),
+    ),
   /** Every vendor Koharu lists models from, in its order. */
   listVendors: () =>
     runner('list_vendors', (options) => invoke<Vendor[]>('list_vendors', {}, options)),

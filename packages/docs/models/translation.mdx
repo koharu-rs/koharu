@@ -20,12 +20,13 @@ Each page is sent as its texts in reading order, and the answer must return ever
 
 ## Options
 
-| Option    | What it does                                                                                                                                 |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vision    | Sends the page image, 1,280 pixels on its longer side, ahead of the texts; off by default                                                    |
-| Reasoning | Lets the model reason before it answers, at the level you choose; **Provider default** uses the model's own, and **Off** turns reasoning off |
+| Option              | What it does                                                                                                                                                                            |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vision              | Sends the page image, 1,280 pixels on its longer side, ahead of the texts; off by default                                                                                               |
+| Reasoning           | Lets the model reason before it answers, at the level you choose; **Provider default** uses the model's own, and **Off** turns reasoning off                                            |
+| OpenRouter provider | For an OpenRouter model, sends requests to one provider only, with no fallback; **Auto** follows the routing preference. See [OpenRouter routing](/models/providers#openrouter-routing) |
 
-A model that can't take the reasoning level you choose, such as **Off** on a model that always reasons, stops the run and names the setting. Vision works only with a model that reads images; with any other model the run fails and asks you to turn **Vision** off. Both options add time, and on Koharu's own tests with Index-Translate 9B neither read better, so try them on a few pages before keeping them.
+A model that can't take the reasoning level you choose, such as **Off** on a model that always reasons, stops the run and names the setting. Vision works only with a model that reads images; with any other model the run fails and asks you to turn **Vision** off. Vision and Reasoning both add time, and on Koharu's own tests with Index-Translate 9B neither read better, so try them on a few pages before keeping them.
 
 ## Local quantization
 

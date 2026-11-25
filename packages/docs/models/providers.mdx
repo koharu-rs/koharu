@@ -43,6 +43,10 @@ Koharu's local models include Index-Translate (2B, 9B, and a 35B A3B preview), w
   </Step>
 </Steps>
 
+## OpenRouter routing
+
+OpenRouter sends each request to one of the providers that host the model. **Routing preference** under **Settings → Providers** orders them: **Balanced (default)** leaves the choice to OpenRouter, and **Lowest price**, **Highest throughput**, and **Lowest latency** order them by that measure. To use one provider for a model, choose it under **Settings → Pipeline → Translator → OpenRouter provider**. Requests then go only to that provider, with no fallback, and only providers that support structured output for the model are listed. A pinned provider the model no longer lists is marked unavailable, and translation fails until you choose **Auto** or another provider. The choices are saved in `[providers.openrouter]` of `config.toml`, as `routing` and, for each model, `pins`. See OpenRouter's [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection) guide.
+
 ## Credentials and privacy
 
 API keys and sign-ins are stored encrypted in `~/.koharu/secrets.age`, with the key kept in the operating system's credential store; no environment variable is read. Base URLs live in the `[providers]` section of `~/.koharu/config.toml`. **Sign out** revokes a subscription sign-in and deletes it; the eraser button clears a key.

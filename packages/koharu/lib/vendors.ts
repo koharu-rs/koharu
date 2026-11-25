@@ -8,12 +8,15 @@ export type VendorTraits = {
   server?: boolean
   /** The user gives the context window its server runs models with, which the server doesn't say. */
   contextWindow?: boolean
+  /** The user picks how it orders the providers behind a model. */
+  routing?: boolean
 }
 
 /** Each vendor's traits, by rig's name, as `list_vendors` names them. */
 export const vendorTraits: Record<string, VendorTraits> = {
   chatgpt: { signsIn: true },
   grok: { signsIn: true },
+  openrouter: { routing: true },
   ollama: { server: true },
   lmstudio: { server: true },
   'openai-compatible': { server: true, contextWindow: true },

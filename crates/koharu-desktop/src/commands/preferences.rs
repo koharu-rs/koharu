@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::future::{AbortHandle, Abortable};
 use koharu_agent::AgentConfig;
 use koharu_config::secrets::SecretString;
-use koharu_llm::{Model, Providers, SignInPrompt, VENDORS};
+use koharu_llm::{Host, Model, Providers, SignInPrompt, VENDORS, openrouter_hosts};
 use koharu_pipeline::PipelineConfig;
 use koharu_renderer::RendererConfig;
 use parking_lot::Mutex;
@@ -78,6 +78,14 @@ pub async fn save_preferences(
 #[specta::specta]
 pub async fn list_models() -> Vec<Model> {
     koharu_llm::models().await
+}
+
+/// The hosts OpenRouter lists for its model `model`, `author/slug`, which a
+/// request may be pinned to.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_openrouter_hosts(model: String) -> Result<Vec<Host>> {
+    Ok(openrouter_hosts(&model).await?)
 }
 
 /// A vendor, by rig's name, and whether its sign-in or key is stored. What

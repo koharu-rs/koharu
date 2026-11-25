@@ -22,6 +22,7 @@ provider only when the user picked that provider.
 | name | `vendor/model`, as rig names a model, such as `anthropic/claude-opus-5-5` or `koharu/index-translate-9b` | |
 | quantization | one of Koharu's own models takes it after a colon, `koharu/index-translate-9b:Q8_0`, and otherwise loads its first | Ollama names a model `model:tag` [Ollama API] |
 | a server's address | `[providers]` holds a vendor's `base_url` by its rig name, such as a remote Ollama; the interface offers it for the servers the user names: Ollama, LM Studio, and an OpenAI-compatible one | Codex's `[model_providers]` [Codex config] |
+| routing | `[providers.openrouter]` holds `routing`, OpenRouter's `provider.sort` (price, throughput, or latency; unset keeps its balance), and `pins`, one host per model by its `author/slug`, sent as `provider.only` with `allow_fallbacks` false; a pin names only an endpoint the model lists with `structured_outputs`, as every request requires its parameters | OpenRouter's provider routing [OpenRouter routing] |
 | OpenAI-compatible | one server at the base URL the user gives, such as a relay, spoken to in Chat Completions, which such servers speak far more widely than Responses; its `/models` list says nothing of what a model can do | Zed's OpenAI-compatible provider [Zed providers] |
 | credentials | API keys and sign-ins live in Koharu's encrypted secrets, under the vendor's name; no environment variable is read | |
 | sign-in | `chatgpt` and `grok` sign in with the user's plan in place of a key: ChatGPT through rig's sign-in, the route Codex takes, and Grok, a SuperGrok or X Premium plan, with xAI's device code through xAI's shared client, its requests going to the endpoint the Grok CLI uses | Hermes Agent and OpenClaw sign in to xAI so [Hermes xAI] [OpenClaw xAI] |
@@ -86,7 +87,7 @@ coding agent's [pi compaction]:
 Read in November 2026.
 
 - [rig], [Ollama API], [Codex config], [OpenAI structured outputs], [LM Studio list], [Zed providers]
-- Hosted requests: [OpenAI retries], [OpenAI data controls], [xAI Responses]
+- Hosted requests: [OpenAI retries], [OpenAI data controls], [xAI Responses], [OpenRouter routing]
 - xAI's sign-in: [Hermes xAI], [OpenClaw xAI]
 - Context: [pi compaction]
 - llama.cpp: [llama.cpp fit], [llama.cpp parallel], [llama.cpp Gemma 4]
@@ -100,6 +101,7 @@ Read in November 2026.
 [OpenAI retries]: https://github.com/openai/openai-python/blob/804a9af5a5199f36d28dfdf84c7981f0253a3a3f/src/openai/_base_client.py#L922-L930
 [OpenAI data controls]: https://platform.openai.com/docs/guides/your-data
 [xAI Responses]: https://docs.x.ai/developers/rest-api-reference/inference/responses
+[OpenRouter routing]: https://openrouter.ai/docs/guides/routing/provider-selection
 [Hermes xAI]: https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth_xai.py
 [OpenClaw xAI]: https://github.com/openclaw/openclaw/blob/main/extensions/xai/xai-oauth.ts
 [pi compaction]: https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/compaction.md

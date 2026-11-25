@@ -6,6 +6,7 @@ import { Eraser } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Choice } from '@/components/controls/Choice'
 import {
   NumberField,
   PreferencePage,
@@ -19,6 +20,7 @@ import {
   commands,
   type Endpoint,
   type Providers,
+  type Routing,
   type SignInPrompt,
   type Vendor,
 } from '@koharu/ipc/protocol'
@@ -33,6 +35,19 @@ function vendorsChanged() {
   return refresh(vendorsKey, modelsKey)
 }
 
+/** `vendor`'s endpoint in `providers` with `patch` merged in; an endpoint with nothing left set goes. */
+export function withEndpoint(providers: Providers, vendor: string, patch: Endpoint): Providers {
+  const endpoint: Endpoint = { ...providers[vendor], ...patch }
+  if (!endpoint.base_url) delete endpoint.base_url
+  if (!endpoint.context_window) delete endpoint.context_window
+  if (!endpoint.routing) delete endpoint.routing
+  if (Object.keys(endpoint.pins ?? {}).length === 0) delete endpoint.pins
+  const next = { ...providers }
+  if (Object.keys(endpoint).length > 0) next[vendor] = endpoint
+  else delete next[vendor]
+  return next
+}
+
 /** Each vendor's API key, or its sign-in for one the user signs in to with their plan, kept in
  * the OS credential store and saved apart from `config.toml`, and the `[providers]` base URL for a
  * vendor whose server the user names, with the context window of a server that doesn't say. */
@@ -45,16 +60,7 @@ export function ProviderPreferences({
 }) {
   const { t } = useTranslation()
   const vendors = useQuery({ queryKey: vendorsKey, queryFn: () => commands.listVendors() })
-  /** `vendor`'s endpoint with `patch` merged in; an endpoint with nothing left set goes. */
-  const update = (vendor: string, patch: Endpoint) => {
-    const endpoint: Endpoint = { ...value[vendor], ...patch }
-    if (!endpoint.base_url) delete endpoint.base_url
-    if (!endpoint.context_window) delete endpoint.context_window
-    const next = { ...value }
-    if (Object.keys(endpoint).length > 0) next[vendor] = endpoint
-    else delete next[vendor]
-    onChange(next)
-  }
+  const update = (vendor: string, patch: Endpoint) => onChange(withEndpoint(value, vendor, patch))
   return (
     <PreferencePage
       title={t('settings.providers.title')}
@@ -76,6 +82,12 @@ export function ProviderPreferences({
                     onChange={(base_url) => update(vendor.name, { base_url })}
                   />
                 )}
+                {traits.routing && (
+                  <RoutingField
+                    value={value[vendor.name]?.routing ?? null}
+                    onChange={(routing) => update(vendor.name, { routing })}
+                  />
+                )}
                 {/* The context window, in tokens, the server runs its models with, such as
                     llama.cpp's `--ctx-size`; nothing while the server's is unknown. */}
                 {traits.contextWindow && (
@@ -95,6 +107,34 @@ export function ProviderPreferences({
         })}
       </PreferenceSection>
     </PreferencePage>
+  )
+}
+
+/** Balanced is OpenRouter's own order, which sets none. */
+function RoutingField({
+  value,
+  onChange,
+}: {
+  value: Routing | null
+  onChange: (value: Routing | null) => void
+}) {
+  const { t } = useTranslation()
+  const label = t('settings.providers.routing')
+  return (
+    <div className='grid gap-1'>
+      <span className='text-[10px] text-muted-foreground'>{label}</span>
+      <Choice
+        value={value ?? 'balanced'}
+        choices={{
+          balanced: t('settings.providers.routingBalanced'),
+          price: t('settings.providers.routingPrice'),
+          throughput: t('settings.providers.routingThroughput'),
+          latency: t('settings.providers.routingLatency'),
+        }}
+        label={label}
+        onChange={(next) => onChange(next === 'balanced' ? null : next)}
+      />
+    </div>
   )
 }
 

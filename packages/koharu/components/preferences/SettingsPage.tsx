@@ -99,7 +99,9 @@ export function SettingsPage() {
                 <PipelinePreferences
                   value={preferences.pipeline}
                   models={models}
+                  providers={preferences.providers}
                   onChange={(pipeline) => edit({ ...preferences, pipeline })}
+                  onProvidersChange={(providers) => edit({ ...preferences, providers })}
                 />
               ) : (
                 <LoadingPreferences />
