@@ -5801,6 +5801,7 @@ version = "0.95.3"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
+ "koharu-runtime",
  "thiserror 2.0.21",
  "tracing",
 ]
@@ -6045,6 +6046,7 @@ dependencies = [
  "koharu-llama-sys",
  "koharu-torch-sys",
  "libloading 0.9.1",
+ "parking_lot 0.13.0",
  "reqwest",
  "serde",
  "specta",

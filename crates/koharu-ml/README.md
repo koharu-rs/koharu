@@ -39,7 +39,7 @@ page's pixels can run off the device's thread.
 
 | Part | Model |
 |---|---|
-| device | the runtime's, given once when the model loads |
+| device | the runtime's, given once when the model loads; loading and running each take a turn on it, as koharu-runtime gives them |
 | precision | BF16 where the device computes in it, F32 elsewhere; libtorch has no Vulkan build, so on Vulkan its models run on the CPU |
 | weights | every weight a port declares comes from the checkpoint; a missing one, an unexpected one, or a shape that differs is an error, since each means the port's names don't match |
 | inference | gradients off, and no tensor leaves inference mode |

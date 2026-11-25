@@ -14,7 +14,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_runtime::Repository;
+use koharu_runtime::{Library, Repository, Turn};
 use koharu_torch::Device;
 
 use self::{
@@ -38,7 +38,7 @@ pub struct HayaiOcr {
 
 impl HayaiOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device);
+        let (device, kind) = crate::torch::device(device);
         let [config, weights, tokenizer] = REPOSITORY
             .resolve(["config.json", "model.safetensors", "tokenizer.json"])
             .await
@@ -52,6 +52,7 @@ impl HayaiOcr {
             tokenizer.len(),
             config.vocab_size
         );
+        let _turn = Turn::take(Library::Torch);
         let processor = ImageProcessor::new(device);
 
         let mut model = Model::new(&config, &tokenizer, device, kind)?;
@@ -69,7 +70,7 @@ impl HayaiOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::inference_mode(|| {
+        crate::torch::inference(|| {
             let inputs = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))

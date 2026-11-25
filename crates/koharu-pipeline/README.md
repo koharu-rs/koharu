@@ -155,7 +155,8 @@ model, the target, or the instructions starts a new one.
   again.
 - **One call at a time** on that thread, so peak memory is every loaded model
   plus the largest working set, and running out never depends on timing. A
-  local language model decodes on its own thread beside it.
+  local language model decodes on its own thread beside it, taking turns on the
+  GPU with stable-diffusion.cpp's models on CUDA, and with every model on ROCm.
 - **Pages in flight.** Up to three: one reading its input, one on the model,
   and one writing its result.
 - **Order.** A run is a graph of its pages' stages: detection before a page's

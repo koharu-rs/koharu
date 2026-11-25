@@ -2,11 +2,15 @@ use std::{
     ffi::{CStr, c_char, c_void},
     ptr::{self, NonNull},
     slice,
-    sync::{Arc, Once},
+    sync::{
+        Arc, Once,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use image::{DynamicImage, RgbImage, RgbaImage};
 use koharu_diffusion_sys as sys;
+use koharu_runtime::{Library, Turn};
 
 use crate::{ContextParams, GenerateError, ImageParams, LoadError, StatusError, options::Options};
 
@@ -22,13 +26,18 @@ pub struct Context {
     context: Arc<Raw>,
 }
 
-/// Stops the generation its model is running, from any thread.
+/// Stops the generation its model is running or waiting to run, from any
+/// thread.
 #[derive(Clone, Debug)]
 pub struct Canceller(Arc<Raw>);
 
 /// sd.cpp's context, freed once neither its model nor a canceller holds it.
 #[derive(Debug)]
-struct Raw(NonNull<sys::sd_ctx_t>);
+struct Raw {
+    pointer: NonNull<sys::sd_ctx_t>,
+    /// A stop, which sd.cpp forgets as a generation starts.
+    stopped: AtomicBool,
+}
 
 // Generating takes the model whole, and a canceller only sets sd.cpp's
 // atomic cancel flag, so the context may be shared between threads.
@@ -37,16 +46,17 @@ unsafe impl Sync for Raw {}
 
 impl Drop for Raw {
     fn drop(&mut self) {
-        unsafe { sys::sd_ctx_free(self.0.as_ptr()) };
+        let _turn = Turn::take(Library::Ggml);
+        unsafe { sys::sd_ctx_free(self.pointer.as_ptr()) };
     }
 }
 
 impl Canceller {
-    /// Stops the model's generation as soon as sd.cpp can, which then fails
-    /// as cancelled. sd.cpp clears the request as a generation starts, so it
-    /// stops only one under way.
+    /// Stops the model's generation as soon as sd.cpp can, or before it starts
+    /// when its turn hasn't come, which then fails as cancelled.
     pub fn cancel(&self) {
-        unsafe { sys::sd_cancel_generation(self.0.0.as_ptr(), sys::SD_CANCEL_ALL) };
+        self.0.stopped.store(true, Ordering::Relaxed);
+        unsafe { sys::sd_cancel_generation(self.0.pointer.as_ptr(), sys::SD_CANCEL_ALL) };
     }
 }
 
@@ -73,14 +83,20 @@ impl Context {
         options.set("eager_load", true)?;
 
         let mut context = ptr::null_mut();
-        match unsafe { sys::sd_ctx_create(options.as_ptr(), &mut context) } {
-            sys::SD_STATUS_OK => {}
-            status => return Err(StatusError::from(status).into()),
+        let status = {
+            let _turn = Turn::take(Library::Ggml);
+            unsafe { sys::sd_ctx_create(options.as_ptr(), &mut context) }
+        };
+        if status != sys::SD_STATUS_OK {
+            return Err(StatusError::from(status).into());
         }
         let context = Self {
-            context: Arc::new(Raw(NonNull::new(context).ok_or(LoadError::NullResult)?)),
+            context: Arc::new(Raw {
+                pointer: NonNull::new(context).ok_or(LoadError::NullResult)?,
+                stopped: AtomicBool::new(false),
+            }),
         };
-        if !unsafe { sys::sd_ctx_supports_image_generation(context.context.0.as_ptr()) } {
+        if !unsafe { sys::sd_ctx_supports_image_generation(context.context.pointer.as_ptr()) } {
             return Err(LoadError::NoImages);
         }
         Ok(context)
@@ -91,6 +107,7 @@ impl Context {
         &mut self,
         params: &ImageParams,
     ) -> Result<Vec<DynamicImage>, GenerateError> {
+        self.context.stopped.store(false, Ordering::Relaxed);
         let options = Options::image().ok_or(GenerateError::NullResult)?;
         options.set("prompt", params.prompt)?;
         options.set("negative_prompt", params.negative_prompt)?;
@@ -114,9 +131,13 @@ impl Context {
         options.set("vae_tiling.tile_size_w", params.vae_tile)?;
         options.set("vae_tiling.tile_size_h", params.vae_tile)?;
 
+        let _turn = Turn::take(Library::Ggml);
+        if self.context.stopped.load(Ordering::Relaxed) {
+            return Err(StatusError::Cancelled("stopped before its turn".to_owned()).into());
+        }
         let mut result = ptr::null_mut();
         match unsafe {
-            sys::sd_generate_image(self.context.0.as_ptr(), options.as_ptr(), &mut result)
+            sys::sd_generate_image(self.context.pointer.as_ptr(), options.as_ptr(), &mut result)
         } {
             sys::SD_STATUS_OK => {}
             status => return Err(StatusError::from(status).into()),

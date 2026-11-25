@@ -17,7 +17,7 @@ mod suppress;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, RgbImage};
-use koharu_runtime::Repository;
+use koharu_runtime::{Library, Repository, Turn};
 use koharu_torch::Device;
 use rayon::prelude::*;
 
@@ -73,7 +73,7 @@ pub struct KoharuLayoutHighres {
 
 impl KoharuLayoutHighres {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device);
+        let (device, kind) = crate::torch::device(device);
         let [config, weights] = REPOSITORY
             .resolve(["config.json", "model.safetensors"])
             .await
@@ -81,6 +81,7 @@ impl KoharuLayoutHighres {
         let config: Config = serde_json::from_slice(&fs_err::read(&config)?)?;
         let processor = ImageProcessor::new(&config)?;
 
+        let _turn = Turn::take(Library::Torch);
         let mut model = Model::new(device, kind)?;
         model.load(&weights)?;
         Ok(Self {
@@ -104,7 +105,7 @@ impl KoharuLayoutHighres {
             bubble: options.bubble.unwrap_or(self.thresholds.bubble),
             panel: options.panel.unwrap_or(self.thresholds.panel),
         };
-        let mut detections = koharu_torch::inference_mode(|| {
+        let mut detections = crate::torch::inference(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
             let output = self.model.forward(&pixel_values)?;
             self.processor

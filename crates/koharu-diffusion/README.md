@@ -21,7 +21,8 @@ crate adds safety, not behaviour.
 | placing weights | sd.cpp fits the weights into the device's free memory itself, then system memory | |
 | kernels | sd.cpp picks flash attention and direct convolution for each module and backend, so none is forced on or off | sd.cpp's automatic selection [sd.cpp backends] |
 | a schedule | a model whose checkpoint saves its own noise levels steps through them, in place of a step count | sd.cpp's custom sigmas [sd.cpp C API] |
-| stopping | a canceller stops a generation under way from another thread; sd.cpp clears the request as a generation starts | `sd_cancel_generation` [sd.cpp header] |
+| stopping | a canceller stops a generation under way, or waiting for its turn, from another thread | `sd_cancel_generation` [sd.cpp header] |
+| turns | loading, generating, and freeing a model each take a turn on the device, as koharu-runtime gives them | |
 | prompts | sd.cpp keeps its last few prompts' encodings, so a prompt used again isn't encoded again | |
 | a model | one at a time per context: a context can move between threads, but generating takes it whole | |
 | images | inputs are copied into sd.cpp's tensors; outputs are copied out of its result, which sd.cpp frees, so the C runtime that made them frees them | sd.cpp's tensors and results [sd.cpp C API] |

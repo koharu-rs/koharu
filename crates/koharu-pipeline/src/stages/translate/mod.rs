@@ -134,7 +134,7 @@ pub(crate) async fn translate(
     let model = match key(Stage::Translate, config) {
         // A local model loads on the GPU thread, which only hands it over:
         // its engine runs on a thread of its own, so the turn waits off the
-        // GPU thread, and the other stages' models run meanwhile.
+        // GPU thread, and the other stages go on.
         Some(key) => {
             let (reference, images) = (translator.model.clone(), translator.vision);
             task.inference(&[member], move |models| {

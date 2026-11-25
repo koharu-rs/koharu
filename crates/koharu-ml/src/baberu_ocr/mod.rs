@@ -10,7 +10,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_runtime::Repository;
+use koharu_runtime::{Library, Repository, Turn};
 use koharu_torch::Tensor;
 
 use self::{
@@ -39,7 +39,7 @@ pub struct BaberuOcr {
 
 impl BaberuOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device);
+        let (device, kind) = crate::torch::device(device);
         let [config, generation, weights, vocabulary] = BABERU
             .resolve([
                 "config.json",
@@ -68,6 +68,7 @@ impl BaberuOcr {
             tokenizer.len(),
             config.vocab_size
         );
+        let _turn = Turn::take(Library::Torch);
         let processor =
             BaberuImageProcessor::new(&vision_processor, config.vision_image_size, device)?;
 
@@ -88,7 +89,7 @@ impl BaberuOcr {
         if images.is_empty() {
             return Ok(Vec::new());
         }
-        koharu_torch::inference_mode(|| {
+        crate::torch::inference(|| {
             let pixel_values = images
                 .iter()
                 .map(|image| self.processor.preprocess(image))

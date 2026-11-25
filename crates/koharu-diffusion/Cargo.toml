@@ -14,5 +14,6 @@ publish.workspace = true
 [dependencies]
 image = { workspace = true }
 koharu-diffusion-sys = { workspace = true }
+koharu-runtime = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

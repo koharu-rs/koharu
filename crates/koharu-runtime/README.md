@@ -34,6 +34,15 @@ model never runs somewhere the user didn't expect. llama.cpp must list the GPU
 too, so a Vulkan loader without a Vulkan device doesn't count. libtorch has no
 Vulkan build, so on Vulkan its models run on the CPU.
 
+On CUDA, llama.cpp and stable-diffusion.cpp take turns, and on ROCm libtorch
+does too. llama.cpp captures what it runs there as a graph, and a call that
+waits for the whole GPU meanwhile is invalid and ends the capture too [CUDA
+graphs]; ggml stops the process at either. libtorch makes none on CUDA, so its
+models run beside a translation there, but on ROCm through 10.2 even a
+synchronous copy counts as one [ROCm capture]. A library with a long piece of
+work hands the GPU over after five seconds when another waits for it. Metal and
+Vulkan have no graphs, so there the libraries run side by side.
+
 ## 2. Packages
 
 | Package | From | Needed for |
@@ -79,8 +88,11 @@ a later start.
 
 Read in November 2026.
 
-- [HF cache], [TheRock], [Clip Studio Paint user data]
+- [HF cache], [TheRock], [Clip Studio Paint user data], [CUDA graphs],
+  [ROCm capture]
 
 [HF cache]: https://huggingface.co/docs/huggingface_hub/guides/manage-cache
 [Clip Studio Paint user data]: https://support.clip-studio.com/en-us/faq/articles/20210039
 [TheRock]: https://github.com/ROCm/TheRock
+[CUDA graphs]: https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/cuda-graphs.html
+[ROCm capture]: https://github.com/ROCm/rocm-systems/pull/14449

@@ -1,6 +1,6 @@
-mod backend;
 mod image;
 mod nn;
+mod torch;
 
 pub mod baberu_ocr;
 pub mod flux3_klein;

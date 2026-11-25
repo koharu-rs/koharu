@@ -27,6 +27,7 @@ use koharu_llama::{
     mtmd::{MtmdBitmap, MtmdContext, MtmdInputChunks, MtmdInputText, mtmd_default_marker},
     token::LlamaToken,
 };
+use koharu_runtime::{Library, Turn};
 use llguidance::ParserFactory;
 use rig_core::error::{ErrorKind, ErrorReport, ProviderError};
 use tokio::sync::mpsc::UnboundedSender;
@@ -97,6 +98,7 @@ pub(super) fn serve(
     ready: SyncSender<Result<Loaded>>,
     queue: Receiver<Job>,
 ) {
+    let turn = Turn::take(Library::Ggml);
     let (model, size) = match load::model(&files, size) {
         Ok(loaded) => loaded,
         Err(error) => return drop(ready.send(Err(error))),
@@ -112,6 +114,7 @@ pub(super) fn serve(
         vision: engine.mtmd.is_some(),
         context: size.context,
     };
+    drop(turn);
     if ready.send(Ok(loaded)).is_ok() {
         engine.run(&queue);
     }
@@ -186,13 +189,16 @@ impl<'m> Engine<'m> {
         let mut waiting = VecDeque::new();
         let mut running: Vec<Sequence> = Vec::new();
         let mut free: Vec<i32> = (0..self.size.sequences as i32).rev().collect();
+        let mut turn = None;
         loop {
             if running.is_empty() && waiting.is_empty() {
+                turn = None;
                 match queue.recv() {
                     Ok(job) => waiting.push_back(job),
                     Err(_) => return,
                 }
             }
+            turn.get_or_insert_with(|| Turn::take(Library::Ggml)).pass();
             waiting.extend(queue.try_iter());
             while !free.is_empty()
                 && let Some(job) = waiting.pop_front()

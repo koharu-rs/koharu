@@ -13,7 +13,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::Repository;
+use koharu_runtime::{Library, Repository, Turn};
 
 use self::{
     config::Config,
@@ -38,7 +38,7 @@ pub struct MangaOcrAr {
 
 impl MangaOcrAr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
-        let (device, kind) = crate::backend::torch(device);
+        let (device, kind) = crate::torch::device(device);
         let [config, weights, vocabulary] = REPOSITORY
             .resolve(["config.json", "model.safetensors", "vocab.json"])
             .await
@@ -46,6 +46,7 @@ impl MangaOcrAr {
         let config: Config = serde_json::from_slice(&fs_err::read(&config)?)?;
         let vocabulary: Vocabulary = serde_json::from_slice(&fs_err::read(&vocabulary)?)?;
 
+        let _turn = Turn::take(Library::Torch);
         let mut model = Model::new(&config, vocabulary.len(), device, kind)?;
         model.load(&weights)?;
         Ok(Self {
@@ -57,7 +58,7 @@ impl MangaOcrAr {
 
     /// The text of each crop.
     pub fn inference(&self, images: &[DynamicImage]) -> Result<Vec<String>> {
-        koharu_torch::inference_mode(|| {
+        crate::torch::inference(|| {
             let mut texts = Vec::with_capacity(images.len());
             for images in images.chunks(BATCH_SIZE) {
                 let crops = images
