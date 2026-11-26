@@ -46,7 +46,7 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ1QjAxQjRENzYxOTE1MDYKUldRR0ZSbDJUUnV3MWFXN09pNjhoRmNMSTV2Ylh3Wm9CZHhiRE01RVZtYXFLWVd4Vi9SbkE4QnUK",
       "endpoints": ["https://github.com/koharu-rs/koharu/releases/latest/download/latest.json"],
       "windows": {
-        "installMode": "quiet"
+        "installMode": "passive"
       }
     }
   }
