@@ -1,3 +1,13 @@
+## [0.100.1](https://github.com/koharu-rs/koharu/compare/0.100.0..0.100.1) - 2026-11-26
+
+### 🐛 Bug Fixes
+
+- *(ui)* Keep what's typed in the Pipeline settings' text boxes, so an input method's composition no longer leaves each step behind - ([f2249e4](https://github.com/koharu-rs/koharu/commit/f2249e480714dc2fa799e390857992c6cd35c144))
+
+### 🧪 Testing
+
+- *(renderer)* Set a kernel style's test text in an installed sans-serif, which CI's Linux runner has in place of Arial - ([8dc3b93](https://github.com/koharu-rs/koharu/commit/8dc3b93f47b227e8af9ac9573b21a48f9d6ce844))
+
 ## [0.100.0](https://github.com/koharu-rs/koharu/compare/0.99.0..0.100.0) - 2026-11-26
 
 ### ⛰️  Features
