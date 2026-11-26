@@ -51,7 +51,10 @@ fn ended(advance: f32, last: &Segment, scale: f32) -> f32 {
 
 /// The cost of a line `used` long ending with `last`: its unfilled share
 /// squared, plus its break's penalty. A line longer than its room costs far
-/// more, so the least overflowing breaks win when nothing fits.
+/// more, as the square of one and how far it runs past, so when nothing fits
+/// a long word's overrun is split over more lines rather than left on one:
+/// two lines a little long had cost as much as one far too long, and the
+/// hyphen between them tipped it to the one.
 fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
     let paragraph_end = matches!(last.after, Break::Mandatory | Break::End);
     let mut cost = match last.after {
@@ -64,7 +67,8 @@ fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
         Break::Hyphen => 1_000.0,
     };
     if used > room + 0.01 {
-        cost += 1_000_000.0 * (1.0 + (used - room) / room.max(1.0));
+        let over = (used - room) / room.max(1.0);
+        cost += 1_000_000.0 * (1.0 + over) * (1.0 + over);
     } else if room > 0.0 && !(balance == Balance::Ragged && paragraph_end) {
         let slack = (room - used) / room;
         cost += 100.0 * slack * slack;

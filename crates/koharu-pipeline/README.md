@@ -73,8 +73,16 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
   words, measured with the renderer, whatever its sources' own. A text that
   would draw smaller is brought up to it as far as its room allows, and one that
   fits larger stays so: small text can't be read, and a large line in a large
-  balloon is a shout. A run on some blocks measures the page's other
-  translations too.
+  balloon is a shout. One whose lines would span under half its room across
+  them at that size grows toward its source's size, as large as the balloon
+  holds up to it within an eighth of an em of its border, and when its lines
+  still span under half the balloon, past the border until they span half or
+  reach the source's size: a word as wide as a narrow balloon left it mostly
+  empty, where the original shouted, and its source's size whole overfilled
+  tall balloons whose lines it multiplied. Of a chapter's 92 balloon
+  texts, those that looked empty spanned at most 0.38 of their rooms, the rest
+  0.59 or more. A run on some blocks measures the page's other translations
+  too.
 - **Margin.** A balloon's text has a letter's width of air [Comicraft glossary].
   One under the page's size has as much of it as holds that size, down to half:
   half holds it 15 to 17% larger, where a line height of 1 rather than 1.2 gives
@@ -88,30 +96,36 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
   they may before a word is hyphenated to reach the size.
 - **Overflow.** A balloon's text its room still holds under nine tenths of the
   page's size, as a word wider than a narrow balloon leaves it, keeps the size
-  and runs past the balloon, centred, hyphenated as far as that keeps it
-  nearer, and outlined as text on art is: smaller text stands out among its
-  page's more than text past a balloon's edge. It stays on the page and out of
-  other balloons. A free text doesn't run past its frame, as one still small in
-  its widest, such as a chapter's subtitle under its title, is a smaller text.
-- **Clear of each other.** Last, a free text, a sound effect, or a text running
-  past its balloon shrinks as far as keeps its lines, grown by an eighth of its
-  size, off the other texts' lines, sound effects first and then free texts,
-  each the largest first, so a balloon's text keeps its size. A free text or
-  sound effect shrinks to half at most, as a quarter drew some at 2 to 4
-  pixels; a sound effect no size clears takes the size covering least
-  dialogue. Sound effects
-  filling widened frames had covered balloons' texts and each other. A remark
-  written across the edge of a balloon holding other texts is a free text, as
-  its share of the balloon would be its narrow source box.
+  and runs past the balloon, above and below it rather than past its sides,
+  centred, hyphenated as far as that keeps it nearer, and outlined as text on
+  art is: smaller text stands out among its page's more than text past a
+  balloon's edge. It stays on the page and out of other balloons. A free text
+  doesn't run past its frame, as one still small in its widest, such as a
+  chapter's subtitle under its title, is a smaller text.
+- **Clear of each other.** Last, a free text, a sound effect, or a balloon's
+  text running past it or lifted to its source's size shrinks as far as keeps
+  its lines, grown by an eighth of its size, off the other texts' lines and
+  sources, whose clean-up, drawn over an earlier layer, hid an overflowing
+  letter. Sound effects move first and then free texts, each the largest
+  first, so a balloon's text keeps its size. A free text or sound effect
+  shrinks to half at most, as a quarter drew some at 2 to 4 pixels; a sound
+  effect no size clears takes the size covering least dialogue; a balloon's
+  text shrinks back to what its room holds or the page's size at most. Sound
+  effects filling widened frames had covered balloons' texts and each other. A
+  remark written across the edge of a balloon holding other texts is a free
+  text, as its share of the balloon would be its narrow source box.
 - **Lines** are centred, or in Japanese and Chinese started together at the top
   or the left, as JLREQ aligns a line to its head [JLREQ].
 - **Fill and stroke** are its source's, the stroke's width in proportion to its
-  size. One that lies on art and whose source has no outline gets a stroke,
-  black around a light fill and white around any other, which keeps it legible:
-  a sound effect a sixteenth of its size, and a text outside a balloon or
-  running past one an eighth. On paper of the stroke's colour it can't be seen, and looking for low
-  contrast under the text missed one over foliage and those crossing a panel's
-  border.
+  size, at most an eighth of it, as a sound effect's measured outline scaled to
+  a size read small from its source had come to a third. One whose source has no
+  outline gets a stroke, black around a light fill and white around any other,
+  which keeps it legible on art, tone, or a balloon's border: a sound effect a
+  sixteenth of its size, and a text an eighth, in a balloon too, where lifted
+  and overflowing texts had lost their letters on tone. On paper of the stroke's
+  colour it can't be seen, and looking for low contrast under the text missed
+  one over foliage and those crossing a panel's border; placement doesn't read
+  the page's pixels.
 - **Direction.** It's vertical only when its source is and the target is
   Japanese or Chinese; any other language runs horizontally, turned by its
   source's tilt.

@@ -119,12 +119,7 @@ pub(super) fn fit(
             |scale| overflows(styled, room, &halves, scale),
             |scale| {
                 let mut placed = place(styled, room, &halves, scale);
-                let hyphens = placed.lines.iter().filter(|line| {
-                    !line.last
-                        && (line.segments.clone().last())
-                            .is_some_and(|at| halves[at].after == Break::Hyphen)
-                });
-                placed.overflowed |= hyphens.count() > 1;
+                placed.overflowed |= hyphens(&halves, &placed) > 1;
                 placed
             },
         );
@@ -202,10 +197,16 @@ pub(super) fn fit(
 /// The largest scale above 1 at which `segments`, which fit at 1 as `set`,
 /// still fit, breaking between words only: the scale doubles until they
 /// don't, then the gap is halved as shrinking halves it. A word that outgrows
-/// its line ends the growth rather than being hyphenated.
+/// its line ends the growth rather than being hyphenated, a drawn-out sound
+/// too, which breaks only where its set size needs it.
 fn grow(styled: &Styled, room: &Room, segments: &[Segment], set: Placed) -> Placed {
     let overflows = |scale| overflows(styled, room, segments, scale);
-    let at = |scale| place(styled, room, segments, scale);
+    let set_hyphens = hyphens(segments, &set);
+    let at = |scale| {
+        let mut placed = place(styled, room, segments, scale);
+        placed.overflowed |= hyphens(segments, &placed) > set_hyphens;
+        placed
+    };
     let (mut low, mut best) = (1.0, set);
     while low < CEILING {
         let high = low * 2.0;
@@ -219,6 +220,17 @@ fn grow(styled: &Styled, room: &Room, segments: &[Segment], set: Placed) -> Plac
         }
     }
     best
+}
+
+/// How many of `placed`'s lines of `segments` end in a hyphen.
+fn hyphens(segments: &[Segment], placed: &Placed) -> usize {
+    (placed.lines.iter())
+        .filter(|line| {
+            !line.last
+                && (line.segments.clone().last())
+                    .is_some_and(|at| segments[at].after == Break::Hyphen)
+        })
+        .count()
 }
 
 /// The largest scale from 1 down to `floor` at which `at` fits the text, else
@@ -519,19 +531,15 @@ fn in_path<'a>(
 
 impl InPath<'_> {
     /// Every line count the path's block extent holds is tried, and the
-    /// cheapest count that fits wins; when none fits, the least overflowing,
-    /// the fewer lines on a tie.
+    /// cheapest count that fits wins; when none fits, the text runs past the
+    /// outline across its lines, as a box's text runs past its foot, rather
+    /// than along them past its sides, where a narrow balloon's lines had
+    /// stuck out on both.
     fn place(&self) -> Placed {
         let (fewest, most) = self.counts();
-        // Fewer lines than `fewest` overflow, so they're tried only when no
-        // more fit.
         match self.best(fewest..=most) {
             Some((_, placed)) if !placed.overflowed => placed,
-            later => match (self.best(1..=most.min(fewest - 1)), later) {
-                (Some(earlier), Some(later)) if later.0 < earlier.0 => later.1,
-                (Some((_, placed)), _) | (None, Some((_, placed))) => placed,
-                (None, None) => self.overflowing(),
-            },
+            _ => self.overflowing(),
         }
     }
 
@@ -714,18 +722,27 @@ impl InPath<'_> {
             },
         ))
     }
-    /// The text when no line count holds it: in the middle line's widest
-    /// span, or the bounds, running past the outline as overflowing box text
-    /// does.
+    /// The text when no line count holds it: in the widest span a line's band
+    /// across the outline reaches, less the air at its ends, or the bounds,
+    /// running past the outline as overflowing box text does. The middle
+    /// line's span, narrower in a balloon pinched there, had kept a word whole
+    /// past its sides that its widest held in two lines.
     fn overflowing(&self) -> Placed {
         let (bounds, pitch, air) = (self.outline.bounds, self.pitch, self.air);
         let middle = (bounds.y0 + bounds.y1) * 0.5;
-        let band = self.outline.band(
-            middle - f64::from(pitch) * 0.5,
-            middle + f64::from(pitch) * 0.5,
-        );
-        let (start, end) = room::axis(std::slice::from_ref(&band))
-            .and_then(|axis| room::reach(&band, axis))
+        let step = f64::from(pitch) * 0.5;
+        let bands = ((bounds.height() - f64::from(pitch)) / step)
+            .floor()
+            .max(0.0) as usize;
+        let (start, end) = (0..=bands)
+            .filter_map(|at| {
+                let v0 = bounds.y0 + step * at as f64;
+                let band = self.outline.band(v0, v0 + f64::from(pitch));
+                room::axis(std::slice::from_ref(&band)).and_then(|axis| room::reach(&band, axis))
+            })
+            .max_by(|a, b| (a.1 - a.0).total_cmp(&(b.1 - b.0)))
+            .map(|(start, end)| (start + f64::from(air), end - f64::from(air)))
+            .filter(|(start, end)| end > start)
             .unwrap_or((bounds.x0, bounds.x1));
         let room = (end - start) as f32;
         let lines = lines::break_lines(self.segments, self.scale, Balance::Even, None, |_| room)
@@ -850,6 +867,40 @@ mod tests {
         });
         assert!(!placed.overflowed);
         assert!((0.4..=0.417).contains(&placed.scale), "{}", placed.scale);
+        Ok(())
+    }
+
+    #[test]
+    fn a_balloon_s_text_too_long_for_it_runs_past_its_top_and_foot_not_its_sides() -> Result<()> {
+        // Eight words 25 long at their set size in a balloon 60 wide and 40
+        // tall, whose margin leaves lines 40 long: a word to a line.
+        let frame: Frame = serde_json::from_value(serde_json::json!({
+            "path": {"path": "M0 0 L60 0 L60 40 L0 40 Z", "fit": "none", "anchor": "center"}
+        }))?;
+        let styled = Styled {
+            text: String::new(),
+            spans: Vec::new(),
+            vertical: false,
+            align: Align::Center,
+            line_height: 1.2,
+            hyphenation: None,
+            chinese: false,
+            frame: frame.clone(),
+            ruby: Vec::new(),
+        };
+        let mut words = vec![word(25.0, Break::Normal); 7];
+        words.push(word(25.0, Break::End));
+        let (segments, placed) = fit(&styled, &Room::new(&frame, false), |_| words.clone());
+        assert!(placed.overflowed);
+        assert_eq!(placed.lines.len(), 8);
+        for line in &placed.lines {
+            let used = lines::length(&segments, line.segments.clone(), placed.scale);
+            assert!(
+                used <= line.room && line.room <= 60.0,
+                "{used} in {}",
+                line.room
+            );
+        }
         Ok(())
     }
 

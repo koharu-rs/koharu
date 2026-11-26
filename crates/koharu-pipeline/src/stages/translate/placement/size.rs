@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use koharu_renderer::Renderer;
-use koharu_scene::{Fit, Frame, LanguageIdentifier, LayerId, PathFit, Role, Text};
+use koharu_scene::{Direction, Fit, Frame, LanguageIdentifier, LayerId, PathFit, Role, Text};
 use kurbo::{Affine, BezPath, Line, ParamCurve as _, Point, Rect, Shape as _};
 use rayon::prelude::*;
 
@@ -22,6 +22,15 @@ const ACROSS: u32 = 4;
 /// room: under it, as under the share the renderer starts a hyphen at, it
 /// looks smaller than its neighbours.
 const NEAR: f64 = 0.9;
+/// Of its room's height, the most a balloon's text at the page's size may
+/// take and leave the balloon empty, as a word as wide as the room holds it
+/// small. Of a chapter's 92 balloon texts, those that looked empty took at
+/// most 0.38 of it, and the rest 0.59 or more.
+const EMPTY: f64 = 0.5;
+/// The margin, in ems, of a text lifted toward its source's size: up to the
+/// balloon's border but off it. Half an em held "Leave it to me!" at 24 px in
+/// a balloon its 40 px original filled.
+const EDGE: f64 = 0.125;
 
 /// The middle of `values`, the larger of two.
 pub(super) fn median(mut values: Vec<f64>) -> Option<f64> {
@@ -53,6 +62,111 @@ pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Opti
     Ok(median(held))
 }
 
+/// Brings `lettering` up to `size`, the page's, or toward `source`, its
+/// source's, when that's larger and its balloon would look empty at the page's
+/// size, as the original fills it: as large as its balloon holds up to
+/// `source`, within `EDGE` of its border; and when the balloon still looks
+/// empty there, past its border too, up to the size at which it no longer
+/// does or `source`. Taking `source` whole overfilled tall balloons whose
+/// lines it multiplied, and stopping at the border left a word as wide as a
+/// narrow balloon at a fraction of its original. Gives the size it's set at,
+/// and what its room holds when it runs past the room.
+pub(super) fn lift(
+    lettering: &mut Lettering,
+    size: f64,
+    source: Option<f64>,
+) -> Result<(f64, Option<f64>)> {
+    let given = lettering.text.frame.clone();
+    let held = reach(lettering, size)?;
+    let Some(source) = source.filter(|source| *source > size) else {
+        return Ok((size, held));
+    };
+    if !empty(lettering.id, &at(&lettering.text, size))? {
+        return Ok((size, held));
+    }
+    let placed = std::mem::replace(&mut lettering.text.frame, given);
+    if reach(lettering, source)?.is_none() {
+        return Ok((source, None));
+    }
+    // What the balloon holds up to its border, as the original's letters
+    // reach it; shrinking from its source's size finds that in a narrow
+    // balloon, where growing from the page's stopped short of it.
+    if let Frame::Path { fit, inset, .. } = &mut lettering.text.frame {
+        *fit = PathFit::Best;
+        *inset = inset.min(EDGE);
+    }
+    let fills = drawn(lettering.id, &at(&lettering.text, source))?;
+    let (frame, start, set, holds) = match fills >= size {
+        true => (lettering.text.frame.clone(), fills, source, None),
+        false => (placed, size, size, held),
+    };
+    // Past the border, in the same room.
+    let Frame::Path {
+        path,
+        anchor,
+        inset,
+        ..
+    } = &frame
+    else {
+        lettering.text.frame = frame;
+        return Ok((set, holds));
+    };
+    let mut past = lettering.text.clone();
+    past.frame = Frame::Path {
+        path: path.clone(),
+        fit: PathFit::None,
+        anchor: *anchor,
+        inset: *inset,
+    };
+    if start >= 0.999 * source || !empty(lettering.id, &at(&past, start))? {
+        lettering.text.frame = frame;
+        return Ok((set, holds));
+    }
+    let mut grown = source;
+    if !empty(lettering.id, &at(&past, source))? {
+        let (mut low, mut high) = (start, source);
+        for _ in 0..8 {
+            let middle = (low + high) / 2.0;
+            match empty(lettering.id, &at(&past, middle))? {
+                true => low = middle,
+                false => high = middle,
+            }
+        }
+        grown = high;
+    }
+    lettering.text.frame = past.frame;
+    Ok((grown, Some(holds.unwrap_or(start))))
+}
+
+/// `text` set at `size`.
+fn at(text: &Text, size: f64) -> Text {
+    let mut text = text.clone();
+    text.style.chars.size = Some(size);
+    text
+}
+
+/// Whether `text`, block `id`'s, takes under `EMPTY` of its room's extent
+/// across its lines.
+fn empty(id: LayerId, text: &Text) -> Result<bool> {
+    let Frame::Path { path, .. } = &text.frame else {
+        return Ok(false);
+    };
+    let Some(laid) = Renderer::get().layout(id, text)? else {
+        return Ok(false);
+    };
+    let room = BezPath::from(path).bounding_box();
+    let across = |rect: Rect| match text.direction {
+        Direction::Vertical => (rect.x0, rect.x1),
+        Direction::Horizontal => (rect.y0, rect.y1),
+    };
+    let (low, high) = (laid.lines.iter().map(|line| across(*line)))
+        .fold((f64::MAX, f64::MIN), |(low, high), (from, to)| {
+            (low.min(from), high.max(to))
+        });
+    let (from, to) = across(room);
+    Ok(high - low < EMPTY * (to - from))
+}
+
 /// Brings `lettering` up to `size` in the least of its rooms that holds it so,
 /// in whole words if one does, or else in the most it may take. A balloon's
 /// text that room holds under `NEAR` of `size` keeps `size` there, running past
@@ -60,7 +174,7 @@ pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Opti
 /// to. A free text doesn't: its frame has widened as far as it may, and one
 /// still smaller, such as a chapter's subtitle under its title, is a smaller
 /// text.
-pub(super) fn lift(lettering: &mut Lettering, size: f64) -> Result<Option<f64>> {
+fn reach(lettering: &mut Lettering, size: f64) -> Result<Option<f64>> {
     let rooms = rooms(lettering);
     let Some(most) = rooms.last() else {
         return Ok(None);
@@ -95,22 +209,26 @@ pub(super) fn lift(lettering: &mut Lettering, size: f64) -> Result<Option<f64>> 
     Ok(None)
 }
 
-/// Keeps the texts that may move off the others' letters, and off `fixed`,
-/// those of the page's texts kept as they are, each shrinking only as far as
+/// Keeps the texts that may move off the others' letters, off `fixed`, those
+/// of the page's texts kept as they are, and off the other texts' `sources`,
+/// whose clean-ups hid an overflowing letter, each shrinking only as far as
 /// that takes: a free text or a sound effect from what fills its frame down to
-/// half of it, as less is too small to read, and a balloon's text running past
-/// it from its size, of `sizes`, down to what its room holds, of `held`, which
-/// also keeps off the page's other `balloons`; all on the page, `sheet`. A
+/// half of it, as less is too small to read, and a balloon's text set above
+/// what fills its room, running past it or lifted to its source's size, from
+/// its size, of `sizes`, down to its `floors`, what its room holds or the
+/// page's size, which also keeps off the page's other `balloons`; all on the
+/// page, `sheet`. A
 /// sound effect lying across dialogue takes the size covering least of it.
-/// Sound effects move first, then free texts, then those running past a
-/// balloon, each the largest first, so a balloon's text keeps its size before
+/// Sound effects move first, then free texts, then those balloons' texts,
+/// each the largest first, so a balloon's text keeps its size before
 /// what lies on art does. Sound effects drawn over balloons and over each
 /// other, and remarks beside them, had covered their texts.
 pub(super) fn clear(
     letterings: &mut [Lettering],
     sizes: &mut [Option<f64>],
-    held: &[Option<f64>],
+    floors: &[Option<f64>],
     fixed: &[Rect],
+    sources: &[(LayerId, Rect)],
     balloons: &[(LayerId, BezPath)],
     sheet: Rect,
 ) -> Result<()> {
@@ -130,7 +248,7 @@ pub(super) fn clear(
             )
         })
         .collect::<Result<Vec<_>>>()?;
-    let rank = |at: usize| match (&letterings[at].text.frame, held[at]) {
+    let rank = |at: usize| match (&letterings[at].text.frame, floors[at]) {
         (_, Some(_)) => Some(2),
         (Frame::Box { .. }, None) if letterings[at].block.role == Role::Sfx => Some(0),
         (Frame::Box { .. }, None) => Some(1),
@@ -155,8 +273,13 @@ pub(super) fn clear(
                 lines.iter().map(move |line| (*line, sound))
             })
             .chain(fixed.iter().map(|line| (*line, false)))
+            .chain(
+                (sources.iter())
+                    .filter(|(id, _)| *id != lettering.id)
+                    .map(|(_, source)| (*source, false)),
+            )
             .collect();
-        let walls: Vec<&BezPath> = match held[at] {
+        let walls: Vec<&BezPath> = match floors[at] {
             Some(_) => (balloons.iter())
                 .filter(|(id, _)| Some(*id) != lettering.balloon)
                 .map(|(_, outline)| outline)
@@ -176,8 +299,30 @@ pub(super) fn clear(
             continue;
         }
         // The least and most it's set at, in a frame that sets it so.
-        let (least, most, frame) = match (&lettering.text.frame, held[at], sizes[at]) {
-            (frame, Some(held), Some(size)) => (held, size, frame.clone()),
+        let (least, most, frame) = match (&lettering.text.frame, floors[at], sizes[at]) {
+            (
+                Frame::Path {
+                    path,
+                    anchor,
+                    inset,
+                    ..
+                },
+                Some(floor),
+                Some(size),
+            ) => {
+                let frame = Frame::Path {
+                    path: path.clone(),
+                    fit: PathFit::None,
+                    anchor: *anchor,
+                    inset: *inset,
+                };
+                // No larger than it draws, which a lifted text's room holds.
+                let draws = drawn(
+                    lettering.id,
+                    &at_size(lettering, &lettering.text.frame, Some(size)),
+                )?;
+                (floor, size.min(draws), frame)
+            }
             (Frame::Box { bounds, anchor, .. }, _, size) => {
                 let fills = drawn(
                     lettering.id,
@@ -209,9 +354,9 @@ pub(super) fn clear(
             }
             found = Some(low);
         }
-        // With nothing clear past what its room holds, it fills the room.
-        if let (Some(size), Some(held)) = (found, held[at])
-            && size <= 1.01 * held
+        // With nothing clear past its floor, it fills its room from there.
+        if let (Some(size), Some(floor)) = (found, floors[at])
+            && size <= 1.01 * floor
         {
             found = None;
         }
@@ -236,15 +381,16 @@ pub(super) fn clear(
             }
         }
         let lettering = &mut letterings[at];
-        match (found, held[at]) {
+        match (found, floors[at]) {
             (Some(size), _) => {
                 lettering.text.frame = frame;
                 sizes[at] = Some(size);
             }
-            (None, Some(_)) => {
+            (None, Some(floor)) => {
                 if let Frame::Path { fit, .. } = &mut lettering.text.frame {
                     *fit = PathFit::Best;
                 }
+                sizes[at] = Some(floor);
             }
             // A free text that no size clears, lying across another, stays.
             (None, None) => continue,

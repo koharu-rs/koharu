@@ -1,6 +1,7 @@
 //! Where lines may break: Unicode line breaking, with Chinese words kept
-//! whole, Korean broken between words, and words at hyphenation points; and
-//! the text between two breaks measured from its glyphs.
+//! whole, Korean broken between words, words at hyphenation points, and a
+//! drawn-out sound in its run of one letter; and the text between two breaks
+//! measured from its glyphs.
 
 use std::{ops::Range, sync::LazyLock};
 
@@ -33,7 +34,9 @@ pub(super) const LINE_ENDS: [char; 5] = ['\n', '\r', '\u{0085}', '\u{2028}', '\u
 /// Where lines may break: between words, then also at each word's middle
 /// hyphenation point, so no word takes two hyphens, then at all of them.
 /// Never elsewhere in a word, as a letterer never splits one without a
-/// hyphen.
+/// hyphen, but in a drawn-out sound, which breaks with one in the middle of
+/// its run of one letter in any language and as a word does, since any length
+/// of the run reads alike and dictionaries have no points in it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Breaking {
     Words,
@@ -146,9 +149,9 @@ fn opportunities(text: &str, breaking: Breaking, lang: Option<Lang>) -> Vec<Cut>
             true => start + text[start..next].trim_end_matches(LINE_ENDS).len(),
             false => next,
         };
-        let points = match lang {
-            Some(lang) if !mandatory(next) => points(text, start..end, breaking, lang),
-            _ => Vec::new(),
+        let points = match mandatory(next) {
+            true => Vec::new(),
+            false => points(text, start..end, breaking, lang),
         };
         let mut start = start;
         for point in points {
@@ -160,8 +163,9 @@ fn opportunities(text: &str, breaking: Breaking, lang: Option<Lang>) -> Vec<Cut>
     pieces
 }
 
-/// Where `breaking` lets a hyphen end a line inside the piece `range`.
-fn points(text: &str, range: Range<usize>, breaking: Breaking, lang: Lang) -> Vec<usize> {
+/// Where `breaking` lets a hyphen end a line inside the piece `range`, at
+/// `lang`'s hyphenation points, or in a drawn-out sound's run of one letter.
+fn points(text: &str, range: Range<usize>, breaking: Breaking, lang: Option<Lang>) -> Vec<usize> {
     // A piece's word is its letters, between whatever else starts or ends
     // it. Photoshop hyphenates words of more than five letters.
     let piece = &text[range.clone()];
@@ -169,10 +173,16 @@ fn points(text: &str, range: Range<usize>, breaking: Breaking, lang: Lang) -> Ve
     let start = range.start + piece.len() - piece.trim_start_matches(not_letter).len();
     let word = start..start + piece.trim_matches(not_letter).len();
     let letters = &text[word.clone()];
-    if breaking == Breaking::Words
-        || !letters.chars().all(char::is_alphabetic)
-        || letters.chars().count() < 6
-    {
+    if !letters.chars().all(char::is_alphabetic) {
+        return Vec::new();
+    }
+    if let Some(point) = drawn_out(letters) {
+        return vec![word.start + point];
+    }
+    let Some(lang) = lang.filter(|_| breaking != Breaking::Words) else {
+        return Vec::new();
+    };
+    if letters.chars().count() < 6 {
         return Vec::new();
     }
     let mut end = word.start;
@@ -189,6 +199,26 @@ fn points(text: &str, range: Range<usize>, breaking: Breaking, lang: Lang) -> Ve
             .collect(),
         _ => points.collect(),
     }
+}
+
+/// Where the drawn-out sound `letters`, such as "Gwaaaaah", breaks: in the
+/// middle of its longest run of one letter four or more long, keeping two of
+/// it on each side.
+fn drawn_out(letters: &str) -> Option<usize> {
+    let chars: Vec<(usize, char)> = letters.char_indices().collect();
+    let same = |a: char, b: char| a.to_lowercase().eq(b.to_lowercase());
+    let mut longest: Option<(usize, usize)> = None;
+    let mut at = 0;
+    while let Some(&(_, first)) = chars.get(at) {
+        let length = (chars[at..].iter())
+            .take_while(|(_, ch)| same(*ch, first))
+            .count();
+        if length >= 4 && longest.is_none_or(|(_, most)| length > most) {
+            longest = Some((at, length));
+        }
+        at += length;
+    }
+    longest.map(|(start, length)| chars[start + length / 2].0)
 }
 
 /// The text's segments, broken as `breaking` allows and measured from the
@@ -384,6 +414,16 @@ mod tests {
             pieces("Um... actually!", Breaking::Halves),
             ["Um... ", "actu", "ally!"]
         );
+    }
+
+    #[test]
+    fn a_drawn_out_sound_breaks_in_its_run_as_a_word_does_in_any_language() {
+        let text = "Gwaaaaah! Hmmm";
+        let unknown: Vec<&str> = opportunities(text, Breaking::Words, None)
+            .into_iter()
+            .map(|(range, ..)| &text[range])
+            .collect();
+        assert_eq!(unknown, ["Gwaa", "aaah! ", "Hmmm"]);
     }
 
     #[test]

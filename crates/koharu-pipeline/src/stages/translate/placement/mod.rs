@@ -74,8 +74,9 @@ pub(super) fn place(
         })
         .collect::<Result<Vec<_>>>()?;
     let size = size::page(&letterings, source)?;
-    // The page, its balloons, and the lines of its texts kept as they are,
-    // which those that move keep within and off.
+    // The page, its balloons, the lines of its texts kept as they are, and
+    // where every text's source lies, which its clean-up covers, drawn over
+    // an earlier layer's lettering: what those that move keep within and off.
     let on = project.page(page)?;
     let sheet = Rect::new(
         0.0,
@@ -93,25 +94,40 @@ pub(super) fn place(
         })
         .collect::<Result<Vec<_>>>()?
         .concat();
+    let sources: Vec<(LayerId, Rect)> = (project.blocks(page)?.into_iter())
+        .filter_map(|(id, block)| Some((id, block.source.bounds()?)))
+        .collect();
     letterings.retain(|lettering| words.contains_key(&lettering.id));
-    let (mut sizes, held): (Vec<_>, Vec<_>) = letterings
+    // Each text's size, and what it may shrink back to: what its room holds
+    // when it runs past it, or the page's size when it's lifted above that.
+    let (mut sizes, floors): (Vec<_>, Vec<_>) = letterings
         .par_iter_mut()
         .map(|lettering| {
             let own = lettering.block.source.style.chars.size;
-            let size = match lettering.block.role {
-                Role::Text => size,
-                Role::Sfx => [own, size].into_iter().flatten().reduce(f64::min),
+            let (size, source) = match lettering.block.role {
+                Role::Text => (size, own),
+                Role::Sfx => ([own, size].into_iter().flatten().reduce(f64::min), None),
             };
-            let held = match size {
-                Some(size) => size::lift(lettering, size)?,
-                None => None,
-            };
-            Ok((size, held))
+            Ok(match size {
+                Some(page) => {
+                    let (size, held) = size::lift(lettering, page, source)?;
+                    (Some(size), held.or((size > page).then_some(page)))
+                }
+                None => (None, None),
+            })
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .unzip();
-    size::clear(&mut letterings, &mut sizes, &held, &fixed, &outlines, sheet)?;
+    size::clear(
+        &mut letterings,
+        &mut sizes,
+        &floors,
+        &fixed,
+        &sources,
+        &outlines,
+        sheet,
+    )?;
     for (lettering, size) in letterings.iter_mut().zip(sizes) {
         lettering.letter(size);
     }
@@ -206,20 +222,13 @@ fn lettering<'p>(
 
 impl Lettering<'_> {
     /// Sets it at `size`, in its source's ink as its fill unless its style
-    /// sets one, and an outline in proportion: its own, or its source's, or
-    /// for one lying on art, as a sound effect does and a text outside a
-    /// balloon or running past one may, one unlike its fill, which keeps it
-    /// legible over it: a sixteenth of a sound effect's size, and an eighth of
-    /// a text's, which is smaller. On paper the outline's colour it can't be
-    /// seen.
+    /// sets one, and an outline in proportion, at most `OUTLINE` of its size:
+    /// its own, or its source's, or one unlike its fill, which keeps it legible
+    /// over art, tone, or a balloon's border, a sixteenth of a sound effect's
+    /// size and an eighth of a text's. On paper the outline's colour it can't
+    /// be seen, so a balloon's text has one too: telling plain paper from tone
+    /// takes the page's pixels, which placement doesn't read.
     fn letter(&mut self, size: Option<f64>) {
-        let past = matches!(
-            self.text.frame,
-            Frame::Path {
-                fit: PathFit::None,
-                ..
-            }
-        );
         let source = &self.block.source.style.chars;
         let chars = &mut self.text.style.chars;
         chars.fill = chars.fill.or(source.fill);
@@ -229,21 +238,25 @@ impl Lettering<'_> {
             Some((stroke, width * scale))
         });
         let share = match self.block.role {
-            Role::Sfx => Some(1.0 / 16.0),
-            Role::Text if self.balloon.is_none() || past => Some(1.0 / 8.0),
-            Role::Text => None,
+            Role::Sfx => 1.0 / 16.0,
+            Role::Text => 1.0 / 8.0,
         };
         let outlined = outlined.or_else(|| {
-            let (size, share) = size.zip(share).filter(|_| chars.stroke.is_none())?;
+            let size = size.filter(|_| chars.stroke.is_none())?;
             Some((unlike(chars.fill), size * share))
         });
         if let Some((stroke, width)) = outlined {
+            let most = size.or(chars.size).map_or(width, |size| OUTLINE * size);
             chars.stroke = Some(stroke);
-            chars.stroke_width = Some(width);
+            chars.stroke_width = Some(width.min(most));
         }
         chars.size = size.or(chars.size);
     }
 }
+
+/// Of a text's size, the widest outline it's given. A sound effect's measured
+/// outline, scaled to a size read small from its source, had come to a third.
+const OUTLINE: f64 = 1.0 / 8.0;
 
 /// The colour of an outline around `fill`: black around a light one, and white
 /// around any other, the renderer's black included.
@@ -639,13 +652,18 @@ mod tests {
     }
 
     #[test]
-    fn a_text_on_art_without_an_outline_gets_one_unlike_its_fill() -> Result<()> {
+    fn a_text_gets_an_outline_unlike_its_fill_no_wider_than_an_eighth_of_it() -> Result<()> {
         let source = |x: f64, role: &str, fill: [f32; 4]| {
             json!({"kind": "block", "role": role, "source": {
                 "frame": {"box": {"bounds": {"x": x, "y": 20.0, "width": 90.0, "height": 120.0}}},
                 "style": {"chars": {"size": 32.0, "fill": fill}},
             }})
         };
+        // A sound effect whose outline measured a third of its size.
+        let mut bold = source(0.0, "sfx", [0.0, 0.0, 0.0, 1.0]);
+        bold["source"]["frame"]["box"]["bounds"]["y"] = json!(250.0);
+        bold["source"]["style"]["chars"]["stroke"] = json!([1.0, 1.0, 1.0, 1.0]);
+        bold["source"]["style"]["chars"]["stroke_width"] = json!(32.0 / 3.0);
         let dir = tempfile::tempdir()?;
         let (mut session, ids) = page(
             &dir,
@@ -658,28 +676,31 @@ mod tests {
                 ),
                 ("sound", None, source(0.0, "sfx", [0.97, 0.94, 0.93, 1.0])),
                 ("remark", None, source(210.0, "text", [0.2, 0.2, 0.2, 1.0])),
+                ("bold", None, bold),
             ],
         )?;
         let (black, white) = (Rgba([0.0, 0.0, 0.0, 1.0]), Rgba([1.0; 4]));
 
-        // A balloon's paper is behind its text already; on art, a sixteenth
-        // of its size for a sound effect, and an eighth for a text.
+        // A sixteenth of its size for a sound effect, and an eighth for a
+        // text, in a balloon too, whose tone or border it keeps off.
         let mut outline = |block| -> Result<_> {
             let chars = placed(&mut session, block, &langid!("en"))?.style.chars;
             let size = chars.size.context("a size")?;
             let width = chars.stroke_width.map(|width| width / size);
             Ok(chars.stroke.zip(width))
         };
-        assert_eq!(outline(ids[1])?, None);
+        assert_eq!(outline(ids[1])?, Some((white, 1.0 / 8.0)));
         assert_eq!(outline(ids[2])?, Some((black, 1.0 / 16.0)));
         assert_eq!(outline(ids[3])?, Some((white, 1.0 / 8.0)));
+        assert_eq!(outline(ids[4])?, Some((white, 1.0 / 8.0)));
         Ok(())
     }
 
     #[test]
     fn a_text_smaller_than_its_page_s_narrows_its_margin_as_far_as_that_takes() -> Result<()> {
         // Two balloons of one width, and a narrower one whose word reaches
-        // their texts' size with a margin under an em.
+        // their texts' size with a margin under an em; sources smaller than
+        // the page's size, which they'd be brought up to in empty balloons.
         let balloon = |x: f64, y: f64, width: f64| {
             let (right, bottom) = (x + width, y + 190.0);
             json!({"kind": "balloon", "outline":
@@ -688,7 +709,7 @@ mod tests {
         let text = |x: f64, y: f64| {
             json!({"kind": "block", "source": {
                 "frame": {"box": {"bounds": {"x": x, "y": y, "width": 60.0, "height": 100.0}}},
-                "style": {"chars": {"size": 40.0}},
+                "style": {"chars": {"size": 20.0}},
             }})
         };
         let dir = tempfile::tempdir()?;
@@ -711,7 +732,7 @@ mod tests {
 
         let texts = lettered(
             &mut session,
-            &[(roomy, "HHHH"), (other, "HHHH"), (tight, "HHHH")],
+            &[(roomy, "HMHM"), (other, "HMHM"), (tight, "HMHM")],
             &langid!("en"),
         )?;
         let size = texts[2].style.chars.size.context("a size")?;
@@ -738,7 +759,7 @@ mod tests {
         let text = |x: f64, y: f64| {
             json!({"kind": "block", "source": {
                 "frame": {"box": {"bounds": {"x": x, "y": y + 40.0, "width": 40.0, "height": 100.0}}},
-                "style": {"chars": {"size": 40.0}},
+                "style": {"chars": {"size": 20.0}},
             }})
         };
         let dir = tempfile::tempdir()?;
@@ -755,12 +776,12 @@ mod tests {
                 ("beside", Some("d"), text(340.0, 0.0)),
             ],
         )?;
-        let word = "HHHHHHHHHH";
+        let word = "HMHMHMHMHM";
         let texts = lettered(
             &mut session,
             &[
-                (ids[1], "HHHH"),
-                (ids[3], "HHHH"),
+                (ids[1], "HMHM"),
+                (ids[3], "HMHM"),
                 (ids[5], word),
                 (ids[7], word),
             ],
@@ -772,7 +793,6 @@ mod tests {
         };
         let size = texts[0].style.chars.size.context("a size")?;
         assert_eq!(fit(&texts[0])?, PathFit::Best);
-        assert_eq!(texts[0].style.chars.stroke, None);
         // In the open, at the page's size past its balloon, outlined.
         let open = &texts[2].style.chars;
         assert_eq!(fit(&texts[2])?, PathFit::None);
@@ -792,6 +812,60 @@ mod tests {
             .map(|line| line.x0)
             .fold(f64::MAX, f64::min);
         assert!(left >= 320.0, "{left}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_text_its_balloon_would_leave_empty_grows_past_it_until_it_fills_it() -> Result<()> {
+        // Two narrow balloons, and two whose word draws a line across a
+        // fraction of them at the page's size, its source at 40: a tall one
+        // it can't fill below that, and a short one it fills at less.
+        let balloon = |x: f64, y: f64, width: f64, height: f64| {
+            let (right, bottom) = (x + width, y + height);
+            json!({"kind": "balloon", "outline": format!("M{x} {y} L{right} {y} L{right} {bottom} L{x} {bottom} Z")})
+        };
+        let text = |x: f64, y: f64, size: f64| {
+            json!({"kind": "block", "source": {
+                "frame": {"box": {"bounds": {"x": x, "y": y, "width": 40.0, "height": 60.0}}},
+                "style": {"chars": {"size": size}},
+            }})
+        };
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("a", None, balloon(0.0, 0.0, 80.0, 120.0)),
+                ("one", Some("a"), text(20.0, 30.0, 10.0)),
+                ("b", None, balloon(0.0, 130.0, 80.0, 120.0)),
+                ("two", Some("b"), text(20.0, 160.0, 10.0)),
+                ("c", None, balloon(110.0, 0.0, 120.0, 400.0)),
+                ("tall", Some("c"), text(150.0, 170.0, 40.0)),
+                ("d", None, balloon(260.0, 150.0, 100.0, 80.0)),
+                ("short", Some("d"), text(290.0, 160.0, 40.0)),
+            ],
+        )?;
+        let texts = lettered(
+            &mut session,
+            &[
+                (ids[1], "HMHM"),
+                (ids[3], "HMHM"),
+                (ids[5], "HMHM"),
+                (ids[7], "HMHM"),
+            ],
+            &langid!("en"),
+        )?;
+        let page = size::drawn(ids[1], &texts[0])?;
+        let past = |text: &Text| -> Result<f64> {
+            let Frame::Path { fit, .. } = text.frame else {
+                bail!("{:?}", text.frame);
+            };
+            assert_eq!(fit, PathFit::None);
+            assert_eq!(text.style.chars.stroke, Some(Rgba([1.0; 4])));
+            text.style.chars.size.context("a size")
+        };
+        let (tall, short) = (past(&texts[2])?, past(&texts[3])?);
+        assert_eq!(tall, 40.0);
+        assert!(short > 1.3 * page && short < 38.0, "{short} against {page}");
         Ok(())
     }
 
