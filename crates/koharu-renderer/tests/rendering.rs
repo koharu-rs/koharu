@@ -622,18 +622,35 @@ fn a_panel_draws_its_children_past_its_outline() {
 
 #[test]
 fn a_kernel_style_sets_what_a_text_leaves_out_and_redefining_it_changes_its_texts() {
-    // The project's antique family is Arial in Latin, and its rounded only
-    // leans.
-    let styles = json!({"op": "update_meta", "patch": {"styles": {
-        "antique": {"Latn": {"family": "Arial"}},
-        "rounded": {"Latn": {"italic": true}},
-    }}});
     let renderer = renderer();
     let added = |style: Value| {
         json!({"op": "add_layer", "id": "$text", "page": "$page", "index": 0, "layer": {
             "kind": "text", "content": "Hello", "language": "en", "style": style,
         }})
     };
+    // An installed sans-serif, as the unit tests take one: the one a text set
+    // in it draws with, by its PostScript name.
+    let family = [
+        "Arial",
+        "Segoe UI",
+        "Noto Sans",
+        "DejaVu Sans",
+        "Liberation Sans",
+    ]
+    .into_iter()
+    .find(|family| {
+        let style = json!({"chars": {"family": family, "size": 30.0}});
+        let (_dir, session, page, change) = page(400, 200, vec![added(style)]);
+        let frame = renderer.render(&session, page).expect("a frame");
+        let drawn = &text(&frame, &change, "text").runs[0].post_script_name;
+        drawn.starts_with(&family.replace(' ', ""))
+    })
+    .expect("an installed sans-serif");
+    // The project's antique family is it in Latin, and its rounded only leans.
+    let styles = json!({"op": "update_meta", "patch": {"styles": {
+        "antique": {"Latn": {"family": family}},
+        "rounded": {"Latn": {"italic": true}},
+    }}});
     let face = |style: Value, redefined: Option<Value>| {
         let (_dir, mut session, page, change) = page(400, 200, vec![styles.clone(), added(style)]);
         if let Some(face) = redefined {
@@ -645,9 +662,11 @@ fn a_kernel_style_sets_what_a_text_leaves_out_and_redefining_it_changes_its_text
         }
         let frame = renderer.render(&session, page).expect("a frame");
         let run = text(&frame, &change, "text").runs[0].clone();
-        let italic = run.post_script_name.contains("Italic") || run.faux_italic;
-        let bold = run.post_script_name.contains("Bold") || run.faux_bold;
-        (run.post_script_name.starts_with("Arial"), italic, bold)
+        // DejaVu names its slanted faces Oblique.
+        let name = &run.post_script_name;
+        let italic = name.contains("Italic") || name.contains("Oblique") || run.faux_italic;
+        let bold = name.contains("Bold") || run.faux_bold;
+        (name.starts_with(&family.replace(' ', "")), italic, bold)
     };
     let rounded = json!({"kernel": "rounded", "chars": {"size": 30.0}});
     // The kernel's italic, in antique's family.
