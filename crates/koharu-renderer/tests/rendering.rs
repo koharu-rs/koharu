@@ -217,7 +217,7 @@ fn a_balloon_merely_full_shrinks_without_hyphens() {
                 "kind": "text",
                 "content": "I can't believe it's already over.",
                 "language": "en",
-                "style": {"chars": {"family": "Arial", "size": 34.0}, "align": "center"},
+                "style": {"chars": {"family": "Arial", "size": 38.0}, "align": "center"},
                 "frame": {"path": {"path": "M380 200 A180 115 0 1 0 740 200 A180 115 0 1 0 380 200 Z", "anchor": "center"}},
             },
         })],

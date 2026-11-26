@@ -549,9 +549,14 @@ mod tests {
         let Frame::Path { path, fit, .. } = text.frame else {
             bail!("{:?}", text.frame);
         };
-        // The right half of the balloon, as the right text's room.
+        // The right half of the balloon, as the right text's room, reaching
+        // past the split by a share of the page's size, the text's own.
+        let size = text.style.chars.size.context("a size")?;
         let room = BezPath::from_svg(path.as_str())?.bounding_box();
-        assert!(room.x0 > 50.0 && room.x1 <= 200.5, "{room:?}");
+        assert!(
+            room.x0 > 50.0 - SPLIT * size && room.x1 <= 200.5,
+            "{room:?}"
+        );
         assert_eq!(fit, koharu_scene::PathFit::Best);
         assert_eq!(text.direction, Direction::Horizontal);
 
@@ -580,9 +585,11 @@ mod tests {
         let Frame::Path { path, .. } = text.frame else {
             bail!("{:?}", text.frame);
         };
-        // The remark keeps the balloon's left half.
+        // The remark keeps the balloon's left half, which the text's room
+        // reaches into by a share of the page's size, the text's own.
+        let size = text.style.chars.size.context("a size")?;
         let room = BezPath::from_svg(path.as_str())?.bounding_box();
-        assert!(room.x0 > 50.0, "{room:?}");
+        assert!(room.x0 > 50.0 - SPLIT * size, "{room:?}");
         Ok(())
     }
 
@@ -801,7 +808,9 @@ mod tests {
             &langid!("en"),
         )?;
         let size = texts[2].style.chars.size.context("a size")?;
-        assert_eq!((margin(&texts[0])?, margin(&texts[1])?), (1.0, 1.0));
+        // Held only at the page's size, which they set, they narrow theirs to
+        // three quarters without drawing 15% larger.
+        assert_eq!((margin(&texts[0])?, margin(&texts[1])?), (0.75, 0.75));
         assert!((0.5..1.0).contains(&margin(&texts[2])?), "{:?}", texts[2]);
         assert!(size::drawn(&session.project(), tight, &texts[2])? >= 0.99 * size);
         // Placed alone, the texts it leaves set the size still.
