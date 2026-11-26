@@ -59,26 +59,34 @@ const useFavoriteFonts = create<{
 
 /** Picks a font family, each shown in its own face: a search line that matches a family's name or
  * any of its faces' PostScript names, and a star beside it that lists only the favorites, then the
- * matches in alphabetical order, the keyboard's arrows and Enter moving through them. */
+ * matches in alphabetical order, the keyboard's arrows and Enter moving through them. With
+ * `fallback`, an entry above them picks none, as Firefox's font menus list Default first; with no
+ * `value`, it shows as the picker's. A `ghost` one draws only its value until pointed at, for a list
+ * of them. */
 export function FontPicker({
   value,
   families,
   disabled,
   size = 'default',
+  variant = 'outline',
   ariaLabel,
   placeholder,
+  fallback,
   onChange,
 }: {
   value: string
   families: FontFamily[]
   disabled?: boolean
   size?: 'default' | 'sm'
+  variant?: 'outline' | 'ghost'
   ariaLabel?: string
   placeholder?: string
+  fallback?: { label: string; onSelect: () => void }
   onChange: (family: string) => void
 }) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
   const list = useRef<{ reveal: (index: number) => void }>(null)
   const orderedFamilies = useMemo(
     () =>
@@ -107,6 +115,7 @@ export function FontPicker({
       items={listed}
       value={selectedFamily ?? null}
       inputValue={query}
+      open={open}
       disabled={disabled}
       itemToStringLabel={(family) => family.name}
       isItemEqualToValue={(family, other) =>
@@ -119,7 +128,10 @@ export function FontPicker({
         )
       }}
       onInputValueChange={setQuery}
-      onOpenChange={(open) => !open && setQuery('')}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setQuery('')
+      }}
       onValueChange={(family) => family && onChange(family.name)}
       onItemHighlighted={(_, { reason, index }) => {
         if (reason === 'keyboard') list.current?.reveal(index)
@@ -128,7 +140,7 @@ export function FontPicker({
       <ComboboxTrigger
         render={
           <Button
-            variant='outline'
+            variant={variant}
             size={size === 'sm' ? 'xs' : 'default'}
             className='w-full min-w-0 justify-between font-normal'
           />
@@ -147,7 +159,7 @@ export function FontPicker({
           />
         ) : (
           <span className={cn('truncate', !value && 'text-muted-foreground')}>
-            {value || placeholder || t('fontPicker.choose')}
+            {value || fallback?.label || placeholder || t('fontPicker.choose')}
           </span>
         )}
       </ComboboxTrigger>
@@ -179,6 +191,25 @@ export function FontPicker({
             <TooltipContent>{t('fontPicker.favoritesOnly')}</TooltipContent>
           </Tooltip>
         </div>
+        {fallback && (
+          <>
+            <button
+              type='button'
+              aria-pressed={!value}
+              className={cn(
+                'flex h-8 w-full items-center px-2 text-left text-[11px] outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent',
+                !value && 'bg-accent text-accent-foreground',
+              )}
+              onClick={() => {
+                fallback.onSelect()
+                setOpen(false)
+              }}
+            >
+              <span className='truncate'>{fallback.label}</span>
+            </button>
+            <Separator />
+          </>
+        )}
         <ComboboxEmpty className='py-4'>
           {only && favorites.length === 0 ? t('fontPicker.noFavorites') : t('fontPicker.noResults')}
         </ComboboxEmpty>

@@ -4,7 +4,7 @@
 use std::{io::Cursor, sync::Arc};
 
 use image::{ImageFormat, Rgb, RgbImage};
-use koharu_renderer::{Gpu, Renderer, RendererConfig};
+use koharu_renderer::{Gpu, Renderer};
 use koharu_scene::{Background, Edit, Hash, LayerId, Op, PageId, Ref, Rgba, Session};
 use kurbo::{Affine, BezPath, Point, Rect, Shape as _, TranslateScale, Vec2};
 use parking_lot::Mutex;
@@ -22,11 +22,7 @@ use crate::{Brush, Canvas, CharKey, Colors, Effect, Notice, RubyEdit, Tool};
 
 /// One renderer for every test, as the app has one, setting text in
 /// installed fonts so no test downloads one.
-static RENDERER: std::sync::LazyLock<Renderer> = std::sync::LazyLock::new(|| {
-    Renderer::new(RendererConfig {
-        font_families: Vec::new(),
-    })
-});
+static RENDERER: std::sync::LazyLock<Renderer> = std::sync::LazyLock::new(Renderer::new);
 
 /// A project of one page, its renderer, and a canvas showing it.
 struct Fixture {
@@ -51,7 +47,8 @@ impl Fixture {
 /// `$page`), shown on a canvas; `None` without a GPU.
 fn fixture(size: (u32, u32), ops: Vec<Value>) -> Option<Fixture> {
     let dir = tempfile::tempdir().expect("a folder");
-    let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+    let mut session = Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+        .expect("a project");
     let page = json!({"op": "add_page", "id": "$page", "index": 0,
         "size": {"width": size.0, "height": size.1}});
     let ops: Vec<Op> = std::iter::once(page)

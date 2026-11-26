@@ -110,6 +110,11 @@ pub(crate) fn changed(before: &Project, after: &Project) -> (PageChanges, BTreeS
         let owner = after.index.get(&layer).or_else(|| before.index.get(&layer));
         changed.extend(owner.copied());
     }
+    // A style in it sets the font of every text of its kernel, so every page
+    // draws anew.
+    if before.meta != after.meta {
+        changed.extend(after.pages.keys().copied());
+    }
     let stayed_before = before
         .order
         .iter()

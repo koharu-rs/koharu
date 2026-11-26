@@ -287,7 +287,9 @@ mod tests {
             .collect();
         ops.insert(0, Op::AddFile { bytes: scan });
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+                .expect("a project");
         let change = session
             .apply(Edit {
                 label: "test".to_owned(),
@@ -319,6 +321,7 @@ mod tests {
             blocks: None,
             session: Arc::new(Mutex::new(session)),
             cancel: CancellationToken::new(),
+            started: Default::default(),
         };
         let area = Area {
             rect: Rect {

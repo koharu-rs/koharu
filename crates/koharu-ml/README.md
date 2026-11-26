@@ -23,6 +23,7 @@ to the code that makes it.
 | Baberu OCR, with DINOv2 | Japanese OCR | libtorch | [Baberu OCR] |
 | Hayai OCR v2.7 Supernova, with SigLIP2 | Japanese, Chinese, Korean, and English OCR | libtorch | [Hayai OCR] |
 | LaMa, fine-tuned on manga | inpainting | libtorch | [LaMa], as [IOPaint] runs it |
+| YuzuMarker.FontDetection, a ResNet-50 | the broad style, or kernel, of a crop's font | libtorch | [YuzuMarker] |
 | FLUX.3 Image Klein | generation and editing | stable-diffusion.cpp | [FLUX.3 Klein] |
 | Qwen-Image 2.1 Turbo, with Qwen3-VL 8B | generation and editing | stable-diffusion.cpp | [Qwen-Image] |
 
@@ -53,6 +54,9 @@ page's pixels can run off the device's thread.
   divided among the groups of text in it, one room each, where translations go.
   Each class has its own confidence threshold.
 - **OCR** returns each crop's text.
+- **Font detection** returns each crop's kernels, such as antique, gothic, or
+  rounded, with their probabilities: the network's 6,150 fonts summed by the
+  kernel table published beside its weights.
 - **Inpainting** returns the image redrawn under its mask.
 - **Generation** returns images of a prompt, and edits the images it's given.
 
@@ -67,6 +71,7 @@ Read in November 2026.
 
 - Layout: [RF-DETR], [Koharu Layout]
 - OCR: [manga-ocr-ar], [Baberu OCR], [Hayai OCR]
+- Font detection: [YuzuMarker]
 - Inpainting, generation, and editing: [LaMa], [IOPaint], [FLUX.3 Klein],
   [Qwen-Image]
 
@@ -75,6 +80,7 @@ Read in November 2026.
 [manga-ocr-ar]: https://huggingface.co/muscgab/manga-ocr-ar-experimental
 [Baberu OCR]: https://huggingface.co/genshiai-daichi/baberu-ocr
 [Hayai OCR]: https://huggingface.co/JustANormalTinkerer/hayai-ocr-v2.7-supernova
+[YuzuMarker]: https://github.com/JeffersonQin/YuzuMarker.FontDetection/tree/0a94e165fe2b08d2800b723290eabd120b2d3d58
 [LaMa]: https://github.com/advimman/lama/tree/786f5936b27fb3dacd2b1ad799e4de968ea697e7
 [IOPaint]: https://github.com/Sanster/IOPaint/tree/61a759fb3f332bacdce8b2813f4837495c9b86e0
 [FLUX.3 Klein]: https://github.com/black-forest-labs/flux-3-image-klein/tree/62e90b9278b73ecc52927770c6965dc6b1966498

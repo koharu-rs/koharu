@@ -211,7 +211,7 @@ fn a_ruby_on_part_of_a_base_takes_the_rest_s_off() {
 #[test]
 fn text_and_duplicates_survive_reopening() {
     let (_dir, path) = path();
-    let mut session = Session::create(&path).expect("a project");
+    let mut session = Session::create(&path, koharu_scene::Meta::default()).expect("a project");
     let page = page(&mut session);
     let balloon = add(
         &mut session,
@@ -240,7 +240,7 @@ fn text_and_duplicates_survive_reopening() {
 
     let before = session.project();
     drop(session);
-    let session = Session::open(&path).expect("it opens");
+    let session = Session::open(&path, koharu_scene::Meta::default()).expect("it opens");
     assert_eq!(session.project(), before);
     assert_eq!(text(&session, copied_block).content.text(), "Bye");
 }

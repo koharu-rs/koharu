@@ -31,7 +31,10 @@ fn lock(session: &Mutex<Session>) -> MutexGuard<'_, Session> {
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let session = Arc::new(Mutex::new(Session::create(dir.path().join("shared.khr"))?));
+    let session = Arc::new(Mutex::new(Session::create(
+        dir.path().join("shared.khr"),
+        koharu_scene::Meta::default(),
+    )?));
     let change = lock(&session).apply(edit("Detect", vec![
         json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 600}}),
         json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "block", "source": {

@@ -15,7 +15,7 @@ pub fn path() -> (TempDir, PathBuf) {
 /// A new project holding one 64×64 page.
 pub fn session() -> (TempDir, Session, PageId) {
     let (dir, path) = path();
-    let mut session = Session::create(&path).expect("a new project");
+    let mut session = Session::create(&path, koharu_scene::Meta::default()).expect("a new project");
     let page = page(&mut session);
     (dir, session, page)
 }

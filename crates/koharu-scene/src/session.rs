@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use tokio::sync::broadcast;
 
 use crate::{
-    Change, Edit, Error, Hash, History, LayerId, Project, ProjectId, Rect, Result, Revision, Tiles,
-    change, edit, project::Picture, store::Store, tiles,
+    Change, Edit, Error, Hash, History, LayerId, Meta, Project, ProjectId, Rect, Result, Revision,
+    Tiles, change, edit, project::Picture, store::Store, tiles,
 };
 
 /// A project file's extension, without the dot.
@@ -40,15 +40,20 @@ struct Step {
 }
 
 impl Session {
-    pub fn create(path: impl AsRef<Path>) -> Result<Self> {
+    /// A new project holding `meta`, as Preferences' styles, which an
+    /// InDesign document takes from the styles made with none open.
+    pub fn create(path: impl AsRef<Path>, meta: Meta) -> Result<Self> {
         let path = path.as_ref();
-        let (store, project) = Store::create(path)?;
+        let (store, project) = Store::create(path, meta)?;
         Ok(Self::assemble(store, path, project))
     }
 
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    /// The project at `path`. A file from before a project held its own
+    /// styles takes `meta`'s, as it drew with Preferences' then, and keeps
+    /// them from its first write.
+    pub fn open(path: impl AsRef<Path>, meta: Meta) -> Result<Self> {
         let path = path.as_ref();
-        let (store, project) = Store::open(path)?;
+        let (store, project) = Store::open(path, meta)?;
         Ok(Self::assemble(store, path, project))
     }
 
@@ -344,7 +349,8 @@ mod tests {
     #[test]
     fn an_edit_that_runs_out_of_space_changes_nothing() {
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session = Session::create(dir.path().join("test.khr"), crate::Meta::default())
+            .expect("a project");
         let ops = [
             json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 512, "height": 512}}),
             json!({"op": "add_layer", "page": "$p", "index": 0, "layer": {"kind": "raster"}}),

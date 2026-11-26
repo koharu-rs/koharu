@@ -1,5 +1,7 @@
 'use client'
 
+import type { ReactNode } from 'react'
+
 import {
   Select,
   SelectContent,
@@ -28,7 +30,7 @@ export function Choice<Value extends string>({
 }: {
   /** Matching no choice shows nothing, as for a value the selection doesn't share. */
   value: Value | ''
-  choices: Record<Value, string>
+  choices: Record<Value, ReactNode>
   /** Its accessible name. */
   label: string
   size?: 'default' | 'sm'
@@ -68,7 +70,7 @@ export function Choice<Value extends string>({
         // As wide as its trigger, wider only for a label that needs it.
         className={cn(compact && 'min-w-fit')}
       >
-        {(Object.entries(choices) as [Value, string][]).map(([choice, name]) => (
+        {(Object.entries(choices) as [Value, ReactNode][]).map(([choice, name]) => (
           <SelectItem
             key={choice}
             value={choice}

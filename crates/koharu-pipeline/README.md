@@ -52,7 +52,7 @@ more. Only a stage knows its models.
 
 | Stage | Default model | Reads | Writes |
 |---|---|---|---|
-| detect | Koharu Layout HighRes | the scan | panels, balloons with outlines, and blocks in reading order, in place of the ones there; each block's source frame, tilt, direction, and mask |
+| detect | Koharu Layout HighRes, with YuzuMarker.FontDetection | the scan | panels, balloons with outlines, and blocks in reading order, in place of the ones there; each block's source frame, tilt, direction, and mask, and the kind of face its text is lettered in |
 | recognize | Manga OCR AR | the scan inside each block's source frame, with other blocks' glyphs blanked | the source's wording and its language |
 | inpaint | LaMa | the scan, each block's mask, its balloon, and its panel; for an area, the page as drawn without its lettering | the block's clean-up under its mask; for an area, that part of the raster or the clean-up it names, whose mask opens there, or a new raster limited to it by a layer mask |
 | translate | Index-Translate 9B | the page's sources in reading order, and with vision the scan | each block's translation: wording, language, and placement |
@@ -64,9 +64,65 @@ outlined, such as in white around black, and the outline, the tone that lies
 all around what it encloses, isn't its ink: on 28 pages of four works, at most
 half of plain lettering's ink lies so around its counters.
 
+Detection also reads each text's and sound effect's face: how likely each
+kernel of CJK font is,
+such as antique, gothic, rounded, or mincho, the probabilities of
+YuzuMarker.FontDetection's 6,150 fonts summed by the kernel table published
+beside its weights, and its glyph stroke over its size, both in its own
+namespace. On 318 crops of Manga109 the port's kernels came within 0.001 of
+PyTorch's in BF16, median, and the likeliest agreed on 314. It reads each
+lettering in five crops, its box with 0, 3, 7, 12, and 20% more on each side,
+and keeps their mean: YuzuMarker trains on 7%, and its reading moves with the
+margin. On Manga109, moving one crop's 7% to 3% or 12% changed the style
+placed for 8% of balloon texts, 17% of free texts, and 18% of sound effects,
+and the mean of five for 1%, 4%, and 2%.
+
 There's no typesetting stage. Placement puts a translation in its room in its
 balloon, or in its source's frame when it's free or a sound effect, and fits it
-`best`, so resizing a balloon reflows the text.
+`best`, so resizing a balloon reflows the text. It gives the translation its
+source's kernel, as Japanese editors letter each kind of line in its own kind
+of face [Manga font kinds], whose style Settings or the project sets, and
+nothing else of its font:
+
+- A balloon is a box when four-fifths or more of its outline, simplified to
+  within a fiftieth of its diagonal, runs within 10° of horizontal or
+  vertical. Narration and monologue sit in boxes, one or two run together,
+  often in a face of their own, where speech balloons curve and a shout's
+  spikes run diagonal. In chapter 119 of Tensei Goblin, 22 of the 28 balloon
+  texts read as mincho, its narration, sat in boxes, against 1 of the 36 read
+  as antique and none of the 10 gothic shouts.
+- A source's reading is first multiplied by the square root of the mean of
+  the project's other readings of its kind: texts in speech balloons, texts
+  in boxes, texts outside both, or sound effects. A reading the crop swings
+  then doesn't stand alone.
+- A text or a sound effect takes the likeliest kernel of its likeliest group,
+  the scene's, when that group's kernels sum to 0.6 or more, as detection
+  splits a face among the kernels of its look; else, or with none read,
+  antique.
+- A text in a speech balloon that this places as antique or mincho takes the
+  project's dialogue face of the two instead, as a book keeps one face from
+  balloon to balloon. The font network knows 21 antique fonts against 1,189
+  mincho ones and reads antique's kana as mincho, so one book's dialogue would
+  otherwise change face from line to line: in Dorohedoro's first volume, 117
+  of 150 pages mixed the two in their balloons. The face is mincho when five
+  or more of the dialogue's kanji-heavy texts, those whose Han is 40% or more
+  of their Han and kana, read as the mincho kernels at 0.7 on average.
+  Antique sets its kanji in gothic, so on Manga109 the books in mincho read
+  0.92 and 1.00 and those in antique 0.26 at most; otherwise it's antique. A
+  text placed in any other face, such as a gothic shout or a rounded thought,
+  and a box's or a free text, keeps its own.
+- The mincho group takes 0.995: antique kana with gothic kanji, the commonest
+  dialogue face, often reads as it past 0.9, as the font network knows few
+  antique fonts. On Manga109 that letters 87 of 91 mincho texts as mincho and
+  27 of 48 antique ones, where 0.9 lettered all of both. Kana alone can't tell
+  mincho, fangsong, kaisho, or textbook from antique, so a source with no Han
+  character counts them as antique.
+- A source whose stroke is 1.3 times the median of the dialogue's or more is
+  set at weight 700, as a shout's heavy face is. The dialogue is the texts in
+  speech balloons read as antique or mincho, or every text outside them when
+  none is in one:
+  the project's, not a page's, as a page of mostly monologue would weigh
+  rounded gothic as its dialogue.
 
 - **Size.** A letterer keeps one size for a page's dialogue [Manga balloon
   basics]. A page's is the median of the largest its texts' rooms hold in whole
@@ -265,7 +321,7 @@ Read in November 2026.
   [Photoshop combine variations]
 - Editing models: [FLUX.3 Klein], [Qwen-Image 2.1]
 - [ComfyUI routes], [Ollama keep_alive], [OpenCV inpaint], [CLDR], [Index-Translate], [JLREQ], [Whisper]
-- Lettering: [Manga balloon basics], [Comicraft glossary]
+- Lettering: [Manga balloon basics], [Comicraft glossary], [Manga font kinds]
 
 [Photoshop Content-Aware Fill]: https://helpx.adobe.com/photoshop/desktop/repair-retouch/remove-objects-fill-space/adjust-content-aware-fill-settings.html
 [Photoshop Generative Fill]: https://helpx.adobe.com/photoshop/desktop/create-open-import-images/create-images/edit-images-with-generative-fill.html
@@ -278,6 +334,7 @@ Read in November 2026.
 [CLDR]: https://cldr.unicode.org/
 [Index-Translate]: https://huggingface.co/IndexTeam/Index-Translate-9B
 [Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie
+[Manga font kinds]: https://manga.jp.net/knowhow/150924font/
 [Comicraft glossary]: https://balloontales.com/?p=418
 [JLREQ]: https://www.w3.org/TR/jlreq/
 [Whisper]: https://github.com/openai/whisper/blob/86098128c0b4f24f0e2aa2994de830614b474227/whisper/transcribe.py#L184-L224

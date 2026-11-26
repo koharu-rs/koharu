@@ -3,6 +3,7 @@
 //! balloon leaves it as is.
 
 mod free;
+mod kernel;
 mod room;
 mod simplify;
 mod size;
@@ -12,8 +13,8 @@ use std::collections::HashMap;
 use anyhow::{Result, anyhow};
 use icu_locale_core::{LanguageIdentifier, subtags::language};
 use koharu_scene::{
-    Align, Anchor, Block, Bounds, Color, Content, Direction, Fit, Frame, Layer, LayerId, PageId,
-    Path, PathFit, Project, Rgba, Role, Text, Transform,
+    Align, Anchor, Block, Bounds, Color, Content, Direction, Fit, Frame, Kernel, Layer, LayerId,
+    PageId, Path, PathFit, Project, Rgba, Role, Text, Transform,
 };
 use kurbo::{Affine, BezPath, Rect, Shape as _};
 use rayon::prelude::*;
@@ -21,6 +22,8 @@ use serde_json::{Value, json};
 
 /// A text of the page, its translation in the room it has.
 struct Lettering<'p> {
+    /// The project it's in, whose faces it's laid out in.
+    project: &'p Project,
     id: LayerId,
     block: &'p Block,
     /// The balloon it's in.
@@ -61,13 +64,14 @@ pub(super) fn place(
             .filter_map(|(_, block)| block.source.style.chars.size)
             .collect(),
     );
+    let kernels = kernel::Kernels::new(project)?;
     // A balloon's room split is a flood over its pixels, run for each of its
     // texts, so the texts are placed in parallel.
     let mut letterings = blocks
         .into_par_iter()
         .filter_map(|(id, block)| {
             let text = match words.get(&id) {
-                Some(words) => translation(block, words, target),
+                Some(words) => translation(block, words, target, kernels.of(id)),
                 None => block.translation.clone()?,
             };
             Some(lettering(project, id, block, text, source))
@@ -90,7 +94,7 @@ pub(super) fn place(
         .filter(|lettering| !words.contains_key(&lettering.id))
         .filter_map(|lettering| {
             let text = lettering.block.translation.as_ref()?;
-            Some(size::lines(lettering.id, text))
+            Some(size::lines(project, lettering.id, text))
         })
         .collect::<Result<Vec<_>>>()?
         .concat();
@@ -147,17 +151,20 @@ fn balloons(layers: &[Layer], found: &mut Vec<(LayerId, BezPath)>) {
     }
 }
 
-/// `block`'s translation worded `words` in `target`.
-fn translation(block: &Block, words: &str, target: &LanguageIdentifier) -> Text {
-    let given = block
-        .translation
-        .clone()
-        .unwrap_or_else(|| block.source.blank());
-    Text {
-        content: given.content.replaced(words),
-        language: target.clone(),
-        ..given
-    }
+/// `block`'s translation worded `words` in `target`, lettered in `kernel`'s
+/// style, and at `weight` when its source is heavy.
+fn translation(
+    block: &Block,
+    words: &str,
+    target: &LanguageIdentifier,
+    (kernel, weight): (Kernel, Option<u16>),
+) -> Text {
+    let mut text = (block.translation.clone()).unwrap_or_else(|| block.source.blank());
+    text.content = text.content.replaced(words);
+    text.language = target.clone();
+    text.style.kernel = Some(kernel);
+    text.style.chars.weight = weight.or(text.style.chars.weight);
+    text
 }
 
 /// `text`, block `id`'s translation, in its room. It is vertical only when its
@@ -212,6 +219,7 @@ fn lettering<'p>(
         false => free::widest(page, holder, id, source, line),
     };
     Ok(Lettering {
+        project,
         id,
         block,
         balloon,
@@ -287,11 +295,13 @@ fn patch(text: &Text) -> Value {
         "style": {
             "chars": {
                 "size": chars.size,
+                "weight": chars.weight,
                 "fill": chars.fill,
                 "stroke": chars.stroke,
                 "stroke_width": chars.stroke_width,
             },
             "align": text.style.align,
+            "kernel": text.style.kernel,
         },
     }})
 }
@@ -346,7 +356,7 @@ fn boxed(rect: Rect) -> Frame {
 mod tests {
     use anyhow::{Context as _, Result, bail};
     use icu_locale_core::langid;
-    use koharu_renderer::{Renderer, RendererConfig};
+    use koharu_renderer::Renderer;
     use koharu_scene::{Created, Edit, Op, Session};
 
     use super::*;
@@ -364,7 +374,8 @@ mod tests {
         dir: &tempfile::TempDir,
         layers: &[(&str, Option<&str>, Value)],
     ) -> Result<(Session, Vec<LayerId>)> {
-        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())?;
         let mut ops = vec![
             json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": 400, "height": 400}}),
         ];
@@ -407,15 +418,13 @@ mod tests {
     }
 
     /// The translations `words`' blocks get once placed into `target`, in
-    /// installed fonts, so no test downloads one.
+    /// installed fonts, as a project with no styles sets them, so no test
+    /// downloads one.
     fn lettered(
         session: &mut Session,
         words: &[(LayerId, &str)],
         target: &LanguageIdentifier,
     ) -> Result<Vec<Text>> {
-        Renderer::get().set_config(RendererConfig {
-            font_families: Vec::new(),
-        });
         let project = session.project();
         let page = project.pages().next().context("a page")?.id;
         let translated: Vec<_> = words
@@ -738,7 +747,7 @@ mod tests {
         let size = texts[2].style.chars.size.context("a size")?;
         assert_eq!((margin(&texts[0])?, margin(&texts[1])?), (1.0, 1.0));
         assert!((0.5..1.0).contains(&margin(&texts[2])?), "{:?}", texts[2]);
-        assert!(size::drawn(tight, &texts[2])? >= 0.99 * size);
+        assert!(size::drawn(&session.project(), tight, &texts[2])? >= 0.99 * size);
         // Placed alone, the texts it leaves set the size still.
         let alone = placed(&mut session, tight, &langid!("en"))?;
         let again = alone.style.chars.size.context("a size")?;
@@ -804,7 +813,7 @@ mod tests {
         assert_eq!(fit(&texts[3])?, PathFit::None);
         assert!(beside < 0.9 * size, "{beside} against {size}");
         let laid = Renderer::get()
-            .layout(ids[7], &texts[3])?
+            .layout(&session.project(), ids[7], &texts[3])?
             .context("a layout")?;
         let left = laid
             .lines
@@ -854,7 +863,7 @@ mod tests {
             ],
             &langid!("en"),
         )?;
-        let page = size::drawn(ids[1], &texts[0])?;
+        let page = size::drawn(&session.project(), ids[1], &texts[0])?;
         let past = |text: &Text| -> Result<f64> {
             let Frame::Path { fit, .. } = text.frame else {
                 bail!("{:?}", text.frame);
@@ -898,7 +907,9 @@ mod tests {
         assert_eq!(fit, Fit::Shrink);
         // As drawn, outlines included.
         let drawn = |id: LayerId, text: &Text| -> Result<Vec<Rect>> {
-            let laid = Renderer::get().layout(id, text)?.context("a layout")?;
+            let laid = Renderer::get()
+                .layout(&session.project(), id, text)?
+                .context("a layout")?;
             Ok(laid.lines)
         };
         let (speech, sound) = (drawn(ids[1], &texts[0])?, drawn(ids[2], &texts[1])?);
@@ -1006,11 +1017,11 @@ mod tests {
             &langid!("en"),
         )?;
         let long = Renderer::get()
-            .layout(ids[0], &texts[0])?
+            .layout(&session.project(), ids[0], &texts[0])?
             .context("a layout")?;
         assert!(long.hyphens.is_empty() && long.scale >= 0.999, "{long:?}");
         assert_eq!(texts[2].style.chars.size, Some(16.0));
-        assert!(size::drawn(ids[2], &texts[2])? >= 15.9);
+        assert!(size::drawn(&session.project(), ids[2], &texts[2])? >= 15.9);
         Ok(())
     }
 }

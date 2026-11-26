@@ -9,7 +9,13 @@ pub(crate) mod inpaint;
 pub(crate) mod recognize;
 pub(crate) mod translate;
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Instant,
+};
 
 use anyhow::anyhow;
 use image::{DynamicImage, GrayImage, Luma};
@@ -43,6 +49,9 @@ pub(crate) struct Member {
     pub(crate) blocks: Option<Arc<[LayerId]>>,
     pub(crate) session: Arc<Mutex<Session>>,
     pub(crate) cancel: CancellationToken,
+    /// Whether the app was told the stage started on the page, which it's
+    /// told once, however many turns the stage takes.
+    pub(crate) started: Arc<AtomicBool>,
 }
 
 impl Member {
@@ -140,8 +149,9 @@ pub(crate) struct Stopped;
 
 impl Task {
     /// `work` on the GPU thread at the task's place in line, with `members`
-    /// started then. A stopped run's work is dropped unrun, and a panicking
-    /// model fails its run rather than the thread every model is on.
+    /// started then, on their first turn. A stopped run's work is dropped
+    /// unrun, and a panicking model fails its run rather than the thread every
+    /// model is on.
     pub(crate) async fn inference<T: Send + 'static>(
         &self,
         members: &[&Member],
@@ -185,9 +195,11 @@ impl Task {
         }
     }
 
+    /// The Started events of `members` not yet started, which are then.
     fn started_events(&self, members: &[&Member]) -> Vec<Event> {
         members
             .iter()
+            .filter(|member| !member.started.swap(true, Ordering::Relaxed))
             .map(|member| Event::Started {
                 run: member.run,
                 page: member.page,

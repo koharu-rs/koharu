@@ -356,7 +356,7 @@ function ProjectList({
                 onClick={() => onDelete(project)}
                 disabled={busy}
               >
-                <Trash2 className='size-3.5' />
+                <Trash2 strokeWidth={1.5} className='size-3.5' />
               </Button>
             </li>
           )

@@ -353,7 +353,8 @@ mod tests {
     #[test]
     fn a_balloon_locked_while_translating_leaves_the_others_their_translation() -> Result<()> {
         let dir = tempfile::tempdir()?;
-        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())?;
         let block = |x: f64| {
             json!({"kind": "block", "source": {
                 "content": "猫", "language": "ja",

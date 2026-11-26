@@ -201,7 +201,8 @@ mod tests {
     /// removed with it.
     fn project() -> anyhow::Result<(tempfile::TempDir, Session, PageId, LayerId)> {
         let dir = tempfile::tempdir()?;
-        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())?;
         let ops = [
             json!({"op": "add_page", "index": 0, "size": {"width": 100, "height": 100}}),
             json!({"op": "add_page", "id": "$p", "index": 1, "size": {"width": 100, "height": 100}}),

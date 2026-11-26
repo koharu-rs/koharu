@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::Renderer;
 use koharu_scene::{Created, Edit, LayerKind, Session};
 use serde_json::{Value, json};
 
@@ -16,7 +16,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("poster.khr"))?;
+    let mut session =
+        Session::create(dir.path().join("poster.khr"), koharu_scene::Meta::default())?;
     let red: Vec<u8> = [220, 40, 60, 255].repeat(64 * 64);
     let ops: Vec<Value> = vec![
         json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 320, "height": 240}}),
@@ -65,7 +66,7 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    let renderer = Renderer::new(RendererConfig::default());
+    let renderer = Renderer::new();
     let frame = renderer.render(&session, change.pages.added[0])?;
     let project = session.project();
     let composite = frame.rasterize()?;

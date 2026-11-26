@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use koharu_renderer::{Drawn, Frame, Gpu, Renderer, RendererConfig};
+use koharu_renderer::{Drawn, Frame, Gpu, Renderer};
 use koharu_scene::{Created, Edit, LayerKind, Op, Project, Session};
 use kurbo::{Affine, Point, Rect};
 use serde_json::{Value, json};
@@ -18,7 +18,10 @@ const WINDOW: (f64, f64) = (1280.0, 800.0);
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("episode.khr"))?;
+    let mut session = Session::create(
+        dir.path().join("episode.khr"),
+        koharu_scene::Meta::default(),
+    )?;
 
     // A webtoon episode: balloons down a tall page, and a narration box set
     // too small for its text.
@@ -54,7 +57,7 @@ fn main() -> Result<()> {
         })
     };
 
-    let renderer = Renderer::new(RendererConfig::default());
+    let renderer = Renderer::new();
     let gpu = Gpu::get()?;
     let started = Instant::now();
     let frame = renderer.render(&session, page)?;

@@ -160,7 +160,9 @@
       "set_text": "Modifier le texte",
       "set_visibility": "Afficher ou masquer",
       "translate": "Traduction",
-      "update_layer": "Modifier le calque"
+      "update_layer": "Modifier le calque",
+      "update_style": "Mettre à jour le style",
+      "use_default_styles": "Utiliser les styles par défaut"
     },
     "title": "Historique"
   },
@@ -284,10 +286,12 @@
     "import": "Importer des pages",
     "original": "Afficher l’original",
     "redo": "Rétablir",
+    "saveDefaultStyles": "Enregistrer les styles par défaut",
     "selectAllLayers": "Sélectionner tous les calques",
     "settings": "Paramètres",
     "undo": "Annuler",
     "unloadModels": "Décharger les modèles",
+    "useDefaultStyles": "Utiliser les styles par défaut",
     "view": "Affichage"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "Paramètres",
     "typesetting": {
-      "addFallback": "Ajouter une police de secours",
-      "addFamily": "Ajouter une famille de polices",
-      "description": "Définissez la liste ordonnée de polices utilisée lorsqu’aucune famille n’est attribuée à un calque de texte.",
-      "empty": "Aucune famille par défaut. Koharu utilisera la police de secours du système.",
-      "fallbacks": "Polices de secours",
-      "fallbacksDescription": "Utilisées dans l’ordre pour les caractères absents de la police principale. Faites glisser pour réordonner, ou sur Principale pour les échanger.",
-      "familyLabel": "Famille de polices par défaut {{index}}",
-      "fontFallback": "Polices préférées",
-      "fontFallbackDescription": "Koharu utilise la première famille disponible qui prend en charge le texte.",
-      "loadError": "Impossible de charger les polices. Les familles existantes peuvent toujours être supprimées.",
-      "loadingFonts": "Chargement des polices…",
-      "primary": "Principale",
-      "removeFamily": "Retirer {{family}}",
+      "description": "Les styles avec lesquels chaque nouveau projet commence, par écriture. Ensuite, le projet garde les siens : Fichier → Utiliser les styles par défaut lui redonne ceux-ci.",
+      "loadError": "Impossible de charger les polices. Les polices déjà définies restent utilisées.",
+      "restore": "Rétablir les valeurs par défaut",
+      "restoreDescription": "Les styles de toutes les écritures reviennent à ceux de Koharu. Les polices définies ici sont perdues ; les projets gardent leurs propres styles.",
+      "restoreTitle": "Rétablir les styles par défaut ?",
+      "script": "Écriture",
+      "styles": "Styles",
+      "stylesDescription": "Une traduction prend le style de la police de son original. Un style laissé Par défaut prend la police d’Antique dans la même écriture.",
       "title": "Moteur de rendu"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "Effet sonore",
     "title": "Histoire",
     "translate": "Traduire {{name}}"
+  },
+  "styles": {
+    "clearOverrides": "Effacer les remplacements",
+    "default": "Par défaut (celle d’Antique : {{name}})",
+    "defaultWeight": "Par défaut",
+    "font": "Police de {{name}}",
+    "groups": {
+      "brush": "Styles au pinceau",
+      "design": "Styles fantaisie",
+      "mincho": "Styles mincho"
+    },
+    "italic": "{{name}} en italique",
+    "kernel": "Style",
+    "kernels": {
+      "antique": "Antique",
+      "brush": "Pinceau",
+      "decorative": "Décorative",
+      "design": "Fantaisie",
+      "fangsong": "Fangsong",
+      "gothic": "Gothique",
+      "gyokai": "Semi-régulière",
+      "gyosho": "Semi-cursive",
+      "handwriting": "Manuscrite",
+      "kaisho": "Régulière",
+      "kointai": "Kointai",
+      "mincho": "Mincho",
+      "pop": "Pop",
+      "reisho": "Des clercs",
+      "rounded": "Arrondie",
+      "sosho": "Cursive",
+      "tensho": "Sigillaire",
+      "textbook": "Scolaire",
+      "weibei": "Stèle des Wei"
+    },
+    "updateToMatch": "Mettre à jour {{name}} d’après ce texte",
+    "weight": "Graisse de {{name}}"
   },
   "tools": {
     "block": "Bloc de texte",

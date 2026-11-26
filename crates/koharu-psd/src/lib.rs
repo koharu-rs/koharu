@@ -6,7 +6,7 @@ mod engine_data;
 use koharu_renderer::{Drawn, Frame, Raster, Renderer};
 use koharu_scene::{
     Background, Balloon, Blend, Block, Content, FillRule, Layer, LayerId, Offset, PageId, Path,
-    Rgba, Session, Shape,
+    Project, Rgba, Session, Shape,
 };
 use kurbo::BezPath;
 use photocraft_psd::{
@@ -74,6 +74,7 @@ pub fn export(
     let frame = renderer.render(session, page)?;
     let mut export = Export {
         renderer,
+        project: &project,
         frame: &frame,
         labels,
         size: (width, height),
@@ -117,6 +118,7 @@ pub fn export(
 
 struct Export<'a> {
     renderer: &'a Renderer,
+    project: &'a Project,
     frame: &'a Frame,
     labels: &'a Labels,
     size: (u32, u32),
@@ -290,7 +292,7 @@ impl Export<'_> {
 
         let source = &block.source;
         let mut blocks = Vec::new();
-        if let Some(resolved) = self.renderer.layout(id, source)?
+        if let Some(resolved) = self.renderer.layout(self.project, id, source)?
             && !resolved.runs.is_empty()
         {
             blocks.extend(blocks::type_layer(source, &resolved, self.texts));

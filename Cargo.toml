@@ -82,7 +82,7 @@ icu_experimental = { version = "0.7.0", default-features = false, features = ["c
 icu_locale = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc", "serde"] }
 icu_properties = { version = "2.4.0", features = ["compiled_data"] }
-icu_segmenter = { version = "2.4.0", features = ["compiled_data"] }
+icu_segmenter = { version = "2.4.0", features = ["compiled_data", "unstable"] }
 image = "0.25.10"
 imageproc = "0.27.0"
 imbl = { version = "7.0.2", features = ["serde"] }

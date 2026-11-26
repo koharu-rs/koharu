@@ -160,7 +160,9 @@
       "set_text": "Edit text",
       "set_visibility": "Show or hide",
       "translate": "Translation",
-      "update_layer": "Change layer"
+      "update_layer": "Change layer",
+      "update_style": "Update style",
+      "use_default_styles": "Use default styles"
     },
     "title": "History"
   },
@@ -284,10 +286,12 @@
     "import": "Import Pages",
     "original": "Show Original",
     "redo": "Redo",
+    "saveDefaultStyles": "Save Styles as Default",
     "selectAllLayers": "Select All Layers",
     "settings": "Settings",
     "undo": "Undo",
     "unloadModels": "Unload Models",
+    "useDefaultStyles": "Use Default Styles",
     "view": "View"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "Settings",
     "typesetting": {
-      "addFallback": "Add a fallback",
-      "addFamily": "Add font family",
-      "description": "Set the ordered font stack used when a text layer has no assigned family.",
-      "empty": "No default families. Koharu will use the system fallback.",
-      "fallbacks": "Fallbacks",
-      "fallbacksDescription": "Used in order for characters the primary lacks. Drag to reorder, or onto Primary to swap.",
-      "familyLabel": "Default font family {{index}}",
-      "fontFallback": "Preferred fonts",
-      "fontFallbackDescription": "Koharu uses the first available family that supports the text.",
-      "loadError": "Fonts could not be loaded. Existing families can still be removed.",
-      "loadingFonts": "Loading fonts…",
-      "primary": "Primary",
-      "removeFamily": "Remove {{family}}",
+      "description": "The styles each new project starts with, by script. A project keeps its own after that: File → Use Default Styles gives it these again.",
+      "loadError": "Fonts could not be loaded. The fonts already set still apply.",
+      "restore": "Restore defaults",
+      "restoreDescription": "Every script's styles go back to Koharu's own. The fonts you set here are lost; projects keep their own styles.",
+      "restoreTitle": "Restore the default styles?",
+      "script": "Script",
+      "styles": "Styles",
+      "stylesDescription": "A translation takes the style of its source's typeface. A style left at Default takes Antique's font in the same script.",
       "title": "Renderer"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "Sound effect",
     "title": "Story",
     "translate": "Translate {{name}}"
+  },
+  "styles": {
+    "clearOverrides": "Clear overrides",
+    "default": "Default (Antique's: {{name}})",
+    "defaultWeight": "Default",
+    "font": "{{name}} font",
+    "groups": {
+      "brush": "Brush styles",
+      "design": "Design styles",
+      "mincho": "Mincho styles"
+    },
+    "italic": "{{name}} italic",
+    "kernel": "Style",
+    "kernels": {
+      "antique": "Antique",
+      "brush": "Brush",
+      "decorative": "Decorative",
+      "design": "Design",
+      "fangsong": "Fangsong",
+      "gothic": "Gothic",
+      "gyokai": "Running regular",
+      "gyosho": "Running script",
+      "handwriting": "Handwriting",
+      "kaisho": "Regular script",
+      "kointai": "Kointai",
+      "mincho": "Mincho",
+      "pop": "Pop",
+      "reisho": "Clerical script",
+      "rounded": "Rounded",
+      "sosho": "Cursive script",
+      "tensho": "Seal script",
+      "textbook": "Textbook",
+      "weibei": "Wei stele"
+    },
+    "updateToMatch": "Update {{name}} to match",
+    "weight": "{{name}} weight"
   },
   "tools": {
     "block": "Text block",

@@ -10,7 +10,7 @@ use anyhow::{Result, bail};
 use clap::Parser;
 use koharu_agent::{McpServer, Tools};
 use koharu_pipeline::{Pipeline, PipelineConfig};
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::Renderer;
 use koharu_scene::{Edit, Hash, Op, Session};
 use parking_lot::Mutex;
 use tracing_subscriber::EnvFilter;
@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
     let cli = Cli::parse();
     let session = match (cli.project.exists(), cli.pages.is_empty()) {
-        (true, true) => Session::open(&cli.project)?,
+        (true, true) => Session::open(&cli.project, koharu_scene::Meta::default())?,
         (true, false) => bail!("{} exists; it takes no pages", cli.project.display()),
         (false, _) => create(&cli.project, &cli.pages)?,
     };
@@ -42,7 +42,6 @@ async fn main() -> Result<()> {
     let pipeline = Pipeline::new(koharu_config::get::<PipelineConfig>()?);
     // The process's, which the pipeline draws a painted area's page with.
     let renderer = Renderer::get().clone();
-    renderer.set_config(koharu_config::get::<RendererConfig>()?);
     let server = McpServer::start(cli.port).await?;
     server.open(Some(Tools::new(session, pipeline, renderer)));
     println!("http://{}/mcp", server.address());
@@ -53,7 +52,7 @@ async fn main() -> Result<()> {
 /// A project at `path` with `pages` as its pages, as the pipeline's example
 /// imports them.
 fn create(path: &PathBuf, pages: &[PathBuf]) -> Result<Session> {
-    let mut session = Session::create(path)?;
+    let mut session = Session::create(path, koharu_scene::Meta::default())?;
     let mut ops = Vec::new();
     for (index, file) in pages.iter().enumerate() {
         let bytes = fs_err::read(file)?;

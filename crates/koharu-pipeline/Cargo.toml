@@ -18,6 +18,7 @@ bytesize = { workspace = true }
 icu_experimental = { workspace = true }
 icu_locale = { workspace = true }
 icu_locale_core = { workspace = true }
+icu_properties = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
 indoc = { workspace = true }

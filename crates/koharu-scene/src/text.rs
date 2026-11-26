@@ -61,6 +61,106 @@ pub struct TextStyle {
     /// A paragraph key: a multiple of each line's largest size.
     #[serde(default)]
     pub line_height: Option<f64>,
+    /// A text key: the kind of face it's lettered in, whose style sets its
+    /// family, weight, and italic where `chars` and the marks don't. Agents
+    /// never set it, translation and the type bar do, so their schema leaves
+    /// out its nineteen documented values, which would crowd a small model's
+    /// context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip)]
+    pub kernel: Option<Kernel>,
+}
+
+/// The kind of face a text is lettered in, as its source's was: one of the
+/// kernels Morisawa, Founder, and DynaComware classify their faces by, as
+/// font detection reads them. Declared by group, each group's first naming
+/// it.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    Type,
+    JsonSchema,
+    strum::VariantArray,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Kernel {
+    /// アンチック: antique kana, manga's commonest dialogue face; a text's
+    /// style when detection isn't sure of its source's, and what every other
+    /// style leaves out.
+    Antique,
+    /// 明朝体, 宋体.
+    Mincho,
+    /// 仿宋体.
+    Fangsong,
+    /// 楷書体, 楷体.
+    Kaisho,
+    /// 教科書体.
+    Textbook,
+    /// ゴシック体, 黑体.
+    Gothic,
+    /// 丸ゴシック体, 圆体.
+    Rounded,
+    /// 手書き: hand-lettered faces.
+    Handwriting,
+    /// 筆書体: brush faces.
+    Brush,
+    /// 行書体: running script.
+    Gyosho,
+    /// 行楷体: running regular script.
+    Gyokai,
+    /// 草書体: cursive script.
+    Sosho,
+    /// 隷書体: clerical script.
+    Reisho,
+    /// 篆書体: seal script.
+    Tensho,
+    /// 古印体: the worn strokes of old seals.
+    Kointai,
+    /// 魏碑体: Wei stele script.
+    Weibei,
+    /// デザイン書体: design faces.
+    Design,
+    /// ポップ体.
+    Pop,
+    /// Decorative faces, such as horror's.
+    Decorative,
+}
+
+impl Kernel {
+    /// The first kernel of this one's group, as Settings groups faces of one
+    /// look to set at once: the mincho kin under mincho, the calligraphic
+    /// hands under brush, and pop and decorative faces under design.
+    #[must_use]
+    pub fn group(self) -> Self {
+        use Kernel::*;
+        match self {
+            Fangsong | Kaisho | Textbook => Mincho,
+            Gyosho | Gyokai | Sosho | Reisho | Tensho | Kointai | Weibei => Brush,
+            Pop | Decorative => Design,
+            kernel => kernel,
+        }
+    }
+}
+
+/// The font a kernel's style sets for one script; each value it leaves out
+/// is antique's.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Face {
+    #[serde(default)]
+    pub family: Option<String>,
+    #[serde(default)]
+    pub weight: Option<u16>,
+    #[serde(default)]
+    pub italic: Option<bool>,
 }
 
 /// Text as spans in order, each with its marks, so no mark can fall outside the

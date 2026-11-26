@@ -12,7 +12,7 @@ use std::{ops::Range, time::Instant};
 
 use icu_segmenter::{GraphemeClusterSegmenter, WordSegmenter, options::WordBreakInvariantOptions};
 use koharu_renderer::{Lettering, Renderer};
-use koharu_scene::{CharStyle, Content, Edit, LayerId, Op, Page, RichText, Text, Uuid};
+use koharu_scene::{CharStyle, Content, Edit, LayerId, Op, Page, Project, RichText, Text, Uuid};
 use kurbo::{Affine, Line, Point, Rect};
 
 pub(crate) use self::keys::Keyed;
@@ -41,6 +41,8 @@ struct Composition {
 
 pub(crate) struct Typing {
     renderer: Renderer,
+    /// The project the text is in, whose faces it's laid out in.
+    project: Project,
     target: Target,
     /// The text typed into: its frame, transform, and style. Its content is
     /// `content`.
@@ -70,28 +72,36 @@ pub(crate) struct Typing {
 }
 
 impl Typing {
-    /// Typing into `layer`'s `text`.
-    pub fn layer(renderer: &Renderer, layer: LayerId, text: &Text) -> anyhow::Result<Self> {
+    /// Typing into `layer`'s `text`, of `project`.
+    pub fn layer(
+        renderer: &Renderer,
+        project: &Project,
+        layer: LayerId,
+        text: &Text,
+    ) -> anyhow::Result<Self> {
         Self::start(
             renderer,
+            project,
             Target::Layer(layer),
             text.clone(),
             text.content.clone(),
         )
     }
 
-    /// Typing a new text, `text` giving its frame and place.
-    pub fn new_text(renderer: &Renderer, text: Text) -> anyhow::Result<Self> {
-        Self::start(renderer, Target::New, text, RichText::default())
+    /// Typing a new text into `project`, `text` giving its frame and place.
+    pub fn new_text(renderer: &Renderer, project: &Project, text: Text) -> anyhow::Result<Self> {
+        Self::start(renderer, project, Target::New, text, RichText::default())
     }
 
     fn start(
         renderer: &Renderer,
+        project: &Project,
         target: Target,
         base: Text,
         content: RichText,
     ) -> anyhow::Result<Self> {
         let lettering = renderer.lettering(
+            project,
             LayerId(Uuid::nil()),
             &Text {
                 content: content.clone(),
@@ -100,6 +110,7 @@ impl Typing {
         )?;
         Ok(Self {
             renderer: renderer.clone(),
+            project: project.clone(),
             target,
             base,
             original: content.clone(),
@@ -127,7 +138,8 @@ impl Typing {
 
     /// Takes the text's frame, place, and style again from `text`, as
     /// another change left them, keeping what's typed.
-    pub fn rebase(&mut self, text: &Text) -> anyhow::Result<()> {
+    pub fn rebase(&mut self, project: &Project, text: &Text) -> anyhow::Result<()> {
+        self.project = project.clone();
         self.base = text.clone();
         self.relay_annotating()
     }
@@ -232,9 +244,9 @@ impl Typing {
 
     /// Lays the shown text out again after a change.
     fn relay(&mut self) -> anyhow::Result<()> {
-        self.lettering = self
-            .renderer
-            .lettering(LayerId(Uuid::nil()), &self.shown())?;
+        self.lettering =
+            self.renderer
+                .lettering(&self.project, LayerId(Uuid::nil()), &self.shown())?;
         self.touch();
         Ok(())
     }

@@ -47,6 +47,8 @@ export interface ProjectView {
   page: PageId | null
   pages: PageSummary[]
   history: History
+  /** What the project holds beyond its pages, such as the faces it sets. */
+  meta: ProjectAnswer['meta']
   /** Each page's revision when a change last named it, added or changed, which its thumbnail
    * follows whichever page is shown. */
   revisions: Record<PageId, string>
@@ -121,6 +123,7 @@ const projectQuery = queryOptions({
       page,
       pages: (project as ProjectAnswer).pages,
       history: history as History,
+      meta: (project as ProjectAnswer).meta,
       revisions: known?.name === name ? known.revisions : {},
     }
   },

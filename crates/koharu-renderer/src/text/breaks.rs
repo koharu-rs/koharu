@@ -131,7 +131,15 @@ fn opportunities(text: &str, breaking: Breaking, lang: Option<Lang>) -> Vec<Cut>
             .collect(),
         false => Vec::new(),
     };
-    let offsets: Vec<usize> = LineSegmenter::new_auto(options)
+    // Unicode 17's rules, whose LB19a lets a line break before an opening
+    // quotation mark and after a closing one between East Asian characters,
+    // as Chinese sets “” as brackets; `new_auto`'s Unicode 15.1 data breaks on
+    // neither side of one, so 位于“霍尔”中心地带 had run on as one piece down
+    // and past its column. The LSTM data breaks Thai, Khmer, and Myanmar, as
+    // `new_auto` does.
+    let mut segmenter = LineSegmenter::new_17_for_non_complex_scripts(options);
+    segmenter.load_lstm();
+    let offsets: Vec<usize> = segmenter
         .segment_str(text)
         .filter(|&at| mandatory(at) || !words.iter().any(|w| at > w.start && at < w.end))
         .collect();
@@ -376,6 +384,22 @@ mod tests {
             vec![
                 "\u{5357}\u{4eac}\u{5e02}",
                 "\u{957f}\u{6c5f}\u{5927}\u{6865}",
+            ]
+        );
+    }
+
+    #[test]
+    fn chinese_breaks_before_an_opening_quote_and_after_a_closing_one() {
+        // 位于“霍尔”中心地带, a translation on page 36 of a volume, whose
+        // column ran past its box when it broke nowhere around the quotes.
+        let text =
+            "\u{4f4d}\u{4e8e}\u{201c}\u{970d}\u{5c14}\u{201d}\u{4e2d}\u{5fc3}\u{5730}\u{5e26}";
+        assert_eq!(
+            pieces(text, Breaking::Words),
+            vec![
+                "\u{4f4d}\u{4e8e}",
+                "\u{201c}\u{970d}\u{5c14}\u{201d}",
+                "\u{4e2d}\u{5fc3}\u{5730}\u{5e26}",
             ]
         );
     }

@@ -5,13 +5,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{Background, History, Layer, LayerId, Page, PageId, ProjectId, Result, Session, Size};
+use crate::{
+    Background, History, Layer, LayerId, Meta, Page, PageId, ProjectId, Result, Session, Size,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "query", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Query {
     /// List the pages in order, with their sizes, backgrounds, and how many
-    /// of their blocks are translated.
+    /// of their blocks are translated, and what the project holds beyond
+    /// them, such as the faces it sets.
     GetProject,
     /// Get one page with its layers, each holding its children, masks among
     /// them.
@@ -41,6 +44,7 @@ pub struct ProjectAnswer {
     /// The format version the file holds.
     pub version: String,
     pub pages: Vec<PageSummary>,
+    pub meta: Meta,
 }
 
 /// A page without its layers, which `get_page` answers, and how far its
@@ -83,6 +87,7 @@ impl Session {
                         })
                     })
                     .collect::<Result<_>>()?,
+                meta: project.meta().clone(),
             }),
             Query::GetPage { page } => Answer::Page(project.page(page)?.clone()),
             Query::GetLayer { layer } => Answer::Layer(Box::new(project.layer(layer)?.clone())),

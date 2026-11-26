@@ -5,7 +5,7 @@
 use std::io::Cursor;
 
 use koharu_psd::{Labels, export};
-use koharu_renderer::{Gpu, Renderer, RendererConfig};
+use koharu_renderer::{Gpu, Renderer};
 use koharu_scene::{Edit, Hash, Op, Session};
 use photocraft_psd::{
     BlendMode, LayerRecord, MaskData, PsdFile, SectionType, Version, VersionedDescriptor,
@@ -44,7 +44,8 @@ fn translate(block: &str, text: &str, x: f64) -> [Json; 2] {
 /// blocks, and a free block on the page.
 fn poster() -> (tempfile::TempDir, Session, koharu_scene::PageId) {
     let dir = tempfile::tempdir().expect("a temporary directory");
-    let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+    let mut session = Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+        .expect("a project");
     let mut scan = Vec::new();
     image::RgbaImage::from_pixel(200, 200, image::Rgba([240, 240, 240, 255]))
         .write_to(&mut Cursor::new(&mut scan), image::ImageFormat::Png)
@@ -145,9 +146,7 @@ fn engine_data(record: &LayerRecord) -> String {
 fn a_page_exports_as_layers_photoshop_can_edit() {
     let (_dir, session, page) = poster();
     // Installed fonts only, so the test downloads none.
-    let renderer = Renderer::new(RendererConfig {
-        font_families: Vec::new(),
-    });
+    let renderer = Renderer::new();
     if let Err(error) = Gpu::get() {
         eprintln!("skipped without a GPU: {error}");
         return;

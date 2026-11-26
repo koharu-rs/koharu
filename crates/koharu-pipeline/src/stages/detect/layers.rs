@@ -1,19 +1,58 @@
 //! The ops adding a page's detected parts: panels, balloons, and blocks, each
 //! block with its mask.
 
+use std::collections::BTreeMap;
+
 use anyhow::Result;
-use image::{GrayImage, Luma};
+use image::{GrayImage, Luma, RgbImage, imageops};
 use imageproc::{distance_transform::Norm, morphology::dilate};
 use koharu_ml::koharu_layout_highres::{Kind, Layout, Lettering, Mask, Typography};
+use koharu_ml::yuzumarker_font_detection::Kernel;
 use koharu_scene::{Bounds, Op, PageId, Rect, Ref, Rgba, Transform};
 use kurbo::{Affine, Point, Shape as _};
 use serde_json::{Value, json};
 
-use super::tree::{Node, Part, Tree};
+use super::{
+    Detection,
+    tree::{Node, Part, Tree},
+};
 use crate::stages::action;
 
 /// A lettering's mask, grown, over the rectangle it covers.
 pub(super) type Grown = (Rect, Vec<u8>);
+
+/// How likely each kernel is to be the font of a lettering.
+pub(super) type Kernels = BTreeMap<Kernel, f32>;
+
+/// The margins a lettering's font is read under, as shares of its box on
+/// each side: YuzuMarker's training crops take 7%, and its reading moves
+/// with the margin, so the readings under these are averaged. On Manga109,
+/// moving a single crop's 7% to 3% or 12% changed the style placed for 8% of
+/// balloon texts, 17% of free texts, and 18% of sound effects, and for 1%,
+/// 4%, and 2% with the five averaged.
+/// https://github.com/JeffersonQin/YuzuMarker.FontDetection/blob/0a94e165fe2b08d2800b723290eabd120b2d3d58/detector/data.py#L313-L332
+const MARGINS: [f32; 5] = [0.0, 0.03, 0.07, 0.12, 0.2];
+
+/// Each lettering's crops, by its index, for reading its font, a sound
+/// effect's as well as a text's: its box with each of the `MARGINS` more on
+/// each side.
+pub(super) fn crops(layout: &Layout, page: &RgbImage) -> Vec<(usize, RgbImage)> {
+    let mut crops = Vec::new();
+    for (at, lettering) in layout.lettering.iter().enumerate() {
+        let [x0, y0, x1, y1] = lettering.bbox;
+        for margin in MARGINS {
+            let (across, down) = ((x1 - x0) * margin, (y1 - y0) * margin);
+            let (left, top) = ((x0 - across).max(0.0) as u32, (y0 - down).max(0.0) as u32);
+            let right = ((x1 + across) as u32).min(page.width());
+            let bottom = ((y1 + down) as u32).min(page.height());
+            if right > left && bottom > top {
+                let crop = imageops::crop_imm(page, left, top, right - left, bottom - top);
+                crops.push((at, crop.to_image()));
+            }
+        }
+    }
+    crops
+}
 
 /// Each of the layout's letterings' masks; `None` for an empty one.
 pub(super) fn masks(layout: &Layout, typography: &[Option<Typography>]) -> Vec<Option<Grown>> {
@@ -52,6 +91,7 @@ pub(super) fn masks(layout: &Layout, typography: &[Option<Typography>]) -> Vec<O
 pub(super) fn additions(
     layout: &Layout,
     typography: &[Option<Typography>],
+    kernels: &[Option<Kernels>],
     masks: Vec<Option<Grown>>,
     kept: &[kurbo::Rect],
     page: PageId,
@@ -61,6 +101,7 @@ pub(super) fn additions(
     let mut adding = Adding {
         layout,
         typography,
+        kernels,
         masks,
         page,
         model,
@@ -74,6 +115,7 @@ pub(super) fn additions(
 struct Adding<'a> {
     layout: &'a Layout,
     typography: &'a [Option<Typography>],
+    kernels: &'a [Option<Kernels>],
     masks: Vec<Option<Grown>>,
     page: PageId,
     model: &'a str,
@@ -86,31 +128,46 @@ impl Adding<'_> {
         for (index, node) in nodes.iter().enumerate() {
             let label = format!("d{}", self.labels);
             self.labels += 1;
-            let (mut layer, score) = match node.part {
+            let scored = |score| Detection {
+                score,
+                ..Detection::default()
+            };
+            let (mut layer, detection) = match node.part {
                 Part::Panel(at) => {
                     let panel = &self.layout.panels[at];
                     let [x0, y0, x1, y1] = panel.bbox.map(f64::from);
                     let outline = kurbo::Rect::new(x0, y0, x1, y1).to_path(0.0).to_svg();
-                    (json!({"kind": "panel", "outline": outline}), panel.score)
+                    (
+                        json!({"kind": "panel", "outline": outline}),
+                        scored(panel.score),
+                    )
                 }
                 Part::Bubble(at) => {
                     let bubble = &self.layout.bubbles[at];
                     (
                         json!({"kind": "balloon", "outline": bubble.outline.to_svg()}),
-                        bubble.score,
+                        scored(bubble.score),
                     )
                 }
                 Part::Lettering(at) => {
                     let lettering = &self.layout.lettering[at];
-                    (
-                        block(lettering, self.typography[at].as_ref()),
-                        lettering.score,
-                    )
+                    let typography = self.typography[at].as_ref();
+                    let detection = Detection {
+                        score: lettering.score,
+                        kernels: self.kernels[at]
+                            .as_ref()
+                            .map_or_else(BTreeMap::new, rounded),
+                        stroke: typography.and_then(stroke),
+                    };
+                    (block(lettering, typography), detection)
                 }
             };
+            // The font model read the kernels beside the detector.
+            let parameters = (!detection.kernels.is_empty())
+                .then(|| json!({"fonts": "YuzuMarker.FontDetection"}));
             layer["attributes"] = json!({
-                "c2pa": {"detection": action("c2pa.created", self.model, None)},
-                "koharu": {"detection": {"score": score}},
+                "c2pa": {"detection": action("c2pa.created", self.model, parameters)},
+                "koharu": {"detection": detection},
             });
             self.ops.push(serde_json::from_value(json!({
                 "op": "add_layer",
@@ -133,6 +190,27 @@ impl Adding<'_> {
         }
         Ok(())
     }
+}
+
+/// The kernels as a block keeps them: to three places, without those under
+/// a hundredth, which no choice of lettering reads.
+fn rounded(kernels: &Kernels) -> BTreeMap<Kernel, f64> {
+    kernels
+        .iter()
+        .filter(|(_, probability)| **probability >= 0.01)
+        .map(|(&kernel, &probability)| (kernel, thousandths(f64::from(probability))))
+        .collect()
+}
+
+/// A lettering's glyph stroke over its em size, which compares its weight
+/// with another's at any size.
+fn stroke(typography: &Typography) -> Option<f64> {
+    let width = typography.stroke_width?;
+    (typography.size > 0.0).then(|| thousandths(f64::from(width / typography.size)))
+}
+
+fn thousandths(value: f64) -> f64 {
+    (value * 1000.0).round() / 1000.0
 }
 
 /// How far a block's mask reaches past its glyph mask: the clean-up shows

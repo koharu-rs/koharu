@@ -257,6 +257,16 @@ function StoryText({
   })
 
   const name = plainText(isBlockLayer(layer) ? (layer.translation ?? layer.source) : layer)
+  // That a block is a sound effect, and its kernel when it isn't antique, the common case, so a
+  // wrong guess stands out.
+  const kernel = isBlockLayer(layer) ? layer.translation?.style?.kernel : undefined
+  const kind =
+    [
+      isBlockLayer(layer) && layer.role === 'sfx' ? t('story.sfx') : null,
+      kernel && kernel !== 'antique' ? t(`styles.kernels.${kernel}`) : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || null
   const field =
     'min-h-8 w-full max-w-full min-w-0 resize-none overflow-hidden rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
   return (
@@ -330,9 +340,9 @@ function StoryText({
       <div className='grid min-w-0 gap-1'>
         {isBlockLayer(layer) ? (
           <>
-            {layer.role === 'sfx' && (
+            {kind && (
               <span className='px-0.5 text-[8px] font-medium tracking-[0.06em] text-muted-foreground uppercase'>
-                {t('story.sfx')}
+                {kind}
               </span>
             )}
             <CommitTextarea

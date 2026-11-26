@@ -17,7 +17,7 @@ use koharu_llm::rig::completion::Effort;
 use koharu_pipeline::{
     Event, Inpainter, Outcome, Pipeline, PipelineConfig, Request, Stage, Target,
 };
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::Renderer;
 use koharu_scene::{Content, Edit, Hash, Op, Session, Tile};
 use parking_lot::Mutex;
 use tracing_subscriber::{
@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
     if path.exists() {
         fs_err::remove_file(&path)?;
     }
-    let mut session = Session::create(&path)?;
+    let mut session = Session::create(&path, koharu_scene::Meta::default())?;
     let mut ops = Vec::new();
     for (index, file) in files.iter().enumerate() {
         let bytes = fs_err::read(file)?;
@@ -160,7 +160,7 @@ async fn main() -> Result<()> {
 
     let session = session.lock();
     let project = session.project();
-    let renderer = Renderer::new(RendererConfig::default());
+    let renderer = Renderer::new();
     for (page, file) in project.pages().zip(&files) {
         let background = page
             .background

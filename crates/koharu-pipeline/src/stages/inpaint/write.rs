@@ -272,7 +272,8 @@ mod tests {
     #[test]
     fn an_area_goes_onto_the_layer_it_names() -> Result<()> {
         let dir = tempfile::tempdir()?;
-        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())?;
         let change = session.apply(Edit {
             label: "test".to_owned(),
             ops: serde_json::from_value(json!([

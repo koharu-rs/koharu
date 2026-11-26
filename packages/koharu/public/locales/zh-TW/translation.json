@@ -160,7 +160,9 @@
       "set_text": "編輯文字",
       "set_visibility": "顯示或隱藏",
       "translate": "翻譯",
-      "update_layer": "變更圖層"
+      "update_layer": "變更圖層",
+      "update_style": "更新書體",
+      "use_default_styles": "使用預設書體"
     },
     "title": "步驟記錄"
   },
@@ -284,10 +286,12 @@
     "import": "匯入頁面",
     "original": "顯示原圖",
     "redo": "重做",
+    "saveDefaultStyles": "將書體存為預設",
     "selectAllLayers": "選取所有圖層",
     "settings": "設定",
     "undo": "復原",
     "unloadModels": "卸載模型",
+    "useDefaultStyles": "使用預設書體",
     "view": "檢視"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "設定",
     "typesetting": {
-      "addFallback": "新增備用字型",
-      "addFamily": "新增字型家族",
-      "description": "設定文字圖層未指定字型家族時使用的有序字型堆疊。",
-      "empty": "沒有預設字型家族。Koharu 將使用系統後備字型。",
-      "fallbacks": "備用字型",
-      "fallbacksDescription": "主要字型缺少的字元會依序使用備用字型。拖曳可調整順序，拖到主要字型上即可互換。",
-      "familyLabel": "預設字型家族 {{index}}",
-      "fontFallback": "偏好字型",
-      "fontFallbackDescription": "Koharu 使用第一個支援該文字的可用字型家族。",
-      "loadError": "無法載入字型。仍可移除現有字型家族。",
-      "loadingFonts": "正在載入字型…",
-      "primary": "主要字型",
-      "removeFamily": "移除 {{family}}",
+      "description": "各書寫系統中新專案開始時使用的書體。之後專案保留自己的書體，「檔案 → 使用預設書體」可再次套用這些。",
+      "loadError": "無法載入字型。已設定的字型仍會使用。",
+      "restore": "還原預設",
+      "restoreDescription": "所有書寫系統的書體都會還原為 Koharu 的預設值，這裡設定的字型將遺失；專案保留自己的書體。",
+      "restoreTitle": "要還原預設書體嗎？",
+      "script": "書寫系統",
+      "styles": "書體",
+      "stylesDescription": "譯文沿用原文的書體。保持預設的書體使用同一書寫系統中日漫黑體的字型。",
       "title": "渲染器"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "音效",
     "title": "故事",
     "translate": "翻譯 {{name}}"
+  },
+  "styles": {
+    "clearOverrides": "清除覆寫",
+    "default": "預設（日漫黑體：{{name}}）",
+    "defaultWeight": "預設",
+    "font": "{{name}}的字型",
+    "groups": {
+      "brush": "書法類",
+      "design": "美術類",
+      "mincho": "明體類"
+    },
+    "italic": "{{name}}斜體",
+    "kernel": "書體",
+    "kernels": {
+      "antique": "日漫黑體",
+      "brush": "書法體",
+      "decorative": "裝飾體",
+      "design": "美術體",
+      "fangsong": "仿宋",
+      "gothic": "黑體",
+      "gyokai": "行楷",
+      "gyosho": "行書",
+      "handwriting": "手寫體",
+      "kaisho": "楷體",
+      "kointai": "古印體",
+      "mincho": "明體",
+      "pop": "POP體",
+      "reisho": "隸書",
+      "rounded": "圓體",
+      "sosho": "草書",
+      "tensho": "篆書",
+      "textbook": "教科書體",
+      "weibei": "魏碑"
+    },
+    "updateToMatch": "依此文字更新{{name}}",
+    "weight": "{{name}}字重"
   },
   "tools": {
     "block": "文字區塊",

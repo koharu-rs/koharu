@@ -375,8 +375,11 @@ mod tests {
     /// Tools on a project with one page, and the page.
     fn project() -> (tempfile::TempDir, Tools, koharu_scene::PageId) {
         let dir = tempfile::tempdir().expect("a folder");
-        let mut session =
-            koharu_scene::Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session = koharu_scene::Session::create(
+            dir.path().join("test.khr"),
+            koharu_scene::Meta::default(),
+        )
+        .expect("a project");
         let page = json!({"op": "add_page", "index": 0, "size": {"width": 100, "height": 100}});
         let change = session
             .apply(koharu_scene::Edit {
@@ -390,7 +393,7 @@ mod tests {
         let tools = Tools::new(
             Arc::new(parking_lot::Mutex::new(session)),
             koharu_pipeline::Pipeline::new(koharu_pipeline::PipelineConfig::default()),
-            koharu_renderer::Renderer::new(koharu_renderer::RendererConfig::default()),
+            koharu_renderer::Renderer::new(),
         );
         (dir, tools, id)
     }

@@ -8,7 +8,7 @@
 //!
 //! `cargo run -p koharu-renderer --example typeset`
 
-use koharu_renderer::{Frame, Renderer, RendererConfig};
+use koharu_renderer::{Frame, Renderer};
 use koharu_scene::{Change, Created, Edit, LayerId, Session};
 use serde_json::{Value, json};
 
@@ -32,7 +32,10 @@ const BALLOONS: [(&str, &str); 3] = [
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("chapter.khr"))?;
+    let mut session = Session::create(
+        dir.path().join("chapter.khr"),
+        koharu_scene::Meta::default(),
+    )?;
     let mut ops = vec![
         json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 640, "height": 640}}),
     ];
@@ -60,7 +63,7 @@ fn main() -> Result<()> {
     }
     apply(&mut session, ops)?;
 
-    let renderer = Renderer::new(RendererConfig::default());
+    let renderer = Renderer::new();
     println!("each translation filling its balloon:");
     report(&renderer.render(&session, page)?, &blocks);
 

@@ -3,7 +3,8 @@
 use std::{path::PathBuf, time::SystemTime};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use koharu_scene::{EXTENSION, Session};
+use koharu_renderer::RendererConfig;
+use koharu_scene::{EXTENSION, Meta, Session};
 use sanitize_filename::OptionsForCheck;
 
 /// The projects folder.
@@ -47,12 +48,14 @@ impl Library {
         if path.exists() {
             bail!("a project named {name:?} already exists");
         }
-        Session::create(&path).with_context(|| format!("failed to create {}", path.display()))
+        Session::create(&path, preferred()?)
+            .with_context(|| format!("failed to create {}", path.display()))
     }
 
     pub fn open(&self, name: &str) -> Result<Session> {
         let path = self.path(name)?;
-        Session::open(&path).with_context(|| format!("failed to open {}", path.display()))
+        Session::open(&path, preferred()?)
+            .with_context(|| format!("failed to open {}", path.display()))
     }
 
     /// The project `name`, created when there's none.
@@ -82,4 +85,16 @@ impl Library {
         );
         Ok(self.root.join(format!("{name}.{EXTENSION}")))
     }
+}
+
+/// What a new project holds, and a file from before projects held their own
+/// styles takes: Preferences' styles, as a new InDesign document takes the
+/// styles made with none open.
+fn preferred() -> Result<Meta> {
+    let config: RendererConfig = koharu_config::get()?;
+    let mut meta = Meta::default();
+    for (kernel, faces) in config.styles {
+        meta.styles.insert(kernel, faces.into_iter().collect());
+    }
+    Ok(meta)
 }

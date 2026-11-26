@@ -19,7 +19,7 @@ description: '外観、モデル、プロバイダー、翻訳、フォント、
 
 ## レンダラー
 
-優先フォントを順に設定します。変更しない限り CCWildWords、次に Adobe 黑体 Std です。Koharu はフォントが指定されていないテキストと、フォントに字形がない場合にこれらを使い、最後にシステムのフォントへフォールバックします。個々のテキストレイヤーのタイポグラフィはそのまま保たれます。
+新しいプロジェクトが最初に使う書体を、文字体系別に設定します。近い書体は見出しの下にまとめて並びます（明朝系：明朝体、仿宋体、楷書体、教科書体など）。書体ごとにフォントと太さのメニューと斜体の切り替えがあり、メニューの最初の**既定**はアンチックのフォントを使います。変更しない限り、ラテン文字にはスキャンレーショングループのフォントガイドが文字の種類ごとに使うフォントが使われます。アンチックは CCWildWords、明朝体のナレーションは CCVictorySpeechLower、ゴシック体の叫びは CreativeBlock BB、丸ゴシック体のモノローグは Anime Ace 3 BB の斜体、手書きは Ashcan BB、筆書体は Ninjutsu BB、デザイン書体は Voice Activated BB、ポップ体は Komika Slick、古印体と装飾書体は ManEater BB です。これらのフォントにないキリル文字とギリシャ文字は CCWildWords の斜体か太字の斜体、中国語と日本語にはそれぞれの書体の同梱フォントが使われます。空欄の値はアンチックの値を使います。**既定に戻す**で、すべての用字系の書体が Koharu の既定に戻ります。その後はプロジェクトが独自の書体を持ち、**ファイル → 既定の書体を使用**でこれらをもう一度適用できます。テキスト自身のフォント、太さ、斜体はそれより優先されます。
 
 ## ギャラリー
 
@@ -103,8 +103,10 @@ context_window = 32768
 
 ### `[renderer]`
 
-<ResponseField name='font_families' type='string[]'>
-  優先フォントを順に並べたもの。既定は `["CCWildWords", "Adobe 黑体 Std"]` です。
+<ResponseField name='styles' type='table'>
+  新しいプロジェクトが最初に使う、書体ごと、文字体系ごとのフォント。`styles.<書体>.<文字体系>` に `family`、`weight`、`italic`
+  を書きます。例: `styles.rounded.Latn.italic = true`。書体は `antique`、`mincho`、`fangsong`、`kaisho`、`textbook`、`gothic`、`rounded`、`handwriting`、`brush`、`gyosho`、`gyokai`、`sosho`、`reisho`、`tensho`、`kointai`、`weibei`、`design`、`pop`、
+  `decorative`、文字体系は `Latn`、`Hans`、`Hant`、`Jpan` などの ISO 15924 コードです。1 つでも変更すると、表全体が書き込まれます。
 </ResponseField>
 
 ### `[agent]`

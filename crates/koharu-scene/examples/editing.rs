@@ -43,7 +43,7 @@ fn refresh(change: &Change) {
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("edit.khr"))?;
+    let mut session = Session::create(dir.path().join("edit.khr"), koharu_scene::Meta::default())?;
     let change = apply(
         &mut session,
         "New page",

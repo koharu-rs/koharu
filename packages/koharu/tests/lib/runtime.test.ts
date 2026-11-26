@@ -22,7 +22,7 @@ function tell(name: keyof typeof events, payload: unknown): void {
 
 const preferences: Preferences = {
   pipeline: {},
-  renderer: { font_families: ['CCWildWords'] },
+  renderer: { styles: { antique: { Latn: { family: 'CCWildWords' } } } },
   agent: {},
   providers: {},
 }
@@ -33,7 +33,7 @@ function desktop(open: () => string | null) {
   vi.spyOn(commands, 'getShownPage').mockResolvedValue(null)
   vi.spyOn(commands, 'query').mockImplementation(async (query) =>
     query.query === 'get_project'
-      ? { id: 'project', version: '1', pages: [] }
+      ? { id: 'project', version: '1', pages: [], meta: {} }
       : { steps: [], current: 0 },
   )
 }

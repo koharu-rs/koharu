@@ -75,6 +75,10 @@ impl Snapshot {
         &self.page
     }
 
+    pub(crate) fn project(&self) -> &Project {
+        &self.project
+    }
+
     pub(crate) fn size(&self) -> Size {
         Size::new(
             f64::from(self.page.size.width),

@@ -19,7 +19,7 @@ use serde_rusqlite::from_rows;
 use serde_with::{json::JsonString, serde_as};
 
 use crate::{
-    Content, Error, Hash, LayerId, Page, PageId, Project, ProjectId, Result, Uuid,
+    Content, Error, Hash, LayerId, Meta, Page, PageId, Project, ProjectId, Result, Uuid,
     project::{TileMap, depth_first, ids},
     tiles,
 };
@@ -28,7 +28,13 @@ use crate::{
 /// on it, so opening refuses any other database before reading its rows.
 const APPLICATION_ID: i32 = 0x4B48_5255;
 /// The format version this build writes.
-const VERSION: Version = Version::new(1, 1, 0);
+const VERSION: Version = Version::new(1, 2, 0);
+/// What each version added to the tables, which a file from before it takes
+/// in this build's first write to it.
+const UPGRADES: [(Version, &str); 1] = [(
+    Version::new(1, 2, 0),
+    "ALTER TABLE project ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'",
+)];
 /// Most compressed tiles fit on a page of this size, which keeps them out of
 /// overflow chains, each of whose pages is a read of its own.
 const PAGE_SIZE: u32 = 16384;
@@ -37,7 +43,12 @@ const PAGE_SIZE: u32 = 16384;
 /// quarter of a page before spilling, which read tiles five times slower when
 /// tried, and a page's row holds its whole layer tree.
 const SCHEMA: &str = indoc! {"
-    CREATE TABLE project(id TEXT PRIMARY KEY, version TEXT NOT NULL, pages TEXT NOT NULL) STRICT;
+    CREATE TABLE project(
+      id TEXT PRIMARY KEY,
+      version TEXT NOT NULL,
+      pages TEXT NOT NULL,
+      meta TEXT NOT NULL
+    ) STRICT;
     CREATE TABLE pages(id TEXT PRIMARY KEY, page TEXT NOT NULL) STRICT;
     CREATE TABLE tiles(
       layer TEXT NOT NULL,
@@ -49,13 +60,17 @@ const SCHEMA: &str = indoc! {"
     CREATE TABLE blobs(hash TEXT PRIMARY KEY, bytes BLOB NOT NULL) STRICT;
 "};
 
+/// The project row, as any version this build reads holds it: a column a
+/// version before it added is missing.
 #[serde_as]
 #[derive(Deserialize)]
 struct ProjectRow {
     id: ProjectId,
-    version: String,
     #[serde_as(as = "JsonString")]
     pages: Vector<PageId>,
+    #[serde_as(as = "Option<JsonString>")]
+    #[serde(default)]
+    meta: Option<Meta>,
 }
 
 #[serde_as]
@@ -106,13 +121,13 @@ fn json(value: &impl serde::Serialize) -> String {
 }
 
 impl Store {
-    /// Creates a project at `path`, and fails if `path` exists. A create that
-    /// fails removes the file, which would refuse both another create and an
-    /// open, and its journals, which SQLite would replay into the next
-    /// project made there.
-    pub(crate) fn create(path: &Path) -> Result<(Self, Project)> {
+    /// Creates a project at `path` holding `meta`, and fails if `path` exists.
+    /// A create that fails removes the file, which would refuse both another
+    /// create and an open, and its journals, which SQLite would replay into
+    /// the next project made there.
+    pub(crate) fn create(path: &Path, meta: Meta) -> Result<(Self, Project)> {
         fs_err::File::create_new(path)?;
-        let created = Self::initialize(path);
+        let created = Self::initialize(path, meta);
         if created.is_err() {
             // What can't be removed doesn't change what failed.
             let _ = Self::remove(path);
@@ -137,7 +152,7 @@ impl Store {
         Ok(())
     }
 
-    fn initialize(path: &Path) -> Result<(Self, Project)> {
+    fn initialize(path: &Path, meta: Meta) -> Result<(Self, Project)> {
         let conn = Connection::open_with_flags(path, flags())?;
         configure(&conn)?;
         conn.execute_batch(&format!(
@@ -147,13 +162,15 @@ impl Store {
              PRAGMA application_id={APPLICATION_ID};
              {SCHEMA}"
         ))?;
-        let project = Project::new(ProjectId(Uuid::now_v7()));
+        let mut project = Project::new(ProjectId(Uuid::now_v7()));
+        project.meta = meta;
         conn.execute(
-            "INSERT INTO project VALUES (?1, ?2, ?3)",
+            "INSERT INTO project VALUES (?1, ?2, ?3, ?4)",
             params![
                 project.id.to_string(),
                 VERSION.to_string(),
-                json(&project.order)
+                json(&project.order),
+                json(&project.meta),
             ],
         )?;
         Ok((
@@ -164,9 +181,10 @@ impl Store {
         ))
     }
 
-    /// Opens a project and takes its lock. Nothing is written until the file
+    /// Opens a project and takes its lock, `meta` standing for what a file
+    /// from before projects held it lacks. Nothing is written until the file
     /// has shown it is a valid project this build reads.
-    pub(crate) fn open(path: &Path) -> Result<(Self, Project)> {
+    pub(crate) fn open(path: &Path, meta: Meta) -> Result<(Self, Project)> {
         let conn = Connection::open_with_flags(path, flags())?;
         let opening = |error: rusqlite::Error| match error.sqlite_error_code() {
             Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked) => {
@@ -182,7 +200,7 @@ impl Store {
         if application_id != APPLICATION_ID {
             return Err(Error::corrupt("this is not a Koharu project"));
         }
-        let project = load(&conn)?;
+        let project = load(&conn, meta)?;
         sweep(&conn, &project)?;
         Ok((
             Self {
@@ -213,9 +231,25 @@ impl Store {
         hashes.into_iter().map(|hash| blob(&conn, hash)).collect()
     }
 
+    /// A write, which first makes the file this build's: it takes what each
+    /// version since its own added to the tables, then this build's version,
+    /// so an older build refuses it as too new rather than as corrupt, and
+    /// then the project row whole, since reading filled in what it lacked. A
+    /// write that fails leaves the file as it was.
     pub(crate) fn begin(&mut self) -> Result<Tx<'_>> {
         let conn = self.conn.get_mut().unwrap_or_else(PoisonError::into_inner);
-        Ok(Tx(conn.transaction()?))
+        let tx = conn.transaction()?;
+        let stored: String = tx.query_row("SELECT version FROM project", [], |row| row.get(0))?;
+        // Opening refused a version this build can't read.
+        let stored = Version::parse(&stored).map_err(Error::corrupt)?;
+        let upgraded = stored != VERSION;
+        if upgraded {
+            for (_, upgrade) in UPGRADES.iter().filter(|(version, _)| stored < *version) {
+                tx.execute_batch(upgrade)?;
+            }
+            tx.execute("UPDATE project SET version = ?1", [VERSION.to_string()])?;
+        }
+        Ok(Tx { tx, upgraded })
     }
 }
 
@@ -278,23 +312,28 @@ fn blob(conn: &Connection, hash: &Hash) -> Result<Vec<u8>> {
         .ok_or_else(|| Error::NotFound(format!("file {hash}")))
 }
 
-fn load(conn: &Connection) -> Result<Project> {
-    let mut statement = conn.prepare("SELECT id, version, pages FROM project")?;
-    let rows: Vec<ProjectRow> =
-        from_rows(statement.query([])?).collect::<std::result::Result<_, _>>()?;
-    let [row] = <[ProjectRow; 1]>::try_from(rows)
-        .map_err(|_| Error::corrupt("a project has one project row"))?;
+fn load(conn: &Connection, meta: Meta) -> Result<Project> {
+    let one = || Error::corrupt("a project has one project row");
     // A reader opens any version up to its own with the same major version,
     // since an addition needs no decoder. The rows of any other version mean
-    // something this build can't know, so they're never read.
-    let readable = Version::parse(&row.version).is_ok_and(|stored| {
+    // something this build can't know, so only its version is read.
+    let version: String = conn
+        .query_row("SELECT version FROM project", [], |row| row.get(0))
+        .optional()?
+        .ok_or_else(one)?;
+    let readable = Version::parse(&version).is_ok_and(|stored| {
         stored.major == VERSION.major && stored <= VERSION && stored.pre.is_empty()
     });
     if !readable {
-        return Err(Error::Version(row.version));
+        return Err(Error::Version(version));
     }
+    let mut statement = conn.prepare("SELECT * FROM project")?;
+    let rows: Vec<ProjectRow> =
+        from_rows(statement.query([])?).collect::<std::result::Result<_, _>>()?;
+    let [row] = <[ProjectRow; 1]>::try_from(rows).map_err(|_| one())?;
     let mut project = Project::new(row.id);
     project.order = row.pages;
+    project.meta = row.meta.unwrap_or(meta);
 
     let mut statement = conn.prepare("SELECT id, page FROM pages")?;
     for row in from_rows::<PageRow>(statement.query([])?) {
@@ -334,29 +373,34 @@ fn load(conn: &Connection) -> Result<Project> {
 
 /// A write in progress. Dropping it without `commit` rolls it back, blobs
 /// included.
-pub(crate) struct Tx<'c>(Transaction<'c>);
+pub(crate) struct Tx<'c> {
+    tx: Transaction<'c>,
+    /// Whether this write upgrades the file, whose project row it writes
+    /// whole.
+    upgraded: bool,
+}
 
 impl Tx<'_> {
     pub(crate) fn commit(self) -> Result<()> {
-        Ok(self.0.commit()?)
+        Ok(self.tx.commit()?)
     }
 
     /// Stores `bytes` under their hash, once.
     pub(crate) fn put_blob(&self, bytes: &[u8]) -> Result<Hash> {
         let hash = Hash::of(bytes);
-        self.0
+        self.tx
             .prepare_cached("INSERT OR IGNORE INTO blobs VALUES (?1, ?2)")?
             .execute(params![hash.to_string(), bytes])?;
         Ok(hash)
     }
 
     pub(crate) fn blob(&self, hash: &Hash) -> Result<Vec<u8>> {
-        blob(&self.0, hash)
+        blob(&self.tx, hash)
     }
 
     pub(crate) fn has_blob(&self, hash: &Hash) -> Result<bool> {
         Ok(self
-            .0
+            .tx
             .prepare_cached("SELECT 1 FROM blobs WHERE hash = ?1")?
             .exists([hash.to_string()])?)
     }
@@ -364,12 +408,12 @@ impl Tx<'_> {
     /// Writes what differs between `before`, as the file holds it, and
     /// `after`. `OrdMap::diff` skips the parts the two share.
     pub(crate) fn write_diff(&self, before: &Project, after: &Project) -> Result<()> {
-        let conn = &self.0;
-        // The rows written are this build's version, so the file becomes it,
-        // and an older build refuses it as too new rather than as corrupt.
-        conn.prepare_cached("UPDATE project SET version = ?1 WHERE version <> ?1")?
-            .execute([VERSION.to_string()])?;
-        if before.order != after.order {
+        let conn = &self.tx;
+        if self.upgraded || before.meta != after.meta {
+            conn.prepare_cached("UPDATE project SET meta = ?1")?
+                .execute([json(&after.meta)])?;
+        }
+        if self.upgraded || before.order != after.order {
             conn.prepare_cached("UPDATE project SET pages = ?1")?
                 .execute([json(&after.order)])?;
         }
@@ -409,12 +453,12 @@ impl Tx<'_> {
                     new: ((x, y), hash),
                     ..
                 } => {
-                    self.0
+                    self.tx
                         .prepare_cached("INSERT OR REPLACE INTO tiles VALUES (?1, ?2, ?3, ?4)")?
                         .execute(params![layer, x, y, hash.to_string()])?;
                 }
                 DiffItem::Remove((x, y), _) => {
-                    self.0
+                    self.tx
                         .prepare_cached("DELETE FROM tiles WHERE layer = ?1 AND x = ?2 AND y = ?3")?
                         .execute(params![layer, x, y])?;
                 }

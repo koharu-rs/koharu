@@ -24,7 +24,7 @@ fn edit(label: &str, ops: Vec<Value>) -> Result<Edit> {
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("chapter.khr");
-    let mut session = Session::create(&path)?;
+    let mut session = Session::create(&path, koharu_scene::Meta::default())?;
 
     // The scan is kept byte for byte, and the page takes its size.
     let mut scan = Vec::new();
@@ -106,7 +106,7 @@ fn main() -> Result<()> {
     );
 
     drop(session);
-    let reopened = Session::open(&path)?;
+    let reopened = Session::open(&path, koharu_scene::Meta::default())?;
     assert_eq!(reopened.project(), project);
     println!(
         "reopened {} layers",

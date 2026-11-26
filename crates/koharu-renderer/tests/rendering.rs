@@ -4,15 +4,13 @@
 
 use std::io::Cursor;
 
-use koharu_renderer::{Frame, Gpu, Raster, Renderer, RendererConfig, ResolvedText};
+use koharu_renderer::{Frame, Gpu, Raster, Renderer, ResolvedText};
 use koharu_scene::{Change, Created, Edit, Hash, LayerId, Op, PageId, Session};
 use serde_json::{Value, json};
 
 /// A renderer that sets text in installed fonts, so no test downloads one.
 fn renderer() -> Renderer {
-    Renderer::new(RendererConfig {
-        font_families: Vec::new(),
-    })
+    Renderer::new()
 }
 
 fn apply(session: &mut Session, ops: Vec<Value>) -> Change {
@@ -44,7 +42,8 @@ fn page(
     layers: Vec<Value>,
 ) -> (tempfile::TempDir, Session, PageId, Change) {
     let dir = tempfile::tempdir().expect("a temporary directory");
-    let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+    let mut session = Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+        .expect("a project");
     let mut ops = vec![
         json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": width, "height": height}}),
     ];
@@ -65,7 +64,8 @@ fn png(width: u32, height: u32, color: [u8; 4]) -> Vec<u8> {
 /// A project with one page made from a `color` scan, holding `layers`.
 fn scanned(color: [u8; 4], layers: Vec<Value>) -> (tempfile::TempDir, Session, PageId, Change) {
     let dir = tempfile::tempdir().expect("a temporary directory");
-    let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+    let mut session = Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+        .expect("a project");
     let scan = png(64, 64, color);
     let file = Hash::of(&scan);
     let mut ops = vec![
@@ -618,4 +618,44 @@ fn a_panel_draws_its_children_past_its_outline() {
         (pixels.get_pixel(16, 32)[3], pixels.get_pixel(48, 32)[3]),
         (255, 255)
     );
+}
+
+#[test]
+fn a_kernel_style_sets_what_a_text_leaves_out_and_redefining_it_changes_its_texts() {
+    // The project's antique family is Arial in Latin, and its rounded only
+    // leans.
+    let styles = json!({"op": "update_meta", "patch": {"styles": {
+        "antique": {"Latn": {"family": "Arial"}},
+        "rounded": {"Latn": {"italic": true}},
+    }}});
+    let renderer = renderer();
+    let added = |style: Value| {
+        json!({"op": "add_layer", "id": "$text", "page": "$page", "index": 0, "layer": {
+            "kind": "text", "content": "Hello", "language": "en", "style": style,
+        }})
+    };
+    let face = |style: Value, redefined: Option<Value>| {
+        let (_dir, mut session, page, change) = page(400, 200, vec![styles.clone(), added(style)]);
+        if let Some(face) = redefined {
+            let patch = json!({"styles": {"rounded": {"Latn": face}}});
+            apply(
+                &mut session,
+                vec![json!({"op": "update_meta", "patch": patch})],
+            );
+        }
+        let frame = renderer.render(&session, page).expect("a frame");
+        let run = text(&frame, &change, "text").runs[0].clone();
+        let italic = run.post_script_name.contains("Italic") || run.faux_italic;
+        let bold = run.post_script_name.contains("Bold") || run.faux_bold;
+        (run.post_script_name.starts_with("Arial"), italic, bold)
+    };
+    let rounded = json!({"kernel": "rounded", "chars": {"size": 30.0}});
+    // The kernel's italic, in antique's family.
+    assert_eq!(face(rounded.clone(), None), (true, true, false));
+    // The text's own value wins.
+    let upright = json!({"kernel": "rounded", "chars": {"size": 30.0, "italic": false}});
+    assert!(!face(upright, None).1);
+    // Redefining the style changes its text: bold, and no longer italic.
+    let redefined = json!({"weight": 700, "italic": false});
+    assert_eq!(face(rounded, Some(redefined)), (true, false, true));
 }

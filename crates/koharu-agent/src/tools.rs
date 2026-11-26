@@ -528,7 +528,6 @@ fn seen(drawn: &RgbaImage) -> Result<String, ToolExecutionError> {
 mod tests {
     use image::Rgb;
     use koharu_pipeline::PipelineConfig;
-    use koharu_renderer::RendererConfig;
     use koharu_scene::{Background, Created, Hash, Ref};
     use rig_core::completion::message::DocumentSourceKind;
     use serde_json::json;
@@ -539,11 +538,12 @@ mod tests {
     /// defaults.
     fn open() -> (tempfile::TempDir, Tools) {
         let dir = tempfile::tempdir().expect("a folder");
-        let session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let session = Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+            .expect("a project");
         let tools = Tools::new(
             Arc::new(Mutex::new(session)),
             Pipeline::new(PipelineConfig::default()),
-            Renderer::new(RendererConfig::default()),
+            Renderer::new(),
         );
         (dir, tools)
     }

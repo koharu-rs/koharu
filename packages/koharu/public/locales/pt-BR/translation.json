@@ -160,7 +160,9 @@
       "set_text": "Editar texto",
       "set_visibility": "Mostrar ou ocultar",
       "translate": "Tradução",
-      "update_layer": "Alterar camada"
+      "update_layer": "Alterar camada",
+      "update_style": "Atualizar estilo",
+      "use_default_styles": "Usar estilos padrão"
     },
     "title": "Histórico"
   },
@@ -284,10 +286,12 @@
     "import": "Importar páginas",
     "original": "Mostrar original",
     "redo": "Refazer",
+    "saveDefaultStyles": "Salvar estilos como padrão",
     "selectAllLayers": "Selecionar todas as camadas",
     "settings": "Configurações",
     "undo": "Desfazer",
     "unloadModels": "Descarregar modelos",
+    "useDefaultStyles": "Usar estilos padrão",
     "view": "Exibir"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "Configurações",
     "typesetting": {
-      "addFallback": "Adicionar uma alternativa",
-      "addFamily": "Adicionar família de fontes",
-      "description": "Defina a pilha ordenada de fontes usada quando uma camada de texto não tem família atribuída.",
-      "empty": "Nenhuma família padrão. O Koharu usará a alternativa do sistema.",
-      "fallbacks": "Alternativas",
-      "fallbacksDescription": "Usadas em ordem para os caracteres que faltam na principal. Arraste para reordenar, ou sobre Principal para trocar.",
-      "familyLabel": "Família de fontes padrão {{index}}",
-      "fontFallback": "Fontes preferidas",
-      "fontFallbackDescription": "O Koharu usa a primeira família disponível compatível com o texto.",
-      "loadError": "Não foi possível carregar as fontes. As famílias existentes ainda podem ser removidas.",
-      "loadingFonts": "Carregando fontes…",
-      "primary": "Principal",
-      "removeFamily": "Remover {{family}}",
+      "description": "Os estilos com que cada projeto novo começa, por sistema de escrita. Depois, o projeto mantém os seus: Arquivo → Usar estilos padrão aplica estes de novo.",
+      "loadError": "Não foi possível carregar as fontes. As fontes já definidas continuam valendo.",
+      "restore": "Restaurar padrões",
+      "restoreDescription": "Os estilos de todos os sistemas de escrita voltam aos do Koharu. As fontes definidas aqui são perdidas; os projetos mantêm os seus.",
+      "restoreTitle": "Restaurar os estilos padrão?",
+      "script": "Sistema de escrita",
+      "styles": "Estilos",
+      "stylesDescription": "Uma tradução segue o estilo da fonte do original. Um estilo deixado em Padrão usa a fonte de Antique no mesmo sistema de escrita.",
       "title": "Renderizador"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "Efeito sonoro",
     "title": "História",
     "translate": "Traduzir {{name}}"
+  },
+  "styles": {
+    "clearOverrides": "Limpar substituições",
+    "default": "Padrão (a de Antique: {{name}})",
+    "defaultWeight": "Padrão",
+    "font": "Fonte de {{name}}",
+    "groups": {
+      "brush": "Estilos de pincel",
+      "design": "Estilos de design",
+      "mincho": "Estilos mincho"
+    },
+    "italic": "{{name}} em itálico",
+    "kernel": "Estilo",
+    "kernels": {
+      "antique": "Antique",
+      "brush": "Pincel",
+      "decorative": "Decorativa",
+      "design": "Design",
+      "fangsong": "Fangsong",
+      "gothic": "Gótica",
+      "gyokai": "Semirregular",
+      "gyosho": "Semicursiva",
+      "handwriting": "Manuscrita",
+      "kaisho": "Regular",
+      "kointai": "Kointai",
+      "mincho": "Mincho",
+      "pop": "Pop",
+      "reisho": "Clerical",
+      "rounded": "Arredondada",
+      "sosho": "Cursiva",
+      "tensho": "Selo",
+      "textbook": "Escolar",
+      "weibei": "Estela Wei"
+    },
+    "updateToMatch": "Atualizar {{name}} para corresponder",
+    "weight": "Peso de {{name}}"
   },
   "tools": {
     "block": "Bloco de texto",

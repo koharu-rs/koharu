@@ -1,4 +1,5 @@
 use koharu_ml::koharu_layout_highres::KoharuLayoutHighres;
+use koharu_ml::yuzumarker_font_detection::YuzuMarkerFontDetection;
 use koharu_runtime::Device;
 use serde::{Deserialize, Serialize};
 use strum::{Display, VariantArray};
@@ -15,11 +16,14 @@ pub enum Detector {
     KoharuLayoutHighres,
 }
 
+/// The detector, and the font model that reads the style of the lettering it
+/// finds.
 pub(super) async fn load(
     model: Detector,
     device: &'static Device,
-) -> anyhow::Result<KoharuLayoutHighres> {
-    match model {
-        Detector::KoharuLayoutHighres => KoharuLayoutHighres::load(device).await,
-    }
+) -> anyhow::Result<(KoharuLayoutHighres, YuzuMarkerFontDetection)> {
+    let layout = match model {
+        Detector::KoharuLayoutHighres => KoharuLayoutHighres::load(device).await?,
+    };
+    Ok((layout, YuzuMarkerFontDetection::load(device).await?))
 }

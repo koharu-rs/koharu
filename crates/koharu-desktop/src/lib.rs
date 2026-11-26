@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use koharu_pipeline::{Pipeline, PipelineConfig};
-use koharu_renderer::{Gpu, Renderer, RendererConfig};
+use koharu_renderer::{Gpu, Renderer};
 use sentry::protocol::GpuContext;
 use tauri::Manager as _;
 use tauri_plugin_log::{Target, TargetKind, log::LevelFilter};
@@ -40,7 +40,6 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
 
     // The process's, which the pipeline draws a painted area's page with.
     let renderer = Renderer::get().clone();
-    renderer.set_config(koharu_config::get::<RendererConfig>()?);
     // The window composites with it from its first frame.
     let gpu = Gpu::get()?;
     let adapter = gpu.adapter.get_info();

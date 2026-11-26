@@ -47,7 +47,10 @@ fn blocks(session: &Session) -> Result<Vec<(LayerId, Block)>> {
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("pipeline.khr"))?;
+    let mut session = Session::create(
+        dir.path().join("pipeline.khr"),
+        koharu_scene::Meta::default(),
+    )?;
     apply(
         &mut session,
         "Import",

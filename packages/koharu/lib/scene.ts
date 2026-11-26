@@ -4,6 +4,8 @@ import {
   commands,
   type Change,
   type CharStyle,
+  type Face,
+  type Kernel,
   type Layer,
   type LayerId,
   type Op,
@@ -21,6 +23,7 @@ import {
   type Move,
   type Part,
 } from './document'
+import type { Faces } from './styles'
 
 /** The panels' edits, each one undo step through the scene's own `edit`, labelled by a key the
  * History panel translates. */
@@ -95,32 +98,60 @@ export function setSourceText(layer: LayerId, text: string): Promise<Change> {
   ])
 }
 
-/** Merges `style`, a `TextStyle` patch, into each layer's lettering: a text's own style, and a
- * block's translation's, which is what it draws. A character value it sets is every character's,
- * as Photoshop styles a selected type layer, so the characters marked with their own drop it. */
-export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
+/** The ops merging `style`, a `TextStyle` patch, into each layer's lettering: a text's own style,
+ * and a block's translation's, which is what it draws; with `marks`, the characters marked with a
+ * value it sets drop it. */
+function restyled(layers: Layer[], style: TextStyle, marks: boolean): Op[] {
   const keys = Object.keys(style.chars ?? {}) as (keyof CharStyle)[]
-  return edit(
-    'set_style',
-    layers
-      .filter((layer) => isTextLayer(layer) || isBlockLayer(layer))
-      .flatMap((layer): Op[] => {
-        const patch: Value = isBlockLayer(layer) ? { translation: { style } } : { style }
-        const restyle: Op = { op: 'update_layer', layer: layer.id, patch }
-        const spans = letteringOf(layer)?.content ?? []
-        const marked = spans.some((span) => keys.some((key) => span.attributes?.[key] != null))
-        if (!marked) return [restyle]
-        const unmarked = spans.map(({ attributes, ...span }) => ({
-          ...span,
-          attributes: Object.fromEntries(
-            Object.entries(attributes ?? {}).filter(
-              ([key]) => !keys.includes(key as keyof CharStyle),
-            ),
+  return layers
+    .filter((layer) => isTextLayer(layer) || isBlockLayer(layer))
+    .flatMap((layer): Op[] => {
+      const patch: Value = isBlockLayer(layer) ? { translation: { style } } : { style }
+      const restyle: Op = { op: 'update_layer', layer: layer.id, patch }
+      const spans = letteringOf(layer)?.content ?? []
+      const marked = spans.some((span) => keys.some((key) => span.attributes?.[key] != null))
+      if (!marks || !marked) return [restyle]
+      const unmarked = spans.map(({ attributes, ...span }) => ({
+        ...span,
+        attributes: Object.fromEntries(
+          Object.entries(attributes ?? {}).filter(
+            ([key]) => !keys.includes(key as keyof CharStyle),
           ),
-        }))
-        return [restyle, { op: 'set_rich_text', layer: layer.id, spans: unmarked }]
-      }),
-  )
+        ),
+      }))
+      return [restyle, { op: 'set_rich_text', layer: layer.id, spans: unmarked }]
+    })
+}
+
+/** Merges `style` into each layer's lettering. A character value it sets is every character's, as
+ * Photoshop styles a selected type layer, so the characters marked with their own drop it. */
+export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
+  return edit('set_style', restyled(layers, style, true))
+}
+
+/** Redefines this project's `kernel` in `script` as `face`, as Google Docs' Update 'Heading 1' to
+ * match does: every text of that style takes it, and `layers`, which it was taken from, drop their
+ * own font, weight, and italic, so they follow it. Their marked characters keep theirs. */
+export function updateStyle(
+  layers: Layer[],
+  kernel: Kernel,
+  script: string,
+  face: Face,
+): Promise<Change> {
+  const own = { chars: { family: null, weight: null, italic: null } }
+  return edit('update_style', [
+    { op: 'update_meta', patch: { styles: { [kernel]: { [script]: face } } } },
+    ...restyled(layers, own, false),
+  ])
+}
+
+/** Replaces this project's styles with `styles`, Preferences', as Google Docs' Use my default
+ * styles does. */
+export function applyDefaultStyles(styles: Faces): Promise<Change> {
+  return edit('use_default_styles', [
+    { op: 'update_meta', patch: { styles: null } },
+    { op: 'update_meta', patch: { styles } },
+  ])
 }
 
 /** Sets the fit of each layer's own frame, a box or a path: a text's, or a block's translation's.

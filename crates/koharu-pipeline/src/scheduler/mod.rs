@@ -353,6 +353,7 @@ impl Scheduler {
                     blocks: job.blocks.clone(),
                     session: Arc::clone(&run.session),
                     cancel: run.cancel.clone(),
+                    started: Default::default(),
                 }
             })
             .collect();

@@ -5,7 +5,9 @@
 
 use anyhow::Result;
 use koharu_renderer::Renderer;
-use koharu_scene::{Direction, Fit, Frame, LanguageIdentifier, LayerId, PathFit, Role, Text};
+use koharu_scene::{
+    Direction, Fit, Frame, LanguageIdentifier, LayerId, PathFit, Project, Role, Text,
+};
 use kurbo::{Affine, BezPath, Line, ParamCurve as _, Point, Rect, Shape as _};
 use rayon::prelude::*;
 
@@ -54,7 +56,7 @@ pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Opti
             text.style.chars.size = source.or(text.style.chars.size);
             // A text of no language has no hyphens.
             text.language = LanguageIdentifier::UNKNOWN;
-            drawn(lettering.id, &text)
+            drawn(lettering.project, lettering.id, &text)
         })
         .collect::<Result<Vec<_>>>()?;
     // A text of no characters draws at none.
@@ -81,7 +83,7 @@ pub(super) fn lift(
     let Some(source) = source.filter(|source| *source > size) else {
         return Ok((size, held));
     };
-    if !empty(lettering.id, &at(&lettering.text, size))? {
+    if !empty(lettering.project, lettering.id, &at(&lettering.text, size))? {
         return Ok((size, held));
     }
     let placed = std::mem::replace(&mut lettering.text.frame, given);
@@ -95,7 +97,11 @@ pub(super) fn lift(
         *fit = PathFit::Best;
         *inset = inset.min(EDGE);
     }
-    let fills = drawn(lettering.id, &at(&lettering.text, source))?;
+    let fills = drawn(
+        lettering.project,
+        lettering.id,
+        &at(&lettering.text, source),
+    )?;
     let (frame, start, set, holds) = match fills >= size {
         true => (lettering.text.frame.clone(), fills, source, None),
         false => (placed, size, size, held),
@@ -118,16 +124,16 @@ pub(super) fn lift(
         anchor: *anchor,
         inset: *inset,
     };
-    if start >= 0.999 * source || !empty(lettering.id, &at(&past, start))? {
+    if start >= 0.999 * source || !empty(lettering.project, lettering.id, &at(&past, start))? {
         lettering.text.frame = frame;
         return Ok((set, holds));
     }
     let mut grown = source;
-    if !empty(lettering.id, &at(&past, source))? {
+    if !empty(lettering.project, lettering.id, &at(&past, source))? {
         let (mut low, mut high) = (start, source);
         for _ in 0..8 {
             let middle = (low + high) / 2.0;
-            match empty(lettering.id, &at(&past, middle))? {
+            match empty(lettering.project, lettering.id, &at(&past, middle))? {
                 true => low = middle,
                 false => high = middle,
             }
@@ -147,11 +153,11 @@ fn at(text: &Text, size: f64) -> Text {
 
 /// Whether `text`, block `id`'s, takes under `EMPTY` of its room's extent
 /// across its lines.
-fn empty(id: LayerId, text: &Text) -> Result<bool> {
+fn empty(project: &Project, id: LayerId, text: &Text) -> Result<bool> {
     let Frame::Path { path, .. } = &text.frame else {
         return Ok(false);
     };
-    let Some(laid) = Renderer::get().layout(id, text)? else {
+    let Some(laid) = Renderer::get().layout(project, id, text)? else {
         return Ok(false);
     };
     let room = BezPath::from(path).bounding_box();
@@ -186,7 +192,7 @@ fn reach(lettering: &mut Lettering, size: f64) -> Result<Option<f64>> {
         text.language = language;
         let mut holds = |room: &Frame| -> Result<f64> {
             text.frame = room.clone();
-            drawn(lettering.id, &text)
+            drawn(lettering.project, lettering.id, &text)
         };
         held = holds(most)?;
         if held < 0.999 * size {
@@ -243,6 +249,7 @@ pub(super) fn clear(
         .zip(&*sizes)
         .map(|(lettering, size)| {
             lines(
+                lettering.project,
                 lettering.id,
                 &at_size(lettering, &lettering.text.frame, *size),
             )
@@ -318,6 +325,7 @@ pub(super) fn clear(
                 };
                 // No larger than it draws, which a lifted text's room holds.
                 let draws = drawn(
+                    lettering.project,
                     lettering.id,
                     &at_size(lettering, &lettering.text.frame, Some(size)),
                 )?;
@@ -325,6 +333,7 @@ pub(super) fn clear(
             }
             (Frame::Box { bounds, anchor, .. }, _, size) => {
                 let fills = drawn(
+                    lettering.project,
                     lettering.id,
                     &at_size(lettering, &lettering.text.frame, size),
                 )?;
@@ -337,7 +346,13 @@ pub(super) fn clear(
             }
             _ => continue,
         };
-        let trial = |size: f64| lines(lettering.id, &at_size(lettering, &frame, Some(size)));
+        let trial = |size: f64| {
+            lines(
+                lettering.project,
+                lettering.id,
+                &at_size(lettering, &frame, Some(size)),
+            )
+        };
         let smallest = trial(least)?;
         // A sound effect lying across another keeps off the rest at least, as
         // a letterer lays one sound effect over another.
@@ -396,6 +411,7 @@ pub(super) fn clear(
             (None, None) => continue,
         }
         current[at] = lines(
+            lettering.project,
             lettering.id,
             &at_size(lettering, &lettering.text.frame, sizes[at]),
         )?;
@@ -405,10 +421,10 @@ pub(super) fn clear(
 
 /// The boxes of `text`'s lines, block `id`'s, on the page, each grown by an
 /// eighth of the text's size for its outline or the air beside it.
-pub(super) fn lines(id: LayerId, text: &Text) -> Result<Vec<Rect>> {
+pub(super) fn lines(project: &Project, id: LayerId, text: &Text) -> Result<Vec<Rect>> {
     let onto = Affine::from(text.transform);
     Ok(Renderer::get()
-        .layout(id, text)?
+        .layout(project, id, text)?
         .map_or_else(Vec::new, |laid| {
             let size = laid
                 .runs
@@ -489,8 +505,8 @@ fn rooms(lettering: &Lettering) -> Vec<Frame> {
 }
 
 /// The size `text`, block `id`'s, draws at; 0 when it has no characters.
-pub(super) fn drawn(id: LayerId, text: &Text) -> Result<f64> {
-    let laid = Renderer::get().layout(id, text)?;
+pub(super) fn drawn(project: &Project, id: LayerId, text: &Text) -> Result<f64> {
+    let laid = Renderer::get().layout(project, id, text)?;
     Ok(laid.map_or(0.0, |laid| {
         laid.runs
             .iter()

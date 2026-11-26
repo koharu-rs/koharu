@@ -33,7 +33,7 @@ fix writes.
 
 | Element | Model | Cite |
 |---|---|---|
-| project | ordered pages, imported files, and a `version` | a Clip Studio Paint EX work is one management file over its pages [CSP pages]; a Figma file keeps each image once, fetched by hash with `getImageByHash` [Figma image paint]; an OpenRaster image must carry a `version` [OpenRaster] |
+| project | ordered pages, imported files, a `version`, and `meta`: what it holds beyond its pages, as one value, so holding more is adding a field to it. Its `styles` are its own face for each kernel in each script, which it starts with from Preferences and keeps | a Clip Studio Paint EX work is one management file over its pages [CSP pages]; a Figma file keeps each image once, fetched by hash with `getImageByHash` [Figma image paint]; an OpenRaster image must carry a `version` [OpenRaster]; an MBTiles file keeps its own facts in its `metadata` table [MBTiles]; an InDesign document holds its own character styles [InDesign character styles], taking the styles made with none open when it's new [InDesign styles], and a Google Docs document keeps its own until Use my default styles [Google Docs styles] |
 | page | a stored id, a `size`, a `background`, its layers, and their pixels | each Clip Studio Paint page has its own canvas size [CSP page size]; a PSD document has a width and height [PSD spec]; each Photoshop artboard has its own size [Photoshop artboards]; a Figma page is a node with an `id` [Figma nodes] |
 | `background` | none, or an imported file's content hash and `visible`; drawn first, under every layer, at the page's origin. A page made from a file has that file as its background, at its size | Photoshop's Background is the bottom-most layer, an image has only one, and its stacking order, blending mode, and opacity can't change [Photoshop Background] |
 
@@ -125,7 +125,21 @@ Studio Paint's line space can be "a percentage of the character size" [CSP text
 frame]. Photoshop's leading [Photoshop leading] and Figma's line height [Figma
 text properties] are the same setting; manga letterers set it tighter than
 Photoshop's 120% Auto, at the size or 1 pt more, so dialogue reads evenly
-[Manga balloon basics]. Styling with no characters selected writes `style` and
+[Manga balloon basics]. `kernel` is the third key only `style` holds: the kind
+of face a text is lettered in, as its source's was, since Japanese editors set
+each kind of line in its own kind of face [Manga font kinds], and as InDesign
+applies a named character style to text [InDesign characters]. Its values are
+the 19 kernels font detection reads, as Morisawa, Founder, and DynaComware
+classify their faces [YuzuMarker kernels], grouped by look so Settings sets a
+group at once: `mincho` with `fangsong`, `kaisho`, and `textbook`; `brush` with
+the calligraphic hands, `gyosho`, `gyokai`, `sosho`, `reisho`, `tensho`,
+`kointai`, and `weibei`; `design` with `pop` and `decorative`; and `antique`,
+`gothic`, `rounded`, and `handwriting` alone. A kernel's face, for the script
+of the text's language, gives the family, weight, and italic that the text's
+`style` and marks leave out; the face is the project's `meta.styles` for that
+kernel and script, and what it leaves out is `antique`'s,
+as is a text's with no kernel. Styling with
+no characters selected writes `style` and
 drops that key's marks, so every character takes it, as Photoshop styles a
 selected type layer [Photoshop type]; styling selected characters writes marks.
 A typed character takes the marks of the one before it, or the first one's at
@@ -146,9 +160,9 @@ given a ruby on only some of its characters loses its own on the rest. White spa
 at a base's ends has no ruby. Ruby has no size or place of its own: it's half its base's size,
 over a line or on the right of a column, as JLREQ sets it in principle [JLREQ].
 
-A text holds its own values. Nothing is shared between texts, because a
-balloon's text length and size differ from its neighbours', so no one style
-fits them all.
+A text holds its own values. Only a kernel's face is shared, and only its
+family, weight, and italic: nothing else is, because a balloon's text length and
+size differ from its neighbours', so no one style fits them all.
 
 A size is the size a text is set at. A `shrink` frame draws its spans smaller,
 all at one scale, only while they would otherwise overflow, so dialogue keeps one
@@ -389,7 +403,7 @@ fields of them.
 | Detection | the background | a `panel` for each panel it finds; a `balloon` for each balloon, inside the panel it's read in, though it crosses the border, or on the page when it's read in none; a `block` for each text or sound effect, inside its balloon if it has one, else free in its panel or on the page, with its `role`, its source's frame, tilt, and direction, and its mask; all in reading order |
 | OCR | the background inside each block's source frame | the source's `content` and `language` |
 | Inpainting | the background, each block's mask, and its balloon's outline when it has one | the block's clean-up, only in the tiles it changes |
-| Translation | the page's sources in reading order, for context, and in a balloon, the balloon's outline and its other texts | each given block's translation: `content` and `language`; its `frame`, its room in its balloon, with the margin its size needs, or its source's frame when it's free, as wide as its size needs, with `best` fit; `anchor` and `direction` |
+| Translation | the page's sources in reading order, for context, and in a balloon, the balloon's outline and its other texts | each given block's translation: `content` and `language`; its `frame`, its room in its balloon, with the margin its size needs, or its source's frame when it's free, as wide as its size needs, with `best` fit; `anchor` and `direction`; and its `kernel`, its source's as detection read it, with `weight` 700 when its source is heavier than the dialogue |
 
 Each model also writes its `c2pa` action on the layers it wrote.
 
@@ -496,7 +510,9 @@ agent.
   minor version, and a reader opens any version up to its own with the same
   major version, since an addition needs no decoder. Writing to an older file
   raises its version, so an older build refuses what it can't read as too new.
-  A change that removes or redefines core data raises the major version, and
+  What a version added to the tables, such as the project's `meta` column, an
+  older file takes in that write's transaction, so one that fails leaves the
+  file as it was, and reads as its default until then. A change that removes or redefines core data raises the major version, and
   once a release has written a version, the change ships an upgrade to it. The
   patch stays 0, since stored data has no bug fixes. A newer version, a
   pre-release, or unknown core data fails to open; unknown attributes never do.
@@ -513,7 +529,7 @@ Read in October and November 2026.
   [Photoshop leading], [Photoshop History panel], [Photoshop combine
   variations], [Photoshop transform], [Lightroom masking],
   [InDesign auto-size], [InDesign alignment], [InDesign characters], [InDesign
-  character styles], [Acrobat OCR]
+  character styles], [InDesign styles], [Acrobat OCR]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP layer
   masks], [CSP file objects], [CSP text], [CSP text editing], [CSP vertical
   text], [CSP balloons], [CSP text frame], [CSP text tool], [CSP font], [CSP
@@ -523,17 +539,18 @@ Read in October and November 2026.
   plugin data], [Figma multiplayer]
 - Microsoft: [PowerPoint placeholders], [PowerPoint autofit], [OOXML anchor],
   [OOXML autofit], [Publisher copyfitting]
-- Google and Apple: [Google Slides fitting], [Keynote autosize], [SwiftUI
-  minimum scale]
+- Google and Apple: [Google Slides fitting], [Google Docs styles], [Keynote
+  autosize], [SwiftUI minimum scale]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
   inside shapes dropped], [CSS masking], [CSS text], [CSS align], [CSS
   line-height], [CSS font synthesis], [JLREQ]
 - Document and translation formats: [PAGE-XML], [XLIFF]
 - Lettering and manga translation: [Comics Kingdom], [Manga balloon basics],
-  [Search and Destroy letters], [Manga translation II]
+  [Search and Destroy letters], [Manga translation II], [Manga font kinds],
+  [YuzuMarker kernels]
 - Others: [OpenRaster], [Krita layers], [Krita file], [Krita tiles], [GIMP
   XCF], [GIMP parasites], [Blender custom properties], [C2PA actions],
-  [SemVer], [RFC 7396]
+  [SemVer], [RFC 7396], [MBTiles]
 
 [PSD spec]: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
 [Photoshop Background]: https://web.archive.org/web/20241224024227/https://helpx.adobe.com/photoshop/using/layer-basics.html
@@ -552,6 +569,8 @@ Read in October and November 2026.
 [InDesign alignment]: https://helpx.adobe.com/indesign/using/aligning-text.html
 [InDesign characters]: https://developer.adobe.com/indesign/dom/api/c/Character/
 [InDesign character styles]: https://developer.adobe.com/indesign/dom/api/c/CharacterStyle/
+[InDesign styles]: https://helpx.adobe.com/sg/indesign/using/paragraph-character-styles.html
+[Google Docs styles]: https://support.google.com/docs/answer/1663349
 [Photoshop transform]: https://helpx.adobe.com/photoshop/using/free-transformations-images-shapes-paths.html
 [Photoshop leading]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/adjust-line-and-character-spacing.html
 [Photoshop History panel]: https://helpx.adobe.com/photoshop/desktop/get-started/set-up-toolbars-panels/history-panel-overview.html
@@ -604,8 +623,11 @@ Read in October and November 2026.
 [Comics Kingdom]: https://comicskingdom.com/trending/blog/2024/07/22/do-you-speak-comics-part-2-balloons-and-bubbles
 [Manga balloon basics]: https://www.linkedin.com/pulse/manga-lettering-balloon-basics-phil-christie
 [Search and Destroy letters]: https://yattatachi.com/the-manga-letters-search-and-destroy
+[Manga font kinds]: https://manga.jp.net/knowhow/150924font/
+[YuzuMarker kernels]: https://huggingface.co/mayocream/yuzumarker-fontdetection/tree/c58f09e7151904f5b6d3f1e6c5678558a16d5ea9
 [Manga translation II]: https://wordswithoutborders.org/read/article/2009-02/manga-translation-only-poets-need-apply-part-ii/
 [OpenRaster]: https://www.openraster.org/baseline/layer-stack-spec.html
+[MBTiles]: https://github.com/mapbox/mbtiles-spec/blob/682fed797a346a41cecf123484f3f214f05b5b57/1.3/spec.md#metadata
 [Krita layers]: https://docs.krita.org/en/reference_manual/layers_and_masks.html
 [Krita file]: https://invent.kde.org/graphics/krita/-/blob/master/plugins/impex/libkra/kis_kra_savexml_visitor.cpp
 [Krita tiles]: https://invent.kde.org/graphics/krita/-/blob/master/libs/image/tiles3/swap/kis_tile_compressor_2.cpp

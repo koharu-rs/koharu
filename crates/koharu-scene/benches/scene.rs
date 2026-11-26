@@ -64,7 +64,8 @@ fn page_pixels(seed: u32) -> Vec<u8> {
 /// A project in a fresh directory with one page holding one empty raster.
 fn raster() -> (TempDir, Session, LayerId) {
     let dir = TempDir::new().expect("a temporary directory");
-    let mut session = Session::create(dir.path().join("bench.khr")).expect("a project");
+    let mut session = Session::create(dir.path().join("bench.khr"), koharu_scene::Meta::default())
+        .expect("a project");
     let change = session
         .apply(edit(vec![
             json!({"op": "add_page", "id": "$p", "index": 0, "size": {"width": WIDTH, "height": HEIGHT}}),
@@ -124,7 +125,7 @@ fn open(c: &mut Criterion) {
     const TEXTS: usize = 30;
     let dir = TempDir::new().expect("a temporary directory");
     let path = dir.path().join("bench.khr");
-    let mut session = Session::create(&path).expect("a project");
+    let mut session = Session::create(&path, koharu_scene::Meta::default()).expect("a project");
     for index in 0..PAGES {
         let mut ops = vec![
             json!({"op": "add_page", "id": "$p", "index": index, "size": {"width": WIDTH, "height": HEIGHT}}),
@@ -144,7 +145,9 @@ fn open(c: &mut Criterion) {
     }
     drop(session);
     c.bench_function("open a project of 20 pages with 30 texts each", |b| {
-        b.iter(|| black_box(Session::open(&path).expect("it opens")));
+        b.iter(|| {
+            black_box(Session::open(&path, koharu_scene::Meta::default()).expect("it opens"))
+        });
     });
 }
 

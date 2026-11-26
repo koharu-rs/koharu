@@ -6,7 +6,10 @@ mod layers;
 mod model;
 mod tree;
 
+use std::collections::BTreeMap;
+
 use koharu_ml::koharu_layout_highres::{Layout, Options, Typography};
+use koharu_ml::yuzumarker_font_detection::Kernel;
 use koharu_scene::{Content, Layer, Op, PageId, Project, locked_inside};
 use kurbo::Rect;
 use rayon::prelude::*;
@@ -47,6 +50,19 @@ fn threshold<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<f32>, 
     }
 }
 
+/// What detection records of a layer in its `koharu` namespace: its score,
+/// and how likely each kernel is to be its face and its glyph stroke over
+/// its size, which placement picks its style by. A block found before
+/// kernels were read has neither.
+#[derive(Default, Serialize, Deserialize)]
+pub(crate) struct Detection {
+    pub(crate) score: f32,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) kernels: BTreeMap<Kernel, f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) stroke: Option<f64>,
+}
+
 pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Result<()> {
     let member = &task.members[0];
     let read = member.clone();
@@ -67,16 +83,17 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
         bubble: config.bubble,
         panel: config.panel,
     };
+    let loading = key.clone();
     let (scan, detected) = task
         .inference(&[member], move |models| {
-            let detector = models.get(&key, |device| model::load(config.model, device))?;
+            let (detector, _) = models.get(&loading, |device| model::load(config.model, device))?;
             let detected = detector.inference(&scan, &options)?;
             Ok((scan, detected))
         })
         .await?;
     let page = member.page;
     let name = config.model.to_string();
-    let (layout, typography, masks) = tokio::task::spawn_blocking(move || {
+    let (layout, typography, masks, crops) = tokio::task::spawn_blocking(move || {
         let pixels = scan.to_rgb8();
         let layout = {
             let _span = tracing::info_span!("layout").entered();
@@ -89,13 +106,41 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
             .map(|lettering| lettering.typography(&pixels))
             .collect();
         let masks = layers::masks(&layout, &typography);
-        (layout, typography, masks)
+        let crops = layers::crops(&layout, &pixels);
+        (layout, typography, masks, crops)
     })
     .await?;
+    let letterings = layout.lettering.len();
+    let kernels = task
+        .inference(&[member], move |models| {
+            let (_, fonts) = models.get(&key, |device| model::load(config.model, device))?;
+            let (at, crops): (Vec<usize>, Vec<_>) = crops.into_iter().unzip();
+            let _span = tracing::info_span!("fonts", crops = crops.len()).entered();
+            // Each lettering's readings, one a crop, averaged.
+            let mut sums: Vec<Option<(layers::Kernels, f32)>> = vec![None; letterings];
+            for (at, read) in at.into_iter().zip(fonts.inference(&crops)?) {
+                let (sum, count) = sums[at].get_or_insert_with(Default::default);
+                for (kernel, probability) in read {
+                    *sum.entry(kernel).or_default() += probability;
+                }
+                *count += 1.0;
+            }
+            Ok(sums
+                .into_iter()
+                .map(|sum| {
+                    sum.map(|(sum, count)| {
+                        sum.into_iter()
+                            .map(|(kernel, total)| (kernel, total / count))
+                            .collect()
+                    })
+                })
+                .collect::<Vec<_>>())
+        })
+        .await?;
     member
         .apply(Stage::Detect, move |session| {
             let project = session.project();
-            ops(&project, page, &layout, &typography, masks, &name)
+            ops(&project, page, &layout, &typography, &kernels, masks, &name)
         })
         .await
 }
@@ -107,6 +152,7 @@ fn ops(
     page: PageId,
     layout: &Layout,
     typography: &[Option<Typography>],
+    kernels: &[Option<layers::Kernels>],
     masks: Vec<Option<layers::Grown>>,
     model: &str,
 ) -> anyhow::Result<Vec<Op>> {
@@ -117,7 +163,7 @@ fn ops(
     removals(&found.layers, &mut ops);
     let kept = kept(project, page);
     ops.extend(layers::additions(
-        layout, typography, masks, &kept, page, model,
+        layout, typography, kernels, masks, &kept, page, model,
     )?);
     Ok(ops)
 }
@@ -165,7 +211,8 @@ mod tests {
     #[test]
     fn detecting_again_keeps_a_locked_block_and_adds_no_second() -> Result<()> {
         let dir = tempfile::tempdir()?;
-        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())?;
         let outline = "M0 0 L200 0 L200 160 L0 160 Z";
         let block = |x: f64, locked: bool| {
             json!({"kind": "block", "locked": locked, "source": {"frame": {"box": {
@@ -219,7 +266,15 @@ mod tests {
             panels: Vec::new(),
         };
         let masks = layers::masks(&layout, &[None, None]);
-        let ops = ops(&project, page, &layout, &[None, None], masks, "test")?;
+        let ops = ops(
+            &project,
+            page,
+            &layout,
+            &[None, None],
+            &[None, None],
+            masks,
+            "test",
+        )?;
         session.apply(Edit {
             label: "detect".to_owned(),
             ops,

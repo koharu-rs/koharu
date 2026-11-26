@@ -52,7 +52,7 @@ lines centred on one axis in a balloon, or started together on it.
 
 | Part | Model | Cite |
 |---|---|---|
-| breaking | where Unicode allows a line to break, chosen over the whole text rather than one line at a time; Chinese by word | Unicode line breaking [UAX 14], through ICU4X [ICU4X]; Chinese words by jieba [jieba] |
+| breaking | where Unicode allows a line to break, chosen over the whole text rather than one line at a time; Chinese by word, and before an opening quotation mark and after a closing one between East Asian characters | Unicode 17's line breaking [UAX 14], its LB19a for quotation marks, through ICU4X [ICU4X]; Chinese words by jieba [jieba] |
 | fitting | `shrink` lowers the size just enough to fit, down to half; `best` also grows it to the largest size that fits, and a word too wide for its line stops the growth; past every step at half size, `best` shrinks on until the text fits | the scene's fit modes ([koharu-scene](../koharu-scene/README.md#text)) |
 | hyphens | whole words shrink first; where that draws them under nine tenths of their size, one word may take one hyphen, near its middle, if that makes the text at least a tenth larger, up to its size, as more cost more than they gain; and at half size a word too wide for its line takes as many as it needs; a word never breaks without a hyphen, and what still doesn't fit runs past its frame, hyphenated where that keeps it nearer, unless it fits best | Comicraft avoids hyphenation wherever it can [Comicraft glossary] |
 | hyphenation | words of more than five letters, two letters kept on each side, at most two lines in a row ending with a hyphen; a drawn-out sound, such as "Gwaaaaah", in the middle of its run of four or more of one letter, in any language and as a word breaks, though growing to fill a frame never adds such a break | Photoshop's defaults [Photoshop hyphenation]; dictionaries have no points in a drawn-out sound |
@@ -80,7 +80,8 @@ far as that allows.
 
 | Part | Model | Cite |
 |---|---|---|
-| chain | a span's family, then the preferred families, then Arial, then the system's fallback for the text's scripts in its language, then symbol and emoji families | the system's fallback through fontique [fontique] |
+| face | where a text's marks and style set no family, weight, or italic, its kernel's face for the script of its language in the project's styles does, with what that leaves out from antique's, and antique's for a text with no kernel; the `[renderer]` preference holds the styles a new project starts with, whose defaults are, for Latin, the bundled font scanlation groups' font guides set each kind of line in, for Cyrillic and Greek, which those fonts lack, the dialogue font's bold and italics, and for Chinese and Japanese a bundled face of the kernel, a group's first kernel's standing for each of its kernels with none of its own | Japanese editors set each kind of line in its own kind of face [Manga font kinds]; scanlation groups' guides set narration in a lowercase italic font apart from dialogue's, and name fonts for narration, thoughts, shouts, and handwriting [QSS font cards] [Gemelli font guide] [Vorbis fonts] |
+| chain | a text's face, then the dialogue families of its script and of Latin, then Arial, then the system's fallback for the text's scripts in its language, then symbol and emoji families | the system's fallback through fontique [fontique] |
 | language | a text with none takes Japanese from kana and Korean from Hangul, and Han alone falls back as Simplified Chinese, so Chinese never takes the system language's font, such as a Japanese one | |
 | graphemes | fallback never splits one, and a character no font in the chain has is listed for the inspector | |
 | marks | a character of no script of its own, such as a mark, a digit, or a space, takes the font of the text beside it when that font has it, so a CJK sentence's marks come from its CJK font even where a Latin font earlier in the chain has them | |
@@ -99,7 +100,8 @@ Read in November 2026.
   [CSS font synthesis], [JLREQ], [CLREQ]
 - Adobe: [Photoshop hyphenation], [Photoshop text in shapes]
 - Clip Studio Paint: [CSP font]
-- Lettering: [Comicraft glossary]
+- Lettering: [Comicraft glossary], [Manga font kinds]
+- Scanlation font guides: [QSS font cards], [Gemelli font guide], [Vorbis fonts]
 
 [vello]: https://github.com/linebender/vello
 [HarfRust]: https://github.com/harfbuzz/harfrust
@@ -107,6 +109,10 @@ Read in November 2026.
 [ICU4X]: https://github.com/unicode-org/icu4x
 [jieba]: https://github.com/fxsjy/jieba
 [fontique]: https://github.com/linebender/parley/tree/main/fontique
+[Manga font kinds]: https://manga.jp.net/knowhow/150924font/
+[QSS font cards]: https://quicksandscans.wordpress.com/resources/
+[Gemelli font guide]: https://docs.google.com/presentation/d/1hOvjfXMLuvTO6-XofTf4T6asAOp2DOOiYkTvLLj-XEc/htmlpresent
+[Vorbis fonts]: https://www.insidescanlation.com/etc/Vorbis-Typesetting-Guide/fonts.htm
 [Koharu fonts]: https://huggingface.co/datasets/mayocream/fonts
 [Firefox fonts]: https://github.com/mozilla-firefox/firefox/blob/main/gfx/thebes/gfxFontEntry.h
 [UAX 14]: https://www.unicode.org/reports/tr14/

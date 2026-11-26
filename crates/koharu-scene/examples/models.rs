@@ -56,7 +56,8 @@ fn translation(session: &Session, block: LayerId) -> Result<String> {
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("models.khr"))?;
+    let mut session =
+        Session::create(dir.path().join("models.khr"), koharu_scene::Meta::default())?;
     let created = apply(
         &mut session,
         "Detect",

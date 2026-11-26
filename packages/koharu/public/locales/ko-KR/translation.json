@@ -160,7 +160,9 @@
       "set_text": "텍스트 편집",
       "set_visibility": "표시/숨기기",
       "translate": "번역",
-      "update_layer": "레이어 변경"
+      "update_layer": "레이어 변경",
+      "update_style": "서체 업데이트",
+      "use_default_styles": "기본 서체 사용"
     },
     "title": "작업 내역"
   },
@@ -284,10 +286,12 @@
     "import": "페이지 가져오기",
     "original": "원본 보기",
     "redo": "다시 실행",
+    "saveDefaultStyles": "서체를 기본값으로 저장",
     "selectAllLayers": "모든 레이어 선택",
     "settings": "설정",
     "undo": "실행 취소",
     "unloadModels": "모델 언로드",
+    "useDefaultStyles": "기본 서체 사용",
     "view": "보기"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "설정",
     "typesetting": {
-      "addFallback": "대체 글꼴 추가",
-      "addFamily": "글꼴 패밀리 추가",
-      "description": "텍스트 레이어에 글꼴 패밀리가 지정되지 않았을 때 사용할 순서 있는 글꼴 스택을 설정합니다.",
-      "empty": "기본 패밀리가 없습니다. Koharu가 시스템 대체 글꼴을 사용합니다.",
-      "fallbacks": "대체 글꼴",
-      "fallbacksDescription": "기본 글꼴에 없는 문자에 순서대로 쓰입니다. 드래그해 순서를 바꾸거나, 기본에 놓아 서로 바꿀 수 있습니다.",
-      "familyLabel": "기본 글꼴 패밀리 {{index}}",
-      "fontFallback": "선호 글꼴",
-      "fontFallbackDescription": "Koharu는 텍스트를 지원하는 첫 번째 사용 가능한 패밀리를 사용합니다.",
-      "loadError": "글꼴을 불러오지 못했습니다. 기존 패밀리는 삭제할 수 있습니다.",
-      "loadingFonts": "글꼴 불러오는 중…",
-      "primary": "기본",
-      "removeFamily": "{{family}} 삭제",
+      "description": "새 프로젝트가 처음에 쓰는 서체를 문자 체계별로 설정합니다. 그 뒤로는 프로젝트가 자체 서체를 가지며, 파일 → 기본 서체 사용으로 이 서체를 다시 적용할 수 있습니다.",
+      "loadError": "글꼴을 불러오지 못했습니다. 이미 설정한 글꼴은 그대로 쓰입니다.",
+      "restore": "기본값 복원",
+      "restoreDescription": "모든 문자 체계의 서체가 Koharu 기본값으로 돌아가고 여기서 설정한 글꼴은 사라집니다. 프로젝트는 자체 서체를 유지합니다.",
+      "restoreTitle": "기본 서체로 복원할까요?",
+      "script": "문자 체계",
+      "styles": "서체",
+      "stylesDescription": "번역문은 원문의 서체를 따릅니다. 기본값으로 둔 서체는 같은 문자 체계의 안티크체 글꼴을 씁니다.",
       "title": "렌더러"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "효과음",
     "title": "스토리",
     "translate": "{{name}} 번역"
+  },
+  "styles": {
+    "clearOverrides": "재정의 지우기",
+    "default": "기본값(안티크체: {{name}})",
+    "defaultWeight": "기본값",
+    "font": "{{name}} 글꼴",
+    "groups": {
+      "brush": "붓글씨 계열",
+      "design": "디자인 계열",
+      "mincho": "명조 계열"
+    },
+    "italic": "{{name}} 기울임꼴",
+    "kernel": "서체",
+    "kernels": {
+      "antique": "안티크체",
+      "brush": "붓글씨체",
+      "decorative": "장식체",
+      "design": "디자인체",
+      "fangsong": "방송체",
+      "gothic": "고딕체",
+      "gyokai": "행해서체",
+      "gyosho": "행서체",
+      "handwriting": "손글씨체",
+      "kaisho": "해서체",
+      "kointai": "고인체",
+      "mincho": "명조체",
+      "pop": "팝체",
+      "reisho": "예서체",
+      "rounded": "둥근고딕체",
+      "sosho": "초서체",
+      "tensho": "전서체",
+      "textbook": "교과서체",
+      "weibei": "위비체"
+    },
+    "updateToMatch": "이 텍스트에 맞게 {{name}} 업데이트",
+    "weight": "{{name}} 굵기"
   },
   "tools": {
     "block": "텍스트 블록",

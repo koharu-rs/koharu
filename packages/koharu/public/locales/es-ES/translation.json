@@ -160,7 +160,9 @@
       "set_text": "Editar texto",
       "set_visibility": "Mostrar u ocultar",
       "translate": "Traducción",
-      "update_layer": "Cambiar capa"
+      "update_layer": "Cambiar capa",
+      "update_style": "Actualizar estilo",
+      "use_default_styles": "Usar estilos predeterminados"
     },
     "title": "Historia"
   },
@@ -284,10 +286,12 @@
     "import": "Importar páginas",
     "original": "Mostrar original",
     "redo": "Rehacer",
+    "saveDefaultStyles": "Guardar estilos como predeterminados",
     "selectAllLayers": "Seleccionar todas las capas",
     "settings": "Ajustes",
     "undo": "Deshacer",
     "unloadModels": "Liberar los modelos",
+    "useDefaultStyles": "Usar estilos predeterminados",
     "view": "Ver"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "Ajustes",
     "typesetting": {
-      "addFallback": "Añadir una alternativa",
-      "addFamily": "Añadir familia tipográfica",
-      "description": "Define la pila ordenada de fuentes usada cuando una capa de texto no tiene una familia asignada.",
-      "empty": "No hay familias predeterminadas. Koharu usará la alternativa del sistema.",
-      "fallbacks": "Alternativas",
-      "fallbacksDescription": "Se usan en orden para los caracteres que le faltan a la principal. Arrastra para reordenar, o sobre Principal para intercambiarlas.",
-      "familyLabel": "Familia tipográfica predeterminada {{index}}",
-      "fontFallback": "Fuentes preferidas",
-      "fontFallbackDescription": "Koharu usa la primera familia disponible compatible con el texto.",
-      "loadError": "No se pudieron cargar las fuentes. Las familias existentes aún se pueden eliminar.",
-      "loadingFonts": "Cargando fuentes…",
-      "primary": "Principal",
-      "removeFamily": "Eliminar {{family}}",
+      "description": "Los estilos con los que empieza cada proyecto nuevo, por sistema de escritura. Después, el proyecto conserva los suyos: Archivo → Usar estilos predeterminados le vuelve a dar estos.",
+      "loadError": "No se pudieron cargar las fuentes. Las fuentes ya definidas se siguen usando.",
+      "restore": "Restaurar predeterminados",
+      "restoreDescription": "Los estilos de todos los sistemas de escritura vuelven a los de Koharu. Se pierden las fuentes que hayas fijado aquí; los proyectos conservan los suyos.",
+      "restoreTitle": "¿Restaurar los estilos predeterminados?",
+      "script": "Sistema de escritura",
+      "styles": "Estilos",
+      "stylesDescription": "Una traducción toma el estilo del tipo de letra de su original. Un estilo en Predeterminada toma la fuente de Antique en el mismo sistema de escritura.",
       "title": "Renderizador"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "Efecto de sonido",
     "title": "Guion",
     "translate": "Traducir {{name}}"
+  },
+  "styles": {
+    "clearOverrides": "Borrar modificaciones",
+    "default": "Predeterminada (la de Antique: {{name}})",
+    "defaultWeight": "Predeterminado",
+    "font": "Fuente de {{name}}",
+    "groups": {
+      "brush": "Estilos de pincel",
+      "design": "Estilos de diseño",
+      "mincho": "Estilos mincho"
+    },
+    "italic": "{{name}} en cursiva",
+    "kernel": "Estilo",
+    "kernels": {
+      "antique": "Antique",
+      "brush": "Pincel",
+      "decorative": "Decorativa",
+      "design": "Diseño",
+      "fangsong": "Fangsong",
+      "gothic": "Gótica",
+      "gyokai": "Semirregular",
+      "gyosho": "Semicursiva",
+      "handwriting": "Manuscrita",
+      "kaisho": "Regular",
+      "kointai": "Kointai",
+      "mincho": "Mincho",
+      "pop": "Pop",
+      "reisho": "Clerical",
+      "rounded": "Redondeada",
+      "sosho": "Cursiva",
+      "tensho": "De sello",
+      "textbook": "Escolar",
+      "weibei": "Estela Wei"
+    },
+    "updateToMatch": "Actualizar {{name}} para que coincida",
+    "weight": "Grosor de {{name}}"
   },
   "tools": {
     "block": "Bloque de texto",

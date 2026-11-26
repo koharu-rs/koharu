@@ -11,8 +11,16 @@ import { useTranslation } from 'react-i18next'
 import { AboutDialog } from '@/components/app/AboutDialog'
 import { checkForUpdates } from '@/components/app/Updater'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
-import { send, useCommand, useImportPages, usePage, useProject } from '@/lib/queries'
-import { deleteSelection } from '@/lib/scene'
+import {
+  send,
+  useCommand,
+  useImportPages,
+  usePage,
+  usePreferences,
+  useProject,
+  useSavePreferences,
+} from '@/lib/queries'
+import { applyDefaultStyles, deleteSelection } from '@/lib/scene'
 import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type PageId } from '@koharu/ipc/protocol'
@@ -37,6 +45,8 @@ export function TitleBar() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const macOS = useMacOS()
   const project = useProject().data
+  const preferences = usePreferences().data
+  const savePreferences = useSavePreferences()
   const pageQuery = usePage(Boolean(project))
   const pages = project?.pages ?? []
   const page = project ? (pageQuery.data ?? null) : null
@@ -138,6 +148,30 @@ export function TitleBar() {
                 pages={exportable}
                 disabled={exportable.length === 0}
               />
+              <MenubarSeparator />
+              {/* Google Docs' Use my default styles and Save as my default styles: a project keeps
+                its own styles, which Preferences' only start. */}
+              <MenubarItem
+                disabled={!project || !preferences}
+                onClick={() =>
+                  preferences && send(applyDefaultStyles, preferences.renderer.styles ?? {})
+                }
+              >
+                {t('menu.useDefaultStyles')}
+              </MenubarItem>
+              <MenubarItem
+                disabled={!project || !preferences}
+                onClick={() =>
+                  project &&
+                  preferences &&
+                  savePreferences.mutate({
+                    ...preferences,
+                    renderer: { ...preferences.renderer, styles: project.meta.styles ?? {} },
+                  })
+                }
+              >
+                {t('menu.saveDefaultStyles')}
+              </MenubarItem>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={() => send(commands.close)}>
                 {t('menu.closeProject')}

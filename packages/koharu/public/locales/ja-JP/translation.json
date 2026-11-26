@@ -160,7 +160,9 @@
       "set_text": "テキストを編集",
       "set_visibility": "表示/非表示",
       "translate": "翻訳",
-      "update_layer": "レイヤーを変更"
+      "update_layer": "レイヤーを変更",
+      "update_style": "書体を更新",
+      "use_default_styles": "既定の書体を使用"
     },
     "title": "ヒストリー"
   },
@@ -284,10 +286,12 @@
     "import": "ページを読み込む",
     "original": "元の画像を表示",
     "redo": "やり直す",
+    "saveDefaultStyles": "書体を既定として保存",
     "selectAllLayers": "すべてのレイヤーを選択",
     "settings": "設定",
     "undo": "元に戻す",
     "unloadModels": "モデルをアンロード",
+    "useDefaultStyles": "既定の書体を使用",
     "view": "表示"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "設定",
     "typesetting": {
-      "addFallback": "フォールバックを追加",
-      "addFamily": "フォントファミリーを追加",
-      "description": "テキストレイヤーにファミリーが指定されていない場合に使う、順序付きフォントスタックを設定します。",
-      "empty": "既定のファミリーがありません。Koharuはシステムの代替フォントを使用します。",
-      "fallbacks": "フォールバック",
-      "fallbacksDescription": "メインにない文字に順番に使われます。ドラッグで並べ替え、メインに重ねると入れ替えられます。",
-      "familyLabel": "既定のフォントファミリー {{index}}",
-      "fontFallback": "優先フォント",
-      "fontFallbackDescription": "Koharuは文字に対応する最初の利用可能なファミリーを使用します。",
-      "loadError": "フォントを読み込めませんでした。既存のファミリーは削除できます。",
-      "loadingFonts": "フォントを読み込み中…",
-      "primary": "メイン",
-      "removeFamily": "{{family}}を削除",
+      "description": "新しいプロジェクトが最初に使う書体を、用字系別に設定します。その後はプロジェクトが独自の書体を持ち、「ファイル → 既定の書体を使用」でこれらをもう一度適用できます。",
+      "loadError": "フォントを読み込めませんでした。設定済みのフォントはそのまま使われます。",
+      "restore": "既定に戻す",
+      "restoreDescription": "すべての用字系の書体が Koharu の既定に戻り、ここで設定したフォントは失われます。プロジェクトは独自の書体を保ちます。",
+      "restoreTitle": "書体を既定に戻しますか？",
+      "script": "用字系",
+      "styles": "書体",
+      "stylesDescription": "訳文は原文の書体を引き継ぎます。既定のままの書体は、同じ用字系のアンチックのフォントを使います。",
       "title": "レンダラー"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "効果音",
     "title": "ストーリー",
     "translate": "{{name}}を翻訳"
+  },
+  "styles": {
+    "clearOverrides": "オーバーライドを消去",
+    "default": "既定（アンチック：{{name}}）",
+    "defaultWeight": "既定",
+    "font": "{{name}}のフォント",
+    "groups": {
+      "brush": "筆書系",
+      "design": "デザイン系",
+      "mincho": "明朝系"
+    },
+    "italic": "{{name}}の斜体",
+    "kernel": "書体",
+    "kernels": {
+      "antique": "アンチック",
+      "brush": "筆書体",
+      "decorative": "装飾書体",
+      "design": "デザイン書体",
+      "fangsong": "仿宋体",
+      "gothic": "ゴシック体",
+      "gyokai": "行楷書体",
+      "gyosho": "行書体",
+      "handwriting": "手書き",
+      "kaisho": "楷書体",
+      "kointai": "古印体",
+      "mincho": "明朝体",
+      "pop": "ポップ体",
+      "reisho": "隷書体",
+      "rounded": "丸ゴシック体",
+      "sosho": "草書体",
+      "tensho": "篆書体",
+      "textbook": "教科書体",
+      "weibei": "魏碑体"
+    },
+    "updateToMatch": "{{name}}をこのテキストに合わせて更新",
+    "weight": "{{name}}の太さ"
   },
   "tools": {
     "block": "テキストブロック",

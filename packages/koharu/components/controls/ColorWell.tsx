@@ -1,7 +1,7 @@
 'use client'
 
 import { Pipette, SquareSlash } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 
@@ -17,6 +17,9 @@ type ColorWellProps = {
   label?: string
   size?: 'default' | 'sm'
   disabled?: boolean
+  /** Drawn over a bar of the colour in place of a swatch, as Word's font colour button draws an A,
+   * so wells side by side say what each colours. */
+  glyph?: ReactNode
 } & (
   | {
       value: string
@@ -32,7 +35,14 @@ type ColorWellProps = {
 
 export function ColorWell(props: ColorWellProps) {
   const { t } = useTranslation()
-  const { value, label, size = 'default', disabled = false, allowTransparent = false } = props
+  const {
+    value,
+    label,
+    size = 'default',
+    disabled = false,
+    allowTransparent = false,
+    glyph,
+  } = props
   const [draft, setDraft] = useState(value ?? '#000000')
   const [transparent, setTransparent] = useState(value === null)
   const [open, setOpen] = useState(false)
@@ -93,7 +103,16 @@ export function ColorWell(props: ColorWellProps) {
             />
           }
         >
-          {transparent ? (
+          {glyph ? (
+            <span className='flex flex-col items-center gap-px leading-none'>
+              {glyph}
+              {/* None shows as an empty bar. */}
+              <span
+                className={cn('h-[3px] w-3.5 rounded-[1px]', transparent && 'ring-1 ring-input')}
+                style={transparent ? undefined : { backgroundColor: draft }}
+              />
+            </span>
+          ) : transparent ? (
             <SquareSlash
               aria-hidden='true'
               className={cn('text-muted-foreground', size === 'sm' ? 'size-3.5' : 'size-4')}

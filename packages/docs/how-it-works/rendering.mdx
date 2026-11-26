@@ -54,10 +54,10 @@ PSD export writes them as Photoshop's own Faux Bold and Faux Italic.
 When a font lacks a character, Koharu tries, in order:
 
 <Steps>
-  <Step title="The text's own font" />
-  <Step title='The preferred fonts in Settings → Renderer'>
-    CCWildWords, then Adobe 黑体 Std, unless you change them.
+  <Step title="The text's own font, or its style's">
+    A style's font for the text's script, as the project's styles set it.
   </Step>
+  <Step title="The Antique font of the text's script, then Latin's" />
   <Step title='Arial' />
   <Step title="The system's fallback for the text's script and language" />
   <Step title='Symbol and emoji fonts' />

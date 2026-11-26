@@ -19,7 +19,7 @@ description: '查找外观、模型、提供商、翻译、字体和网站登录
 
 ## 渲染器
 
-按顺序设置首选字体；未修改时依次为 CCWildWords 和 Adobe 黑体 Std。文本没有指定字体，或字体无法提供某个字形时，Koharu 会使用这些字体，最后回退到系统字体。单个文本图层仍保留自己的排版。
+按书写系统设置新项目开始时使用的书体。相近的书体列在同一标题下（如宋体类：宋体、仿宋、楷体、教科书体）。每种书体有字体菜单、字重菜单和斜体开关，菜单第一项**默认**使用日漫黑体的字体。未修改时，拉丁文字使用汉化组字体指南为各类台词选用的字体：日漫黑体为 CCWildWords，宋体的旁白为 CCVictorySpeechLower，黑体的喊叫为 CreativeBlock BB，圆体的独白为 Anime Ace 3 BB 斜体，手写体为 Ashcan BB，书法体为 Ninjutsu BB，美术体为 Voice Activated BB，POP体为 Komika Slick，古印体和装饰体为 ManEater BB。这些字体不含的西里尔字母和希腊字母使用 CCWildWords 的斜体或粗斜体；中文和日文使用各书体的内置字体。留空的值使用日漫黑体的值。**恢复默认**会把所有书写系统的书体恢复为 Koharu 的默认值。之后项目保留自己的书体，**文件 → 使用默认书体**可再次套用这些；文本自己的字体、字重和斜体仍然优先。
 
 ## 图库
 
@@ -103,8 +103,10 @@ context_window = 32768
 
 ### `[renderer]`
 
-<ResponseField name='font_families' type='string[]'>
-  按顺序排列的首选字体。默认为 `["CCWildWords", "Adobe 黑体 Std"]`。
+<ResponseField name='styles' type='table'>
+  新项目开始时每种书体在每种书写系统中的字体，写在 `styles.<书体>.<书写系统>` 下，包含 `family`、
+  `weight` 和 `italic`，例如 `styles.rounded.Latn.italic = true`。书体为 `antique`、`mincho`、`fangsong`、`kaisho`、`textbook`、`gothic`、`rounded`、`handwriting`、`brush`、`gyosho`、`gyokai`、`sosho`、`reisho`、`tensho`、`kointai`、`weibei`、`design`、`pop`
+  和 `decorative`；书写系统为 `Latn`、`Hans`、`Hant`、`Jpan` 等 ISO 15924 代码。只要修改一项，整个表都会写入。
 </ResponseField>
 
 ### `[agent]`

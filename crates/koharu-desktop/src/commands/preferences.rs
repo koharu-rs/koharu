@@ -62,7 +62,6 @@ pub async fn save_preferences(
         koharu_config::update(|section: &mut Providers| *section = providers)?;
         let saved = self::preferences()?;
         app.pipeline.set_config(saved.pipeline.clone());
-        app.renderer.set_config(saved.renderer.clone());
         // The preferences are saved by now, so a page that fails to redraw
         // with them doesn't fail the save.
         if let Err(error) = app.refresh() {

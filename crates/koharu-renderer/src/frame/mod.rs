@@ -343,7 +343,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{Renderer, RendererConfig};
+    use crate::Renderer;
 
     /// A view puts each page pixel at its output pixels, zoomed in on part of
     /// the page or out to all of it, where a raster draws from a halved
@@ -352,7 +352,9 @@ mod tests {
     fn a_view_maps_page_pixels_to_its_output() {
         // A white raster under a red square from (256, 256) to (512, 512).
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+                .expect("a project");
         let ops = vec![
             json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1024, "height": 1024}}),
             json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
@@ -380,7 +382,7 @@ mod tests {
                 ops,
             })
             .expect("an edit");
-        let renderer = Renderer::new(RendererConfig::default());
+        let renderer = Renderer::new();
         let Ok(gpu) = Gpu::get() else {
             eprintln!("skipped without a GPU");
             return;
@@ -425,7 +427,9 @@ mod tests {
     #[test]
     fn a_layer_past_vello_gpus_default_texture_size_draws() {
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+                .expect("a project");
         let ops = vec![
             json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 5000, "height": 16}}),
             json!({"op": "add_layer", "page": "$page", "index": 0, "layer": {
@@ -446,7 +450,7 @@ mod tests {
             eprintln!("skipped without a GPU");
             return;
         };
-        let frame = Renderer::new(RendererConfig::default())
+        let frame = Renderer::new()
             .render(&session, change.pages.added[0])
             .expect("a frame");
         let mut drawing = gpu.drawing(5000, 16);
@@ -464,7 +468,9 @@ mod tests {
     #[test]
     fn a_page_drawn_smaller_is_opaque_to_its_edges() {
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+                .expect("a project");
         let ops = vec![
             json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 1001, "height": 1025}}),
             json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
@@ -493,7 +499,7 @@ mod tests {
             eprintln!("skipped without a GPU");
             return;
         }
-        let image = Renderer::new(RendererConfig::default())
+        let image = Renderer::new()
             .render(&session, change.pages.added[0])
             .and_then(|frame| frame.rasterize_scaled(250, 256))
             .expect("pixels");
@@ -506,7 +512,9 @@ mod tests {
     fn a_frame_without_a_layer_draws_what_is_under_it() {
         // A white raster under a red square from (16, 16) to (48, 48).
         let dir = tempfile::tempdir().expect("a temporary directory");
-        let mut session = Session::create(dir.path().join("test.khr")).expect("a project");
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())
+                .expect("a project");
         let ops = vec![
             json!({"op": "add_page", "id": "$page", "index": 0, "size": {"width": 64, "height": 64}}),
             json!({"op": "add_layer", "id": "$paper", "page": "$page", "index": 0, "layer": {"kind": "raster"}}),
@@ -536,7 +544,7 @@ mod tests {
             .expect("an edit");
         let page = change.pages.added[0];
         let square = session.project().page(page).expect("the page").layers[1].id;
-        let renderer = Renderer::new(RendererConfig::default());
+        let renderer = Renderer::new();
         if Gpu::get().is_err() {
             eprintln!("skipped without a GPU");
             return;

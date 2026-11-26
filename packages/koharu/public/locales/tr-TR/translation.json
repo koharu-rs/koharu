@@ -160,7 +160,9 @@
       "set_text": "Metni düzenle",
       "set_visibility": "Göster veya gizle",
       "translate": "Çeviri",
-      "update_layer": "Katmanı değiştir"
+      "update_layer": "Katmanı değiştir",
+      "update_style": "Stili güncelle",
+      "use_default_styles": "Varsayılan stilleri kullan"
     },
     "title": "Geçmiş"
   },
@@ -284,10 +286,12 @@
     "import": "Sayfaları İçe Aktar",
     "original": "Orijinali Göster",
     "redo": "Yinele",
+    "saveDefaultStyles": "Stilleri Varsayılan Olarak Kaydet",
     "selectAllLayers": "Tüm Katmanları Seç",
     "settings": "Ayarlar",
     "undo": "Geri Al",
     "unloadModels": "Modelleri bellekten kaldır",
+    "useDefaultStyles": "Varsayılan Stilleri Kullan",
     "view": "Görünüm"
   },
   "model": {
@@ -470,19 +474,14 @@
     },
     "title": "Ayarlar",
     "typesetting": {
-      "addFallback": "Yedek ekle",
-      "addFamily": "Yazı tipi ailesi ekle",
-      "description": "Bir metin katmanına aile atanmadığında kullanılacak sıralı yazı tipi yığınını ayarlayın.",
-      "empty": "Varsayılan aile yok. Koharu sistem yedeğini kullanacak.",
-      "fallbacks": "Yedekler",
-      "fallbacksDescription": "Birincil yazı tipinde olmayan karakterler için sırayla kullanılır. Sıralamak için sürükleyin ya da yer değiştirmek için Birincil'in üzerine bırakın.",
-      "familyLabel": "Varsayılan yazı tipi ailesi {{index}}",
-      "fontFallback": "Tercih edilen yazı tipleri",
-      "fontFallbackDescription": "Koharu, metni destekleyen ilk kullanılabilir aileyi kullanır.",
-      "loadError": "Yazı tipleri yüklenemedi. Mevcut aileler yine de kaldırılabilir.",
-      "loadingFonts": "Yazı tipleri yükleniyor…",
-      "primary": "Birincil",
-      "removeFamily": "{{family}} ailesini kaldır",
+      "description": "Her yeni projenin başladığı stiller, yazı sistemine göre. Sonrasında proje kendi stillerini tutar: Dosya → Varsayılan Stilleri Kullan bunları yeniden uygular.",
+      "loadError": "Yazı tipleri yüklenemedi. Önceden ayarlanan yazı tipleri yine kullanılır.",
+      "restore": "Varsayılanları geri yükle",
+      "restoreDescription": "Tüm yazı sistemlerinin stilleri Koharu'nunkilere döner. Burada ayarladığınız yazı tipleri kaybolur; projeler kendi stillerini korur.",
+      "restoreTitle": "Varsayılan stiller geri yüklensin mi?",
+      "script": "Yazı sistemi",
+      "styles": "Stiller",
+      "stylesDescription": "Bir çeviri, kaynağının yazı tipinin stilini alır. Varsayılan bırakılan bir stil, aynı yazı sistemindeki Antika'nın yazı tipini alır.",
       "title": "Oluşturucu"
     }
   },
@@ -524,6 +523,42 @@
     "sfx": "Ses efekti",
     "title": "Hikâye",
     "translate": "{{name}} öğesini çevir"
+  },
+  "styles": {
+    "clearOverrides": "Geçersiz kılmaları temizle",
+    "default": "Varsayılan (Antika'nınki: {{name}})",
+    "defaultWeight": "Varsayılan",
+    "font": "{{name}} yazı tipi",
+    "groups": {
+      "brush": "Fırça stilleri",
+      "design": "Tasarım stilleri",
+      "mincho": "Mincho stilleri"
+    },
+    "italic": "{{name}} italik",
+    "kernel": "Stil",
+    "kernels": {
+      "antique": "Antika",
+      "brush": "Fırça",
+      "decorative": "Dekoratif",
+      "design": "Tasarım",
+      "fangsong": "Fangsong",
+      "gothic": "Gotik",
+      "gyokai": "Yarı düzgün",
+      "gyosho": "Yarı bitişik",
+      "handwriting": "El yazısı",
+      "kaisho": "Düzgün yazı",
+      "kointai": "Kointai",
+      "mincho": "Mincho",
+      "pop": "Pop",
+      "reisho": "Kâtip yazısı",
+      "rounded": "Yuvarlak",
+      "sosho": "Bitişik",
+      "tensho": "Mühür yazısı",
+      "textbook": "Ders kitabı",
+      "weibei": "Wei steli"
+    },
+    "updateToMatch": "{{name}} stilini bu metne göre güncelle",
+    "weight": "{{name}} kalınlığı"
   },
   "tools": {
     "block": "Metin bloğu",

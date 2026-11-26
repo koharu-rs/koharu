@@ -7,7 +7,7 @@
 use std::io::Cursor;
 
 use koharu_psd::{Labels, export};
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::Renderer;
 use koharu_scene::{Edit, Hash, Session};
 use photocraft_psd::PsdFile;
 use serde_json::{Value, json};
@@ -16,7 +16,10 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut session = Session::create(dir.path().join("chapter.khr"))?;
+    let mut session = Session::create(
+        dir.path().join("chapter.khr"),
+        koharu_scene::Meta::default(),
+    )?;
     let mut scan = Vec::new();
     image::RgbaImage::from_pixel(320, 240, image::Rgba([180, 200, 230, 255]))
         .write_to(&mut Cursor::new(&mut scan), image::ImageFormat::Png)?;
@@ -55,7 +58,7 @@ fn main() -> Result<()> {
             .collect::<std::result::Result<_, _>>()?,
     })?;
 
-    let renderer = Renderer::new(RendererConfig::default());
+    let renderer = Renderer::new();
     let labels = Labels {
         background: "Background".into(),
         cleanup: "Clean-up".into(),

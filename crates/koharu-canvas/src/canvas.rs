@@ -191,7 +191,7 @@ impl Canvas {
             Some(Some(layer)) => match typable(&snapshot.page().layers, layer) {
                 Some(text) => {
                     if let Some(typing) = &mut self.typing
-                        && typing.rebase(&text).is_err()
+                        && typing.rebase(snapshot.project(), &text).is_err()
                     {
                         self.typing = None;
                     }
@@ -639,7 +639,7 @@ impl Canvas {
             .then(|| text_at(&cx, sample.page))
             .flatten()
         {
-            let mut typing = Typing::layer(&self.renderer, layer, &text)?;
+            let mut typing = Typing::layer(&self.renderer, cx.snapshot.project(), layer, &text)?;
             typing.press(sample.page, false, 1);
             typing.dragging = Some(pointer);
             self.typing = Some(typing);
@@ -744,7 +744,11 @@ impl Canvas {
         // nothing selected; committing adds it, selected.
         if let Gesture::Draft(draft) = &active.gesture {
             let text = draft.text(&cx);
-            self.typing = Some(Typing::new_text(&self.renderer, text)?);
+            self.typing = Some(Typing::new_text(
+                &self.renderer,
+                cx.snapshot.project(),
+                text,
+            )?);
             effects.push(Effect::Selection(Vec::new()));
             return Ok(effects);
         }

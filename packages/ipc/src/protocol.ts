@@ -304,6 +304,16 @@ export type Event =
 
 export type ExportFormat = 'png' | 'psd' | 'cbz' | 'pdf'
 
+/**
+ *  The font a kernel's style sets for one script; each value it leaves out
+ *  is antique's.
+ */
+export type Face = {
+  family?: string | null
+  weight?: number | null
+  italic?: boolean | null
+}
+
 /**  The page facing the shown one in a two-page spread, and its side. */
 export type FacingPage = {
   page: PageId
@@ -432,6 +442,56 @@ export type InpainterConfig = {
 }
 
 /**
+ *  The kind of face a text is lettered in, as its source's was: one of the
+ *  kernels Morisawa, Founder, and DynaComware classify their faces by, as
+ *  font detection reads them. Declared by group, each group's first naming
+ *  it.
+ */
+export type Kernel =
+  /**
+   *  アンチック: antique kana, manga's commonest dialogue face; a text's
+   *  style when detection isn't sure of its source's, and what every other
+   *  style leaves out.
+   */
+  | 'antique'
+  /**  明朝体, 宋体. */
+  | 'mincho'
+  /**  仿宋体. */
+  | 'fangsong'
+  /**  楷書体, 楷体. */
+  | 'kaisho'
+  /**  教科書体. */
+  | 'textbook'
+  /**  ゴシック体, 黑体. */
+  | 'gothic'
+  /**  丸ゴシック体, 圆体. */
+  | 'rounded'
+  /**  手書き: hand-lettered faces. */
+  | 'handwriting'
+  /**  筆書体: brush faces. */
+  | 'brush'
+  /**  行書体: running script. */
+  | 'gyosho'
+  /**  行楷体: running regular script. */
+  | 'gyokai'
+  /**  草書体: cursive script. */
+  | 'sosho'
+  /**  隷書体: clerical script. */
+  | 'reisho'
+  /**  篆書体: seal script. */
+  | 'tensho'
+  /**  古印体: the worn strokes of old seals. */
+  | 'kointai'
+  /**  魏碑体: Wei stele script. */
+  | 'weibei'
+  /**  デザイン書体: design faces. */
+  | 'design'
+  /**  ポップ体. */
+  | 'pop'
+  /**  Decorative faces, such as horror's. */
+  | 'decorative'
+
+/**
  *  The names of the layers a PSD needs where the scene has none, in the app's
  *  language. A type layer takes its text as its name, as Photoshop names it.
  */
@@ -525,6 +585,15 @@ export type Mask = {
 }
 
 export type MaskMode = 'add' | 'subtract' | 'intersect'
+
+/**
+ *  What a project holds beyond its pages, kept as one value, so holding more
+ *  is adding a field.
+ */
+export type Meta = {
+  /**  The faces it sets in place of Preferences', by kernel, then script. */
+  styles?: Partial<{ [key in Kernel]: { [key in string]: Face } }>
+}
 
 /**  A model the translator or the agent can use, as rig's catalog describes it. */
 export type Model = {
@@ -656,6 +725,14 @@ export type Op =
   | { op: 'write_pixels'; layer: Ref; rect: Rect; pixels: number[] }
   /**  Add an imported file, stored once by its content hash. */
   | { op: 'add_file'; bytes: number[] }
+  /**
+   *  Change what the project holds beyond its pages with a JSON Merge
+   *  Patch (RFC 7396), as `update_layer` changes a layer, such as
+   *  `{"styles": {"rounded": {"Latn": {"italic": true}}}}` for the face a
+   *  kernel's style has in a script, an ISO 15924 code, which every text of
+   *  that style takes; `null` in its place clears it.
+   */
+  | { op: 'update_meta'; patch: Value }
 
 /**  An opacity, from 0 to 1. */
 export type Opacity = number
@@ -771,6 +848,7 @@ export type ProjectAnswer = {
   /**  The format version the file holds. */
   version: string
   pages: PageSummary[]
+  meta: Meta
 }
 
 /**  A project, stored once when it is created. */
@@ -786,7 +864,8 @@ export type Providers = { [key in string]: Endpoint }
 export type Query =
   /**
    *  List the pages in order, with their sizes, backgrounds, and how many
-   *  of their blocks are translated.
+   *  of their blocks are translated, and what the project holds beyond
+   *  them, such as the faces it sets.
    */
   | { query: 'get_project' }
   /**
@@ -855,7 +934,12 @@ export type Rect = {
 export type Ref = string
 
 export type RendererConfig = {
-  font_families?: string[]
+  /**
+   *  The styles a new project starts with, and a file from before projects
+   *  held their own takes: each kernel's face in each script, by ISO 15924
+   *  code. A project keeps its own from then on.
+   */
+  styles?: Partial<{ [key in Kernel]: { [key in string]: Face } }>
 }
 
 export type Result<T, E> = ({ Ok: T } & { Err?: never }) | ({ Err: E } & { Ok?: never })
@@ -1046,6 +1130,14 @@ export type TextStyle = {
   align?: Align | null
   /**  A paragraph key: a multiple of each line's largest size. */
   line_height?: number | null
+  /**
+   *  A text key: the kind of face it's lettered in, whose style sets its
+   *  family, weight, and italic where `chars` and the marks don't. Agents
+   *  never set it, translation and the type bar do, so their schema leaves
+   *  out its nineteen documented values, which would crowd a small model's
+   *  context.
+   */
+  kernel?: Kernel | null
 }
 
 export type Tool =

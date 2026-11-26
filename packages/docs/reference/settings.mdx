@@ -19,7 +19,7 @@ Add API keys, sign in to subscriptions, and set base URLs for the connections li
 
 ## Renderer
 
-Set the ordered preferred fonts, CCWildWords and then Adobe 黑体 Std unless you change them. Koharu uses them for a text with no font of its own and when a font cannot supply a glyph, then falls back to system fonts. Individual text layers still own their typography.
+Set the styles each new project starts with, a script at a time, related styles listed under a heading, such as Mincho styles: Mincho, Fangsong, Regular script, and Textbook. Each style has a font menu, whose first entry, **Default**, takes Antique's font, a weight menu, and an italic toggle. Unless you change them, Latin takes the fonts scanlation groups' font guides use for each kind of line: CCWildWords for Antique, CCVictorySpeechLower for Mincho's narration, CreativeBlock BB for Gothic's shouts, Anime Ace 3 BB italic for Rounded's thoughts, Ashcan BB for Handwriting, Ninjutsu BB for Brush, Voice Activated BB for Design, Komika Slick for Pop, and ManEater BB for Kointai and Decorative. Cyrillic and Greek, which those fonts lack, take CCWildWords, italic or bold italic, and Chinese and Japanese a bundled font of each style. A blank value takes Antique's. **Restore defaults** brings every script's styles back to Koharu's own. A project keeps its own styles after that: **File → Use Default Styles** gives it these again, and a text's own font, weight, and italic still win.
 
 ## Gallery
 
@@ -104,8 +104,12 @@ One table per provider that has a server address: `ollama`, `lmstudio`, and `ope
 
 ### `[renderer]`
 
-<ResponseField name='font_families' type='string[]'>
-  The preferred fonts, in order. By default, `["CCWildWords", "Adobe 黑体 Std"]`.
+<ResponseField name='styles' type='table'>
+  The styles a new project starts with, each style's face in each script, under `styles.<style>.<script>`, with `family`,
+  `weight`, and `italic`, such as `styles.rounded.Latn.italic = true`. The styles are
+  `antique`, `mincho`, `fangsong`, `kaisho`, `textbook`, `gothic`, `rounded`, `handwriting`, `brush`, `gyosho`, `gyokai`, `sosho`, `reisho`, `tensho`, `kointai`, `weibei`, `design`, `pop`, and `decorative`; the scripts are ISO 15924 codes such as
+  `Latn`, `Hans`, `Hant`, and `Jpan`. Once you change one, the
+  whole table is written.
 </ResponseField>
 
 ### `[agent]`

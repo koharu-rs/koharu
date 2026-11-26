@@ -135,7 +135,8 @@ mod tests {
     /// model, in a folder removed with it.
     fn project() -> anyhow::Result<(tempfile::TempDir, Arc<Mutex<Session>>)> {
         let dir = tempfile::tempdir()?;
-        let mut session = Session::create(dir.path().join("test.khr"))?;
+        let mut session =
+            Session::create(dir.path().join("test.khr"), koharu_scene::Meta::default())?;
         session.apply(Edit {
             label: "test".to_owned(),
             ops: vec![serde_json::from_value(json!({

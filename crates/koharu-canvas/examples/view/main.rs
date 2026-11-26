@@ -21,7 +21,7 @@ use std::{
 
 use anyhow::{Context as _, Result, bail};
 use clap::Parser;
-use koharu_renderer::{Renderer, RendererConfig};
+use koharu_renderer::Renderer;
 use koharu_scene::{Edit, Hash, Op, Session};
 use parking_lot::Mutex;
 use tracing_subscriber::EnvFilter;
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
     let cli = Cli::parse();
     let session = match (cli.project.exists(), cli.images.is_empty()) {
-        (true, true) => Session::open(&cli.project)?,
+        (true, true) => Session::open(&cli.project, koharu_scene::Meta::default())?,
         (true, false) => bail!("{} exists; it takes no images", cli.project.display()),
         (false, _) => create(&cli.project, &cli.images)?,
     };
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
         .nth(cli.page.saturating_sub(1))
         .map(|page| page.id)
         .with_context(|| format!("the project has no page {}", cli.page))?;
-    let renderer = Renderer::new(koharu_config::get::<RendererConfig>()?);
+    let renderer = Renderer::new();
     let host = Host::new(renderer, Arc::new(Mutex::new(session)), page)?;
     match cli.script {
         Some(snapshot) => script::run(host, &snapshot, cli.dense),
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
 /// A project at `path` with `images` as its pages, as the pipeline's example
 /// imports them.
 fn create(path: &Path, images: &[PathBuf]) -> Result<Session> {
-    let mut session = Session::create(path)?;
+    let mut session = Session::create(path, koharu_scene::Meta::default())?;
     let mut ops = Vec::new();
     for (index, file) in images.iter().enumerate() {
         let bytes = fs_err::read(file)?;

@@ -46,7 +46,7 @@ fn mv(
 #[test]
 fn structure_survives_reopening_and_undo() {
     let (_dir, path) = path();
-    let mut session = Session::create(&path).expect("a project");
+    let mut session = Session::create(&path, koharu_scene::Meta::default()).expect("a project");
     let page = page(&mut session);
     let change = apply(&mut session, vec![
         json!({"op": "add_layer", "page": page, "index": 0, "layer": {"kind": "raster", "name": "paint"}}),
@@ -66,7 +66,7 @@ fn structure_survives_reopening_and_undo() {
     let text = group.children[2].id;
 
     drop(session);
-    let mut session = Session::open(&path).expect("it opens");
+    let mut session = Session::open(&path, koharu_scene::Meta::default()).expect("it opens");
     assert_eq!(session.project(), project, "the reopened project matches");
     assert!(
         session.undo().expect("undo").is_none(),
@@ -247,17 +247,21 @@ fn moves_locks_and_invalid_edits() {
 #[test]
 fn a_second_open_is_locked_at_once() {
     let (_dir, path) = path();
-    let session = Session::create(&path).expect("a project");
+    let session = Session::create(&path, koharu_scene::Meta::default()).expect("a project");
     let start = std::time::Instant::now();
-    let error = Session::open(&path).err().expect("locked");
+    let error = Session::open(&path, koharu_scene::Meta::default())
+        .err()
+        .expect("locked");
     assert!(matches!(error, Error::ProjectLocked(_)), "{error:?}");
     assert!(start.elapsed() < std::time::Duration::from_secs(1));
     assert!(matches!(
-        Session::create(&path).err().expect("it exists"),
+        Session::create(&path, koharu_scene::Meta::default())
+            .err()
+            .expect("it exists"),
         Error::Io(_)
     ));
     drop(session);
-    Session::open(&path).expect("it opens");
+    Session::open(&path, koharu_scene::Meta::default()).expect("it opens");
 }
 
 #[test]
@@ -431,7 +435,7 @@ fn committed_edits_survive_a_process_that_never_closed() {
         copy.with_extension("khr-wal"),
     )
     .expect("a copy");
-    let copied = Session::open(&copy).expect("it opens");
+    let copied = Session::open(&copy, koharu_scene::Meta::default()).expect("it opens");
     let Content::Text(kept) = &layer(&copied, text).content else {
         panic!("not a text")
     };
@@ -640,7 +644,7 @@ fn update_layer_merges_and_fails_closed() {
 #[test]
 fn reopening_matches_memory() {
     let (_dir, path) = path();
-    let mut session = Session::create(&path).expect("a project");
+    let mut session = Session::create(&path, koharu_scene::Meta::default()).expect("a project");
     let page = page(&mut session);
     let second = common::page(&mut session);
     let panel = add(
@@ -688,7 +692,12 @@ fn reopening_matches_memory() {
 
     let before = session.project();
     drop(session);
-    assert_eq!(Session::open(&path).expect("it opens").project(), before);
+    assert_eq!(
+        Session::open(&path, koharu_scene::Meta::default())
+            .expect("it opens")
+            .project(),
+        before
+    );
 }
 
 /// The page bounds of a path a layer's value holds at `key`.

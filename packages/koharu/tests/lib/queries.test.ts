@@ -33,7 +33,7 @@ describe('send', () => {
 describe('useSavePreferences', () => {
   const preferences = (font: string): Preferences => ({
     pipeline: {},
-    renderer: { font_families: [font] },
+    renderer: { styles: { antique: { Latn: { family: font } } } },
     agent: {},
     providers: {},
   })

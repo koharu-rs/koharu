@@ -67,6 +67,19 @@ export function displayNames(display: string) {
   return new Intl.DisplayNames([cldrLocales[display] ?? display], { type: 'language' })
 }
 
+/** Script names in the interface language `display`, from CLDR. The Han scripts go by Chinese's
+ * name in them, as Simplified Chinese, since CLDR's script names call them only Simplified and
+ * Traditional. */
+export function scriptNames(display: string) {
+  const locale = [cldrLocales[display] ?? display]
+  const scripts = new Intl.DisplayNames(locale, { type: 'script' })
+  const languages = new Intl.DisplayNames(locale, { type: 'language' })
+  return {
+    of: (code: string) =>
+      code === 'Hans' || code === 'Hant' ? languages.of(`zh-${code}`) : scripts.of(code),
+  }
+}
+
 /** The variant an interface language is named as, where a reader tells it from its kin; others are
  * named by their language alone, as a language menu lists them. */
 const variants: Partial<Record<SupportedLanguage, string>> = {

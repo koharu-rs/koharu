@@ -18,6 +18,8 @@ fs-err = { workspace = true }
 glifo = { workspace = true }
 harfrust = { workspace = true }
 hypher = { workspace = true }
+icu_locale = { workspace = true }
+icu_locale_core = { workspace = true }
 icu_properties = { workspace = true }
 icu_segmenter = { workspace = true }
 image = { workspace = true }
@@ -37,6 +39,7 @@ serde_path_to_error = { workspace = true }
 skrifa = { workspace = true }
 smallvec = { workspace = true }
 specta = { workspace = true }
+strum = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 unicode-bidi = { workspace = true }

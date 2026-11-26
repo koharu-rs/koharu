@@ -810,11 +810,11 @@ mod tests {
         Ok(())
     }
 
-    /// Where each glyph of `content` in `language`, set vertically in the
-    /// renderer's default fonts, inks on the page, from the top; and the
+    /// Where each glyph of `content` in `language`, set vertically in CC
+    /// Wild Words and Adobe 黑体 Std, inks on the page, from the top; and the
     /// layout.
     fn inks(content: &str, language: &str) -> Result<(Vec<Rect>, TextLayout)> {
-        let families = crate::RendererConfig::default().font_families;
+        let families = ["CCWildWords", "Adobe 黑体 Std"].map(String::from);
         let text = koharu_scene::Text {
             content: content.into(),
             direction: koharu_scene::Direction::Vertical,
