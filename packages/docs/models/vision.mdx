@@ -1,14 +1,13 @@
 ---
 title: 'Vision and inpainting models'
 description: 'Choose models for detection, OCR, and artwork reconstruction.'
-icon: 'eye'
 ---
 
 Open **Settings → Pipeline** and choose a model for each stage. Every model runs on your machine; the [workflow](/guides/processing) stays the same whichever you choose.
 
 ## Detection
 
-**Koharu Layout HighRes**, an RF-DETR segmenter, finds panels, speech bubbles, text, and sound effects, and gives each text block its mask and reading order.
+**Koharu Layout HighRes**, an RF-DETR segmenter, finds panels, speech bubbles, text, and sound effects, and gives each text block its mask and reading order. See [detection and OCR](/how-it-works/detection).
 
 Text, SFX, bubble, and panel thresholds set how confident each class must be; empty fields use the model's own. Lower thresholds keep more uncertain regions and may add false positives. Compare several representative pages before changing them, then run detection again on those pages.
 

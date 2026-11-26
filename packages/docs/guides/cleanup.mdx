@@ -1,7 +1,6 @@
 ---
 title: 'Clean up source lettering'
 description: 'Use inpainting and the Remove brush to remove lettering while preserving artwork.'
-icon: 'eraser'
 ---
 
 Inpainting reconstructs the artwork beneath source text. A precise removal area usually matters more than a larger model.
@@ -18,7 +17,7 @@ Most lettering sits on plain paper or a gradient, so Koharu fills it without the
 | A smooth background                           | Telea's fast-marching fill, from OpenCV |
 | Line art, screentone, a bubble border, or art | The inpainting model                    |
 
-On a flat color, each separate part of a mask is read on its own, so a stray part takes the color around it. Where a mask covers a bubble border or art, the model redraws only that part.
+On a flat color, each separate part of a mask is read on its own, so a stray part takes the color around it. Where a mask covers a bubble border or art, the model redraws only that part. See [cleanup](/how-it-works/cleanup) for how each tier decides.
 
 The model redraws each text with 256 pixels of context around it, at the page's own scale, and never across two panels. LaMa's fill stays inside the mask. FLUX.3 Klein and Qwen-Image 2.1 Turbo redraw the whole window, and the clean-up keeps it around the text, shown through the block's mask, so painting the mask larger shows more of their redraw.
 

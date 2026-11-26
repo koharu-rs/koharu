@@ -1,29 +1,18 @@
 ---
 title: '硬件与运行时'
-description: '了解支持的 GPU，以及 Koharu 会下载和存储哪些内容。'
-icon: 'microchip'
+description: '确认你的 GPU 和驱动能否运行 Koharu，以及首次运行会下载什么。'
 ---
 
 Koharu 在同一块 GPU 上运行所有模型，也用它绘制页面。它会自动下载该 GPU 需要的原生库与模型文件，运行发行版不需要安装 CUDA 或 ROCm SDK。
 
-## 设备选择
+Koharu 没有纯 CPU 模式：没有受支持的 GPU 时，模型无法运行。画布、导出和缩略图也在 GPU 上绘制，因此即使只是打开项目，也需要能正常工作的显卡驱动。
 
-首次运行模型时，Koharu 会选择本机最合适的 GPU，并在本次会话中一直使用它：
-
-| 顺序 | GPU                        |
-| ---- | -------------------------- |
-| 1    | Metal，或独立 NVIDIA GPU   |
-| 2    | 独立 AMD GPU               |
-| 3    | 集成 NVIDIA GPU            |
-| 4    | 集成 AMD GPU               |
-| 5    | 通过 Vulkan 使用的其他 GPU |
-
-同一顺序中，显存更大的优先，其次是更新的 CUDA 架构。如果最合适的 GPU 无法使用，运行会失败，而不会改用下一块 GPU，因此模型不会在你意料之外的设备上运行。Koharu 没有纯 CPU 模式：没有受支持的 GPU 时，模型无法运行。
+## 支持的 GPU
 
 <Tabs>
   <Tab title='NVIDIA'>
     Windows 和 Linux 支持 CUDA 13.3。只有驱动报告 CUDA 13.3 或更新版本，且 GPU 计算能力达到 7.5
-    或更新时，Koharu 才会使用 CUDA 设备，即需要 Turing 架构或更新的 GPU，以及 R610
+    或更新时，Koharu 才会使用 CUDA GPU，即需要 Turing 架构或更新的 GPU，以及 R610
     系列或更新的驱动。查看 NVIDIA
     的[驱动与架构对应表](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)并[下载驱动](https://www.nvidia.com/en-us/drivers/)。
   </Tab>
@@ -34,32 +23,26 @@ Koharu 在同一块 GPU 上运行所有模型，也用它绘制页面。它会�
   </Tab>
   <Tab title='Apple 芯片'>Apple 芯片的 macOS 上使用 Metal。</Tab>
   <Tab title='Vulkan'>
-    Vulkan 是 Windows 和 Linux 上的其余选项。本地语言模型和扩散类修补模型会在 Vulkan GPU
+    Vulkan 是 Windows 和 Linux 上的其余选项。语言模型和扩散类修补模型会在 Vulkan GPU
     上运行。libtorch 没有 Vulkan 版本，因此在 Vulkan 机器上，检测、OCR 和 LaMa 会在 CPU
     上运行，速度较慢。
   </Tab>
 </Tabs>
 
-<Note>
-  画布、导出和页面缩略图同样在 GPU 上绘制，因此即使只是打开项目，也需要可正常工作的显卡驱动。
-</Note>
+有多块 GPU 时，Koharu 会选出最好的一块并一直使用；顺序参见[在 GPU 上运行的模型](/zh/how-it-works/runtime#一块-gpu)。
 
-## 下载与存储
+## 首次运行
 
 | 数据                                                         | 下载时机                   |
 | ------------------------------------------------------------ | -------------------------- |
-| libtorch、llama.cpp、stable-diffusion.cpp，以及 CUDA 或 ROCm | 首次运行任意模型时         |
-| 固定到 Hugging Face 某次提交的模型权重                       | 首次加载该模型时           |
-| Koharu 字体数据集中的字体                                    | 文本需要系统中没有的字体时 |
+| libtorch、llama.cpp、stable-diffusion.cpp，以及 CUDA 或 ROCm | 首次运行任何模型时         |
+| 固定到 Hugging Face 某个提交的模型权重                       | 首次加载该模型时           |
+| Koharu 字体数据集中的字体                                    | 文字需要系统中没有的字面时 |
 
-所有内容都存放在同一个存储目录中：Windows 上是 Koharu 安装文件夹中的 `store` 文件夹，macOS 和 Linux 上是系统缓存文件夹中的 `koharu/store`。下载会先暂存并校验，再移动到位，因此中断的下载会在下次使用时重试。更新后，旧版本的运行时会在后台删除，模型文件会保留。参见[数据位置](/zh/reference/data)。
+下载来源为 GitHub、CUDA 来自 PyPI、ROCm 来自 AMD 的软件源，权重和字体来自 Hugging Face。活动中心会显示下载进度。所有内容都放在同一个存储中，参见[数据位置](/zh/reference/data#运行时与模型存储)。
 
-## 内存与模型驻留
+## 内存
 
-活动中心会显示下载和处理任务。模型在某个阶段首次需要时加载，之后的运行中保持加载；在设置中切换到其他模型时才会卸载。
+模型在某个阶段首次需要时加载，并保持加载。不会为腾出空间而卸载模型：放不下的模型会失败，错误信息会给出可用内存。更小的模型和量化需要的内存更少，但通常会牺牲一些质量；能放进磁盘的模型，仍可能超出 GPU 内存。参见[内存](/zh/how-it-works/runtime#内存)。
 
-Koharu 不会为了腾出空间而卸载模型：放不下的模型会失败，错误信息会列出可用内存。本地语言模型会缩小上下文，并把部分层移到系统内存以便放下；扩散类修补模型会先把权重放进 GPU 的可用显存，再放进系统内存。
-
-较小的本地模型和量化版本需要的内存更少，但质量可能下降。能放进磁盘的模型仍可能超出设备内存。
-
-如果运行在第一个模型就失败，请检查与 GitHub、PyPI、AMD 仓库和 Hugging Face 的网络连接，更新驱动后重试一次。若问题重复出现，请记录完整错误并参考[故障排除](/zh/reference/troubleshooting)。
+如果在首个模型处失败，请检查能否访问 GitHub、PyPI、AMD 的软件源和 Hugging Face，更新驱动后重试一次。如果仍然失败，请记录完整错误并按照[故障排除](/zh/reference/troubleshooting)操作。

@@ -1,7 +1,6 @@
 ---
 title: '架构'
 description: '从 React 界面追踪到场景、处理流程和原生运行时的职责划分。'
-icon: 'sitemap'
 ---
 
 Koharu 以桌面应用运行。React 调用带类型的 Tauri 命令；持久的项目状态、处理和绘制由原生组件负责。
@@ -27,14 +26,15 @@ flowchart TB
 
 ## 界面与应用
 
-| 组件              | 职责                                                                                         |
-| ----------------- | -------------------------------------------------------------------------------------------- |
-| `packages/koharu` | 开始界面、页面列表、处理选择器、图层、故事、排版工具条、历史记录、智能体面板、设置和活动中心 |
-| `packages/ui`     | 共享的 React 基础组件与样式                                                                  |
-| `packages/ipc`    | 由桌面端命令和事件生成的 TypeScript 协议                                                     |
-| `crates/koharu`   | 进程：崩溃报告、日志、panic 处理和应用的启动顺序                                             |
-| `koharu-desktop`  | 窗口、命令、项目文件夹、导入与导出、设置以及 MCP 服务器                                      |
-| `koharu-sentry`   | 把界面与原生端作为同一个应用接入 Sentry                                                      |
+| 组件                | 职责                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/koharu`   | 开始界面、页面列表、处理选择器、图层、故事、排版工具条、历史记录、智能体面板、设置和活动中心         |
+| `packages/ui`       | 共享的 React 基础组件与样式                                                                          |
+| `packages/ipc`      | 由桌面端命令和事件生成的 TypeScript 协议                                                             |
+| `crates/koharu`     | 进程：崩溃报告、日志、panic 处理和应用的启动顺序                                                     |
+| `koharu-desktop`    | 窗口、命令、项目文件夹、导入与导出、设置以及 MCP 服务器                                              |
+| `koharu-sentry`     | 把界面与原生端作为同一个应用接入 Sentry                                                              |
+| `koharu-extensions` | 图库读取的网站，来自固定到某个提交的 [koharu-rs/extensions](https://github.com/koharu-rs/extensions) |
 
 界面在 CEF 中离屏渲染，窗口把它合成在绘制页面的原生画布之上。界面通过场景的查询与编辑读写打开的项目，与智能体和 MCP 客户端使用同一套协议。无论由谁修改，每次变更都会通知窗口，因此画布和面板无需轮询即可重绘。设置是 `config.toml` 中的各个部分，保存时交给各自所属的组件。
 
@@ -59,12 +59,25 @@ flowchart TB
 
 有两个 crate 被图中多处使用，因此未画出：`koharu-config` 负责 `config.toml` 的类型化配置段和加密的密钥数据，其密钥保存在操作系统凭据存储中；`koharu-leptonica` 移植了 `koharu-ml` 用来测量文字的 Leptonica 算法。
 
-<CardGroup cols={2}>
+## 阅读设计
+
+每个 crate 的 README 就是它的设计：目标、各部分的模型及其参照的成熟产品，以及出处。修改前请先阅读所属 crate 的 README。
+
+| 领域       | README                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 应用       | [`koharu`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu/README.md)、[`koharu-desktop`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-desktop/README.md)、[`koharu-canvas`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-canvas/README.md)、[`koharu-config`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-config/README.md)、[`koharu-sentry`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-sentry/README.md)                   |
+| 项目与绘制 | [`koharu-scene`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-scene/README.md)、[`koharu-renderer`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-renderer/README.md)、[`koharu-psd`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-psd/README.md)                                                                                                                                                                                                             |
+| 模型与任务 | [`koharu-pipeline`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md)、[`koharu-ml`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-ml/README.md)、[`koharu-llm`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-llm/README.md)、[`koharu-agent`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-agent/README.md)、[`koharu-leptonica`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-leptonica/README.md)             |
+| 原生运行时 | [`koharu-runtime`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-runtime/README.md)、[`koharu-torch`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-torch/README.md)、[`koharu-llama`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-llama/README.md)、[`koharu-diffusion`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-diffusion/README.md)、[`koharu-bindgen`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-bindgen/README.md) |
+
+<Columns cols={2}>
   <Card title="场景与存储" icon="database" href="/zh/development/scene">
-    了解图层、编辑、历史与项目文件。
+    编辑、属性、版本管理与项目文件的归属。
   </Card>
 
-  <Card title="处理与渲染" icon="layer-group" href="/zh/development/rendering">
-    跟随处理任务经过渲染器到达窗口。
+  <Card title="处理与渲染" icon="layers" href="/zh/development/rendering">
+    流水线请求、渲染器帧与窗口。
   </Card>
-</CardGroup>
+</Columns>
+
+从翻译者角度看各部分如何运作，参见 [Koharu 的工作原理](/zh/how-it-works)。

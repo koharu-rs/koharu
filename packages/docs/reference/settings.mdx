@@ -1,7 +1,6 @@
 ---
 title: 'Settings'
 description: 'Find the controls for appearance, models, providers, translation, fonts, and site sign-ins.'
-icon: 'gear'
 ---
 
 Open **File → Settings**, the settings button in the page list, or the one on the start screen. Changes save automatically after a short delay; choose **Back to editor** to return.
@@ -26,11 +25,96 @@ Set the ordered preferred fonts, CCWildWords and then Adobe 黑体 Std unless yo
 
 Lists the sites the [gallery](/guides/gallery) reads. **Sign in** opens a site's own sign-in page in a window of its own; when you close it, the row shows the account the site reports, and **Sign out** clears that site's sign-in. A site without accounts says **No account needed**.
 
-<Note>
-  Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]` (including
-  `[pipeline.translator]`), `[providers]`, `[renderer]` for typesetting, and `[agent]`. The file can
-  be edited by hand for options the app has no screen for; a value of the wrong type is an error,
-  never a default. Keep credentials out of it and use **Settings → Providers** instead.
-</Note>
+## Configuration file
+
+Settings live in `~/.koharu/config.toml`, a table per component. Edit it by hand for options the app has no screen for, such as a local model's quantization. A key you leave out uses its default, and the app writes only the keys you change. A value that doesn't read, such as one of the wrong type or a model that no longer exists, falls back to its default; a file that isn't valid TOML is an error. Credentials never go here: save them in **Settings → Providers**.
+
+```toml
+[pipeline.translator]
+model = "koharu/index-translate-9b:Q8_0"
+target = "ja"
+instructions = "Keep honorifics such as -san and -senpai."
+
+[providers.openai-compatible]
+base_url = "https://example.com/v1"
+context_window = 32768
+```
+
+### `[pipeline.detector]`
+
+<ResponseField name='model' type='string' default='koharu-layout-highres'>
+  The detector.
+</ResponseField>
+<ResponseField name='text, onomatopoeia, bubble, panel' type='number'>
+  Each kind's lowest confidence a detection keeps, from 0 to 1. Left out, the model's own.
+</ResponseField>
+
+### `[pipeline.recognizer]`
+
+<ResponseField name='model' type='string' default='hayai-ocr'>
+  The recognizer: `hayai-ocr`, `manga-ocr-ar`, or `baberu-ocr`.
+</ResponseField>
+
+### `[pipeline.inpainter]`
+
+<ResponseField name='model' type='string' default='lama'>
+  What cleans pages and **Remove** strokes: `lama`, `flux3-klein`, or `qwen-image`.
+</ResponseField>
+<ResponseField name='fill' type='string' default='flux3-klein'>
+  The model **Generative Fill** last used, which it picks next time.
+</ResponseField>
+<ResponseField name='prompt' type='string'>
+  What `flux3-klein` and `qwen-image` are asked when a run brings no prompt of its own. By default,
+  to remove all the text, including dialogue, sound effects, and handwritten notes, leave speech
+  bubbles empty, and keep everything else the same.
+</ResponseField>
+
+### `[pipeline.translator]`
+
+<ResponseField name='model' type='string' default='koharu/index-translate-9b'>
+  A `provider/model` reference, as the model picker names it. A local model takes a quantization
+  after a colon, such as `koharu/index-translate-9b:Q8_0`.
+</ResponseField>
+<ResponseField name='target' type='string' default='en'>
+  The target language as a BCP 47 tag, such as `ja`, `pt-BR`, or `zh-Hant`.
+</ResponseField>
+<ResponseField name='instructions' type='string'>
+  **Additional instructions**, added after Koharu's own prompt as written.
+</ResponseField>
+<ResponseField name='vision' type='boolean' default={false}>
+  Whether each page's image goes to the model with its texts.
+</ResponseField>
+<ResponseField name='reasoning' type='string'>
+  `off`, or a level: `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Left out, the model's
+  own.
+</ResponseField>
+
+### `[providers.<provider>]`
+
+One table per provider that has a server address: `ollama`, `lmstudio`, and `openai-compatible`.
+
+<ResponseField name='base_url' type='string'>
+  The server's address. Left out, Ollama's and LM Studio's usual local address. An OpenAI-compatible
+  server's ends where OpenAI's `/v1` does.
+</ResponseField>
+<ResponseField name='context_window' type='integer'>
+  The context, in tokens, an OpenAI-compatible server runs its model with, such as llama.cpp's
+  `--ctx-size`. See [translation](/how-it-works/translation#what-the-conversation-keeps).
+</ResponseField>
+
+### `[renderer]`
+
+<ResponseField name='font_families' type='string[]'>
+  The preferred fonts, in order. By default, `["CCWildWords", "Adobe 黑体 Std"]`.
+</ResponseField>
+
+### `[agent]`
+
+<ResponseField name='model' type='string'>
+  The Agent's model, a `provider/model` reference. Left out until you choose one.
+</ResponseField>
+<ResponseField name='reasoning' type='string'>
+  As translation's `reasoning`, for the Agent.
+</ResponseField>
 
 See [data locations](/reference/data) for project and download storage.

@@ -1,0 +1,69 @@
+---
+title: 'Models on your GPU'
+description: 'Which GPU runs the models, what Koharu downloads and keeps, and how models share memory and the GPU during a run.'
+sidebarTitle: 'Models on your GPU'
+---
+
+Every model runs on one GPU: the best one the machine has. Koharu downloads the libraries that GPU needs and each model's weights the first time they're needed, keeps them, and runs from disk after that.
+
+## One GPU
+
+The models share one GPU's memory. Splitting them across GPUs would make whether a model fits depend on which ran first, so the first time a model runs, Koharu picks one GPU and keeps it for the session:
+
+| Rank | GPU                             |
+| ---- | ------------------------------- |
+| 1    | Metal, or a discrete NVIDIA GPU |
+| 2    | A discrete AMD GPU              |
+| 3    | An integrated NVIDIA GPU        |
+| 4    | An integrated AMD GPU           |
+| 5    | Any other GPU through Vulkan    |
+
+Within a rank, more memory wins, then a newer CUDA architecture. If the best GPU can't be used, the run fails rather than falling back to the next one, so a model never runs somewhere you didn't expect. There is no CPU-only mode.
+
+libtorch, which runs detection, OCR, and LaMa, has no Vulkan build, so on a Vulkan machine those three run on the CPU. Language models and the diffusion inpainters run on the Vulkan GPU.
+
+## What downloads
+
+| Package                              | From                                  | For                      |
+| ------------------------------------ | ------------------------------------- | ------------------------ |
+| CUDA                                 | NVIDIA's packages on PyPI             | An NVIDIA GPU            |
+| ROCm                                 | AMD's packages                        | An AMD GPU               |
+| libtorch and Koharu's bindings to it | Koharu's own builds on GitHub         | Every GPU                |
+| llama.cpp                            | Koharu's own builds on GitHub         | Every GPU                |
+| stable-diffusion.cpp                 | Koharu's own builds on GitHub         | Every GPU                |
+| Model weights                        | Hugging Face, at a pinned commit      | Each model               |
+| Fonts                                | Koharu's font dataset on Hugging Face | A text that needs a face |
+
+- **Pinned.** Every package and model is pinned to one version, so a model runs on the same library builds on every machine of its kind.
+- **All or nothing.** Every library downloads before any opens, so a failed download leaves nothing half loaded.
+- **Never half written.** A download is written to a staging folder on the same disk, checked, then moved into place. A lock keeps a second Koharu from downloading the same thing at once.
+- **Retried.** A library package downloads over several connections where the server allows it, and each retries a few times. A model file that breaks off starts over.
+- **Cleaned up.** After a start has loaded its libraries, older versions of them are removed in the background. Model files stay.
+
+Everything goes into one store. See [data locations](/reference/data#runtime-and-model-store) for where it is.
+
+## Memory
+
+A model loads the first time a stage needs it and stays loaded for later runs. Models load one at a time on the thread that owns them, so each load sees the memory actually free.
+
+- **Nothing is unloaded to make room.** A model that doesn't fit fails, and the error names the free memory. Choose a smaller model, switch other stages to lighter ones, or choose **Edit → Unload Models**, which frees every model Koharu loaded.
+- **A model leaves** when the settings switch away from it, when you unload models, or when Koharu quits. A Generative Fill model the settings don't use leaves five minutes after its last fill.
+- **Local language models** shrink their context and move layers to system memory to fit. The diffusion inpainters place their weights in free GPU memory, then system memory.
+
+A model that fits on disk can still exceed GPU memory. Smaller models and quantizations need less, usually at some cost in quality.
+
+## Taking turns on the GPU
+
+The vision models run one call at a time, so peak memory is every loaded model plus the largest single job, and running out never depends on timing. A local language model generates on its own thread beside them.
+
+On CUDA, llama.cpp captures its work as a graph, which a call from another library waiting on the whole GPU would break. So llama.cpp and stable-diffusion.cpp take turns on CUDA, and on ROCm libtorch takes turns as well. A library in the middle of a long job hands the GPU over after five seconds when another is waiting. On Metal and Vulkan they run side by side.
+
+## How runs are scheduled
+
+- **Interactive first.** Runs on text blocks or a painted area go ahead of runs on pages, at their next model call, so a **Remove** stroke doesn't wait for a chapter. Runs on pages go in the order they came.
+- **Three pages in flight.** One page reads its input, one is on the model, and one writes its result.
+- **Order within a page.** Detection comes before a page's other stages, OCR before its translation, and each page's translation before the next page's, since translation is one conversation.
+- **Batches.** OCR reads up to eight waiting pages in one batch.
+- **Stopping.** **Stop** ends every run, running and queued, and cuts short a diffusion model's redraw. A stopped run writes nothing more.
+
+Design and sources: the [`koharu-runtime` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-runtime/README.md) and the [`koharu-pipeline` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md#5-running).

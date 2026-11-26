@@ -1,68 +1,50 @@
 ---
 title: 'ハードウェアとランタイム'
-description: '対応 GPU と、Koharu がダウンロード・保存するものを確認します。'
-icon: 'microchip'
+description: 'お使いの GPU とドライバーで Koharu を動かせるか、初回実行で何がダウンロードされるかを確認します。'
 ---
 
 Koharu はすべてのモデルを 1 つの GPU で実行し、ページの描画にもその GPU を使います。その GPU に必要なネイティブライブラリとモデルファイルは自動でダウンロードされるため、リリース版の実行に CUDA や ROCm の SDK は不要です。
 
-## デバイスの選択
+CPU だけで動くモードはありません。対応する GPU がなければモデルは動きません。Koharu はキャンバス、書き出し、サムネイルも GPU で描くため、プロジェクトを開くだけでも正常に動くグラフィックドライバーが必要です。
 
-モデルを初めて実行するとき、Koharu はマシンで最適な GPU を選び、そのセッションの間使い続けます。
-
-| 順位 | GPU                            |
-| ---- | ------------------------------ |
-| 1    | Metal、または単体の NVIDIA GPU |
-| 2    | 単体の AMD GPU                 |
-| 3    | 内蔵の NVIDIA GPU              |
-| 4    | 内蔵の AMD GPU                 |
-| 5    | Vulkan 経由のその他の GPU      |
-
-同じ順位ではメモリが多いもの、次に新しい CUDA アーキテクチャが優先されます。最適な GPU を使えない場合は次の GPU に切り替えずに実行が失敗するため、モデルが想定外の場所で動くことはありません。CPU だけで動かすモードはなく、対応 GPU がなければモデルは実行されません。
+## 対応 GPU
 
 <Tabs>
   <Tab title='NVIDIA'>
-    CUDA 13.3 は Windows と Linux で利用できます。ドライバーが CUDA 13.3 以降を報告し、GPU の
-    Compute Capability が 7.5 以上の場合にのみ CUDA デバイスを使います。つまり Turing 世代以降の GPU
-    と R610 系以降のドライバーが必要です。NVIDIA
-    の[ドライバーとアーキテクチャの対応表](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)と[ドライバーのダウンロード](https://www.nvidia.com/en-us/drivers/)を確認してください。
+    Windows と Linux で CUDA 13.3 に対応しています。ドライバーが CUDA 13.3 以降に対応し、GPU の
+    Compute Capability が 7.5 以上のとき、Koharu は CUDA GPU を使います。Turing 世代以降の GPU と
+    R610 系列以降のドライバーが該当します。NVIDIA
+    の[ドライバーとアーキテクチャの対応表](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)と[ドライバーのダウンロード](https://www.nvidia.com/en-us/drivers/)を参照してください。
   </Tab>
   <Tab title='AMD'>
-    ROCm 10.1 は x86-64 の Windows と Linux で利用でき、対応状況は
-    GPU、OS、ドライバーの組み合わせによって異なります。互換性のある [AMD
+    x86-64 の Windows と Linux で ROCm 10.1 に対応していますが、対応状況は
+    GPU、OS、ドライバーの組み合わせによって異なります。対応する [AMD
     ドライバー](https://www.amd.com/en/support)をインストールしてください。必要な ROCm ランタイムは
-    Koharu がダウンロードします。プラットフォーム要件は AMD
-    の[互換性マトリクス](https://rocm.docs.amd.com/en/docs-10.1.0/compatibility/compatibility-matrix.html)を確認してください。
+    Koharu がダウンロードします。プラットフォームの要件は AMD
+    の[互換性マトリックス](https://rocm.docs.amd.com/en/docs-10.1.0/compatibility/compatibility-matrix.html)を確認してください。
   </Tab>
   <Tab title='Apple シリコン'>Apple シリコンの macOS では Metal を使います。</Tab>
   <Tab title='Vulkan'>
-    Vulkan は Windows と Linux で残りの選択肢です。ローカル言語モデルと拡散モデル系のインペイントは
-    Vulkan の GPU で動きます。libtorch には Vulkan 版がないため、Vulkan のマシンでは検出、OCR、LaMa
-    が CPU で動き、処理は遅くなります。
+    Windows と Linux では、残る選択肢が Vulkan です。言語モデルと拡散系のインペイントモデルは Vulkan
+    の GPU で動きます。libtorch には Vulkan 版がないため、Vulkan のマシンでは検出、OCR、LaMa が CPU
+    で動き、そのぶん遅くなります。
   </Tab>
 </Tabs>
 
-<Note>
-  キャンバス、書き出し、ページのサムネイルも GPU で描画するため、プロジェクトを開くだけでも動作する
-  グラフィックスドライバーが必要です。
-</Note>
+GPU が複数あるときは、Koharu が最も良いものを選んで使い続けます。順位は [GPU で動くモデル](/ja/how-it-works/runtime#1-つの-gpu)を参照してください。
 
-## ダウンロードと保存先
+## 初回実行
 
-| データ                                                      | ダウンロードされるとき                         |
-| ----------------------------------------------------------- | ---------------------------------------------- |
-| libtorch、llama.cpp、stable-diffusion.cpp、CUDA または ROCm | いずれかのモデルを初めて実行するとき           |
-| Hugging Face のコミットに固定したモデルの重み               | そのモデルを初めて読み込むとき                 |
-| Koharu のフォントデータセットのフォント                     | システムにない書体がテキストに必要になったとき |
+| データ                                                      | ダウンロードされるとき                       |
+| ----------------------------------------------------------- | -------------------------------------------- |
+| libtorch、llama.cpp、stable-diffusion.cpp、CUDA または ROCm | いずれかのモデルを初めて実行したとき         |
+| Hugging Face のコミットに固定されたモデルの重み             | そのモデルを初めて読み込んだとき             |
+| Koharu のフォントデータセットのフォント                     | システムにない書体をテキストが必要としたとき |
 
-すべて 1 つのストアに保存されます。Windows では Koharu のインストールフォルダー内の `store` フォルダー、macOS と Linux では OS のキャッシュフォルダー内の `koharu/store` です。ダウンロードは一時領域で検証してから配置されるため、中断したダウンロードは次に使うときに再試行されます。更新後、古いバージョンのランタイムはバックグラウンドで削除され、モデルファイルは残ります。詳しくは[データの保存場所](/ja/reference/data)を参照してください。
+ダウンロード元は、GitHub、CUDA は PyPI、ROCm は AMD のリポジトリ、重みとフォントは Hugging Face です。進捗はアクティビティセンターに表示されます。すべては 1 つのストアに入ります。[データの保存場所](/ja/reference/data#ランタイムとモデルのストア)を参照してください。
 
-## メモリとモデルの常駐
+## メモリ
 
-アクティビティセンターにはダウンロードと処理の実行状況が表示されます。モデルは工程で初めて必要になったときに読み込まれ、以降の実行でも読み込まれたままです。設定で別のモデルに切り替えると解放されます。
+モデルは工程が初めて必要としたときに読み込まれ、読み込まれたままになります。場所を空けるためにアンロードはしません。収まらないモデルは失敗し、エラーに空きメモリが示されます。小さいモデルや量子化はメモリが少なくて済みますが、たいてい品質は下がります。ディスクに収まるモデルでも、GPU のメモリを超えることがあります。[メモリ](/ja/how-it-works/runtime#メモリ)を参照してください。
 
-空きを作るためにモデルを解放することはありません。収まらないモデルは失敗し、エラーに空きメモリが表示されます。ローカル言語モデルはコンテキストを縮め、レイヤーをシステムメモリへ移して収めます。拡散モデル系のインペイントは重みを GPU の空きメモリ、次にシステムメモリへ配置します。
-
-小さいローカルモデルや量子化ほど必要なメモリは少なくなりますが、品質が下がる場合があります。ディスクに収まるモデルでも、デバイスのメモリを超えることがあります。
-
-最初のモデルで実行が失敗する場合は、GitHub、PyPI、AMD のリポジトリ、Hugging Face への接続を確認し、ドライバーを更新して一度だけ再試行します。繰り返す場合は完全なエラーを記録し、[トラブルシューティング](/ja/reference/troubleshooting)に従ってください。
+最初のモデルで実行が失敗した場合は、GitHub、PyPI、AMD のリポジトリ、Hugging Face にアクセスできるか確認し、ドライバーを更新して一度だけ再試行してください。それでも失敗する場合は、エラー全文を控えて[トラブルシューティング](/ja/reference/troubleshooting)に従ってください。

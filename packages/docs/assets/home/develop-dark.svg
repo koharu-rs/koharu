@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 404" width="680" height="404" fill="none">
+<defs><clipPath id="c"><rect width="680" height="404" rx="32"/></clipPath></defs>
+<g clip-path="url(#c)">
+<rect width="680" height="404" fill="#1C0D11"/>
+<g stroke="#47202A" stroke-width="1.5" stroke-dasharray="4 4"><line x1="85" y1="0" x2="85" y2="404"/><line x1="187" y1="0" x2="187" y2="404"/><line x1="289" y1="0" x2="289" y2="404"/><line x1="391" y1="0" x2="391" y2="404"/><line x1="493" y1="0" x2="493" y2="404"/><line x1="595" y1="0" x2="595" y2="404"/><line x1="0" y1="47" x2="680" y2="47"/><line x1="0" y1="98" x2="680" y2="98"/><line x1="0" y1="149" x2="680" y2="149"/><line x1="0" y1="200" x2="680" y2="200"/><line x1="0" y1="251" x2="680" y2="251"/><line x1="0" y1="302" x2="680" y2="302"/><line x1="0" y1="353" x2="680" y2="353"/></g>
+</g>
+<g stroke-linecap="round" stroke-linejoin="round" transform="translate(340 202) scale(1.32) translate(-340 -202)">
+<g transform="skewY(6) translate(0 -36)"><rect x="214" y="104" width="226" height="176" rx="12" fill="#28121A" stroke="#F07B89" stroke-width="1.6"/><line x1="214" y1="132" x2="440" y2="132" stroke="#F07B89" stroke-width="1.6" opacity="0.5"/><circle cx="422" cy="118" r="3.5" fill="#F07B89"/><circle cx="410" cy="118" r="3.5" fill="#F07B89"/><circle cx="398" cy="118" r="3.5" fill="#F07B89"/><rect x="250" y="132" width="236" height="190" rx="12" fill="#4E1C27" stroke="#F07B89" stroke-width="1.6"/><line x1="250" y1="160" x2="486" y2="160" stroke="#F07B89" stroke-width="1.6" opacity="0.5"/><circle cx="468" cy="146" r="3.5" fill="#F07B89"/><circle cx="456" cy="146" r="3.5" fill="#F07B89"/><circle cx="444" cy="146" r="3.5" fill="#F07B89"/><line x1="290" y1="168" x2="360" y2="168" stroke="#F07B89" stroke-width="6" opacity="0.45"/><line x1="374" y1="168" x2="430" y2="168" stroke="#F07B89" stroke-width="6" opacity="0.45"/><line x1="290" y1="282" x2="404" y2="282" stroke="#F07B89" stroke-width="6" opacity="0.45"/><g stroke="#F07B89" stroke-width="10"><path d="M326 196 L298 222 L326 248"/><path d="M380 186 L356 258"/><path d="M410 196 L438 222 L410 248"/></g></g>
+</g>
+</svg>

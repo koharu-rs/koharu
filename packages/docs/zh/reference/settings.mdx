@@ -1,7 +1,6 @@
 ---
 title: '设置'
 description: '查找外观、模型、提供商、翻译、字体和网站登录设置。'
-icon: 'gear'
 ---
 
 通过**文件 → 设置**、页面列表中的设置按钮或开始界面的设置按钮打开。修改会在短暂延迟后自动保存；选择**返回编辑器**即可回到编辑。
@@ -26,11 +25,95 @@ icon: 'gear'
 
 [图库](/zh/guides/gallery)读取的网站列表。**登录**会在单独的窗口中打开网站自己的登录页面；关闭窗口后，该行会显示网站报告的账号，**退出登录**会清除该网站的登录。没有账号的网站显示**无需账号**。
 
-<Note>
-  设置保存在 `~/.koharu/config.toml` 中，每个组件一张表：`[pipeline]`（包含
-  `[pipeline.translator]`）、`[providers]`、用于排版的 `[renderer]` 以及
-  `[agent]`。界面中没有入口的选项可以直接编辑该文件；类型错误的值会报错，而不会当作默认值。凭据不要写进该文件，请使用**设置
-  → 提供商**。
-</Note>
+## 配置文件
+
+设置保存在 `~/.koharu/config.toml` 中，每个组件一张表。应用没有界面的选项（例如本地模型的量化）可以直接编辑此文件设置。省略的键使用默认值，应用只写入你更改过的键。无法读取的值（例如类型错误的值或已不存在的模型）会回退为默认值；不是有效 TOML 的文件会报错。凭据不要写在这里，请在**设置 → 提供商**中保存。
+
+```toml
+[pipeline.translator]
+model = "koharu/index-translate-9b:Q8_0"
+target = "ja"
+instructions = "保留 -san、-senpai 等敬称。"
+
+[providers.openai-compatible]
+base_url = "https://example.com/v1"
+context_window = 32768
+```
+
+### `[pipeline.detector]`
+
+<ResponseField name='model' type='string' default='koharu-layout-highres'>
+  检测模型。
+</ResponseField>
+<ResponseField name='text, onomatopoeia, bubble, panel' type='number'>
+  每类检测保留的最低置信度，取值 0 到 1。省略时使用模型自己的值。
+</ResponseField>
+
+### `[pipeline.recognizer]`
+
+<ResponseField name='model' type='string' default='hayai-ocr'>
+  识别模型：`hayai-ocr`、`manga-ocr-ar` 或 `baberu-ocr`。
+</ResponseField>
+
+### `[pipeline.inpainter]`
+
+<ResponseField name='model' type='string' default='lama'>
+  清理页面和**移除**笔画所用的模型：`lama`、`flux3-klein` 或 `qwen-image`。
+</ResponseField>
+<ResponseField name='fill' type='string' default='flux3-klein'>
+  **创成式填充**上次使用的模型，下次会默认选中它。
+</ResponseField>
+<ResponseField name='prompt' type='string'>
+  当任务没有自带提示词时，发给 `flux3-klein` 和 `qwen-image`
+  的指示。默认要求模型移除所有文字（包括对白、拟声词和手写注释），让对白框保持空白，其余一切保持不变。
+</ResponseField>
+
+### `[pipeline.translator]`
+
+<ResponseField name='model' type='string' default='koharu/index-translate-9b'>
+  与模型选择器相同的 `provider/model` 引用。本地模型可在冒号后指定量化，例如
+  `koharu/index-translate-9b:Q8_0`。
+</ResponseField>
+<ResponseField name='target' type='string' default='en'>
+  目标语言的 BCP 47 标签，例如 `ja`、`pt-BR` 或 `zh-Hant`。
+</ResponseField>
+<ResponseField name='instructions' type='string'>
+  **附加指示**，按原样附加在 Koharu 自己的提示词之后。
+</ResponseField>
+<ResponseField name='vision' type='boolean' default={false}>
+  是否把每页图像连同文字一起发给模型。
+</ResponseField>
+<ResponseField name='reasoning' type='string'>
+  `off`，或推理等级：`minimal`、`low`、`medium`、`high`、`xhigh` 或
+  `max`。省略时使用模型自己的设置。
+</ResponseField>
+
+### `[providers.<provider>]`
+
+每个有服务器地址的提供商一张表：`ollama`、`lmstudio` 和 `openai-compatible`。
+
+<ResponseField name='base_url' type='string'>
+  服务器地址。省略时为 Ollama 和 LM Studio 常用的本地地址。OpenAI 兼容服务器的地址应结束于 OpenAI 的
+  `/v1` 所在的位置。
+</ResponseField>
+<ResponseField name='context_window' type='integer'>
+  OpenAI 兼容服务器运行模型时的上下文长度（token 数），例如 llama.cpp 的
+  `--ctx-size`。参见[翻译的工作原理](/zh/how-it-works/translation#对话保留的内容)。
+</ResponseField>
+
+### `[renderer]`
+
+<ResponseField name='font_families' type='string[]'>
+  按顺序排列的首选字体。默认为 `["CCWildWords", "Adobe 黑体 Std"]`。
+</ResponseField>
+
+### `[agent]`
+
+<ResponseField name='model' type='string'>
+  Agent 的模型，`provider/model` 引用。选择之前不会写入。
+</ResponseField>
+<ResponseField name='reasoning' type='string'>
+  与翻译的 `reasoning` 相同，用于 Agent。
+</ResponseField>
 
 项目和下载内容的存储位置参见[数据位置](/zh/reference/data)。

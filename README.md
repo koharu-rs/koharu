@@ -138,7 +138,7 @@ Builds are available for Windows (x64), macOS (Apple silicon), and Linux (x86-64
 Install on Windows with [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
 
 ```bash
-winget install koharu
+winget install --id mayocream.koharu
 ```
 
 ### Homebrew

@@ -1,70 +1,51 @@
 ---
 title: 'Hardware and runtimes'
-description: 'Check GPU support and understand what Koharu downloads and stores.'
-icon: 'microchip'
+description: 'Check that your GPU and driver can run Koharu, and what the first run downloads.'
 ---
 
-Koharu runs every model on one GPU and draws pages with it. It downloads the native libraries and model files that GPU needs; you do not need a CUDA or ROCm SDK installation to run a release.
+Koharu runs every model on one GPU and draws pages with it. It downloads the native libraries and model files that GPU needs; you don't need a CUDA or ROCm SDK installed to run a release.
 
-## Device selection
+There is no CPU-only mode: without a supported GPU, models don't run. Koharu also draws the canvas, exports, and thumbnails on the GPU, so it needs a working graphics driver even to open a project.
 
-The first time a model runs, Koharu picks the best GPU on the machine and keeps it for the session:
-
-| Rank | GPU                             |
-| ---- | ------------------------------- |
-| 1    | Metal, or a discrete NVIDIA GPU |
-| 2    | A discrete AMD GPU              |
-| 3    | An integrated NVIDIA GPU        |
-| 4    | An integrated AMD GPU           |
-| 5    | Any other GPU through Vulkan    |
-
-Within a rank, more memory wins, then a newer CUDA architecture. If the best GPU cannot be used, the run fails rather than falling back to the next one, so a model never runs somewhere you did not expect. There is no CPU-only mode: without a supported GPU, models do not run.
+## Supported GPUs
 
 <Tabs>
   <Tab title='NVIDIA'>
-    CUDA 13.3 support is available on Windows and Linux. Koharu uses a CUDA device only when the
-    driver reports CUDA 13.3 or newer and the GPU has compute capability 7.5 or newer, which means a
-    Turing-class or newer GPU with an R610-series or newer driver. See NVIDIA's [driver and
-    architecture
+    CUDA 13.3 is supported on Windows and Linux. Koharu uses a CUDA GPU when the driver reports CUDA
+    13.3 or newer and the GPU has compute capability 7.5 or newer: a Turing-class or newer GPU with
+    an R610-series or newer driver. See NVIDIA's [driver and architecture
     matrix](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html)
     and [driver downloads](https://www.nvidia.com/en-us/drivers/).
   </Tab>
   <Tab title='AMD'>
-    ROCm 10.1 support is available on x86-64 Windows and Linux and depends on the exact GPU,
-    operating system, and driver. Install a compatible [AMD driver](https://www.amd.com/en/support).
-    Koharu downloads the ROCm runtime it needs. Check AMD's [compatibility
+    ROCm 10.1 is supported on x86-64 Windows and Linux, depending on the exact GPU, operating
+    system, and driver. Install a compatible [AMD driver](https://www.amd.com/en/support); Koharu
+    downloads the ROCm runtime it needs. Check AMD's [compatibility
     matrix](https://rocm.docs.amd.com/en/docs-10.1.0/compatibility/compatibility-matrix.html) for
     platform requirements.
   </Tab>
   <Tab title='Apple silicon'>Koharu uses Metal on Apple-silicon macOS.</Tab>
   <Tab title='Vulkan'>
-    Vulkan is the remaining option on Windows and Linux. Local language models and the diffusion
+    Vulkan is the remaining option on Windows and Linux. Language models and the diffusion
     inpainters run on the Vulkan GPU. libtorch has no Vulkan build, so detection, OCR, and LaMa run
     on the CPU on a Vulkan machine, which is slower.
   </Tab>
 </Tabs>
 
-<Note>
-  The canvas, exports, and page thumbnails are drawn on the GPU as well, so Koharu needs a working
-  graphics driver even to open a project.
-</Note>
+With more than one GPU, Koharu picks the best one and keeps it; see [models on your GPU](/how-it-works/runtime#one-gpu) for the order.
 
-## Downloads and storage
+## The first run
 
-| Data                                                        | When it is downloaded                      |
+| Data                                                        | When it downloads                          |
 | ----------------------------------------------------------- | ------------------------------------------ |
 | libtorch, llama.cpp, stable-diffusion.cpp, and CUDA or ROCm | The first time any model runs              |
 | Model weights, pinned to a Hugging Face commit              | The first time that model loads            |
 | Fonts from Koharu's font dataset                            | When a text needs a face your system lacks |
 
-Everything goes into one store: the `store` folder in Koharu's installation folder on Windows, and `koharu/store` under the operating system's cache folder on macOS and Linux. Downloads are staged and validated before they move into place, so an interrupted download is retried on the next use. After an update, older runtime versions are removed in the background; model files stay. See [data locations](/reference/data).
+Downloads come from GitHub, PyPI for CUDA, AMD's repository for ROCm, and Hugging Face for weights and fonts. The activity center shows their progress. Everything goes into one store; see [data locations](/reference/data#runtime-and-model-store).
 
-## Memory and model residency
+## Memory
 
-The activity center shows downloads and processing runs. A model loads the first time a stage needs it and stays loaded for later runs. It unloads when the settings switch to another model.
+A model loads the first time a stage needs it and stays loaded. Nothing is unloaded to make room: a model that doesn't fit fails, and the error names the free memory. Smaller models and quantizations need less memory, usually at some cost in quality, and a model that fits on disk can still exceed GPU memory. See [memory](/how-it-works/runtime#memory).
 
-Nothing is unloaded to make room: a model that does not fit fails, and the error names the free memory. Local language models shrink their context and move layers to system memory to fit; the diffusion inpainters place their weights in free GPU memory, then system memory.
-
-Smaller local models and quantizations need less memory, with a possible quality trade-off. A model that fits on disk can still exceed device memory.
-
-If a run fails at the first model, check network access to GitHub, PyPI, AMD's repository, and Hugging Face, update the driver, and retry once. Capture the full error if it repeats and follow [troubleshooting](/reference/troubleshooting).
+If a run fails at the first model, check network access to GitHub, PyPI, AMD's repository, and Hugging Face, update the driver, and retry once. If it fails again, capture the full error and follow [troubleshooting](/reference/troubleshooting).

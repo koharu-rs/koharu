@@ -1,0 +1,73 @@
+---
+title: 'Detection and OCR'
+description: 'How Koharu finds lettering, puts it in reading order, measures it, and reads its text.'
+sidebarTitle: 'Detection and OCR'
+---
+
+Detection reads the scan once and writes the page's structure: its panels, its balloons, and a text block for each text and sound effect. OCR then reads each block's wording. Everything later stages do starts from what these two write.
+
+## What detection finds
+
+**Koharu Layout HighRes**, an RF-DETR segmenter, finds four kinds of thing on a page: text, sound effects, balloons, and panels. Each comes with a box, a pixel mask, and a confidence. A detection below its kind's threshold is dropped; the thresholds in **Settings → Pipeline** default to the model's own. The model sometimes predicts one object twice, so a detection that mostly overlaps a more confident one of its kind, or a text nested inside another text, is dropped as a duplicate.
+
+## Reading order
+
+Detection orders a page as a reader of Japanese manga does: panel by panel, every text of a panel before the next panel's. Among panels, and among a panel's texts, it splits the page at its gutters into rows read top to bottom, or else into columns read right to left, and orders each part the same way.
+
+- A text with at least a quarter of its box in a panel is read in that panel.
+- A text mostly outside every panel but beside one, such as a balloon spilling over a panel's side or a caption in the margin, is read with the nearest panel that spans at least half its height.
+
+The order is the order **Story** lists, and the order translation sends texts to the model. For a book read left to right, drag rows in **Layers** to put them in its order.
+
+## Balloons and their rooms
+
+A balloon's outline is traced from its mask. When a balloon holds several texts, its outline is divided into one room per text, and each translation is placed in its own room:
+
+- Two balloons drawn overlapping part first along the line between the notches where their outlines cross.
+- Texts still sharing a part divide it where it narrows between them.
+
+See [fitting translations](/how-it-works/lettering) for how a room becomes a translation's frame.
+
+## What each text block gets
+
+| Field     | What detection writes                                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Place     | Inside its balloon, or free in its panel or on the page                                                                             |
+| Role      | Text, or a sound effect                                                                                                             |
+| Frame     | The box around its lettering                                                                                                        |
+| Direction | Vertical when the lettering's block is longer that way at its tilt                                                                  |
+| Tilt      | The commonest direction of the block's edges, within 45°; a tilt that moves the lines' far end by less than a stroke counts as none |
+| Lettering | Its size, line width, ink colour, and outline colour                                                                                |
+| Mask      | The lettering's pixels, reaching 3 pixels past them so slivers of letter outlines are covered, but never into another text's box    |
+
+Lettering over art is often set in an outline, such as white around black. Koharu tells the outline from the ink by which tone lies all the way around what it encloses. Translation then letters in the same colours, with the outline as its stroke.
+
+A mask never reaches into a neighbour's box because the block's clean-up shows through it: a clean-up there would cover the neighbour's translation. A glyph two masks both take in goes to the block whose box is nearer.
+
+## Detecting again
+
+Detection replaces the page's panels, balloons, and text blocks, whoever made them, except locked ones. A locked layer stays where it is, with the panels and balloons that hold it, and detection adds no second block over a block it keeps. Lock the texts you've finished before running detection again, for example with new thresholds.
+
+## OCR
+
+OCR reads each block's source text from the scan inside its frame. A frame can reach over a neighbour's lettering, so the glyphs of the page's other blocks inside the crop are blanked in the crop's median colour first. OCR reads up to eight pages waiting for it in one batch.
+
+| Recognizer   | Reads                                  |
+| ------------ | -------------------------------------- |
+| Hayai OCR    | Japanese, Chinese, Korean, and English |
+| Manga OCR AR | Japanese manga                         |
+| Baberu OCR   | Japanese manga                         |
+
+OCR reads only text blocks that exist: a text detection missed can't be recovered by changing the recognizer.
+
+## When something is missed
+
+| You see                        | Do                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| A text with no block           | Draw one with **Text block** (`K`), then run **OCR** on it from its menu in **Story** |
+| Texts in the wrong order       | Drag them in **Layers**                                                               |
+| Too many or too few detections | Change a threshold on several representative pages, then run detection on them again  |
+| A wrong reading                | Correct **Source text** in **Story**, then translate that text again                  |
+| A mask over art                | Select the block's mask in **Layers** and erase it there; its clean-up hides at once  |
+
+Design and sources: the [`koharu-ml` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-ml/README.md) and the [`koharu-pipeline` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md#2-stages).

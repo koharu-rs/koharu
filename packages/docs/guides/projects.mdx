@@ -1,7 +1,6 @@
 ---
 title: 'Projects and imports'
 description: 'Keep pages, translations, and artwork together in one Koharu project file.'
-icon: 'folder-open'
 ---
 
 A project owns its source images, text, artwork edits, and layout. Koharu keeps each project in one `.khr` file and never changes the files you import. Every edit is saved as it happens; there is no **Save** command.
@@ -10,11 +9,11 @@ A project owns its source images, text, artwork edits, and layout. Koharu keeps 
 
 The start screen lists the projects in Koharu's projects folder, most recently changed first:
 
-| Platform | Projects folder                                 |
-| -------- | ----------------------------------------------- |
-| Windows  | `projects` in the folder Koharu is installed in |
-| macOS    | `~/Library/Application Support/Koharu/projects` |
-| Linux    | `~/.local/share/Koharu/projects`                |
+| Platform | Projects folder                                                                                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows  | `projects` in the folder Koharu is installed in, or `%LOCALAPPDATA%\Koharu\projects` when that folder isn't writable, as in an install for all users under Program Files |
+| macOS    | `~/Library/Application Support/Koharu/projects`                                                                                                                          |
+| Linux    | `~/.local/share/Koharu/projects`                                                                                                                                         |
 
 Create, open, or delete projects here. A project's name is its file name, so a name that is not a valid file name on every platform is refused. Choose **File → Close Project** to return to the start screen.
 

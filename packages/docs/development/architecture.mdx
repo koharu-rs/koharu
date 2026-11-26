@@ -1,7 +1,6 @@
 ---
 title: 'Architecture'
 description: 'Follow ownership from the React interface to scenes, processing, and native runtimes.'
-icon: 'sitemap'
 ---
 
 Koharu runs as a desktop application. React invokes typed Tauri commands; native components own durable project state, processing, and drawing.
@@ -27,14 +26,15 @@ flowchart TB
 
 ## Interface and application
 
-| Component         | Responsibility                                                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `packages/koharu` | Start view, page list, processing selector, layers, story, type bar, history, Agent panel, settings, and the activity center |
-| `packages/ui`     | Shared React primitives and styling                                                                                          |
-| `packages/ipc`    | The TypeScript protocol generated from the desktop's commands and events                                                     |
-| `crates/koharu`   | The process: crash reporting, logs, panics, and the order the app starts in                                                  |
-| `koharu-desktop`  | The window, the commands, the projects folder, import and export, preferences, and the MCP server                            |
-| `koharu-sentry`   | Sentry for the interface and the native side as one app                                                                      |
+| Component           | Responsibility                                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `packages/koharu`   | Start view, page list, processing selector, layers, story, type bar, history, Agent panel, settings, and the activity center |
+| `packages/ui`       | Shared React primitives and styling                                                                                          |
+| `packages/ipc`      | The TypeScript protocol generated from the desktop's commands and events                                                     |
+| `crates/koharu`     | The process: crash reporting, logs, panics, and the order the app starts in                                                  |
+| `koharu-desktop`    | The window, the commands, the projects folder, import and export, preferences, and the MCP server                            |
+| `koharu-sentry`     | Sentry for the interface and the native side as one app                                                                      |
+| `koharu-extensions` | The gallery's sites, from [koharu-rs/extensions](https://github.com/koharu-rs/extensions) pinned to a commit                 |
 
 The interface renders off-screen in CEF, and the window composites it over the native canvas, which draws the page. The interface reads and edits the open project through the scene's queries and edits, the same protocol the agent and MCP clients use. Every change is broadcast to the window, whichever writer made it, so the canvas and the panels redraw without polling. Preferences are `config.toml` sections, each handed to the component that owns it when saved.
 
@@ -59,12 +59,25 @@ Safe wrappers `koharu-torch`, `koharu-llama`, and `koharu-diffusion` are separat
 
 Two crates are shared across the diagram and omitted from it: `koharu-config` owns the typed sections of `config.toml` and the encrypted secrets, whose key is kept in the operating system credential store, and `koharu-leptonica` ports the Leptonica algorithms `koharu-ml` uses to measure lettering.
 
-<CardGroup cols={2}>
+## Read the design
+
+Each crate's README is its design: the goal, the model of each part with the established product it follows, and the sources. Read the owning crate's README before changing it.
+
+| Area                | READMEs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application         | [`koharu`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu/README.md), [`koharu-desktop`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-desktop/README.md), [`koharu-canvas`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-canvas/README.md), [`koharu-config`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-config/README.md), [`koharu-sentry`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-sentry/README.md)                   |
+| Project and drawing | [`koharu-scene`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-scene/README.md), [`koharu-renderer`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-renderer/README.md), [`koharu-psd`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-psd/README.md)                                                                                                                                                                                                             |
+| Models and runs     | [`koharu-pipeline`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md), [`koharu-ml`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-ml/README.md), [`koharu-llm`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-llm/README.md), [`koharu-agent`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-agent/README.md), [`koharu-leptonica`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-leptonica/README.md)             |
+| Native runtimes     | [`koharu-runtime`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-runtime/README.md), [`koharu-torch`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-torch/README.md), [`koharu-llama`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-llama/README.md), [`koharu-diffusion`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-diffusion/README.md), [`koharu-bindgen`](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-bindgen/README.md) |
+
+<Columns cols={2}>
   <Card title="Scene and storage" icon="database" href="/development/scene">
-    Trace layers, edits, history, and the project file.
+    Edits, attributes, versioning, and ownership of the project file.
   </Card>
 
-  <Card title="Processing and rendering" icon="layer-group" href="/development/rendering">
-    Follow runs through the renderer and the window.
+  <Card title="Processing and rendering" icon="layers" href="/development/rendering">
+    Pipeline requests, renderer frames, and the window.
   </Card>
-</CardGroup>
+</Columns>
+
+For how each part behaves for someone translating, see [how Koharu works](/how-it-works).

@@ -1,47 +1,40 @@
 ---
 title: 'Scene and storage'
-description: 'Understand layers, text blocks, edits, history, and the project file.'
-icon: 'database'
+description: 'How code changes a project: edits as merge patches, attributes, versioning, and which component owns what.'
 ---
 
-`koharu-scene` owns what a project means and how it is stored.
-
-## Layers and manga kinds
-
-A project holds ordered pages. Each page has a background, the imported scan, and a tree of layers. Ordinary layers follow Photoshop: groups, images, rasters, shapes, text, and masks. Three kinds follow Clip Studio Paint's frames and balloons and hold a manga page's parts:
-
-```mermaid
-flowchart TB
-  page["Page: background scan"] --> panel["Panel: outline"]
-  panel --> balloon["Balloon: outline"]
-  balloon --> block["Text block: source, translation, mask, clean-up"]
-  panel --> free["Text block outside a balloon"]
-  page --> other["Groups, images, rasters, shapes, text, masks"]
-```
-
-A text block is one text of the page. Its source is never drawn; its translation is. Its mask covers the source glyphs, and its clean-up is a raster shown only inside that mask, under the translation. Each pipeline stage writes its own fields of a block, so a new model for a stage writes the same fields. Namespaced attributes carry data for tools, such as a C2PA record of what a model did; the renderer never reads them.
+`koharu-scene` owns what a project means and how it is stored. For the layer tree, text blocks, undo, and the project file as a user sees them, see [pages, layers, and history](/how-it-works/projects). This page covers what code that reads or changes a project relies on.
 
 ## Apply an edit
 
-Every writer edits a project the same way: the editor, a pipeline run, and the agent. An edit carries an undo label and its changes and applies whole or not at all. A layer patch is a JSON Merge Patch read back into the layer's types, so a misspelled property or a value of the wrong shape fails and leaves the layer as it was.
+Every writer edits a project the same way: the editor, a pipeline run, the agent, and an MCP client. An edit carries an undo label and its changes and applies whole or not at all; an edit that changes nothing adds no step. Each edit, undo, and redo names the pages and layers it touched and the ones it made, so a view redraws only those.
+
+A layer patch is a JSON Merge Patch (RFC 7396) read back into the layer's types, so a misspelled property or a value of the wrong shape fails and leaves the layer as it was. A patch can't name a layer's id, children, kind, or attributes. A text's wording changes only through the text edits, a block's translation included; a block's source takes its wording from a patch, as OCR writes it.
 
 <Note>
   The last writer of any value wins, model or user. A rerun replaces your changes, and undo is the
   way back. The workflow decides which fields a run writes; the scene enforces none of it.
 </Note>
 
-## Store a project
+## Attributes
 
-A project is one SQLite file with the `.khr` extension, page images included. Every edit is kept as it applies, so there is no save and no unsaved state. Raster pixels are stored in 64×64 tiles, each compressed on its own, and only tiles that hold pixels are stored. An open project is locked exclusively, so a second writer finds it locked at once.
-
-## History
-
-History lists each step's label, oldest first, and moves back or forward to any of them. It keeps the 20 most recent steps and lasts as long as the project is open, as closing a Photoshop document clears its states.
+Each layer has attributes: a namespace, then keys and values, for data only a tool reads, such as a detector's confidence or a C2PA record of what a model did. The renderer never reads them, so two projects that differ only in attributes draw the same. A namespace's owner reads its values into its own types; a namespace no reader knows is kept as it is.
 
 ## Open and version
 
-Opening fails closed: a value of the wrong shape, an unknown kind, missing pixels, or a file that is not a project fails to open and is left as it was. The project's `version` is a SemVer version that changes only with the core schema. A reader opens any version up to its own within the same major version; a newer version fails to open.
+Opening fails closed: a value of the wrong shape, a misspelled property, an unknown kind, missing pixels, or a file that isn't a project fails to open and is left as it was. The tree's rules, which kind holds which, are kept by the edits and not checked again.
+
+The project's `version` is a SemVer version that changes only with the core schema:
+
+- A new layer kind or core property raises the minor version. A reader opens any version up to its own with the same major version, since an addition needs no decoder.
+- Writing to an older file raises its version, so an older build refuses what it can't read as too new.
+- Removing or redefining core data raises the major version, and once a release has written a version, the change ships an upgrade from it.
+- The patch number stays 0: stored data has no bug fixes.
+
+A newer version, a pre-release, or unknown core data fails to open; unknown attributes never do.
 
 ## Keep application ownership separate
 
-The desktop owns the projects folder and project names. The renderer, pipeline, and agent read the open session and submit edits; they do not write the file directly.
+The desktop owns the projects folder and project names. The renderer, pipeline, and agent read the open session and submit edits; they never write the file directly.
+
+Design and sources: the [`koharu-scene` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-scene/README.md).

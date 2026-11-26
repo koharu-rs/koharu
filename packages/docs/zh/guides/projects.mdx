@@ -1,7 +1,6 @@
 ---
 title: '项目与导入'
 description: '把页面、译文与图稿保存在同一个 Koharu 项目文件中。'
-icon: 'folder-open'
 ---
 
 项目保存源图像、文字、图稿编辑和版面。Koharu 把每个项目保存为一个 `.khr` 文件，不会修改你导入的文件。每次编辑都会立即保存，因此没有**保存**命令。
@@ -10,11 +9,11 @@ icon: 'folder-open'
 
 开始界面按最近修改顺序列出 Koharu 项目文件夹中的项目：
 
-| 平台    | 项目文件夹                                      |
-| ------- | ----------------------------------------------- |
-| Windows | Koharu 安装文件夹中的 `projects`                |
-| macOS   | `~/Library/Application Support/Koharu/projects` |
-| Linux   | `~/.local/share/Koharu/projects`                |
+| 平台    | 项目文件夹                                                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Windows | Koharu 安装文件夹中的 `projects`；该文件夹不可写时（例如为所有用户安装在 Program Files 下）为 `%LOCALAPPDATA%\Koharu\projects` |
+| macOS   | `~/Library/Application Support/Koharu/projects`                                                                                |
+| Linux   | `~/.local/share/Koharu/projects`                                                                                               |
 
 可在此创建、打开或删除项目。项目名称就是文件名，因此在任一平台上不能作为文件名的名称会被拒绝。选择**文件 → 关闭项目**可返回开始界面。
 

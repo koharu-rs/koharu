@@ -1,7 +1,6 @@
 ---
 title: 'Write and publish docs'
 description: 'Preview Mintlify, maintain translated MDX, and connect the repository for publishing.'
-icon: 'book'
 ---
 
 The documentation is the `@koharu/docs` Mintlify workspace in `packages/docs/`. Bun manages its dependencies through the repository's root `bun.lock`.
@@ -35,9 +34,20 @@ The documentation is the `@koharu/docs` Mintlify workspace in `packages/docs/`. 
 
 ## Author native MDX
 
-Every page needs a `title` and `description` in frontmatter. Mintlify renders article titles, so do not repeat them as an H1. The landing pages use Almond's native `frame` mode and provide their own single H1.
+Every page needs a `title` and `description` in frontmatter. Mintlify renders article titles, so do not repeat them as an H1. The site follows Mintlify's own docs: the `luma` theme, the logo in `assets/logo-light.svg` and `assets/logo-dark.svg`, and Lucide icons. As in Mintlify's docs, pages, tabs, and sidebar groups have no icon; only a card's `icon` is set, to a [Lucide](https://lucide.dev/icons) name. The homepage uses `frame` mode, provides its own single H1, and links each tab from an illustration in `assets/home/`, which has a light and a `-dark` version.
 
-Use **Steps** for ordered tasks, **Tabs** for platform or model choices, **Note**, **Tip**, and **Warning** for relevant callouts, **Cards** for next actions, and **Accordions** for symptom-specific help. Keep reference tables and fenced Mermaid diagrams readable without custom scripts or CSS.
+The site has four tabs, and a page belongs to the one that matches what its reader is doing:
+
+| Tab          | Folder                                   | A page here                                                                                                        |
+| ------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Guides       | the root, `guides/`, `models/`, `agent/` | Walks through a task in the app                                                                                    |
+| How it works | `how-it-works/`                          | Explains why Koharu behaves as it does, for someone translating, and ends with a link to the owning crate's README |
+| Reference    | `reference/`, and `privacy`              | Lists settings, keys, shortcuts, locations, and fixes to look up                                                   |
+| Develop      | `development/`                           | Covers building, the code's ownership, and contributing                                                            |
+
+A How it works page states only what the code does, in the app's own words, with the numbers that explain a result; the crate README keeps the rest of the design and its sources.
+
+Use **Steps** for ordered tasks, **Tabs** for platform or model choices, **Note**, **Tip**, and **Warning** for relevant callouts, **Cards** in **Columns** for next actions, **Accordions** for symptom-specific help, **Tree** for a layer or folder tree, and **ResponseField** for configuration keys. Keep reference tables and fenced Mermaid diagrams readable without custom scripts or CSS.
 
 Use root-relative internal links with no file extension, such as `/guides/export`. Shared images live outside the locale folders and need descriptive alt text.
 
@@ -45,7 +55,7 @@ Use root-relative internal links with no file extension, such as `/guides/export
 
 English is the default language and lives directly in `packages/docs/`. Japanese and Simplified Chinese live in `ja/` and `zh/`, with the same filenames and directory structure as English. Maintain matching page slugs, instructions, examples, and technical coverage in all three languages. Translate headings, descriptions, component labels, navigation, and image descriptions as well as prose.
 
-`packages/docs/docs.json` owns themes and navigation. Define each language's `groups` under `navigation.languages`, and keep English marked with `default: true`. Add a page to every language's navigation when it is introduced, using unprefixed paths for English and language-prefixed paths for translations. Each page path must belong to only one language. See Mintlify's [internationalization guide](https://www.mintlify.com/docs/guides/internationalization) for the structure. The site uses Mintlify's language switcher and does not keep old Zensical routes or redirects.
+`packages/docs/docs.json` owns themes and navigation. Each language under `navigation.languages` has the same four `tabs`, each with its groups, and English keeps `default: true`. Add a page to its tab in every language's navigation when it is introduced, using unprefixed paths for English and language-prefixed paths for translations. Each page path must belong to only one language. See Mintlify's [internationalization guide](https://www.mintlify.com/docs/guides/internationalization) for the structure. The site uses Mintlify's language switcher and does not keep old Zensical routes or redirects.
 
 ## Connect publishing
 

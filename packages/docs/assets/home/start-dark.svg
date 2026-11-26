@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 404" width="680" height="404" fill="none">
+<defs><clipPath id="c"><rect width="680" height="404" rx="32"/></clipPath></defs>
+<g clip-path="url(#c)">
+<rect width="680" height="404" fill="#1C0D11"/>
+<g stroke="#47202A" stroke-width="1.5" stroke-dasharray="4 4"><line x1="85" y1="0" x2="85" y2="404"/><line x1="187" y1="0" x2="187" y2="404"/><line x1="289" y1="0" x2="289" y2="404"/><line x1="391" y1="0" x2="391" y2="404"/><line x1="493" y1="0" x2="493" y2="404"/><line x1="595" y1="0" x2="595" y2="404"/><line x1="0" y1="47" x2="680" y2="47"/><line x1="0" y1="98" x2="680" y2="98"/><line x1="0" y1="149" x2="680" y2="149"/><line x1="0" y1="200" x2="680" y2="200"/><line x1="0" y1="251" x2="680" y2="251"/><line x1="0" y1="302" x2="680" y2="302"/><line x1="0" y1="353" x2="680" y2="353"/></g>
+</g>
+<g stroke-linecap="round" stroke-linejoin="round" transform="translate(340 202) scale(1.32) translate(-340 -202)">
+<g transform="skewY(-6) translate(0 34)"><rect x="212" y="92" width="230" height="176" rx="12" fill="#28121A" stroke="#F07B89" stroke-width="1.6"/><line x1="212" y1="120" x2="442" y2="120" stroke="#F07B89" stroke-width="1.6" opacity="0.5"/><circle cx="424" cy="106" r="3.5" fill="#F07B89"/><circle cx="412" cy="106" r="3.5" fill="#F07B89"/><circle cx="400" cy="106" r="3.5" fill="#F07B89"/><rect x="254" y="124" width="236" height="186" rx="12" fill="#4E1C27" stroke="#F07B89" stroke-width="1.6"/><line x1="254" y1="152" x2="490" y2="152" stroke="#F07B89" stroke-width="1.6" opacity="0.5"/><circle cx="472" cy="138" r="3.5" fill="#F07B89"/><circle cx="460" cy="138" r="3.5" fill="#F07B89"/><circle cx="448" cy="138" r="3.5" fill="#F07B89"/><path d="M372 172 V246" stroke="#F07B89" stroke-width="10"/><path d="M340 216 L372 248 L404 216" stroke="#F07B89" stroke-width="10"/><path d="M318 258 V280 H426 V258" stroke="#F07B89" stroke-width="2.5"/></g>
+</g>
+</svg>

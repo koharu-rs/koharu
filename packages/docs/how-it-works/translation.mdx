@@ -1,0 +1,71 @@
+---
+title: 'Translation'
+description: 'One conversation per project, what the model receives for each page, what it remembers, and when a page is asked again.'
+sidebarTitle: 'Translation'
+---
+
+Translation is a conversation with the model you choose, one turn per page, in page order. Each page is translated with the pages before it in view, so names, tone, and recurring terms carry from page to page.
+
+## One conversation per project
+
+The conversation belongs to the open project and lives while the project is open. Translating a page adds its turn; translating some text blocks is a turn of the same conversation. Changing the model, the target language, or **Additional instructions** starts a new one, since its history was written under the old settings.
+
+The pages before a page give it context, so translate a chapter from its first page. A later page translated alone has only the turns the conversation already holds.
+
+## What the model receives
+
+Koharu's system prompt is Index-Translate's instruction for structured data, in English, naming the target language by its English name:
+
+```text
+Translate the manga text in each message into English. Each message is a page's texts as a JSON object, numbered in reading order: translate only the values, and never alter the structure or the keys. Output only the translated JSON, without any explanation.
+```
+
+Your **Additional instructions** follow it, as written, in any language. The prompt itself can't be changed, because the answer is read back by its JSON.
+
+Each page's turn is its unlocked texts in reading order, keyed by number:
+
+```json
+{
+  "1": "おい、待てよ！",
+  "2": "あいつ、どこへ行った…？"
+}
+```
+
+With 10 or more texts the keys take two digits, `01` to `12`, so they sort in reading order. The answer must return every key and no other, and is held to that shape. With **Vision** on, the page's scan goes ahead of the texts, 1,280 pixels on its longer side; a model that reads no images goes without it.
+
+## What the conversation keeps
+
+The history keeps each page's texts and its answer, but not its image or the model's reasoning, so it grows only by the text, and a local model reuses it from turn to turn. Near the model's context window, older pages are folded into a summary the model writes, so the conversation goes on from it. A translation-only model can't summarize, so its older pages are dropped instead.
+
+A server you connect as **OpenAI-compatible** doesn't say its context window, so set its **Context length** in **Settings → Providers**. Without it, the history grows until the server cuts the prompt off.
+
+## When a page is asked again
+
+A page that gets no answer Koharu can use is asked again, by why:
+
+| Why                                                                   | Asked again                                                                         |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| The answer is broken or misses a text                                 | Once, told what's wrong                                                             |
+| The answer copies the page before's, for different texts              | Once, without the history it copied                                                 |
+| The provider blocked the page, or its answer, for its content         | Once, without the history, which may be what was blocked                            |
+| The page doesn't fit the model's context window                       | Once, with the older half of the history dropped                                    |
+| A local model's answer was cut off, as when it keeps repeating itself | Twice, with more randomness each time, since it would otherwise answer the same way |
+
+A page that still gets no answer, or whose translation is blank, is left untranslated and never enters the history, and [the run goes on](/guides/processing#follow-progress-and-stop-work). With a hosted model, each retry is another request. When a provider is overloaded or limits your rate, the request is sent again up to nine times, for about two and a half minutes or as long as the provider asks, before the run ends.
+
+## Text that stays as it is
+
+A text the model gives back unchanged, such as a copyright line or a `!?`, is already in the target's script. It keeps its original lettering: its clean-up is hidden, and it gets no translation.
+
+## Vision and Reasoning
+
+**Vision** shows the model each page, and **Reasoning** lets it think before it answers. On Koharu's own test of 16 pages with Index-Translate 9B, neither translated better and both took longer, so Vision is off and Reasoning is the model's own level unless you set them. A model that can't take the level you set, such as **Off** on one that always reasons, stops the run and names the setting.
+
+## Better translations
+
+- Correct OCR first: the model translates the source text, not the scan.
+- Put names, terms, honorifics, and tone in **Additional instructions**, and test them on several pages.
+- Translate from the start of a chapter, so later pages have the earlier ones in view.
+- Lock a text whose translation you've finished: a rerun leaves it, and leaves it out of the page's turn.
+
+Design and sources: the [`koharu-pipeline` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md#4-translation).

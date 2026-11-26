@@ -1,0 +1,68 @@
+---
+title: 'Fitting translations'
+description: 'Where a translation goes, how large it is lettered, how it makes room, and where its colours and direction come from.'
+sidebarTitle: 'Fitting translations'
+---
+
+Koharu has no typesetting stage. Translation places each text as it writes it, following a letterer's conventions: one size across a page's dialogue, whole words before hyphens, and lines centred in their balloon. The renderer then fits the text to its frame every time it draws the page.
+
+## Where a translation goes
+
+A text in a balloon goes in its room: the share of the balloon's outline its source gets beside the balloon's other texts. A free text or a sound effect goes in its source's frame.
+
+A room's outline is traced from the balloon's pixels with an anchor every few pixels, so the frame keeps only the few anchors that hold its shape: four for a rectangle or an ellipse, or those of a smooth curve. On 183 balloons whose traced outlines had a median of 76 anchors, the frames have a median of 5, small enough to reshape with **Direct Selection**.
+
+Translation stores its decisions, not their result: the frame, its margin, where the text is anchored, its direction, and **Auto** size. The size itself is worked out at every render, so resizing a frame reflows its text, as resizing a Clip Studio Paint balloon moves its text, and nothing stored goes stale when a font loads.
+
+## One size for a page
+
+A letterer keeps one size for a page's dialogue. Koharu measures the page's size with the renderer: the median of the largest size each text's room holds in whole words.
+
+- A translation that would draw smaller than the page's size is brought up to it, as far as its room allows. Small text can't be read.
+- A translation that fits larger stays larger. A big line in a big balloon is a shout.
+- A sound effect is brought up to its source's size when that's smaller than the page's.
+
+Translating some text blocks measures the page's other translations too, so a page keeps one size.
+
+## Making room
+
+When a text would draw smaller than the page's size, Koharu makes room in this order before it hyphenates a word.
+
+<Steps>
+  <Step title='Narrow the margin'>
+    A balloon's text has a letter's width of air around it. A text under the page's size takes less,
+    down to half: half a margin holds it 15 to 17% larger.
+  </Step>
+  <Step title='Widen a free text'>
+    A vertical source's column holds only a word or two of a horizontal translation, so a free
+    text's frame widens until it holds the page's size: along its lines to two and a half times its
+    width but not past its longer side, then across them to three lines. It stays inside its panel
+    and off the page's other texts and balloons. Without that limit, a text covered a face beside
+    it.
+  </Step>
+  <Step title='Hyphenate'>
+    Where whole words would draw under three quarters of their size, a word may take one hyphen near
+    its middle if that makes the text at least a quarter larger. Only words longer than five letters
+    break, keeping two letters on each side, with at most two hyphenated lines in a row, as
+    Photoshop's defaults do.
+  </Step>
+</Steps>
+
+## Lines, colours, and direction
+
+- **Lines** are centred on one axis of the balloon, as Western balloons are lettered. Japanese and Chinese lines start together at the top or the left, as the W3C's Japanese layout requirements align a line to its head.
+- **Colours** are the source's: its ink is the fill, its outline the stroke, with the stroke's width in proportion to the size.
+- **Outline on art.** A text that lies on art, from a source with no outline, gets a stroke so it stays legible: black around a light fill, white around any other, a sixteenth of its size for a sound effect and an eighth for a text outside a balloon.
+- **Direction.** A translation is vertical only when its source is vertical and the target is Japanese or Chinese. Any other language runs horizontally, turned by its source's tilt.
+
+## Auto and a typed size
+
+**Auto** grows a text to the largest size its frame holds; a word too wide for its line stops the growth. Past every step at half size, it shrinks on until the text fits.
+
+A typed size draws the text at exactly that size, as Photoshop does, so texts set to one size look the same. Text too long for its frame runs past it, and a **+** at the frame's top-left corner marks it until you resize the frame.
+
+<Card title='Typeset a translation' icon='type' href='/guides/typesetting'>
+  Change the font, size, colour, and border of the texts you select.
+</Card>
+
+Design and sources: the [`koharu-pipeline` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md#2-stages) and the [`koharu-renderer` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-renderer/README.md#2-text).

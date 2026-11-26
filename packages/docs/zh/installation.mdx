@@ -1,7 +1,6 @@
 ---
 title: '安装 Koharu'
 description: '下载发行版、完成首次运行并保持应用更新。'
-icon: 'download'
 ---
 
 <Steps>
@@ -13,7 +12,7 @@ icon: 'download'
         运行发行版中的 Windows 安装程序（`-setup.exe` 或 `.msi`），或使用 WinGet 安装：
 
         ```powershell
-        winget install koharu
+        winget install --id mayocream.koharu
         ```
       </Tab>
       <Tab title="macOS">
@@ -45,7 +44,7 @@ icon: 'download'
 
 ## 安装更新
 
-发行版会在启动时检查一次签名的 GitHub 发行版更新源，不提供手动检查更新。出现更新时，选择**更新**并等待下载完成，Koharu 会安装更新并重新启动。选择**稍后**则在下次启动前继续使用当前版本。
+发行版会在启动时检查一次签名的 GitHub 发行版更新源。其他时候要检查，请选择**帮助 → 检查更新**；更新对话框会显示新版本的说明，或告诉你已是最新版本。出现更新时，选择**更新**并等待下载完成，Koharu 会安装更新并重新启动。选择**稍后**则在下次启动前继续使用当前版本。
 
 <Tip>
   翻译工作请使用发行版。需要修改 Koharu 代码时，请查看[开发环境设置](/zh/development/setup)。

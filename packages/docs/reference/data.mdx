@@ -1,7 +1,6 @@
 ---
 title: 'Formats and data'
 description: 'Locate projects, settings, credentials, downloads, and logs.'
-icon: 'database'
 ---
 
 ## Supported formats
@@ -15,7 +14,7 @@ icon: 'database'
 
 ## Project data
 
-Each project is one `.khr` file in the projects folder: `projects` in Koharu's installation folder on Windows, `~/Library/Application Support/Koharu/projects` on macOS, and `~/.local/share/Koharu/projects` on Linux. The file is a SQLite database holding the imported images, generated artwork, raster edits, and text. While a project is open, Koharu holds it locked and may keep a `-wal` file beside it.
+Each project is one `.khr` file in the [projects folder](/guides/projects#create-and-reopen-projects). The file is a SQLite database holding the imported images, generated artwork, raster edits, and text. While a project is open, Koharu holds it locked and may keep a `-wal` file beside it.
 
 <Warning>
   Do not change or copy a project file while it is open. Deleting a project from the start screen
@@ -24,7 +23,7 @@ Each project is one `.khr` file in the projects folder: `projects` in Koharu's i
 
 ## Settings and credentials
 
-Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]`, `[providers]`, `[renderer]`, and `[agent]`. Settings you leave at their defaults are not written, so later default changes reach you. A file that is not valid TOML, or a value of the wrong type, is an error rather than a silent default; fix it or use the Settings screen.
+Settings live in `~/.koharu/config.toml`, a table per component: `[pipeline]`, `[providers]`, `[renderer]`, and `[agent]`. Settings you leave at their defaults are not written, so later default changes reach you. A value that doesn't read, such as one of the wrong type or a model that no longer exists, falls back to its default. A file that isn't valid TOML is an error; fix it or delete it. See [every key](/reference/settings#configuration-file).
 
 API keys and provider sign-ins are encrypted in `~/.koharu/secrets.age`. Its key is kept in the operating system's credential store; on Linux that needs a Secret Service such as GNOME Keyring, KWallet, or KeePassXC. If the key is lost, the file cannot be read again and is deleted, so you sign in again. A project backup includes no keys or sign-ins.
 
@@ -32,7 +31,7 @@ Sign-ins to the [gallery](/guides/gallery)'s sites are cookies in Koharu's built
 
 ## Runtime and model store
 
-Runtime packages and model files are stored in the `store` folder in Koharu's installation folder on Windows, and in `koharu/store` under the operating system cache folder on macOS and Linux. This data is replaceable: removing it while Koharu is closed makes the required files download again.
+Runtime packages and model files are stored in the `store` folder in Koharu's installation folder on Windows, or in `%LOCALAPPDATA%\koharu\store` when that folder isn't writable, and in `koharu/store` under the operating system cache folder on macOS and Linux. This data is replaceable: removing it while Koharu is closed makes the required files download again.
 
 Never remove the store while Koharu may still have its libraries loaded.
 

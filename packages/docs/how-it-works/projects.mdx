@@ -1,0 +1,82 @@
+---
+title: 'Pages, layers, and history'
+description: 'What a project holds, how a text block keeps its source, translation, mask, and clean-up together, and how edits and undo work.'
+sidebarTitle: 'Pages and layers'
+---
+
+A project is one `.khr` file holding its pages in order. Each page is its scan and a tree of layers. Ordinary layers follow Photoshop's; the parts of a manga page follow Clip Studio Paint's panels and balloons.
+
+## A page's layers
+
+Detection builds the tree in reading order, so a page reads like this, first to last:
+
+<Tree>
+  <Tree.Folder name='Page: the scan as its background' defaultOpen>
+    <Tree.Folder name='Panel' defaultOpen>
+      <Tree.Folder name='Balloon' defaultOpen>
+        <Tree.File name='Text block' />
+        <Tree.File name='Text block' />
+      </Tree.Folder>
+      <Tree.File name='Text block: a sound effect, free in its panel' />
+      <Tree.File name='Text block: narration, free in its panel' />
+    </Tree.Folder>
+    <Tree.Folder name='Panel'>
+      <Tree.Folder name='Balloon'>
+        <Tree.File name='Text block' />
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.File name='Text block: read in no panel' />
+    <Tree.File name='Raster: your own paint' />
+  </Tree.Folder>
+</Tree>
+
+| Layer         | What it is                                                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Background    | The imported scan, kept byte for byte and drawn under everything. Nothing ever paints on it, so hiding or deleting what's above shows the original     |
+| Panel         | A panel's outline, holding the balloons and texts read in it. It clips nothing, so a balloon that crosses the border stays with the panel it's read in |
+| Balloon       | A balloon's outline, holding its texts. Its line and fill are part of the scan, so the outline itself is never drawn                                   |
+| Text block    | One text of the page, in its balloon or free in its panel or on the page: see below                                                                    |
+| Ordinary kind | Groups, images, rasters, shapes, text, and masks, each with visibility, lock, opacity, and blend mode, as in Photoshop                                 |
+
+The tree's order is the reading order. **Story** lists texts in it; **Layers** lists the tree frontmost first, as Photoshop's layer panel does, so the last text read is the top row. Dragging a row in **Layers** moves it in reading order too.
+
+## A text block
+
+A text block keeps one text's four parts together, so each can be fixed without rebuilding the others.
+
+| Part        | Written by                            | Drawn                                                  |
+| ----------- | ------------------------------------- | ------------------------------------------------------ |
+| Source      | Detection's frame, OCR's wording      | Never: it's what the model reads, and what you correct |
+| Translation | Translation, or your typing           | Yes, in its frame, over the clean-up                   |
+| Mask        | Detection, or your painting           | No: it limits where the clean-up shows                 |
+| Clean-up    | Inpainting, **Remove**, your painting | Only inside the mask, under the translation            |
+
+The clean-up works as a Photoshop fill layer with a layer mask: painting the mask shows more of the clean-up or less, at once, with no rerun. A text's parts behave accordingly:
+
+- Deleting a text block deletes its clean-up, so the original lettering shows again.
+- A block without a translation still shows its clean-up, so its area stays clean for new lettering.
+- Each text gets its own translation in its own frame. Text never flows from one frame into another.
+
+A **Text** layer is lettering of your own, with no source, mask, or clean-up.
+
+## Every change is an edit
+
+The editor, a pipeline run, and the Agent all change a project through the same edits. An edit applies whole or not at all, and each is one undo step; an edit that changes nothing adds no step.
+
+The last writer of a value wins, whether a model or you, and undo is the way back. Locks are the one guard: no pipeline stage writes a locked layer.
+
+**View → History** lists the steps, after the project as it opened, and goes back or forward to any of them at once, as Photoshop's History panel does. It keeps the 20 most recent steps, Photoshop's default, and clears when the project closes, as closing a Photoshop document clears its states.
+
+## How a project is stored
+
+- **One file.** A project is a SQLite database with the `.khr` extension, the imported images inside it, as a Clip Studio Paint work is one file. Moving or deleting the originals doesn't affect it.
+- **No save.** Each edit is written as it applies, so a project never has unsaved changes.
+- **Tiles.** Raster pixels are stored in 64 × 64 tiles, each compressed on its own, and only tiles that hold pixels are stored. A clean-up stores only the area it covers.
+- **One window.** An open project is locked, so a second window or a second Koharu finds it in use.
+- **Opening fails closed.** A damaged file, or one written by a newer Koharu whose project format changed, doesn't open, and the file is left as it was.
+
+<Card title='Back up a project' icon='save' href='/guides/projects#back-up-and-restore'>
+  Close it, then copy its `.khr` file.
+</Card>
+
+Design and sources: the [`koharu-scene` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-scene/README.md).

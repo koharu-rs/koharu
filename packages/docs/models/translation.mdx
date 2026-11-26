@@ -1,7 +1,6 @@
 ---
 title: 'Configure translation'
 description: 'Set the model, target language, instructions, reasoning, and image input.'
-icon: 'language'
 ---
 
 Choose translation settings in the **Translator** section of **Settings → Pipeline**; the processing selector also sets the model and the target language. They are saved with Koharu's settings and apply to every project. Provider connections and credentials are read for each request.
@@ -14,7 +13,7 @@ LFM3 1.7B is made for a limited set of target languages. Other local and hosted 
 
 ## How pages are translated
 
-Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the instructions starts a new one.
+Translation is one conversation per open project: one turn per page, in page order, so each page sees the pages translated before it. See [translation](/how-it-works/translation) for what the model receives. Translating selected text blocks is a turn of the same conversation. Changing the model, the target language, or the instructions starts a new one.
 
 Each page is sent as its texts in reading order, and the answer must return every one. A text the model gives back unchanged, such as a copyright line, keeps its original lettering: its clean-up is hidden and it gets no translation.
 

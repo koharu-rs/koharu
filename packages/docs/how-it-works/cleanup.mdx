@@ -1,0 +1,61 @@
+---
+title: 'Cleanup'
+description: 'Why most lettering is filled without a model, how the inpainting model redraws the rest, and how Remove and Generative Fill build on the page.'
+sidebarTitle: 'Cleanup'
+---
+
+Cleanup, the **Inpainting** stage, removes each text's lettering from the scan. The result goes into the text block's clean-up, which shows only inside the block's mask, under its translation. The scan itself never changes.
+
+## Fills come before the model
+
+Most lettering sits on plain paper or a smooth gradient, which a fill rebuilds exactly and at once. A model there can add texture or tint, so Koharu uses one only where it's needed.
+
+For each lettering, Koharu reads a ring of unmasked pixels just past its mask, inside its balloon or panel, and the first tier that can rebuild the ring fills the mask:
+
+| Tier                | When                                                                                                                     | Fill                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| One colour          | Every ring pixel lies within 16 levels of the ring's median, or the ring is that close on average with no pixel far off  | The median colour                              |
+| A smooth background | The same, once a gradient fitted to the ring is taken away                                                               | Telea's fast-marching fill, ported from OpenCV |
+| The model           | Anything else: lettering crossing its balloon's line, a line or art against it, screentone, or too small a ring to judge | The inpainting model                           |
+
+Lettering that isn't one colour all round is judged again for each separate piece of its mask, since detection can mask a stray piece on other paper or on a balloon's line. Only what a piece's paper doesn't reach, such as a part past the balloon's outline, goes to the model.
+
+## How the model redraws
+
+The model works in windows at the page's own scale. Each window holds a lettering whole with 256 pixels of context around it, merged with the windows it overlaps while the merge stays within about a megapixel, and never spans two panels. A whole page shrunk to fit a model left lettering untouched, and a large window shrunk the same way left glyph-shaped patches; at the page's own scale, neither happens.
+
+Each lettering is redrawn in one window only, and the model sees every lettering in its window masked, not only the ones it redraws there.
+
+<Tabs>
+  <Tab title='LaMa'>
+    LaMa, fine-tuned on manga, redraws under the mask and takes no prompt. Only the masked pixels
+    are kept, so its result can't reach past the lettering.
+  </Tab>
+  <Tab title='FLUX.3 Klein and Qwen-Image 2.1 Turbo'>
+    These are editing models: neither ships an inpainting mode, so each redraws its whole window
+    from the window as a reference, following the **Prompt** in **Settings → Pipeline**, which by
+    default asks it to remove all text and keep everything else. An edit drifts in tone, so its
+    colours are matched to the original away from the mask before it's kept: without that, a fill
+    showed its seam. The clean-up keeps the redraw up to 256 pixels around the lettering, shown
+    through the mask, as Photoshop keeps a Generative Fill result whole under its layer mask, so
+    painting the mask larger shows more of it.
+  </Tab>
+</Tabs>
+
+## Remove and Generative Fill
+
+A **Remove** stroke is a run of its own: inpainting on the painted area, with the inpainting model in **Settings → Pipeline**. All of the area goes to the model, with no fill tiers. It reads the page as it's drawn, earlier clean-ups, paint, and fills included, but without lettering, as Photoshop's Remove tool samples all layers. Another stroke over a result builds on it, and translated text is never baked into the fill.
+
+The result goes onto the raster layer or clean-up selected in **Layers**, and a selected clean-up's mask opens where you painted. With nothing selected, it goes onto a new raster layer limited to the area, which stays selected for the next strokes.
+
+**Generative Fill** draws what its prompt asks into an area marked with **Rectangular Marquee** or **Lasso**. It has its own model, FLUX.3 Klein unless you pick another, kept for the next fill as Photoshop's Generative Fill keeps its own. A fill model the settings don't use stays loaded for five minutes after the last fill, so filling again doesn't load it again.
+
+## When a clean-up goes wrong
+
+| You see                              | Do                                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Fragments of a glyph left            | Paint over them with **Remove**, or run **Inpainting** on that text from its menu in **Story** |
+| A clean-up over line art or a border | Select the block's mask in **Layers** and erase it there; no rerun needed                      |
+| A good result replaced               | A rerun replaces clean-ups: undo, then lock the texts you want kept                            |
+
+Design and sources: the [`koharu-pipeline` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-pipeline/README.md#3-inpainting).

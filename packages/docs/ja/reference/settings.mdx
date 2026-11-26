@@ -1,7 +1,6 @@
 ---
 title: '設定'
 description: '外観、モデル、プロバイダー、翻訳、フォント、サイトへのログインの設定を探します。'
-icon: 'gear'
 ---
 
 **ファイル → 設定**、ページ一覧の設定ボタン、またはスタート画面の設定ボタンから開きます。変更は少し待つと自動で保存されます。**エディターに戻る**で編集に戻ります。
@@ -26,12 +25,95 @@ icon: 'gear'
 
 [ギャラリー](/ja/guides/gallery)が読むサイトの一覧です。**ログイン**はサイト自身のログインページを別ウィンドウで開きます。ウィンドウを閉じると、サイトが伝えるアカウントが行に表示され、**サインアウト**でそのサイトのログインを消去します。アカウントのないサイトには**アカウント不要**と表示されます。
 
-<Note>
-  設定は `~/.koharu/config.toml`
-  に、コンポーネントごとのテーブルとして保存されます。`[pipeline]`（`[pipeline.translator]`
-  を含む）、`[providers]`、組版用の `[renderer]`、`[agent]`
-  です。画面のないオプションはこのファイルを直接編集して設定できます。型の違う値は既定値として扱われず、エラーになります。認証情報はファイルに書かず、**設定
-  → プロバイダー**を使ってください。
-</Note>
+## 設定ファイル
+
+設定は `~/.koharu/config.toml` に、コンポーネントごとのテーブルとして保存されます。ローカルモデルの量子化など、画面のないオプションはこのファイルを直接編集して設定します。書かれていないキーは既定値を使い、アプリは変更したキーだけを書き込みます。型の違う値や、もう存在しないモデルなど、読み取れない値は既定値に戻ります。TOML として正しくないファイルはエラーになります。認証情報はここに書かず、**設定 → プロバイダー**で保存してください。
+
+```toml
+[pipeline.translator]
+model = "koharu/index-translate-9b:Q8_0"
+target = "ja"
+instructions = "敬称（さん、先輩など）はそのまま残してください。"
+
+[providers.openai-compatible]
+base_url = "https://example.com/v1"
+context_window = 32768
+```
+
+### `[pipeline.detector]`
+
+<ResponseField name='model' type='string' default='koharu-layout-highres'>
+  検出モデル。
+</ResponseField>
+<ResponseField name='text, onomatopoeia, bubble, panel' type='number'>
+  各種類の検出を残す最低の信頼度で、0 から 1 の値です。書かなければモデル自身の値です。
+</ResponseField>
+
+### `[pipeline.recognizer]`
+
+<ResponseField name='model' type='string' default='hayai-ocr'>
+  認識モデル。`hayai-ocr`、`manga-ocr-ar`、`baberu-ocr` のいずれかです。
+</ResponseField>
+
+### `[pipeline.inpainter]`
+
+<ResponseField name='model' type='string' default='lama'>
+  ページと**削除**のストロークを処理するモデル。`lama`、`flux3-klein`、`qwen-image` のいずれかです。
+</ResponseField>
+<ResponseField name='fill' type='string' default='flux3-klein'>
+  **生成塗りつぶし**が最後に使ったモデルで、次回もこれを選びます。
+</ResponseField>
+<ResponseField name='prompt' type='string'>
+  実行が独自のプロンプトを持たないときに `flux3-klein` と `qwen-image`
+  へ送る指示。既定では、セリフ、擬音、手書きのメモを含むすべての文字を消し、吹き出しを空にして、それ以外はそのまま保つよう求めます。
+</ResponseField>
+
+### `[pipeline.translator]`
+
+<ResponseField name='model' type='string' default='koharu/index-translate-9b'>
+  モデルピッカーと同じ `provider/model`
+  形式の参照。ローカルモデルはコロンの後に量子化を指定できます（例:
+  `koharu/index-translate-9b:Q8_0`）。
+</ResponseField>
+<ResponseField name='target' type='string' default='en'>
+  対象言語の BCP 47 タグ。例: `ja`、`pt-BR`、`zh-Hant`。
+</ResponseField>
+<ResponseField name='instructions' type='string'>
+  **追加の指示**。Koharu 自身のプロンプトの後に、書いたとおりに加えられます。
+</ResponseField>
+<ResponseField name='vision' type='boolean' default={false}>
+  各ページの画像をテキストと一緒にモデルへ送るかどうか。
+</ResponseField>
+<ResponseField name='reasoning' type='string'>
+  `off`、またはレベル（`minimal`、`low`、`medium`、`high`、`xhigh`、`max`）。書かなければモデル自身の設定です。
+</ResponseField>
+
+### `[providers.<provider>]`
+
+サーバーのアドレスを持つプロバイダーごとに 1 つのテーブルです: `ollama`、`lmstudio`、`openai-compatible`。
+
+<ResponseField name='base_url' type='string'>
+  サーバーのアドレス。書かなければ Ollama と LM Studio の通常のローカルアドレスです。OpenAI
+  互換サーバーのアドレスは、OpenAI の `/v1` に当たる部分で終わります。
+</ResponseField>
+<ResponseField name='context_window' type='integer'>
+  OpenAI 互換サーバーがモデルを動かしているコンテキスト長（トークン数）。llama.cpp の `--ctx-size`
+  など。[翻訳のしくみ](/ja/how-it-works/translation#会話が保持するもの)を参照してください。
+</ResponseField>
+
+### `[renderer]`
+
+<ResponseField name='font_families' type='string[]'>
+  優先フォントを順に並べたもの。既定は `["CCWildWords", "Adobe 黑体 Std"]` です。
+</ResponseField>
+
+### `[agent]`
+
+<ResponseField name='model' type='string'>
+  エージェントのモデル。`provider/model` 形式の参照です。選ぶまでは書かれません。
+</ResponseField>
+<ResponseField name='reasoning' type='string'>
+  翻訳の `reasoning` と同じ形式で、エージェント用です。
+</ResponseField>
 
 プロジェクトとダウンロードの保存先は[データの保存場所](/ja/reference/data)を参照してください。

@@ -1,7 +1,6 @@
 ---
 title: 'Install Koharu'
 description: 'Download a release, complete the first run, and keep the app up to date.'
-icon: 'download'
 ---
 
 <Steps>
@@ -13,7 +12,7 @@ icon: 'download'
         Run the Windows installer (`-setup.exe` or `.msi`) from the release, or install with WinGet:
 
         ```powershell
-        winget install koharu
+        winget install --id mayocream.koharu
         ```
       </Tab>
       <Tab title="macOS">
@@ -45,7 +44,7 @@ icon: 'download'
 
 ## Install updates
 
-Release builds check a signed GitHub release feed once at startup; there is no manual update check. When an update is offered, choose **Update** and let the download finish; Koharu installs it and relaunches. **Later** keeps the current version until the next start.
+Release builds check a signed GitHub release feed once at startup. To check at any other time, choose **Help → Check for Updates**; the update dialog answers either way, with the new version's notes or that you're up to date. When an update is offered, choose **Update** and let the download finish; Koharu installs it and relaunches. **Later** keeps the current version until the next start.
 
 <Tip>
   Use a release build for translation work. Use the [development setup](/development/setup) when you

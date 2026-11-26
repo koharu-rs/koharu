@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 404" width="680" height="404" fill="none">
+<defs><clipPath id="c"><rect width="680" height="404" rx="32"/></clipPath></defs>
+<g clip-path="url(#c)">
+<rect width="680" height="404" fill="#FDF2F4"/>
+<g stroke="#F5C6CE" stroke-width="1.5" stroke-dasharray="4 4"><line x1="85" y1="0" x2="85" y2="404"/><line x1="187" y1="0" x2="187" y2="404"/><line x1="289" y1="0" x2="289" y2="404"/><line x1="391" y1="0" x2="391" y2="404"/><line x1="493" y1="0" x2="493" y2="404"/><line x1="595" y1="0" x2="595" y2="404"/><line x1="0" y1="47" x2="680" y2="47"/><line x1="0" y1="98" x2="680" y2="98"/><line x1="0" y1="149" x2="680" y2="149"/><line x1="0" y1="200" x2="680" y2="200"/><line x1="0" y1="251" x2="680" y2="251"/><line x1="0" y1="302" x2="680" y2="302"/><line x1="0" y1="353" x2="680" y2="353"/></g>
+</g>
+<g stroke-linecap="round" stroke-linejoin="round" transform="translate(340 202) scale(1.32) translate(-340 -202)">
+<path d="M340 206 L476 268 L340 330 L204 268 Z" fill="#FFFFFF" fill-opacity="1" stroke="#D85B6A" stroke-width="1.6"/><path d="M340 148 L476 210 L340 272 L204 210 Z" fill="#FADCE1" fill-opacity="0.85" stroke="#D85B6A" stroke-width="1.6"/><path d="M340 90 L476 152 L340 214 L204 152 Z" fill="#FFFFFF" fill-opacity="1" stroke="#D85B6A" stroke-width="1.6"/><line x1="285.4" y1="153.0" x2="342.6" y2="127.0" stroke="#F07B89" stroke-width="10"/><line x1="302.6" y1="169.1" x2="377.4" y2="134.9" stroke="#F07B89" stroke-width="10"/><line x1="341.5" y1="175.2" x2="390.5" y2="152.8" stroke="#F07B89" stroke-width="10"/>
+</g>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 404" width="680" height="404" fill="none">
+<defs><clipPath id="c"><rect width="680" height="404" rx="32"/></clipPath></defs>
+<g clip-path="url(#c)">
+<rect width="680" height="404" fill="#1C0D11"/>
+<g stroke="#47202A" stroke-width="1.5" stroke-dasharray="4 4"><line x1="85" y1="0" x2="85" y2="404"/><line x1="187" y1="0" x2="187" y2="404"/><line x1="289" y1="0" x2="289" y2="404"/><line x1="391" y1="0" x2="391" y2="404"/><line x1="493" y1="0" x2="493" y2="404"/><line x1="595" y1="0" x2="595" y2="404"/><line x1="0" y1="47" x2="680" y2="47"/><line x1="0" y1="98" x2="680" y2="98"/><line x1="0" y1="149" x2="680" y2="149"/><line x1="0" y1="200" x2="680" y2="200"/><line x1="0" y1="251" x2="680" y2="251"/><line x1="0" y1="302" x2="680" y2="302"/><line x1="0" y1="353" x2="680" y2="353"/></g>
+</g>
+<g stroke-linecap="round" stroke-linejoin="round" transform="translate(340 202) scale(1.32) translate(-340 -202)">
+<rect x="214" y="88" width="196" height="228" rx="10" fill="#28121A" stroke="#F07B89" stroke-width="1.6"/><g stroke="#F07B89" stroke-width="1.6" opacity="0.55"><rect x="230" y="104" width="164" height="72" rx="4"/><rect x="230" y="188" width="78" height="112" rx="4"/><rect x="316" y="188" width="78" height="112" rx="4"/></g><path d="M452 104 C510 104 548 136 548 176 C548 216 510 246 452 246 C440 246 428 245 418 242 L392 268 L398 234 C372 222 356 200 356 176 C356 136 394 104 452 104 Z" fill="#4E1C27" stroke="#F07B89" stroke-width="1.6"/><line x1="412" y1="150" x2="492" y2="150" stroke="#F07B89" stroke-width="9"/><line x1="404" y1="176" x2="500" y2="176" stroke="#F07B89" stroke-width="9"/><line x1="422" y1="202" x2="482" y2="202" stroke="#F07B89" stroke-width="9"/>
+</g>
+</svg>

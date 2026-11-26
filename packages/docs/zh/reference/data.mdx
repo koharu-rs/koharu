@@ -1,7 +1,6 @@
 ---
 title: '格式与数据位置'
 description: '查找项目、设置、凭据、下载内容和日志的位置。'
-icon: 'database'
 ---
 
 ## 支持的格式
@@ -15,13 +14,13 @@ icon: 'database'
 
 ## 项目数据
 
-每个项目都是项目文件夹中的一个 `.khr` 文件。项目文件夹在 Windows 上是 Koharu 安装文件夹中的 `projects`，在 macOS 上是 `~/Library/Application Support/Koharu/projects`，在 Linux 上是 `~/.local/share/Koharu/projects`。该文件是一个 SQLite 数据库，保存导入的图像、生成的图稿、栅格编辑和文字。项目打开期间，Koharu 会锁定该文件，并可能在旁边保留一个 `-wal` 文件。
+每个项目都是[项目文件夹](/zh/guides/projects#创建与重新打开项目)中的一个 `.khr` 文件。该文件是一个 SQLite 数据库，保存导入的图像、生成的图稿、栅格编辑和文字。项目打开期间，Koharu 会锁定该文件，并可能在旁边保留一个 `-wal` 文件。
 
 <Warning>项目打开时不要修改或复制其文件。从开始界面删除项目会永久删除其文件。</Warning>
 
 ## 设置与凭据
 
-设置保存在 `~/.koharu/config.toml` 中，每个组件一张表：`[pipeline]`、`[providers]`、`[renderer]` 和 `[agent]`。保持默认值的设置不会写入文件，因此默认值日后改变时会自动生效。不是有效 TOML 的文件或类型错误的值会报错，而不会悄悄改用默认值；请修正文件或使用设置界面。
+设置保存在 `~/.koharu/config.toml` 中，每个组件一张表：`[pipeline]`、`[providers]`、`[renderer]` 和 `[agent]`。保持默认值的设置不会写入文件，因此默认值日后改变时会自动生效。无法读取的值（例如类型错误的值或已不存在的模型）会回退为默认值。不是有效 TOML 的文件会报错；请修正或删除该文件。参见[全部键](/zh/reference/settings#配置文件)。
 
 API 密钥和服务商的登录信息加密保存在 `~/.koharu/secrets.age` 中。其密钥保存在操作系统的凭据存储里；Linux 上需要 GNOME Keyring、KWallet 或 KeePassXC 等 Secret Service。密钥丢失后该文件将无法再读取并会被删除，你需要重新登录。项目备份不包含任何密钥或登录信息。
 
@@ -29,7 +28,7 @@ API 密钥和服务商的登录信息加密保存在 `~/.koharu/secrets.age` 中
 
 ## 运行时与模型存储
 
-运行时软件包和模型文件在 Windows 上保存在 Koharu 安装文件夹中的 `store` 文件夹，在 macOS 和 Linux 上保存在系统缓存文件夹中的 `koharu/store`。这些数据可以重新获取：在 Koharu 关闭时删除，所需文件会重新下载。
+运行时软件包和模型文件在 Windows 上保存在 Koharu 安装文件夹中的 `store` 文件夹（该文件夹不可写时为 `%LOCALAPPDATA%\koharu\store`），在 macOS 和 Linux 上保存在系统缓存文件夹中的 `koharu/store`。这些数据可以重新获取：在 Koharu 关闭时删除，所需文件会重新下载。
 
 Koharu 可能仍加载着其中的库时，不要删除存储目录。
 

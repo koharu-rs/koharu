@@ -1,0 +1,70 @@
+---
+title: 'Drawing the page'
+description: 'One renderer for the canvas and every export, how text is laid out, vertical text, ruby, faux styles, and where fonts come from.'
+sidebarTitle: 'Drawing the page'
+---
+
+Koharu has one renderer. The canvas, PNG, PSD, CBZ, and PDF export, page thumbnails, and the page a **Remove** stroke reads all draw through the same painter, with vello on the GPU. So an export shows what the editor shows, and Koharu needs a working GPU even to open a project.
+
+## Every draw works the text out
+
+A text's size, its line breaks, and its place in its frame are worked out each time the page is drawn, and nowhere else. Nothing stores a result that could go stale: change a font, a frame, or a word, and the next draw fits the text again.
+
+Redrawing stays fast because a layer's drawing is kept by what it depends on, such as its text and its fonts, so a draw after an edit reuses every layer the edit didn't touch. A view draws only the part of the page it shows, at its zoom's level of detail.
+
+A page, or an imported image, can be up to 32,768 pixels on a side and 268,435,456 pixels in all. A PSD export is limited to 30,000 pixels on a side, Photoshop's own limit.
+
+## Laying out a line
+
+- **Shaping.** A text is split into runs of one font, script, and direction, each shaped once with HarfRust, HarfBuzz's Rust port.
+- **Breaking.** Line breaks follow Unicode's line-breaking rules, chosen over the whole text rather than one line at a time. Centred text in a box is balanced across its lines. Chinese breaks between words, found with jieba.
+- **Balloon shapes.** In a frame shaped like its balloon, every line count the frame's height holds is tried, and the one that fits best wins. Every line is centred on one axis, where Photoshop centres each line in its own span of the shape, so the lines of a lopsided balloon don't wander along its outline.
+- **Right to left.** Arabic and Hebrew lines show their runs in the order Unicode's bidirectional algorithm gives, and start on the right.
+
+## Vertical text
+
+Vertical columns run right to left, following the W3C's Japanese and Chinese layout requirements and CSS's vertical writing.
+
+| Characters                                         | In a column                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------ |
+| Latin letters and longer numbers                   | Turned a quarter clockwise                                               |
+| A number of one or two digits outside a Latin word | Upright in one cell, as CSS's `text-combine-upright: digits 2`           |
+| `!` and `?`                                        | Full width; a run of two or three sits upright in one cell               |
+| `、` and `。`                                      | Their vertical forms in the cell's corner; Chinese centres them          |
+| `〜`, `…`, `—`, `・`, `：`                         | Centred across the column, or turned where the font has no vertical form |
+| `「` or `『` opening a line                        | The line starts at the bracket's ink, without the half em before it      |
+
+Check punctuation, small kana, and Latin runs in the font you chose: its vertical forms and metrics still decide how they look.
+
+## Ruby
+
+Ruby is set at half its base's size, over a line or on the right of a column. Whichever of the two is shorter is spread to the other's length, with half a share at each end, so they're centred and ruby never reaches over the next characters, as the W3C's rules for simple ruby set it. A base never breaks across lines, and a line with ruby opens up as far as its ruby needs.
+
+## Bold and italic in any font
+
+A font that has a bold or italic face uses it. For one that doesn't, Koharu fakes it, and the type bar's tooltip says **Faux Bold** or **Faux Italic**:
+
+- **Faux bold** draws each glyph 0.02 em thicker on each side and sets it 0.04 em wider, as CC Wild Words' own bold is. A full-width character keeps its width, as in a CJK family's own bold. A face that is already bold gets no bolder.
+- **Faux italic** leans upright text 14° to the right, CSS's default oblique angle. In a column, each upright character leans about its own centre, so it stays on the column's centre line.
+
+PSD export writes them as Photoshop's own Faux Bold and Faux Italic.
+
+## Where fonts come from
+
+When a font lacks a character, Koharu tries, in order:
+
+<Steps>
+  <Step title="The text's own font" />
+  <Step title='The preferred fonts in Settings → Renderer'>
+    CCWildWords, then Adobe 黑体 Std, unless you change them.
+  </Step>
+  <Step title='Arial' />
+  <Step title="The system's fallback for the text's script and language" />
+  <Step title='Symbol and emoji fonts' />
+</Steps>
+
+A text with no language of its own is read as Japanese when it has kana, Korean when it has Hangul, and Simplified Chinese when it has Han characters alone, so Chinese never takes a Japanese system font. A mark, digit, or space takes the font of the text beside it, so a CJK sentence's punctuation comes from its CJK font. A character is never split across two fonts.
+
+The font list includes the families of Koharu's font dataset, pinned to one version. A face a text needs downloads as the text is laid out, and the draw waits for it; a family that fails to download falls back down the chain.
+
+Design and sources: the [`koharu-renderer` README](https://github.com/koharu-rs/koharu/blob/main/crates/koharu-renderer/README.md).
