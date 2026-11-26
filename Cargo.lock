@@ -11678,7 +11678,7 @@ dependencies = [
 [[package]]
 name = "tauri-winit-gtk4"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/mayocream/winit-gtk4?rev=bf2978ad27b8f2d4a04de00afdaa882a4c28ab79#bf2978ad27b8f2d4a04de00afdaa882a4c28ab79"
+source = "git+https://github.com/mayocream/winit-gtk4?rev=b5ea265088c92a1e063ac0e1e2bd05a3f705d6d3#b5ea265088c92a1e063ac0e1e2bd05a3f705d6d3"
 dependencies = [
  "dpi",
  "gdk4-wayland",

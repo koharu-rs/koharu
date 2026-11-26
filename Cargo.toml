@@ -236,8 +236,10 @@ tauri = { git = "https://github.com/mayocream/tauri", rev = "5f3beceb3bf736a9cd9
 tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "5f3beceb3bf736a9cd9c4934739aeb6dc6bb0732" }
 tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "5f3beceb3bf736a9cd9c4934739aeb6dc6bb0732" }
 # The published 0.31.0-beta.3 with tauri-apps/winit-gtk4#5, which scales X11
-# windows by the font DPI as KDE's fractional scales set it (#1425).
-tauri-winit-gtk4 = { git = "https://github.com/mayocream/winit-gtk4", rev = "bf2978ad27b8f2d4a04de00afdaa882a4c28ab79" }
+# windows by the font DPI as KDE's fractional scales set it (#1425), and the
+# fork's gtk4-ime branch, which gives the GTK 4 backend an input method, so
+# dead keys, Compose, IBus, and Fcitx type into Koharu on Linux.
+tauri-winit-gtk4 = { git = "https://github.com/mayocream/winit-gtk4", rev = "b5ea265088c92a1e063ac0e1e2bd05a3f705d6d3" }
 # The published 0.31.0-beta.3 with rust-windowing/winit#4798, on a branch of
 # the winit-gtk4 fork: on Windows, enabling the input method held the window's
 # state lock, so a message it caused that took the lock hung the app (#1542).
