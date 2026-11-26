@@ -2,10 +2,18 @@
 //! Windows virtual-key codes and the platform's scan codes, text as character
 //! events, and the input method's composition through CEF's IME calls.
 
+use std::collections::HashMap;
+
+use serde::Serialize;
+use specta::Type;
 use tauri_runtime_cef::cef::{
     BrowserHost, CefString, CompositionUnderline, CompositionUnderlineStyle, ImplBrowser as _,
     ImplBrowserHost as _, ImplFrame as _, KeyEvent as CefKeyEvent, KeyEventType, Range,
     sys::cef_event_flags_t,
+};
+#[cfg(windows)]
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyboardLayout, MAPVK_VK_TO_CHAR, MAPVK_VK_TO_VSC_EX, MAPVK_VSC_TO_VK_EX, MapVirtualKeyExW,
 };
 #[cfg(any(windows, target_os = "macos"))]
 use winit::platform::scancode::PhysicalKeyExtScancode as _;
@@ -254,25 +262,127 @@ fn characters(event: &KeyEvent) -> (u16, u16) {
     (character, unmodified)
 }
 
-/// The Windows virtual-key code Chromium identifies a key by. A letter is the
-/// layout's, as Windows reports it; every other key is its position's on a US
-/// layout. A key the input method took in a field of the page's is
-/// `VK_PROCESSKEY`, which Blink does nothing for [Blink key events]; without
-/// a field it composes nothing, and stays the key a shortcut names.
+/// The Windows virtual-key code Chromium identifies a key by, and on Windows
+/// finds its `KeyboardEvent.key` from through the layout [CEF key event]. A
+/// key the input method took in a field of the page's is `VK_PROCESSKEY`,
+/// which Blink does nothing for [Blink key events]; without a field it
+/// composes nothing, and stays the key a shortcut names. A digit, letter, or
+/// punctuation key is the layout's, and every other key its US position's.
 ///
+/// [CEF key event]: https://github.com/chromiumembedded/cef/blob/6028375/libcef/browser/native/browser_platform_delegate_native_win.cc#L452-L482
 /// [Blink key events]: https://chromium.googlesource.com/chromium/src/+/161066f3d4245f28c30e428514ff38725b47e31c/third_party/blink/renderer/core/input/keyboard_event_manager.cc#448
 fn windows_key_code(event: &KeyEvent, field: bool) -> i32 {
     if field && event.logical_key == NamedKey::Process {
         return 0xe5;
     }
-    if let Key::Character(text) = &event.logical_key
-        && let Some(letter) = text.chars().next().filter(char::is_ascii_alphabetic)
-    {
-        return letter.to_ascii_uppercase() as i32;
-    }
     let PhysicalKey::Code(code) = event.physical_key else {
         return 0;
     };
+    let position = us_key_code(code);
+    // `VK_0` to `VK_Z` and the OEM keys, the codes a layout hands out.
+    if !matches!(position, 0x30..=0x5a | 0xba..=0xe4) {
+        return position;
+    }
+    layout_key_code(event).unwrap_or(position)
+}
+
+/// On Windows, the code the layout gives the key, as Windows sends it with
+/// the key's messages; a code a US layout gives another key would find that
+/// key's character, such as Ñ for Spanish `º` [Spanish layout].
+///
+/// [Spanish layout]: https://kbdlayout.info/kbdsp/virtualkeys
+#[cfg(windows)]
+fn layout_key_code(event: &KeyEvent) -> Option<i32> {
+    let scancode = event.physical_key.to_scancode()?;
+    // The thread's layout, the one its windows' keys arrive in.
+    let code =
+        unsafe { MapVirtualKeyExW(scancode, MAPVK_VSC_TO_VK_EX, Some(GetKeyboardLayout(0))) };
+    (code != 0).then_some(code as i32)
+}
+
+/// Elsewhere the code a letter has, as Chromium makes codes up there.
+#[cfg(not(windows))]
+fn layout_key_code(event: &KeyEvent) -> Option<i32> {
+    let Key::Character(text) = &event.logical_key else {
+        return None;
+    };
+    let letter = text.chars().next().filter(char::is_ascii_alphabetic)?;
+    Some(letter.to_ascii_uppercase() as i32)
+}
+
+/// The punctuation keys of a US layout, which other layouts give other keys,
+/// and what each types there.
+const PUNCTUATION: [(KeyCode, char); 12] = [
+    (KeyCode::Backquote, '`'),
+    (KeyCode::Minus, '-'),
+    (KeyCode::Equal, '='),
+    (KeyCode::BracketLeft, '['),
+    (KeyCode::BracketRight, ']'),
+    (KeyCode::Backslash, '\\'),
+    (KeyCode::Semicolon, ';'),
+    (KeyCode::Quote, '\''),
+    (KeyCode::Comma, ','),
+    (KeyCode::Period, '.'),
+    (KeyCode::Slash, '/'),
+    (KeyCode::IntlBackslash, '\\'),
+];
+
+/// The key standing for a US punctuation key, by its `KeyboardEvent.code`,
+/// which winit's key names are, and what it types unshifted. The page's
+/// `navigator.keyboard` can't say: CEF's windowless view leaves its layout
+/// map empty.
+#[derive(Serialize, Type)]
+pub struct Place {
+    pub code: String,
+    pub label: String,
+}
+
+/// Where the layout puts each US punctuation key: the key it gives the US
+/// key's code. Windows apps take a shortcut's key by that code, so VS Code's
+/// Ctrl+` is Ctrl+Ñ on a Spanish layout. Read on the thread whose windows the
+/// keys arrive in.
+#[cfg(windows)]
+pub fn places() -> HashMap<String, Place> {
+    let layout = unsafe { GetKeyboardLayout(0) };
+    PUNCTUATION
+        .into_iter()
+        .filter_map(|(code, _)| {
+            let key_code = us_key_code(code) as u32;
+            let scancode = unsafe { MapVirtualKeyExW(key_code, MAPVK_VK_TO_VSC_EX, Some(layout)) };
+            let PhysicalKey::Code(place) = PhysicalKey::from_scancode(scancode) else {
+                return None;
+            };
+            // A dead key's character comes with the top bit set.
+            let character =
+                unsafe { MapVirtualKeyExW(key_code, MAPVK_VK_TO_CHAR, Some(layout)) } & 0x7fff_ffff;
+            let label = char::from_u32(character).filter(|character| !character.is_control())?;
+            let place = Place {
+                code: format!("{place:?}"),
+                label: label.to_string(),
+            };
+            Some((format!("{code:?}"), place))
+        })
+        .collect()
+}
+
+/// Elsewhere a shortcut takes a key by its place, and the label is what a US
+/// layout types there.
+#[cfg(not(windows))]
+pub fn places() -> HashMap<String, Place> {
+    PUNCTUATION
+        .into_iter()
+        .map(|(code, label)| {
+            let place = Place {
+                code: format!("{code:?}"),
+                label: label.to_string(),
+            };
+            (format!("{code:?}"), place)
+        })
+        .collect()
+}
+
+/// The code a key has in its position on a US layout.
+fn us_key_code(code: KeyCode) -> i32 {
     match code {
         KeyCode::Backspace => 0x08,
         KeyCode::Tab => 0x09,

@@ -54,7 +54,11 @@ use winit::{
 };
 
 use self::{compose::Compositor, input::Input, pace::Pacer, paint::Painted, shared::Importer};
-pub use self::{input::Pointer, shared::sharing};
+pub use self::{
+    input::Pointer,
+    keys::{Place, places},
+    shared::sharing,
+};
 use crate::{app::App, events};
 
 /// The window's label in `tauri.conf.json`, and its webview's.

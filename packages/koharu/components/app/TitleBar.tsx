@@ -21,7 +21,7 @@ import {
   useSavePreferences,
 } from '@/lib/queries'
 import { applyDefaultStyles, deleteSelection } from '@/lib/scene'
-import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
+import { shortcutLabel, shortcuts, useKeyboard } from '@/lib/shortcuts'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type PageId } from '@koharu/ipc/protocol'
 import {
@@ -236,7 +236,7 @@ export function TitleBar() {
                 closeOnClick
               >
                 {t('menu.original')}
-                <MenubarShortcut>{shortcutLabel(shortcuts.original)}</MenubarShortcut>
+                <KeyShortcut code={shortcuts.original} />
               </MenubarCheckboxItem>
               <MenubarCheckboxItem
                 disabled={!page}
@@ -370,6 +370,12 @@ function ExportMenu({
       </MenubarSubContent>
     </MenubarSub>
   )
+}
+
+/** A shortcut on a punctuation key, named by what the user's layout types on the key standing for
+ * it; the menu mounts it as it opens, which reads the layout again. */
+function KeyShortcut({ code }: { code: string }) {
+  return <MenubarShortcut>{useKeyboard().label(code)}</MenubarShortcut>
 }
 
 function MenubarTrigger({ className, ...props }: ComponentProps<typeof UiMenubarTrigger>) {

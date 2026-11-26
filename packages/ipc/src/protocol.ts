@@ -836,6 +836,17 @@ export type PipelineEvent =
   | { kind: 'failed'; run: RunId; page: PageId; stage: Stage; reason: string }
   | { kind: 'ended'; run: RunId; outcome: Outcome }
 
+/**
+ *  The key standing for a US punctuation key, by its `KeyboardEvent.code`,
+ *  which winit's key names are, and what it types unshifted. The page's
+ *  `navigator.keyboard` can't say: CEF's windowless view leaves its layout
+ *  map empty.
+ */
+export type Place = {
+  code: string
+  label: string
+}
+
 export type Preferences = {
   pipeline: PipelineConfig
   renderer: RendererConfig
@@ -1357,6 +1368,11 @@ export const commands = {
   /** Picks where the open project's pages go, and writes them there: `pages` alone, or every page when it's `None`, in the project's order. `labels` names a PSD's layers the scene names nothing, in the interface's language. */
   export: (pages: PageId[] | null, format: ExportFormat, labels: Labels) =>
     runner('export', (options) => invoke<null>('export', { pages, format, labels }, options)),
+  /** Where the user's layout puts each US punctuation key, by `KeyboardEvent.code`: the key a shortcut on the US key takes instead, and what it types. Read on the main thread, whose layout its window's keys arrive in. */
+  getKeyboard: () =>
+    runner('get_keyboard', (options) =>
+      invoke<{ [key in string]: Place }>('get_keyboard', {}, options),
+    ),
   /** The canvas element's rectangle, in CSS pixels from the window's corner. */
   setViewport: (x: number, y: number, width: number, height: number) =>
     runner('set_viewport', (options) =>

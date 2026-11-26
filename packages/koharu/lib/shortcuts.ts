@@ -1,7 +1,10 @@
-import type { Tool } from '@koharu/ipc/protocol'
+import { useQuery } from '@tanstack/react-query'
+
+import { commands, type Tool } from '@koharu/ipc/protocol'
 
 /** The editor's shortcuts, Photoshop's, as react-hotkeys-hook writes them: `mod` is ⌘ on macOS
- * and Ctrl elsewhere, and a letter is the one its key types in the user's layout. */
+ * and Ctrl elsewhere, a letter is the one its key types in the user's layout, and a digit is its
+ * key's wherever the layout puts it, as Ctrl+0 is on AZERTY's unshifted 0. */
 export const shortcuts = {
   undo: 'mod+z',
   redo: 'mod+shift+z',
@@ -10,8 +13,8 @@ export const shortcuts = {
   deselect: 'mod+d',
   /** Fit on Screen. */
   fit: 'mod+0',
-  /** Lightroom's Before and After. */
-  original: '\\',
+  /** Lightroom's Before and After, on the key standing for US `\`: see `useKeyboard`. */
+  original: 'Backslash',
   /** Photoshop's Layers panel. */
   layers: 'f7',
   delete: 'delete',
@@ -54,4 +57,23 @@ export function shortcutLabel(hotkey: string): string {
     .sort((left, right) => rank(left) - rank(right))
     .map((key) => names[key] ?? key.toUpperCase())
     .join(macOS ? '' : '+')
+}
+
+/** What the user's layout makes of a shortcut on a US punctuation key, named by its
+ * `KeyboardEvent.code`: the key standing for it, and what that key types. Windows apps take a
+ * shortcut's key by its virtual-key code, which a layout may give another key, such as Spanish
+ * `º` for `\`, and the desktop says which; elsewhere the key keeps its US place. A label reads
+ * the layout again as it shows, so it names the key that works after a switch of layouts too. */
+export function useKeyboard() {
+  const { data } = useQuery({
+    queryKey: ['keyboard'],
+    queryFn: () => commands.getKeyboard(),
+    staleTime: 0,
+  })
+  return {
+    /** The code of the key standing for the US key at `code`. */
+    place: (code: string) => data?.[code]?.code ?? code,
+    /** What that key types, as a label shows it, once the layout is read. */
+    label: (code: string) => data?.[code]?.label.toUpperCase(),
+  }
 }
