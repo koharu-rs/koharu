@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDown } from 'lucide-react'
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Choice } from '@/components/controls/Choice'
@@ -112,16 +112,10 @@ export function PipelinePreferences({
           description={t('settings.pipeline.options.promptDescription')}
           align='start'
         >
-          <Textarea
-            aria-label={t('settings.pipeline.options.prompt')}
+          <TextBox
+            label={t('settings.pipeline.options.prompt')}
             value={inpainter.prompt ?? ''}
-            className='min-h-28 resize-none text-[12px] leading-5'
-            onChange={(event) =>
-              onChange({
-                ...value,
-                inpainter: { ...inpainter, prompt: event.currentTarget.value },
-              })
-            }
+            onChange={(prompt) => onChange({ ...value, inpainter: { ...inpainter, prompt } })}
           />
         </PreferenceRow>
       </Stage>
@@ -300,13 +294,43 @@ function TranslatorOptions({
         description={t('settings.pipeline.translator.instructionsDescription')}
         align='start'
       >
-        <Textarea
-          aria-label={t('settings.pipeline.translator.instructions')}
+        <TextBox
+          label={t('settings.pipeline.translator.instructions')}
           value={value.instructions ?? ''}
-          className='min-h-28 resize-none text-[12px] leading-5'
-          onChange={(event) => onChange({ ...value, instructions: event.currentTarget.value })}
+          onChange={(instructions) => onChange({ ...value, instructions })}
         />
       </PreferenceRow>
     </>
+  )
+}
+
+/** A text box that holds what's typed itself. The preferences show an edit a tick later, and a box
+ * waiting for them would put the older text back after each keystroke, ending the input method's
+ * composition. */
+function TextBox({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
+  return (
+    <Textarea
+      aria-label={label}
+      value={draft}
+      className='min-h-28 resize-none text-[12px] leading-5'
+      onChange={(event) => {
+        setDraft(event.currentTarget.value)
+        onChange(event.currentTarget.value)
+      }}
+    />
   )
 }
