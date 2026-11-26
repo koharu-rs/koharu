@@ -1,3 +1,14 @@
+## [0.100.3](https://github.com/koharu-rs/koharu/compare/0.100.2..0.100.3) - 2026-11-26
+
+### 🐛 Bug Fixes
+
+- *(updater)* Install Windows updates in passive mode, whose msiexec can ask for the admin rights an MSI install needs - ([f26a0cf](https://github.com/koharu-rs/koharu/commit/f26a0cf4e2f134be74b3ce063a1de19b6c5e31d0))
+- Take Show Original on the key a layout gives US \'s virtual key, º on a Spanish keyboard, which the View menu now names, and Fit on the 0 key wherever a layout puts it - ([c3137bc](https://github.com/koharu-rs/koharu/commit/c3137bcec0592899080ad4d798f283c5080a47ce))
+
+### 🧪 Testing
+
+- Expect a balloon text's room past its split and a margin narrowed at the page's size, and set a fuller sentence in the ellipse that shrinks it - ([8affd38](https://github.com/koharu-rs/koharu/commit/8affd38aa5386f129b9440728a0bee5af3ee8252))
+
 ## [0.100.2](https://github.com/koharu-rs/koharu/compare/0.100.1..0.100.2) - 2026-11-26
 
 ### 🐛 Bug Fixes
