@@ -5,18 +5,20 @@ sidebarTitle: 'Introduction'
 mode: 'frame'
 ---
 
-export const HeroCard = ({ image, title, description, href }) => {
+{/* Each card names its images whole: publishing rewrites a prop named `image` into a CDN address. */}
+
+export const HeroCard = ({ light, dark, title, description, href }) => {
   return (
     <>
       <Visibility for='humans'>
         <a className='group cursor-pointer pb-8' href={href}>
           <img
-            src={`/assets/home/${image}.svg`}
+            src={light}
             alt=''
             className='pointer-events-none block transition-all duration-100 group-hover:scale-105 dark:hidden'
           />
           <img
-            src={`/assets/home/${image}-dark.svg`}
+            src={dark}
             alt=''
             className='pointer-events-none hidden transition-all duration-100 group-hover:scale-105 dark:block'
           />
@@ -60,28 +62,32 @@ export const HeroCard = ({ image, title, description, href }) => {
 
     <div className='mt-12 grid gap-x-6 gap-y-4 px-6 sm:grid-cols-2 lg:mt-24 lg:px-0'>
       <HeroCard
-        image='start'
+        light='/assets/home/start.svg'
+        dark='/assets/home/start-dark.svg'
         title='Get started'
         description='Install Koharu, translate your first page, and export it.'
         href='/installation'
       />
 
       <HeroCard
-        image='guides'
+        light='/assets/home/guides.svg'
+        dark='/assets/home/guides-dark.svg'
         title='Guides'
         description='Import a chapter, run the pipeline, then review, clean up, and letter it.'
         href='/guides/projects'
       />
 
       <HeroCard
-        image='how-it-works'
+        light='/assets/home/how-it-works.svg'
+        dark='/assets/home/how-it-works-dark.svg'
         title='How it works'
         description="Why each result comes out as it does, and what to change when it doesn't."
         href='/how-it-works'
       />
 
       <HeroCard
-        image='develop'
+        light='/assets/home/develop.svg'
+        dark='/assets/home/develop-dark.svg'
         title='Develop'
         description='Build Koharu, find your way around the code, and contribute.'
         href='/development/contributing'
