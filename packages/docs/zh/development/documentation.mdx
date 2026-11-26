@@ -34,16 +34,19 @@ description: '预览 Mintlify，维护翻译 MDX，并连接仓库发布。'
 
 ## 使用原生 MDX
 
-每页 frontmatter 都需要 `title` 和 `description`。普通文章标题由 Mintlify 渲染，不要重复添加 H1。站点参照 Mintlify 自己的文档：使用 `luma` 主题、`assets/logo-light.svg` 与 `assets/logo-dark.svg` 中的标志，以及 Lucide 图标。与 Mintlify 的文档一样，页面、标签页和侧边栏分组都不设图标，只有卡片的 `icon` 填写 [Lucide](https://lucide.dev/icons) 的图标名。首页使用 `frame` 模式，在正文中提供唯一的 H1，并用 `assets/home/` 中的插图链接到各个标签页；每张插图都有浅色版和 `-dark` 版。
+每页 frontmatter 都需要 `title` 和 `description`。普通文章标题由 Mintlify 渲染，不要重复添加 H1。站点参照 Mintlify 自己的文档：使用 `luma` 主题、`assets/logo-light.svg` 与 `assets/logo-dark.svg` 中的标志，以及 Lucide 图标。与 Mintlify 的文档一样，页面和侧边栏分组都不设图标，只有卡片的 `icon` 填写 [Lucide](https://lucide.dev/icons) 的图标名。首页使用 `frame` 模式，在正文中提供唯一的 H1，并用 `assets/home/` 中的插图链接到各个部分；每张插图都有浅色版和 `-dark` 版。
 
-站点有四个标签页，页面归入与读者正在做的事相符的标签页：
+侧边栏是一列平铺的部分，没有顶部标签页，也没有嵌套分组；页面归入与读者正在做的事相符的部分。
 
-| 标签页   | 文件夹                                 | 放在这里的页面                                                     |
-| -------- | -------------------------------------- | ------------------------------------------------------------------ |
-| 指南     | 根目录、`guides/`、`models/`、`agent/` | 按步骤讲解应用中的一项操作                                         |
-| 工作原理 | `how-it-works/`                        | 为翻译者解释 Koharu 为何如此运作，并在末尾链接所属 crate 的 README |
-| 参考     | `reference/` 和 `privacy`              | 供查阅的设置、键、快捷键、位置和解决方法                           |
-| 开发     | `development/`                         | 构建、代码归属与参与贡献                                           |
+| 部分         | 文件夹                    | 放在这里的页面                                                     |
+| ------------ | ------------------------- | ------------------------------------------------------------------ |
+| 开始使用     | 根目录                    | 带新用户从安装走到导出第一页                                       |
+| 翻译流程     | `guides/`                 | 按步骤讲解应用中的一项操作                                         |
+| 模型与服务商 | `models/`                 | 选择并连接各阶段运行的模型                                         |
+| Koharu Agent | `agent/`                  | 设置和使用 Agent                                                   |
+| 工作原理     | `how-it-works/`           | 为翻译者解释 Koharu 为何如此运作，并在末尾链接所属 crate 的 README |
+| 开发         | `development/`            | 构建、代码归属与参与贡献                                           |
+| 参考         | `reference/` 和 `privacy` | 供查阅的设置、键、快捷键、位置和解决方法                           |
 
 工作原理页面只写代码实际做的事，使用应用自己的用语和能解释结果的数字；其余设计和出处留在 crate 的 README 中。
 
@@ -55,7 +58,7 @@ description: '预览 Mintlify，维护翻译 MDX，并连接仓库发布。'
 
 英语是默认语言，直接位于 `packages/docs/`。日语和简体中文分别位于 `ja/`、`zh/`，使用与英语相同的文件名和目录结构。保持页面路径、操作步骤、示例与技术覆盖一致。正文之外，标题、描述、组件标签、导航和图片说明也要翻译。
 
-`packages/docs/docs.json` 管理主题和导航。`navigation.languages` 中的每种语言都有相同的四个 `tabs` 及其分组，英语保留 `default: true`。新增页面时应加入所有语言导航中对应的标签页，英语路径不加语言前缀，翻译路径加上对应语言前缀。每个页面路径只能属于一种语言。具体结构见 Mintlify 的[国际化指南](https://www.mintlify.com/docs/guides/internationalization)。站点使用 Mintlify 原生语言切换，不保留旧 Zensical 路由或重定向。
+`packages/docs/docs.json` 管理主题和导航。`navigation.languages` 中的每种语言都有相同的 `groups`，即各自带有页面的部分，英语保留 `default: true`。新增页面时应加入所有语言导航中对应的部分，英语路径不加语言前缀，翻译路径加上对应语言前缀。每个页面路径只能属于一种语言。具体结构见 Mintlify 的[国际化指南](https://www.mintlify.com/docs/guides/internationalization)。站点使用 Mintlify 原生语言切换，不保留旧 Zensical 路由或重定向。
 
 ## 连接发布
 

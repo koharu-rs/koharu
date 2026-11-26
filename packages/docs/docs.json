@@ -103,88 +103,65 @@
             }
           ]
         },
-        "tabs": [
+        "groups": [
           {
-            "tab": "Guides",
-            "groups": [
-              {
-                "group": "Get started",
-                "pages": ["index", "installation", "quickstart", "hardware"]
-              },
-              {
-                "group": "Translation workflow",
-                "pages": [
-                  "guides/projects",
-                  "guides/gallery",
-                  "guides/processing",
-                  "guides/canvas",
-                  "guides/review",
-                  "guides/cleanup",
-                  "guides/typesetting",
-                  "guides/export",
-                  "guides/reader"
-                ]
-              },
-              {
-                "group": "Models & providers",
-                "pages": ["models/vision", "models/providers", "models/translation"]
-              },
-              {
-                "group": "Koharu Agent",
-                "pages": ["agent/setup", "agent/projects"]
-              }
+            "group": "Get started",
+            "pages": ["index", "installation", "quickstart", "hardware"]
+          },
+          {
+            "group": "Translation workflow",
+            "pages": [
+              "guides/projects",
+              "guides/gallery",
+              "guides/processing",
+              "guides/canvas",
+              "guides/review",
+              "guides/cleanup",
+              "guides/typesetting",
+              "guides/export",
+              "guides/reader"
             ]
           },
           {
-            "tab": "How it works",
-            "groups": [
-              {
-                "group": "Basics",
-                "pages": ["how-it-works/index", "how-it-works/projects"]
-              },
-              {
-                "group": "The pipeline",
-                "pages": [
-                  "how-it-works/detection",
-                  "how-it-works/cleanup",
-                  "how-it-works/translation",
-                  "how-it-works/lettering"
-                ]
-              },
-              {
-                "group": "Rendering & runtime",
-                "pages": ["how-it-works/rendering", "how-it-works/runtime"]
-              }
+            "group": "Models & providers",
+            "pages": ["models/vision", "models/providers", "models/translation"]
+          },
+          {
+            "group": "Koharu Agent",
+            "pages": ["agent/setup", "agent/projects"]
+          },
+          {
+            "group": "How it works",
+            "pages": [
+              "how-it-works/index",
+              "how-it-works/projects",
+              "how-it-works/detection",
+              "how-it-works/cleanup",
+              "how-it-works/translation",
+              "how-it-works/lettering",
+              "how-it-works/rendering",
+              "how-it-works/runtime"
             ]
           },
           {
-            "tab": "Reference",
-            "groups": [
-              {
-                "group": "The app",
-                "pages": ["reference/settings", "reference/shortcuts", "reference/data"]
-              },
-              {
-                "group": "Help",
-                "pages": ["reference/troubleshooting", "privacy"]
-              }
+            "group": "Develop",
+            "pages": [
+              "development/contributing",
+              "development/setup",
+              "development/documentation",
+              "development/architecture",
+              "development/scene",
+              "development/rendering"
             ]
           },
           {
-            "tab": "Develop",
-            "groups": [
-              {
-                "group": "Contribute",
-                "pages": [
-                  "development/contributing",
-                  "development/setup",
-                  "development/documentation"
-                ]
-              },
-              {
-                "group": "Architecture",
-                "pages": ["development/architecture", "development/scene", "development/rendering"]
-              }
+            "group": "Reference",
+            "pages": [
+              "reference/settings",
+              "reference/shortcuts",
+              "reference/data",
+              "reference/troubleshooting",
+              "privacy"
             ]
           }
         ]
@@ -264,92 +241,65 @@
             }
           ]
         },
-        "tabs": [
+        "groups": [
           {
-            "tab": "ガイド",
-            "groups": [
-              {
-                "group": "はじめに",
-                "pages": ["ja/index", "ja/installation", "ja/quickstart", "ja/hardware"]
-              },
-              {
-                "group": "翻訳ワークフロー",
-                "pages": [
-                  "ja/guides/projects",
-                  "ja/guides/gallery",
-                  "ja/guides/processing",
-                  "ja/guides/canvas",
-                  "ja/guides/review",
-                  "ja/guides/cleanup",
-                  "ja/guides/typesetting",
-                  "ja/guides/export",
-                  "ja/guides/reader"
-                ]
-              },
-              {
-                "group": "モデルとプロバイダー",
-                "pages": ["ja/models/vision", "ja/models/providers", "ja/models/translation"]
-              },
-              {
-                "group": "Koharu Agent",
-                "pages": ["ja/agent/setup", "ja/agent/projects"]
-              }
+            "group": "はじめに",
+            "pages": ["ja/index", "ja/installation", "ja/quickstart", "ja/hardware"]
+          },
+          {
+            "group": "翻訳ワークフロー",
+            "pages": [
+              "ja/guides/projects",
+              "ja/guides/gallery",
+              "ja/guides/processing",
+              "ja/guides/canvas",
+              "ja/guides/review",
+              "ja/guides/cleanup",
+              "ja/guides/typesetting",
+              "ja/guides/export",
+              "ja/guides/reader"
             ]
           },
           {
-            "tab": "しくみ",
-            "groups": [
-              {
-                "group": "基本",
-                "pages": ["ja/how-it-works/index", "ja/how-it-works/projects"]
-              },
-              {
-                "group": "パイプライン",
-                "pages": [
-                  "ja/how-it-works/detection",
-                  "ja/how-it-works/cleanup",
-                  "ja/how-it-works/translation",
-                  "ja/how-it-works/lettering"
-                ]
-              },
-              {
-                "group": "描画とランタイム",
-                "pages": ["ja/how-it-works/rendering", "ja/how-it-works/runtime"]
-              }
+            "group": "モデルとプロバイダー",
+            "pages": ["ja/models/vision", "ja/models/providers", "ja/models/translation"]
+          },
+          {
+            "group": "Koharu Agent",
+            "pages": ["ja/agent/setup", "ja/agent/projects"]
+          },
+          {
+            "group": "しくみ",
+            "pages": [
+              "ja/how-it-works/index",
+              "ja/how-it-works/projects",
+              "ja/how-it-works/detection",
+              "ja/how-it-works/cleanup",
+              "ja/how-it-works/translation",
+              "ja/how-it-works/lettering",
+              "ja/how-it-works/rendering",
+              "ja/how-it-works/runtime"
             ]
           },
           {
-            "tab": "リファレンス",
-            "groups": [
-              {
-                "group": "アプリ",
-                "pages": ["ja/reference/settings", "ja/reference/shortcuts", "ja/reference/data"]
-              },
-              {
-                "group": "ヘルプ",
-                "pages": ["ja/reference/troubleshooting", "ja/privacy"]
-              }
+            "group": "開発",
+            "pages": [
+              "ja/development/contributing",
+              "ja/development/setup",
+              "ja/development/documentation",
+              "ja/development/architecture",
+              "ja/development/scene",
+              "ja/development/rendering"
             ]
           },
           {
-            "tab": "開発",
-            "groups": [
-              {
-                "group": "開発に参加",
-                "pages": [
-                  "ja/development/contributing",
-                  "ja/development/setup",
-                  "ja/development/documentation"
-                ]
-              },
-              {
-                "group": "アーキテクチャ",
-                "pages": [
-                  "ja/development/architecture",
-                  "ja/development/scene",
-                  "ja/development/rendering"
-                ]
-              }
+            "group": "リファレンス",
+            "pages": [
+              "ja/reference/settings",
+              "ja/reference/shortcuts",
+              "ja/reference/data",
+              "ja/reference/troubleshooting",
+              "ja/privacy"
             ]
           }
         ]
@@ -429,92 +379,65 @@
             }
           ]
         },
-        "tabs": [
+        "groups": [
           {
-            "tab": "指南",
-            "groups": [
-              {
-                "group": "开始使用",
-                "pages": ["zh/index", "zh/installation", "zh/quickstart", "zh/hardware"]
-              },
-              {
-                "group": "翻译流程",
-                "pages": [
-                  "zh/guides/projects",
-                  "zh/guides/gallery",
-                  "zh/guides/processing",
-                  "zh/guides/canvas",
-                  "zh/guides/review",
-                  "zh/guides/cleanup",
-                  "zh/guides/typesetting",
-                  "zh/guides/export",
-                  "zh/guides/reader"
-                ]
-              },
-              {
-                "group": "模型与服务商",
-                "pages": ["zh/models/vision", "zh/models/providers", "zh/models/translation"]
-              },
-              {
-                "group": "Koharu Agent",
-                "pages": ["zh/agent/setup", "zh/agent/projects"]
-              }
+            "group": "开始使用",
+            "pages": ["zh/index", "zh/installation", "zh/quickstart", "zh/hardware"]
+          },
+          {
+            "group": "翻译流程",
+            "pages": [
+              "zh/guides/projects",
+              "zh/guides/gallery",
+              "zh/guides/processing",
+              "zh/guides/canvas",
+              "zh/guides/review",
+              "zh/guides/cleanup",
+              "zh/guides/typesetting",
+              "zh/guides/export",
+              "zh/guides/reader"
             ]
           },
           {
-            "tab": "工作原理",
-            "groups": [
-              {
-                "group": "基础",
-                "pages": ["zh/how-it-works/index", "zh/how-it-works/projects"]
-              },
-              {
-                "group": "流水线",
-                "pages": [
-                  "zh/how-it-works/detection",
-                  "zh/how-it-works/cleanup",
-                  "zh/how-it-works/translation",
-                  "zh/how-it-works/lettering"
-                ]
-              },
-              {
-                "group": "渲染与运行时",
-                "pages": ["zh/how-it-works/rendering", "zh/how-it-works/runtime"]
-              }
+            "group": "模型与服务商",
+            "pages": ["zh/models/vision", "zh/models/providers", "zh/models/translation"]
+          },
+          {
+            "group": "Koharu Agent",
+            "pages": ["zh/agent/setup", "zh/agent/projects"]
+          },
+          {
+            "group": "工作原理",
+            "pages": [
+              "zh/how-it-works/index",
+              "zh/how-it-works/projects",
+              "zh/how-it-works/detection",
+              "zh/how-it-works/cleanup",
+              "zh/how-it-works/translation",
+              "zh/how-it-works/lettering",
+              "zh/how-it-works/rendering",
+              "zh/how-it-works/runtime"
             ]
           },
           {
-            "tab": "参考",
-            "groups": [
-              {
-                "group": "应用",
-                "pages": ["zh/reference/settings", "zh/reference/shortcuts", "zh/reference/data"]
-              },
-              {
-                "group": "帮助",
-                "pages": ["zh/reference/troubleshooting", "zh/privacy"]
-              }
+            "group": "开发",
+            "pages": [
+              "zh/development/contributing",
+              "zh/development/setup",
+              "zh/development/documentation",
+              "zh/development/architecture",
+              "zh/development/scene",
+              "zh/development/rendering"
             ]
           },
           {
-            "tab": "开发",
-            "groups": [
-              {
-                "group": "参与贡献",
-                "pages": [
-                  "zh/development/contributing",
-                  "zh/development/setup",
-                  "zh/development/documentation"
-                ]
-              },
-              {
-                "group": "架构",
-                "pages": [
-                  "zh/development/architecture",
-                  "zh/development/scene",
-                  "zh/development/rendering"
-                ]
-              }
+            "group": "参考",
+            "pages": [
+              "zh/reference/settings",
+              "zh/reference/shortcuts",
+              "zh/reference/data",
+              "zh/reference/troubleshooting",
+              "zh/privacy"
             ]
           }
         ]
