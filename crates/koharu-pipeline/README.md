@@ -86,13 +86,30 @@ balloon, or in its source's frame when it's free or a sound effect, and fits it
   in its panel and off the page's other texts and balloons. Without that limit a
   text covered a face beside it. A margin narrows and a frame widens as far as
   they may before a word is hyphenated to reach the size.
+- **Overflow.** A balloon's text its room still holds under nine tenths of the
+  page's size, as a word wider than a narrow balloon leaves it, keeps the size
+  and runs past the balloon, centred, hyphenated as far as that keeps it
+  nearer, and outlined as text on art is: smaller text stands out among its
+  page's more than text past a balloon's edge. It stays on the page and out of
+  other balloons. A free text doesn't run past its frame, as one still small in
+  its widest, such as a chapter's subtitle under its title, is a smaller text.
+- **Clear of each other.** Last, a free text, a sound effect, or a text running
+  past its balloon shrinks as far as keeps its lines, grown by an eighth of its
+  size, off the other texts' lines, sound effects first and then free texts,
+  each the largest first, so a balloon's text keeps its size. A free text or
+  sound effect shrinks to half at most, as a quarter drew some at 2 to 4
+  pixels; a sound effect no size clears takes the size covering least
+  dialogue. Sound effects
+  filling widened frames had covered balloons' texts and each other. A remark
+  written across the edge of a balloon holding other texts is a free text, as
+  its share of the balloon would be its narrow source box.
 - **Lines** are centred, or in Japanese and Chinese started together at the top
   or the left, as JLREQ aligns a line to its head [JLREQ].
 - **Fill and stroke** are its source's, the stroke's width in proportion to its
   size. One that lies on art and whose source has no outline gets a stroke,
   black around a light fill and white around any other, which keeps it legible:
-  a sound effect a sixteenth of its size, and a text outside a balloon an
-  eighth. On paper of the stroke's colour it can't be seen, and looking for low
+  a sound effect a sixteenth of its size, and a text outside a balloon or
+  running past one an eighth. On paper of the stroke's colour it can't be seen, and looking for low
   contrast under the text missed one over foliage and those crossing a panel's
   border.
 - **Direction.** It's vertical only when its source is and the target is

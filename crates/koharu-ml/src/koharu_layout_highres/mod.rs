@@ -26,7 +26,7 @@ pub use self::{
     layout::{Bubble, Kind, Layout, Lettering, Panel},
     measure::{Outline, Typography},
     processor::Mask,
-    rooms::rooms,
+    rooms::{rooms, straddles},
 };
 
 use self::{

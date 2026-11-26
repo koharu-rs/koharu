@@ -56,6 +56,9 @@ pub struct ResolvedText {
     pub frame: Rect,
     /// The scale fitting drew it at; 1 at its set size.
     pub scale: f32,
+    /// Each line's box, in its own coordinates: as long as its characters
+    /// along it and a line's pitch across it, grown by its strokes.
+    pub lines: Vec<Rect>,
     /// UTF-16 offsets where a line ends with an added hyphen.
     pub hyphens: Vec<usize>,
     pub overflowed: bool,

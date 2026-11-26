@@ -130,11 +130,11 @@ fn a_long_word_shrinks_before_it_hyphenates_and_never_breaks_between_letters() {
     // With room, the word sets at its size.
     assert_eq!(word_in_box(2.0, "en").scale, 1.0);
 
-    // A box a little narrower than the word: it shrinks and stays whole,
-    // whether its language hyphenates or not.
+    // A box a little narrower than the word: it shrinks, by less than a
+    // tenth, and stays whole, whether its language hyphenates or not.
     for language in ["en", "und"] {
-        let shrunk = word_in_box(0.9, language);
-        assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.5, "{shrunk:?}");
+        let shrunk = word_in_box(0.95, language);
+        assert!(shrunk.scale < 1.0 && shrunk.scale >= 0.9, "{shrunk:?}");
         assert!(shrunk.hyphens.is_empty() && !shrunk.overflowed);
     }
 

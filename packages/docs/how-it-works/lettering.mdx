@@ -8,7 +8,7 @@ Koharu has no typesetting stage. Translation places each text as it writes it, f
 
 ## Where a translation goes
 
-A text in a balloon goes in its room: the share of the balloon's outline its source gets beside the balloon's other texts. A free text or a sound effect goes in its source's frame.
+A text in a balloon goes in its room: the share of the balloon's outline its source gets beside the balloon's other texts. A free text or a sound effect goes in its source's frame, and so does a remark written across the edge of a balloon that holds other texts, whose share would be its narrow source box.
 
 A room's outline is traced from the balloon's pixels with an anchor every few pixels, so the frame keeps only the few anchors that hold its shape: four for a rectangle or an ellipse, or those of a smooth curve. On 183 balloons whose traced outlines had a median of 76 anchors, the frames have a median of 5, small enough to reshape with **Direct Selection**.
 
@@ -41,25 +41,34 @@ When a text would draw smaller than the page's size, Koharu makes room in this o
     it.
   </Step>
   <Step title='Hyphenate'>
-    Where whole words would draw under three quarters of their size, a word may take one hyphen near
-    its middle if that makes the text at least a quarter larger. Only words longer than five letters
-    break, keeping two letters on each side, with at most two hyphenated lines in a row, as
-    Photoshop's defaults do.
+    Where whole words would draw under nine tenths of their size, one word may take a hyphen near its
+    middle if that makes the text at least a tenth larger. A text takes one such hyphen at most: one
+    in a narrow balloon took four to grow a tenth. Only words longer than five letters break,
+    keeping two letters on each side, with at most two hyphenated lines in a row, as Photoshop's
+    defaults do.
+  </Step>
+  <Step title='Run past the balloon'>
+    A balloon's text that still draws under nine tenths of the page's size keeps the page's size and
+    runs past its balloon, centred, with as many hyphens as keep it nearer the balloon and an
+    outline as text on art gets. It stays on the page and off its other balloons and texts,
+    shrinking just enough to clear them. Such a text has a set size rather than **Auto**.
   </Step>
 </Steps>
+
+Last, a text that may move, a free text, a sound effect, or a text running past its balloon, shrinks as far as keeps it off the other texts' letters, a free text or sound effect to half its size at most. Sound effects give way first, then free texts, so a balloon's text keeps its size. A sound effect that no size clears takes the size covering the least dialogue, and a free text lying right across another stays as it is.
 
 ## Lines, colours, and direction
 
 - **Lines** are centred on one axis of the balloon, as Western balloons are lettered. Japanese and Chinese lines start together at the top or the left, as the W3C's Japanese layout requirements align a line to its head.
 - **Colours** are the source's: its ink is the fill, its outline the stroke, with the stroke's width in proportion to the size.
-- **Outline on art.** A text that lies on art, from a source with no outline, gets a stroke so it stays legible: black around a light fill, white around any other, a sixteenth of its size for a sound effect and an eighth for a text outside a balloon.
+- **Outline on art.** A text that lies on art, from a source with no outline, gets a stroke so it stays legible: black around a light fill, white around any other, a sixteenth of its size for a sound effect and an eighth for a text outside a balloon or running past one.
 - **Direction.** A translation is vertical only when its source is vertical and the target is Japanese or Chinese. Any other language runs horizontally, turned by its source's tilt.
 
 ## Auto and a typed size
 
 **Auto** grows a text to the largest size its frame holds; a word too wide for its line stops the growth. Past every step at half size, it shrinks on until the text fits.
 
-A typed size draws the text at exactly that size, as Photoshop does, so texts set to one size look the same. Text too long for its frame runs past it, and a **+** at the frame's top-left corner marks it until you resize the frame.
+A typed size draws the text at exactly that size, as Photoshop does, so texts set to one size look the same. Text too long for its frame runs past it, centred and hyphenated where that keeps it nearer, and a **+** at the frame's top-left corner marks it until you resize the frame.
 
 <Card title='Typeset a translation' icon='type' href='/guides/typesetting'>
   Change the font, size, colour, and border of the texts you select.

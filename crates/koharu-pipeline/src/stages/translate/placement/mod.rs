@@ -23,8 +23,8 @@ use serde_json::{Value, json};
 struct Lettering<'p> {
     id: LayerId,
     block: &'p Block,
-    /// Whether it's in a balloon.
-    enclosed: bool,
+    /// The balloon it's in.
+    balloon: Option<LayerId>,
     text: Text,
     /// The widest box it may take outside a balloon.
     widest: Option<Rect>,
@@ -39,7 +39,10 @@ struct Lettering<'p> {
 /// Chinese started together at the top or the left, as JLREQ aligns a line to
 /// its head. A text that would draw smaller than the page's size, which every
 /// text of the page has a say in, is brought up to it, and a sound effect to
-/// its source's size when that's smaller.
+/// its source's size when that's smaller; a balloon's text its room can't hold
+/// near that size keeps it, running past the room. Then whatever may move, a
+/// free text, a sound effect, or a text running past its balloon, shrinks as
+/// far as keeps it off the others' letters.
 pub(super) fn place(
     project: &Project,
     page: PageId,
@@ -71,20 +74,61 @@ pub(super) fn place(
         })
         .collect::<Result<Vec<_>>>()?;
     let size = size::page(&letterings, source)?;
+    // The page, its balloons, and the lines of its texts kept as they are,
+    // which those that move keep within and off.
+    let on = project.page(page)?;
+    let sheet = Rect::new(
+        0.0,
+        0.0,
+        f64::from(on.size.width),
+        f64::from(on.size.height),
+    );
+    let mut outlines = Vec::new();
+    balloons(&on.layers, &mut outlines);
+    let fixed = (letterings.iter())
+        .filter(|lettering| !words.contains_key(&lettering.id))
+        .filter_map(|lettering| {
+            let text = lettering.block.translation.as_ref()?;
+            Some(size::lines(lettering.id, text))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .concat();
     letterings.retain(|lettering| words.contains_key(&lettering.id));
-    letterings.par_iter_mut().try_for_each(|lettering| {
-        let own = lettering.block.source.style.chars.size;
-        let size = match lettering.block.role {
-            Role::Text => size,
-            Role::Sfx => [own, size].into_iter().flatten().reduce(f64::min),
-        };
+    let (mut sizes, held): (Vec<_>, Vec<_>) = letterings
+        .par_iter_mut()
+        .map(|lettering| {
+            let own = lettering.block.source.style.chars.size;
+            let size = match lettering.block.role {
+                Role::Text => size,
+                Role::Sfx => [own, size].into_iter().flatten().reduce(f64::min),
+            };
+            let held = match size {
+                Some(size) => size::lift(lettering, size)?,
+                None => None,
+            };
+            Ok((size, held))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .unzip();
+    size::clear(&mut letterings, &mut sizes, &held, &fixed, &outlines, sheet)?;
+    for (lettering, size) in letterings.iter_mut().zip(sizes) {
         lettering.letter(size);
-        size.map_or(Ok(()), |size| size::lift(lettering, size))
-    })?;
+    }
     Ok(letterings
         .iter()
         .map(|lettering| (lettering.id, patch(&lettering.text)))
         .collect())
+}
+
+/// The outlines of the balloons among `layers`, each with its layer.
+fn balloons(layers: &[Layer], found: &mut Vec<(LayerId, BezPath)>) {
+    for layer in layers {
+        if let Content::Balloon(balloon) = &layer.content {
+            found.push((layer.id, BezPath::from(&balloon.outline)));
+        }
+        balloons(&layer.children, found);
+    }
 }
 
 /// `block`'s translation worded `words` in `target`.
@@ -112,19 +156,21 @@ fn lettering<'p>(
 ) -> Result<Lettering<'p>> {
     let (page, holder) = project.parent(id)?;
     let source = &block.source;
-    let (enclosed, room) = match holder {
+    let (balloon, room) = match holder {
         Some(Layer {
+            id: holder,
             content: Content::Balloon(balloon),
             children,
             ..
-        }) => {
-            let room = match block.role {
-                Role::Text => room::room(&balloon.outline, children, &page.layers, id)?,
-                Role::Sfx => None,
-            };
-            (true, room)
-        }
-        _ => (false, None),
+        }) => match block.role {
+            // A remark across its edge is lettered as a free text.
+            Role::Text => match room::room(&balloon.outline, children, &page.layers, id)? {
+                Some(room) => (Some(*holder), Some(room)),
+                None => (None, None),
+            },
+            Role::Sfx => (Some(*holder), None),
+        },
+        _ => (None, None),
     };
     let (frame, transform) = match room {
         Some(room) => turned(room, source.transform)?,
@@ -145,14 +191,14 @@ fn lettering<'p>(
         true => Align::Start,
         false => Align::Center,
     });
-    let widest = match enclosed || vertical {
+    let widest = match balloon.is_some() || vertical {
         true => None,
         false => free::widest(page, holder, id, source, line),
     };
     Ok(Lettering {
         id,
         block,
-        enclosed,
+        balloon,
         text,
         widest,
     })
@@ -162,10 +208,18 @@ impl Lettering<'_> {
     /// Sets it at `size`, in its source's ink as its fill unless its style
     /// sets one, and an outline in proportion: its own, or its source's, or
     /// for one lying on art, as a sound effect does and a text outside a
-    /// balloon may, one unlike its fill, which keeps it legible over it: a
-    /// sixteenth of a sound effect's size, and an eighth of a text's, which is
-    /// smaller. On paper the outline's colour it can't be seen.
+    /// balloon or running past one may, one unlike its fill, which keeps it
+    /// legible over it: a sixteenth of a sound effect's size, and an eighth of
+    /// a text's, which is smaller. On paper the outline's colour it can't be
+    /// seen.
     fn letter(&mut self, size: Option<f64>) {
+        let past = matches!(
+            self.text.frame,
+            Frame::Path {
+                fit: PathFit::None,
+                ..
+            }
+        );
         let source = &self.block.source.style.chars;
         let chars = &mut self.text.style.chars;
         chars.fill = chars.fill.or(source.fill);
@@ -176,7 +230,7 @@ impl Lettering<'_> {
         });
         let share = match self.block.role {
             Role::Sfx => Some(1.0 / 16.0),
-            Role::Text if !self.enclosed => Some(1.0 / 8.0),
+            Role::Text if self.balloon.is_none() || past => Some(1.0 / 8.0),
             Role::Text => None,
         };
         let outlined = outlined.or_else(|| {
@@ -356,11 +410,21 @@ mod tests {
             .map(|(id, words)| (*id, (*words).to_owned()))
             .collect();
         let patches = place(&project, page, &translated, target)?;
+        // In `target`, as the stage writes them, which lays them out in it.
+        let language = json!({"translation": {"language": target}});
         let ops = translated
             .into_iter()
-            .map(|(id, text)| Op::SetText {
-                layer: id.into(),
-                text,
+            .flat_map(|(id, text)| {
+                [
+                    Op::SetText {
+                        layer: id.into(),
+                        text,
+                    },
+                    Op::UpdateLayer {
+                        layer: id.into(),
+                        patch: language.clone(),
+                    },
+                ]
             })
             .chain(patches.into_iter().map(|(id, patch)| Op::UpdateLayer {
                 layer: id.into(),
@@ -658,6 +722,118 @@ mod tests {
         let alone = placed(&mut session, tight, &langid!("en"))?;
         let again = alone.style.chars.size.context("a size")?;
         assert!((again - size).abs() < 0.01 * size, "{again} against {size}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_word_too_long_for_its_balloon_keeps_the_page_s_size_past_it_short_of_others() -> Result<()>
+    {
+        // Two roomy balloons, a narrow one in the open below them and another
+        // 10 right of the second, each 60 wide for a word with no hyphenation
+        // point.
+        let balloon = |x: f64, y: f64, width: f64| {
+            let (right, bottom) = (x + width, y + 190.0);
+            json!({"kind": "balloon", "outline": format!("M{x} {y} L{right} {y} L{right} {bottom} L{x} {bottom} Z")})
+        };
+        let text = |x: f64, y: f64| {
+            json!({"kind": "block", "source": {
+                "frame": {"box": {"bounds": {"x": x, "y": y + 40.0, "width": 40.0, "height": 100.0}}},
+                "style": {"chars": {"size": 40.0}},
+            }})
+        };
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("a", None, balloon(0.0, 0.0, 160.0)),
+                ("roomy", Some("a"), text(60.0, 0.0)),
+                ("b", None, balloon(160.0, 0.0, 160.0)),
+                ("other", Some("b"), text(220.0, 0.0)),
+                ("c", None, balloon(170.0, 205.0, 60.0)),
+                ("open", Some("c"), text(180.0, 205.0)),
+                ("d", None, balloon(330.0, 0.0, 60.0)),
+                ("beside", Some("d"), text(340.0, 0.0)),
+            ],
+        )?;
+        let word = "HHHHHHHHHH";
+        let texts = lettered(
+            &mut session,
+            &[
+                (ids[1], "HHHH"),
+                (ids[3], "HHHH"),
+                (ids[5], word),
+                (ids[7], word),
+            ],
+            &langid!("en"),
+        )?;
+        let fit = |text: &Text| match text.frame {
+            Frame::Path { fit, .. } => Ok(fit),
+            _ => bail!("{:?}", text.frame),
+        };
+        let size = texts[0].style.chars.size.context("a size")?;
+        assert_eq!(fit(&texts[0])?, PathFit::Best);
+        assert_eq!(texts[0].style.chars.stroke, None);
+        // In the open, at the page's size past its balloon, outlined.
+        let open = &texts[2].style.chars;
+        assert_eq!(fit(&texts[2])?, PathFit::None);
+        assert_eq!(open.size, Some(size));
+        assert_eq!(open.stroke, Some(Rgba([1.0; 4])));
+        assert_eq!(open.stroke_width, Some(size / 8.0));
+        // Beside a balloon, as large as stays off it, its outline included.
+        let beside = texts[3].style.chars.size.context("a size")?;
+        assert_eq!(fit(&texts[3])?, PathFit::None);
+        assert!(beside < 0.9 * size, "{beside} against {size}");
+        let laid = Renderer::get()
+            .layout(ids[7], &texts[3])?
+            .context("a layout")?;
+        let left = laid
+            .lines
+            .iter()
+            .map(|line| line.x0)
+            .fold(f64::MAX, f64::min);
+        assert!(left >= 320.0, "{left}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_sound_effect_over_a_balloon_shrinks_off_its_text() -> Result<()> {
+        // A balloon's text, and a sound effect whose box reaches over it.
+        let block = |role: &str, x: f64, y: f64, width: f64, height: f64| {
+            json!({"kind": "block", "role": role, "source": {
+                "frame": {"box": {"bounds": {"x": x, "y": y, "width": width, "height": height}}},
+                "style": {"chars": {"size": 40.0}},
+            }})
+        };
+        let dir = tempfile::tempdir()?;
+        let (mut session, ids) = page(
+            &dir,
+            &[
+                ("b", None, json!({"kind": "balloon", "outline": BALLOON})),
+                ("speech", Some("b"), block("text", 60.0, 40.0, 40.0, 100.0)),
+                ("sound", None, block("sfx", 140.0, 30.0, 250.0, 100.0)),
+            ],
+        )?;
+        let texts = lettered(
+            &mut session,
+            &[(ids[1], "HELLO THERE"), (ids[2], "BOOM!")],
+            &langid!("en"),
+        )?;
+        let Frame::Box { fit, .. } = texts[1].frame else {
+            bail!("{:?}", texts[1].frame);
+        };
+        assert_eq!(fit, Fit::Shrink);
+        // As drawn, outlines included.
+        let drawn = |id: LayerId, text: &Text| -> Result<Vec<Rect>> {
+            let laid = Renderer::get().layout(id, text)?.context("a layout")?;
+            Ok(laid.lines)
+        };
+        let (speech, sound) = (drawn(ids[1], &texts[0])?, drawn(ids[2], &texts[1])?);
+        assert!(
+            sound
+                .iter()
+                .all(|a| speech.iter().all(|b| a.intersect(*b).area() == 0.0)),
+            "{sound:?} against {speech:?}"
+        );
         Ok(())
     }
 

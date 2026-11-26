@@ -87,6 +87,30 @@ fn closed(points: &[Point]) -> BezPath {
         .collect()
 }
 
+/// Whether `boxes` lie less than `STRADDLE` inside the balloon `outline`, by a
+/// grid of points over each: written across its edge, as a remark beside a
+/// balloon is.
+pub fn straddles(outline: &BezPath, boxes: &[Rect]) -> bool {
+    let points: Vec<Point> = boxes
+        .iter()
+        .flat_map(|rect| {
+            (0..12).flat_map(move |gx| {
+                (0..12).map(move |gy| {
+                    Point::new(
+                        rect.x0 + rect.width() * (f64::from(gx) + 0.5) / 12.0,
+                        rect.y0 + rect.height() * (f64::from(gy) + 0.5) / 12.0,
+                    )
+                })
+            })
+        })
+        .collect();
+    let inside = points
+        .iter()
+        .filter(|&&point| outline.contains(point))
+        .count();
+    !points.is_empty() && (inside as f64) < STRADDLE * points.len() as f64
+}
+
 /// One room in the balloon `outline` for each group of boxes, in page
 /// pixels. Each group's boxes seed the balloon's pixels under them, so a
 /// translation covering several texts gets one room, and stay whole in it.
@@ -103,29 +127,9 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
     if groups.len() < 2 {
         return whole();
     }
-    // A grid of points over each group's boxes, and the share inside.
     let straddles: Vec<bool> = groups
         .iter()
-        .map(|boxes| {
-            let points: Vec<Point> = boxes
-                .iter()
-                .flat_map(|rect| {
-                    (0..12).flat_map(move |gx| {
-                        (0..12).map(move |gy| {
-                            Point::new(
-                                rect.x0 + rect.width() * (f64::from(gx) + 0.5) / 12.0,
-                                rect.y0 + rect.height() * (f64::from(gy) + 0.5) / 12.0,
-                            )
-                        })
-                    })
-                })
-                .collect();
-            let inside = points
-                .iter()
-                .filter(|&&point| outline.contains(point))
-                .count();
-            !points.is_empty() && (inside as f64) < STRADDLE * points.len() as f64
-        })
+        .map(|boxes| straddles(outline, boxes))
         .collect();
     let bounds = groups
         .iter()

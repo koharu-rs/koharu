@@ -1,4 +1,4 @@
-use koharu_ml::koharu_layout_highres::rooms;
+use koharu_ml::koharu_layout_highres::{rooms, straddles};
 use koharu_scene::{Content, Layer, LayerId, Role};
 use kurbo::{BezPath, Shape as _};
 
@@ -9,7 +9,9 @@ use crate::{Error, Result};
 /// page of `layers`, simplified: the layout model's split of the outline among
 /// the source boxes of the texts standing in it. Those are its own and any
 /// other whose box reaches in, such as a remark written over its edge, which a
-/// later layer's clean-up would otherwise cover the balloon's lines with.
+/// later layer's clean-up would otherwise cover the balloon's lines with. None
+/// for such a remark, written across the edge of a balloon others stand in,
+/// which is lettered as a free text is: its share is its source's narrow box.
 pub(super) fn room(
     outline: &koharu_scene::Path,
     children: &[Layer],
@@ -34,9 +36,13 @@ pub(super) fn room(
         })
         .map(|(_, (_, rect))| vec![*rect])
         .collect();
-    Ok(at
-        .and_then(|at| rooms(&outline, &groups).into_iter().nth(at))
-        .map(simplified))
+    let Some(at) = at else {
+        return Ok(None);
+    };
+    if groups.len() > 1 && straddles(&outline, &groups[at]) {
+        return Ok(None);
+    }
+    Ok(rooms(&outline, &groups).into_iter().nth(at).map(simplified))
 }
 
 /// The text blocks among `layers`, and among their children when `deep`,

@@ -1,10 +1,10 @@
 //! Lines fitted to a text's room: at its size when they fit, or in a best-fit
 //! frame at the largest scale above it that fits; else, as the frame allows,
 //! at the largest scale down to half that fits with whole words, then at half
-//! with a path's inset halved, unless one hyphen a word keeps the text a good
-//! deal larger, then hyphenated, and a best-fit text below half as it last
+//! with a path's inset halved, unless one hyphen keeps the text a tenth
+//! larger, then hyphenated, and a best-fit text below half as it last
 //! broke until it fits. A word is never split without a hyphen: what still
-//! doesn't fit runs past its room whole.
+//! doesn't fit runs past its room, hyphenated where that runs it less far.
 
 use std::ops::{Range, RangeInclusive};
 
@@ -14,7 +14,7 @@ use kurbo::Rect;
 use super::{
     breaks::{Break, Breaking, Segment},
     lines::{self, Balance},
-    room::{self, Outline, Room, Spans, fills, physical, shrinks},
+    room::{self, Outline, Room, Spans, fills, logical, physical, shrinks},
     style::Styled,
 };
 
@@ -23,10 +23,11 @@ use super::{
 /// line height, or a room too small for anything, reaches.
 const CEILING: f32 = 256.0;
 
-/// Whole words drawn at less of their size than this hyphenate when that
-/// makes them `GAIN` times larger.
-const SMALL: f32 = 0.75;
-const GAIN: f32 = 1.25;
+/// Whole words drawn at less of their size than this take a hyphen when that
+/// makes them `GAIN` times larger: under it a text looks smaller than its
+/// neighbours.
+const SMALL: f32 = 0.9;
+const GAIN: f32 = 1.1;
 
 /// Lines placed at one scale.
 #[derive(Clone, Debug)]
@@ -103,7 +104,7 @@ pub(super) fn fit(
         _ => None,
     };
     // A hyphen is the lesser evil where a long word would leave the text
-    // small.
+    // small, but only one: a narrow balloon's text took four to grow a tenth.
     if styled.hyphenation.is_some()
         && shrinks(&styled.frame)
         && (placed.overflowed || placed.scale < SMALL)
@@ -116,7 +117,16 @@ pub(super) fn fit(
         let halved = largest_fit(
             least,
             |scale| overflows(styled, room, &halves, scale),
-            |scale| place(styled, room, &halves, scale),
+            |scale| {
+                let mut placed = place(styled, room, &halves, scale);
+                let hyphens = placed.lines.iter().filter(|line| {
+                    !line.last
+                        && (line.segments.clone().last())
+                            .is_some_and(|at| halves[at].after == Break::Hyphen)
+                });
+                placed.overflowed |= hyphens.count() > 1;
+                placed
+            },
         );
         if !halved.overflowed {
             return (halves, halved);
@@ -141,7 +151,7 @@ pub(super) fn fit(
             if !hyphenated.overflowed {
                 return (hyphens, hyphenated);
             }
-            Some(hyphens)
+            Some((hyphens, hyphenated))
         }
         None => None,
     };
@@ -149,7 +159,7 @@ pub(super) fn fit(
     // shrinks on, as it last broke, until its room holds it, as far below
     // its size as it may grow above.
     if fills(&styled.frame) {
-        let segments = hyphens.unwrap_or(words);
+        let segments = hyphens.map_or(words, |(hyphens, _)| hyphens);
         let sure = |scale: f32| match inset {
             Some((outline, anchor, inset)) => {
                 let (fewest, most) =
@@ -165,9 +175,28 @@ pub(super) fn fit(
         );
         return (segments, shrunk);
     }
-    // Nothing fits: the words run past their room whole, centred, into its
-    // margin first.
-    (words, placed)
+    // Nothing fits: the text runs past its room, centred, into its margin
+    // first, and hyphenated when that keeps it nearer the room, as a word too
+    // long for a narrow balloon reads better broken than running over art.
+    let past = |segments: &[Segment], placed: &Placed| {
+        let frame = logical(styled.vertical).transform_rect_bbox(placed.frame);
+        placed
+            .lines
+            .iter()
+            .map(|line| {
+                let along = lines::length(segments, line.segments.clone(), placed.scale);
+                let across =
+                    (frame.y0 as f32 - line.top).max(line.top + line.pitch - frame.y1 as f32);
+                (along - line.room).max(across)
+            })
+            .fold(0.0, f32::max)
+    };
+    match hyphens {
+        Some((hyphens, hyphenated)) if past(&hyphens, &hyphenated) < past(&words, &placed) => {
+            (hyphens, hyphenated)
+        }
+        _ => (words, placed),
+    }
 }
 
 /// The largest scale above 1 at which `segments`, which fit at 1 as `set`,
@@ -911,22 +940,33 @@ mod tests {
     }
 
     #[test]
-    fn a_long_word_hyphenates_only_where_that_makes_it_a_good_deal_larger() -> Result<()> {
+    fn a_text_takes_one_hyphen_and_only_where_that_makes_it_a_tenth_larger() -> Result<()> {
         // In a box 90 wide it fits whole at 0.6 of its size, and its halves
         // at theirs.
         let (styled, room) = in_box(90.0, 100.0, "shrink")?;
         let (segments, placed) = fit(&styled, &room, long);
         assert_eq!((segments.len(), placed.scale), (2, 1.0));
-        // In one 115 wide it fits whole above three quarters.
-        let (styled, room) = in_box(115.0, 100.0, "shrink")?;
+        // In one 140 wide it fits whole above nine tenths.
+        let (styled, room) = in_box(140.0, 100.0, "shrink")?;
         let (segments, placed) = fit(&styled, &room, long);
         assert_eq!(segments.len(), 1);
-        assert!((0.75..0.77).contains(&placed.scale), "{}", placed.scale);
-        // In one 90 wide and 16 tall, a line of it at 0.6 is 7.2 tall and
-        // two of its halves fit at 0.67, not a quarter larger.
-        let (styled, room) = in_box(90.0, 16.0, "shrink")?;
+        assert!((0.93..0.94).contains(&placed.scale), "{}", placed.scale);
+        // In one 90 wide and 15 tall, a line of it at 0.6 is 7.2 tall and
+        // two of its halves fit at 0.625, not a tenth larger.
+        let (styled, room) = in_box(90.0, 15.0, "shrink")?;
         let (segments, placed) = fit(&styled, &room, long);
         assert_eq!(segments.len(), 1);
+        assert!((0.59..=0.6).contains(&placed.scale), "{}", placed.scale);
+        // Two such words, which grow only with a hyphen each, stay whole.
+        let (styled, room) = in_box(90.0, 100.0, "shrink")?;
+        let (segments, placed) = fit(&styled, &room, |breaking| {
+            let mut first = long(breaking);
+            if let Some(last) = first.last_mut() {
+                last.after = Break::Normal;
+            }
+            [first, long(breaking)].concat()
+        });
+        assert_eq!(segments.len(), 2);
         assert!((0.59..=0.6).contains(&placed.scale), "{}", placed.scale);
         Ok(())
     }
