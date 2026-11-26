@@ -55,7 +55,7 @@
     "@vitejs/plugin-react": "^6.3.0",
     "@vitest/ui": "^5.1.1",
     "jsdom": "^31.0.1",
-    "oxlint": "^1.93.0",
+    "oxlint": "^1.94.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"
