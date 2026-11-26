@@ -22,12 +22,14 @@ use super::{Lettering, Mask, outlined::outlined};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Typography {
     /// Whether the lines run down the page: the lettering's block is longer
-    /// that way, at its tilt.
+    /// that way, at its tilt, or its ink stands in columns, as a balloon of
+    /// several short columns, wider than tall, has it.
     pub vertical: bool,
     /// How far the lines turn clockwise from horizontal, or from vertical for
     /// vertical lines, in degrees within ±45°: the commonest direction of the
-    /// block's edges. A turn that moves the lines' far end by less than a
-    /// stroke is 0: it can't be told from the glyphs' ragged edges.
+    /// block's edges. A turn under `UPRIGHT`, or one that moves the lines'
+    /// far end by less than a stroke, is 0: it can't be told from the glyphs'
+    /// ragged edges, and lettering is upright far more often than not.
     pub tilt: f32,
     /// How broad the lines are across, in pixels, about a CJK glyph's em:
     /// the ink's profile across the lines splits into a run for each, and
@@ -63,7 +65,12 @@ impl Lettering {
         // The block's edges are the sides and ends of its lines, and their
         // commonest direction, modulo 90°, is the lines' tilt. The edges'
         // gradients are averaged at four times their angle, which folds sides
-        // and ends onto one direction. Leptonica's skew finder, scoring the
+        // and ends onto one direction, then again over only the edges within
+        // `TILT_REACH` of that average, until it settles. Glyphs narrower
+        // than a column's widest, such as ー, っ, and !!, make its sides
+        // ragged, and their leaning edges pulled the plain average of 41
+        // upright texts on 8 Manga109 spreads up to 7° off; a turned block
+        // turns all of its edges. Leptonica's skew finder, scoring the
         // ink's profiles, flipped direction on 14% of blocks turned by up to
         // 20° and followed only 82% of the turn; the block's hull, by its
         // minimum-area rectangle or narrowest side, tilted wherever columns
@@ -89,19 +96,47 @@ impl Lettering {
         });
         let smooth = gaussian_blur_f32(&body_image, 1.5);
         let (across, down) = (horizontal_sobel(&smooth), vertical_sobel(&smooth));
-        let (mut cosine, mut sine) = (0.0f64, 0.0f64);
-        for (gx, gy) in across.pixels().zip(down.pixels()) {
-            let (gx, gy) = (f64::from(gx.0[0]), f64::from(gy.0[0]));
-            let strength = gx.hypot(gy);
-            if strength > 0.0 {
-                let angle = 4.0 * gy.atan2(gx);
-                cosine += strength * angle.cos();
-                sine += strength * angle.sin();
+        // A direction in degrees, modulo 90°, within ±45°.
+        let fold = |degrees: f64| (degrees + 45.0).rem_euclid(90.0) - 45.0;
+        let edges: Vec<(f64, f64)> = across
+            .pixels()
+            .zip(down.pixels())
+            .map(|(gx, gy)| (f64::from(gx.0[0]), f64::from(gy.0[0])))
+            .filter(|&(gx, gy)| gx != 0.0 || gy != 0.0)
+            .map(|(gx, gy)| (fold(gy.atan2(gx).to_degrees()), gx.hypot(gy)))
+            .collect();
+        let (cosine, sine) =
+            edges
+                .iter()
+                .fold((0.0, 0.0), |(cosine, sine), &(direction, strength)| {
+                    let angle = 4.0 * direction.to_radians();
+                    (
+                        cosine + strength * angle.cos(),
+                        sine + strength * angle.sin(),
+                    )
+                });
+        let mut angle = (f64::atan2(sine, cosine) / 4.0).to_degrees();
+        for _ in 0..8 {
+            let (turn, weight) = edges
+                .iter()
+                .map(|&(direction, strength)| (fold(direction - angle), strength))
+                .filter(|(turn, _)| turn.abs() <= TILT_REACH)
+                .fold((0.0, 0.0), |(turn, weight), (by, strength)| {
+                    (turn + by * strength, weight + strength)
+                });
+            if weight == 0.0 {
+                break;
+            }
+            let shift = turn / weight;
+            angle = fold(angle + shift);
+            if shift.abs() < 0.01 {
+                break;
             }
         }
-        let angle = (sine.atan2(cosine) / 4.0).to_degrees() as f32;
+        let angle = angle as f32;
 
-        // The lines run along the body's longer extent at that angle.
+        // The lines run along the body's longer extent at that angle, or
+        // down its columns.
         let (sin, cos) = angle.to_radians().sin_cos();
         let (mut along_x, mut along_y) = ((f32::MAX, f32::MIN), (f32::MAX, f32::MIN));
         for (x, y, part) in parts.enumerate_pixels() {
@@ -113,16 +148,26 @@ impl Lettering {
             }
         }
         let (extent_x, extent_y) = (along_x.1 - along_x.0 + 1.0, along_y.1 - along_y.0 + 1.0);
-        let vertical = if (extent_x - extent_y).abs() < 1.0 {
+        // By its shape alone, every misreading found among 647 letterings on
+        // 24 Manga109 spreads and 8 Chinese pages, 17 of them, was a block of
+        // columns wider than tall read as horizontal; so only a block read as
+        // horizontal is asked whether its ink stands in columns.
+        let longer_down = if (extent_x - extent_y).abs() < 1.0 {
             height > width
         } else {
             extent_y > extent_x
         };
-        let length = extent_x.max(extent_y);
+        let vertical =
+            longer_down || columns(&ink, if angle.abs() < UPRIGHT { 0.0 } else { angle });
+        let length = if vertical { extent_y } else { extent_x };
         let strokes = |ink: &GrayImage| {
             let stroke_width = find_stroke_width(ink, 0.15);
             let resolution = (stroke_width.unwrap_or(1.0) / length).atan().to_degrees();
-            let tilt = if angle.abs() < resolution { 0.0 } else { angle };
+            let tilt = if angle.abs() < resolution.max(UPRIGHT) {
+                0.0
+            } else {
+                angle
+            };
             (stroke_width, tilt)
         };
         let outlined = outlined(page, &block, &ink, [left, top], |ink| {
@@ -169,22 +214,43 @@ impl Lettering {
 
 /// How broad `ink`'s lines, not all blank, are across at `tilt`.
 fn breadth(ink: &GrayImage, vertical: bool, tilt: f32) -> f32 {
+    median(&lines(ink, vertical, tilt))
+        .expect("the profile's peak is a run")
+        .breadth as f32
+}
+
+/// A line of ink: where it starts across the lines, in pixels from the
+/// ink's first, how broad it is, how far its ink reaches along it, and how
+/// much ink it holds.
+struct Line {
+    start: usize,
+    breadth: usize,
+    length: f32,
+    ink: u32,
+}
+
+/// `ink`'s lines when they run down the page or across it, at `tilt`, in
+/// order across them: the ink's profile across the lines splits into a run
+/// for each.
+fn lines(ink: &GrayImage, vertical: bool, tilt: f32) -> Vec<Line> {
     let (sin, cos) = tilt.to_radians().sin_cos();
-    let across: Vec<f32> = ink
+    // Each pixel of ink, across the lines and along them.
+    let points: Vec<(f32, f32)> = ink
         .enumerate_pixels()
         .filter(|(_, _, pixel)| pixel.0[0] != 0)
         .map(|(x, y, _)| {
             let (x, y) = (x as f32, y as f32);
-            match vertical {
-                true => x * cos + y * sin,
-                false => y * cos - x * sin,
-            }
+            let (u, v) = (x * cos + y * sin, y * cos - x * sin);
+            if vertical { (u, v) } else { (v, u) }
         })
         .collect();
-    let low = across.iter().copied().fold(f32::MAX, f32::min);
+    let low = points
+        .iter()
+        .map(|(across, _)| *across)
+        .fold(f32::MAX, f32::min);
     let mut profile = Vec::<u32>::new();
-    for position in &across {
-        let bin = (position - low) as usize;
+    for (across, _) in &points {
+        let bin = (across - low) as usize;
         if profile.len() <= bin {
             profile.resize(bin + 1, 0);
         }
@@ -193,21 +259,78 @@ fn breadth(ink: &GrayImage, vertical: bool, tilt: f32) -> f32 {
     // Close lines' anti-aliased edges can meet, so a gap is where the
     // profile falls below an eighth of its peak.
     let gap = profile.iter().copied().max().unwrap_or(0) / 8;
-    let mut runs: Vec<(usize, u32)> = profile
-        .split(|count| *count <= gap)
-        .filter(|run| !run.is_empty())
-        .map(|run| (run.len(), run.iter().sum()))
-        .collect();
-    runs.sort_unstable();
-    let total: u32 = runs.iter().map(|(_, ink)| ink).sum();
+    let mut lines = Vec::new();
+    let mut start = None;
+    for (bin, &count) in profile.iter().chain([&0]).enumerate() {
+        match (count > gap, start) {
+            (true, None) => start = Some(bin),
+            (false, Some(from)) => {
+                lines.push(Line {
+                    start: from,
+                    breadth: bin - from,
+                    length: 0.0,
+                    ink: profile[from..bin].iter().sum(),
+                });
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    let mut line_of = vec![None; profile.len()];
+    for (index, line) in lines.iter().enumerate() {
+        line_of[line.start..line.start + line.breadth].fill(Some(index));
+    }
+    let mut reach = vec![(f32::MAX, f32::MIN); lines.len()];
+    for (across, along) in &points {
+        if let Some(index) = line_of[(across - low) as usize] {
+            reach[index] = (reach[index].0.min(*along), reach[index].1.max(*along));
+        }
+    }
+    for (line, (first, last)) in lines.iter_mut().zip(reach) {
+        line.length = last - first + 1.0;
+    }
+    lines
+}
+
+/// The line holding the median of the ink, the lines ordered by breadth,
+/// which stands for them all: ruby or a stray mark doesn't.
+fn median(lines: &[Line]) -> Option<&Line> {
+    let mut ordered: Vec<&Line> = lines.iter().collect();
+    ordered.sort_unstable_by_key(|line| (line.breadth, line.ink));
+    let total: u32 = lines.iter().map(|line| line.ink).sum();
     let mut seen = 0;
-    runs.iter()
-        .find(|(_, ink)| {
-            seen += ink;
-            2 * seen >= total
-        })
-        .map(|(length, _)| *length)
-        .expect("the profile's peak is a run") as f32
+    ordered.into_iter().find(|line| {
+        seen += line.ink;
+        2 * seen >= total
+    })
+}
+
+/// Whether `ink` stands in columns at `tilt`: its lines down the page are at
+/// least three times as long as broad, so each holds a few glyphs, and the
+/// gaps between them are wider by half than those between its rows across,
+/// as the space between lines is wider than between the glyphs of a line.
+/// A single column's parts, such as い's two strokes, lie closer than its
+/// glyphs.
+fn columns(ink: &GrayImage, tilt: f32) -> bool {
+    let (down, across) = (lines(ink, true, tilt), lines(ink, false, tilt));
+    let Some(column) = median(&down) else {
+        return false;
+    };
+    // The median gap between neighbouring lines, or 0 for one line.
+    let between = |lines: &[Line]| {
+        let mut gaps: Vec<f32> = lines
+            .windows(2)
+            .map(|pair| (pair[1].start - pair[0].start - pair[0].breadth) as f32)
+            .collect();
+        gaps.sort_unstable_by(f32::total_cmp);
+        match gaps.len() {
+            0 => 0.0,
+            count if count % 2 == 0 => (gaps[count / 2 - 1] + gaps[count / 2]) / 2.0,
+            count => gaps[count / 2],
+        }
+    };
+    let (columns, rows) = (between(&down), between(&across));
+    column.length >= 3.0 * column.breadth as f32 && columns > rows && columns >= 1.5 * rows
 }
 
 /// How far from the band's median colour, in every channel, an outline's
@@ -791,6 +914,17 @@ fn ink(
         .then_some((crop, ink, [left, top]))
 }
 
+/// How far from the lines' direction, in degrees, a block's edge still
+/// counts toward it: a turned block's sides, stepped on the pixel grid,
+/// spread about that far, while a mark leaning further, such as a
+/// hand-lettered !!, doesn't count.
+const TILT_REACH: f64 = 10.0;
+
+/// The tilt, in degrees, under which lettering reads as upright, as a missed
+/// turn costs less than a false one: the 41 upright texts that the plain
+/// average turned by up to 7° on 8 Manga109 spreads measure at most 1.3°.
+const UPRIGHT: f32 = 3.0;
+
 /// How far from the paper's median colour, in every channel, a pixel of
 /// plain paper lies, and how much of it must.
 const PAPER_TOLERANCE: u8 = 32;
@@ -922,6 +1056,134 @@ mod tests {
         let fitted = glyph_mask(&detected, [80.0, 36.0, 120.0, 180.0], &page);
         assert!(fitted.contains(100, 48));
         assert!(!fitted.contains(100, 16));
+    }
+
+    #[test]
+    fn a_ragged_column_stays_upright_and_a_turned_one_turns() {
+        use imageproc::{drawing::draw_polygon_mut, point::Point};
+
+        use crate::koharu_layout_highres::Kind;
+
+        // Shapes around a column's top centre, turned clockwise about it, on
+        // a 1024-pixel page, whose blocks close over gaps of up to 12 pixels.
+        let tilt = |shapes: Vec<[(f32, f32); 4]>, turn: f32| {
+            let mut page = RgbImage::from_pixel(1024, 1024, Rgb([255, 255, 255]));
+            let (sin, cos) = turn.to_radians().sin_cos();
+            for corners in shapes {
+                let points = corners.map(|(x, y)| {
+                    Point::new(
+                        (500.0 + x * cos - y * sin).round() as i32,
+                        (400.0 + x * sin + y * cos).round() as i32,
+                    )
+                });
+                draw_polygon_mut(&mut page, &points, Rgb([0, 0, 0]));
+            }
+            let pixels = page
+                .pixels()
+                .map(|pixel| if pixel.0[0] < 128 { 255 } else { 0 })
+                .collect();
+            let lettering = Lettering {
+                kind: Kind::Text,
+                score: 1.0,
+                bbox: [450.0, 350.0, 550.0, 600.0],
+                mask: Mask {
+                    x: 0,
+                    y: 0,
+                    width: 1024,
+                    height: 1024,
+                    pixels,
+                },
+                bubble: None,
+                panel: None,
+                room: None,
+            };
+            lettering
+                .typography(&page)
+                .expect("the column holds ink")
+                .tilt
+        };
+        let bar = |left: f32, top: f32, width: f32, height: f32| {
+            [
+                (left, top),
+                (left + width, top),
+                (left + width, top + height),
+                (left, top + height),
+            ]
+        };
+        // Three 三, 24 pixels wide and 28 apart, ending in a hand-lettered
+        // !!: two bars leaning 25°, narrower than the column, as ー, っ, and
+        // !! make a column's sides ragged.
+        let mut ragged: Vec<_> = (0..3)
+            .flat_map(|row| {
+                [0.0, 11.0, 22.0].map(|line| bar(-12.0, 28.0 * row as f32 + line, 24.0, 2.0))
+            })
+            .collect();
+        ragged.extend([-4.0, 4.0].map(|left| {
+            [
+                (left, 82.0),
+                (left + 3.0, 82.0),
+                (left - 7.0, 104.0),
+                (left - 10.0, 104.0),
+            ]
+        }));
+        assert_eq!(tilt(ragged, 0.0), 0.0);
+        let solid = (0..5)
+            .map(|row| bar(-12.0, 28.0 * row as f32, 24.0, 24.0))
+            .collect();
+        let turned = tilt(solid, 12.0);
+        assert!((turned - 12.0).abs() < 1.0, "turned {turned}°");
+    }
+
+    #[test]
+    fn short_columns_read_down_and_short_rows_across() {
+        use crate::koharu_layout_highres::Kind;
+
+        // Hollow 24-pixel glyphs with 2-pixel strokes on a 1024-pixel page,
+        // in `columns` by `rows`, `across` pixels apart side by side and
+        // `down` pixels apart above and below.
+        let vertical = |columns: u32, rows: u32, across: u32, down: u32| {
+            let mut page = RgbImage::from_pixel(1024, 1024, Rgb([255, 255, 255]));
+            for (column, row) in
+                (0..columns).flat_map(|column| (0..rows).map(move |row| (column, row)))
+            {
+                let (left, top) = (400 + column * (24 + across), 400 + row * (24 + down));
+                for (x, y) in (left..left + 24).flat_map(|x| (top..top + 24).map(move |y| (x, y))) {
+                    let edge = x < left + 2 || x >= left + 22 || y < top + 2 || y >= top + 22;
+                    if edge {
+                        page.put_pixel(x, y, Rgb([0, 0, 0]));
+                    }
+                }
+            }
+            let pixels = page
+                .pixels()
+                .map(|pixel| if pixel.0[0] < 128 { 255 } else { 0 })
+                .collect();
+            let lettering = Lettering {
+                kind: Kind::Text,
+                score: 1.0,
+                bbox: [390.0, 390.0, 560.0, 500.0],
+                mask: Mask {
+                    x: 0,
+                    y: 0,
+                    width: 1024,
+                    height: 1024,
+                    pixels,
+                },
+                bubble: None,
+                panel: None,
+                room: None,
+            };
+            lettering
+                .typography(&page)
+                .expect("the glyphs are ink")
+                .vertical
+        };
+        // Four columns of three glyphs, wider than tall, the columns 12
+        // pixels apart and their glyphs 4.
+        assert!(vertical(4, 3, 12, 4));
+        // Three rows of four glyphs, also wider than tall, the rows 12
+        // pixels apart and their glyphs 4.
+        assert!(!vertical(4, 3, 4, 12));
     }
 
     #[test]
