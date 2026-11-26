@@ -1,3 +1,30 @@
+## [0.100.0](https://github.com/koharu-rs/koharu/compare/0.99.0..0.100.0) - 2026-11-26
+
+### ⛰️  Features
+
+- Letter each translation in its source's kernel style, with styles the project keeps and Settings seeds, steadier font readings, and Chinese lines breaking around quotation marks - ([7955303](https://github.com/koharu-rs/koharu/commit/7955303e336fa0e3b71545d8a86b5333bd0bd73a))
+
+### 🐛 Bug Fixes
+
+- *(ml)* Keep upright lettering upright by re-averaging its tilt over the edges near it, and read a block of short columns wider than tall as vertical - ([3745d87](https://github.com/koharu-rs/koharu/commit/3745d87029652fadf6c024491ded6918837dd84c))
+- *(pipeline)* Grow a text its balloon would leave empty toward its source's size, break drawn-out sounds in their runs, overflow past a balloon's top and foot rather than its sides, outline every text, and cap outlines at an eighth of its size - ([c784a40](https://github.com/koharu-rs/koharu/commit/c784a404213b5218155e2a1d9b7b91dc7ebdc369))
+- *(pipeline)* Keep small text at its page's size, hyphenated from nine tenths of it and past its balloon where no hyphen lifts it, and shrink sound effects, free text, and overflow off other texts' letters - ([e101154](https://github.com/koharu-rs/koharu/commit/e1011543a0d639a377e5c4cf559fc6efd0cfb91f))
+- *(ui)* Take react-colorful 5.8.2 from npm in place of the fork pin - ([4016358](https://github.com/koharu-rs/koharu/commit/401635800669d865c0851746b40ac58b0b7b1ff1))
+- Type accents and input-method text on Linux, on a winit-gtk4 pin that gives its GTK 4 backend an input method - ([ede5017](https://github.com/koharu-rs/koharu/commit/ede501747112297edcac8fedd5d193ff9bef6516))
+
+### 📚 Documentation
+
+- Show the current editor in the README's screenshot, its window cut out with rounded, transparent corners - ([95532f8](https://github.com/koharu-rs/koharu/commit/95532f83aae7e153306b60d327f9fad4bdde6896))
+- Fold the top tabs into one flat sidebar of sections, with Reference last, as Mintlify's own docs have no tabs - ([f6d4935](https://github.com/koharu-rs/koharu/commit/f6d493546bb5f45116cc2af281fb28da4628f1ce))
+- Show the homepage's illustrations on the published site, where Mintlify rewrote the cards' image prop into a CDN address - ([32a421a](https://github.com/koharu-rs/koharu/commit/32a421a1273e6ab49181c89740d3473601c6b712))
+- Split the site into Guides, How it works, Reference, and Develop tabs with a How it works page on each stage, restyle it after Mintlify's own docs, fix what no longer matched the app, and give WinGet's package id - ([2ae5dce](https://github.com/koharu-rs/koharu/commit/2ae5dcecf718d9ecbbf30f328a77c2b27e5fb2ba))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(docs)* Upgrade mint to 4.3.94, whose preview switches language - ([a9b0389](https://github.com/koharu-rs/koharu/commit/a9b0389a3d03c16bf20c270ef0ab8c3d67fee231))
+- Build macOS without an explicit target again - ([45afa38](https://github.com/koharu-rs/koharu/commit/45afa38260d7e68197110335fa7d1dc351d80fa4))
+- Save Rust caches from main only, give Test a cache apart from Lint's, build macOS for the release's target, and drop the bun caches - ([ec4c3dc](https://github.com/koharu-rs/koharu/commit/ec4c3dc6ae1fbd365651f8960d51b4a5f07de18b))
+
 ## [0.99.0](https://github.com/koharu-rs/koharu/compare/0.98.1..0.99.0) - 2026-11-25
 
 ### ⛰️  Features
