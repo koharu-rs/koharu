@@ -1,3 +1,9 @@
+## [0.100.2](https://github.com/koharu-rs/koharu/compare/0.100.1..0.100.2) - 2026-11-26
+
+### 🐛 Bug Fixes
+
+- Centre vertical text in its balloon share, which reaches past the lines splitting a balloon, size a page by its balloon texts, set a balloon's like texts at one size, keep margins to three quarters, never letter in grey, and set ellipses, middle dots and AAT fonts' brackets right in vertical text - ([83cd4d9](https://github.com/koharu-rs/koharu/commit/83cd4d9659ee1f0cc90067b1cbe8fe324a383437))
+
 ## [0.100.1](https://github.com/koharu-rs/koharu/compare/0.100.0..0.100.1) - 2026-11-26
 
 ### 🐛 Bug Fixes
