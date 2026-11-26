@@ -8,7 +8,7 @@ Koharu has no typesetting stage. Translation places each text as it writes it, f
 
 ## Where a translation goes
 
-A text in a balloon goes in its room: the share of the balloon's outline its source gets beside the balloon's other texts. A free text or a sound effect goes in its source's frame, and so does a remark written across the edge of a balloon that holds other texts, whose share would be its narrow source box.
+A text in a balloon goes in its room: the share of the balloon's outline its source gets beside the balloon's other texts. The share reaches half the page's size past the lines splitting the balloon, which aren't drawn, so its letters keep only a quarter of their size from those lines, and stay centred in a share that narrows. A free text or a sound effect goes in its source's frame, and so does a remark written across the edge of a balloon that holds other texts, whose share would be its narrow source box.
 
 A room's outline is traced from the balloon's pixels with an anchor every few pixels, so the frame keeps only the few anchors that hold its shape: four for a rectangle or an ellipse, or those of a smooth curve. On 183 balloons whose traced outlines had a median of 76 anchors, the frames have a median of 5, small enough to reshape with **Direct Selection**.
 
@@ -16,7 +16,7 @@ Translation stores its decisions, not their result: the frame, its margin, where
 
 ## One size for a page
 
-A letterer keeps one size for a page's dialogue. Koharu measures the page's size with the renderer: the median of the largest size each text's room holds in whole words.
+A letterer keeps one size for a page's dialogue. Koharu measures the page's size with the renderer: the median of the largest size each balloon's text's room holds in whole words. A page with no text in a balloon is measured from all its text. A title's or a running head's frame widens to hold far more than a balloon, so it doesn't set the dialogue's size.
 
 - A translation that would draw smaller than the page's size is brought up to it, as far as its room allows. Small text can't be read.
 - A translation that fits larger stays larger. A big line in a big balloon is a shout.
@@ -32,7 +32,8 @@ When a text would draw smaller than the page's size, Koharu makes room in this o
 <Steps>
   <Step title='Narrow the margin'>
     A balloon's text has a letter's width of air around it. A text under the page's size takes less,
-    down to half: half a margin holds it 15 to 17% larger.
+    down to three quarters, which keeps a gap from the balloon's border. A text its balloon holds at
+    only about the page's size narrows its margin the same way, until it draws 15% larger.
   </Step>
   <Step title='Widen a free text'>
     A vertical source's column holds only a word or two of a horizontal translation, so a free

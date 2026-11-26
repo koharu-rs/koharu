@@ -139,9 +139,13 @@ fn opportunities(text: &str, breaking: Breaking, lang: Option<Lang>) -> Vec<Cut>
     // `new_auto` does.
     let mut segmenter = LineSegmenter::new_17_for_non_complex_scripts(options);
     segmenter.load_lstm();
+    // A middle dot never starts a line, as CLREQ and JLREQ keep it, but
+    // Unicode leaves U+00B7 ambiguous, which broke a translated name before
+    // the dot between its parts.
     let offsets: Vec<usize> = segmenter
         .segment_str(text)
         .filter(|&at| mandatory(at) || !words.iter().any(|w| at > w.start && at < w.end))
+        .filter(|&at| at == 0 || mandatory(at) || !text[at..].starts_with('\u{B7}'))
         .collect();
     let mut pieces = Vec::new();
     for pair in offsets.windows(2) {

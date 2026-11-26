@@ -181,19 +181,59 @@ impl Outline {
             ..self.corners.partition_point(|corner| *corner < v1);
         let mut spans = self.spans(at(0));
         for v in (1..5).map(at).chain(self.corners[inside].iter().copied()) {
-            let next = self.spans(v);
-            spans = spans
-                .iter()
-                .flat_map(|(a0, a1)| {
-                    next.iter().filter_map(move |(b0, b1)| {
-                        let (start, end) = (a0.max(*b0), a1.min(*b1));
-                        (end > start).then_some((start, end))
-                    })
-                })
-                .collect();
+            spans = common(&spans, &self.spans(v));
         }
         spans
     }
+
+    /// The spans along the band `v0..v1` that keep `air` from the outline on
+    /// every side, as CSS's `shape-padding` keeps a shape's content: the
+    /// band's spans less `air` at both ends, and past its sides, at the
+    /// middles of `MARGIN` equal parts of `air` and at the outline's corners
+    /// there, the spans less a disc's half-chord at that distance. The band
+    /// widened by `air` and cut by `air` kept a line up to 1.4 times as far
+    /// from a sloping outline, and set the heads of a domed balloon's columns
+    /// an em low.
+    pub(super) fn padded(&self, v0: f64, v1: f64, air: f64) -> Spans {
+        let less = |spans: Spans, by: f64| -> Spans {
+            (spans.into_iter())
+                .map(|(start, end)| (start + by, end - by))
+                .filter(|(start, end)| end > start)
+                .collect()
+        };
+        let mut spans = less(self.band(v0, v1), air);
+        if air <= 0.0 {
+            return spans;
+        }
+        let near = |corner: &&f64| {
+            (v0 - air..v0).contains(*corner) || (**corner > v1 && **corner < v1 + air)
+        };
+        let rows = (0..MARGIN)
+            .map(|part| air * (f64::from(part) + 0.5) / f64::from(MARGIN))
+            .flat_map(|distance| [v0 - distance, v1 + distance])
+            .chain(self.corners.iter().filter(near).copied());
+        for v in rows {
+            let distance = (v0 - v).max(v - v1);
+            let chord = (air * air - distance * distance).max(0.0).sqrt();
+            spans = common(&spans, &less(self.spans(v), chord));
+        }
+        spans
+    }
+}
+
+/// The rows a line's margin is sampled at past each side of its band.
+const MARGIN: u32 = 6;
+
+/// Where `a` and `b` overlap.
+fn common(a: &Spans, b: &Spans) -> Spans {
+    a.iter()
+        .flat_map(|(a0, a1)| {
+            b.iter().filter_map(move |(b0, b1)| {
+                let (start, end) = (a0.max(*b0), a1.min(*b1));
+                (end > start).then_some((start, end))
+            })
+        })
+        .collect()
 }
 
 /// The inline position lines in `bands` are centred on: of their spans'

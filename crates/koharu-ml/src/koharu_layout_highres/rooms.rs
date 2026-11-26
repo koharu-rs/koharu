@@ -121,8 +121,11 @@ pub fn straddles(outline: &BezPath, boxes: &[Rect]) -> bool {
 /// past the edge too, so the others' rooms keep off its lettering, and its
 /// room is its boxes' bounds, as a free text's frame is its box, since the
 /// outline's edge through it would cut its lines short. A group whose room
-/// comes out empty gets the whole outline.
-pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
+/// comes out empty gets the whole outline. Each other room reaches `reach`
+/// pixels into the outline past its borders with the others, a waist's
+/// chord too, which aren't drawn, so a text may keep less of a margin from
+/// them than from the outline.
+pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>], reach: f64) -> Vec<BezPath> {
     let whole = || vec![outline.clone(); groups.len()];
     if groups.len() < 2 {
         return whole();
@@ -274,9 +277,21 @@ pub fn rooms(outline: &BezPath, groups: &[Vec<Rect>]) -> Vec<BezPath> {
             {
                 return bounds.to_path(0.1);
             }
-            let room = GrayImage::from_fn(width, height, |lx, ly| {
+            let mut room = GrayImage::from_fn(width, height, |lx, ly| {
                 Luma([u8::from(labels.get_pixel(lx, ly)[0] == label) * u8::MAX])
             });
+            if reach > 0.0 {
+                let near = euclidean_squared_distance_transform(&room);
+                for (lx, ly, pixel) in room.enumerate_pixels_mut() {
+                    let other = labels.get_pixel(lx, ly)[0];
+                    if outside.get_pixel(lx, ly)[0] == 0
+                        && (other == 0 || !straddles[other as usize - 1])
+                        && near.get_pixel(lx, ly)[0] <= reach * reach
+                    {
+                        *pixel = Luma([u8::MAX]);
+                    }
+                }
+            }
             outline_of(&room, x.saturating_sub(1), y.saturating_sub(1))
                 .unwrap_or_else(|| outline.clone())
         })
@@ -525,6 +540,7 @@ mod tests {
                 vec![Rect::new(20.0, 80.0, 60.0, 120.0)],
                 vec![Rect::new(140.0, 80.0, 180.0, 120.0)],
             ],
+            0.0,
         );
 
         let [left_room, right_room] = [found[0].bounding_box(), found[1].bounding_box()];
@@ -551,6 +567,7 @@ mod tests {
                 vec![resize.transform_rect_bbox(Rect::new(20.0, 80.0, 60.0, 120.0))],
                 vec![resize.transform_rect_bbox(Rect::new(140.0, 80.0, 180.0, 120.0))],
             ],
+            0.0,
         );
 
         let [left_room, right_room] = [found[0].bounding_box(), found[1].bounding_box()];
@@ -579,6 +596,7 @@ mod tests {
                 vec![Rect::new(56.0, 56.0, 84.0, 176.0)],
                 vec![Rect::new(100.0, 44.0, 124.0, 84.0)],
             ],
+            0.0,
         );
 
         let lower = Point::new(134.0, 99.0);
@@ -596,7 +614,7 @@ mod tests {
             [wide.clone(), column.clone()],
             [column.clone(), wide.clone()],
         ] {
-            let found = rooms(&outline, &groups);
+            let found = rooms(&outline, &groups, 0.0);
             let at = usize::from(groups[0] == wide);
             // Most of the column's 40 by 180 box.
             let area = found[at].area().abs();
@@ -616,6 +634,7 @@ mod tests {
                 vec![Rect::new(40.0, 20.0, 140.0, 180.0)],
                 vec![Rect::new(170.0, 20.0, 230.0, 180.0)],
             ],
+            0.0,
         );
         let remark = found[1].bounding_box();
         assert!(remark.x1 >= 228.0 && remark.height() >= 155.0, "{remark:?}");
@@ -625,6 +644,7 @@ mod tests {
                 vec![Rect::new(40.0, 20.0, 140.0, 180.0)],
                 vec![Rect::new(150.0, 20.0, 204.0, 180.0)],
             ],
+            0.0,
         );
         assert!(
             found[1].bounding_box().x1 <= 201.0,

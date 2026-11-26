@@ -222,7 +222,8 @@ fn script_runs(text: &str, range: Range<usize>) -> Vec<(Range<usize>, IcuScript)
 /// Photoshop and CSS's `text-orientation: mixed` set it; the rest stands
 /// upright, `vert` giving the characters it transforms their vertical forms.
 /// What it transforms or else rotates (`Tr`), such as `〜` or a bracket,
-/// turns sideways in a font without a vertical form for it. `!` and `?`
+/// turns sideways in a font without a vertical form for it, and so does an
+/// ellipsis, which UAX #50 rotates. `!` and `?`
 /// stand upright in full width, as manga sets them, and so does an emoji: a
 /// grapheme with the emoji variation selector or a keycap, which UAX #50
 /// keeps upright.
@@ -238,11 +239,16 @@ fn orientations<'a>(
     for pair in boundaries.windows(2) {
         let grapheme = &part[pair[0]..pair[1]];
         let first = grapheme.chars().next().expect("a grapheme has a character");
+        let formless =
+            || font_at(range.start + pair[0]).is_some_and(|font| !font.has_vertical_form(first));
         let rotated = match orientation.get(first) {
+            // An ellipsis takes its font's vertical form, as Japanese and
+            // Chinese set one, and turns only without it. Turned, the horizontal
+            // form a face's `morx` gave it, already vertical, ran across the
+            // column.
+            _ if matches!(first, '…' | '‥' | '⋯') => formless(),
             VerticalOrientation::Rotated => true,
-            VerticalOrientation::TransformedRotated => {
-                font_at(range.start + pair[0]).is_some_and(|font| !font.has_vertical_form(first))
-            }
+            VerticalOrientation::TransformedRotated => formless(),
             _ => false,
         };
         let turned =

@@ -33,8 +33,9 @@ pub struct Typography {
     pub tilt: f32,
     /// How broad the lines are across, in pixels, about a CJK glyph's em:
     /// the ink's profile across the lines splits into a run for each, and
-    /// the run holding the median of the ink is the size, so ruby or a
-    /// stray mark doesn't count.
+    /// of the runs at least as broad as the one holding the median of the
+    /// ink, the one holding their median is the size, so neither ruby, a
+    /// stray mark, nor a line of kana narrower than the em counts.
     pub size: f32,
     pub stroke_width: Option<f32>,
     /// The commonest colour segment under the ink, and around it.
@@ -212,11 +213,18 @@ impl Lettering {
     }
 }
 
-/// How broad `ink`'s lines, not all blank, are across at `tilt`.
+/// How broad `ink`'s lines, not all blank, are across at `tilt`: the median of
+/// those at least as broad as the median line. A line is as broad as its
+/// broadest glyph, and kana are narrower than the em kanji fill: in a text
+/// of two kana columns and one with kanji, the median of the three read it a
+/// fifth small, which made its stroke read bold.
 fn breadth(ink: &GrayImage, vertical: bool, tilt: f32) -> f32 {
-    median(&lines(ink, vertical, tilt))
-        .expect("the profile's peak is a run")
-        .breadth as f32
+    let lines = lines(ink, vertical, tilt);
+    let middle = median(&lines).expect("the profile's peak is a run").breadth;
+    let broad: Vec<Line> = (lines.into_iter())
+        .filter(|line| line.breadth >= middle)
+        .collect();
+    median(&broad).expect("the median line is broad").breadth as f32
 }
 
 /// A line of ink: where it starts across the lines, in pixels from the
@@ -310,9 +318,23 @@ fn median(lines: &[Line]) -> Option<&Line> {
 /// gaps between them are wider by half than those between its rows across,
 /// as the space between lines is wider than between the glyphs of a line.
 /// A single column's parts, such as い's two strokes, lie closer than its
-/// glyphs.
+/// glyphs. A line no more than half as broad as the median one is gap: ruby,
+/// half its base's size, stands between columns, and its sparse glyphs split
+/// into slivers a pixel or two broad, whose gaps had read three short
+/// columns with ruby as rows.
 fn columns(ink: &GrayImage, tilt: f32) -> bool {
-    let (down, across) = (lines(ink, true, tilt), lines(ink, false, tilt));
+    let broad = |lines: Vec<Line>| -> Vec<Line> {
+        let Some(middle) = median(&lines).map(|line| line.breadth) else {
+            return lines;
+        };
+        (lines.into_iter())
+            .filter(|line| 2 * line.breadth > middle)
+            .collect()
+    };
+    let (down, across) = (
+        broad(lines(ink, true, tilt)),
+        broad(lines(ink, false, tilt)),
+    );
     let Some(column) = median(&down) else {
         return false;
     };
@@ -1140,18 +1162,32 @@ mod tests {
 
         // Hollow 24-pixel glyphs with 2-pixel strokes on a 1024-pixel page,
         // in `columns` by `rows`, `across` pixels apart side by side and
-        // `down` pixels apart above and below.
-        let vertical = |columns: u32, rows: u32, across: u32, down: u32| {
+        // `down` pixels apart above and below, and with `ruby` a hollow
+        // 10-pixel glyph with 1-pixel strokes a pixel right of each column's
+        // first and centred on it, as ruby stands beside one word of a
+        // column.
+        let vertical = |columns: u32, rows: u32, across: u32, down: u32, ruby: bool| {
             let mut page = RgbImage::from_pixel(1024, 1024, Rgb([255, 255, 255]));
+            let mut hollow = |left: u32, top: u32, size: u32, stroke: u32| {
+                for (x, y) in
+                    (left..left + size).flat_map(|x| (top..top + size).map(move |y| (x, y)))
+                {
+                    let edge = x < left + stroke
+                        || x >= left + size - stroke
+                        || y < top + stroke
+                        || y >= top + size - stroke;
+                    if edge {
+                        page.put_pixel(x, y, Rgb([0, 0, 0]));
+                    }
+                }
+            };
             for (column, row) in
                 (0..columns).flat_map(|column| (0..rows).map(move |row| (column, row)))
             {
                 let (left, top) = (400 + column * (24 + across), 400 + row * (24 + down));
-                for (x, y) in (left..left + 24).flat_map(|x| (top..top + 24).map(move |y| (x, y))) {
-                    let edge = x < left + 2 || x >= left + 22 || y < top + 2 || y >= top + 22;
-                    if edge {
-                        page.put_pixel(x, y, Rgb([0, 0, 0]));
-                    }
+                hollow(left, top, 24, 2);
+                if ruby && row == 0 {
+                    hollow(left + 25, top + 7, 10, 1);
                 }
             }
             let pixels = page
@@ -1179,11 +1215,12 @@ mod tests {
                 .vertical
         };
         // Four columns of three glyphs, wider than tall, the columns 12
-        // pixels apart and their glyphs 4.
-        assert!(vertical(4, 3, 12, 4));
+        // pixels apart and their glyphs 4, with ruby and without.
+        assert!(vertical(4, 3, 12, 4, false));
+        assert!(vertical(4, 3, 12, 4, true));
         // Three rows of four glyphs, also wider than tall, the rows 12
         // pixels apart and their glyphs 4.
-        assert!(!vertical(4, 3, 4, 12));
+        assert!(!vertical(4, 3, 4, 12, false));
     }
 
     #[test]

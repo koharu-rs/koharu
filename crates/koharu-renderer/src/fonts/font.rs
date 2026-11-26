@@ -1,13 +1,13 @@
 //! A font: one face as a variable-font instance, with its character map,
 //! metrics, HarfRust font and shape plans, and variation coordinates.
 
-use std::{fmt, sync::Arc};
+use std::{collections::HashMap, fmt, ops::Range, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
 use fontique::{CharmapIndex, QueryFont, Synthesis};
 use harfrust::{
     Buffer, Direction, Feature, Language, Script, ShapeOptions, ShapePlan, ShaperFont, Tag,
-    font::Variation,
+    font::{Blob, Variation},
 };
 use icu_properties::{CodePointSetData, props::DefaultIgnorableCodePoint};
 use skrifa::{
@@ -62,6 +62,15 @@ struct PlanKey {
     features: SmallVec<[(Tag, u32, bool); 2]>,
 }
 
+/// A table of a face: its range of the face's file.
+struct Table(Arc<dyn AsRef<[u8]> + Send + Sync>, Range<usize>);
+
+impl AsRef<[u8]> for Table {
+    fn as_ref(&self) -> &[u8] {
+        &(*self.0).as_ref()[self.1.clone()]
+    }
+}
+
 impl fmt::Debug for Font {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -88,13 +97,42 @@ impl Font {
                 value: *value,
             })
             .collect::<Vec<_>>();
-        let shaper = harfrust::Font::new(found.blob.clone().into_raw_parts().0, found.index)
+        let face = skrifa::FontRef::from_index(found.blob.as_ref(), found.index)
+            .context("failed to create Skrifa font reference")?;
+        // Shaped with OpenType layout alone, as Photoshop and DirectWrite
+        // shape: a face's Apple `morx` or `mort` is left out. A Chinese face's
+        // one `morx` subtable, horizontal and on by default, swapped in the
+        // vertical forms of `…` and `《` in horizontal text.
+        let apple = [b"morx", b"mort"].map(skrifa::Tag::new);
+        let bytes = found.blob.clone().into_raw_parts().0;
+        let source: harfrust::font::Source =
+            match apple.iter().any(|tag| face.table_data(*tag).is_some()) {
+                false => bytes.into(),
+                true => {
+                    let tables: HashMap<Tag, Range<usize>> = (face.table_directory.table_records())
+                        .iter()
+                        .filter(|record| !apple.contains(&record.tag()))
+                        .map(|record| {
+                            let start = record.offset() as usize;
+                            let tag = Tag::new(&record.tag().into_bytes());
+                            (tag, start..start + record.length() as usize)
+                        })
+                        .collect();
+                    let table: Arc<dyn Fn(Tag) -> Option<Blob> + Send + Sync> =
+                        Arc::new(move |tag| {
+                            let range = tables.get(&tag)?.clone();
+                            let table: Arc<dyn AsRef<[u8]> + Send + Sync> =
+                                Arc::new(Table(bytes.clone(), range));
+                            Some(Blob::from(table))
+                        });
+                    table.into()
+                }
+            };
+        let shaper = harfrust::Font::new(source, found.index)
             .context("failed to create HarfRust font")?
             .instance_builder()
             .variations(&variations)
             .build();
-        let face = skrifa::FontRef::from_index(found.blob.as_ref(), found.index)
-            .context("failed to create Skrifa font reference")?;
         let location = face.axes().location(variations.iter().map(|variation| {
             (
                 skrifa::Tag::new(&variation.tag.into_bytes()),
@@ -188,7 +226,9 @@ impl Font {
     }
 
     /// Whether the face sets `ch` in vertical text in a form of its own: its
-    /// `vert` or `vrt2` features substitute another glyph for it.
+    /// `vert` or `vrt2` features, or Unicode's vertical presentation forms
+    /// without them, substitute another glyph for it, one that draws: a
+    /// Chinese face draws `︽` and `︾` as nothing.
     pub(crate) fn has_vertical_form(&self, ch: char) -> bool {
         if let Some(known) = self.vertical_forms.get(&ch) {
             return known;
@@ -217,10 +257,9 @@ impl Font {
             ShapeOptions::new().plan(Some(&plan)).features(&features),
         );
         let vertical = shaped.is_ok()
-            && buffer
-                .glyph_infos()
-                .first()
-                .is_some_and(|info| Some(info.glyph_id) != horizontal);
+            && buffer.glyph_infos().first().is_some_and(|info| {
+                Some(info.glyph_id) != horizontal && self.ink(info.glyph_id, 1.0).is_some()
+            });
         self.vertical_forms.insert(ch, vertical);
         vertical
     }

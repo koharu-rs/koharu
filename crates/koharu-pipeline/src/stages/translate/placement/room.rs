@@ -12,11 +12,13 @@ use crate::{Error, Result};
 /// later layer's clean-up would otherwise cover the balloon's lines with. None
 /// for such a remark, written across the edge of a balloon others stand in,
 /// which is lettered as a free text is: its share is its source's narrow box.
+/// It reaches `past` beyond the lines splitting it from the others' shares.
 pub(super) fn room(
     outline: &koharu_scene::Path,
     children: &[Layer],
     layers: &[Layer],
     block: LayerId,
+    past: f64,
 ) -> Result<Option<BezPath>> {
     let outline = BezPath::from_svg(outline.as_str())
         .map_err(|_| Error::invalid("a balloon's outline isn't a path"))?;
@@ -42,7 +44,10 @@ pub(super) fn room(
     if groups.len() > 1 && straddles(&outline, &groups[at]) {
         return Ok(None);
     }
-    Ok(rooms(&outline, &groups).into_iter().nth(at).map(simplified))
+    Ok(rooms(&outline, &groups, past)
+        .into_iter()
+        .nth(at)
+        .map(simplified))
 }
 
 /// The text blocks among `layers`, and among their children when `deep`,

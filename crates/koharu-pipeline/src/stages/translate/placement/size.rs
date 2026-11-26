@@ -3,6 +3,8 @@
 //! balloon too narrow for its words, off the page's other balloons and texts.
 //! One its room holds larger still fills its room.
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use koharu_renderer::Renderer;
 use koharu_scene::{
@@ -13,10 +15,13 @@ use rayon::prelude::*;
 
 use super::{Lettering, boxed};
 
-/// The margins a balloon's text may have, in ems, the widest first. Half holds
-/// it 15 to 17% larger than the whole, and less puts letters on the balloon's
-/// border.
-const MARGINS: [f64; 5] = [1.0, 0.875, 0.75, 0.625, 0.5];
+/// The margins a balloon's text may have, in ems, the widest first. Three
+/// quarters keeps a gap from the balloon's border the eye sees; half held a
+/// text 15 to 17% larger but set letters against the border.
+const MARGINS: [f64; 3] = [1.0, 0.875, 0.75];
+/// Of a balloon's text's size, how large a narrower margin lets it draw before
+/// the margin stops narrowing.
+const ROOMY: f64 = 1.15;
 /// The steps a frame widens in, along its lines and across them.
 const ALONG: u32 = 16;
 const ACROSS: u32 = 4;
@@ -33,6 +38,10 @@ const EMPTY: f64 = 0.5;
 /// balloon's border but off it. Half an em held "Leave it to me!" at 24 px in
 /// a balloon its 40 px original filled.
 const EDGE: f64 = 0.125;
+/// Of the larger of two sources' sizes, the least the smaller is for a
+/// balloon's two texts to be set alike: a remark lettered at 19 pixels beside
+/// 23 is set apart, and 24 beside 26 alike.
+const ALIKE: f64 = 0.85;
 
 /// The middle of `values`, the larger of two.
 pub(super) fn median(mut values: Vec<f64>) -> Option<f64> {
@@ -41,13 +50,25 @@ pub(super) fn median(mut values: Vec<f64>) -> Option<f64> {
 }
 
 /// The size of the page `letterings` are on: the median of the largest its
-/// texts' rooms hold in whole words, each measured from its sources' size,
-/// `source`. Page medians agree within a work, where a size over its pages
-/// followed the tightest one.
+/// dialogue's rooms hold in whole words, each measured from its sources' size,
+/// `source`. Its dialogue is its texts in balloons, or every text when none is
+/// in one: a running head's or a title's widened frame holds far more than a
+/// balloon, and two set a page's one balloon text past its balloon at nearly
+/// three times its source's size. Page medians agree within a work, where a
+/// size over its pages followed the tightest one.
 pub(super) fn page(letterings: &[Lettering], source: Option<f64>) -> Result<Option<f64>> {
-    let mut held = letterings
-        .par_iter()
+    let texts: Vec<&Lettering> = (letterings.iter())
         .filter(|lettering| lettering.block.role == Role::Text)
+        .collect();
+    let in_balloons: Vec<&Lettering> = (texts.iter().copied())
+        .filter(|lettering| lettering.balloon.is_some())
+        .collect();
+    let dialogue = match in_balloons.is_empty() {
+        true => texts,
+        false => in_balloons,
+    };
+    let mut held = dialogue
+        .par_iter()
         .map(|lettering| {
             let mut text = lettering.text.clone();
             if let Some(widest) = lettering.widest {
@@ -142,6 +163,32 @@ pub(super) fn lift(
     }
     lettering.text.frame = past.frame;
     Ok((grown, Some(holds.unwrap_or(start))))
+}
+
+/// Narrows the margin of `lettering`, a balloon's text set at `size` and
+/// filling its room, a step of `MARGINS` at a time, until it draws `ROOMY`
+/// times that size or the margin is the narrowest: one its share holds only
+/// at about the page's size looked small beside texts that grow to fill
+/// roomier balloons.
+pub(super) fn roomier(lettering: &mut Lettering, size: f64) -> Result<()> {
+    let Frame::Path {
+        fit: PathFit::Best,
+        inset,
+        ..
+    } = lettering.text.frame
+    else {
+        return Ok(());
+    };
+    for margin in std::iter::once(inset).chain(MARGINS.into_iter().filter(|m| *m < inset)) {
+        if let Frame::Path { inset, .. } = &mut lettering.text.frame {
+            *inset = margin;
+        }
+        let draws = drawn(lettering.project, lettering.id, &at(&lettering.text, size))?;
+        if draws >= ROOMY * size {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// `text` set at `size`.
@@ -415,6 +462,48 @@ pub(super) fn clear(
             lettering.id,
             &at_size(lettering, &lettering.text.frame, sizes[at]),
         )?;
+    }
+    Ok(())
+}
+
+/// Sets the texts of a balloon, of `letterings` at `sizes`, whose sources are
+/// set alike at one size, the smallest any of them draws at, as a letterer
+/// sets one speaker's balloon: a short text filling its share grew past the
+/// long one beside it, which the original set alike. A remark its original
+/// set smaller, under `ALIKE` of another's size, stays apart: matched, it held
+/// the balloon's main text at its own narrow share's size. One that would draw
+/// larger stops filling its room.
+pub(super) fn together(letterings: &mut [Lettering], sizes: &mut [Option<f64>]) -> Result<()> {
+    let mut balloons: HashMap<LayerId, Vec<(usize, f64, f64)>> = HashMap::new();
+    for (index, (lettering, size)) in letterings.iter().zip(&*sizes).enumerate() {
+        let (Some(balloon), Role::Text, Some(size), Some(source)) = (
+            lettering.balloon,
+            lettering.block.role,
+            size,
+            lettering.block.source.style.chars.size,
+        ) else {
+            continue;
+        };
+        let draws = drawn(lettering.project, lettering.id, &at(&lettering.text, *size))?;
+        balloons
+            .entry(balloon)
+            .or_default()
+            .push((index, draws, source));
+    }
+    for texts in balloons.values().filter(|texts| texts.len() > 1) {
+        for &(index, draws, source) in texts {
+            let least = (texts.iter())
+                .filter(|(_, _, other)| source.min(*other) >= ALIKE * source.max(*other))
+                .map(|(_, draws, _)| *draws)
+                .fold(f64::MAX, f64::min);
+            if draws > 1.001 * least
+                && let Frame::Path { fit, .. } = &mut letterings[index].text.frame
+                && *fit == PathFit::Best
+            {
+                *fit = PathFit::Shrink;
+                sizes[index] = Some(least);
+            }
+        }
     }
     Ok(())
 }

@@ -74,10 +74,27 @@ pub(super) fn place(
                 Some(words) => translation(block, words, target, kernels.of(id)),
                 None => block.translation.clone()?,
             };
-            Some(lettering(project, id, block, text, source))
+            Some(lettering(project, id, block, text, source, 0.0))
         })
         .collect::<Result<Vec<_>>>()?;
     let size = size::page(&letterings, source)?;
+    // The split's reach is a share of the page's size, which the balloons'
+    // texts measure in their shares.
+    if let Some(size) = size {
+        letterings = (letterings.into_par_iter())
+            .map(|lettering| match lettering.balloon {
+                Some(_) => self::lettering(
+                    project,
+                    lettering.id,
+                    lettering.block,
+                    lettering.text,
+                    source,
+                    SPLIT * size,
+                ),
+                None => Ok(lettering),
+            })
+            .collect::<Result<Vec<_>>>()?;
+    }
     // The page, its balloons, the lines of its texts kept as they are, and
     // where every text's source lies, which its clean-up covers, drawn over
     // an earlier layer's lettering: what those that move keep within and off.
@@ -115,6 +132,9 @@ pub(super) fn place(
             Ok(match size {
                 Some(page) => {
                     let (size, held) = size::lift(lettering, page, source)?;
+                    if held.is_none() && size <= page && lettering.balloon.is_some() {
+                        size::roomier(lettering, size)?;
+                    }
                     (Some(size), held.or((size > page).then_some(page)))
                 }
                 None => (None, None),
@@ -132,6 +152,7 @@ pub(super) fn place(
         &outlines,
         sheet,
     )?;
+    size::together(&mut letterings, &mut sizes)?;
     for (lettering, size) in letterings.iter_mut().zip(sizes) {
         lettering.letter(size);
     }
@@ -167,15 +188,24 @@ fn translation(
     text
 }
 
-/// `text`, block `id`'s translation, in its room. It is vertical only when its
-/// source is and it's Japanese or Chinese, which are written so; any other
-/// language runs horizontally, turned by the source's tilt as the source is.
+/// Of the page's size, how far a balloon text's share reaches past the lines
+/// splitting the balloon among its texts, which aren't drawn: within a
+/// three-quarter margin, its letters keep a quarter of an em off one, and
+/// half an em off the other text's. A short text beside another, its share
+/// narrowing away from the balloon's side, fitted only at the wide end.
+const SPLIT: f64 = 0.5;
+
+/// `text`, block `id`'s translation, in its room, which reaches `reach` past
+/// the lines splitting its balloon. It is vertical only when its source is
+/// and it's Japanese or Chinese, which are written so; any other language
+/// runs horizontally, turned by the source's tilt as the source is.
 fn lettering<'p>(
     project: &'p Project,
     id: LayerId,
     block: &'p Block,
     text: Text,
     line: Option<f64>,
+    reach: f64,
 ) -> Result<Lettering<'p>> {
     let (page, holder) = project.parent(id)?;
     let source = &block.source;
@@ -187,7 +217,7 @@ fn lettering<'p>(
             ..
         }) => match block.role {
             // A remark across its edge is lettered as a free text.
-            Role::Text => match room::room(&balloon.outline, children, &page.layers, id)? {
+            Role::Text => match room::room(&balloon.outline, children, &page.layers, id, reach)? {
                 Some(room) => (Some(*holder), Some(room)),
                 None => (None, None),
             },
@@ -235,11 +265,18 @@ impl Lettering<'_> {
     /// over art, tone, or a balloon's border, a sixteenth of a sound effect's
     /// size and an eighth of a text's. On paper the outline's colour it can't
     /// be seen, so a balloon's text has one too: telling plain paper from tone
-    /// takes the page's pixels, which placement doesn't read.
+    /// takes the page's pixels, which placement doesn't read. A grey fill is
+    /// black or white instead, and a grey outline white or black.
     fn letter(&mut self, size: Option<f64>) {
         let source = &self.block.source.style.chars;
         let chars = &mut self.text.style.chars;
-        chars.fill = chars.fill.or(source.fill);
+        // A fill of no hue is black or white, the nearer: read off a scan,
+        // black ink comes out grey, which looks faded.
+        chars.fill = (chars.fill.or(source.fill)).map(|fill| match grey(fill) {
+            true if luminance(fill) > 0.5 => WHITE,
+            true => BLACK,
+            false => fill,
+        });
         let outlined = [&*chars, source].into_iter().find_map(|chars| {
             let (stroke, width) = chars.stroke.zip(chars.stroke_width)?;
             let scale = size.zip(chars.size).map_or(1.0, |(to, from)| to / from);
@@ -255,7 +292,13 @@ impl Lettering<'_> {
         });
         if let Some((stroke, width)) = outlined {
             let most = size.or(chars.size).map_or(width, |size| OUTLINE * size);
-            chars.stroke = Some(stroke);
+            // An outline of no hue is white or black, unlike its fill: read
+            // off a scan, a white or black one comes out grey, which looks
+            // dirty around the letters.
+            chars.stroke = Some(match grey(stroke) {
+                true => unlike(chars.fill),
+                false => stroke,
+            });
             chars.stroke_width = Some(width.min(most));
         }
         chars.size = size.or(chars.size);
@@ -266,15 +309,28 @@ impl Lettering<'_> {
 /// outline, scaled to a size read small from its source, had come to a third.
 const OUTLINE: f64 = 1.0 / 8.0;
 
+/// The most a colour's channels may differ for it to have no hue, and be set
+/// in black or white.
+const GREY: f32 = 0.1;
+
+const BLACK: Rgba = Rgba([0.0, 0.0, 0.0, 1.0]);
+const WHITE: Rgba = Rgba([1.0; 4]);
+
+/// Whether `colour` has no hue.
+fn grey(Rgba([red, green, blue, _]): Rgba) -> bool {
+    red.max(green).max(blue) - red.min(green).min(blue) < GREY
+}
+
+fn luminance(colour: Rgba) -> f32 {
+    Color::from(colour).discard_alpha().relative_luminance()
+}
+
 /// The colour of an outline around `fill`: black around a light one, and white
 /// around any other, the renderer's black included.
 fn unlike(fill: Option<Rgba>) -> Rgba {
-    let luminance = fill.map_or(0.0, |fill| {
-        Color::from(fill).discard_alpha().relative_luminance()
-    });
-    match luminance > 0.5 {
-        true => Rgba([0.0, 0.0, 0.0, 1.0]),
-        false => Rgba([1.0; 4]),
+    match fill.is_some_and(|fill| luminance(fill) > 0.5) {
+        true => BLACK,
+        false => WHITE,
     }
 }
 

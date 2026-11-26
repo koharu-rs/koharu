@@ -79,7 +79,11 @@ and the mean of five for 1%, 4%, and 2%.
 
 There's no typesetting stage. Placement puts a translation in its room in its
 balloon, or in its source's frame when it's free or a sound effect, and fits it
-`best`, so resizing a balloon reflows the text. It gives the translation its
+`best`, so resizing a balloon reflows the text. A balloon text's room reaches
+half the page's size past the lines splitting the balloon among its texts,
+which aren't drawn, so within a three-quarter margin its letters keep a quarter
+of their size off them: a short text whose share narrowed away from the
+balloon's side fitted only at its wide end. It gives the translation its
 source's kernel, as Japanese editors letter each kind of line in its own kind
 of face [Manga font kinds], whose style Settings or the project sets, and
 nothing else of its font:
@@ -126,7 +130,10 @@ nothing else of its font:
 
 - **Size.** A letterer keeps one size for a page's dialogue [Manga balloon
   basics]. A page's is the median of the largest its texts' rooms hold in whole
-  words, measured with the renderer, whatever its sources' own. A text that
+  words, measured with the renderer, whatever its sources' own: its texts in
+  balloons, or every text when none is in one, as a running head's or a title's
+  widened frame holds far more than a balloon: two had set a page's one
+  balloon text past it at nearly three times its source's size. A text that
   would draw smaller is brought up to it as far as its room allows, and one that
   fits larger stays so: small text can't be read, and a large line in a large
   balloon is a shout. One whose lines would span under half its room across
@@ -140,8 +147,10 @@ nothing else of its font:
   0.59 or more. A run on some blocks measures the page's other translations
   too.
 - **Margin.** A balloon's text has a letter's width of air [Comicraft glossary].
-  One under the page's size has as much of it as holds that size, down to half:
-  half holds it 15 to 17% larger, where a line height of 1 rather than 1.2 gives
+  One under the page's size has as much of it as holds that size, down to three
+  quarters, and one its balloon holds at only about the page's size narrows it
+  the same way until it draws 15% larger: half held text 15 to 17% larger but
+  set letters against the border, where a line height of 1 rather than 1.2 gives
   2%.
 - **Free text.** A vertical source's column holds a word or two of a horizontal
   translation, so its frame widens until it holds the page's size, or a sound

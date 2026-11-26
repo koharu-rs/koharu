@@ -129,7 +129,7 @@ pub(super) fn build(detections: Vec<Detection>, width: u32, height: u32) -> Layo
             .collect();
         for (index, room) in texts
             .into_iter()
-            .zip(rooms::rooms(&bubble.outline, &groups))
+            .zip(rooms::rooms(&bubble.outline, &groups, 0.0))
         {
             lettering[index].room = Some(room);
         }

@@ -583,7 +583,9 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
 /// line, as JLREQ's hyphens (cl-03), dividing punctuation (cl-04), middle
 /// dots (cl-05), and inseparable characters (cl-08) do, and as CLREQ sets
 /// Chinese's interpunct, midline ellipsis, and connector; in `chinese`, its
-/// stops too.
+/// stops too; and a run of full stops, an ellipsis typed as periods, which
+/// translations and OCR give and a sideways run had set on its baseline, left
+/// of the centre line.
 ///
 /// Deliberately left out: cl-08's vertical kana repeat marks, whose halves
 /// join only as their font draws them; ASCII `:`, `;`, and `~`, which JLREQ
@@ -592,7 +594,10 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
 /// fonts' vertical forms in the column's top right corner. ASCII `!` and `?`
 /// count as cl-04, since vertical text sets them upright and full width.
 fn centred(text: &str, offset: usize, chinese: bool) -> bool {
+    let periods = text[offset..].starts_with('.')
+        && (text[offset + 1..].starts_with('.') || text[..offset].ends_with('.'));
     (chinese && stop(text, offset))
+        || periods
         || text[offset..].chars().next().is_some_and(|ch| {
             matches!(
                 ch,
