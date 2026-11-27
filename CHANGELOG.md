@@ -1,3 +1,9 @@
+## [0.101.1](https://github.com/koharu-rs/koharu/compare/0.101.0..0.101.1) - 2026-11-27
+
+### 🐛 Bug Fixes
+
+- *(ml)* Grow a text's box over the glyphs it cuts, whose rest clean-up left when the box ended inside a line ([#1572](https://github.com/koharu-rs/koharu/issues/1572)) - ([e1d22ae](https://github.com/koharu-rs/koharu/commit/e1d22aed238b9e5b89db3b8ae5d3a78081ae8128))
+
 ## [0.101.0](https://github.com/koharu-rs/koharu/compare/0.100.3..0.101.0) - 2026-11-27
 
 ### ⛰️  Features
