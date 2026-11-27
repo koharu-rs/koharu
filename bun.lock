@@ -41,7 +41,7 @@
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
         "@floating-ui/react-dom": "^2.1.9",
-        "@formatjs/intl-displaynames": "^8.0.3",
+        "@formatjs/intl-displaynames": "^8.0.4",
         "@koharu/ipc": "workspace:*",
         "@koharu/ui": "workspace:*",
         "@sentry/core": "^11.11.0",
@@ -307,11 +307,11 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
-    "@formatjs/fast-memoize": ["@formatjs/fast-memoize@3.1.7", "", {}, "sha512-zXfhLpvA6T7+efdt9JLbBwZ00tT7NsBMDVnDu8rpHeNNv8KfRZAMo2gkG0k9lK/Nzc//3kJ9pImsfuJxk3KhUA=="],
+    "@formatjs/fast-memoize": ["@formatjs/fast-memoize@3.1.8", "", {}, "sha512-Y9YFFfeBDkAWmLWD3LVNHbHlyELsP2lYRNoY6+QhtPh1/ujCiX5QYBzAqe0cWdkCxKVezHLt0qjWz1veEUV7UA=="],
 
-    "@formatjs/intl-displaynames": ["@formatjs/intl-displaynames@8.0.3", "", { "dependencies": { "@formatjs/intl-localematcher": "0.10.1" } }, "sha512-UhKG1OwrbQzZNKIcmZu+/JR5SOxE25RWmUzxaNfQ04AJ4OwxNkTvAbVX0ojnkm0i8Qs4E8ElIoBdA6F8XTkJXw=="],
+    "@formatjs/intl-displaynames": ["@formatjs/intl-displaynames@8.0.4", "", { "dependencies": { "@formatjs/intl-localematcher": "0.10.2" } }, "sha512-9vH/ViaY4+8yh81yNHns9SPAi02kKcdlSfNcZdUlLNpjyNobr0wW41nYkHGo+QFwTHNCK6URQk63vd1iKjG9tQ=="],
 
-    "@formatjs/intl-localematcher": ["@formatjs/intl-localematcher@0.10.1", "", { "dependencies": { "@formatjs/fast-memoize": "3.1.7" } }, "sha512-gBqglQK9rXuHsLmM8wzTMBy4Xo4d0jamirIVKuEL8F1rwbskWdpMA1kZarSkny+uvr5q/K6GSzE0Rcq1wZLl3g=="],
+    "@formatjs/intl-localematcher": ["@formatjs/intl-localematcher@0.10.2", "", { "dependencies": { "@formatjs/fast-memoize": "3.1.8" } }, "sha512-KvXcVOPLYRQ5s6O0MrHePLIIhkSUm5bZbsEHGmKI3xXoy7hvGxUoagaobAIi8/hc9YabgHvLDFeeqbrjPNIKwg=="],
 
     "@google-automations/git-file-utils": ["@google-automations/git-file-utils@3.2.1", "", { "dependencies": { "@octokit/rest": "^20.1.1", "minimatch": "^10.2.4" } }, "sha512-LYOjAnGu/xtEkYYh6W3/1RmeK9HB/fV+xMe7nHc+WiDYrnxAJWBfcyUucoJtYS8XAhVUzNWrQvYDPRbxe67DNQ=="],
 
