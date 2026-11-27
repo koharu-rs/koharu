@@ -16,7 +16,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@floating-ui/react-dom": "^2.1.9",
-    "@formatjs/intl-displaynames": "^8.0.3",
+    "@formatjs/intl-displaynames": "^8.0.4",
     "@koharu/ipc": "workspace:*",
     "@koharu/ui": "workspace:*",
     "@sentry/core": "^11.11.0",
