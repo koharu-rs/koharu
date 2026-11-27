@@ -737,12 +737,13 @@ impl InPath<'_> {
             .iter()
             .map(|range| lines::length(self.segments, range.clone(), self.scale))
             .collect();
-        // What the lines' breaks inside words cost, so a count that keeps its
-        // words whole can win over one that splits them.
+        // What the lines' breaks inside words cost, each as much as half a
+        // line left empty, as breaking lines weighs them, so a count that
+        // keeps its words whole can win over one that splits them.
         let inside_words = (lines.lines.iter())
             .filter(|range| self.segments[range.end - 1].inside_word)
             .count() as f32
-            * lines::INSIDE_WORD;
+            * 0.25;
         // The lines' unfilled shares squared, and far more for one longer
         // than its room, to compare line counts.
         let cost = used
