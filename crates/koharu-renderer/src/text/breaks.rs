@@ -51,8 +51,6 @@ pub(super) enum Break {
     Mandatory,
     /// Between words, or between CJK characters.
     Normal,
-    /// Between two syllables of a Vietnamese word.
-    Discouraged,
     /// Inside a word at a hyphenation point; a hyphen shows if a line ends here.
     Hyphen,
     /// The end of the text.
@@ -75,6 +73,9 @@ pub(super) struct Segment {
     pub after: Break,
     /// It ends with punctuation, the best place for a break.
     pub punctuation: bool,
+    /// It ends inside a word, between two of its syllables, where a line had
+    /// better not break: Vietnamese spaces every syllable.
+    pub inside_word: bool,
     /// Its largest span's size.
     pub size: f32,
     /// How far its ruby and emphasis marks reach above its line's centre,
@@ -268,8 +269,7 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
     for value in &mut advances {
         (*value, sum) = (sum, sum + *value);
     }
-    // Vietnamese spaces every syllable, and a break inside one of its words
-    // is discouraged.
+    // Vietnamese words, whose syllables a line had better not break between.
     let words = match styled.vietnamese {
         true => pyvi::tokenize(&styled.text),
         false => Vec::new(),
@@ -285,11 +285,14 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
     for (range, next, after) in opportunities(&styled.text, breaking, styled.hyphenation) {
         let start = joined.take().unwrap_or(range.start);
         if matches!(after, Break::Mandatory | Break::End) || breakable[next] {
-            let after = match after {
-                Break::Normal if inside_word(next) => Break::Discouraged,
-                after => after,
-            };
-            segments.push(measure(shaped, &advances, start..range.end, after));
+            let inside_word = after == Break::Normal && inside_word(next);
+            segments.push(measure(
+                shaped,
+                &advances,
+                start..range.end,
+                after,
+                inside_word,
+            ));
         } else {
             joined = Some(start);
         }
@@ -298,7 +301,13 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
 }
 
 /// The segment `range` makes, measured by `advances`.
-fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Break) -> Segment {
+fn measure(
+    shaped: &ShapedText,
+    advances: &[f64],
+    range: Range<usize>,
+    after: Break,
+    inside_word: bool,
+) -> Segment {
     let styled = shaped.styled;
     let advance = |range: Range<usize>| (advances[range.end] - advances[range.start]) as f32;
     let visible_end = range.start + styled.text[range.clone()].trim_end().len();
@@ -346,6 +355,7 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
         },
         after,
         punctuation,
+        inside_word,
         size,
         rise,
         sink,

@@ -29,9 +29,9 @@ pub(super) struct Lines {
 /// default hyphen limit is two.
 const RUNS: usize = 3;
 
-/// What a discouraged break costs, as a share of a line's room left unfilled
-/// costs squared.
-pub(super) const DISCOURAGED: f32 = 0.25;
+/// What a break inside a word costs, as a share of a line's room left
+/// unfilled costs squared: as much as half a line left empty.
+pub(super) const INSIDE_WORD: f32 = 0.25;
 
 /// The length of segments `range` set on one line, at `scale`.
 pub(super) fn length(segments: &[Segment], range: Range<usize>, scale: f32) -> f32 {
@@ -64,10 +64,10 @@ fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
     let mut cost = match last.after {
         Break::Mandatory | Break::End => 0.0,
         Break::Normal if last.punctuation => 0.0,
+        // A line's slack weighs 100 times its square.
+        Break::Normal if last.inside_word => 2.0 + 100.0 * INSIDE_WORD,
         // A break inside a phrase rather than after punctuation.
         Break::Normal => 2.0,
-        // A line's slack weighs 100 times its square.
-        Break::Discouraged => 2.0 + 100.0 * DISCOURAGED,
         // Above any line's slack, so a word hyphenates only where its line
         // can't hold it whole: Comicraft avoids a hyphen whenever it can.
         Break::Hyphen => 1_000.0,
@@ -224,6 +224,7 @@ mod tests {
             hyphen: 0.0,
             after: Break::Normal,
             punctuation: false,
+            inside_word: false,
             size: 0.0,
             rise: 0.0,
             sink: 0.0,
