@@ -21,10 +21,6 @@ jobs:
   test:
     name: Rust
     runs-on: ubuntu-latest
-    env:
-      # Enough for file and line in panic backtraces; the dev profile's full
-      # debug info would only make this cache larger and its tests slower to link.
-      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - run: |
           sudo apt update

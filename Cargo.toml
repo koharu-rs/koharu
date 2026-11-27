@@ -264,6 +264,9 @@ cef-dll-sys = { git = "https://github.com/mayocream/cef-rs", rev = "da25c86f6067
 # Image decoding and the models' pre- and post-processing ran 10 to 40 times
 # slower unoptimized, so debug builds optimize lightly, and dependencies fully.
 opt-level = 1
+# Full debug information made the app's PDB 1.3 GB, which every link rewrote;
+# line tables keep files and lines in backtraces.
+debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 3
