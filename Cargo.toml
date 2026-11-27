@@ -118,6 +118,7 @@ photocraft-psd = { git = "https://github.com/storytold/photocraft", rev = "d6b97
 pollster = "1.0.1"
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
+pyvi = { git = "https://github.com/koharu-rs/pyvi", rev = "37f5c15eb69f14ddae55378278b53b31bbe93ebc" }
 quick_cache = "0.7.0"
 quote = "1.0.47"
 rars = "0.13.0"

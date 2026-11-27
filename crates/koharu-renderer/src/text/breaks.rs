@@ -1,12 +1,11 @@
 //! Where lines may break: Unicode line breaking, with Chinese words kept
-//! whole, Korean broken between words, words at hyphenation points, and a
-//! drawn-out sound in its run of one letter; and the text between two breaks
-//! measured from its glyphs.
+//! whole, Vietnamese ones together where they can be, Korean broken between
+//! words, words at hyphenation points, and a drawn-out sound in its run of
+//! one letter; and the text between two breaks measured from its glyphs.
 
-use std::{borrow::Cow, ops::Range, sync::LazyLock};
+use std::{ops::Range, sync::LazyLock};
 
 use hypher::{Lang, hyphenate_bounded};
-use icu_normalizer::ComposingNormalizerBorrowed;
 use icu_properties::{
     CodePointMapData,
     props::{GeneralCategory, GeneralCategoryGroup, LineBreak, Script as IcuScript},
@@ -52,7 +51,7 @@ pub(super) enum Break {
     Mandatory,
     /// Between words, or between CJK characters.
     Normal,
-    /// Between syllables of a common Vietnamese expression.
+    /// Between two syllables of a Vietnamese word.
     Discouraged,
     /// Inside a word at a hyphenation point; a hyphen shows if a line ends here.
     Hyphen,
@@ -242,11 +241,7 @@ fn drawn_out(letters: &str) -> Option<usize> {
 
 /// The text's segments, broken as `breaking` allows and measured from the
 /// glyphs it shaped into.
-pub(super) fn segments(
-    shaped: &ShapedText,
-    breaking: Breaking,
-    vietnamese_balloon: bool,
-) -> Vec<Segment> {
+pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> {
     let styled = shaped.styled;
     // Where the text may break, where a run starts or ends or a cluster
     // starts but not inside an upright group or under a ruby; and the advance
@@ -273,6 +268,16 @@ pub(super) fn segments(
     for value in &mut advances {
         (*value, sum) = (sum, sum + *value);
     }
+    // Vietnamese spaces every syllable, and a break inside one of its words
+    // is discouraged.
+    let words = match styled.vietnamese {
+        true => pyvi::tokenize(&styled.text),
+        false => Vec::new(),
+    };
+    let inside_word = |at: usize| {
+        (words.get(words.partition_point(|word| word.end <= at)))
+            .is_some_and(|word| word.start < at)
+    };
     // A cut inside a cluster, such as a ligature, inside an upright group, or
     // under a ruby joins the next piece.
     let mut segments = Vec::new();
@@ -280,13 +285,9 @@ pub(super) fn segments(
     for (range, next, after) in opportunities(&styled.text, breaking, styled.hyphenation) {
         let start = joined.take().unwrap_or(range.start);
         if matches!(after, Break::Mandatory | Break::End) || breakable[next] {
-            let after = if vietnamese_balloon
-                && after == Break::Normal
-                && vietnamese_phrase_at(&styled.text, next)
-            {
-                Break::Discouraged
-            } else {
-                after
+            let after = match after {
+                Break::Normal if inside_word(next) => Break::Discouraged,
+                after => after,
             };
             segments.push(measure(shaped, &advances, start..range.end, after));
         } else {
@@ -294,41 +295,6 @@ pub(super) fn segments(
         }
     }
     segments
-}
-
-/// Whether a space at this break separates the syllables of a common
-/// Vietnamese expression. Normalize only for matching, keeping text offsets.
-fn vietnamese_phrase_at(text: &str, at: usize) -> bool {
-    let before = text[..at].trim_end();
-    if before.len() == at {
-        return false;
-    }
-    let categories = CodePointMapData::<GeneralCategory>::new();
-    let punctuation = |ch| GeneralCategoryGroup::Punctuation.contains(categories.get(ch));
-    let Some(left) = before.split_whitespace().next_back() else {
-        return false;
-    };
-    let followers: &[&str] =
-        match vietnamese_syllable(left.trim_start_matches(punctuation)).as_ref() {
-            "cảm" | "cám" => &["ơn"],
-            "lý" | "lí" => &["do"],
-            "xin" => &["chào", "lỗi"],
-            "tạm" => &["biệt"],
-            "của" => &["tôi", "tớ", "cậu", "mình"],
-            _ => return false,
-        };
-    text[at..].split_whitespace().next().is_some_and(|right| {
-        followers.contains(&vietnamese_syllable(right.trim_end_matches(punctuation)).as_ref())
-    })
-}
-
-fn vietnamese_syllable(word: &str) -> Cow<'_, str> {
-    let word = ComposingNormalizerBorrowed::new_nfc().normalize(word);
-    if word.chars().any(char::is_uppercase) {
-        Cow::Owned(word.to_lowercase())
-    } else {
-        word
-    }
 }
 
 /// The segment `range` makes, measured by `advances`.
@@ -428,6 +394,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: false,
+            vietnamese: false,
             frame: Frame::Point,
             ruby: Vec::new(),
             marks: Vec::new(),
@@ -526,32 +493,6 @@ mod tests {
     }
 
     #[test]
-    fn vietnamese_wrapping_marks_an_optional_break_but_keeps_a_manual_one() -> anyhow::Result<()> {
-        let text = "lý do. “CA\u{0309}M ƠN!” Lý\ndo";
-        let styled = styled(text);
-        let shaped = ShapedText::new(&styled)?;
-        let segments = |balloon| segments(&shaped, Breaking::Words, balloon);
-        let ordinary = segments(false);
-        let tailored = segments(true);
-        let boundary = |segments: &[Segment], end| {
-            segments
-                .iter()
-                .find(|segment| segment.visible_end == end)
-                .map(|segment| segment.after)
-        };
-        for following in [" do.", " ƠN!"] {
-            let end = text.find(following).expect("the space in the expression");
-            assert_eq!(boundary(&ordinary, end), Some(Break::Normal));
-            assert_eq!(boundary(&tailored, end), Some(Break::Discouraged));
-        }
-        assert_eq!(ordinary.len(), tailored.len());
-        assert!(tailored.iter().any(|segment| {
-            segment.after == Break::Mandatory && text[segment.range.clone()].ends_with("Lý")
-        }));
-        Ok(())
-    }
-
-    #[test]
     fn a_hyphenated_word_is_measured_as_shaped_once() -> anyhow::Result<()> {
         // A kerning pair, A and V, crosses its hyphenation point: car-a-van.
         let styled = Styled {
@@ -561,8 +502,8 @@ mod tests {
         };
         let shaped = ShapedText::new(&styled)?;
         let total = |segments: Vec<Segment>| segments.iter().map(|s| s.advance).sum::<f32>();
-        let word = total(segments(&shaped, Breaking::Words, false));
-        let pieces = segments(&shaped, Breaking::Hyphens, false);
+        let word = total(segments(&shaped, Breaking::Words));
+        let pieces = segments(&shaped, Breaking::Hyphens);
         assert!(pieces.len() > 1, "{pieces:?}");
         let hyphenated = total(pieces);
         assert!(
@@ -587,7 +528,7 @@ mod tests {
     fn an_empty_paragraph_keeps_its_span_s_size() -> anyhow::Result<()> {
         let styled = styled("a\n\nb");
         let shaped = ShapedText::new(&styled)?;
-        let sizes: Vec<f32> = segments(&shaped, Breaking::Words, false)
+        let sizes: Vec<f32> = segments(&shaped, Breaking::Words)
             .iter()
             .map(|segment| segment.size)
             .collect();

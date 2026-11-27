@@ -31,6 +31,7 @@ koharu-scene = { workspace = true }
 kurbo = { workspace = true }
 parking_lot = { workspace = true }
 pollster = { workspace = true }
+pyvi = { workspace = true }
 quick_cache = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }

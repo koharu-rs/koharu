@@ -732,24 +732,35 @@ impl InPath<'_> {
             Some(count),
             |line| rooms[line],
         )?;
-        // Compare line counts by slack and discouraged breaks, with far more
-        // cost for a line longer than its room.
-        let mut used = Vec::with_capacity(count);
-        let mut cost = 0.0;
-        for (range, &room) in lines.lines.iter().zip(&rooms) {
-            let length = lines::length(self.segments, range.clone(), self.scale);
-            used.push(length);
-            if length > room {
-                cost += 1e6 * (1.0 + length - room);
-            } else if room > 0.0 {
-                let slack = (room - length) / room;
-                let penalty = match self.segments[range.end - 1].after {
-                    Break::Discouraged => lines::PHRASE_BREAK_COST,
-                    _ => 0.0,
-                };
-                cost += slack * slack + penalty;
-            }
-        }
+        let used: Vec<f32> = lines
+            .lines
+            .iter()
+            .map(|range| lines::length(self.segments, range.clone(), self.scale))
+            .collect();
+        // What the lines' discouraged breaks cost, so a count that keeps its
+        // words whole can win over one that splits them.
+        let discouraged = (lines.lines.iter())
+            .filter(|range| self.segments[range.end - 1].after == Break::Discouraged)
+            .count() as f32
+            * lines::DISCOURAGED;
+        // The lines' unfilled shares squared, and far more for one longer
+        // than its room, to compare line counts.
+        let cost = used
+            .iter()
+            .enumerate()
+            .map(|(line, &used)| {
+                let room = rooms[line];
+                if used > room {
+                    1e6 * (1.0 + used - room)
+                } else if room > 0.0 {
+                    let slack = (room - used) / room;
+                    slack * slack
+                } else {
+                    0.0
+                }
+            })
+            .sum::<f32>()
+            + discouraged;
         // Where a block sharing an edge starts: centred, unless that takes
         // it past the shared edge or a line past its span's far end.
         let middle = match self.vertical {
@@ -1020,6 +1031,7 @@ mod tests {
                 line_height: 1.2,
                 hyphenation: Some(Lang::English),
                 chinese: false,
+                vietnamese: false,
                 frame,
                 ruby: Vec::new(),
                 marks: Vec::new(),
@@ -1078,11 +1090,12 @@ mod tests {
     }
 
     #[test]
-    fn a_vietnamese_balloon_avoids_a_discouraged_break_when_both_layouts_fit() -> Result<()> {
+    fn a_balloon_avoids_a_discouraged_break_when_both_layouts_fit() -> Result<()> {
         let (mut styled, _) = in_box(100.0, 25.0, "none")?;
         styled.align = Align::Center;
-        // The phrase takes 50 pixels including its space. At 51 both
-        // layouts fit; at 49 it must split to fit on two lines.
+        // The word of the second and third takes 50 pixels including its
+        // space. At 51 both layouts fit; at 49 it must split to fit on two
+        // lines.
         let mut lines = |width, after| -> Result<Vec<Range<usize>>> {
             styled.frame = serde_json::from_value(serde_json::json!({
                 "path": {
@@ -1109,6 +1122,41 @@ mod tests {
     }
 
     #[test]
+    fn a_balloon_takes_another_line_count_to_keep_a_word_whole() -> Result<()> {
+        // A balloon 50 wide but where two lines' letters fall, from 7 to 17
+        // and from 19 to 29 down, `wide` across. Six words 22 long fill
+        // three lines of 50 two to a line, or two of 100 three to a line,
+        // which leave more room unfilled; a discouraged break after the
+        // second word ends a line of the three.
+        let (mut styled, _) = in_box(100.0, 36.0, "none")?;
+        styled.align = Align::Center;
+        let mut lines = |wide: f64, after| -> Result<Vec<Range<usize>>> {
+            let (left, right) = (50.0 - wide / 2.0, 50.0 + wide / 2.0);
+            let path = format!(
+                "M25 0 H75 V7 H{right} V17 H75 V19 H{right} V29 H75 V36 H25 V29 H{left} V19 \
+                 H25 V17 H{left} V7 H25 Z"
+            );
+            styled.frame = serde_json::from_value(serde_json::json!({
+                "path": {"path": path, "fit": "none", "anchor": "center", "inset": 0}
+            }))?;
+            let room = Room::new(&styled.frame, false);
+            let (_, placed) = fit(&styled, &room, |_| {
+                let mut words = vec![word(22.0, Break::Normal); 6];
+                words[1].after = after;
+                words[5].after = Break::End;
+                words
+            });
+            assert!(!placed.overflowed);
+            Ok(placed.lines.into_iter().map(|line| line.segments).collect())
+        };
+        assert_eq!(lines(100.0, Break::Normal)?, [0..2, 2..4, 4..6]);
+        assert_eq!(lines(100.0, Break::Discouraged)?, [0..3, 3..6]);
+        // Where two lines can't hold three words, the word splits.
+        assert_eq!(lines(60.0, Break::Discouraged)?, [0..2, 2..4, 4..6]);
+        Ok(())
+    }
+
+    #[test]
     fn a_balloon_s_text_too_long_for_it_runs_past_its_top_and_foot_not_its_sides() -> Result<()> {
         // Eight words 25 long at their set size in a balloon 60 wide and 40
         // tall, whose margin leaves lines 40 long: a word to a line.
@@ -1123,6 +1171,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: false,
+            vietnamese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),
@@ -1157,6 +1206,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: false,
+            vietnamese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),
@@ -1202,6 +1252,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: true,
+            vietnamese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),

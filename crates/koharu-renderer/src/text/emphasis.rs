@@ -57,6 +57,7 @@ impl Mark {
                 line_height: 1.0,
                 hyphenation: None,
                 chinese: false,
+                vietnamese: false,
                 frame: Frame::Point,
                 ruby: Vec::new(),
                 marks: Vec::new(),
