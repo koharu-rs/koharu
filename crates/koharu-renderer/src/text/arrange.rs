@@ -545,9 +545,16 @@ fn position(
             continue;
         }
         // A sideways run's baseline runs down the column, as far left of its
-        // centre line as halfway between the ascent and descent is above the
-        // baseline, which centres the run across the column.
-        let sideways_baseline = -block_center - centre;
+        // centre line as its em box's centre is above the baseline, which
+        // centres the box across the column as an upright glyph's is.
+        let sideways_baseline = -block_center - font.em_centre(size);
+        // A bracket turned in a run of no letter or digit stands among upright
+        // characters for its vertical form, which centres on the column; a
+        // Latin bracket inks where its letters would, off the em box's centre.
+        let alone = sideways
+            && !styled.text[run.range.clone()]
+                .chars()
+                .any(char::is_alphanumeric);
         for glyph in &piece {
             if glyph.cluster >= hang {
                 continue;
@@ -557,9 +564,11 @@ fn position(
             // ink, whichever way it stands, as JLREQ centres `！`, `？`, `…`,
             // and dashes; its font centres its em box, which a Western `…`
             // or a Chinese `！` inks off the middle of.
-            let ink = (vertical && centred(&styled.text, glyph.cluster, styled.chinese))
-                .then(|| font.ink(glyph.id, size))
-                .flatten();
+            let ink = (vertical
+                && (centred(&styled.text, glyph.cluster, styled.chinese)
+                    || alone && bracket(&styled.text, glyph.cluster)))
+            .then(|| font.ink(glyph.id, size))
+            .flatten();
             // Chinese centres a stop along its cell too, which its font's
             // vertical form sets in the corner.
             let middle = styled.chinese && stop(&styled.text, glyph.cluster);
@@ -763,6 +772,16 @@ fn opening_space(shaped: &ShapedText, pieces: &[Piece<'_>], scale: f32, head: us
     }
 }
 
+/// Whether the character at `offset` is a Latin parenthesis, square bracket,
+/// or brace, which JLREQ counts with the brackets (cl-01 and cl-02) and
+/// Unicode turns sideways in vertical text.
+fn bracket(text: &str, offset: usize) -> bool {
+    matches!(
+        text[offset..].chars().next(),
+        Some('(' | ')' | '[' | ']' | '{' | '}')
+    )
+}
+
 /// Whether the character at `offset` is a full stop (cl-06) or a comma
 /// (cl-07), which Chinese sets in the middle of its cell, as CLREQ describes
 /// Taiwan and Hong Kong setting every stop mark.
@@ -921,6 +940,44 @@ mod tests {
                 assert!((across - centre).abs() < 0.01, "{across} against {centre}");
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn a_bracket_turned_between_upright_characters_centres_its_ink() -> Result<()> {
+        let font = [
+            "Malgun Gothic",
+            "Apple SD Gothic Neo",
+            "Noto Sans CJK KR",
+            "Yu Gothic",
+            "Noto Sans CJK SC",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed CJK font");
+        let text = koharu_scene::Text {
+            content: "(금)에".into(),
+            direction: koharu_scene::Direction::Vertical,
+            ..koharu_scene::Text::default()
+        };
+        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let centre = layout.resolved.baseline;
+        let mut brackets = 0;
+        for (glyphs, run) in layout.runs.iter().zip(&layout.resolved.runs) {
+            if !glyphs.sideways {
+                continue;
+            }
+            for glyph in &glyphs.glyphs {
+                let ink = glyphs
+                    .font
+                    .ink(glyph.id, run.size)
+                    .expect("a bracket has ink");
+                let across = glyph.x + (ink.y0 + ink.y1) as f32 * 0.5;
+                assert!((across - centre).abs() < 0.01, "{across} against {centre}");
+                brackets += 1;
+            }
+        }
+        assert_eq!(brackets, 2);
         Ok(())
     }
 
@@ -1096,11 +1153,10 @@ mod tests {
             panic!("two glyphs");
         };
         // Down the column, its baseline left of the column's centre line by
-        // half of what the ascent passes the descent.
+        // as far as its em box's centre is above it.
         assert!(v.y > a.y && a.x == v.x);
-        let (ascent, descent) = font.extent(24.0);
         let centre = layout.resolved.baseline;
-        assert!((a.x - (centre - (ascent - descent) * 0.5)).abs() < 1e-3);
+        assert!((a.x - (centre - font.em_centre(24.0))).abs() < 1e-3);
         Ok(())
     }
 }
