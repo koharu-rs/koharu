@@ -1,3 +1,13 @@
+## [0.102.1](https://github.com/koharu-rs/koharu/compare/0.102.0..0.102.1) - 2026-11-27
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Keep Vietnamese words on one line where they fit ([#1586](https://github.com/koharu-rs/koharu/issues/1586)) - ([fdd0406](https://github.com/koharu-rs/koharu/commit/fdd040658ae25460fb599c0a48c9e29c1fa31a24))
+
+## New Contributors ❤️
+
+* @surinatheworld made their first contribution in [#1586](https://github.com/koharu-rs/koharu/pull/1586)
+
 ## [0.102.0](https://github.com/koharu-rs/koharu/compare/0.101.2..0.102.0) - 2026-11-27
 
 ### ⛰️  Features
