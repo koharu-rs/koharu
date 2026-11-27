@@ -1,15 +1,18 @@
-//! Export: every page, or some of them, as PNG or PSD files in a folder, as a
-//! CBZ of PNGs, or as a PDF.
+//! Export: every page, or some of them, as PNG, JPEG, WebP, or PSD files in a
+//! folder, as a CBZ of images, or as a PDF.
 
-use std::{
-    io::{Cursor, Write as _},
-    path::Path,
-    sync::Arc,
-};
+use std::{io::Write as _, path::Path, sync::Arc};
 
-use anyhow::Context as _;
+use anyhow::{Context as _, anyhow, ensure};
 use fs_err::File;
-use image::{ImageFormat, RgbaImage};
+use image::{
+    DynamicImage, Rgba, RgbaImage,
+    codecs::{
+        jpeg::JpegEncoder,
+        png::{CompressionType, FilterType, PngEncoder},
+    },
+    imageops,
+};
 use koharu_psd::Labels;
 use koharu_scene::PageId;
 use krilla::{Document, geom::Size, image::Image, page::PageSettings};
@@ -21,18 +24,97 @@ use tauri_runtime_cef::CefRuntime;
 use super::{Result, import::PDF_SCALE};
 use crate::app::App;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Type)]
+/// What the pages go out as: a folder of images or of PSDs, a CBZ of
+/// images, or a PDF.
+#[derive(Clone, Debug, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ExportFormat {
-    Png,
-    Psd,
-    Cbz,
+    Images(ImageFormat),
+    /// With the names of the layers the scene names nothing, in the
+    /// interface's language.
+    Psd(Labels),
+    Cbz(ImageFormat),
     Pdf,
 }
 
+/// How a flattened page is written: PNG's without loss, JPEG's and WebP's at
+/// a quality from 1 to 100.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageFormat {
+    Png,
+    Jpeg { quality: u8 },
+    Webp { quality: u8 },
+}
+
+impl ImageFormat {
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Png => "png",
+            Self::Jpeg { .. } => "jpg",
+            Self::Webp { .. } => "webp",
+        }
+    }
+
+    fn encode(self, image: RgbaImage) -> anyhow::Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        match self {
+            // The png crate's own default compression: image's, the fastest,
+            // leaves a page in near-grays twice the size.
+            Self::Png => {
+                let encoder = PngEncoder::new_with_quality(
+                    &mut bytes,
+                    CompressionType::Default,
+                    FilterType::Adaptive,
+                );
+                if image.pixels().all(|pixel| pixel[3] == u8::MAX) {
+                    opaque(image).write_with_encoder(encoder)?
+                } else {
+                    image.write_with_encoder(encoder)?
+                }
+            }
+            // JPEG has no transparency, so the page is drawn over white, as
+            // Photoshop's JPEG export does. Overlay's rounding can leave that
+            // white's alpha at 254.
+            Self::Jpeg { quality } => {
+                let mut white =
+                    RgbaImage::from_pixel(image.width(), image.height(), Rgba([255; 4]));
+                imageops::overlay(&mut white, &image, 0, 0);
+                opaque(white)
+                    .write_with_encoder(JpegEncoder::new_with_quality(&mut bytes, quality))?
+            }
+            // libwebp leaves out the alpha of a page with no transparency.
+            Self::Webp { quality } => {
+                let (width, height) = image.dimensions();
+                // libwebp's `WEBP_MAX_DIMENSION`.
+                ensure!(
+                    width.max(height) <= 16383,
+                    "a WebP image is at most 16383 pixels a side, and the page is {width}×{height}"
+                );
+                bytes = webp::Encoder::from_rgba(image.as_raw(), width, height)
+                    .encode_simple(false, quality.into())
+                    .map_err(|error| anyhow!("libwebp failed with {error:?}"))?
+                    .to_vec();
+            }
+        }
+        Ok(bytes)
+    }
+}
+
+/// An opaque `image`, its alpha dropped unread, in the fewest channels that
+/// hold it exactly: gray when every pixel is a gray, RGB otherwise.
+fn opaque(image: RgbaImage) -> DynamicImage {
+    let gray = image.pixels().all(|Rgba([r, g, b, _])| r == g && g == b);
+    let image = DynamicImage::ImageRgba8(image);
+    if gray {
+        DynamicImage::ImageLuma8(image.to_luma8())
+    } else {
+        DynamicImage::ImageRgb8(image.to_rgb8())
+    }
+}
+
 /// Picks where the open project's pages go, and writes them there: `pages`
-/// alone, or every page when it's `None`, in the project's order. `labels`
-/// names a PSD's layers the scene names nothing, in the interface's language.
+/// alone, or every page when it's `None`, in the project's order.
 #[tauri::command]
 #[specta::specta]
 pub async fn export(
@@ -40,7 +122,6 @@ pub async fn export(
     window: Window<CefRuntime>,
     pages: Option<Vec<PageId>>,
     format: ExportFormat,
-    labels: Labels,
 ) -> Result<()> {
     let name = app
         .project
@@ -50,8 +131,8 @@ pub async fn export(
         .context("no project is open")?;
     let dialog = rfd::AsyncFileDialog::new().set_parent(&window);
     let extension = match format {
-        ExportFormat::Png | ExportFormat::Psd => None,
-        ExportFormat::Cbz => Some("cbz"),
+        ExportFormat::Images(_) | ExportFormat::Psd(_) => None,
+        ExportFormat::Cbz(_) => Some("cbz"),
         ExportFormat::Pdf => Some("pdf"),
     };
     let destination = match extension {
@@ -68,17 +149,16 @@ pub async fn export(
         return Ok(());
     };
     let app = Arc::clone(&app);
-    Ok(tokio::task::spawn_blocking(move || {
-        write(&app, pages.as_deref(), format, &labels, &destination)
-    })
-    .await??)
+    Ok(
+        tokio::task::spawn_blocking(move || write(&app, pages.as_deref(), format, &destination))
+            .await??,
+    )
 }
 
 fn write(
     app: &App,
     pages: Option<&[PageId]>,
     format: ExportFormat,
-    labels: &Labels,
     destination: &Path,
 ) -> anyhow::Result<()> {
     let session = app.session()?;
@@ -101,28 +181,28 @@ fn write(
         Ok(frame.rasterize()?.image)
     };
     match format {
-        ExportFormat::Png => {
+        ExportFormat::Images(format) => {
             for (number, page) in pages {
                 fs_err::write(
-                    destination.join(format!("{number}.png")),
-                    png(&draw(page)?)?,
+                    destination.join(format!("{number}.{}", format.extension())),
+                    format.encode(draw(page)?)?,
                 )?;
             }
         }
-        ExportFormat::Psd => {
+        ExportFormat::Psd(labels) => {
             for (number, page) in pages {
-                let psd = koharu_psd::export(&session.lock(), &app.renderer, page, labels)?;
+                let psd = koharu_psd::export(&session.lock(), &app.renderer, page, &labels)?;
                 fs_err::write(destination.join(format!("{number}.psd")), psd)?;
             }
         }
-        ExportFormat::Cbz => {
+        ExportFormat::Cbz(format) => {
             let mut archive = ::zip::ZipWriter::new(File::create(destination)?);
-            // Already-compressed PNGs gain nothing from deflate.
+            // Already-compressed images gain nothing from deflate.
             let options = ::zip::write::SimpleFileOptions::default()
                 .compression_method(::zip::CompressionMethod::Stored);
             for (number, page) in pages {
-                archive.start_file(format!("{number}.png"), options)?;
-                archive.write_all(&png(&draw(page)?)?)?;
+                archive.start_file(format!("{number}.{}", format.extension()), options)?;
+                archive.write_all(&format.encode(draw(page)?)?)?;
             }
             archive.finish()?;
         }
@@ -143,10 +223,4 @@ fn write(
         }
     }
     Ok(())
-}
-
-fn png(image: &RgbaImage) -> anyhow::Result<Vec<u8>> {
-    let mut png = Cursor::new(Vec::new());
-    image.write_to(&mut png, ImageFormat::Png)?;
-    Ok(png.into_inner())
 }

@@ -65,6 +65,12 @@
     "tryAgain": "再試行",
     "unknown": "ネイティブアプリケーションが不明なエラーを返しました。"
   },
+  "export": {
+    "export": "書き出す",
+    "imageFormat": "画像形式",
+    "quality": "画質",
+    "title": "{{format}}で書き出す"
+  },
   "feedback": {
     "addScreenshot": "スクリーンショットを追加",
     "cancel": "キャンセル",

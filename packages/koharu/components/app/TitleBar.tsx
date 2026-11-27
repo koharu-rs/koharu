@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { AboutDialog } from '@/components/app/AboutDialog'
 import { checkForUpdates } from '@/components/app/Updater'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
+import { Choice } from '@/components/controls/Choice'
 import {
   send,
   useCommand,
@@ -23,7 +24,15 @@ import {
 import { applyDefaultStyles, deleteSelection } from '@/lib/scene'
 import { shortcutLabel, shortcuts, useKeyboard } from '@/lib/shortcuts'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type PageId } from '@koharu/ipc/protocol'
+import { commands, type ImageFormat, type PageId } from '@koharu/ipc/protocol'
+import { Button } from '@koharu/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@koharu/ui/components/dialog'
 import {
   Menubar,
   MenubarCheckboxItem,
@@ -37,12 +46,20 @@ import {
   MenubarSubTrigger,
   MenubarTrigger as UiMenubarTrigger,
 } from '@koharu/ui/components/menubar'
+import { Slider } from '@koharu/ui/components/slider'
 import { ToggleGroup, ToggleGroupItem } from '@koharu/ui/components/toggle-group'
 import { cn } from '@koharu/ui/lib/utils'
 
 export function TitleBar() {
   const { t } = useTranslation()
   const [aboutOpen, setAboutOpen] = useState(false)
+  // Kept once asked for, so the dialog closes in place.
+  const [exportOptions, setExportOptions] = useState<ExportOptions>()
+  const [exportOpen, setExportOpen] = useState(false)
+  const askExportOptions = (options: ExportOptions) => {
+    setExportOptions(options)
+    setExportOpen(true)
+  }
   const macOS = useMacOS()
   const project = useProject().data
   const preferences = usePreferences().data
@@ -142,11 +159,17 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
-              <ExportMenu label='menu.export' pages={null} disabled={pages.length === 0} />
+              <ExportMenu
+                label='menu.export'
+                pages={null}
+                disabled={pages.length === 0}
+                onOptions={askExportOptions}
+              />
               <ExportMenu
                 label='menu.exportSelected'
                 pages={exportable}
                 disabled={exportable.length === 0}
+                onOptions={askExportOptions}
               />
               <MenubarSeparator />
               {/* Google Docs' Use my default styles and Save as my default styles: a project keeps
@@ -328,28 +351,54 @@ export function TitleBar() {
         {!macOS && <WindowControls />}
       </header>
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+      {exportOptions && (
+        <ExportDialog options={exportOptions} open={exportOpen} onOpenChange={setExportOpen} />
+      )}
     </>
   )
 }
 
-/** The formats the pages go out in, all of them when `pages` is null. One export runs at a time. */
+type ExportLabel = 'menu.export' | 'menu.exportSelected'
+
+/** An export whose options its dialog asks for. */
+type ExportOptions = { label: ExportLabel; pages: PageId[] | null; format: 'jpeg' | 'webp' | 'cbz' }
+
+const imageNames = { png: 'PNG', jpeg: 'JPEG', webp: 'WebP' } as const
+
+/** The formats the pages go out in, all of them when `pages` is null. JPEG, WebP, and CBZ ask for
+ * their options first. One export runs at a time. */
 function ExportMenu({
   label,
   pages,
   disabled,
+  onOptions,
 }: {
-  label: 'menu.export' | 'menu.exportSelected'
+  label: ExportLabel
   pages: PageId[] | null
   disabled: boolean
+  onOptions: (options: ExportOptions) => void
 }) {
   const { t } = useTranslation()
   const { run, busy } = useCommand(['export', label], commands.export, label)
   const exporting = useIsMutating({ mutationKey: ['export'] }) > 0
-  const psdLabels = {
-    background: t('psd.background'),
-    cleanup: t('psd.cleanup'),
-    outline: t('psd.outline'),
-  }
+  const formats = [
+    ['PNG', () => run(pages, { images: 'png' })],
+    ['JPEG', () => onOptions({ label, pages, format: 'jpeg' })],
+    ['WebP', () => onOptions({ label, pages, format: 'webp' })],
+    [
+      'PSD',
+      () =>
+        run(pages, {
+          psd: {
+            background: t('psd.background'),
+            cleanup: t('psd.cleanup'),
+            outline: t('psd.outline'),
+          },
+        }),
+    ],
+    ['CBZ', () => onOptions({ label, pages, format: 'cbz' })],
+    ['PDF', () => run(pages, 'pdf')],
+  ] as const
 
   return (
     <MenubarSub>
@@ -358,17 +407,89 @@ function ExportMenu({
         {t(label)}
       </MenubarSubTrigger>
       <MenubarSubContent>
-        {(['png', 'psd', 'cbz', 'pdf'] as const).map((format) => (
-          <MenubarItem
-            key={format}
-            disabled={exporting}
-            onClick={() => run(pages, format, psdLabels)}
-          >
-            {format.toUpperCase()}…
+        {formats.map(([name, choose]) => (
+          <MenubarItem key={name} disabled={exporting} onClick={choose}>
+            {name}…
           </MenubarItem>
         ))}
       </MenubarSubContent>
     </MenubarSub>
+  )
+}
+
+/** An export's options before its destination, as Photoshop's Export As asks for them: a CBZ's
+ * image format, and a JPEG's or WebP's quality. They stay as last set while the app runs. */
+function ExportDialog({
+  options,
+  open,
+  onOpenChange,
+}: {
+  options: ExportOptions
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const { run } = useCommand(['export', options.label], commands.export, options.label)
+  const [cbz, setCbz] = useState<keyof typeof imageNames>('png')
+  const [quality, setQuality] = useState(90)
+  const image = options.format === 'cbz' ? cbz : options.format
+  const format: ImageFormat =
+    image === 'png' ? 'png' : image === 'jpeg' ? { jpeg: { quality } } : { webp: { quality } }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className='sm:max-w-xs'>
+        <DialogHeader>
+          <DialogTitle>
+            {t('export.title', {
+              format: options.format === 'cbz' ? 'CBZ' : imageNames[options.format],
+            })}
+          </DialogTitle>
+        </DialogHeader>
+        <div className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-[12px]'>
+          {options.format === 'cbz' && (
+            <>
+              <span className='text-muted-foreground'>{t('export.imageFormat')}</span>
+              <Choice
+                value={cbz}
+                choices={imageNames}
+                label={t('export.imageFormat')}
+                onChange={setCbz}
+              />
+            </>
+          )}
+          {image !== 'png' && (
+            <>
+              <span className='text-muted-foreground'>{t('export.quality')}</span>
+              <div className='flex min-w-0 items-center gap-3'>
+                <Slider
+                  aria-label={t('export.quality')}
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={quality}
+                  onValueChange={setQuality}
+                />
+                <span className='w-6 shrink-0 text-right tabular-nums'>{quality}</span>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant='outline' onClick={() => onOpenChange(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            onClick={() => {
+              onOpenChange(false)
+              run(options.pages, options.format === 'cbz' ? { cbz: format } : { images: format })
+            }}
+          >
+            {t('export.export')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

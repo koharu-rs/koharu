@@ -1,5 +1,5 @@
 ---
-title: 'Export PNG, PSD, CBZ, and PDF'
+title: 'Export PNG, JPEG, WebP, PSD, CBZ, and PDF'
 description: 'Export every page, or the selected ones, as flattened images, layered documents, a comic archive, or a PDF.'
 ---
 
@@ -9,13 +9,16 @@ Review the pages before exporting. **File → Export Project** writes every page
   <Step title="Choose a format">
     <Tabs>
       <Tab title="PNG">
-        One flattened image per page for delivery and review, drawn as the canvas draws it.
+        One flattened image per page for delivery and review, drawn as the canvas draws it, without loss.
+      </Tab>
+      <Tab title="JPEG and WebP">
+        One flattened image per page in a much smaller file than PNG, with some loss. A dialog asks for the quality first, from 1 to 100; a higher quality keeps more detail in a larger file. JPEG has no transparency, so transparent areas are drawn over white. WebP holds pages up to 16,383 pixels on a side.
       </Tab>
       <Tab title="PSD">
         One layered Photoshop document per page for further typography or artwork edits. Every layer stays editable: the scan is the bottom pixel layer, panels and balloons become folders, and each text block becomes a folder holding its clean-up as a pixel layer masked by the block's mask, its source as a hidden type layer, and its translation as a type layer. Visibility, opacity, blend modes, and locks are kept. Bold and italic that a font has no face for are written as Photoshop's Faux Bold and Faux Italic. Photoshop has no ruby or emphasis marks, and Koharu doesn't write how a vertical column's characters stand, so these show until you edit its type layer. Pages larger than 30,000 pixels on a side cannot be exported as PSD.
       </Tab>
       <Tab title="CBZ">
-        One comic archive of the flattened PNG pages, for readers that open CBZ files.
+        One comic archive of the flattened pages, for readers that open CBZ files. A dialog asks for the pages' format first, PNG, JPEG, or WebP, and a JPEG's or WebP's quality.
       </Tab>
       <Tab title="PDF">
         One document with a flattened image per page, without loss, at 300 DPI. Its text is part of the image, so it cannot be selected or searched.
@@ -23,7 +26,7 @@ Review the pages before exporting. **File → Export Project** writes every page
     </Tabs>
   </Step>
   <Step title="Choose a destination">
-    For PNG and PSD, select a folder in the native dialog. Files are numbered by the page's place in the project, with at least three digits:
+    For PNG, JPEG, WebP, and PSD, select a folder in the native dialog. Files are numbered by the page's place in the project, with at least three digits:
 
     ```text
     001.png
@@ -44,6 +47,6 @@ Review the pages before exporting. **File → Export Project** writes every page
 
 ## Check consistency
 
-The canvas, PNG, CBZ, PDF, and PSD all draw through the same renderer. If they differ, report the page, format, and images through [troubleshooting](/reference/troubleshooting).
+The canvas, PNG, JPEG, WebP, CBZ, PDF, and PSD all draw through the same renderer. If they differ, report the page, format, and images through [troubleshooting](/reference/troubleshooting).
 
 There is no separate “inpainted image only” export.

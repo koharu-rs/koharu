@@ -65,6 +65,12 @@
     "tryAgain": "重试",
     "unknown": "原生应用返回了未知错误。"
   },
+  "export": {
+    "export": "导出",
+    "imageFormat": "图片格式",
+    "quality": "质量",
+    "title": "导出为 {{format}}"
+  },
   "feedback": {
     "addScreenshot": "添加截图",
     "cancel": "取消",

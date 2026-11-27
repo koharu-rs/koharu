@@ -65,6 +65,12 @@
     "tryAgain": "Tekrar dene",
     "unknown": "Yerel uygulama bilinmeyen bir hata döndürdü."
   },
+  "export": {
+    "export": "Dışa Aktar",
+    "imageFormat": "Görüntü biçimi",
+    "quality": "Kalite",
+    "title": "{{format}} Olarak Dışa Aktar"
+  },
   "feedback": {
     "addScreenshot": "Ekran görüntüsü ekle",
     "cancel": "İptal",

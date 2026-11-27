@@ -65,6 +65,12 @@
     "tryAgain": "Try again",
     "unknown": "The native application returned an unknown error."
   },
+  "export": {
+    "export": "Export",
+    "imageFormat": "Image format",
+    "quality": "Quality",
+    "title": "Export {{format}}"
+  },
   "feedback": {
     "addScreenshot": "Add a screenshot",
     "cancel": "Cancel",

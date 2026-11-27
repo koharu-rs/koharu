@@ -65,6 +65,12 @@
     "tryAgain": "أعد المحاولة",
     "unknown": "أعاد التطبيق الأصلي خطأً غير معروف."
   },
+  "export": {
+    "export": "تصدير",
+    "imageFormat": "تنسيق الصورة",
+    "quality": "الجودة",
+    "title": "تصدير {{format}}"
+  },
   "feedback": {
     "addScreenshot": "إضافة لقطة شاشة",
     "cancel": "إلغاء",

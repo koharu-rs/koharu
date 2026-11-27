@@ -65,6 +65,12 @@
     "tryAgain": "再試一次",
     "unknown": "原生應用程式傳回了未知錯誤。"
   },
+  "export": {
+    "export": "匯出",
+    "imageFormat": "影像格式",
+    "quality": "品質",
+    "title": "匯出為 {{format}}"
+  },
   "feedback": {
     "addScreenshot": "新增螢幕截圖",
     "cancel": "取消",

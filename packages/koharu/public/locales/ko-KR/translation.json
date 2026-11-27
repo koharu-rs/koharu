@@ -65,6 +65,12 @@
     "tryAgain": "다시 시도",
     "unknown": "네이티브 애플리케이션이 알 수 없는 오류를 반환했습니다."
   },
+  "export": {
+    "export": "내보내기",
+    "imageFormat": "이미지 형식",
+    "quality": "품질",
+    "title": "{{format}} 내보내기"
+  },
   "feedback": {
     "addScreenshot": "스크린샷 추가",
     "cancel": "취소",

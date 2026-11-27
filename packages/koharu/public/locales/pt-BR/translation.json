@@ -65,6 +65,12 @@
     "tryAgain": "Tentar novamente",
     "unknown": "O aplicativo nativo retornou um erro desconhecido."
   },
+  "export": {
+    "export": "Exportar",
+    "imageFormat": "Formato de imagem",
+    "quality": "Qualidade",
+    "title": "Exportar {{format}}"
+  },
   "feedback": {
     "addScreenshot": "Adicionar captura de tela",
     "cancel": "Cancelar",

@@ -65,6 +65,12 @@
     "tryAgain": "Réessayer",
     "unknown": "L’application native a renvoyé une erreur inconnue."
   },
+  "export": {
+    "export": "Exporter",
+    "imageFormat": "Format d’image",
+    "quality": "Qualité",
+    "title": "Exporter en {{format}}"
+  },
   "feedback": {
     "addScreenshot": "Ajouter une capture d’écran",
     "cancel": "Annuler",
