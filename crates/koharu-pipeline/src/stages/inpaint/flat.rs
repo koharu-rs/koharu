@@ -120,10 +120,9 @@ pub(super) enum Verdict {
 enum Paper {
     Color([u8; 3]),
     Smooth,
-    /// `line` when a line or art runs against the mask.
-    Art {
-        line: bool,
-    },
+    /// A line or art against the mask, or the mask mostly outside its
+    /// balloon.
+    Art,
     /// Too few pixels to tell.
     Unread,
 }
@@ -155,8 +154,10 @@ impl<'a> Page<'a> {
                 self.smooth(rect, mask);
                 Verdict::Filled(Fill::Smooth)
             }
-            Paper::Art { line: true } => Verdict::Model(bordered(mask)),
-            Paper::Art { line: false } | Paper::Unread => Verdict::Model(mask.clone()),
+            // The mask as it is: the clean-up keeps the model's redraw under
+            // the mask only, so a border would only hide the art between
+            // glyphs from LaMa, which washed its fills out.
+            Paper::Art | Paper::Unread => Verdict::Model(mask.clone()),
         }
     }
 
@@ -176,7 +177,7 @@ impl<'a> Page<'a> {
                 Paper::Color(color) => (color, self.split(own, &piece, color, reach)),
                 // Hemmed in by the rest of its lettering, whose paper it's on.
                 Paper::Unread => (color, self.split(own, &piece, color, reach)),
-                Paper::Art { .. } => (color, (Vec::new(), masked(own, &piece).collect())),
+                Paper::Art => (color, (Vec::new(), masked(own, &piece).collect())),
                 Paper::Smooth => {
                     self.smooth(own, &piece);
                     continue;
@@ -221,7 +222,7 @@ impl<'a> Page<'a> {
             all += 1;
         }
         if (inside as f64) < INSIDE * all as f64 {
-            return Paper::Art { line: false };
+            return Paper::Art;
         }
         ring.retain(|&(x, y)| reach.reads(x, y));
         if ring.len() < RING_PIXELS {
@@ -238,9 +239,7 @@ impl<'a> Page<'a> {
         if smooth.mean < FLAT && smooth.most <= LINE_CONTRAST {
             return Paper::Smooth;
         }
-        Paper::Art {
-            line: smooth.most > LINE_CONTRAST,
-        }
+        Paper::Art
     }
 
     /// The pixels of `mask` over `rect` that its `color` paper reaches, and
