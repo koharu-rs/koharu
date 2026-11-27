@@ -59,7 +59,7 @@ impl Lettering {
     /// no ink.
     pub fn typography(&self, page: &RgbImage) -> Option<Typography> {
         let block = block(&self.mask, page.width(), page.height());
-        let (crop, ink, [left, top]) = ink(&block, page, 0, None)?;
+        let (crop, ink, [left, top], _) = ink(&block, page, 0, None)?;
         let (width, height) = (block.width, block.height);
         let inside = |x: u32, y: u32| block.pixels[(y * width + x) as usize] != 0;
 
@@ -435,8 +435,10 @@ pub(super) fn outline(
 /// its box, which hugs each stroke and its outline but misses counters and
 /// parts of strokes, with its block's ink, widened by 2 pixels per 1024 of the
 /// page's longer side for anti-aliased edges. The paper or art between glyphs
-/// stays out, so inpainting redraws only the lettering.
-pub(super) fn glyph_mask(mask: &Mask, bbox: [f32; 4], page: &RgbImage) -> Mask {
+/// stays out, so inpainting redraws only the lettering. And the box, grown
+/// over the glyphs it cuts that the block holds, so that what's cut to the
+/// box after keeps them whole.
+pub(super) fn glyph_mask(mask: &Mask, bbox: [f32; 4], page: &RgbImage) -> (Mask, [f32; 4]) {
     let (page_width, page_height) = (page.width(), page.height());
     // RF-DETR's mask can stop a few pixels short of a glyph's ends, and LaMa
     // grows even a sliver of ink left outside into a stroke, so the ink may
@@ -495,9 +497,18 @@ pub(super) fn glyph_mask(mask: &Mask, bbox: [f32; 4], page: &RgbImage) -> Mask {
         page_height,
     );
     let block = block(&mask, page_width, page_height);
-    let Some((_, ink, [left, top])) = ink(&block, page, reach, Some(bbox)) else {
-        return mask;
+    let Some((_, ink, [left, top], held)) = ink(&block, page, reach, Some(bbox)) else {
+        return (mask, bbox);
     };
+    let bbox = held.map_or(bbox, |held| {
+        let [x0, y0, x1, y1] = held.map(|edge| edge as f32);
+        [
+            bbox[0].min(x0),
+            bbox[1].min(y0),
+            bbox[2].max(x1),
+            bbox[3].max(y1),
+        ]
+    });
     let margin = scaled(2.0, page_width, page_height);
     let (left, top) = (
         i64::from(left) - i64::from(margin),
@@ -539,7 +550,7 @@ pub(super) fn glyph_mask(mask: &Mask, bbox: [f32; 4], page: &RgbImage) -> Mask {
         }
     }
     let fitted = dilate(&canvas, Norm::L2, margin as u8);
-    crop(&fitted, left, top, page_width, page_height)
+    (crop(&fitted, left, top, page_width, page_height), bbox)
 }
 
 /// Fills what `canvas`'s marked pixels enclose: unmarked areas its edge
@@ -617,20 +628,21 @@ fn block(mask: &Mask, page_width: u32, page_height: u32) -> Mask {
     crop(&closed, left, top, page_width, page_height)
 }
 
+/// A crop of the page, its ink, its place on the page, and the extent of the
+/// glyphs the block holds inside the box, as `ink` finds them.
+type Ink = (RgbImage, GrayImage, [u32; 2], Option<[u32; 4]>);
+
 /// The page's crop around the block and the detection's box, `reach` pixels
-/// wider than both on every side, its ink, and the crop's place on the page.
-/// The ink is the side of one Otsu split of the crop that isn't the paper:
-/// inside the block, in the glyph ends it cut off, and on plain paper in the
-/// glyph-sized parts wholly inside the box or in line with it. The paper is
-/// what the crop shows around the block, or with none around, the side
-/// covering more of the block, so light lettering on dark counts too. `None`
-/// when the block holds no ink.
-fn ink(
-    block: &Mask,
-    page: &RgbImage,
-    reach: u32,
-    bbox: Option<[f32; 4]>,
-) -> Option<(RgbImage, GrayImage, [u32; 2])> {
+/// wider than the block and than the box widened by its line on every side,
+/// its ink, the crop's place on the page, and the extent of the glyphs the
+/// block holds inside the box. The ink is the side of one Otsu split of the
+/// crop that isn't the paper: inside the block, in the glyph ends it cut off,
+/// and on plain paper in the glyph-sized parts wholly inside the box, held by
+/// the block inside it, or in line with it. The paper is what the crop shows
+/// around the block, or with none around, the side covering more of the
+/// block, so light lettering on dark counts too. `None` when the block holds
+/// no ink.
+fn ink(block: &Mask, page: &RgbImage, reach: u32, bbox: Option<[f32; 4]>) -> Option<Ink> {
     if block.width == 0 || block.height == 0 {
         return None;
     }
@@ -642,15 +654,16 @@ fn ink(
             (bottom.ceil().max(0.0) as u32).min(page.height()),
         ]
     });
+    // A glyph is no longer than its line is wide, the box's narrower side.
+    let line = boxed.map_or(0, |[box_left, box_top, box_right, box_bottom]| {
+        box_right
+            .saturating_sub(box_left)
+            .min(box_bottom.saturating_sub(box_top))
+    });
     // The box, lengthened at both ends of its line by the line's width: a
     // glyph the box cuts off lies in line with the others.
     let lined = boxed.map(|[box_left, box_top, box_right, box_bottom]| {
-        let (box_width, box_height) = (
-            box_right.saturating_sub(box_left),
-            box_bottom.saturating_sub(box_top),
-        );
-        let line = box_width.min(box_height);
-        if box_height >= box_width {
+        if box_bottom.saturating_sub(box_top) >= box_right.saturating_sub(box_left) {
             [
                 box_left,
                 box_top.saturating_sub(line),
@@ -671,16 +684,19 @@ fn ink(
         (block.x + block.width + reach).min(page.width()),
         (block.y + block.height + reach).min(page.height()),
     );
-    // `reach` past the lengthened box too, so ink crossing its edge shows
-    // outside it.
-    if let Some([box_left, box_top, box_right, box_bottom]) = lined {
+    // `reach` past the box widened by its line on every side too, so ink
+    // crossing the lengthened box's edge shows outside it, and a glyph the
+    // box cuts shows whole: one in a line the box ends inside reaches past
+    // its side.
+    if let Some([box_left, box_top, box_right, box_bottom]) = boxed {
+        let around = line + reach;
         (left, top) = (
-            left.min(box_left.saturating_sub(reach)),
-            top.min(box_top.saturating_sub(reach)),
+            left.min(box_left.saturating_sub(around)),
+            top.min(box_top.saturating_sub(around)),
         );
         (right, bottom) = (
-            right.max((box_right + reach).min(page.width())),
-            bottom.max((box_bottom + reach).min(page.height())),
+            right.max((box_right + around).min(page.width())),
+            bottom.max((box_bottom + around).min(page.height())),
         );
     }
     let (width, height) = (right - left, bottom - top);
@@ -801,16 +817,21 @@ fn ink(
     }
     // On plain paper every glyph-sized ink part wholly inside the box is
     // lettering: RF-DETR's mask can miss a thin glyph, such as 一, whole. So
-    // is one in line with the box, past its ends, when the paper there is
-    // plain too and the part stands on the box's own paper: the box can miss
-    // it as well, but not past a balloon's or panel's border, which parts the
-    // paper. The paper is plain when nearly all of it away from the ink's
-    // edges is near its median colour; on art no part counts.
+    // is one the block holds inside the box, whole past it: RF-DETR's box can
+    // end inside a line, and its mask with it, and the glyph's rest is one
+    // line further at most, not the next. So is one in line with the box,
+    // past its ends, when the paper there is plain too and the part stands
+    // on the box's own paper: the box can miss it as well, but not past a
+    // balloon's or panel's border, which parts the paper. The paper is plain
+    // when nearly all of it away from the ink's edges is near its median
+    // colour; on art no part counts.
     let all_ink = GrayImage::from_fn(width, height, |x, y| {
         Luma([if is_ink(x, y) { 255 } else { 0 }])
     });
     let pieces = connected_components(&all_ink, Connectivity::Eight, Luma([0]));
     let mut lettering = vec![false; labels(&pieces)];
+    // The extent of the glyphs the block holds inside the box, in the crop.
+    let mut held_extent: Option<[u32; 4]> = None;
     if let (Some(boxed), Some(lined)) = (boxed, lined) {
         let within = |[box_left, box_top, box_right, box_bottom]: [u32; 4], x: u32, y: u32| {
             (box_left..box_right).contains(&(x + left))
@@ -855,12 +876,6 @@ fn ink(
         };
         let (plain_box, plain_line) = (plain(boxed), plain(lined));
         if plain_box || plain_line {
-            // A glyph is no longer than its line is wide: a longer part, such
-            // as a ruled line under the text, is art.
-            let [box_left, box_top, box_right, box_bottom] = boxed;
-            let line = box_right
-                .saturating_sub(box_left)
-                .min(box_bottom.saturating_sub(box_top));
             // The paper's parts, and the one covering most of the box.
             let paper = connected_components(&all_ink, Connectivity::Four, Luma([255]));
             let mut covering = vec![0usize; labels(&paper)];
@@ -871,7 +886,8 @@ fn ink(
             }
             let own = (1..covering.len()).max_by_key(|&part| covering[part]);
             let mut extents: Vec<Option<[u32; 4]>> = vec![None; lettering.len()];
-            let (mut leaves_box, mut leaves_line, mut on_own) = (
+            let (mut leaves_box, mut held, mut leaves_line, mut on_own) = (
+                vec![false; lettering.len()],
                 vec![false; lettering.len()],
                 vec![false; lettering.len()],
                 vec![false; lettering.len()],
@@ -883,6 +899,8 @@ fn ink(
                 }
                 if !within(boxed, x, y) {
                     leaves_box[piece] = true;
+                } else if inside(x, y) {
+                    held[piece] = true;
                 }
                 if !within(lined, x, y) {
                     leaves_line[piece] = true;
@@ -909,10 +927,25 @@ fn ink(
                 ];
             }
             for (piece, extent) in extents.into_iter().enumerate() {
-                if let Some([x0, y0, x1, y1]) = extent {
-                    lettering[piece] = (x1 - x0 + 1).max(y1 - y0 + 1) <= line
+                let Some([x0, y0, x1, y1]) = extent else {
+                    continue;
+                };
+                // A glyph is no longer than its line is wide: a longer part,
+                // such as a ruled line under the text, is art.
+                let glyph = (x1 - x0 + 1).max(y1 - y0 + 1) <= line;
+                let whole = glyph && plain_box && held[piece];
+                lettering[piece] = whole
+                    || glyph
                         && ((plain_box && !leaves_box[piece])
                             || (plain_line && !leaves_line[piece] && on_own[piece]));
+                if whole {
+                    let extent = held_extent.get_or_insert([x0, y0, x1, y1]);
+                    *extent = [
+                        extent[0].min(x0),
+                        extent[1].min(y0),
+                        extent[2].max(x1),
+                        extent[3].max(y1),
+                    ];
                 }
             }
         }
@@ -931,9 +964,11 @@ fn ink(
             },
         ])
     });
+    let held =
+        held_extent.map(|[x0, y0, x1, y1]| [x0 + left, y0 + top, x1 + left + 1, y1 + top + 1]);
     ink.pixels()
         .any(|pixel| pixel.0[0] != 0)
-        .then_some((crop, ink, [left, top]))
+        .then_some((crop, ink, [left, top], held))
 }
 
 /// How far from the lines' direction, in degrees, a block's edge still
@@ -1037,7 +1072,7 @@ mod tests {
             height: 136,
             pixels,
         };
-        let fitted = glyph_mask(&detected, [80.0, 36.0, 120.0, 180.0], &page);
+        let (fitted, _) = glyph_mask(&detected, [80.0, 36.0, 120.0, 180.0], &page);
         assert!(fitted.contains(100, 192));
         assert!(!fitted.contains(100, 213));
     }
@@ -1075,9 +1110,44 @@ mod tests {
             height: 176,
             pixels,
         };
-        let fitted = glyph_mask(&detected, [80.0, 36.0, 120.0, 180.0], &page);
+        let (fitted, _) = glyph_mask(&detected, [80.0, 36.0, 120.0, 180.0], &page);
         assert!(fitted.contains(100, 48));
         assert!(!fitted.contains(100, 16));
+    }
+
+    #[test]
+    fn a_line_the_box_ends_inside_is_masked_whole() {
+        // Three lines of glyphs on white paper, the box and its mask ending
+        // halfway down the last, and another lettering's line under them.
+        let mut page = RgbImage::from_pixel(300, 200, Rgb([255, 255, 255]));
+        let lines = [60, 80, 100, 130];
+        for top in lines {
+            for left in (40..190).step_by(14) {
+                for y in top..top + 14 {
+                    for x in left..left + 10 {
+                        page.put_pixel(x, y, Rgb([0, 0, 0]));
+                    }
+                }
+            }
+        }
+        let bbox = [36.0, 56.0, 200.0, 107.0];
+        let detected = Mask {
+            x: 0,
+            y: 0,
+            width: 300,
+            height: 200,
+            pixels: (0..200)
+                .flat_map(|y| (0..300).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    let glyph = page.get_pixel(x, y).0[0] == 0;
+                    u8::from(glyph && y < 107) * u8::MAX
+                })
+                .collect(),
+        };
+        let (fitted, grown) = glyph_mask(&detected, bbox, &page);
+        assert!(fitted.contains(45, 113));
+        assert!(grown[3] >= 114.0);
+        assert!(!fitted.contains(45, 131) && grown[3] < 130.0);
     }
 
     #[test]

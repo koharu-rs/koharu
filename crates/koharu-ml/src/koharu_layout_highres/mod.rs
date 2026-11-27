@@ -130,13 +130,14 @@ impl Detected {
     pub fn layout(self, page: &RgbImage) -> Layout {
         let Self(mut detections) = self;
         // RF-DETR's lettering masks hug each stroke but miss counters and
-        // parts of strokes. Each lettering's is its own, so they're made in
-        // parallel.
+        // parts of strokes, and its boxes can cut a line's glyphs. Each
+        // lettering's are its own, so they're fitted in parallel.
         detections
             .par_iter_mut()
             .filter(|detection| matches!(detection.label.as_str(), "text" | "onomatopoeia"))
             .for_each(|detection| {
-                detection.mask = measure::glyph_mask(&detection.mask, detection.bbox, page);
+                (detection.mask, detection.bbox) =
+                    measure::glyph_mask(&detection.mask, detection.bbox, page);
             });
         suppress::merge(&mut detections);
         suppress::disjoint(&mut detections);
