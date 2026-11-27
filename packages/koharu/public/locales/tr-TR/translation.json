@@ -210,6 +210,20 @@
     "borderWidth": "Kenarlık genişliği",
     "chooseBorderWidth": "Kenarlık genişliğini seç",
     "chooseFontSize": "Yazı tipi boyutunu seç",
+    "emphasis": "Vurgu işaretleri",
+    "emphasisMarks": {
+      "circle": "Daire",
+      "dot": "Nokta",
+      "double_circle": "Çift daire",
+      "none": "Yok",
+      "open_circle": "Boş daire",
+      "open_dot": "Boş nokta",
+      "open_double_circle": "Boş çift daire",
+      "open_sesame": "Boş susam",
+      "open_triangle": "Boş üçgen",
+      "sesame": "Susam",
+      "triangle": "Üçgen"
+    },
     "font": "Yazı tipi",
     "fontSize": "Yazı tipi boyutu",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "Yazı tipi kalınlığı",
     "horizontal": "Yatay",
     "opacity": "Opaklık",
+    "orientation": "Karakter yönü",
+    "orientations": {
+      "sideways": "Yan",
+      "tate_chu_yoko": "Tate-chu-yoko",
+      "upright": "Dik"
+    },
     "removeRuby": "Ruby kaldır",
     "ruby": "Ruby",
     "selectPage": "Katmanlarını incelemek için bir sayfa seçin.",

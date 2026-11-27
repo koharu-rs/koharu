@@ -67,16 +67,21 @@ pub(super) struct PlacedLine {
     /// The line box along the block axis.
     pub top: f32,
     pub pitch: f32,
-    /// How much of the box, at its top, is leading its ruby added.
+    /// How much of the box, at its top, is leading its ruby and emphasis
+    /// marks added.
     pub lead: f32,
+    /// How much of the box, at its foot, is leading emphasis marks under it
+    /// added.
+    pub trail: f32,
     /// The paragraph ends with this line.
     pub last: bool,
 }
 
 impl PlacedLine {
-    /// Its box without the leading its ruby added: its top and pitch.
+    /// Its box without the leading its ruby and emphasis marks added: its
+    /// top and pitch.
     pub(super) fn letters(&self) -> (f32, f32) {
-        (self.top + self.lead, self.pitch - self.lead)
+        (self.top + self.lead, self.pitch - self.lead - self.trail)
     }
 }
 
@@ -378,19 +383,24 @@ fn place(styled: &Styled, room: &Room, segments: &[Segment], scale: f32) -> Plac
     }
 }
 
-/// A line's pitch, and how much of it is leading its ruby added: its largest
-/// size, scaled, times the line height, and as CSS adds leading to a line with
-/// ruby, enough that its ruby would clear the letters of a line of the same
-/// above it.
-fn pitch(segments: &[Segment], scale: f32, line_height: f32) -> (f32, f32) {
+/// A line's pitch, and how much of it is leading its ruby and emphasis
+/// marks added before and after its letters: its largest size, scaled, times
+/// the line height, and as CSS adds leading to a line with ruby, and so with
+/// emphasis marks, enough that what reaches past its letters would clear
+/// those of a line of the same beside it.
+fn pitch(segments: &[Segment], scale: f32, line_height: f32) -> (f32, f32, f32) {
     let largest = |of: fn(&Segment) -> f32| segments.iter().map(of).fold(0.0, f32::max);
     let size = largest(|segment| segment.size);
     let set = size * line_height;
-    let lead = match largest(|segment| segment.ruby) {
+    let leading = |reach: f32| match reach {
         0.0 => 0.0,
-        rise => (rise + size * 0.5 - set).max(0.0),
+        reach => (reach + size * 0.5 - set).max(0.0),
     };
-    ((set + lead) * scale, lead * scale)
+    let (lead, trail) = (
+        leading(largest(|segment| segment.rise)),
+        leading(largest(|segment| segment.sink)),
+    );
+    ((set + lead + trail) * scale, lead * scale, trail * scale)
 }
 
 /// Point text: each paragraph on one line, as long as the longest, lines
@@ -505,7 +515,7 @@ fn line(
     start: f32,
     room: f32,
     top: f32,
-    (pitch, lead): (f32, f32),
+    (pitch, lead, trail): (f32, f32, f32),
 ) -> PlacedLine {
     let last = range
         .end
@@ -518,6 +528,7 @@ fn line(
         top,
         pitch,
         lead,
+        trail,
         last,
     }
 }
@@ -537,6 +548,7 @@ struct InPath<'a> {
     vertical: bool,
     pitch: f32,
     lead: f32,
+    trail: f32,
     /// The letters' em across a line, which keeps the air from the outline:
     /// with the pitch's leading too, a column kept a sixth of an em more.
     em: f32,
@@ -600,7 +612,7 @@ fn in_path<'a>(
     // does by its first paragraph's direction.
     let rtl = !styled.vertical
         && unicode_bidi::get_base_direction(styled.text.as_str()) == unicode_bidi::Direction::Rtl;
-    let (pitch, lead) = pitch(segments, scale, styled.line_height);
+    let (pitch, lead, trail) = pitch(segments, scale, styled.line_height);
     InPath {
         segments,
         scale,
@@ -614,6 +626,7 @@ fn in_path<'a>(
         vertical: styled.vertical,
         pitch: pitch.max(0.01),
         lead,
+        trail,
         em: size * scale,
         air: size * scale * inset,
         frame: physical(
@@ -778,7 +791,7 @@ impl InPath<'_> {
                     start,
                     room,
                     top + pitch * at as f32,
-                    (pitch, self.lead),
+                    (pitch, self.lead, self.trail),
                 )
             })
             .collect();
@@ -801,9 +814,9 @@ impl InPath<'_> {
         let (pitch, air) = (self.pitch, self.air);
         let bands: Vec<Spans> = (0..count)
             .map(|line| {
-                // The letters' em, in the middle of the line's box below its
-                // ruby's leading.
-                let middle = top + pitch * line as f32 + (self.lead + pitch) * 0.5;
+                // The letters' em, in the middle of the line's box between its
+                // ruby's and emphasis marks' leading.
+                let middle = top + pitch * line as f32 + (self.lead - self.trail + pitch) * 0.5;
                 let (v0, v1) = (middle - self.em * 0.5, middle + self.em * 0.5);
                 self.outline
                     .padded(f64::from(v0), f64::from(v1), f64::from(air))
@@ -829,7 +842,7 @@ impl InPath<'_> {
     /// the air leaves only the wide end of a tapering room, and a room's
     /// rounded foot ended a column's span sooner than the air its head kept.
     fn middle(&self, top: f32, count: usize, axis: f64) -> Option<f32> {
-        let across = top + (self.pitch * count as f32 + self.lead) * 0.5;
+        let across = top + (self.pitch * count as f32 + self.lead - self.trail) * 0.5;
         let band = self.outline.band(
             f64::from(across - self.em * 0.5),
             f64::from(across + self.em * 0.5),
@@ -877,9 +890,10 @@ impl InPath<'_> {
             return anchored;
         }
         // The air is kept from the letters' em, short of their boxes' ends.
+        let shift = self.lead - self.trail;
         let (head, foot) = (
-            (self.lead + pitch - self.em) * 0.5,
-            (pitch - self.lead - self.em) * 0.5,
+            (shift + pitch - self.em) * 0.5,
+            (pitch - shift - self.em) * 0.5,
         );
         let (low, high) = (
             bounds.y0 as f32 + air - head,
@@ -959,7 +973,7 @@ impl InPath<'_> {
                         start,
                         room,
                         top + pitch * at as f32,
-                        (pitch, self.lead),
+                        (pitch, self.lead, self.trail),
                     )
                 })
                 .collect(),
@@ -990,7 +1004,8 @@ mod tests {
             after,
             punctuation: false,
             size: 10.0,
-            ruby: 0.0,
+            rise: 0.0,
+            sink: 0.0,
         }
     }
 
@@ -1011,6 +1026,7 @@ mod tests {
                 chinese: false,
                 frame,
                 ruby: Vec::new(),
+                marks: Vec::new(),
             },
             room,
         ))
@@ -1082,6 +1098,7 @@ mod tests {
             chinese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
+            marks: Vec::new(),
         };
         let mut words = vec![word(25.0, Break::Normal); 7];
         words.push(word(25.0, Break::End));
@@ -1115,6 +1132,7 @@ mod tests {
             chinese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
+            marks: Vec::new(),
         };
         let mut words = vec![word(30.0, Break::Normal); 11];
         words.push(word(30.0, Break::End));
@@ -1159,6 +1177,7 @@ mod tests {
             chinese: true,
             frame: frame.clone(),
             ruby: Vec::new(),
+            marks: Vec::new(),
         };
         let character = |after| Segment {
             range: 0..0,
@@ -1169,7 +1188,8 @@ mod tests {
             after,
             punctuation: false,
             size: 21.0,
-            ruby: 0.0,
+            rise: 0.0,
+            sink: 0.0,
         };
         let mut characters = vec![character(Break::Normal); 9];
         characters.push(character(Break::End));

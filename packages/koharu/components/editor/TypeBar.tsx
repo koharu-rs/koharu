@@ -14,7 +14,15 @@ import {
   Type,
   TypeOutline,
 } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 
@@ -52,10 +60,12 @@ import {
   type CharKey,
   type CharStyle,
   type Direction,
+  type Emphasis,
   type FontFamily,
   type Kernel,
   type Layer,
   type LayerId,
+  type Orientation,
   type Text,
   type TextStyle,
   type Value,
@@ -241,13 +251,13 @@ export function TypeBar() {
   // size above, the weight and the size as narrow as their numbers so the style's and the font's
   // names have room; below, bold, italic, and the text's colour, a letter over it as Word's font
   // colour button draws, then the edge, as Clip Studio Paint's Edge is a setting of its own with its
-  // colour and width, the letter outlined over its colour, then the direction and ruby, and the
-  // alignment.
+  // colour and width, the letter outlined over its colour, then the direction, how characters stand
+  // in a column, ruby, and emphasis marks, and the alignment.
   // Each button group is one cell, its buttons sharing its width, as Pages sets B, I, and U; the rows
   // are as wide as each other: the font menu takes what the upper one leaves, and the lower one
   // stretches its groups to fill it.
   const cell =
-    'flex h-6 gap-px rounded-md border border-input bg-background p-px *:h-full *:min-w-0 *:flex-1 *:rounded-[4px] *:border-0'
+    'flex h-6 gap-px rounded-md border border-input bg-background p-px *:h-full *:min-w-0 *:flex-1 *:rounded-[calc(var(--radius-md)-2px)] *:border-0'
   const toggle =
     'h-full min-w-0 px-0 text-muted-foreground data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary/90'
   return (
@@ -458,7 +468,7 @@ export function TypeBar() {
             onChange={(next) => applyChars({ stroke_width: next, stroke: stroke ?? toRgba(WHITE) })}
           />
         </div>
-        <div className={cn(cell, 'w-14 grow')}>
+        <div className={cn(cell, 'w-28 grow')}>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -492,7 +502,31 @@ export function TypeBar() {
               <span className='ml-2 opacity-60'>{t(`inspector.${direction}`)}</span>
             </TooltipContent>
           </Tooltip>
+          {/* How the selected characters stand in a column, as Clip Studio Paint's TateChuYoko
+            and CSS's text-orientation set them; horizontal text has no use for it. */}
+          <SampleMenu
+            label={t('inspector.orientation')}
+            values={ORIENTATIONS}
+            value={mixed.has('orientation') ? null : (chars.orientation ?? 'mixed')}
+            unset='mixed'
+            disabled={direction !== 'vertical'}
+            name={(value) =>
+              value === 'mixed' ? t('inspector.auto') : t(`inspector.orientations.${value}`)
+            }
+            sample={(value, compact) => <OrientationSample value={value} compact={compact} />}
+            onPick={(orientation) => applyChars({ orientation })}
+          />
           <RubyField typing={typing} />
+          {/* The mark beside each selected character, as InDesign's Kenten lists them. */}
+          <SampleMenu
+            label={t('inspector.emphasis')}
+            values={EMPHASES}
+            value={mixed.has('emphasis') ? null : (chars.emphasis ?? 'none')}
+            unset='none'
+            name={(value) => t(`inspector.emphasisMarks.${value}`)}
+            sample={(value, compact) => <EmphasisSample value={value} compact={compact} />}
+            onPick={(emphasis) => applyChars({ emphasis })}
+          />
         </div>
         <div role='group' aria-label={t('inspector.alignment')} className={cn(cell, 'w-18 grow')}>
           {(
@@ -555,7 +589,143 @@ const CHAR_KEYS: CharKey[] = [
   'fill',
   'stroke',
   'stroke_width',
+  'orientation',
+  'emphasis',
 ]
+
+const ORIENTATIONS: Orientation[] = ['mixed', 'upright', 'sideways', 'tate_chu_yoko']
+/** CSS's marks in its order, each filled and then open. */
+const EMPHASES: Emphasis[] = [
+  'none',
+  'dot',
+  'open_dot',
+  'circle',
+  'open_circle',
+  'double_circle',
+  'open_double_circle',
+  'triangle',
+  'open_triangle',
+  'sesame',
+  'open_sesame',
+]
+
+/** A small column showing how `value` stands its characters, set by the browser's own CSS; smaller
+ * still when `compact`, as a cell's button shows it. Upright's two letters are stacked as lines,
+ * since CSS's upright gives each a full vertical advance, which stood them half again as tall as
+ * the other samples; tate-chu-yoko's two digits share a cell under a kana, so they read as set
+ * across a column rather than as a plain number. */
+function OrientationSample({ value, compact }: { value: Orientation; compact: boolean }) {
+  const [lead, text, style] = {
+    mixed: ['', 'あA', {}],
+    upright: [
+      '',
+      'A\nB',
+      {
+        display: 'inline-block',
+        writingMode: 'horizontal-tb',
+        whiteSpace: 'pre',
+        lineHeight: 0.85,
+        textAlign: 'center',
+      },
+    ],
+    sideways: ['', 'AB', { textOrientation: 'sideways' }],
+    tate_chu_yoko: ['あ', '12', { textCombineUpright: 'all' }],
+  }[value] as [string, string, CSSProperties]
+  return (
+    <span
+      aria-hidden='true'
+      className={cn(
+        'leading-none [writing-mode:vertical-rl]',
+        compact ? 'text-[8px]' : 'text-[9px]',
+      )}
+    >
+      {lead}
+      <span style={style}>{text}</span>
+    </span>
+  )
+}
+
+/** A character with `value`'s mark on its right, as a column sets it, by the browser's own CSS;
+ * smaller when `compact`, as a cell's button shows it. */
+function EmphasisSample({ value, compact }: { value: Emphasis; compact: boolean }) {
+  const shape = value.replace('open_', '').replace('_', '-')
+  const mark =
+    value === 'none' ? 'none' : `${value.startsWith('open_') ? 'open' : 'filled'} ${shape}`
+  return (
+    <span
+      aria-hidden='true'
+      style={{ textEmphasis: mark, textEmphasisPosition: 'over right' }}
+      className={cn(
+        'leading-none [writing-mode:vertical-rl]',
+        compact ? 'text-[8px]' : 'text-[11px]',
+      )}
+    >
+      字
+    </span>
+  )
+}
+
+/** A button of a cell that picks one of `values` from a menu, each shown by its sample and its
+ * name, as a select does; it shows the chosen one's sample, compact, and is pressed for any but
+ * `unset`. A `null` value is one the selection doesn't share, which shows `unset`'s sample and picks
+ * none. */
+function SampleMenu<T extends string>({
+  label,
+  values,
+  value,
+  unset,
+  disabled,
+  name,
+  sample,
+  onPick,
+}: {
+  label: string
+  values: T[]
+  value: T | null
+  unset: T
+  disabled?: boolean
+  name: (value: T) => string
+  sample: (value: T, compact: boolean) => ReactNode
+  onPick: (value: T) => void
+}) {
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              aria-label={label}
+              disabled={disabled}
+              data-active={value !== null && value !== unset}
+              className='flex items-center justify-center gap-px text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
+            />
+          }
+        >
+          {sample(value ?? unset, true)}
+          <ChevronDown className='shrink-0' />
+        </TooltipTrigger>
+        <TooltipContent>
+          {label}
+          {value !== null && <span className='ml-2 opacity-60'>{name(value)}</span>}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align='start' className={list}>
+        <DropdownMenuRadioGroup value={value ?? ''} onValueChange={(next) => onPick(next as T)}>
+          {values.map((option) => (
+            <DropdownMenuRadioItem key={option} value={option} className={cn(item, 'gap-2')}>
+              {/* Each sample starts at the column's start, so a character without a mark stands
+                where the marked ones do. */}
+              <span className='grid w-4 shrink-0 items-center justify-items-start'>
+                {sample(option, false)}
+              </span>
+              {name(option)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 /** What every character of `texts` shares, each span's marks over its text's style, and the values
  * they don't, which it leaves empty, as the canvas reports a typed selection's. */

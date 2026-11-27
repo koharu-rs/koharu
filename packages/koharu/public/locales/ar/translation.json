@@ -210,6 +210,20 @@
     "borderWidth": "عرض الحدود",
     "chooseBorderWidth": "اختر عرض الحدود",
     "chooseFontSize": "اختر حجم الخط",
+    "emphasis": "علامات التوكيد",
+    "emphasisMarks": {
+      "circle": "دائرة",
+      "dot": "نقطة",
+      "double_circle": "دائرة مزدوجة",
+      "none": "بلا",
+      "open_circle": "دائرة مفرغة",
+      "open_dot": "نقطة مفرغة",
+      "open_double_circle": "دائرة مزدوجة مفرغة",
+      "open_sesame": "سمسم مفرغ",
+      "open_triangle": "مثلث مفرغ",
+      "sesame": "سمسم",
+      "triangle": "مثلث"
+    },
     "font": "الخط",
     "fontSize": "حجم الخط",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "وزن الخط",
     "horizontal": "أفقي",
     "opacity": "العتامة",
+    "orientation": "اتجاه الأحرف",
+    "orientations": {
+      "sideways": "جانبية",
+      "tate_chu_yoko": "تاتي-تشو-يوكو",
+      "upright": "قائمة"
+    },
     "removeRuby": "إزالة شرح روبي",
     "ruby": "شرح روبي",
     "selectPage": "اختر صفحة لعرض طبقاتها.",

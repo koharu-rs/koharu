@@ -21,7 +21,10 @@ pub(crate) fn draw(
     drawing.scene.set_transform(transform);
     let passes: &[bool] = if strokes { &[true, false] } else { &[false] };
     for &stroking in passes {
-        let runs = layout.resolved.runs.iter().chain(&layout.resolved.ruby);
+        let resolved = &layout.resolved;
+        let runs = (resolved.runs.iter())
+            .chain(&resolved.ruby)
+            .chain(&resolved.emphasis);
         for (glyphs, run) in layout.runs.iter().zip(runs) {
             let (paint, width, join) = match (stroking, run.stroke) {
                 (true, Some((color, width))) => (color, f64::from(width), Join::Round),

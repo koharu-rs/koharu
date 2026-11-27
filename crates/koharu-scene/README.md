@@ -105,6 +105,8 @@ translation.
 |---|---|---|
 | `content` | rich text: spans in order, each a string with its character marks and its ruby; a plain string is one unmarked span | Figma `characterStyleOverrides` and `styleOverrideTable` [Figma nodes]; Clip Studio Paint colours selected letters [CSP text editing] |
 | `ruby` | a span's: a string set small beside its characters, such as their reading; neighbouring spans with the same ruby are one base, which it's set over once, so one base can hold several styles | Clip Studio Paint's Reading string, which goes over a selected target string [CSP vertical text]; InDesign's `rubyString`, on characters and not on a character style [InDesign characters] [InDesign character styles] |
+| `orientation` | a character key: how characters stand in a vertical column, `mixed` (Latin letters and digits sideways and the rest upright, a number of one or two digits and two or three `!` and `?` in one cell), `upright`, `sideways`, or `tate_chu_yoko`, side by side in one upright cell; horizontal text has no use for it | CSS `text-orientation` and `text-combine-upright: all` [CSS writing modes]; Clip Studio Paint's TateChuYoko on the selected text [CSP font]; Photoshop's Tate-Chu-Yoko and Standard Vertical Roman Alignment [Photoshop Asian type]; InDesign's `tatechuyoko`, on characters and character styles [InDesign characters] [InDesign character styles] |
+| `emphasis` | a character key: the mark set beside each character, `none` or one of CSS's five shapes, filled or open: `dot`, `circle`, `double_circle`, `triangle`, and `sesame`, and `open_dot` and so on | CSS `text-emphasis-style` [CSS text decoration]; InDesign's Kenten, one list of marks, on characters and character styles [InDesign kenten] [InDesign character styles] |
 | `style` | the layer-wide character and paragraph values | Figma `TypeStyle` on the node [Figma property types]; Photoshop formats "selected characters or an entire type layer" [Photoshop characters] |
 | `frame` | none (point text), a box (paragraph text), or a closed path that the text fills; a box or path frame also has a `fit` and an `anchor` | Photoshop point type, paragraph type [Photoshop type], and text inside a shape [Photoshop text in shapes]; Figma `textAutoResize` `WIDTH_AND_HEIGHT` and `NONE` [Figma text resize]; Clip Studio Paint point text and text boxes [CSP text] and balloon text [CSP balloons] |
 | `fit` | `shrink` (the default): text that would overflow shrinks just enough to fit, down to half its set size, and past that it overflows; `none`: the set size always; `grow`, for a box only: the box keeps its inline size, and its block size follows the text, growing away from its `anchor`; `best`: the text grows or shrinks to the largest size the frame holds, shrinking as `shrink` does down to half its set size and then on until it fits | PowerPoint shrinks placeholder text "as you type" by default, and with fitting stopped the text "will overfill the box" [PowerPoint placeholders] [PowerPoint autofit]; Google Slides "Shrink text on overflow" and "Resize shape to fit text" [Google Slides fitting]; Keynote fits text to most text boxes by default [Keynote autosize]; Figma `HEIGHT` [Figma text resize]; InDesign Auto-Size [InDesign auto-size]; a SwiftUI minimum scale factor of 0.5 draws text "as small as half" [SwiftUI minimum scale]; Publisher's Best Fit shrinks or grows text to fill its box [Publisher copyfitting] |
@@ -113,7 +115,7 @@ translation.
 | `language` | one BCP 47 tag; `und` when undetermined | SVG `systemLanguage` [SVG structure]; C2PA `sourceLanguage` and `targetLanguage` [C2PA actions] |
 
 The character keys are font family, weight, italic, size, fill colour, stroke
-colour, and stroke width. Each is both a `style` key and a mark key, and a mark
+colour, stroke width, orientation, and emphasis. Each is both a `style` key and a mark key, and a mark
 wins over `style` for its span. Alignment is a paragraph key that lives only in
 `style` and applies to the whole text, like `textAlignHorizontal` in a Figma
 node's `TypeStyle` [Figma property types]. Its values are `start`, `center`,
@@ -159,6 +161,15 @@ on the rest, one reworded loses it, as a translation rerun rewords a text, and o
 given a ruby on only some of its characters loses its own on the rest. White space
 at a base's ends has no ruby. Ruby has no size or place of its own: it's half its base's size,
 over a line or on the right of a column, as JLREQ sets it in principle [JLREQ].
+
+Orientation and emphasis are styles, unlike ruby, as Photoshop keeps
+tate-chu-yoko in a style run [Photoshop Asian type] and InDesign's character
+styles hold tate-chu-yoko and kenten [InDesign character styles], so a character
+typed beside marked ones takes their marks. `mixed` and `none` are values of
+their own, so a mark can undo a text's style, as `italic: false` does. An
+emphasis mark has no size or place of its own: it's half its character's size,
+over a line, on the right of a column, or under a Chinese line, as CSS prefers
+by language, and past a ruby on its side [CSS text decoration].
 
 A text holds its own values. Only a kernel's face is shared, and only its
 family, weight, and italic: nothing else is, because a balloon's text length and
@@ -529,7 +540,8 @@ Read in October and November 2026.
   [Photoshop leading], [Photoshop History panel], [Photoshop combine
   variations], [Photoshop transform], [Lightroom masking],
   [InDesign auto-size], [InDesign alignment], [InDesign characters], [InDesign
-  character styles], [InDesign styles], [Acrobat OCR]
+  character styles], [InDesign styles], [InDesign kenten], [Photoshop Asian
+  type], [Acrobat OCR]
 - Clip Studio Paint: [CSP pages], [CSP page size], [CSP layers], [CSP layer
   masks], [CSP file objects], [CSP text], [CSP text editing], [CSP vertical
   text], [CSP balloons], [CSP text frame], [CSP text tool], [CSP font], [CSP
@@ -543,7 +555,8 @@ Read in October and November 2026.
   autosize], [SwiftUI minimum scale]
 - W3C: [SVG structure], [SVG rendering], [SVG paths], [SVG image], [SVG text
   inside shapes dropped], [CSS masking], [CSS text], [CSS align], [CSS
-  line-height], [CSS font synthesis], [JLREQ]
+  line-height], [CSS font synthesis], [CSS writing modes], [CSS text
+  decoration], [JLREQ]
 - Document and translation formats: [PAGE-XML], [XLIFF]
 - Lettering and manga translation: [Comics Kingdom], [Manga balloon basics],
   [Search and Destroy letters], [Manga translation II], [Manga font kinds],
@@ -570,6 +583,8 @@ Read in October and November 2026.
 [InDesign characters]: https://developer.adobe.com/indesign/dom/api/c/Character/
 [InDesign character styles]: https://developer.adobe.com/indesign/dom/api/c/CharacterStyle/
 [InDesign styles]: https://helpx.adobe.com/sg/indesign/using/paragraph-character-styles.html
+[InDesign kenten]: https://helpx.adobe.com/indesign/desktop/language-and-proofing/chinese-japanese-and-korean/apply-kenten-to-text.html
+[Photoshop Asian type]: https://helpx.adobe.com/photoshop-elements/using/asian-type.html
 [Google Docs styles]: https://support.google.com/docs/answer/1663349
 [Photoshop transform]: https://helpx.adobe.com/photoshop/using/free-transformations-images-shapes-paths.html
 [Photoshop leading]: https://helpx.adobe.com/photoshop/desktop/text-typography/characters-glyphs/adjust-line-and-character-spacing.html
@@ -617,6 +632,8 @@ Read in October and November 2026.
 [CSS align]: https://www.w3.org/TR/css-align-3/#distribution-block
 [CSS font synthesis]: https://www.w3.org/TR/css-fonts-4/#font-synthesis-intro
 [CSS line-height]: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/line-height
+[CSS writing modes]: https://www.w3.org/TR/css-writing-modes-4/
+[CSS text decoration]: https://www.w3.org/TR/css-text-decor-3/#emphasis-marks
 [JLREQ]: https://www.w3.org/TR/jlreq/
 [PAGE-XML]: https://www.primaresearch.org/schema/PAGE/gts/pagecontent/2019-07-15/pagecontent.xsd
 [XLIFF]: https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#segment

@@ -82,7 +82,7 @@ fn only_compatible_versions_open() {
     let (_dir, path) = path();
     drop(Session::create(&path, Meta::default()).expect("a project"));
     let bytes = fs_err::read(&path).expect("its bytes");
-    for version in ["1.3.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
+    for version in ["1.4.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
         let copy = path.with_extension(format!("v{version}"));
         fs_err::copy(&path, &copy).expect("a copy");
         let conn = rusqlite::Connection::open(&copy).expect("the file opens");
@@ -100,7 +100,7 @@ fn only_compatible_versions_open() {
         assert_eq!(fs_err::read(&copy).expect("its bytes"), before, "{version}");
     }
     assert_eq!(fs_err::read(&path).expect("its bytes"), bytes);
-    Session::open(&path, Meta::default()).expect("1.2.0 opens");
+    Session::open(&path, Meta::default()).expect("1.3.0 opens");
 }
 
 /// Two texts of a page as 0.96.2 stored it, in version 1.0.0: a block's, with
@@ -176,7 +176,7 @@ fn a_page_1_0_0_wrote_opens_as_it_was_and_keeps_the_styles_it_took() {
     apply(&mut session, ops).expect("ruby");
     drop(session);
     let session = Session::open(&path, Meta::default()).expect("it opens again");
-    assert_eq!(version(&session), "1.2.0");
+    assert_eq!(version(&session), "1.3.0");
     assert_eq!(meta(&session), json!(preferred));
     let mut written = stored;
     written["layers"][0]["translation"]["content"] = spans;

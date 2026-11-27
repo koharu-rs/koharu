@@ -210,6 +210,20 @@
     "borderWidth": "描边宽度",
     "chooseBorderWidth": "选择描边宽度",
     "chooseFontSize": "选择字体大小",
+    "emphasis": "着重号",
+    "emphasisMarks": {
+      "circle": "实心圆",
+      "dot": "实心点",
+      "double_circle": "实心双圆",
+      "none": "无",
+      "open_circle": "空心圆",
+      "open_dot": "空心点",
+      "open_double_circle": "空心双圆",
+      "open_sesame": "空心芝麻点",
+      "open_triangle": "空心三角",
+      "sesame": "实心芝麻点",
+      "triangle": "实心三角"
+    },
     "font": "字体",
     "fontSize": "字体大小",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "字体粗细",
     "horizontal": "横排",
     "opacity": "不透明度",
+    "orientation": "字符朝向",
+    "orientations": {
+      "sideways": "旋转",
+      "tate_chu_yoko": "直排内横排",
+      "upright": "直立"
+    },
     "removeRuby": "移除注音",
     "ruby": "注音",
     "selectPage": "选择一个页面以检查其图层。",

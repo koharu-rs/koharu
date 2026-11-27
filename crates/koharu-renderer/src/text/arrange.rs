@@ -7,12 +7,13 @@ use std::ops::Range;
 use anyhow::Result;
 use harfrust::Buffer;
 use koharu_scene::Align;
-use kurbo::{Affine, Rect};
+use kurbo::{Affine, Rect, Vec2};
 use unicode_bidi::{BidiInfo, Level};
 
 use super::{
     ResolvedText, TextRun,
     breaks::{Break, Segment},
+    emphasis::{self, ShapedMark},
     fit::{Placed, PlacedLine},
     itemize::{Orientation, Run},
     lettering::{LineMap, PlacedGlyph},
@@ -27,7 +28,8 @@ use crate::fonts::Font;
 /// A text's glyphs positioned in its own coordinates, with what laying it
 /// out resolved.
 pub(crate) struct TextLayout {
-    /// One for each of `resolved.runs` and then of `resolved.ruby`, in order.
+    /// One for each of `resolved.runs`, then of `resolved.ruby`, and then of
+    /// `resolved.emphasis`, in order.
     pub runs: Vec<GlyphRun>,
     /// Where each line's characters lie, for typing into it.
     pub lines: Vec<LineMap>,
@@ -43,21 +45,25 @@ pub(crate) struct GlyphRun {
     /// Its glyphs are turned a quarter clockwise around their origins, as
     /// vertical text sets Latin.
     pub sideways: bool,
+    /// How much its glyphs narrow, as a tate-chu-yoko cell's do; 1 for none.
+    pub squeeze: f32,
 }
 
 impl GlyphRun {
-    /// What each glyph draws through, around its origin with y down: a faux
-    /// italic's lean, and then a sideways glyph's quarter turn clockwise on
-    /// the page, which maps (x, y) to (-y, x).
+    /// What each glyph draws through, around its origin with y down: a
+    /// squeeze, then a faux italic's lean, and then a sideways glyph's
+    /// quarter turn clockwise on the page, which maps (x, y) to (-y, x).
     pub(crate) fn turn(&self) -> Option<Affine> {
         let lean = f64::from(self.font.lean());
-        let skew = (lean != 0.0).then(|| Affine::skew(-lean, 0.0));
-        match self.sideways {
-            true => Some(
-                Affine::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]) * skew.unwrap_or(Affine::IDENTITY),
-            ),
-            false => skew,
-        }
+        [
+            (self.squeeze != 1.0).then(|| Affine::scale_non_uniform(f64::from(self.squeeze), 1.0)),
+            (lean != 0.0).then(|| Affine::skew(-lean, 0.0)),
+            self.sideways
+                .then(|| Affine::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0])),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|first, then| then * first)
     }
 
     /// Where its glyphs ink at `size`, each through its turn.
@@ -72,9 +78,9 @@ impl GlyphRun {
 }
 
 /// A glyph as positioned: what groups it into a run, its run's span, font,
-/// and whether it's turned sideways; the glyph; and the text offset of its
-/// cluster.
-type Positioned = ((usize, usize, bool), glifo::Glyph, usize);
+/// whether it's turned sideways, and its squeeze; the glyph; and the text
+/// offset of its cluster.
+type Positioned = ((usize, usize, bool, f32), glifo::Glyph, usize);
 
 /// A run as one line holds it, with its glyphs there.
 type Piece<'a> = (&'a Run, Vec<Glyph>);
@@ -97,6 +103,7 @@ pub(super) fn arrange(
     let mut lines = Vec::new();
     let mut line_boxes = Vec::new();
     let (mut ruby_runs, mut ruby_text_runs) = (Vec::new(), Vec::new());
+    let (mut mark_runs, mut mark_text_runs) = (Vec::new(), Vec::new());
     for line in &placed.lines {
         let Some(last) = line.segments.end.checked_sub(1).map(|at| &segments[at]) else {
             continue;
@@ -139,6 +146,19 @@ pub(super) fn arrange(
             }));
             boxes.push(line_box(styled, &line, used));
         }
+        for mark in &shaped.marks {
+            let (glyphs, marked, inks) = beside(shaped, mark, line, &text, &clusters, scale);
+            let Some(marked) = marked else {
+                continue;
+            };
+            let (runs, text_runs) = runs(&mark.text, &glyphs, scale);
+            mark_runs.extend(runs);
+            mark_text_runs.extend(text_runs.into_iter().map(|run| TextRun {
+                range: utf16(&styled.text, marked.start)..utf16(&styled.text, marked.end),
+                ..run
+            }));
+            boxes.extend(inks);
+        }
         bounds = boxes
             .into_iter()
             .chain(bounds)
@@ -154,7 +174,11 @@ pub(super) fn arrange(
 
     let (mut runs, text_runs) = runs(shaped, &glyphs, scale);
     runs.extend(ruby_runs);
-    let drawn = || runs.iter().zip(text_runs.iter().chain(&ruby_text_runs));
+    runs.extend(mark_runs);
+    let drawn = || {
+        let text_runs = text_runs.iter().chain(&ruby_text_runs);
+        runs.iter().zip(text_runs.chain(&mark_text_runs))
+    };
     // A faux italic leans past its line's box, and a faux bold and a stroke
     // grow past both.
     let bounds = drawn()
@@ -174,6 +198,7 @@ pub(super) fn arrange(
         resolved: ResolvedText {
             runs: text_runs,
             ruby: ruby_text_runs,
+            emphasis: mark_text_runs,
             frame: placed.frame,
             scale,
             lines: line_boxes
@@ -216,6 +241,7 @@ fn line_box(styled: &Styled, line: &PlacedLine, used: f32) -> Rect {
 fn uncovered(shaped: &ShapedText) -> Vec<char> {
     let mut uncovered = shaped.uncovered.clone();
     uncovered.extend(shaped.ruby.iter().flat_map(|ruby| &ruby.text.uncovered));
+    uncovered.extend(shaped.marks.iter().flat_map(|mark| &mark.text.uncovered));
     uncovered.sort_unstable();
     uncovered.dedup();
     uncovered
@@ -250,11 +276,88 @@ fn over<'a>(
                 top: top + pitch * 0.5 - shaped.ruby.rise() * scale,
                 pitch: shaped.ruby.size() * scale,
                 lead: 0.0,
+                trail: 0.0,
                 last: true,
             };
             Some((shaped, line))
         })
         .collect()
+}
+
+/// `mark`'s glyphs beside each character it marks that a line's `text`
+/// starts, as CSS centres a mark on its character: its ink centred along the
+/// line on the character's glyphs in `clusters`, and across it on an em box
+/// of its own past the character's, or past its ruby, on the side its text's
+/// language sets marks; with the characters it marks there, and its inks.
+fn beside(
+    shaped: &ShapedText,
+    mark: &ShapedMark,
+    line: &PlacedLine,
+    text: &Range<usize>,
+    clusters: &[PlacedGlyph],
+    scale: f32,
+) -> (Vec<Positioned>, Option<Range<usize>>, Vec<Rect>) {
+    let styled = shaped.styled;
+    let size = mark.size() * scale;
+    // The mark's glyphs as a row from the origin, and where they ink.
+    let mut row = Vec::new();
+    let mut ink: Option<Rect> = None;
+    let mut pen = 0.0;
+    for run in &mark.text.runs {
+        let font = mark.text.font(run);
+        for glyph in mark.text.glyphs(run) {
+            let (x, y) = (pen + glyph.x_offset * scale, -glyph.y_offset * scale);
+            if let Some(drawn) = font.ink(glyph.id, size) {
+                let (x, y) = (f64::from(x), f64::from(y));
+                let drawn = Rect::new(x + drawn.x0, y - drawn.y1, x + drawn.x1, y - drawn.y0);
+                ink = Some(ink.map_or(drawn, |ink| ink.union(drawn)));
+            }
+            let key = (run.span, run.font, false, 1.0);
+            row.push((key, glifo::Glyph { id: glyph.id, x, y }));
+            pen += glyph.advance * scale;
+        }
+    }
+    let (mut glyphs, mut marked, mut inks) = (Vec::new(), None, Vec::new());
+    let Some(ink) = ink else {
+        return (glyphs, marked, inks);
+    };
+    let (top, pitch) = line.letters();
+    let middle = top + pitch * 0.5;
+    for base in mark.bases.iter().filter(|base| text.contains(&base.start)) {
+        let Some(along) = clusters
+            .iter()
+            .filter(|(at, ..)| base.contains(at))
+            .map(|(_, along, _)| along.clone())
+            .reduce(|a, b| a.start.min(b.start)..a.end.max(b.end))
+        else {
+            continue;
+        };
+        let away = mark.near(styled, base) * scale + size * 0.5;
+        let across = match emphasis::under(styled) {
+            true => middle + away,
+            false => middle - away,
+        };
+        let along = (along.start + along.end) * 0.5;
+        // A column's block axis runs right to left, its lines down.
+        let centre = match styled.vertical {
+            true => (-across, along),
+            false => (along, across),
+        };
+        let shift = Vec2::new(f64::from(centre.0), f64::from(centre.1)) - ink.center().to_vec2();
+        glyphs.extend(row.iter().map(|(key, glyph)| {
+            let at = glifo::Glyph {
+                x: glyph.x + shift.x as f32,
+                y: glyph.y + shift.y as f32,
+                ..*glyph
+            };
+            (*key, at, 0)
+        }));
+        inks.push(ink + shift);
+        marked = Some(marked.map_or(base.clone(), |marked: Range<usize>| {
+            marked.start.min(base.start)..marked.end.max(base.end)
+        }));
+    }
+    (glyphs, marked, inks)
 }
 
 /// A ruby's glyphs positioned in its `line`, and its length.
@@ -420,21 +523,23 @@ fn position(
         let mut push = |x: f32, y: f32, glyph: &Glyph| {
             let id = glyph.id;
             let drawn = glifo::Glyph { id, x, y };
-            glyphs.push(((run.span, run.font, sideways), drawn, glyph.cluster));
+            let key = (run.span, run.font, sideways, run.squeeze);
+            glyphs.push((key, drawn, glyph.cluster));
         };
         if run.orientation == Orientation::TateChuYoko {
             // An upright group shares one cell, its glyphs side by side
-            // across the column.
-            let width: f32 = piece.iter().map(|g| g.advance * scale).sum();
+            // across the column, narrowed to fit it.
+            let across_scale = scale * run.squeeze;
+            let width: f32 = piece.iter().map(|g| g.advance * across_scale).sum();
             let mut across = -width * 0.5;
             let cell_start = pen + run.space.0 * scale;
             let cell_baseline = cell_start + (size - (ascent + descent)) * 0.5 + ascent;
             let end = pen + shaped.cell(run) * scale;
             for glyph in &piece {
-                let x = -block_center + across + glyph.x_offset * scale - centre * lean;
+                let x = -block_center + across + glyph.x_offset * across_scale - centre * lean;
                 push(x, cell_baseline - glyph.y_offset * scale, glyph);
                 placed(glyph.cluster, pen..end);
-                across += glyph.advance * scale;
+                across += glyph.advance * across_scale;
             }
             pen = end;
             continue;
@@ -555,7 +660,7 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
     let mut glyph_runs = Vec::new();
     let mut text_runs = Vec::new();
     for run in glyphs.chunk_by(|a, b| a.0 == b.0) {
-        let (span, font, sideways) = run[0].0;
+        let (span, font, sideways, squeeze) = run[0].0;
         let span = &styled.spans[span];
         let font = &span.fonts[font];
         let clusters = run.iter().map(|glyph| glyph.2);
@@ -574,6 +679,7 @@ fn runs(shaped: &ShapedText, glyphs: &[Positioned], scale: f32) -> (Vec<GlyphRun
             font: font.clone(),
             glyphs: run.iter().map(|glyph| glyph.1).collect(),
             sideways,
+            squeeze,
         });
     }
     (glyph_runs, text_runs)
@@ -712,6 +818,7 @@ mod tests {
                 size: 16.0,
                 fill: koharu_scene::Color::BLACK,
                 stroke: None,
+                orientation: koharu_scene::Orientation::Mixed,
             }],
             vertical: false,
             align: Align::Start,
@@ -720,6 +827,7 @@ mod tests {
             chinese: false,
             frame: Frame::Point,
             ruby: Vec::new(),
+            marks: Vec::new(),
         }
     }
 
@@ -770,6 +878,7 @@ mod tests {
             top: 0.0,
             pitch: 20.0,
             lead: 0.0,
+            trail: 0.0,
             last: true,
         };
         let pieces = line_runs(&shaped, &mut Buffer::new(), english..text.len())?;
@@ -905,6 +1014,69 @@ mod tests {
             "{} against {}",
             top(false),
             top(true)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn upright_latin_stands_in_a_japanese_face() -> Result<()> {
+        // These faces' `vrt2` swaps proportional Latin for glyphs already
+        // turned a quarter, which stood an upright T on its side.
+        let font = [
+            "Yu Gothic",
+            "MS Gothic",
+            "Noto Sans CJK JP",
+            "Hiragino Sans",
+        ]
+        .into_iter()
+        .find_map(|family| Library::new().family(family).ok())
+        .expect("an installed Japanese font");
+        let text = koharu_scene::Text {
+            content: "T".into(),
+            direction: koharu_scene::Direction::Vertical,
+            style: koharu_scene::TextStyle {
+                chars: koharu_scene::CharStyle {
+                    orientation: Some(koharu_scene::Orientation::Upright),
+                    ..koharu_scene::CharStyle::default()
+                },
+                ..koharu_scene::TextStyle::default()
+            },
+            ..koharu_scene::Text::default()
+        };
+        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let (run, size) = (&layout.runs[0], layout.resolved.runs[0].size);
+        assert!(!run.sideways);
+        let ink = run.ink(size).next().expect("ink");
+        assert!(ink.height() > ink.width(), "{ink:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_tate_chu_yoko_cell_wider_than_an_em_narrows_into_it() -> Result<()> {
+        let font = styled("").spans[0].fonts[0].clone();
+        let text = koharu_scene::Text {
+            content: "100%".into(),
+            direction: koharu_scene::Direction::Vertical,
+            style: koharu_scene::TextStyle {
+                chars: koharu_scene::CharStyle {
+                    orientation: Some(koharu_scene::Orientation::TateChuYoko),
+                    ..koharu_scene::CharStyle::default()
+                },
+                ..koharu_scene::TextStyle::default()
+            },
+            ..koharu_scene::Text::default()
+        };
+        let layout = crate::text::layout(&text, |_, _| Ok(vec![font.clone()]))?.expect("a layout");
+        let (run, size) = (&layout.runs[0], layout.resolved.runs[0].size);
+        assert!(run.squeeze < 1.0, "{}", run.squeeze);
+        let ink = run
+            .ink(size)
+            .reduce(|ink, other| ink.union(other))
+            .expect("ink");
+        assert!(
+            ink.width() <= f64::from(size),
+            "{} against {size}",
+            ink.width()
         );
         Ok(())
     }

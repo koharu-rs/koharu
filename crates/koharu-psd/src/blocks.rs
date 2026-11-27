@@ -213,8 +213,9 @@ const LF: u16 = b'\n' as u16;
 /// the EngineData, and a warp descriptor; and, when every run shares one
 /// stroke, an Outside stroke effect (`lfx2` with `FrFX`), how Photoshop
 /// strokes type outside its glyphs as the renderer does. Strokes that differ
-/// by span, and ruby, which Photoshop's type doesn't have, stay in the pixels
-/// only.
+/// by span, ruby and emphasis marks, which Photoshop's type doesn't have, and
+/// how a column's characters stand, whose `BaselineDirection` values aren't
+/// known, stay in the pixels only.
 pub(crate) fn type_layer(layer: &Text, text: &ResolvedText, index: i32) -> Vec<TaggedBlock> {
     let vertical = layer.direction == Direction::Vertical;
     let frame = text.frame;

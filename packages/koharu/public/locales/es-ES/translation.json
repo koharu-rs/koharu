@@ -210,6 +210,20 @@
     "borderWidth": "Ancho del contorno",
     "chooseBorderWidth": "Elegir ancho del contorno",
     "chooseFontSize": "Elegir tamaño de fuente",
+    "emphasis": "Marcas de énfasis",
+    "emphasisMarks": {
+      "circle": "Círculo",
+      "dot": "Punto",
+      "double_circle": "Doble círculo",
+      "none": "Ninguna",
+      "open_circle": "Círculo hueco",
+      "open_dot": "Punto hueco",
+      "open_double_circle": "Doble círculo hueco",
+      "open_sesame": "Sésamo hueco",
+      "open_triangle": "Triángulo hueco",
+      "sesame": "Sésamo",
+      "triangle": "Triángulo"
+    },
     "font": "Fuente",
     "fontSize": "Tamaño de fuente",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "Grosor de fuente",
     "horizontal": "Horizontal",
     "opacity": "Opacidad",
+    "orientation": "Orientación de los caracteres",
+    "orientations": {
+      "sideways": "De lado",
+      "tate_chu_yoko": "Tate-chu-yoko",
+      "upright": "Erguidos"
+    },
     "removeRuby": "Quitar ruby",
     "ruby": "Ruby",
     "selectPage": "Selecciona una página para inspeccionar sus capas.",

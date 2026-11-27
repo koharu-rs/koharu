@@ -17,6 +17,8 @@ pub enum CharKey {
     Fill,
     Stroke,
     StrokeWidth,
+    Orientation,
+    Emphasis,
 }
 
 /// What the type bar's ruby field does to the text being typed.
@@ -84,6 +86,8 @@ pub(super) fn shared(mut styles: impl Iterator<Item = CharStyle>) -> (CharStyle,
             CharKey::StrokeWidth,
             chars.stroke_width == style.stroke_width,
         );
+        differs(CharKey::Orientation, chars.orientation == style.orientation);
+        differs(CharKey::Emphasis, chars.emphasis == style.emphasis);
     }
     for key in &mixed {
         match key {
@@ -94,6 +98,8 @@ pub(super) fn shared(mut styles: impl Iterator<Item = CharStyle>) -> (CharStyle,
             CharKey::Fill => chars.fill = None,
             CharKey::Stroke => chars.stroke = None,
             CharKey::StrokeWidth => chars.stroke_width = None,
+            CharKey::Orientation => chars.orientation = None,
+            CharKey::Emphasis => chars.emphasis = None,
         }
     }
     (chars, mixed)

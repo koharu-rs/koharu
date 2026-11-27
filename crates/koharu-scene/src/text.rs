@@ -31,6 +31,12 @@ pub struct CharStyle {
     pub stroke: Option<Rgba>,
     #[serde(default)]
     pub stroke_width: Option<f64>,
+    /// How the characters stand in a vertical column.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<Orientation>,
+    /// The mark set beside each character.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emphasis: Option<Emphasis>,
 }
 
 impl CharStyle {
@@ -45,7 +51,67 @@ impl CharStyle {
             fill: self.fill.or(base.fill),
             stroke: self.stroke.or(base.stroke),
             stroke_width: self.stroke_width.or(base.stroke_width),
+            orientation: self.orientation.or(base.orientation),
+            emphasis: self.emphasis.or(base.emphasis),
         }
+    }
+}
+
+// `mixed` turns Latin letters and digits sideways and stands the rest
+// upright, short numbers and `!?` runs in one cell; `upright` stands every
+// character one under another; `sideways` turns them all a quarter clockwise,
+// as one line; and `tate_chu_yoko` sets them side by side in one upright cell:
+// CSS's `text-orientation`, and the tate-chu-yoko of Photoshop, Clip Studio
+// Paint, and CSS's `text-combine-upright: all`. The doc comments stay short, as
+// agents' tools inline them wherever a character style goes.
+/// How characters stand in a vertical column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Orientation {
+    #[default]
+    Mixed,
+    Upright,
+    Sideways,
+    TateChuYoko,
+}
+
+// CSS's `text-emphasis-style` shapes, each filled or open, as one list, as
+// InDesign lists its kenten.
+/// An emphasis mark.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Emphasis {
+    #[default]
+    None,
+    Dot,
+    OpenDot,
+    Circle,
+    OpenCircle,
+    DoubleCircle,
+    OpenDoubleCircle,
+    Triangle,
+    OpenTriangle,
+    Sesame,
+    OpenSesame,
+}
+
+impl Emphasis {
+    /// The character its mark is, as CSS names each; `None` for none.
+    #[must_use]
+    pub fn mark(self) -> Option<char> {
+        Some(match self {
+            Self::None => return None,
+            Self::Dot => '•',
+            Self::OpenDot => '◦',
+            Self::Circle => '●',
+            Self::OpenCircle => '○',
+            Self::DoubleCircle => '◉',
+            Self::OpenDoubleCircle => '◎',
+            Self::Triangle => '▲',
+            Self::OpenTriangle => '△',
+            Self::Sesame => '﹅',
+            Self::OpenSesame => '﹆',
+        })
     }
 }
 

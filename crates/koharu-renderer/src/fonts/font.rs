@@ -226,7 +226,7 @@ impl Font {
     }
 
     /// Whether the face sets `ch` in vertical text in a form of its own: its
-    /// `vert` or `vrt2` features, or Unicode's vertical presentation forms
+    /// `vert` feature, or Unicode's vertical presentation forms
     /// without them, substitute another glyph for it, one that draws: a
     /// Chinese face draws `︽` and `︾` as nothing.
     pub(crate) fn has_vertical_form(&self, ch: char) -> bool {
@@ -237,10 +237,7 @@ impl Font {
             .charmap
             .charmap(self.data.data.as_ref())
             .and_then(|charmap| charmap.map(ch));
-        let features = [
-            Feature::new(Tag::new(b"vert"), 1, ..),
-            Feature::new(Tag::new(b"vrt2"), 1, ..),
-        ];
+        let features = [Feature::new(Tag::new(b"vert"), 1, ..)];
         let mut buffer = Buffer::new();
         buffer.push_str(ch.encode_utf8(&mut [0; 4]));
         buffer.guess_segment_properties();

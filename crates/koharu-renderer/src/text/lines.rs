@@ -219,7 +219,8 @@ mod tests {
             after: Break::Normal,
             punctuation: false,
             size: 0.0,
-            ruby: 0.0,
+            rise: 0.0,
+            sink: 0.0,
         }
     }
 

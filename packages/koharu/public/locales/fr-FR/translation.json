@@ -210,6 +210,20 @@
     "borderWidth": "Épaisseur du contour",
     "chooseBorderWidth": "Choisir l’épaisseur du contour",
     "chooseFontSize": "Choisir la taille de police",
+    "emphasis": "Marques d'emphase",
+    "emphasisMarks": {
+      "circle": "Cercle",
+      "dot": "Point",
+      "double_circle": "Double cercle",
+      "none": "Aucune",
+      "open_circle": "Cercle creux",
+      "open_dot": "Point creux",
+      "open_double_circle": "Double cercle creux",
+      "open_sesame": "Sésame creux",
+      "open_triangle": "Triangle creux",
+      "sesame": "Sésame",
+      "triangle": "Triangle"
+    },
     "font": "Police",
     "fontSize": "Taille de police",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "Graisse",
     "horizontal": "Horizontal",
     "opacity": "Opacité",
+    "orientation": "Orientation des caractères",
+    "orientations": {
+      "sideways": "Couchés",
+      "tate_chu_yoko": "Tate-chu-yoko",
+      "upright": "Debout"
+    },
     "removeRuby": "Retirer le ruby",
     "ruby": "Ruby",
     "selectPage": "Sélectionnez une page pour inspecter ses calques.",

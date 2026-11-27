@@ -16,7 +16,7 @@ use icu_segmenter::{
 };
 use jieba_rs::Jieba;
 
-use super::{itemize::Orientation, ruby::Ruby, shape::ShapedText};
+use super::{emphasis, itemize::Orientation, ruby::Ruby, shape::ShapedText};
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
 
@@ -75,8 +75,12 @@ pub(super) struct Segment {
     pub punctuation: bool,
     /// Its largest span's size.
     pub size: f32,
-    /// How far its ruby reaches above its line's centre; 0 without any.
-    pub ruby: f32,
+    /// How far its ruby and emphasis marks reach above its line's centre,
+    /// or right of a column's; 0 without any.
+    pub rise: f32,
+    /// How far its emphasis marks reach below its line's centre; 0 without
+    /// any.
+    pub sink: f32,
 }
 
 /// A piece of text between break opportunities: its range, without a line
@@ -296,12 +300,26 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
         // An empty paragraph has no runs, and keeps its span's leading, as
         // Photoshop's does.
         .unwrap_or_else(|| styled.spans[styled.span_at(range.start)].size);
-    let ruby = styled
+    let mut rise = styled
         .ruby
         .iter()
         .filter(|ruby| ruby.base.start < range.end && range.start < ruby.base.end)
         .map(Ruby::rise)
         .fold(0.0, f32::max);
+    let mut sink = 0.0;
+    for mark in &shaped.marks {
+        let bases = mark
+            .bases
+            .iter()
+            .filter(|base| base.start < range.end && range.start < base.end);
+        for base in bases {
+            let reach = mark.near(styled, base) + mark.size();
+            match emphasis::under(styled) {
+                true => sink = f32::max(sink, reach),
+                false => rise = rise.max(reach),
+            }
+        }
+    }
     Segment {
         visible_end,
         advance: advance(range.clone()),
@@ -313,7 +331,8 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
         after,
         punctuation,
         size,
-        ruby,
+        rise,
+        sink,
         range,
     }
 }
@@ -352,6 +371,7 @@ mod tests {
                 size: 16.0,
                 fill: Color::BLACK,
                 stroke: None,
+                orientation: koharu_scene::Orientation::Mixed,
             }],
             vertical: false,
             align: Align::Start,
@@ -360,6 +380,7 @@ mod tests {
             chinese: false,
             frame: Frame::Point,
             ruby: Vec::new(),
+            marks: Vec::new(),
         }
     }
 

@@ -6,9 +6,11 @@ use std::ops::Range;
 use anyhow::{Context, Result};
 use harfrust::{Buffer, Direction, Feature, ShapeOptions, ShaperFont, Tag};
 use icu_properties::props::Script as IcuScript;
+use icu_segmenter::GraphemeClusterSegmenter;
 use unicode_bidi::{BidiInfo, Level, ParagraphInfo};
 
 use super::{
+    emphasis::{self, ShapedMark},
     itemize::{Orientation, Run, itemize},
     ruby::{self, ShapedRuby},
     style::Styled,
@@ -42,6 +44,8 @@ pub(super) struct ShapedText<'a> {
     pub hyphens: Vec<Option<Run>>,
     /// Its ruby, in text order.
     pub ruby: Vec<ShapedRuby<'a>>,
+    /// Its emphasis marks, as `Styled::marks` has them.
+    pub marks: Vec<ShapedMark<'a>>,
     /// Characters no font of their span has, in code point order.
     pub uncovered: Vec<char>,
 }
@@ -57,6 +61,10 @@ impl<'a> ShapedText<'a> {
         for run in &mut runs {
             let shaped = shape_run(styled, &mut buffer, run, run.range.clone())?;
             run.glyphs = glyphs.len()..glyphs.len() + shaped.len();
+            if run.orientation == Orientation::TateChuYoko {
+                let width: f32 = shaped.iter().map(|glyph| glyph.advance).sum();
+                run.squeeze = (styled.spans[run.span].size / width).min(1.0);
+            }
             glyphs.extend(shaped);
         }
         // Each span's hyphen, shaped in the first of its fonts that has one.
@@ -79,8 +87,9 @@ impl<'a> ShapedText<'a> {
                 orientation: Orientation::Upright,
                 glyphs: 0..0,
                 space: (0.0, 0.0),
+                squeeze: 1.0,
             };
-            let shaped = shape_text(styled, &mut buffer, "-", &run, |_| 0)?;
+            let shaped = shape_text(styled, &mut buffer, "-", &run, None, |_| 0)?;
             run.glyphs = glyphs.len()..glyphs.len() + shaped.len();
             glyphs.extend(shaped);
             hyphens.push(Some(run));
@@ -92,9 +101,11 @@ impl<'a> ShapedText<'a> {
             glyphs,
             hyphens,
             ruby: Vec::new(),
+            marks: Vec::new(),
             uncovered,
         };
         shaped.ruby = ruby::shape(&mut shaped)?;
+        shaped.marks = emphasis::shape(&shaped)?;
         Ok(shaped)
     }
 
@@ -153,18 +164,38 @@ pub(super) fn shape_run(
         ),
         false => (source.to_owned(), (0..source.len()).collect()),
     };
-    shape_text(styled, buffer, &text, run, |cluster| {
-        range.start + clusters.get(cluster).copied().unwrap_or(0)
+    let cluster = |cluster| range.start + clusters.get(cluster).copied().unwrap_or(0);
+    let glyphs = shape_text(styled, buffer, &text, run, None, cluster)?;
+    // A tate-chu-yoko cell wider than an em takes its font's half-, third-, or
+    // quarter-width forms for two, three, or four characters where they
+    // narrow it, as CSS fits combined text into an em; `ShapedText` squeezes
+    // what's still too wide.
+    let width = |glyphs: &[Glyph]| glyphs.iter().map(|glyph| glyph.advance).sum::<f32>();
+    if run.orientation != Orientation::TateChuYoko || width(&glyphs) <= styled.spans[run.span].size
+    {
+        return Ok(glyphs);
+    }
+    let tag = match GraphemeClusterSegmenter::new().segment_str(&text).count() - 1 {
+        2 => b"hwid",
+        3 => b"twid",
+        4 => b"qwid",
+        _ => return Ok(glyphs),
+    };
+    let narrowed = shape_text(styled, buffer, &text, run, Some(Tag::new(tag)), cluster)?;
+    Ok(match width(&narrowed) < width(&glyphs) {
+        true => narrowed,
+        false => glyphs,
     })
 }
 
-/// `text` shaped as `run` says, each glyph's cluster mapped by `cluster` from
-/// a byte of `text` to one of the text.
+/// `text` shaped as `run` says, with the feature `width` on, each glyph's
+/// cluster mapped by `cluster` from a byte of `text` to one of the text.
 fn shape_text(
     styled: &Styled,
     buffer: &mut Buffer,
     text: &str,
     run: &Run,
+    width: Option<Tag>,
     cluster: impl Fn(usize) -> usize,
 ) -> Result<Vec<Glyph>> {
     // Sideways runs and tate-chu-yoko shape as horizontal text.
@@ -176,11 +207,16 @@ fn shape_text(
     } else {
         Direction::LeftToRight
     };
-    let features = [
-        Feature::new(Tag::new(b"vert"), 1, ..),
-        Feature::new(Tag::new(b"vrt2"), 1, ..),
-    ];
-    let features: &[Feature] = if vertical { &features } else { &[] };
+    // `vert` alone, as CSS sets upright text: `vrt2` also swaps proportional
+    // Latin for glyphs its font has already turned, which stood upright Latin
+    // sideways, and runs are turned here, by Unicode's orientations.
+    let columns = [Feature::new(Tag::new(b"vert"), 1, ..)];
+    let narrow = width.map(|width| [Feature::new(width, 1, ..)]);
+    let features: &[Feature] = match (vertical, &narrow) {
+        (true, _) => &columns,
+        (false, Some(narrow)) => narrow,
+        (false, None) => &[],
+    };
     let span = &styled.spans[run.span];
     let font = &span.fonts[run.font];
     buffer.clear();
@@ -289,6 +325,7 @@ mod tests {
                 size: 16.0,
                 fill: Color::BLACK,
                 stroke: None,
+                orientation: koharu_scene::Orientation::Mixed,
             }],
             vertical: false,
             align: Align::Start,
@@ -297,6 +334,7 @@ mod tests {
             chinese: false,
             frame: Frame::Point,
             ruby: Vec::new(),
+            marks: Vec::new(),
         }
     }
 

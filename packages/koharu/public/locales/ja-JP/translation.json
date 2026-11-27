@@ -210,6 +210,20 @@
     "borderWidth": "縁取り幅",
     "chooseBorderWidth": "縁取り幅を選択",
     "chooseFontSize": "フォントサイズを選択",
+    "emphasis": "傍点",
+    "emphasisMarks": {
+      "circle": "黒丸",
+      "dot": "黒小丸",
+      "double_circle": "蛇の目",
+      "none": "なし",
+      "open_circle": "白丸",
+      "open_dot": "白小丸",
+      "open_double_circle": "二重丸",
+      "open_sesame": "白ゴマ",
+      "open_triangle": "白三角",
+      "sesame": "ゴマ",
+      "triangle": "黒三角"
+    },
     "font": "フォント",
     "fontSize": "フォントサイズ",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "フォントの太さ",
     "horizontal": "横書き",
     "opacity": "不透明度",
+    "orientation": "文字の向き",
+    "orientations": {
+      "sideways": "横倒し",
+      "tate_chu_yoko": "縦中横",
+      "upright": "正立"
+    },
     "removeRuby": "ルビを削除",
     "ruby": "ルビ",
     "selectPage": "ページを選択してレイヤーを確認します。",

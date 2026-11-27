@@ -81,6 +81,7 @@ hypher = "0.1.8"
 icu_experimental = { version = "0.7.0", default-features = false, features = ["compiled_data"] }
 icu_locale = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc", "serde"] }
+icu_normalizer = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.4.0", features = ["compiled_data"] }
 icu_segmenter = { version = "2.4.0", features = ["compiled_data", "unstable"] }
 image = "0.25.10"

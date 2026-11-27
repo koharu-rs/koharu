@@ -190,7 +190,16 @@ export type ChapterLink = {
 }
 
 /**  One of the values a character's style holds. */
-export type CharKey = 'family' | 'weight' | 'italic' | 'size' | 'fill' | 'stroke' | 'stroke_width'
+export type CharKey =
+  | 'family'
+  | 'weight'
+  | 'italic'
+  | 'size'
+  | 'fill'
+  | 'stroke'
+  | 'stroke_width'
+  | 'orientation'
+  | 'emphasis'
 
 /**
  *  Character values; each is also a mark key on a span, and a mark wins for
@@ -204,6 +213,10 @@ export type CharStyle = {
   fill?: Rgba | null
   stroke?: Rgba | null
   stroke_width?: number | null
+  /**  How the characters stand in a vertical column. */
+  orientation?: Orientation | null
+  /**  The mark set beside each character. */
+  emphasis?: Emphasis | null
 }
 
 /**  The app's theme colours the canvas draws with. */
@@ -275,6 +288,20 @@ export type Edit = {
   label: string
   ops: Op[]
 }
+
+/**  An emphasis mark. */
+export type Emphasis =
+  | 'none'
+  | 'dot'
+  | 'open_dot'
+  | 'circle'
+  | 'open_circle'
+  | 'double_circle'
+  | 'open_double_circle'
+  | 'triangle'
+  | 'open_triangle'
+  | 'sesame'
+  | 'open_sesame'
 
 /**
  *  A vendor's server: where rig, or Koharu for LM Studio, puts it while
@@ -742,6 +769,9 @@ export type Opened = {
   url: string
   series: Series
 }
+
+/**  How characters stand in a vertical column. */
+export type Orientation = 'mixed' | 'upright' | 'sideways' | 'tate_chu_yoko'
 
 export type Outcome =
   | { kind: 'done' }

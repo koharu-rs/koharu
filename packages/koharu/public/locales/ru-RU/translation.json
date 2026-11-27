@@ -210,6 +210,20 @@
     "borderWidth": "Ширина обводки",
     "chooseBorderWidth": "Выбрать ширину обводки",
     "chooseFontSize": "Выбрать размер шрифта",
+    "emphasis": "Знаки выделения",
+    "emphasisMarks": {
+      "circle": "Круг",
+      "dot": "Точка",
+      "double_circle": "Двойной круг",
+      "none": "Нет",
+      "open_circle": "Пустой круг",
+      "open_dot": "Пустая точка",
+      "open_double_circle": "Пустой двойной круг",
+      "open_sesame": "Пустой кунжут",
+      "open_triangle": "Пустой треугольник",
+      "sesame": "Кунжут",
+      "triangle": "Треугольник"
+    },
     "font": "Шрифт",
     "fontSize": "Размер шрифта",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "Насыщенность шрифта",
     "horizontal": "Горизонтально",
     "opacity": "Непрозрачность",
+    "orientation": "Ориентация символов",
+    "orientations": {
+      "sideways": "Набок",
+      "tate_chu_yoko": "Татэ-тю-ёко",
+      "upright": "Прямо"
+    },
     "removeRuby": "Убрать руби",
     "ruby": "Руби",
     "selectPage": "Выберите страницу для просмотра её слоёв.",

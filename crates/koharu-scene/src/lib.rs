@@ -27,6 +27,6 @@ pub use layer::{Attributes, Layer, NewLayer, PixelFormat};
 pub use project::{Background, Meta, Page, Project, locked_inside};
 pub use query::{Answer, PageSummary, ProjectAnswer, Query};
 pub use session::{EXTENSION, Session};
-pub use text::{CharStyle, Face, Kernel, RichText, Span, Text, TextStyle};
+pub use text::{CharStyle, Emphasis, Face, Kernel, Orientation, RichText, Span, Text, TextStyle};
 pub use tiles::{Tile, Tiles};
 pub use values::*;

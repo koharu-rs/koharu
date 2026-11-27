@@ -210,6 +210,20 @@
     "borderWidth": "Border width",
     "chooseBorderWidth": "Choose border width",
     "chooseFontSize": "Choose font size",
+    "emphasis": "Emphasis marks",
+    "emphasisMarks": {
+      "circle": "Circle",
+      "dot": "Dot",
+      "double_circle": "Double circle",
+      "none": "None",
+      "open_circle": "Open circle",
+      "open_dot": "Open dot",
+      "open_double_circle": "Open double circle",
+      "open_sesame": "Open sesame",
+      "open_triangle": "Open triangle",
+      "sesame": "Sesame",
+      "triangle": "Triangle"
+    },
     "font": "Font",
     "fontSize": "Font size",
     "fontStyles": {
@@ -222,6 +236,12 @@
     "fontWeight": "Font weight",
     "horizontal": "Horizontal",
     "opacity": "Opacity",
+    "orientation": "Character orientation",
+    "orientations": {
+      "sideways": "Sideways",
+      "tate_chu_yoko": "Tate-chu-yoko",
+      "upright": "Upright"
+    },
     "removeRuby": "Remove ruby",
     "ruby": "Ruby",
     "selectPage": "Select a page to inspect its layers.",
