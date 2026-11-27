@@ -63,4 +63,74 @@ impl Device {
             total: total as u64,
         }
     }
+
+    /// Whether this device reports reliable device-wide VRAM free and total
+    /// accounting across processes (discrete CUDA and ROCm/HIP GPUs only).
+    #[must_use]
+    pub fn has_vram_accounting(&self) -> bool {
+        self.has_vram_accounting_with_total(
+            self.supports_vram_accounting()
+                .then(|| self.memory().total)
+                .unwrap_or(0),
+        )
+    }
+
+    fn supports_vram_accounting(&self) -> bool {
+        matches!(self.backend, Backend::Cuda { .. } | Backend::Rocm { .. }) && !self.integrated
+    }
+
+    fn has_vram_accounting_with_total(&self, total: u64) -> bool {
+        self.supports_vram_accounting() && total > 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device(backend: Backend, integrated: bool) -> Device {
+        Device {
+            name: "TEST0".to_string(),
+            index: 0,
+            description: "Test Device".to_string(),
+            backend,
+            integrated,
+        }
+    }
+
+    #[test]
+    fn non_discrete_and_non_cuda_rocm_skip_vram_accounting() {
+        assert!(!device(Backend::Cpu, true).has_vram_accounting());
+        assert!(!device(Backend::Cpu, false).has_vram_accounting());
+        assert!(!device(Backend::Metal, true).has_vram_accounting());
+        assert!(!device(Backend::Metal, false).has_vram_accounting());
+        assert!(!device(Backend::Vulkan, false).has_vram_accounting());
+        assert!(!device(Backend::Vulkan, true).has_vram_accounting());
+        assert!(
+            !device(
+                Backend::Cuda {
+                    compute_capability: 89
+                },
+                true
+            )
+            .has_vram_accounting()
+        );
+        assert!(!device(Backend::Rocm { target: "gfx1100" }, true).has_vram_accounting());
+    }
+
+    #[test]
+    fn discrete_cuda_and_rocm_require_nonzero_total_memory() {
+        let cuda = device(
+            Backend::Cuda {
+                compute_capability: 89,
+            },
+            false,
+        );
+        assert!(!cuda.has_vram_accounting_with_total(0));
+        assert!(cuda.has_vram_accounting_with_total(8 * 1024 * 1024 * 1024));
+
+        let rocm = device(Backend::Rocm { target: "gfx1100" }, false);
+        assert!(!rocm.has_vram_accounting_with_total(0));
+        assert!(rocm.has_vram_accounting_with_total(16 * 1024 * 1024 * 1024));
+    }
 }

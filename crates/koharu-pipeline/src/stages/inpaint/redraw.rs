@@ -5,25 +5,34 @@
 use anyhow::Result;
 use image::{GrayImage, Luma, RgbImage, imageops};
 use koharu_scene::Rect;
-use tokio_util::sync::CancellationToken;
+use tokio::runtime::Handle;
+use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 
 use super::{
-    Work, inside,
-    model::Inpaint,
+    Inpainter, Work, inside, model,
     windows::{self, Window},
 };
-use crate::stages::Stopped;
+use crate::{
+    RunId,
+    gpu::{Key, LoadOutcome, Models},
+    stages::Stopped,
+};
 
 /// `work` with each window the model redraws pasted under its own letterings'
 /// masks, and an edit model's windows kept whole.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn windows(
     mut work: Work,
-    inpainter: &dyn Inpaint,
+    models: &mut Models,
+    key: &Key,
+    run: RunId,
+    model: Inpainter,
     prompt: &str,
     cancel: &CancellationToken,
+    runtime: &Handle,
 ) -> Result<Work> {
     let (width, height) = work.image.dimensions();
-    for window in windows::plan(&work.regions, width, height, inpainter.pass()) {
+    for window in windows::plan(&work.regions, width, height, model.pass()) {
         if cancel.is_cancelled() {
             return Err(Stopped.into());
         }
@@ -40,12 +49,36 @@ pub(super) fn windows(
             continue;
         }
         let crop = imageops::crop_imm(&work.image, x, y, across, down).to_image();
-        let redrawn = {
-            let _span = tracing::info_span!("redraw", width = across, height = down).entered();
-            inpainter.inference(&crop, &cut, prompt)?
-        };
+        let crop_mp = f64::from(across) * f64::from(down) / 1_000_000.0;
+        let (redrawn, generative) = models.run(
+            key,
+            &[run],
+            Some(crop_mp),
+            |device| async move {
+                Ok(LoadOutcome {
+                    model: model::load(model, device).await?,
+                    teardown: None,
+                    full_gpu: true,
+                })
+            },
+            |inpainter| {
+                // Stop ends the redraw under way as well as the windows after it.
+                let _stop = inpainter.canceller().map(|canceller| {
+                    let cancel = cancel.clone();
+                    AbortOnDropHandle::new(runtime.spawn(async move {
+                        cancel.cancelled().await;
+                        canceller.cancel();
+                    }))
+                });
+                let _span = tracing::info_span!("redraw", width = across, height = down).entered();
+                Ok((
+                    inpainter.inference(&crop, &cut, prompt)?,
+                    inpainter.generative(),
+                ))
+            },
+        )?;
         paste(&mut work.image, (x, y), &own, &redrawn);
-        if inpainter.generative() {
+        if generative {
             work.windows.push((window, redrawn));
         }
     }

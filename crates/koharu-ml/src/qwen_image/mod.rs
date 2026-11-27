@@ -16,7 +16,7 @@ use anyhow::{Context, Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg};
 use image::{DynamicImage, RgbImage, RgbaImage};
 use koharu_diffusion::{Canceller, ImageParams, SampleMethod};
-use koharu_runtime::Repository;
+use koharu_runtime::{PinnedFile, Repository};
 
 use self::model::{Model, ModelPaths};
 
@@ -38,6 +38,25 @@ const TEXT_ENCODER: Repository = Repository::model(
     "Qwen/Qwen3-VL-8B-Instruct-GGUF",
     "f982a07559d4a2f6c8744d840bf6fccab30eea96",
 );
+
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(
+        TRANSFORMER,
+        "qwen-image-2.1-turbo-Q4_K_M.gguf",
+        4_199_565_120,
+    ),
+    PinnedFile::new(VAE, "vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688),
+    PinnedFile::new(
+        TEXT_ENCODER,
+        "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+        5_027_784_800,
+    ),
+    PinnedFile::new(
+        TEXT_ENCODER,
+        "mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+        1_159_029_824,
+    ),
+];
 
 /// The VAE's 16× downscale by the transformer's 2×2 patches: sizes are
 /// multiples of it.
@@ -101,17 +120,10 @@ impl QwenImage {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let paths = async {
             // 4-bit, as Koharu's other diffusion models load.
-            let [transformer] = TRANSFORMER
-                .resolve(["qwen-image-2.1-turbo-Q4_K_M.gguf"])
-                .await?;
-            let [vae] = VAE
-                .resolve(["vae/qwen_image_2.1_vae_bf16.safetensors"])
-                .await?;
+            let [transformer] = TRANSFORMER.resolve([FILES[0].filename]).await?;
+            let [vae] = VAE.resolve([FILES[1].filename]).await?;
             let [text_encoder, vision] = TEXT_ENCODER
-                .resolve([
-                    "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
-                    "mmproj-Qwen3VL-8B-Instruct-F16.gguf",
-                ])
+                .resolve([FILES[2].filename, FILES[3].filename])
                 .await?;
             anyhow::Ok(ModelPaths {
                 transformer,

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Our features</title>
+<style>
+:root{
+  --paper:#f7f4ef; --ink:#1d1b19; --muted:#6b6459; --line:#e0d9cd;
+  --rail:#14130f; --rail-ink:#ded6c7; --rail-dim:#8d8574;
+  --accent:#b5462f; --accent-soft:#f0e2da; --gold:#a8813c;
+  --code:#efe9df;
+  --surface:#fff; --row-hover:#f2ece1; --heading:#241f1a; --intro:#3c372f;
+  --lede:#4a4237; --callout-label:#5c5346; --th-line:#cfc6b5;
+  --callout-bg:#f1ece2; --callout-line:#e3dbc9; --fork-bg:#efe9dd;
+  --prior-bg:#eef1ec; --prior-line:#dde4d8; --open-bg:#f6efe6; --open-line:#ecd9cf;
+}
+html[data-theme="dark"]{
+  --paper:#171410; --ink:#e7e0d2; --muted:#9c937f; --line:#2e2a20;
+  --accent:#c9664f; --accent-soft:#2a1c15; --gold:#bb9350; --code:#211d16;
+  --surface:#1e1a14; --row-hover:#221e17; --heading:#ece5d4; --intro:#d9d2bf;
+  --lede:#c7bfab; --callout-label:#a89d87; --th-line:#3a3425;
+  --callout-bg:#1e1b15; --callout-line:#322d22; --fork-bg:#211d14;
+  --prior-bg:#1a1e17; --prior-line:#2a3026; --open-bg:#251b14; --open-line:#3b2b20;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+.layout{display:flex;min-height:100vh;align-items:flex-start}
+
+/* ---- contents rail ---- */
+.rail{
+  width:296px;flex:0 0 296px;position:sticky;top:0;height:100vh;overflow-y:auto;
+  background:var(--rail);color:var(--rail-ink);padding:32px 24px 48px;
+  scrollbar-width:thin;scrollbar-color:#3a3527 transparent;
+}
+.rail .brand{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--rail-dim);margin-bottom:14px}
+.rail h1.doc-title{font-size:21px;line-height:1.25;margin:0 0 6px;color:#fff;font-weight:640;letter-spacing:-.01em}
+.rail .sub{color:var(--rail-dim);font-size:13px;margin:0 0 22px}
+.docs-switch{display:flex;flex-direction:column;gap:6px;margin:0 0 26px;padding:0 0 22px;border-bottom:1px solid #2a281f}
+.docs-switch a{
+  display:block;padding:8px 11px;border-radius:7px;color:var(--rail-ink);font-size:13.5px;
+  border:1px solid transparent;
+}
+.docs-switch a:hover{background:#1f1d17;text-decoration:none}
+.docs-switch a.active{background:#262319;border-color:#3a3527;color:#fff}
+.docs-switch a .tag{display:block;font-size:11px;color:var(--rail-dim);letter-spacing:.04em;margin-top:2px}
+.rail .toc-label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--rail-dim);margin:0 0 10px}
+.rail nav{display:flex;flex-direction:column;gap:1px}
+.rail nav a{
+  display:block;font-size:13.25px;line-height:1.35;color:#b9b1a1;
+  padding:5px 9px;border-left:2px solid transparent;border-radius:0 6px 6px 0;
+}
+.rail nav a:hover{color:#fff;background:#1d1b16;text-decoration:none}
+.rail nav a.lvl3{padding-left:22px;font-size:12.5px;color:#968e7e}
+.rail nav a.active{color:#fff;border-left-color:var(--accent);background:#201d16}
+
+/* ---- content ---- */
+main{flex:1 1 auto;min-width:0;padding:56px 56px 140px;display:flex;justify-content:center}
+article{width:100%;max-width:760px}
+article > h1{
+  font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;margin:0 0 10px;
+}
+article > p.intro{font-size:19px;line-height:1.6;color:var(--intro);margin:0 0 22px}
+article > p.intro a{text-decoration:underline;text-underline-offset:2px;text-decoration-color:#d8c7b6}
+article h2{
+  font-size:29px;line-height:1.2;letter-spacing:-.02em;font-weight:660;
+  margin:64px 0 18px;padding-top:26px;border-top:1px solid var(--line);
+}
+article h3{
+  font-size:21px;line-height:1.3;letter-spacing:-.012em;font-weight:640;
+  margin:44px 0 12px;color:var(--heading);
+}
+article h4{font-size:17px;margin:28px 0 8px}
+article p{margin:0 0 16px}
+article ul,article ol{margin:0 0 18px;padding-left:24px}
+article li{margin:0 0 7px}
+article li::marker{color:var(--accent)}
+strong{font-weight:640}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0}
+code{background:var(--code);padding:2px 5px;border-radius:4px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,monospace}
+blockquote.lede{
+  margin:0 0 22px;padding:2px 0 2px 18px;border-left:3px solid var(--gold);
+  font-size:19px;line-height:1.5;color:var(--lede);font-style:italic;
+}
+blockquote.lede p{margin:0}
+
+/* ---- notes ---- */
+.callout{
+  margin:0 0 20px;padding:13px 16px 13px 16px;border-radius:8px;
+  background:var(--callout-bg);border:1px solid var(--callout-line);font-size:15.5px;line-height:1.55;
+}
+.callout-fork{background:var(--fork-bg);border-left:3px solid var(--gold)}
+.callout-prior{background:var(--prior-bg);border-left:3px solid #7d8f6c;border-color:var(--prior-line)}
+.callout-open{background:var(--open-bg);border-left:3px solid var(--accent);border-color:var(--open-line)}
+.callout > em:first-child,.callout > strong:first-child{color:var(--callout-label);letter-spacing:.01em}
+.callout-open > strong:first-child{color:var(--accent)}
+
+/* ---- table ---- */
+table{border-collapse:collapse;width:100%;margin:0 0 26px;font-size:15px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--th-line)}
+tbody tr:hover{background:var(--row-hover)}
+
+/* ---- anchors ---- */
+.anchor{opacity:0;margin-left:.35em;font-size:.62em;color:var(--muted);text-decoration:none;transition:opacity .12s}
+h2:hover .anchor,h3:hover .anchor{opacity:1}
+
+.top{position:fixed;right:28px;bottom:26px;background:var(--surface);border:1px solid var(--line);
+  color:var(--muted);padding:8px 12px;border-radius:999px;font-size:12px;box-shadow:0 4px 14px rgba(30,20,10,.08)}
+.top:hover{color:var(--accent);text-decoration:none}
+.theme-toggle{bottom:66px;cursor:pointer;font-family:inherit}
+
+@media (max-width:1000px){
+  .layout{flex-direction:column}
+  .rail{position:relative;width:100%;flex:none;height:auto;padding:24px 20px}
+  .rail nav{max-height:none}
+  main{padding:36px 22px 90px}
+  article h2{margin-top:48px}
+}
+</style>
+<script>
+(function(){
+  var theme = 'light';
+  try {
+    var stored = localStorage.getItem('koharu-docs-theme');
+    if (stored === 'dark' || stored === 'light') theme = stored;
+    else if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark';
+  } catch (e) {}
+  document.documentElement.dataset.theme = theme;
+})();
+</script>
+</head>
+<body id="top">
+<div class="layout">
+  <aside class="rail">
+    <div class="brand">Koharu fork · planning</div>
+    <h1 class="doc-title">Our features</h1>
+    <p class="sub">Compiled 2026-11-20</p>
+    <div class="docs-switch"><a class="" href="fork-features.html">Fork features<span class="tag">what the other forks ship</span></a><a class="active" href="our-features.html">Our features<span class="tag">this fork's planned features</span></a></div>
+    <p class="toc-label">Contents</p>
+    <nav><a class="lvl2" href="#contents">Contents</a><a class="lvl2" href="#job-orchestration">Job orchestration</a><a class="lvl3" href="#stage-specific-rerun-dropdown-on-the-run-button">Stage-specific rerun dropdown on the Run button</a><a class="lvl3" href="#only-undone-reruns-for-ocr-and-translation">Only-undone reruns for OCR and translation</a><a class="lvl2" href="#ai-assistance">AI assistance</a><a class="lvl3" href="#ai-repaint-and-typesetting-of-stylized-text">AI repaint and typesetting of stylized text</a><a class="lvl3" href="#sfx-translation-awareness">SFX translation awareness</a><a class="lvl3" href="#smart-prompting">Smart prompting</a><a class="lvl2" href="#optional--exploratory">Optional / exploratory</a><a class="lvl3" href="#scan-restoration-and-upscaling">Scan restoration and upscaling</a><a class="lvl2" href="#build-order">Build order</a></nav>
+  </aside>
+  <main>
+    <article><h1 class="srch1" id="our-features">Our features</h1>
+<p class="intro">The expanded specs of this fork’s remaining planned features, each with motivation, behavior, boundaries, interactions, and open questions. Features already implemented in this fork are documented in <a href="FEATURES.md">FEATURES.md</a> (including drag-and-drop import, CBZ WebP/JPEG XL export with automatic grayscale encoding, ComicInfo.xml 2.1 metadata, declared model sizes and VRAM fit indicators, the VRAM-aware job manager, the download manager, the request queue and persistent Activity Center, and the <code>koharu-cli</code> headless batch runner). Upstream Koharu <code>0.99.0</code> already ships FLUX.3 Klein alongside Qwen-Image 2.1 Turbo. What the reference community forks ship — and which of it this fork has deferred — is surveyed in <a href="fork-features.html">fork-features.md</a>.</p>
+<p>This is a personal planning document: each entry covers what a feature is for and what it would do, at the level of user-visible behavior — no technical design yet. Decisions worked through on 2026-11-13 and 2026-11-19 are folded into the text below; new ideas from hands-on review on 2026-11-27 are included under <strong>Job orchestration</strong> and <strong>AI assistance</strong>.</p>
+<h2 id="contents">Contents<a class="anchor" href="#contents">#</a></h2>
+<ul>
+<li><strong>Job orchestration</strong> — stage-specific rerun dropdown on the Run button · only-undone reruns</li>
+<li><strong>AI assistance</strong> — AI repaint and typesetting of stylized text · SFX translation awareness · smart prompting</li>
+<li><strong>Optional / exploratory</strong> — scan restoration and upscaling</li>
+<li><strong>Build order</strong> — the sequence the remaining features land in</li>
+</ul>
+<h2 id="job-orchestration">Job orchestration<a class="anchor" href="#job-orchestration">#</a></h2>
+<h3 id="stage-specific-rerun-dropdown-on-the-run-button">Stage-specific rerun dropdown on the Run button<a class="anchor" href="#stage-specific-rerun-dropdown-on-the-run-button">#</a></h3>
+<blockquote class="lede">
+<p>A dropdown on the <strong>Run</strong> button next to the model selector to redo a single chosen stage for the button’s current scope.</p>
+</blockquote>
+<p><strong>Motivation.</strong> Right-clicking a page in the page rail already lets you run a single stage (<strong>Detection</strong>, <strong>OCR</strong>, <strong>Inpainting</strong>, or <strong>Translation</strong>) on that one page in one click. Doing the same thing for <strong>Selected pages</strong> or <strong>Entire project</strong> currently requires opening the processing selector popover, going into <strong>Stages</strong>, unchecking the other three stages, clicking <strong>Run</strong>, and then re-enabling the other stages afterwards. A dropdown directly on the <strong>Run</strong> button removes that friction.</p>
+<p><strong>Behavior.</strong> The <strong>Run</strong> button next to the model selector always exposes a split dropdown (even when idle, not only when queuing behind an active run). Clicking the primary button runs the currently configured stages for the current scope as today. Opening the dropdown offers quick one-click stage actions — <strong>Detection only</strong>, <strong>OCR only</strong>, <strong>Inpainting only</strong>, and <strong>Translation only</strong> — each running just that stage at the button’s active scope (<strong>Selected pages</strong> or <strong>Entire project</strong>) without mutating the user’s saved stage checkboxes. When a run is already active, the dropdown keeps the <strong>Queue</strong> / <strong>Rerun now</strong> priority choice alongside the single-stage rerun entries.</p>
+<p><strong>Boundaries.</strong> A shortcut entry point over the existing <code>run_pipeline</code> command and current scope selection — no new job kind, no separate stage config, and no change to the saved <code>processingStages</code> preference when choosing a one-off stage from the dropdown.</p>
+<p><strong>Interactions.</strong> Mirrors the page rail’s single-stage right-click menu, generalized to the processing selector’s scope. Pairs naturally with <strong>Only-undone reruns</strong> if adopted later and with <strong>Rerun now</strong> priority when another run is in flight.</p>
+<p class="callout callout-open"><strong>Open questions.</strong></p>
+<ul>
+<li>When a run is already active, should single-stage actions in the dropdown submit as <code>Normal</code> (queued) or <code>RerunNow</code>, or follow a toggle inside the dropdown?</li>
+</ul>
+<p class="callout callout-prior"><strong>Prior art.</strong> In-repo: the page rail’s per-page context menu (<code>Detect</code>, <code>Recognize</code>, <code>Inpaint</code>, <code>Translate</code>).</p>
+<h3 id="only-undone-reruns-for-ocr-and-translation">Only-undone reruns for OCR and translation<a class="anchor" href="#only-undone-reruns-for-ocr-and-translation">#</a></h3>
+<blockquote class="lede">
+<p>Re-running OCR or translation costs nothing on text blocks that stage already produced output for — avoiding redundant regeneration on untouched blocks.</p>
+</blockquote>
+<p><strong>Motivation.</strong> Upstream <code>koharu-pipeline</code> runs every requested stage fresh across everything in scope, replacing existing output (with undo as the way back). Re-running after a failure or after adding pages currently re-executes detection, OCR, inpainting, and translation on pages that were already finished, regenerating machine-authored text that was already fine.</p>
+<p><strong>Behavior.</strong> Stages gain optional only-undone semantics, tracked per text block for OCR and translation (decided 2026-11-19): a block counts as undone when it has no output from that stage, or when what the output was produced from has changed — source text edited, or a detection box moved or resized, which makes OCR stale for that block. A manual text box added to a finished page is translated on the next run without redoing the page. User-authored translations are never overwritten. Settings changes do not invalidate output: switching the translation model or editing the prompt profile leaves finished translations done — otherwise every settings tweak would silently re-translate everything. An adapted prompt from smart prompting does not make output stale either. An intentional redo rides the processing selector’s scope modifier: “Missing only” vs. “All pages” — one command with one more field, not a second path.</p>
+<p><strong>Boundaries.</strong> Stage-level scoping plus one scope modifier — no new job kind, no new command, no second path: the same runs through the same surfaces (processing selector, Agent, CLI) simply skip finished work when asked, and the modifier rides the selector those runs already come from.</p>
+<p><strong>Interactions.</strong> Re-running after failed pages or interrupted unattended CLI runs becomes cheap. Rerun-now with All pages is the fast targeted redo. A spread, if ever adopted (see <a href="fork-features.html">fork-features.md</a>), raises which source page counts as done. Coalescing in the request queue must respect the modifier.</p>
+<p class="callout callout-open"><strong>Open questions.</strong></p>
+<ul>
+<li>Upstream <code>koharu-pipeline</code> explicitly specifies fresh runs (“a run never decides that a page needs no work”). Decide whether to keep fresh runs as default with an opt-in “Missing only” modifier, or make “Missing only” the default.</li>
+</ul>
+<p class="callout callout-prior"><strong>Prior art.</strong> Partial. gudoy’s batch translation resumes only pages a stage has not finished and re-translates sources edited since; koharu-context’s chapter workspace re-runs and overwrites by design.</p>
+<h2 id="ai-assistance">AI assistance<a class="anchor" href="#ai-assistance">#</a></h2>
+<h3 id="ai-repaint-and-typesetting-of-stylized-text">AI repaint and typesetting of stylized text<a class="anchor" href="#ai-repaint-and-typesetting-of-stylized-text">#</a></h3>
+<blockquote class="lede">
+<p>AI repaints the artwork behind stylized source text — sound effects — and the translated replacement is typeset over it, styled to match, with a generative option.</p>
+</blockquote>
+<p><strong>Motivation.</strong> Stylized lettering is the part of manga translation the pipeline handles worst. Sound effects and emphasized text are painted into the artwork, not into bubbles, so they land in cleanup: a generative model can remove them and reconstruct what was behind, but the replacement — a translated SFX with the original’s weight, slant, and energy — is left to a human typesetter, or simply not translated. This feature closes the loop: remove the lettering, then put the translation in its place in a style that matches. Detection is further along than it first appeared: onomatopoeia is already a detected class in <code>koharu-ml</code> — what is missing is routing those regions into this feature’s flow.</p>
+<p><strong>Behavior.</strong> Stylized source text is treated as its own category, defined by a criterion rather than a list: source text that interacts with the artwork such that normal typesetting cannot replace it — painted-in sound effects above all; chapter titles and signs qualify only when they are part of the art, and hand-lettered dialogue stays on the normal text path. Its background is repainted (generative inpainting, targeted at these regions via split lettering routing). The translated replacement is stored as a normal text record in the data model — hidden or marked artwork-rendered — and whatever is painted into the artwork is derived presentation of that record (decided 2026-11-19): re-rolls re-render from the record, and translation exchange, re-rendering, and the CLI summary keep the text. The default replacement is an editable styled text layer — outline, warp, rotation, gradient — which handles most SFX and stays editable like any text layer; generative lettering, where the model paints the replacement in the original’s style, is opt-in per region (decided 2026-11-19). The generative path is a known feasibility risk and is treated as such: matching the original lettering’s weight, slant, and energy in a target-language script at manga resolution is unreliable with today’s models, so an acceptance bar defined by a spike on representative pages precedes the generative option shipping. The user reviews results on the canvas and adjusts them — per-region re-rolls (which submit as rerun-now, per the queue’s priority rule) and undo are the control surface; there is no separate accept/reject flow. Getting a good generative result needs either that user involvement or the smart prompting feature describing the original’s style well. In export the styled text layer is a text layer like any other, and a generative raster replacement is its own PSD layer, like cleanup layers — typesetters can refine either in Photoshop — with the flattened PNG staying flat.</p>
+<p><strong>Boundaries.</strong> Two halves with different maturity. Repainting behind stylized text builds on split lettering routing (bubbles vs. artwork/SFX) and existing <code>onomatopoeia</code> detection. The replacement has two tiers: the styled text layer keeps the app’s rule that visible text comes only from translation text layers; a generatively lettered region is the deliberate divergence from that rule, chosen per region rather than by default. The original idea’s word “typeset” is literal for the default tier.</p>
+<p><strong>Interactions.</strong> Routing onomatopoeia regions from detection into this flow enables <a href="#sfx-translation-awareness">SFX translation awareness</a> below. Strong generative models already in-tree (FLUX.3 Klein, Qwen-Image 2.1 Turbo) raise the ceiling on both halves. Smart prompting describes the original’s style to the generating model. The canvas remains the review surface; undo, regeneration, and paint-over are the controls.</p>
+<p class="callout callout-open"><strong>Open questions.</strong></p>
+<ul>
+<li>The acceptance bar for generative lettering: a spike on representative pages and masks defines “good enough” before the opt-in path ships.</li>
+</ul>
+<p class="callout callout-prior"><strong>Prior art.</strong> Partial. spgsroot routes lettering over artwork separately, removes sound effects, and regenerates the artwork behind them (FLUX.2 Klein 9B, ComfyUI SDXL backends, repair brush with presets). No fork typesets a stylized replacement.</p>
+<h3 id="sfx-translation-awareness">SFX translation awareness<a class="anchor" href="#sfx-translation-awareness">#</a></h3>
+<blockquote class="lede">
+<p>Let the user choose whether detected sound effects (SFX) are translated and repainted or left untouched in the artwork.</p>
+</blockquote>
+<p><strong>Motivation.</strong> Not every reader or scanlation workflow wants sound effects translated: translating SFX requires heavier generative inpainting over complex artwork and extra typesetting review, and many readers prefer keeping original Japanese/Korean hand-drawn sound effects intact while translating only dialogue and narration. Because the Phase 2 SFX repainting pipeline already distinguishes sound effects (<code>Role::Sfx</code> / onomatopoeia) from normal dialogue and free text, exposing an explicit user choice falls out naturally.</p>
+<p><strong>Behavior.</strong> A user-facing setting (available in pipeline preferences and/or per project) controls how SFX regions are handled during pipeline runs:</p>
+<ul>
+<li><strong>Translate &amp; repaint SFX</strong> — sound effects flow through OCR, generative artwork cleanup, and styled-text / opt-in generative replacement.</li>
+<li><strong>Keep original SFX</strong> — sound effects are still recognized as SFX regions so dialogue detection stays clean, but they are skipped by cleanup/inpainting, translation, and typesetting, leaving the original artwork untouched.</li>
+</ul>
+<p>Individual SFX blocks on the canvas can still be manually selected and translated or repainted on demand even when automatic SFX translation is off.</p>
+<p><strong>Boundaries.</strong> Controls pipeline routing for SFX-classified blocks; does not alter detection of dialogue bubbles or normal free text, and does not add a separate pipeline stage.</p>
+<p><strong>Interactions.</strong> Phase 2 companion to <a href="#ai-repaint-and-typesetting-of-stylized-text">AI repaint and typesetting of stylized text</a>. Skipping SFX saves substantial generative inpainting time and VRAM when the user only wants dialogue translated, and keeps the Story tab focused on dialogue when SFX translation is disabled.</p>
+<p class="callout callout-open"><strong>Open questions.</strong></p>
+<ul>
+<li>Should the SFX toggle live in global <code>[pipeline]</code> settings, per-project settings (stored in <code>.khr</code>), or global default with a per-project override?</li>
+<li>When “Keep original SFX” is active, should SFX blocks still be hidden/grouped separately in the Story panel or omitted from the translation prompt altogether?</li>
+</ul>
+<p class="callout callout-prior"><strong>Prior art.</strong> Partial. Upstream detection already separates the <code>onomatopoeia</code> class; spgsroot routes lettering over artwork separately.</p>
+<h3 id="smart-prompting">Smart prompting<a class="anchor" href="#smart-prompting">#</a></h3>
+<blockquote class="lede">
+<p>An AI adapts prompts for the pipeline’s models based on the current page’s image and extracted text.</p>
+</blockquote>
+<p><strong>Motivation.</strong> Generative inpainting quality depends on the prompt, and prompts today are static per model: the user writes a reconstruction prompt once, kept in the model’s settings profile, and it applies to every page. The translation prompt is static in the same way. A flat screentone background and a detailed crowd scene need different guidance; a gag panel and a solemn one need different tone. Per-page tuning is expert work most users never do, so most pages get a mediocre default.</p>
+<p><strong>Behavior.</strong> Based on the current page — the extracted text, and the image where the adapter can see it — an AI adapts the prompts given to the pipeline’s promptable models: the generation prompts of the SFX repaint feature above, and the translation prompts. It can add character tags to the dialogue, supply plot context, and set the appropriate tone. Images are used only when the adapter model is multimodal (decided 2026-11-19): many local translation LLMs are text-only, so the adapter falls back to extracted text alone when the configured model cannot read images. The feature is enabled per project, and enabling it with an API adapter shows what that means — every page image leaves the machine, and cost goes up by a request per page. Once enabled it runs automatically: each page’s job carries a prompt suited to that page, without the user tuning anything manually. The adapted prompt is kept per page and viewable read-only in the UI, so a bad translation can be traced back to the prompt that caused it. The user’s configured prompts become the baseline or fallback rather than the per-page decision. The adapting model is its own setting: it defaults to the configured translation model, and another model can be chosen for it. Cross-page memory is out of the first cut (decided 2026-11-19): per-page adaptation ships first, and plot-detail consistency is a later extension — the forks’ cross-page translation context is the proven mechanism to consider adopting for it, rather than building memory into the adapter.</p>
+<p><strong>Boundaries.</strong> Adaptation of prompts for the promptable models — the SFX-repaint generation prompts and the translation prompts; anything else waits for a real consumer. Adapted prompts flow through the existing per-model prompt profiles: the adapter composes the prompt the pipeline already consumes, and no second prompt path is added. No new pipeline models or tuning knobs beyond the adapter model choice, and no automatic changes to non-prompt settings such as detection thresholds or sampling parameters; those stay manual unless decided otherwise. An adapted prompt does not invalidate existing output — same rule as settings changes under only-undone reruns.</p>
+<p><strong>Interactions.</strong> The AI repaint feature is the flagship beneficiary — describing style and surroundings well is exactly its need. The adapter defaults to the configured translation model and can be pointed at another; API adapters add a request per page. A local adapter is a resident the VRAM manager plans around. Cross-page memory (the plot-detail consistency) overlaps the forks’ cross-page translation context — prior art for the mechanism, not the prompt-adaptation use.</p>
+<p class="callout callout-open"><strong>Open questions.</strong> None remaining.</p>
+<p class="callout callout-prior"><strong>Prior art.</strong> None. spgsroot keeps separate, editable prompts and sampling settings per model and stage, but the adaptation is manual, not driven by the images.</p>
+<h2 id="optional--exploratory">Optional / exploratory<a class="anchor" href="#optional--exploratory">#</a></h2>
+<h3 id="scan-restoration-and-upscaling">Scan restoration and upscaling<a class="anchor" href="#scan-restoration-and-upscaling">#</a></h3>
+<p>Use AI image models to upscale scanned paper manga and remove scanning artifacts. Old print scans become cleaner, higher-resolution source images. Deliberately not expanded into a spec — none of the surveyed forks implements it — and revisited only when there is a real need.</p>
+<h2 id="build-order">Build order<a class="anchor" href="#build-order">#</a></h2>
+<p>Phase 1 (drag-and-drop import, CBZ WebP/JPEG XL export with grayscale encoding, ComicInfo.xml 2.1, download manager, declared model sizes + VRAM fit, VRAM-aware job manager, request queue + persistent Activity Center, and <code>koharu-cli</code>) is shipped and documented in <a href="FEATURES.md">FEATURES.md</a>.</p>
+<p>Remaining sequence:</p>
+<ol type="1">
+<li>Stage-specific rerun dropdown on the Run button (small UI convenience over existing <code>run_pipeline</code>)</li>
+<li>Only-undone reruns (optional — pending decision on fresh vs. missing-only default)</li>
+<li>Smart prompting (Phase 2A)</li>
+<li>AI repaint and typesetting of stylized text + SFX translation awareness (Phase 2B, with generative lettering gated on the feasibility spike)</li>
+</ol>
+</article>
+  </main>
+</div>
+<button class="top theme-toggle" id="themeToggle" type="button">Dark mode</button>
+<a class="top" href="#top">Back to top</a>
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail nav a'));
+  var targets = links.map(function(a){ return document.getElementById(decodeURIComponent(a.hash.slice(1))); });
+  var byId = {};
+  links.forEach(function(a,i){ if(targets[i]) byId[targets[i].id] = a; });
+  var current = null;
+  function update(){
+    var probe = window.scrollY + 140, best = targets[0];
+    targets.forEach(function(t){ if(t && t.offsetTop <= probe) best = t; });
+    if(best && byId[best.id] && byId[best.id] !== current){
+      if(current) current.classList.remove('active');
+      current = byId[best.id];
+      current.classList.add('active');
+    }
+  }
+  document.addEventListener('scroll', update, {passive:true});
+  update();
+  var themeRoot = document.documentElement;
+  var themeToggle = document.getElementById('themeToggle');
+  function syncTheme() {
+    themeToggle.textContent = themeRoot.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
+  }
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var next = themeRoot.dataset.theme === 'dark' ? 'light' : 'dark';
+      themeRoot.dataset.theme = next;
+      try { localStorage.setItem('koharu-docs-theme', next); } catch (e) {}
+      syncTheme();
+    });
+    syncTheme();
+    var scheme = window.matchMedia('(prefers-color-scheme: dark)');
+    scheme.addEventListener('change', function(event) {
+      var stored = null;
+      try { stored = localStorage.getItem('koharu-docs-theme'); } catch (e) {}
+      if (stored) return;
+      themeRoot.dataset.theme = event.matches ? 'dark' : 'light';
+      syncTheme();
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -6,17 +6,55 @@
     "version": "Sürüm"
   },
   "activity": {
+    "cancelDownload": "İndirmeyi iptal et",
+    "cancelJob": "{{job}} iptal et",
+    "cancelRun": "Kuyruktaki işi iptal et",
     "dismiss": "Kapat",
+    "dismissDownload": "İndirmeyi kapat",
+    "downloadCancelled": "İndirme iptal edildi.",
     "downloadFailed": "İndirme başarısız oldu.",
-    "downloadingFiles": "{{count}} dosya indiriliyor",
-    "downloadingFiles_one": "{{count}} dosya indiriliyor",
-    "downloadingFiles_other": "{{count}} dosya indiriliyor",
+    "downloadFiles": "{{done}} / {{total}} dosya",
+    "downloadFinished": "İndirildi",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/sn",
+    "emptyDescription": "Çalıştırmalar, kuyruktaki işler ve model indirmeleri burada görünür.",
+    "emptyTitle": "Son etkinlik yok",
     "loadingPages": "Sayfalar yükleniyor: {{loaded}} / {{total}}",
     "modelDownload": "Model indirme",
+    "pageRange": "Sayfalar {{from}}–{{to}}",
     "processing": "İşleniyor",
     "processingFailed": "İşleme başarısız oldu.",
-    "stop": "Durdur",
-    "title": "Etkinlik"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "Bekleme süresi önceliği",
+      "fifo": "Gönderim sırasına göre",
+      "grouped_by_loaded_model": "Yüklü modele göre gruplandı",
+      "lower_vram_cost": "Daha düşük VRAM değişim maliyeti",
+      "waiting_for_download": "Model indirmesi bekleniyor"
+    },
+    "queueScope": {
+      "area": "Seçili alan",
+      "blocks": "{{count}} blok",
+      "blocks_one": "{{count}} blok",
+      "blocks_other": "{{count}} blok",
+      "metadata": "Üstveri",
+      "pages": "{{count}} sayfa",
+      "pages_one": "{{count}} sayfa",
+      "pages_other": "{{count}} sayfa",
+      "project": "Tüm proje"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "Şimdi yeniden çalıştır",
+    "retryDownload": "İndirmeyi yeniden dene",
+    "sections": {
+      "downloads": "İndirmeler",
+      "queued": "Kuyrukta",
+      "running": "Çalışıyor"
+    },
+    "stageRuntime": "Çalışma zamanı",
+    "stopRun": "Çalıştırmayı durdur",
+    "title": "Etkinlik",
+    "waitingForDownload": "İndirme bekleniyor"
   },
   "agent": {
     "cancel": "İptal",
@@ -40,6 +78,7 @@
     "working": "Çalışıyor…"
   },
   "canvas": {
+    "dropToAppend": "Sayfa eklemek için dosyaları bırakın",
     "empty": "Başlamak için bir sayfa seçin.",
     "notice": {
       "eraser_needs_raster": "Silmek için bir raster katman seçin."
@@ -68,6 +107,8 @@
   "export": {
     "export": "Dışa Aktar",
     "imageFormat": "Görüntü biçimi",
+    "lossless": "Kayıpsız",
+    "losslessDescription": "Sıkıştırma bozulması olmadan piksel verilerini aynen korur.",
     "quality": "Kalite",
     "title": "{{format}} Olarak Dışa Aktar"
   },
@@ -161,6 +202,7 @@
       "resize": "Yeniden boyutlandır",
       "rotate": "Döndür",
       "set_locked": "Kilitle veya kilidi aç",
+      "set_metadata": "Üst veriyi düzenle",
       "set_source_text": "Kaynak metni düzenle",
       "set_style": "Metin stilini değiştir",
       "set_text": "Metni düzenle",
@@ -181,7 +223,13 @@
     "output": "Çıktı",
     "pipelineStages": "İşlem hattı aşamaları",
     "providerDefault": "Sağlayıcı varsayılanı",
+    "queue": "Kuyruğa ekle",
+    "queueDescription": "Etkin toplu iş tamamlandıktan sonra çalıştır.",
+    "queueProcessing": "İşlemeyi kuyruğa ekle",
+    "rerunNow": "Şimdi yeniden çalıştır",
+    "rerunNowDescription": "Sonraki adımda kuyruktaki işlerin önüne geç.",
     "run": "Çalıştır",
+    "runOptions": "Çalıştırma seçenekleri",
     "runProcessing": "İşlemeyi çalıştır",
     "scope": "Kapsam",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}} aşama",
     "stageCount_one": "{{count}} aşama",
     "stageCount_other": "{{count}} aşama",
-    "stages": "Aşamalar",
-    "stop": "Durdur",
-    "stopProcessing": "İşlemeyi durdur"
+    "stages": "Aşamalar"
   },
   "inspector": {
     "alignBottom": "Alta hizala",
@@ -310,6 +356,7 @@
     "help": "Yardım",
     "history": "Geçmiş",
     "import": "Sayfaları İçe Aktar",
+    "metadata": "Üst veri…",
     "original": "Orijinali Göster",
     "redo": "Yinele",
     "saveDefaultStyles": "Stilleri Varsayılan Olarak Kaydet",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "Varsayılan Stilleri Kullan",
     "view": "Görünüm"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "Yalnızca yetişkinler 18+",
+      "earlyChildhood": "Erken çocukluk",
+      "everyone": "Herkes",
+      "everyone10Plus": "Herkes 10+",
+      "g": "G",
+      "kidsToAdults": "Çocuktan yetişkine",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "Yetişkin 17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "Derecelendirme bekleniyor",
+      "teen": "Genç",
+      "unknown": "Bilinmiyor",
+      "x18Plus": "X18+"
+    },
+    "button": "Üst veri",
+    "description": "Bu projede saklanan ve CBZ arşivlerine aktarılan ComicInfo 2.1 üst verilerini düzenleyin.",
+    "fields": {
+      "ageRating": "Yaş sınırı",
+      "alternateCount": "Alternatif toplam",
+      "alternateNumber": "Alternatif numara",
+      "alternateSeries": "Alternatif seri",
+      "blackAndWhite": "Siyah beyaz",
+      "characters": "Karakterler",
+      "colorist": "Renklendiren",
+      "communityRating": "Topluluk puanı",
+      "count": "Toplam",
+      "coverArtist": "Kapak çizeri",
+      "day": "Gün",
+      "editor": "Editör",
+      "format": "Biçim",
+      "genre": "Tür",
+      "gtin": "GTIN",
+      "imprint": "Alt yayınevi",
+      "inker": "Çinici",
+      "languageIso": "Dil ISO",
+      "letterer": "Yazıcı",
+      "locations": "Konumlar",
+      "mainCharacterOrTeam": "Ana karakter veya ekip",
+      "manga": "Manga",
+      "month": "Ay",
+      "notes": "Notlar",
+      "number": "Sayı",
+      "pageCount": "Sayfa sayısı",
+      "pages": "Sayfalar",
+      "penciller": "Çizer",
+      "publisher": "Yayınevi",
+      "review": "İnceleme",
+      "scanInformation": "Tarama bilgisi",
+      "series": "Seri",
+      "seriesGroup": "Seri grubu",
+      "storyArc": "Hikâye arkı",
+      "storyArcNumber": "Ark numarası",
+      "summary": "Özet",
+      "tags": "Etiketler",
+      "teams": "Ekipler",
+      "title": "Başlık",
+      "translator": "Çevirmen",
+      "volume": "Cilt",
+      "web": "Web",
+      "writer": "Yazar",
+      "year": "Yıl"
+    },
+    "languageIsoHint": "CBZ dışa aktarımı {{target}} (etkin hedef çeviri dili) değerini yazar.",
+    "manga": {
+      "no": "Hayır",
+      "unknown": "Bilinmiyor",
+      "yes": "Evet",
+      "yesAndRightToLeft": "Evet (sağdan sola)"
+    },
+    "moreFields": "Daha fazla alan",
+    "noTranslatableFields": "Çevirmek için en az bir metin alanına özgün metin girin.",
+    "original": "Özgün",
+    "pagesAutoComputed": "{{count}} sayfa — CBZ dışa aktarımında otomatik yeniden hesaplanır",
+    "pagesAutoComputed_one": "{{count}} sayfa — CBZ dışa aktarımında otomatik yeniden hesaplanır",
+    "pagesAutoComputed_other": "{{count}} sayfa — CBZ dışa aktarımında otomatik yeniden hesaplanır",
+    "sections": {
+      "charactersAndWorld": "Karakterler ve Dünya",
+      "classification": "Sınıflandırma ve Etiketler",
+      "common": "Genel",
+      "credits": "Katkıda Bulunanlar",
+      "notesAndReview": "Notlar ve İnceleme",
+      "pages": "Sayfalar",
+      "publishing": "Yayın ve Sürüm",
+      "seriesAndStory": "Seri ve Hikâye"
+    },
+    "title": "Üst veri",
+    "translate": "Üst veriyi çevir",
+    "translated": "Çeviri",
+    "translating": "Çevriliyor…",
+    "yesNo": {
+      "no": "Hayır",
+      "unknown": "Bilinmiyor",
+      "yes": "Evet"
+    }
+  },
   "model": {
     "baseUrl": "Temel URL",
     "default": "Varsayılan",
     "targetLanguage": "Hedef dil"
   },
   "modelPicker": {
+    "chooseQuantization": "{{model}} için niceleme seç",
+    "downloaded": "İndirildi",
     "empty": "Kullanılabilir model yok.",
     "loading": "Modeller yükleniyor…",
     "noResults": "Bu aramayla eşleşen model yok.",
+    "notDownloaded": "İndirilmedi",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "Model ara",
     "title": "Model seç",
-    "useModel": "{{provider}} sağlayıcısından {{model}} kullan"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "{{provider}} sağlayıcısından {{model}} kullan",
+    "vramFit": {
+      "fits": "Sığar",
+      "swaps": "Değiştirir",
+      "tooLarge": "Çok büyük"
+    },
+    "vramTooltip": {
+      "alone": "{{available}} boş alandan ≈{{model}}",
+      "withOther": "{{available}} boş alandan ≈{{model}} (+ diğer aşamalar {{other}})"
+    }
   },
   "navigator": {
     "actionsFor": "{{page}} için eylemler",
@@ -343,6 +508,12 @@
     "importAction": "İçe Aktar",
     "importFiles": "Dosyalar…",
     "importFolder": "Klasör…",
+    "importSkipped": "Desteklenmeyen {{count}} dosya atlandı",
+    "importSkippedMore": "{{files}} ve {{count}} dosya daha",
+    "importSkippedMore_one": "{{files}} ve {{count}} dosya daha",
+    "importSkippedMore_other": "{{files}} ve {{count}} dosya daha",
+    "importSkipped_one": "Desteklenmeyen {{count}} dosya atlandı",
+    "importSkipped_other": "Desteklenmeyen {{count}} dosya atlandı",
     "importing": "Sayfalar içe aktarılıyor…",
     "importingAction": "İçe aktarılıyor…",
     "noImage": "Görüntü yok",
@@ -460,8 +631,13 @@
       "thresholds": "Eşikler",
       "title": "İşlem hattı",
       "translator": {
+        "combinePages": "Sayfaları birleştir",
+        "combinePagesDescription": "İsim ve hikâye tutarlılığı için ardışık sayfaları birlikte çevirir (Vision açıkken komşu sayfa diyaloglarını bağlam olarak ekler).",
         "instructions": "Ek talimatlar",
         "instructionsDescription": "İsteğe bağlı, herhangi bir dilde ve biçimde; örneğin bir adın yazılışı ya da üslup. Koharu bunları kendi sistem isteminin ardından olduğu gibi ekler.",
+        "maxPages": "İstek başına en fazla sayfa",
+        "maxPagesAuto": "Otomatik",
+        "maxPagesDescription": "Modelin bağlam ve çıktı sınırlarına göre otomatik boyutlandırma için boş bırakın.",
         "reasoning": "Akıl yürütme",
         "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
         "targetLanguageDescription": "Metnin çevrileceği dili seçin.",
@@ -542,6 +718,15 @@
     "title": "Koharu hazırlanıyor"
   },
   "status": {
+    "activity": "Etkinlik",
+    "activityActive": "{{count}} etkin",
+    "activityActive_one": "{{count}} etkin",
+    "activityActive_other": "{{count}} etkin",
+    "activityFailed": "{{count}} başarısız",
+    "activityFailed_one": "{{count}} başarısız",
+    "activityFailed_other": "{{count}} başarısız",
+    "activityQueued": "{{active}} · +{{queued}} kuyrukta",
+    "openActivity": "Etkinlik sekmesini aç",
     "zoom": "Yakınlaştırma"
   },
   "story": {

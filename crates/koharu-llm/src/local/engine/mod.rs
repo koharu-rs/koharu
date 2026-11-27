@@ -77,6 +77,8 @@ pub(super) struct Loaded {
     pub(super) vision: bool,
     /// The most tokens each request can hold.
     pub(super) context: u32,
+    /// Whether all layers and the full requested context stayed on the GPU.
+    pub(super) full_gpu: bool,
 }
 
 /// A prompt longer than its sequence's context, which rig reads as a request
@@ -101,7 +103,7 @@ pub(super) fn serve(
     queue: Receiver<Job>,
 ) {
     let turn = Turn::take(Library::Ggml);
-    let (model, size) = match load::model(&files, size) {
+    let (model, size, full_gpu) = match load::model(&files, size) {
         Ok(loaded) => loaded,
         Err(error) => return drop(ready.send(Err(error))),
     };
@@ -115,6 +117,7 @@ pub(super) fn serve(
         template,
         vision: engine.mtmd.is_some(),
         context: size.context,
+        full_gpu,
     };
     drop(turn);
     if ready.send(Ok(loaded)).is_ok() {

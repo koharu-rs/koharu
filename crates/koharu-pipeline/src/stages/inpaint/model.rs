@@ -9,7 +9,7 @@ use koharu_ml::{
     lama::{self, Lama},
     qwen_image::{self, QwenImage},
 };
-use koharu_runtime::Device;
+use koharu_runtime::{Device, PinnedFile};
 use serde::{Deserialize, Serialize};
 use strum::{Display, VariantArray};
 
@@ -31,6 +31,37 @@ pub enum Inpainter {
     QwenImage,
 }
 
+impl Inpainter {
+    pub const ALL: &'static [Self] = Self::VARIANTS;
+
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Lama => "lama",
+            Self::Flux3Klein => "flux3-klein",
+            Self::QwenImage => "qwen-image",
+        }
+    }
+
+    #[must_use]
+    pub const fn pass(self) -> u32 {
+        match self {
+            Self::Lama => lama::WHOLE,
+            Self::Flux3Klein | Self::QwenImage => u32::MAX,
+        }
+    }
+
+    #[must_use]
+    pub fn files(self) -> Vec<PinnedFile> {
+        let model = match self {
+            Self::Lama => koharu_ml::Model::Lama,
+            Self::Flux3Klein => koharu_ml::Model::Flux3Klein,
+            Self::QwenImage => koharu_ml::Model::QwenImage,
+        };
+        koharu_ml::files_for(model)
+    }
+}
+
 /// An inpainter, loaded.
 pub(super) type Model = Box<dyn Inpaint + Send>;
 
@@ -50,11 +81,6 @@ pub(super) trait Inpaint {
         false
     }
 
-    /// The longest side of a window it redraws in one pass.
-    fn pass(&self) -> u32 {
-        u32::MAX
-    }
-
     /// What stops a redraw under way, for a model that can be stopped.
     fn canceller(&self) -> Option<Canceller> {
         None
@@ -70,11 +96,6 @@ impl Inpaint for Lama {
         _: &str,
     ) -> anyhow::Result<RgbImage> {
         Lama::inference(self, &DynamicImage::ImageRgb8(image.clone()), mask)
-    }
-
-    /// Past it LaMa crops around each masked region and runs once for each.
-    fn pass(&self) -> u32 {
-        lama::WHOLE
     }
 }
 

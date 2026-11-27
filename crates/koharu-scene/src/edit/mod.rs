@@ -139,6 +139,12 @@ pub enum Op {
         #[serde(default)]
         value: Option<Value>,
     },
+    /// Set one project metadata entry, or remove it when `value` is null.
+    SetProjectMetadata {
+        key: String,
+        #[serde(default)]
+        value: Option<Value>,
+    },
     /// Replace pixels of a layer's picture, in its own pixel coordinates:
     /// RGBA8 for a raster or a block's `cleanup`, grey8 for a mask or a
     /// block's `mask`, each named by its own id. A block's parts take the
@@ -381,6 +387,9 @@ impl Run<'_, '_> {
                 key,
                 value,
             } => self.set_attribute(index, layer, namespace, key, value.as_ref()),
+            Op::SetProjectMetadata { key, value } => {
+                self.set_project_metadata(index, key, value.as_ref())
+            }
             Op::WritePixels {
                 layer,
                 rect,

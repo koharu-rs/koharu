@@ -140,6 +140,47 @@ pub fn run(context: tauri::Context<CefRuntime>) -> Result<()> {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(koharu_sentry::plugin())
+        .on_window_event(|window, event| {
+            if window.label() != screen::MAIN {
+                return;
+            }
+            if let tauri::WindowEvent::DragDrop(event) = event {
+                let payload = match event {
+                    tauri::DragDropEvent::Enter { position, .. } => {
+                        let Ok(scale) = window.scale_factor() else {
+                            return;
+                        };
+                        let pos = position.to_logical::<f64>(scale);
+                        events::FileDrag::Enter { x: pos.x, y: pos.y }
+                    }
+                    tauri::DragDropEvent::Over { position } => {
+                        let Ok(scale) = window.scale_factor() else {
+                            return;
+                        };
+                        let pos = position.to_logical::<f64>(scale);
+                        events::FileDrag::Over { x: pos.x, y: pos.y }
+                    }
+                    tauri::DragDropEvent::Drop { paths, position } => {
+                        let Ok(scale) = window.scale_factor() else {
+                            return;
+                        };
+                        let pos = position.to_logical::<f64>(scale);
+                        let paths = paths
+                            .iter()
+                            .map(|path| path.to_string_lossy().into_owned())
+                            .collect();
+                        events::FileDrag::Drop {
+                            x: pos.x,
+                            y: pos.y,
+                            paths,
+                        }
+                    }
+                    tauri::DragDropEvent::Leave => events::FileDrag::Leave,
+                    _ => return,
+                };
+                events::FILE_DRAG.tell(window.app_handle(), payload);
+            }
+        })
         .on_web_content_process_terminate(koharu_sentry::web_content_process_terminated)
         .manage(app)
         .invoke_handler(commands::handler())

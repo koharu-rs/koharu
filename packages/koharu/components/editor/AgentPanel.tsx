@@ -10,8 +10,8 @@ import { Choice } from '@/components/controls/Choice'
 import { Markdown } from '@/components/controls/Markdown'
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { useConversation, type Part, type Turn } from '@/lib/agent'
-import { modelName, REASONING } from '@/lib/models'
-import { send, useModels, usePreferences, useSavePreferences } from '@/lib/queries'
+import { formatModelName, REASONING } from '@/lib/models'
+import { send, useModelCatalog, usePreferences, useSavePreferences } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type AgentConfig, type AgentEvent, type Event } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
@@ -36,7 +36,8 @@ export function AgentPanel() {
   const shown = useKoharuStore((state) => state.panel === 'agent')
   const [choosing, setChoosing] = useState(false)
   const busy = turns.some((turn) => turn.role === 'assistant' && turn.state === 'running')
-  const models = (useModels().data ?? []).filter((model) => model.tools)
+  const catalog = useModelCatalog()
+  const models = (catalog.data?.translate ?? []).filter((model) => model.tools)
   const preferences = usePreferences().data
   const save = useSavePreferences()
   const list = useRef<HTMLDivElement>(null)
@@ -128,7 +129,13 @@ export function AgentPanel() {
             }}
           />
           <div className='flex min-w-0 items-center gap-0.5 pt-1'>
-            <Popover open={choosing} onOpenChange={setChoosing}>
+            <Popover
+              open={choosing}
+              onOpenChange={(next) => {
+                setChoosing(next)
+                if (next) void catalog.refetch()
+              }}
+            >
               <PopoverTrigger
                 type='button'
                 aria-label={t('agent.model')}
@@ -138,7 +145,7 @@ export function AgentPanel() {
                 )}
               >
                 <span className='truncate'>
-                  {(model && modelName(models, model)) || t('inference.noModel')}
+                  {(model && formatModelName(models, model, t)) || t('inference.noModel')}
                 </span>
                 <ChevronDown className='size-3.5 shrink-0' />
               </PopoverTrigger>
@@ -146,11 +153,14 @@ export function AgentPanel() {
                 side='top'
                 align='start'
                 sideOffset={6}
-                className='w-64 gap-0 overflow-hidden p-1'
+                className='w-72 gap-0 overflow-hidden p-1'
               >
                 <ModelPicker
                   value={model}
                   models={models}
+                  availableVramBytes={catalog.data?.available_vram_bytes ?? null}
+                  otherStagesVramBytes={0}
+                  loading={catalog.isFetching}
                   onSelect={(next) => {
                     setChoosing(false)
                     saveConfig({ ...config, model: next })

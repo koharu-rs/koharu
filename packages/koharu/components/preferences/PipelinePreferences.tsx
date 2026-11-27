@@ -5,41 +5,62 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Choice } from '@/components/controls/Choice'
-import { ModelPicker } from '@/components/controls/ModelPicker'
+import {
+  ModelDiskMeta,
+  ModelPicker,
+  StageModelSelect,
+  VramFitBadge,
+} from '@/components/controls/ModelPicker'
 import {
   NumberField,
   PreferencePage,
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { detectors, inpainters, modelName, REASONING, recognizers, vendorOf } from '@/lib/models'
+import {
+  computeOtherStagesVram,
+  detectors,
+  findCatalogSelection,
+  formatModelName,
+  inpainters,
+  REASONING,
+  recognizers,
+  vendorOf,
+} from '@/lib/models'
 import { languageNames } from '@/lib/translation'
 import { vendorName } from '@/lib/vendors'
 import type {
   Detector,
   Inpainter,
-  Model,
+  ModelCatalog,
   PipelineConfig,
   Recognizer,
+  Stage as StageEnum,
+  TranslateModelEntry,
   TranslatorConfig,
 } from '@koharu/ipc/protocol'
 import { Badge } from '@koharu/ui/components/badge'
+import {
+  NumberField as NumberFieldRoot,
+  NumberFieldGroup,
+  NumberFieldInput,
+} from '@koharu/ui/components/number-field'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { Switch } from '@koharu/ui/components/switch'
 import { Textarea } from '@koharu/ui/components/textarea'
-
-type StageName = 'detect' | 'recognize' | 'inpaint' | 'translate'
 
 /** The `[pipeline]` stages in the order they run, a section each with its model first: the
  * detector with its thresholds, the recognizer, the inpainter with its prompt, and the translator
  * with its options. */
 export function PipelinePreferences({
   value,
-  models,
+  catalog,
+  onRefreshCatalog,
   onChange,
 }: {
   value: PipelineConfig
-  models: Model[]
+  catalog: ModelCatalog | undefined
+  onRefreshCatalog: () => void
   onChange: (value: PipelineConfig) => void
 }) {
   const { t } = useTranslation()
@@ -47,6 +68,7 @@ export function PipelinePreferences({
   const inpainter = value.inpainter ?? {}
   const translator = value.translator ?? {}
   const thresholds = ['text', 'onomatopoeia', 'bubble', 'panel'] as const
+  const availableVramBytes = catalog?.available_vram_bytes ?? null
 
   return (
     <PreferencePage
@@ -56,11 +78,19 @@ export function PipelinePreferences({
       <Stage
         stage='detect'
         model={
-          <ModelSelect
-            stage='detect'
+          <StageModelSelect
             value={detector.model ?? 'koharu-layout-highres'}
-            names={detectors}
-            onChange={(model) => onChange({ ...value, detector: { ...detector, model } })}
+            entries={catalog?.detect ?? []}
+            fallbackNames={detectors}
+            availableVramBytes={availableVramBytes}
+            otherStagesVramBytes={computeOtherStagesVram(catalog, value, 'detect')}
+            label={t('settings.pipeline.modelLabel', {
+              stage: t('settings.pipeline.stages.detect.title'),
+            })}
+            onOpen={onRefreshCatalog}
+            onChange={(model) =>
+              onChange({ ...value, detector: { ...detector, model: model as Detector } })
+            }
           />
         }
       >
@@ -86,23 +116,35 @@ export function PipelinePreferences({
       <Stage
         stage='recognize'
         model={
-          <ModelSelect
-            stage='recognize'
+          <StageModelSelect
             value={value.recognizer?.model ?? 'hayai-ocr'}
-            names={recognizers}
-            onChange={(model: Recognizer) => onChange({ ...value, recognizer: { model } })}
+            entries={catalog?.recognize ?? []}
+            fallbackNames={recognizers}
+            availableVramBytes={availableVramBytes}
+            otherStagesVramBytes={computeOtherStagesVram(catalog, value, 'recognize')}
+            label={t('settings.pipeline.modelLabel', {
+              stage: t('settings.pipeline.stages.recognize.title'),
+            })}
+            onOpen={onRefreshCatalog}
+            onChange={(model) => onChange({ ...value, recognizer: { model: model as Recognizer } })}
           />
         }
       />
       <Stage
         stage='inpaint'
         model={
-          <ModelSelect
-            stage='inpaint'
+          <StageModelSelect
             value={inpainter.model ?? 'lama'}
-            names={inpainters}
-            onChange={(model: Inpainter) =>
-              onChange({ ...value, inpainter: { ...inpainter, model } })
+            entries={catalog?.inpaint ?? []}
+            fallbackNames={inpainters}
+            availableVramBytes={availableVramBytes}
+            otherStagesVramBytes={computeOtherStagesVram(catalog, value, 'inpaint')}
+            label={t('settings.pipeline.modelLabel', {
+              stage: t('settings.pipeline.stages.inpaint.title'),
+            })}
+            onOpen={onRefreshCatalog}
+            onChange={(model) =>
+              onChange({ ...value, inpainter: { ...inpainter, model: model as Inpainter } })
             }
           />
         }
@@ -124,10 +166,13 @@ export function PipelinePreferences({
         model={
           <TranslatorModel
             value={translator.model ?? ''}
-            models={models}
+            models={catalog?.translate ?? []}
+            availableVramBytes={availableVramBytes}
+            otherStagesVramBytes={computeOtherStagesVram(catalog, value, 'translate')}
             label={t('settings.pipeline.modelLabel', {
               stage: t('settings.pipeline.stages.translate.title'),
             })}
+            onOpen={onRefreshCatalog}
             onChange={(model) => onChange({ ...value, translator: { ...translator, model } })}
           />
         }
@@ -147,7 +192,7 @@ function Stage({
   model,
   children,
 }: {
-  stage: StageName
+  stage: StageEnum
   model: ReactNode
   children?: ReactNode
 }) {
@@ -163,46 +208,40 @@ function Stage({
   )
 }
 
-function ModelSelect<Model extends Detector | Recognizer | Inpainter>({
-  stage,
-  value,
-  names,
-  onChange,
-}: {
-  stage: Exclude<StageName, 'translate'>
-  value: Model
-  names: Record<Model, string>
-  onChange: (model: Model) => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <Choice
-      value={value}
-      choices={names}
-      label={t('settings.pipeline.modelLabel', {
-        stage: t(`settings.pipeline.stages.${stage}.title`),
-      })}
-      onChange={onChange}
-    />
-  )
-}
-
-/** The translator's model, any provider's, labelled with where it runs. */
+/** The translator's model, any provider's, labelled with where it runs and its footprint. */
 function TranslatorModel({
   value,
   models,
+  availableVramBytes,
+  otherStagesVramBytes,
   label,
+  onOpen,
   onChange,
 }: {
   value: string
-  models: Model[]
+  models: TranslateModelEntry[]
+  availableVramBytes: number | null
+  otherStagesVramBytes: number
   label: string
+  onOpen: () => void
   onChange: (model: string) => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const selection = useMemo(() => findCatalogSelection(models, value), [models, value])
+  const diskBytes = selection?.variant?.disk_bytes ?? selection?.model.disk_bytes ?? null
+  const downloaded = selection?.variant?.downloaded ?? selection?.model.downloaded ?? false
+  const measuredVram =
+    selection?.variant?.measured_vram_bytes ?? selection?.model.measured_vram_bytes ?? null
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) onOpen()
+      }}
+    >
       <PopoverTrigger
         type='button'
         aria-label={label}
@@ -214,7 +253,15 @@ function TranslatorModel({
               {vendorName(vendorOf(value), t)}
             </Badge>
           )}
-          <span className='truncate'>{modelName(models, value) || t('inference.noModel')}</span>
+          <span className='min-w-0 truncate'>
+            {formatModelName(models, value, t) || t('inference.noModel')}
+          </span>
+          {diskBytes !== null && <ModelDiskMeta diskBytes={diskBytes} downloaded={downloaded} />}
+          <VramFitBadge
+            candidateVramBytes={measuredVram}
+            otherStagesVramBytes={otherStagesVramBytes}
+            availableVramBytes={availableVramBytes}
+          />
         </span>
         <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
       </PopoverTrigger>
@@ -226,6 +273,8 @@ function TranslatorModel({
         <ModelPicker
           value={value}
           models={models}
+          availableVramBytes={availableVramBytes}
+          otherStagesVramBytes={otherStagesVramBytes}
           onSelect={(reference) => {
             onChange(reference)
             setOpen(false)
@@ -262,6 +311,44 @@ function TranslatorOptions({
           onCheckedChange={(vision) => onChange({ ...value, vision })}
         />
       </PreferenceRow>
+      <PreferenceRow
+        title={t('settings.pipeline.translator.combinePages')}
+        description={t('settings.pipeline.translator.combinePagesDescription')}
+      >
+        <Switch
+          aria-label={t('settings.pipeline.translator.combinePages')}
+          checked={value.combine_pages ?? true}
+          onCheckedChange={(combine_pages) => onChange({ ...value, combine_pages })}
+        />
+      </PreferenceRow>
+      {(value.combine_pages ?? true) && (
+        <PreferenceRow
+          title={t('settings.pipeline.translator.maxPages')}
+          description={t('settings.pipeline.translator.maxPagesDescription')}
+        >
+          <NumberFieldRoot
+            value={value.max_pages_per_request ?? null}
+            min={1}
+            max={64}
+            step={1}
+            format={{ maximumFractionDigits: 0, useGrouping: false }}
+            onValueChange={(next) =>
+              onChange({
+                ...value,
+                max_pages_per_request: next === null ? null : Math.max(1, Math.round(next)),
+              })
+            }
+          >
+            <NumberFieldGroup className='h-8 rounded-lg focus-within:ring-3 focus-within:ring-ring/50'>
+              <NumberFieldInput
+                aria-label={t('settings.pipeline.translator.maxPages')}
+                placeholder={t('settings.pipeline.translator.maxPagesAuto')}
+                className='px-2.5 text-left text-[12px] text-foreground placeholder:text-muted-foreground'
+              />
+            </NumberFieldGroup>
+          </NumberFieldRoot>
+        </PreferenceRow>
+      )}
       <PreferenceRow
         title={t('settings.pipeline.translator.reasoning')}
         description={t('settings.pipeline.translator.reasoningDescription')}

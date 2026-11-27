@@ -10,7 +10,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_runtime::{Library, Repository, Turn};
+use koharu_runtime::{Library, PinnedFile, Repository, Turn};
 use koharu_torch::Tensor;
 
 use self::{
@@ -29,6 +29,15 @@ const DINOV2: Repository = Repository::model(
     "f9e44c814b77203eaa57a6bdbbd535f21ede1415",
 );
 
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(BABERU, "config.json", 972),
+    PinnedFile::new(BABERU, "generation_config.json", 269),
+    PinnedFile::new(BABERU, "model.safetensors", 451_347_624),
+    PinnedFile::new(BABERU, "tokenizer/vocab.json", 130_761),
+    PinnedFile::new(DINOV2, "config.json", 548),
+    PinnedFile::new(DINOV2, "preprocessor_config.json", 436),
+];
+
 #[derive(Debug)]
 pub struct BaberuOcr {
     model: Model,
@@ -42,15 +51,15 @@ impl BaberuOcr {
         let (device, kind) = crate::torch::device(device);
         let [config, generation, weights, vocabulary] = BABERU
             .resolve([
-                "config.json",
-                "generation_config.json",
-                "model.safetensors",
-                "tokenizer/vocab.json",
+                FILES[0].filename,
+                FILES[1].filename,
+                FILES[2].filename,
+                FILES[3].filename,
             ])
             .await
             .context("failed to resolve Baberu OCR's files")?;
         let [vision_config, vision_processor] = DINOV2
-            .resolve(["config.json", "preprocessor_config.json"])
+            .resolve([FILES[4].filename, FILES[5].filename])
             .await
             .context("failed to resolve DINOv2's files")?;
         let config: BaberuOcrConfig = serde_json::from_slice(&fs_err::read(&config)?)?;

@@ -6,17 +6,55 @@
     "version": "Versão"
   },
   "activity": {
+    "cancelDownload": "Cancelar download",
+    "cancelJob": "Cancelar {{job}}",
+    "cancelRun": "Cancelar execução na fila",
     "dismiss": "Dispensar",
+    "dismissDownload": "Dispensar download",
+    "downloadCancelled": "Download cancelado.",
     "downloadFailed": "Falha no download.",
-    "downloadingFiles": "Baixando {{count}} arquivos",
-    "downloadingFiles_one": "Baixando {{count}} arquivos",
-    "downloadingFiles_other": "Baixando {{count}} arquivos",
+    "downloadFiles": "{{done}} / {{total}} arquivos",
+    "downloadFinished": "Baixado",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/s",
+    "emptyDescription": "Execuções, tarefas na fila e downloads de modelos aparecem aqui.",
+    "emptyTitle": "Nenhuma atividade recente",
     "loadingPages": "Carregando páginas: {{loaded}} de {{total}}",
     "modelDownload": "Download do modelo",
+    "pageRange": "Páginas {{from}}–{{to}}",
     "processing": "Processando",
     "processingFailed": "Falha no processamento.",
-    "stop": "Parar",
-    "title": "Atividade"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "Prioridade por espera",
+      "fifo": "Por ordem de envio",
+      "grouped_by_loaded_model": "Agrupado por modelo carregado",
+      "lower_vram_cost": "Menor custo de troca de VRAM",
+      "waiting_for_download": "Aguardando download do modelo"
+    },
+    "queueScope": {
+      "area": "Área selecionada",
+      "blocks": "{{count}} blocos",
+      "blocks_one": "{{count}} bloco",
+      "blocks_other": "{{count}} blocos",
+      "metadata": "Metadados",
+      "pages": "{{count}} páginas",
+      "pages_one": "{{count}} página",
+      "pages_other": "{{count}} páginas",
+      "project": "Projeto inteiro"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "Executar agora",
+    "retryDownload": "Tentar download novamente",
+    "sections": {
+      "downloads": "Downloads",
+      "queued": "Na fila",
+      "running": "Em execução"
+    },
+    "stageRuntime": "Runtime",
+    "stopRun": "Parar execução",
+    "title": "Atividade",
+    "waitingForDownload": "Aguardando download"
   },
   "agent": {
     "cancel": "Cancelar",
@@ -40,6 +78,7 @@
     "working": "Trabalhando…"
   },
   "canvas": {
+    "dropToAppend": "Solte arquivos para anexar páginas",
     "empty": "Selecione uma página para começar.",
     "notice": {
       "eraser_needs_raster": "Selecione uma camada raster para apagar."
@@ -68,6 +107,8 @@
   "export": {
     "export": "Exportar",
     "imageFormat": "Formato de imagem",
+    "lossless": "Sem perdas",
+    "losslessDescription": "Mantém os dados exatos de pixels sem artefatos de compressão.",
     "quality": "Qualidade",
     "title": "Exportar {{format}}"
   },
@@ -161,6 +202,7 @@
       "resize": "Redimensionar",
       "rotate": "Girar",
       "set_locked": "Bloquear ou desbloquear",
+      "set_metadata": "Editar metadados",
       "set_source_text": "Editar texto original",
       "set_style": "Alterar estilo do texto",
       "set_text": "Editar texto",
@@ -181,7 +223,13 @@
     "output": "Saída",
     "pipelineStages": "Etapas do pipeline",
     "providerDefault": "Padrão do provedor",
+    "queue": "Enfileirar",
+    "queueDescription": "Executar após o término do lote ativo.",
+    "queueProcessing": "Enfileirar processamento",
+    "rerunNow": "Executar agora",
+    "rerunNowDescription": "Passar à frente da fila na próxima etapa.",
     "run": "Executar",
+    "runOptions": "Opções de execução",
     "runProcessing": "Executar processamento",
     "scope": "Escopo",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}} etapas",
     "stageCount_one": "{{count}} etapas",
     "stageCount_other": "{{count}} etapas",
-    "stages": "Etapas",
-    "stop": "Parar",
-    "stopProcessing": "Parar processamento"
+    "stages": "Etapas"
   },
   "inspector": {
     "alignBottom": "Alinhar embaixo",
@@ -310,6 +356,7 @@
     "help": "Ajuda",
     "history": "Histórico",
     "import": "Importar páginas",
+    "metadata": "Metadados…",
     "original": "Mostrar original",
     "redo": "Refazer",
     "saveDefaultStyles": "Salvar estilos como padrão",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "Usar estilos padrão",
     "view": "Exibir"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "Apenas adultos 18+",
+      "earlyChildhood": "Primeira infância",
+      "everyone": "Livre",
+      "everyone10Plus": "10+",
+      "g": "G",
+      "kidsToAdults": "Infantil a adulto",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "Classificação pendente",
+      "teen": "Adolescente",
+      "unknown": "Desconhecido",
+      "x18Plus": "X18+"
+    },
+    "button": "Metadados",
+    "description": "Edite os metadados ComicInfo 2.1 salvos neste projeto e exportados em arquivos CBZ.",
+    "fields": {
+      "ageRating": "Classificação indicativa",
+      "alternateCount": "Total alternativo",
+      "alternateNumber": "Número alternativo",
+      "alternateSeries": "Série alternativa",
+      "blackAndWhite": "Preto e branco",
+      "characters": "Personagens",
+      "colorist": "Colorista",
+      "communityRating": "Avaliação da comunidade",
+      "count": "Total",
+      "coverArtist": "Artista da capa",
+      "day": "Dia",
+      "editor": "Editor",
+      "format": "Formato",
+      "genre": "Gênero",
+      "gtin": "GTIN",
+      "imprint": "Selo editorial",
+      "inker": "Arte-finalista",
+      "languageIso": "Idioma ISO",
+      "letterer": "Letrista",
+      "locations": "Locais",
+      "mainCharacterOrTeam": "Personagem ou equipe principal",
+      "manga": "Mangá",
+      "month": "Mês",
+      "notes": "Notas",
+      "number": "Número",
+      "pageCount": "Contagem de páginas",
+      "pages": "Páginas",
+      "penciller": "Desenhista",
+      "publisher": "Editora",
+      "review": "Resenha",
+      "scanInformation": "Informações de digitalização",
+      "series": "Série",
+      "seriesGroup": "Grupo de séries",
+      "storyArc": "Arco da história",
+      "storyArcNumber": "Número do arco",
+      "summary": "Sinopse",
+      "tags": "Tags",
+      "teams": "Equipes",
+      "title": "Título",
+      "translator": "Tradutor",
+      "volume": "Volume",
+      "web": "Web",
+      "writer": "Roteirista",
+      "year": "Ano"
+    },
+    "languageIsoHint": "A exportação CBZ grava {{target}} (o idioma de destino ativo).",
+    "manga": {
+      "no": "Não",
+      "unknown": "Desconhecido",
+      "yes": "Sim",
+      "yesAndRightToLeft": "Sim (da direita para a esquerda)"
+    },
+    "moreFields": "Mais campos",
+    "noTranslatableFields": "Adicione texto original em pelo menos um campo de texto para traduzir.",
+    "original": "Original",
+    "pagesAutoComputed": "{{count}} páginas — recalculadas automaticamente na exportação CBZ",
+    "pagesAutoComputed_one": "{{count}} página — recalculada automaticamente na exportação CBZ",
+    "pagesAutoComputed_other": "{{count}} páginas — recalculadas automaticamente na exportação CBZ",
+    "sections": {
+      "charactersAndWorld": "Personagens e mundo",
+      "classification": "Classificação e tags",
+      "common": "Comum",
+      "credits": "Créditos",
+      "notesAndReview": "Notas e resenha",
+      "pages": "Páginas",
+      "publishing": "Publicação e lançamento",
+      "seriesAndStory": "Série e história"
+    },
+    "title": "Metadados",
+    "translate": "Traduzir metadados",
+    "translated": "Traduzido",
+    "translating": "Traduzindo…",
+    "yesNo": {
+      "no": "Não",
+      "unknown": "Desconhecido",
+      "yes": "Sim"
+    }
+  },
   "model": {
     "baseUrl": "URL base",
     "default": "Padrão",
     "targetLanguage": "Idioma de destino"
   },
   "modelPicker": {
+    "chooseQuantization": "Escolher quantização para {{model}}",
+    "downloaded": "Baixado",
     "empty": "Nenhum modelo disponível.",
     "loading": "Carregando modelos…",
     "noResults": "Nenhum modelo corresponde à busca.",
+    "notDownloaded": "Não baixado",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "Buscar modelos",
     "title": "Escolher um modelo",
-    "useModel": "Usar {{model}} de {{provider}}"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "Usar {{model}} de {{provider}}",
+    "vramFit": {
+      "fits": "Cabe",
+      "swaps": "Troca",
+      "tooLarge": "Muito grande"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} de {{available}} livres",
+      "withOther": "≈{{model}} (+ {{other}} outras etapas) de {{available}} livres"
+    }
   },
   "navigator": {
     "actionsFor": "Ações para {{page}}",
@@ -343,6 +508,12 @@
     "importAction": "Importar",
     "importFiles": "Arquivos…",
     "importFolder": "Pasta…",
+    "importSkipped": "{{count}} arquivos não suportados ignorados",
+    "importSkippedMore": "{{files}} e mais {{count}}",
+    "importSkippedMore_one": "{{files}} e mais {{count}}",
+    "importSkippedMore_other": "{{files}} e mais {{count}}",
+    "importSkipped_one": "{{count}} arquivo não suportado ignorado",
+    "importSkipped_other": "{{count}} arquivos não suportados ignorados",
     "importing": "Importando páginas…",
     "importingAction": "Importando…",
     "noImage": "Sem imagem",
@@ -460,8 +631,13 @@
       "thresholds": "Limites",
       "title": "Pipeline",
       "translator": {
+        "combinePages": "Combinar páginas",
+        "combinePagesDescription": "Traduz páginas consecutivas juntas (ou inclui diálogos vizinhos com Visão ativada) para manter a consistência de nomes e enredo.",
         "instructions": "Instruções adicionais",
         "instructionsDescription": "Opcionais, em qualquer idioma e formato, como a grafia de um nome ou o tom. O Koharu as acrescenta como estão após o próprio prompt de sistema.",
+        "maxPages": "Máximo de páginas por solicitação",
+        "maxPagesAuto": "Automático",
+        "maxPagesDescription": "Deixe em branco para Automático (ajustado aos limites de contexto e saída do modelo).",
         "reasoning": "Raciocínio",
         "reasoningDescription": "Usa o raciocínio do modelo durante a tradução.",
         "targetLanguageDescription": "Escolha o idioma para o qual o texto será traduzido.",
@@ -542,6 +718,15 @@
     "title": "Preparando o Koharu"
   },
   "status": {
+    "activity": "Atividade",
+    "activityActive": "{{count}} ativos",
+    "activityActive_one": "{{count}} ativo",
+    "activityActive_other": "{{count}} ativos",
+    "activityFailed": "{{count}} falharam",
+    "activityFailed_one": "{{count}} falhou",
+    "activityFailed_other": "{{count}} falharam",
+    "activityQueued": "{{active}} · +{{queued}} na fila",
+    "openActivity": "Abrir aba Atividade",
     "zoom": "Zoom"
   },
   "story": {

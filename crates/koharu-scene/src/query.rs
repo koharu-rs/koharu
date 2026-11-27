@@ -1,8 +1,11 @@
 //! Reads for tools. Answers serialize the project's own values, so a tool
 //! sees a layer as the file stores it.
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use specta::Type;
 
 use crate::{
@@ -26,6 +29,8 @@ pub enum Query {
     GetStory { page: PageId },
     /// Get the undo and redo labels.
     GetHistory,
+    /// Get all project-level metadata entries.
+    GetProjectMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -36,6 +41,7 @@ pub enum Answer {
     Layer(Box<Layer>),
     Story(Vec<LayerId>),
     History(History),
+    Metadata(BTreeMap<String, Value>),
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -93,6 +99,13 @@ impl Session {
             Query::GetLayer { layer } => Answer::Layer(Box::new(project.layer(layer)?.clone())),
             Query::GetStory { page } => Answer::Story(project.story(page)?),
             Query::GetHistory => Answer::History(self.history()),
+            Query::GetProjectMetadata => Answer::Metadata(
+                project
+                    .metadata
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+            ),
         })
     }
 }

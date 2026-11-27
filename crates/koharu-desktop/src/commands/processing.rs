@@ -2,17 +2,29 @@
 
 use std::{collections::BTreeSet, sync::Arc};
 
-use koharu_pipeline::{Area, Event, Inpainter, PipelineConfig, RunId, Stage, Target};
+use koharu_pipeline::{Area, Event, Inpainter, PipelineConfig, RunId, RunPriority, Stage, Target};
+use koharu_scene::PageId;
 use tauri::State;
 
 use super::Result;
 use crate::app::App;
 
-/// Runs `stages` on `target`; each run's events go out as `pipeline`.
+/// Runs `stages` on `target` at `priority` (queued normally when `None`);
+/// each run's events go out as `pipeline`.
 #[tauri::command]
 #[specta::specta]
-pub fn run_pipeline(app: State<'_, Arc<App>>, target: Target, stages: Vec<Stage>) -> Result<RunId> {
-    Ok(app.process(target, stages.into_iter().collect(), None)?)
+pub fn run_pipeline(
+    app: State<'_, Arc<App>>,
+    target: Target,
+    stages: Vec<Stage>,
+    priority: Option<RunPriority>,
+) -> Result<RunId> {
+    Ok(app.process(
+        target,
+        stages.into_iter().collect(),
+        None,
+        priority.unwrap_or_default(),
+    )?)
 }
 
 /// Fills the area the marquee and the lasso marked with `model` after
@@ -42,14 +54,26 @@ pub async fn fill(
         target,
         BTreeSet::from([Stage::Inpaint]),
         Some(config),
+        RunPriority::RerunNow,
     )?))
 }
 
-/// Stops every run, running and queued; what they finished stays.
+/// Cancels a single queued/running job `(run, page, stage)` when both `run`
+/// and `stage` are given, an entire run when `run` is `Some` and `stage` is
+/// `None`, or every run when `run` is `None`; what they finished stays.
 #[tauri::command]
 #[specta::specta]
-pub fn stop_pipeline(app: State<'_, Arc<App>>) {
-    app.pipeline.stop();
+pub fn cancel_run(
+    app: State<'_, Arc<App>>,
+    run: Option<RunId>,
+    page: Option<PageId>,
+    stage: Option<Stage>,
+) {
+    match (run, stage) {
+        (Some(run), Some(stage)) => app.pipeline.cancel_job(run, page, stage),
+        (run, None) => app.pipeline.cancel(run),
+        (None, Some(_)) => app.pipeline.cancel(None),
+    }
 }
 
 /// Unloads every model the pipeline loaded once the GPU's current call ends,

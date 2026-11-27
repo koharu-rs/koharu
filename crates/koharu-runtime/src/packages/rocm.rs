@@ -92,6 +92,11 @@ fn version() -> PathBuf {
 }
 
 impl Package for Rocm {
+    fn is_ready(&self, _: Host, _: Backend) -> bool {
+        let folder = self.folder();
+        folder.is_dir() && LOAD.iter().all(|library| folder.join(library).is_file())
+    }
+
     /// Downloads ROCm with the target's kernels. Libraries come with their data
     /// files, such as rocBLAS's kernels, so each wheel's tree is kept whole.
     fn download(&self, host: Host, _: Backend) -> BoxFuture<'_, Result<()>> {

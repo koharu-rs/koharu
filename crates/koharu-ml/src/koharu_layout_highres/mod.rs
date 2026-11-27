@@ -18,7 +18,7 @@ mod suppress;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, RgbImage};
-use koharu_runtime::{Library, Repository, Turn};
+use koharu_runtime::{Library, PinnedFile, Repository, Turn};
 use koharu_torch::Device;
 use rayon::prelude::*;
 
@@ -39,6 +39,11 @@ const REPOSITORY: Repository = Repository::model(
     "mayocream/koharu-layout-highres",
     "68077eb09401a46e548190ff2786bd405113ea8b",
 );
+
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(REPOSITORY, "config.json", 551),
+    PinnedFile::new(REPOSITORY, "model.safetensors", 186_458_372),
+];
 
 /// The lowest confidence an onomatopoeia detection keeps by default. The
 /// checkpoint recommends 0.3, but on 212 pages of Blue Archive's comics about
@@ -76,7 +81,7 @@ impl KoharuLayoutHighres {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::torch::device(device);
         let [config, weights] = REPOSITORY
-            .resolve(["config.json", "model.safetensors"])
+            .resolve([FILES[0].filename, FILES[1].filename])
             .await
             .context("failed to resolve Koharu Layout HighRes's files")?;
         let config: Config = serde_json::from_slice(&fs_err::read(&config)?)?;

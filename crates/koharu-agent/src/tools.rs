@@ -11,7 +11,7 @@ use image::{
     DynamicImage, ImageFormat, Rgba, RgbaImage,
     imageops::{self, FilterType},
 };
-use koharu_pipeline::{Event, Pipeline, Request, RunId, Stage, Target};
+use koharu_pipeline::{Event, Pipeline, Request, RunId, RunPriority, Stage, Target};
 use koharu_renderer::Renderer;
 use koharu_scene::{Bounds, Change, LayerId, Op, PageId, Query, Session, Transform};
 use kurbo::{BezPath, Shape as _};
@@ -116,6 +116,10 @@ struct RunArgs {
     /// The stages to run; each page's run in the order detect, recognize,
     /// inpaint, translate.
     stages: BTreeSet<Stage>,
+    /// Queue priority: `normal` queues behind active batch work, while
+    /// `rerun_now` jumps ahead at the next page/stage boundary.
+    #[serde(default)]
+    priority: RunPriority,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -123,6 +127,14 @@ struct RunArgs {
 struct WaitArgs {
     /// The run, as `run` answered it.
     run: RunId,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct StopArgs {
+    /// The run to stop, as `run` answered it; leave out to stop every run.
+    #[serde(default)]
+    run: Option<RunId>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -269,9 +281,10 @@ impl Tool for Run {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Run the pipeline's stages on the project, some pages, some blocks, or a painted area, \
-         replacing what they wrote before. Answers the run's id at once; the run goes on in the \
-         background, and wait follows it."
+        "Run the pipeline's stages on the project, some pages, some blocks, a painted area, or \
+         project metadata, replacing what they wrote before. Optional `priority` (`normal` or \
+         `rerun_now`) controls queue placement. Answers the run's id at once; the run goes on \
+         in the background, and wait follows it."
             .to_owned()
     }
 
@@ -285,6 +298,7 @@ impl Tool for Run {
             target: args.target,
             stages: args.stages,
             config: None,
+            priority: args.priority,
         };
         let run = tools
             .pipeline
@@ -298,21 +312,26 @@ struct Stop;
 
 impl Tool for Stop {
     const NAME: &'static str = "stop";
-    type Args = NoArgs;
+    type Args = StopArgs;
     type Output = String;
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Stop every run, running and queued. What they finished stays.".to_owned()
+        "Stop one run by its id, or every run (running, queued, and waiting) when left out. What \
+         they finished stays."
+            .to_owned()
     }
 
     fn parameters(&self) -> Value {
-        schema::<NoArgs>()
+        schema::<StopArgs>()
     }
 
-    async fn call(&self, context: &mut ToolContext, _: NoArgs) -> Result<String, Self::Error> {
-        project(context)?.pipeline.stop();
-        Ok("Every run is stopped.".to_owned())
+    async fn call(&self, context: &mut ToolContext, args: StopArgs) -> Result<String, Self::Error> {
+        project(context)?.pipeline.cancel(args.run);
+        Ok(match args.run {
+            Some(run) => format!("Run {} is stopped.", run.0),
+            None => "Every run is stopped.".to_owned(),
+        })
     }
 }
 
@@ -326,9 +345,8 @@ impl Tool for Wait {
 
     fn description(&self) -> String {
         "Wait up to 30 seconds for a run to end, then answer what it told so far, in order: how \
-         many page stages it does, each page's stages as they started and finished, or failed \
-         on that page alone, and last, once it ended, how: done, failed with its reason, or \
-         stopped."
+         many steps it does, each page or metadata stage as it started and finished, or failed on \
+         that step alone, and last, once it ended, how: done, failed with its reason, or stopped."
             .to_owned()
     }
 
@@ -811,5 +829,55 @@ mod tests {
             .await
             .expect_err("outside");
         assert_eq!(error.message(), "the region is outside the page");
+    }
+
+    #[tokio::test]
+    async fn run_accepts_priority_and_stop_cancels_single_or_all_runs() {
+        let (_dir, tools) = open();
+        assert_eq!(
+            refusal(
+                &Run.parameters(),
+                &json!({"target": "project", "stages": ["detect"], "priority": "rerun_now"})
+            ),
+            None
+        );
+        assert_eq!(refusal(&Stop.parameters(), &json!({})), None);
+        assert_eq!(refusal(&Stop.parameters(), &json!({"run": 1})), None);
+
+        let started = Run
+            .call(
+                &mut tools.tool_context(),
+                serde_json::from_value(
+                    json!({"target": "project", "stages": ["detect"], "priority": "rerun_now"}),
+                )
+                .expect("valid run args"),
+            )
+            .await
+            .expect("run starts");
+        let run = RunId(started.parse().expect("numeric run id"));
+
+        let single = Stop
+            .call(&mut tools.tool_context(), StopArgs { run: Some(run) })
+            .await
+            .expect("single stop");
+        assert_eq!(single, format!("Run {} is stopped.", run.0));
+
+        let events = Wait
+            .call(&mut tools.tool_context(), WaitArgs { run })
+            .await
+            .expect("wait completes");
+        assert!(matches!(
+            events.last(),
+            Some(Event::Ended {
+                outcome: koharu_pipeline::Outcome::Done | koharu_pipeline::Outcome::Stopped,
+                ..
+            })
+        ));
+
+        let all = Stop
+            .call(&mut tools.tool_context(), StopArgs { run: None })
+            .await
+            .expect("stop all");
+        assert_eq!(all, "Every run is stopped.");
     }
 }

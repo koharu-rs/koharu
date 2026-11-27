@@ -32,6 +32,10 @@ static DIFFUSION: Release = Release {
 };
 
 impl Package for Llama {
+    fn is_ready(&self, host: Host, backend: Backend) -> bool {
+        LLAMA.is_ready(host, backend, |_| true)
+    }
+
     fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>> {
         Box::pin(LLAMA.download(host, backend, |_| true))
     }
@@ -51,6 +55,10 @@ impl Package for Llama {
 }
 
 impl Package for Diffusion {
+    fn is_ready(&self, host: Host, backend: Backend) -> bool {
+        DIFFUSION.is_ready(host, backend, |_| true)
+    }
+
     fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>> {
         Box::pin(DIFFUSION.download(host, backend, |_| true))
     }

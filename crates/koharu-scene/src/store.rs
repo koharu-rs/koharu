@@ -28,16 +28,22 @@ use crate::{
 /// on it, so opening refuses any other database before reading its rows.
 const APPLICATION_ID: i32 = 0x4B48_5255;
 /// The format version this build writes.
-const VERSION: Version = Version::new(1, 3, 0);
+const VERSION: Version = Version::new(1, 4, 0);
 /// What each version added to the tables, which a file from before it takes
 /// in this build's first write to it.
-const UPGRADES: [(Version, &str); 1] = [(
-    Version::new(1, 2, 0),
-    "ALTER TABLE project ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'",
-)];
+const UPGRADES: [(Version, &str); 2] = [
+    (
+        Version::new(1, 2, 0),
+        "ALTER TABLE project ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'",
+    ),
+    (Version::new(1, 4, 0), METADATA_SCHEMA),
+];
 /// Most compressed tiles fit on a page of this size, which keeps them out of
 /// overflow chains, each of whose pages is a read of its own.
 const PAGE_SIZE: u32 = 16384;
+
+const METADATA_SCHEMA: &str =
+    "CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;";
 
 /// `pages` and `blobs` keep their rowids: without one, a row holds only a
 /// quarter of a page before spilling, which read tiles five times slower when
@@ -58,6 +64,7 @@ const SCHEMA: &str = indoc! {"
       PRIMARY KEY(layer, x, y)
     ) STRICT, WITHOUT ROWID;
     CREATE TABLE blobs(hash TEXT PRIMARY KEY, bytes BLOB NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 "};
 
 /// The project row, as any version this build reads holds it: a column a
@@ -87,6 +94,14 @@ struct TileRow {
     x: i32,
     y: i32,
     hash: Hash,
+}
+
+#[serde_as]
+#[derive(Deserialize)]
+struct MetadataRow {
+    key: String,
+    #[serde_as(as = "JsonString")]
+    value: serde_json::Value,
 }
 
 impl From<serde_rusqlite::Error> for Error {
@@ -368,6 +383,19 @@ fn load(conn: &Connection, meta: Meta) -> Result<Project> {
             .or_default()
             .insert((row.x, row.y), row.hash);
     }
+
+    let has_metadata: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata')",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_metadata {
+        let mut statement = conn.prepare("SELECT key, value FROM metadata")?;
+        for row in from_rows::<MetadataRow>(statement.query([])?) {
+            let row = row?;
+            project.metadata.insert(row.key, row.value);
+        }
+    }
     Ok(project)
 }
 
@@ -440,6 +468,21 @@ impl Tx<'_> {
                 DiffItem::Remove(layer, old) => (layer, old, &empty),
             };
             self.write_tiles(*layer, old, new)?;
+        }
+        for item in before.metadata.diff(&after.metadata) {
+            match item {
+                DiffItem::Add(key, value)
+                | DiffItem::Update {
+                    new: (key, value), ..
+                } => {
+                    conn.prepare_cached("INSERT OR REPLACE INTO metadata VALUES (?1, ?2)")?
+                        .execute(params![key, json(value)])?;
+                }
+                DiffItem::Remove(key, _) => {
+                    conn.prepare_cached("DELETE FROM metadata WHERE key = ?1")?
+                        .execute([key])?;
+                }
+            }
         }
         Ok(())
     }

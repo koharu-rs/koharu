@@ -60,10 +60,12 @@ export function PageRail() {
   const selectPages = useKoharuStore((state) => state.selectPages)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const fileDrag = useKoharuStore((state) => state.fileDrag)
   const { importPages, importing } = useImportPages()
   const anchor = useRef<number | null>(null)
   // A page being dragged, and the place of the page it's over.
   const [dragged, setDragged] = useState<{ page: string; target: number | null } | null>(null)
+  const railDrop = fileDrag?.target === 'rail' && dragged === null ? fileDrag : null
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   // The page Delete asks about, kept while its dialog closes so the dialog still names it.
   const [pageToDelete, setPageToDelete] = useState<{ page: string; number: number } | null>(null)
@@ -128,7 +130,13 @@ export function PageRail() {
 
   return (
     <>
-      <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-sidebar)]'>
+      <aside
+        data-page-rail
+        className={cn(
+          'flex h-full min-h-0 flex-col bg-[var(--surface-sidebar)] transition-colors',
+          railDrop && 'bg-primary/[0.03] ring-2 ring-primary/60 ring-inset',
+        )}
+      >
         <header className='flex h-10 shrink-0 items-center px-2.5'>
           <div className='flex min-w-0 items-center gap-2'>
             <h2 className='text-[11px] font-semibold'>{t('navigator.pages')}</h2>
@@ -149,77 +157,92 @@ export function PageRail() {
           )}
         </header>
 
-        {pages.length === 0 ? (
-          <div className='flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center'>
-            <p className='text-[11px] font-medium'>{t('navigator.emptyTitle')}</p>
-            <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
-              {t('navigator.emptyDescription')}
-            </p>
-            <div className='mt-3'>
-              <PageImportMenu importing={importing} onImport={importPages} />
-            </div>
-          </div>
-        ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={pointerWithin}
-            onDragStart={({ active }) => setDragged({ page: String(active.id), target: null })}
-            onDragOver={({ over }) =>
-              setDragged(
-                (current) =>
-                  current && {
-                    ...current,
-                    target: over ? pages.findIndex((page) => page.id === over.id) : null,
-                  },
-              )
-            }
-            onDragCancel={() => setDragged(null)}
-            onDragEnd={({ over }) =>
-              drop(over ? pages.findIndex((page) => page.id === over.id) : null)
-            }
-          >
-            <ScrollArea
-              className='min-h-0 flex-1'
-              viewportClassName='px-1.5 py-1.5'
-              viewportRef={pageList}
-            >
-              <div
-                className='relative w-full touch-none'
-                style={{ height: pageVirtualizer.getTotalSize() }}
-              >
-                {pageVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const page = pages[virtualRow.index]
-                  if (!page) return null
-                  const index = virtualRow.index
-                  return (
-                    <div
-                      key={virtualRow.key}
-                      data-index={virtualRow.index}
-                      className='absolute top-0 left-0 w-full'
-                      style={{ transform: `translateY(${virtualRow.start}px)` }}
-                    >
-                      <PageItem
-                        page={page}
-                        index={index}
-                        revision={project?.revisions[page.id]}
-                        active={active === page.id}
-                        selected={selected.includes(page.id)}
-                        dragged={dragged?.page === page.id}
-                        target={dragged !== null && dragged.target === index}
-                        onSelect={(additive, range) => select(index, additive, range)}
-                        onRun={(stage) => send(commands.runPipeline, { pages: [page.id] }, [stage])}
-                        onDelete={() => {
-                          setPageToDelete({ page: page.id, number: index + 1 })
-                          setConfirmingDelete(true)
-                        }}
-                      />
-                    </div>
-                  )
-                })}
+        <div data-page-rail-body className='relative flex min-h-0 flex-1 flex-col'>
+          {pages.length === 0 ? (
+            <div className='flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center'>
+              <p className='text-[11px] font-medium'>{t('navigator.emptyTitle')}</p>
+              <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
+                {t('navigator.emptyDescription')}
+              </p>
+              <div className='mt-3'>
+                <PageImportMenu importing={importing} onImport={importPages} />
               </div>
-            </ScrollArea>
-          </DndContext>
-        )}
+            </div>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={pointerWithin}
+              onDragStart={({ active }) => setDragged({ page: String(active.id), target: null })}
+              onDragOver={({ over }) =>
+                setDragged(
+                  (current) =>
+                    current && {
+                      ...current,
+                      target: over ? pages.findIndex((page) => page.id === over.id) : null,
+                    },
+                )
+              }
+              onDragCancel={() => setDragged(null)}
+              onDragEnd={({ over }) =>
+                drop(over ? pages.findIndex((page) => page.id === over.id) : null)
+              }
+            >
+              <ScrollArea
+                className='min-h-0 flex-1'
+                viewportClassName='px-1.5 py-1.5'
+                viewportRef={pageList}
+              >
+                <div
+                  className='relative w-full touch-none'
+                  style={{ height: pageVirtualizer.getTotalSize() }}
+                >
+                  {pageVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const page = pages[virtualRow.index]
+                    if (!page) return null
+                    const index = virtualRow.index
+                    return (
+                      <div
+                        key={virtualRow.key}
+                        data-index={virtualRow.index}
+                        className='absolute top-0 left-0 w-full'
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      >
+                        <PageItem
+                          page={page}
+                          index={index}
+                          revision={project?.revisions[page.id]}
+                          active={active === page.id}
+                          selected={selected.includes(page.id)}
+                          dragged={dragged?.page === page.id}
+                          target={dragged !== null && dragged.target === index}
+                          onSelect={(additive, range) => select(index, additive, range)}
+                          onRun={(stage) =>
+                            send(commands.runPipeline, { pages: [page.id] }, [stage], 'normal')
+                          }
+                          onDelete={() => {
+                            setPageToDelete({ page: page.id, number: index + 1 })
+                            setConfirmingDelete(true)
+                          }}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+            </DndContext>
+          )}
+          {railDrop && (
+            <div
+              aria-hidden='true'
+              data-testid='page-rail-drop-line'
+              className='pointer-events-none absolute inset-x-1.5 z-20 flex -translate-y-1/2 items-center'
+              style={{ top: railDrop.lineTop }}
+            >
+              <span className='size-1.5 rounded-full bg-primary' />
+              <span className='h-0.5 flex-1 rounded-full bg-primary' />
+            </div>
+          )}
+        </div>
 
         <div className='mt-auto flex shrink-0 items-center gap-2 px-1.5 pt-0.5 pb-1.5'>
           <Tooltip>

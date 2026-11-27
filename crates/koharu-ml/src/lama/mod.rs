@@ -11,7 +11,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::{DynamicImage, GrayImage, RgbImage};
-use koharu_runtime::{Library, Repository, Turn};
+use koharu_runtime::{Library, PinnedFile, Repository, Turn};
 use koharu_torch::{Device, Kind, Tensor};
 
 use self::{config::FFCResNetGeneratorConfig, model::Model};
@@ -20,6 +20,12 @@ const REPOSITORY: Repository = Repository::model(
     "mayocream/lama-manga",
     "f91c85b26913b3e83f9877867b4c336da3675238",
 );
+
+pub const FILES: &[PinnedFile] = &[PinnedFile::new(
+    REPOSITORY,
+    "lama-manga.safetensors",
+    204_332_996,
+)];
 
 /// The longest side LaMa redraws whole; a larger image goes a crop around
 /// each masked region at a time, as IOPaint's `InpaintModel` does.
@@ -35,7 +41,7 @@ impl Lama {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::torch::device(device);
         let [weights] = REPOSITORY
-            .resolve(["lama-manga.safetensors"])
+            .resolve([FILES[0].filename])
             .await
             .context("failed to resolve LaMa's files")?;
 

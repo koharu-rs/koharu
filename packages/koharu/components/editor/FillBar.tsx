@@ -4,13 +4,13 @@ import { Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Choice } from '@/components/controls/Choice'
+import { StageModelSelect } from '@/components/controls/ModelPicker'
 import { ContextBar } from '@/components/editor/ContextBar'
-import { inpainters } from '@/lib/models'
-import { send, usePreferences, useSavePreferences } from '@/lib/queries'
+import { computeOtherStagesVram, inpainters } from '@/lib/models'
+import { send, useModelCatalog, usePreferences, useSavePreferences } from '@/lib/queries'
 import { shortcutLabel, shortcuts } from '@/lib/shortcuts'
 import { useKoharuStore, type CanvasTool } from '@/lib/store'
-import { commands } from '@koharu/ipc/protocol'
+import { commands, type Inpainter } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
@@ -29,6 +29,7 @@ export function FillBar() {
   const area = useKoharuStore((state) => state.area)
   const tool = useKoharuStore((state) => state.tool)
   const preferences = usePreferences().data
+  const catalog = useModelCatalog()
   const save = useSavePreferences()
   // Kept after Generate, to fill again with it, as Photoshop keeps it.
   const [prompt, setPrompt] = useState('')
@@ -40,16 +41,25 @@ export function FillBar() {
   const generate = () => send(commands.fill, (prompted && prompt.trim()) || null, model)
   return (
     <ContextBar bounds={area} aria-label={t('fill.title')}>
-      <Choice
+      <StageModelSelect
         size='sm'
+        side='bottom'
         value={model}
-        choices={inpainters}
+        entries={catalog.data?.inpaint ?? []}
+        fallbackNames={inpainters}
+        availableVramBytes={catalog.data?.available_vram_bytes ?? null}
+        otherStagesVramBytes={computeOtherStagesVram(catalog.data, pipeline, 'inpaint')}
         label={t('fill.model')}
         className='h-7'
+        finalFocus={(closed) => closed === 'keyboard'}
+        onOpen={() => void catalog.refetch()}
         onChange={(fill) =>
           save.mutate({
             ...preferences,
-            pipeline: { ...pipeline, inpainter: { ...pipeline.inpainter, fill } },
+            pipeline: {
+              ...pipeline,
+              inpainter: { ...pipeline.inpainter, fill: fill as Inpainter },
+            },
           })
         }
       />

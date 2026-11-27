@@ -9,6 +9,18 @@ use strum::{Display, VariantArray};
 
 use crate::PipelineConfig;
 
+/// Queue scheduling priority for a pipeline request.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema, specta::Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RunPriority {
+    #[default]
+    Normal,
+    /// Jumps ahead of queued batch runs and starts at the next page/stage boundary.
+    RerunNow,
+}
+
 /// One run: `stages` on a target, each page's in stage order.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Request {
@@ -17,6 +29,9 @@ pub struct Request {
     /// For this run only; the pipeline's own otherwise.
     #[serde(default)]
     pub config: Option<PipelineConfig>,
+    /// Queue priority (`normal` queues behind active batch work, `rerun_now` preempts).
+    #[serde(default)]
+    pub priority: RunPriority,
 }
 
 /// What a run works on. It runs every stage it's given on everything it
@@ -41,6 +56,8 @@ pub enum Target {
         prompt: Option<String>,
         layer: Option<LayerId>,
     },
+    /// Project ComicInfo prose metadata translation only.
+    Metadata,
 }
 
 /// A stage, in the order a page's stages run.
@@ -67,6 +84,18 @@ pub enum Stage {
     Recognize,
     Inpaint,
     Translate,
+}
+
+impl Stage {
+    #[must_use]
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            Self::Detect => 0,
+            Self::Recognize => 1,
+            Self::Inpaint => 2,
+            Self::Translate => 3,
+        }
+    }
 }
 
 /// A painted area of a page: a byte a pixel over `rect`, in page pixels,

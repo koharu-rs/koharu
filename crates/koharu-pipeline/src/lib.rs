@@ -10,12 +10,15 @@ mod pipeline;
 mod request;
 mod scheduler;
 mod stages;
+pub mod vram;
 
 pub use config::PipelineConfig;
 pub use error::{Error, Result};
-pub use event::{Event, Outcome, RunId};
+pub use event::{
+    Event, Outcome, QueueOrderReason, QueueScope, QueuedRunSummary, QueuedStep, RunId,
+};
 pub use pipeline::Pipeline;
-pub use request::{Area, Request, Stage, Target};
+pub use request::{Area, Request, RunPriority, Stage, Target};
 pub use stages::{
     detect::{Detector, DetectorConfig},
     inpaint::{Inpainter, InpainterConfig},

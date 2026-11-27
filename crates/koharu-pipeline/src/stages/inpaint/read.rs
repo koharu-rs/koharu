@@ -29,7 +29,7 @@ pub(super) fn blocks(member: &Member) -> Result<Option<Work>> {
     if cleanups.is_empty() {
         return Ok(None);
     }
-    let places = places(&project, member.page, width, height);
+    let places = places(&project, member.page_id(), width, height);
     let (mask, regions) = tiers(&mut image, left, &mut cleanups, &places);
     Ok(Some(Work {
         image,
@@ -84,7 +84,7 @@ fn cleanups(
         .collect();
     let mut cleanups = Vec::new();
     let mut left = GrayImage::new(width, height);
-    for (id, block) in project.blocks(member.page).unwrap_or_default() {
+    for (id, block) in project.blocks(member.page_id()).unwrap_or_default() {
         let tiles = session.tiles(block.mask.id, None)?;
         let Some((rect, mask)) = tiles.coverage(width, height) else {
             continue;
@@ -150,7 +150,7 @@ fn drawn(member: &Member) -> Result<Option<RgbImage>> {
         let session = member.session.lock();
         let project = session.project();
         let Some(page) = project
-            .page(member.page)
+            .page(member.page_id())
             .ok()
             .filter(|page| page.background.is_some())
         else {
@@ -159,7 +159,7 @@ fn drawn(member: &Member) -> Result<Option<RgbImage>> {
         let mut lettering = Vec::new();
         letterings(&page.layers, &mut lettering);
         Renderer::get()
-            .render(&session, member.page)?
+            .render(&session, member.page_id())?
             .without(&lettering)
     };
     Ok(Some(
@@ -316,7 +316,7 @@ mod tests {
         let member = Member {
             run: RunId(0),
             job: NodeIndex::new(0),
-            page,
+            page: Some(page),
             index: 0,
             blocks: None,
             session: Arc::new(Mutex::new(session)),

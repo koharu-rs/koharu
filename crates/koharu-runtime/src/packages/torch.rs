@@ -114,26 +114,35 @@ fn variant(backend: Backend) -> Backend {
     }
 }
 
+fn libtorch_complete(folder: &std::path::Path, backend: Backend) -> bool {
+    libraries(backend)
+        .iter()
+        .all(|library| folder.join(library).is_file())
+        // Without its kernels, AOTriton fails every fused
+        // attention as an invalid kernel image.
+        && (!matches!(backend, Backend::Rocm { .. }) || folder.join("aotriton.images").is_dir())
+}
+
+fn shim_complete(folder: &std::path::Path) -> bool {
+    folder.join(shim_library()).is_file()
+}
+
 impl Package for Torch {
+    fn is_ready(&self, host: Host, backend: Backend) -> bool {
+        LIBTORCH.is_ready(host, variant(backend), |folder| {
+            libtorch_complete(folder, backend)
+        }) && SHIM.is_ready(host, variant(backend), shim_complete)
+    }
+
     /// Downloads libtorch and the shim.
     fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
-            let libraries = libraries(backend);
             LIBTORCH
                 .download(host, variant(backend), move |folder| {
-                    libraries
-                        .iter()
-                        .all(|library| folder.join(library).is_file())
-                        // Without its kernels, AOTriton fails every fused
-                        // attention as an invalid kernel image.
-                        && (!matches!(backend, Backend::Rocm { .. })
-                            || folder.join("aotriton.images").is_dir())
+                    libtorch_complete(folder, backend)
                 })
                 .await?;
-            SHIM.download(host, variant(backend), |folder| {
-                folder.join(shim_library()).is_file()
-            })
-            .await
+            SHIM.download(host, variant(backend), shim_complete).await
         })
     }
 

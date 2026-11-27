@@ -6,17 +6,55 @@
     "version": "Version"
   },
   "activity": {
+    "cancelDownload": "Cancel download",
+    "cancelJob": "Cancel {{job}}",
+    "cancelRun": "Cancel queued run",
     "dismiss": "Dismiss",
+    "dismissDownload": "Dismiss download",
+    "downloadCancelled": "Download cancelled.",
     "downloadFailed": "Download failed.",
-    "downloadingFiles": "Downloading {{count}} files",
-    "downloadingFiles_one": "Downloading {{count}} file",
-    "downloadingFiles_other": "Downloading {{count}} files",
+    "downloadFiles": "{{done}} / {{total}} files",
+    "downloadFinished": "Downloaded",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/s",
+    "emptyDescription": "Pipeline runs, queued jobs, and model downloads appear here.",
+    "emptyTitle": "No recent activity",
     "loadingPages": "Loading pages: {{loaded}} of {{total}}",
     "modelDownload": "Model download",
+    "pageRange": "Pages {{from}}–{{to}}",
     "processing": "Processing",
     "processingFailed": "Processing failed.",
-    "stop": "Stop",
-    "title": "Activity"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "Aged priority",
+      "fifo": "In submission order",
+      "grouped_by_loaded_model": "Grouped by loaded model",
+      "lower_vram_cost": "Lower VRAM swap cost",
+      "waiting_for_download": "Waiting for model download"
+    },
+    "queueScope": {
+      "area": "Selected area",
+      "blocks": "{{count}} blocks",
+      "blocks_one": "{{count}} block",
+      "blocks_other": "{{count}} blocks",
+      "metadata": "Metadata",
+      "pages": "{{count}} pages",
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "project": "Entire project"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "Rerun now",
+    "retryDownload": "Retry download",
+    "sections": {
+      "downloads": "Downloads",
+      "queued": "Queued",
+      "running": "Running"
+    },
+    "stageRuntime": "Runtime",
+    "stopRun": "Stop run",
+    "title": "Activity",
+    "waitingForDownload": "Waiting for download"
   },
   "agent": {
     "cancel": "Cancel",
@@ -40,6 +78,7 @@
     "working": "Working..."
   },
   "canvas": {
+    "dropToAppend": "Drop files to append pages",
     "empty": "Select a page to begin.",
     "notice": {
       "eraser_needs_raster": "Select a raster layer to erase."
@@ -68,6 +107,8 @@
   "export": {
     "export": "Export",
     "imageFormat": "Image format",
+    "lossless": "Lossless",
+    "losslessDescription": "Keep exact pixel data without compression artifacts.",
     "quality": "Quality",
     "title": "Export {{format}}"
   },
@@ -161,6 +202,7 @@
       "resize": "Resize",
       "rotate": "Rotate",
       "set_locked": "Lock or unlock",
+      "set_metadata": "Edit metadata",
       "set_source_text": "Edit source text",
       "set_style": "Change type",
       "set_text": "Edit text",
@@ -181,7 +223,13 @@
     "output": "Output",
     "pipelineStages": "Pipeline stages",
     "providerDefault": "Provider default",
+    "queue": "Queue",
+    "queueDescription": "Run after active batch work finishes.",
+    "queueProcessing": "Queue processing",
+    "rerunNow": "Rerun now",
+    "rerunNowDescription": "Jump ahead of queued batch runs at the next step.",
     "run": "Run",
+    "runOptions": "Run options",
     "runProcessing": "Run processing",
     "scope": "Scope",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}} stages",
     "stageCount_one": "{{count}} stage",
     "stageCount_other": "{{count}} stages",
-    "stages": "Stages",
-    "stop": "Stop",
-    "stopProcessing": "Stop processing"
+    "stages": "Stages"
   },
   "inspector": {
     "alignBottom": "Align bottom",
@@ -310,6 +356,7 @@
     "help": "Help",
     "history": "History",
     "import": "Import Pages",
+    "metadata": "Metadata…",
     "original": "Show Original",
     "redo": "Redo",
     "saveDefaultStyles": "Save Styles as Default",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "Use Default Styles",
     "view": "View"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "Adults Only 18+",
+      "earlyChildhood": "Early Childhood",
+      "everyone": "Everyone",
+      "everyone10Plus": "Everyone 10+",
+      "g": "G",
+      "kidsToAdults": "Kids to Adults",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "Mature 17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "Rating Pending",
+      "teen": "Teen",
+      "unknown": "Unknown",
+      "x18Plus": "X18+"
+    },
+    "button": "Metadata",
+    "description": "Edit ComicInfo 2.1 metadata stored with this project and exported in CBZ archives.",
+    "fields": {
+      "ageRating": "Age rating",
+      "alternateCount": "Alternate count",
+      "alternateNumber": "Alternate number",
+      "alternateSeries": "Alternate series",
+      "blackAndWhite": "Black and white",
+      "characters": "Characters",
+      "colorist": "Colorist",
+      "communityRating": "Community rating",
+      "count": "Count",
+      "coverArtist": "Cover artist",
+      "day": "Day",
+      "editor": "Editor",
+      "format": "Format",
+      "genre": "Genre",
+      "gtin": "GTIN",
+      "imprint": "Imprint",
+      "inker": "Inker",
+      "languageIso": "Language ISO",
+      "letterer": "Letterer",
+      "locations": "Locations",
+      "mainCharacterOrTeam": "Main character or team",
+      "manga": "Manga",
+      "month": "Month",
+      "notes": "Notes",
+      "number": "Number",
+      "pageCount": "Page count",
+      "pages": "Pages",
+      "penciller": "Penciller",
+      "publisher": "Publisher",
+      "review": "Review",
+      "scanInformation": "Scan information",
+      "series": "Series",
+      "seriesGroup": "Series group",
+      "storyArc": "Story arc",
+      "storyArcNumber": "Story arc number",
+      "summary": "Summary",
+      "tags": "Tags",
+      "teams": "Teams",
+      "title": "Title",
+      "translator": "Translator",
+      "volume": "Volume",
+      "web": "Web",
+      "writer": "Writer",
+      "year": "Year"
+    },
+    "languageIsoHint": "CBZ export writes {{target}} (the active translation target language).",
+    "manga": {
+      "no": "No",
+      "unknown": "Unknown",
+      "yes": "Yes",
+      "yesAndRightToLeft": "Yes (right to left)"
+    },
+    "moreFields": "More fields",
+    "noTranslatableFields": "Add original text in at least one prose field to translate.",
+    "original": "Original",
+    "pagesAutoComputed": "{{count}} pages — recomputed automatically on CBZ export",
+    "pagesAutoComputed_one": "{{count}} page — recomputed automatically on CBZ export",
+    "pagesAutoComputed_other": "{{count}} pages — recomputed automatically on CBZ export",
+    "sections": {
+      "charactersAndWorld": "Characters & World",
+      "classification": "Classification & Tags",
+      "common": "Common",
+      "credits": "Credits",
+      "notesAndReview": "Notes & Review",
+      "pages": "Pages",
+      "publishing": "Publishing & Release",
+      "seriesAndStory": "Series & Story"
+    },
+    "title": "Metadata",
+    "translate": "Translate metadata",
+    "translated": "Translated",
+    "translating": "Translating…",
+    "yesNo": {
+      "no": "No",
+      "unknown": "Unknown",
+      "yes": "Yes"
+    }
+  },
   "model": {
     "baseUrl": "Base URL",
     "default": "Default",
     "targetLanguage": "Target language"
   },
   "modelPicker": {
+    "chooseQuantization": "Choose quantization for {{model}}",
+    "downloaded": "Downloaded",
     "empty": "No models are available.",
     "loading": "Loading models…",
     "noResults": "No models match this search.",
+    "notDownloaded": "Not downloaded",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "Search models",
     "title": "Choose a model",
-    "useModel": "Use {{model}} from {{provider}}"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "Use {{model}} from {{provider}}",
+    "vramFit": {
+      "fits": "Fits",
+      "swaps": "Swaps",
+      "tooLarge": "Too large"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} of {{available}} free",
+      "withOther": "≈{{model}} (+ {{other}} other stages) of {{available}} free"
+    }
   },
   "navigator": {
     "actionsFor": "Actions for {{page}}",
@@ -343,6 +508,12 @@
     "importAction": "Import",
     "importFiles": "Files…",
     "importFolder": "Folder…",
+    "importSkipped": "Skipped {{count}} unsupported files",
+    "importSkippedMore": "{{files}}, and {{count}} more",
+    "importSkippedMore_one": "{{files}}, and {{count}} more",
+    "importSkippedMore_other": "{{files}}, and {{count}} more",
+    "importSkipped_one": "Skipped {{count}} unsupported file",
+    "importSkipped_other": "Skipped {{count}} unsupported files",
     "importing": "Importing pages…",
     "importingAction": "Importing…",
     "noImage": "No image",
@@ -460,8 +631,13 @@
       "thresholds": "Thresholds",
       "title": "Pipeline",
       "translator": {
+        "combinePages": "Combine pages",
+        "combinePagesDescription": "Translate consecutive pages together (or include neighboring dialogue when Vision is on) for cross-page name and plot continuity.",
         "instructions": "Additional instructions",
         "instructionsDescription": "Optional, in any language and form, such as a name's spelling or the tone. Koharu adds them, as written, after its own system prompt.",
+        "maxPages": "Max pages per request",
+        "maxPagesAuto": "Auto",
+        "maxPagesDescription": "Leave blank for Auto (sized to the model’s context and output limits).",
         "reasoning": "Reasoning",
         "reasoningDescription": "Use model reasoning during translation.",
         "targetLanguageDescription": "Choose the language to translate text into.",
@@ -542,6 +718,15 @@
     "title": "Preparing Koharu"
   },
   "status": {
+    "activity": "Activity",
+    "activityActive": "{{count}} active",
+    "activityActive_one": "{{count}} active",
+    "activityActive_other": "{{count}} active",
+    "activityFailed": "{{count}} failed",
+    "activityFailed_one": "{{count}} failed",
+    "activityFailed_other": "{{count}} failed",
+    "activityQueued": "{{active}} · +{{queued}} queued",
+    "openActivity": "Open Activity tab",
     "zoom": "Zoom"
   },
   "story": {

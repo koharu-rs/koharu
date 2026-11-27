@@ -22,6 +22,7 @@ koharu-bindgen = { path = "crates/koharu-bindgen" }
 koharu-config = { path = "crates/koharu-config" }
 koharu-diffusion = { path = "crates/koharu-diffusion" }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys" }
+koharu-io = { path = "crates/koharu-io" }
 koharu-leptonica = { path = "crates/koharu-leptonica" }
 koharu-llama = { path = "crates/koharu-llama", features = ["llguidance", "mtmd"] }
 koharu-llama-sys = { path = "crates/koharu-llama-sys" }
@@ -91,6 +92,7 @@ indoc = "2.0.8"
 jieba-rs = "0.11.0"
 json-patch = { version = "5.0.0", default-features = false }
 jsonptr = "0.8.2"
+jxl-sys = "0.1.12"
 keyring = "4.2.0"
 koharu-extensions = { git = "https://github.com/koharu-rs/extensions", rev = "f5bb72d340c19c852d72a2598ab574cce8d6162f" }
 krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
@@ -119,6 +121,7 @@ pollster = "1.0.1"
 prettyplease = "0.3.0"
 proc-macro2 = "1.0.107"
 pyvi = { git = "https://github.com/koharu-rs/pyvi", rev = "37f5c15eb69f14ddae55378278b53b31bbe93ebc" }
+quick-xml = { version = "0.42.0", features = ["serialize"] }
 quick_cache = "0.7.0"
 quote = "1.0.47"
 rars = "0.13.0"

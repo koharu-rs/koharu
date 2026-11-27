@@ -14,7 +14,7 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_runtime::{Library, Repository, Turn};
+use koharu_runtime::{Library, PinnedFile, Repository, Turn};
 use koharu_torch::Device;
 
 use self::{
@@ -28,6 +28,12 @@ const REPOSITORY: Repository = Repository::model(
     "b00317ed69fccee5f787187d913fcf8a96f37f65",
 );
 
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(REPOSITORY, "config.json", 540),
+    PinnedFile::new(REPOSITORY, "model.safetensors", 633_564_960),
+    PinnedFile::new(REPOSITORY, "tokenizer.json", 1_247_253),
+];
+
 #[derive(Debug)]
 pub struct HayaiOcr {
     device: Device,
@@ -40,7 +46,7 @@ impl HayaiOcr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::torch::device(device);
         let [config, weights, tokenizer] = REPOSITORY
-            .resolve(["config.json", "model.safetensors", "tokenizer.json"])
+            .resolve([FILES[0].filename, FILES[1].filename, FILES[2].filename])
             .await
             .context("failed to resolve Hayai OCR's files")?;
         let config: HayaiConfig = serde_json::from_slice(&fs_err::read(&config)?)?;

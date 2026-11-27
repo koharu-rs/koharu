@@ -54,7 +54,7 @@ impl Conversation {
         if let Some(model) = &self.hosted {
             return Ok(model.clone());
         }
-        let model = model::load(&config.model, config.vision).await?;
+        let model = model::load(&config.model, config.vision).await?.model;
         self.hosted = Some(model.clone());
         Ok(model)
     }

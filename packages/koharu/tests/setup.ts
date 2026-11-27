@@ -72,6 +72,7 @@ beforeEach(() => {
     ...initial,
     initialized: false,
     jobs: {},
+    queueOrder: [],
     downloads: {},
     camera: { zoom: 1, x: 0, y: 0 },
     selectionBounds: null,
@@ -87,7 +88,9 @@ beforeEach(() => {
     processingScope: 'project',
     processingStages: ['detect', 'recognize', 'inpaint', 'translate'],
     settingsOpen: false,
+    metadataOpen: false,
     historyOpen: false,
+    fileDrag: null,
   })
 })
 

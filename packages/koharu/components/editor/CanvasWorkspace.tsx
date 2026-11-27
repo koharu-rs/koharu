@@ -65,6 +65,8 @@ export function CanvasWorkspace() {
   const page = usePage().data
   const tool = useKoharuStore((state) => state.tool)
   const brush = useKoharuStore((state) => state.brush)
+  const metadataOpen = useKoharuStore((state) => state.metadataOpen)
+  const workspaceDrop = useKoharuStore((state) => state.fileDrag?.target === 'workspace')
   const colorSampling = useColorSampling()
 
   useCanvasViewport(surface)
@@ -164,7 +166,7 @@ export function CanvasWorkspace() {
       const tool = tools.find((tool) => toolKeys[tool] === keys?.[0])
       if (tool) setTool(tool)
     },
-    { useKey: true },
+    { enabled: !metadataOpen, useKey: true },
   )
   // Alt alone would hand the keys to the window's menu, wherever the focus is.
   useHotkeys('alt', () => undefined, {
@@ -189,7 +191,7 @@ export function CanvasWorkspace() {
         held.current = null
       }
     },
-    { keydown: true, keyup: true, preventDefault: true },
+    { enabled: !metadataOpen, keydown: true, keyup: true, preventDefault: true },
   )
   // A window that loses the focus mid-hold never hears Space let go.
   useEffect(() => {
@@ -221,6 +223,7 @@ export function CanvasWorkspace() {
               <p className='text-[12px] text-muted-foreground'>{t('canvas.empty')}</p>
             </div>
           )}
+          {workspaceDrop && <WorkspaceDropRing />}
         </div>
       </div>
       <StatusBar onZoomChange={(zoom) => send(commands.setZoom, zoom)} />
@@ -235,4 +238,18 @@ function sameLayers(a: string[], b: string[]): boolean {
 /** A theme colour, whatever CSS notation it's written in, as the canvas's RGBA. */
 function themeColor(variable: string): Rgba {
   return toRgba(getComputedStyle(document.documentElement).getPropertyValue(variable))
+}
+
+export function WorkspaceDropRing() {
+  const { t } = useTranslation()
+  return (
+    <div
+      data-testid='workspace-drop-ring'
+      className='pointer-events-none absolute inset-3 z-30 grid place-items-center rounded-2xl border-2 border-dashed border-primary/60 bg-primary/[0.04]'
+    >
+      <span className='rounded-full border border-border/60 bg-[var(--surface-panel)]/95 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm backdrop-blur'>
+        {t('canvas.dropToAppend')}
+      </span>
+    </div>
+  )
 }

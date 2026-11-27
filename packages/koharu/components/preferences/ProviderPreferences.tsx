@@ -12,7 +12,7 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { modelsKey, refresh, send } from '@/lib/queries'
+import { modelCatalogKey, refresh, send } from '@/lib/queries'
 import { vendorName, vendorTraits } from '@/lib/vendors'
 import {
   Channel,
@@ -30,7 +30,7 @@ const vendorsKey = ['vendors'] as const
 
 /** Lists the vendors and models again after a key or a sign-in changed. */
 function vendorsChanged() {
-  return refresh(vendorsKey, modelsKey)
+  return refresh(vendorsKey, modelCatalogKey)
 }
 
 /** Each vendor's API key, or its sign-in for one the user signs in to with their plan, kept in

@@ -1,8 +1,7 @@
 'use client'
 
 import { ColorSamplingProvider } from '@/components/controls/ColorSampling'
-import { ActivityCenter } from '@/components/editor/ActivityCenter'
-import { CanvasWorkspace } from '@/components/editor/CanvasWorkspace'
+import { CanvasWorkspace, WorkspaceDropRing } from '@/components/editor/CanvasWorkspace'
 import { PageRail } from '@/components/editor/PageRail'
 import { Reader } from '@/components/editor/Reader'
 import { RightSidebar } from '@/components/editor/RightSidebar'
@@ -19,6 +18,7 @@ import {
  * drags to are remembered. Reading shows the reader alone, without either. */
 export function Editor() {
   const reading = useKoharuStore((state) => state.reading)
+  const workspaceDrop = useKoharuStore((state) => state.fileDrag?.target === 'workspace')
   const layout = useDefaultLayout({
     id: 'editor',
     storage: typeof window === 'undefined' ? undefined : window.localStorage,
@@ -27,9 +27,11 @@ export function Editor() {
   return (
     <ColorSamplingProvider>
       <div className='relative min-h-0 flex-1 bg-transparent'>
-        <ActivityCenter />
         {reading ? (
-          <Reader />
+          <>
+            <Reader />
+            {workspaceDrop && <WorkspaceDropRing />}
+          </>
         ) : (
           <ResizablePanelGroup
             id='editor'

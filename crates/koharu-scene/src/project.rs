@@ -8,6 +8,7 @@ use std::{collections::BTreeMap, slice};
 use imbl::{OrdMap, Vector};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use specta::Type;
 
 use crate::{
@@ -30,6 +31,8 @@ pub struct Project {
     /// Each picture's tiles, under the id of the layer that owns it.
     pub(crate) tiles: OrdMap<LayerId, TileMap>,
     pub(crate) meta: Meta,
+    /// Project-level metadata documents keyed by namespace (e.g. `"comic_info"`).
+    pub(crate) metadata: OrdMap<String, Value>,
 }
 
 /// What a project holds beyond its pages, kept as one value, so holding more
@@ -186,6 +189,7 @@ impl Project {
             index: OrdMap::new(),
             tiles: OrdMap::new(),
             meta: Meta::default(),
+            metadata: OrdMap::new(),
         }
     }
 
@@ -197,6 +201,17 @@ impl Project {
     #[must_use]
     pub fn id(&self) -> ProjectId {
         self.id
+    }
+
+    #[must_use]
+    pub fn metadata(&self, key: &str) -> Option<&Value> {
+        self.metadata.get(key)
+    }
+
+    pub fn metadata_entries(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.metadata
+            .iter()
+            .map(|(key, value)| (key.as_str(), value))
     }
 
     /// The pages in order.

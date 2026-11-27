@@ -17,12 +17,12 @@ import { ProviderPreferences } from '@/components/preferences/ProviderPreference
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
 import { nativeNames } from '@/lib/i18n'
 import {
-  modelsKey,
+  modelCatalogKey,
   preferencesKey,
   queryClient,
   refresh,
   useEditPreferences,
-  useModels,
+  useModelCatalog,
   usePreferences,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
@@ -43,12 +43,12 @@ export function SettingsPage() {
   const { t } = useTranslation()
   const setOpen = useKoharuStore((state) => state.setSettingsOpen)
   const preferences = usePreferences().data
-  const models = useModels().data ?? []
+  const catalog = useModelCatalog()
   const { edit, flush } = useEditPreferences()
 
   // What the file holds as the page opens, which a save under way would answer itself.
   useEffect(() => {
-    void refresh(modelsKey)
+    void refresh(modelCatalogKey)
     if (!queryClient.isMutating({ mutationKey: preferencesKey })) void refresh(preferencesKey)
   }, [])
 
@@ -98,7 +98,8 @@ export function SettingsPage() {
               {preferences ? (
                 <PipelinePreferences
                   value={preferences.pipeline}
-                  models={models}
+                  catalog={catalog.data}
+                  onRefreshCatalog={() => void catalog.refetch()}
                   onChange={(pipeline) => edit({ ...preferences, pipeline })}
                 />
               ) : (

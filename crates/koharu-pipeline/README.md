@@ -21,9 +21,10 @@ only.
 
 | Target | Stages | For |
 |---|---|---|
-| the project, or some pages | any of detect, recognize, inpaint, and translate | one click; detection again with new thresholds |
+| the project, or some pages | any of detect, recognize, inpaint, and translate | one click; detection again with new thresholds (`Target::Project` with `translate` also translates non-empty ComicInfo prose metadata after the last page) |
 | some blocks | recognize, inpaint, and translate | reading a block you drew; translating again after fixing a line |
 | a painted area | inpaint, with an optional prompt, onto a raster or a clean-up it names, or a new raster | the remove brush, as Photoshop's Content-Aware Fill [Photoshop Content-Aware Fill] and Generative Fill [Photoshop Generative Fill] fill a selection |
+| metadata | translate only | translating the project's ComicInfo prose metadata |
 
 - **A run starts fresh.** It runs every stage it's given on everything it
   names, replacing what's there. To go on with an unfinished chapter, run the
@@ -36,8 +37,8 @@ only.
   panels and balloons holding it, and adds no second block over a block it
   leaves.
 - **A request that can't run fails at once**: no stages, detection on blocks, a
-  stage other than inpainting on an area, or a page or block the project
-  doesn't hold.
+  stage other than inpainting on an area, a stage other than translation on
+  metadata, or a page or block the project doesn't hold.
 - **What a run told** is kept in order as it's told, the last event saying how
   it ended, so a caller that looks late still sees everything, as ComfyUI keeps
   a prompt's history [ComfyUI routes].
@@ -259,9 +260,24 @@ model, the target, or the instructions starts a new one.
   at the model's own level unless set, or off. On 16 pages with Index-Translate
   9B, neither read better and both cost time, so vision is off and reasoning the
   model's own unless set.
-- **The history** keeps each page's texts and answer, not its image or the
-  model's reasoning, so it grows as it does without them, and a local model
-  reuses it from turn to turn.
+- **Cross-page combining (`combine_pages`, on by default).**
+  - With Vision off, consecutive pages in a run are packed dynamically to fit
+    the model's `input_limit` and `output_limit` (using CJK-aware token
+    estimates and an optional `max_pages_per_request` cap). General LLMs
+    receive page-boundary continuity guidance; specialized `TRANSLATION` models
+    (`Index-Translate`) keep their bare numbered JSON prompt under a tighter
+    auto budget. If a combined batch is refused, cut off, or overflows, Koharu
+    automatically falls back to translating that batch page by page so a single
+    refused page never fails its neighbours.
+  - With Vision on, translation stays one page per request (showing only the
+    current page's scan); for general models, preceding dialogue (when starting
+    mid-chapter) and upcoming pages' OCR text are attached as read-only
+    `<previous-pages>` and `<upcoming-pages>` context and stripped before
+    storing the turn in conversation history. Specialized `TRANSLATION` models
+    keep bare JSON + conversation history only.
+- **The history** keeps each page's texts and answer, not its image, transient
+  neighbour context, or the model's reasoning, so it grows cleanly without them,
+  and a local model reuses its prefix from turn to turn.
 - **The system prompt** is Index-Translate's structured-data template
   [Index-Translate] in English, fixed, naming the target by its plain English
   name from CLDR [CLDR]. It keeps the JSON the answer is parsed by, which a
@@ -273,31 +289,59 @@ model, the target, or the instructions starts a new one.
 ## 5. Running
 
 - **Models** load the first time a stage needs one, on the one thread that owns
-  them, so each load sees the memory actually free. Nothing is unloaded to make
-  room: a model that doesn't fit fails, naming the free memory. A model leaves
-  when the settings switch away from it, when asked, or when the pipeline ends.
-  One no setting uses, which a run brought as Generative Fill's does, leaves
-  five minutes after a run last ended, as Ollama keeps a model five minutes
-  after its last request [Ollama keep_alive], so filling again doesn't load it
-  again.
-- **One call at a time** on that thread, so peak memory is every loaded model
-  plus the largest working set, and running out never depends on timing. A
-  local language model decodes on its own thread beside it, taking turns on the
-  GPU with stable-diffusion.cpp's models on CUDA, and with every model on ROCm.
+  them, so each load sees the memory actually free. On devices with reliable
+  cross-process VRAM accounting (discrete CUDA and ROCm GPUs), each model's
+  load footprint, peak working memory, and per-megapixel inpainting working
+  cost are measured and persisted at `~/.koharu/vram.json` keyed by
+  `(device, model, revision)` (with `512 MiB` kept as safety margin). Before
+  loading or running a measured model, `Models::prepare` empties libtorch's
+  caching allocator and evicts resident models while free VRAM is below the
+  needed budget, choosing victims in strict order: models not needed by any
+  active run (LRU first), then active-run models whose stage is furthest from
+  the current stage (LRU tie-breaker). Evicting a local language model drops its
+  handle and waits synchronously for its engine thread to free its llama.cpp
+  context and model and exit before free memory is sampled again. A model also
+  leaves when the settings switch away from it, when asked, or when the
+  pipeline ends; one no setting uses, which a run brought as Generative Fill's
+  does, leaves five minutes after a run last ended, as Ollama keeps a model five
+  minutes after its last request [Ollama keep_alive], so filling again doesn't
+  load it again.
+- **One call at a time** on that thread, so working sets don't overlap on the
+  GPU; when an unmeasured load, an external GPU allocation, or a backend without
+  cross-process VRAM accounting hits an out-of-memory failure on load or
+  inference (or a local language model partially spills off GPU while other
+  models are resident), Koharu evicts all other loaded models, empties
+  libtorch's cache, and retries once. A local language model decodes on its own
+  thread beside it, taking turns on the GPU with stable-diffusion.cpp's models
+  on CUDA, and with every model on ROCm.
+- **Pre-admission downloads.** Before entering the GPU queue, the scheduler checks `stages::files_needed` off the GPU thread; if any pinned model files are missing, the run enters `WaitingForDownload`, joins or starts grouped entries in `DownloadManager`, and moves to the queue once its downloads succeed (or ends as stopped/failed, cancelling sole-owner remaining downloads).
 - **Pages in flight.** Up to three: one reading its input, one on the model,
   and one writing its result.
 - **Order.** A run is a graph of its pages' stages: detection before a page's
   other stages, recognition before its translation, and each page's translation
-  before the next page's. Runs on blocks or an area go first, then runs on
-  pages in the order they came, so an interactive run goes ahead at its next
-  model call. Recognition takes up to eight pages waiting for the same model at
-  once.
-- **Failure.** A page the translation model blocks, can't fit, or answers with
-  nothing it can take, fails alone: it's named with the reason, and the run goes
-  on. Any other
-  failure would come again with the next page, so it ends its run, a panic
-  included. What it finished stays. Stopping is the same without the error, for
-  every run, and cuts short a diffusion model's redraw under way.
+  before the next page's. Within a run, execution is stage-batched in stage
+  order (`detect`, then `recognize`, then `inpaint`, then `translate`) and page
+  order within each stage, so every page completes one stage before the next
+  stage loads its model and starts (maximizing multi-page OCR batching and
+  avoiding per-page VRAM swaps). Runs on blocks, an area, metadata, or with
+  `RunPriority::RerunNow` are interactive and preempt at the next model call; at
+  most one `Normal` batch run executes at a time while additional batch runs
+  wait in `queued`. Overlapping `Normal` batch runs on the same project and
+  config coalesce per `(page, stage)` without cross-producting unrelated stages.
+  When admitting the next batch run, `Scheduler` scores candidates against
+  resident GPU models and `~/.koharu/vram.json` footprints (falling back to
+  declared file bytes for unmeasured models) with a `256 MiB/s` FIFO aging
+  bonus. Recognition takes up to eight pages waiting for the same model at once.
+- **Failure and cancellation.** A page the translation model blocks, can't fit,
+  or answers with nothing it can take, fails alone: it's named with the reason,
+  and the run goes on. Any other failure would come again with the next page, so
+  it ends its run, a panic included. What it finished stays. `Pipeline::cancel`
+  cancels one run (`Some(id)`) or every run (`None`) across waiting-for-download
+  (cancelling sole-owner downloads), queued, and active runs without an error,
+  and cuts short a diffusion model's redraw under way. `Pipeline::cancel_job`
+  cancels an individual `(page, stage)` job (or metadata translation) inside an
+  active, queued, or download-waiting run without stopping the rest of the run,
+  bridging translation sequence edges and emitting `Event::JobCancelled`.
 
 ## 6. Settings
 
@@ -317,6 +361,8 @@ is a language CLDR doesn't name in English.
 | `translator.instructions` | none |
 | `translator.vision` | `false` |
 | `translator.reasoning` | the model's own, or `off` or an effort level, one word |
+| `translator.combine_pages` | `true` |
+| `translator.max_pages_per_request` | unset (`Auto`, sized from model limits), or `>= 1` |
 
 Manga OCR AR is CC BY-NC-SA 4.0, so a user who picks it is held to
 non-commercial use. Telea's port keeps OpenCV's BSD-style license, so this

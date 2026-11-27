@@ -82,8 +82,11 @@ a later start.
 - **Model files** come through Hugging Face's own client at the pinned commit,
   one after another, each as one stream. The client retries a request, waiting
   up to 15 seconds in all, and a file that breaks off starts over a few times.
-- **Progress.** Every transfer's state goes to whoever is listening, which the
-  app shows as its list of downloads.
+- **Download manager.** Downloads are grouped per model with declared total
+  sizes, deduplicated across concurrent callers, tracked with a smoothed EWMA
+  byte rate, and support cancellation, retry, and dismissal via
+  `DownloadManager`. Cancelling drops the in-flight stream and cleans up any
+  `.stage-*` staging folder.
 
 ## Sources
 

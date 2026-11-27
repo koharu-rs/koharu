@@ -291,7 +291,9 @@ function StoryText({
                   aria-label={t('story.translate', { name: plainText(layer.source) })}
                   disabled={locked}
                   className='size-5 rounded-md border-primary/20 bg-primary/15 text-accent-foreground opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100 hover:bg-primary/25 hover:text-accent-foreground focus-visible:opacity-100 dark:border-primary/30 dark:bg-primary/25 dark:hover:bg-primary/35'
-                  onClick={() => send(commands.runPipeline, { blocks: [layer.id] }, ['translate'])}
+                  onClick={() =>
+                    send(commands.runPipeline, { blocks: [layer.id] }, ['translate'], 'normal')
+                  }
                 />
               }
             >
@@ -322,7 +324,9 @@ function StoryText({
                 <DropdownMenuItem
                   key={stage}
                   disabled={locked}
-                  onClick={() => send(commands.runPipeline, { blocks: [layer.id] }, [stage])}
+                  onClick={() =>
+                    send(commands.runPipeline, { blocks: [layer.id] }, [stage], 'normal')
+                  }
                 >
                   {t(`phase.${stage}`)}
                 </DropdownMenuItem>

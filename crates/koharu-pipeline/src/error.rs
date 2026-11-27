@@ -30,6 +30,9 @@ pub enum Error {
     #[error("the runtime shut down")]
     Shutdown,
 
+    #[error(transparent)]
+    AcceleratorLocked(#[from] koharu_runtime::AcceleratorLocked),
+
     #[error("{stage} failed")]
     Stage {
         stage: Stage,

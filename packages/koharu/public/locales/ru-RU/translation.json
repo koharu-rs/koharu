@@ -6,17 +6,55 @@
     "version": "Версия"
   },
   "activity": {
+    "cancelDownload": "Отменить скачивание",
+    "cancelJob": "Отменить {{job}}",
+    "cancelRun": "Отменить задачу в очереди",
     "dismiss": "Закрыть",
+    "dismissDownload": "Скрыть скачивание",
+    "downloadCancelled": "Скачивание отменено.",
     "downloadFailed": "Не удалось скачать.",
-    "downloadingFiles": "Скачивание файлов: {{count}}",
-    "downloadingFiles_one": "Скачивание файлов: {{count}}",
-    "downloadingFiles_other": "Скачивание файлов: {{count}}",
+    "downloadFiles": "{{done}} / {{total}} файлов",
+    "downloadFinished": "Скачано",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/с",
+    "emptyDescription": "Здесь отображаются запуски, очередь задач и скачивание моделей.",
+    "emptyTitle": "Нет недавней активности",
     "loadingPages": "Загрузка страниц: {{loaded}} из {{total}}",
     "modelDownload": "Скачивание модели",
+    "pageRange": "Страницы {{from}}–{{to}}",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
-    "stop": "Остановить",
-    "title": "Активность"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "Повышено за время ожидания",
+      "fifo": "В порядке отправки",
+      "grouped_by_loaded_model": "Сгруппировано по загруженной модели",
+      "lower_vram_cost": "Меньшие затраты на выгрузку VRAM",
+      "waiting_for_download": "Ожидание скачивания модели"
+    },
+    "queueScope": {
+      "area": "Выбранная область",
+      "blocks": "{{count}} блоков",
+      "blocks_one": "{{count}} блок",
+      "blocks_other": "{{count}} блоков",
+      "metadata": "Метаданные",
+      "pages": "{{count}} страниц",
+      "pages_one": "{{count}} страница",
+      "pages_other": "{{count}} страниц",
+      "project": "Весь проект"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "Выполнить сейчас",
+    "retryDownload": "Повторить скачивание",
+    "sections": {
+      "downloads": "Скачивания",
+      "queued": "В очереди",
+      "running": "Выполняется"
+    },
+    "stageRuntime": "Среда",
+    "stopRun": "Остановить запуск",
+    "title": "Активность",
+    "waitingForDownload": "Ожидание скачивания"
   },
   "agent": {
     "cancel": "Отмена",
@@ -40,6 +78,7 @@
     "working": "Работа…"
   },
   "canvas": {
+    "dropToAppend": "Перетащите файлы, чтобы добавить страницы",
     "empty": "Выберите страницу, чтобы начать.",
     "notice": {
       "eraser_needs_raster": "Выберите растровый слой, чтобы стирать."
@@ -68,6 +107,8 @@
   "export": {
     "export": "Экспортировать",
     "imageFormat": "Формат изображений",
+    "lossless": "Без потерь",
+    "losslessDescription": "Сохранять точные данные пикселей без артефактов сжатия.",
     "quality": "Качество",
     "title": "Экспорт в {{format}}"
   },
@@ -161,6 +202,7 @@
       "resize": "Изменение размера",
       "rotate": "Поворот",
       "set_locked": "Блокировка",
+      "set_metadata": "Редактировать метаданные",
       "set_source_text": "Изменение исходного текста",
       "set_style": "Изменение стиля текста",
       "set_text": "Изменение текста",
@@ -181,7 +223,13 @@
     "output": "Результат",
     "pipelineStages": "Этапы конвейера",
     "providerDefault": "По умолчанию у провайдера",
+    "queue": "В очередь",
+    "queueDescription": "Выполнить после завершения текущей пакетной задачи.",
+    "queueProcessing": "Поставить обработку в очередь",
+    "rerunNow": "Выполнить сейчас",
+    "rerunNowDescription": "Опередить очередь на следующем шаге.",
     "run": "Запустить",
+    "runOptions": "Параметры запуска",
     "runProcessing": "Запустить обработку",
     "scope": "Область",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "Этапов: {{count}}",
     "stageCount_one": "Этапов: {{count}}",
     "stageCount_other": "Этапов: {{count}}",
-    "stages": "Этапы",
-    "stop": "Остановить",
-    "stopProcessing": "Остановить обработку"
+    "stages": "Этапы"
   },
   "inspector": {
     "alignBottom": "Выровнять по нижнему краю",
@@ -310,6 +356,7 @@
     "help": "Справка",
     "history": "История",
     "import": "Импортировать страницы",
+    "metadata": "Метаданные…",
     "original": "Показать оригинал",
     "redo": "Повторить",
     "saveDefaultStyles": "Сохранить стили по умолчанию",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "Использовать стили по умолчанию",
     "view": "Вид"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "Только для взрослых 18+",
+      "earlyChildhood": "Для малышей",
+      "everyone": "Для всех",
+      "everyone10Plus": "Для всех 10+",
+      "g": "G",
+      "kidsToAdults": "От детей до взрослых",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "Ожидает рейтинга",
+      "teen": "Для подростков",
+      "unknown": "Неизвестно",
+      "x18Plus": "X18+"
+    },
+    "button": "Метаданные",
+    "description": "Редактируйте метаданные ComicInfo 2.1, хранимые в проекте и экспортируемые в архивы CBZ.",
+    "fields": {
+      "ageRating": "Возрастной рейтинг",
+      "alternateCount": "Альтернативное количество",
+      "alternateNumber": "Альтернативный номер",
+      "alternateSeries": "Альтернативная серия",
+      "blackAndWhite": "Чёрно-белое",
+      "characters": "Персонажи",
+      "colorist": "Колорист",
+      "communityRating": "Оценка сообщества",
+      "count": "Количество",
+      "coverArtist": "Художник обложки",
+      "day": "День",
+      "editor": "Редактор",
+      "format": "Формат",
+      "genre": "Жанр",
+      "gtin": "GTIN",
+      "imprint": "Импринт",
+      "inker": "Тушировщик",
+      "languageIso": "Язык ISO",
+      "letterer": "Леттерер",
+      "locations": "Места",
+      "mainCharacterOrTeam": "Главный персонаж или команда",
+      "manga": "Манга",
+      "month": "Месяц",
+      "notes": "Заметки",
+      "number": "Номер",
+      "pageCount": "Число страниц",
+      "pages": "Страницы",
+      "penciller": "Художник",
+      "publisher": "Издатель",
+      "review": "Отзыв",
+      "scanInformation": "Сведения о сканировании",
+      "series": "Серия",
+      "seriesGroup": "Группа серий",
+      "storyArc": "Сюжетная арка",
+      "storyArcNumber": "Номер арки",
+      "summary": "Описание",
+      "tags": "Теги",
+      "teams": "Команды",
+      "title": "Название",
+      "translator": "Переводчик",
+      "volume": "Том",
+      "web": "Веб",
+      "writer": "Сценарист",
+      "year": "Год"
+    },
+    "languageIsoHint": "При экспорте в CBZ записывается {{target}} (текущий целевой язык перевода).",
+    "manga": {
+      "no": "Нет",
+      "unknown": "Неизвестно",
+      "yes": "Да",
+      "yesAndRightToLeft": "Да (справа налево)"
+    },
+    "moreFields": "Больше полей",
+    "noTranslatableFields": "Добавьте исходный текст хотя бы в одно текстовое поле для перевода.",
+    "original": "Оригинал",
+    "pagesAutoComputed": "{{count}} страниц — пересчитываются автоматически при экспорте CBZ",
+    "pagesAutoComputed_one": "{{count}} страница — пересчитывается автоматически при экспорте CBZ",
+    "pagesAutoComputed_other": "{{count}} страниц — пересчитываются автоматически при экспорте CBZ",
+    "sections": {
+      "charactersAndWorld": "Персонажи и мир",
+      "classification": "Классификация и теги",
+      "common": "Основное",
+      "credits": "Авторы",
+      "notesAndReview": "Заметки и отзыв",
+      "pages": "Страницы",
+      "publishing": "Публикация и выпуск",
+      "seriesAndStory": "Серия и сюжет"
+    },
+    "title": "Метаданные",
+    "translate": "Перевести метаданные",
+    "translated": "Перевод",
+    "translating": "Перевод…",
+    "yesNo": {
+      "no": "Нет",
+      "unknown": "Неизвестно",
+      "yes": "Да"
+    }
+  },
   "model": {
     "baseUrl": "Базовый URL",
     "default": "По умолчанию",
     "targetLanguage": "Язык перевода"
   },
   "modelPicker": {
+    "chooseQuantization": "Выбрать квантование для {{model}}",
+    "downloaded": "Загружено",
     "empty": "Нет доступных моделей.",
     "loading": "Загрузка моделей…",
     "noResults": "Нет моделей, соответствующих поиску.",
+    "notDownloaded": "Не загружено",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "Искать модели",
     "title": "Выбрать модель",
-    "useModel": "Использовать {{model}} от {{provider}}"
+    "units": {
+      "b": "{{value}} Б",
+      "gb": "{{value}} ГБ",
+      "kb": "{{value}} КБ",
+      "mb": "{{value}} МБ"
+    },
+    "useModel": "Использовать {{model}} от {{provider}}",
+    "vramFit": {
+      "fits": "Помещается",
+      "swaps": "Выгрузка",
+      "tooLarge": "Не помещается"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} из {{available}} свободно",
+      "withOther": "≈{{model}} (+ {{other}} другие этапы) из {{available}} свободно"
+    }
   },
   "navigator": {
     "actionsFor": "Действия для {{page}}",
@@ -343,6 +508,12 @@
     "importAction": "Импорт",
     "importFiles": "Файлы…",
     "importFolder": "Папка…",
+    "importSkipped": "Пропущено неподдерживаемых файлов: {{count}}",
+    "importSkippedMore": "{{files}} и ещё {{count}}",
+    "importSkippedMore_one": "{{files}} и ещё {{count}}",
+    "importSkippedMore_other": "{{files}} и ещё {{count}}",
+    "importSkipped_one": "Пропущен неподдерживаемый файл: {{count}}",
+    "importSkipped_other": "Пропущено неподдерживаемых файлов: {{count}}",
     "importing": "Импорт страниц…",
     "importingAction": "Импорт…",
     "noImage": "Нет изображения",
@@ -460,8 +631,13 @@
       "thresholds": "Пороги",
       "title": "Конвейер",
       "translator": {
+        "combinePages": "Объединять страницы",
+        "combinePagesDescription": "Переводит соседние страницы вместе (или добавляет диалоги соседних страниц при включённом Vision) для сохранения имён и контекста.",
         "instructions": "Дополнительные инструкции",
         "instructionsDescription": "Необязательно, на любом языке и в любой форме, например написание имени или тон. Koharu добавляет их как есть после своего системного промпта.",
+        "maxPages": "Макс. страниц за запрос",
+        "maxPagesAuto": "Авто",
+        "maxPagesDescription": "Оставьте пустым для режима «Авто» (по лимитам контекста и вывода модели).",
         "reasoning": "Рассуждение",
         "reasoningDescription": "Использует рассуждение модели во время перевода.",
         "targetLanguageDescription": "Выберите язык, на который нужно перевести текст.",
@@ -542,6 +718,15 @@
     "title": "Подготовка Koharu"
   },
   "status": {
+    "activity": "Активность",
+    "activityActive": "Активно: {{count}}",
+    "activityActive_one": "Активно: {{count}}",
+    "activityActive_other": "Активно: {{count}}",
+    "activityFailed": "Ошибок: {{count}}",
+    "activityFailed_one": "Ошибок: {{count}}",
+    "activityFailed_other": "Ошибок: {{count}}",
+    "activityQueued": "{{active}} · +{{queued}} в очереди",
+    "openActivity": "Открыть вкладку «Активность»",
     "zoom": "Масштаб"
   },
   "story": {

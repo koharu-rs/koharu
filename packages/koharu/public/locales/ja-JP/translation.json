@@ -6,17 +6,55 @@
     "version": "バージョン"
   },
   "activity": {
+    "cancelDownload": "ダウンロードを中止",
+    "cancelJob": "{{job}}を中止",
+    "cancelRun": "待機中のジョブを中止",
     "dismiss": "閉じる",
+    "dismissDownload": "ダウンロードを閉じる",
+    "downloadCancelled": "ダウンロードが中止されました。",
     "downloadFailed": "ダウンロードに失敗しました。",
-    "downloadingFiles": "{{count}}件のファイルをダウンロード中",
-    "downloadingFiles_one": "{{count}}件のファイルをダウンロード中",
-    "downloadingFiles_other": "{{count}}件のファイルをダウンロード中",
+    "downloadFiles": "{{done}} / {{total}} ファイル",
+    "downloadFinished": "ダウンロード完了",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/s",
+    "emptyDescription": "実行中の処理、待機キュー、モデルのダウンロードがここに表示されます。",
+    "emptyTitle": "最近のアクティビティはありません",
     "loadingPages": "ページを読み込み中: {{loaded}} / {{total}}",
     "modelDownload": "モデルのダウンロード",
+    "pageRange": "{{from}}〜{{to}}ページ目",
     "processing": "処理中",
     "processingFailed": "処理に失敗しました。",
-    "stop": "停止",
-    "title": "アクティビティ"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "待機時間による優先",
+      "fifo": "送信順",
+      "grouped_by_loaded_model": "読み込み済みモデルでグループ化",
+      "lower_vram_cost": "VRAM入れ替えコスト小",
+      "waiting_for_download": "モデルダウンロード待機中"
+    },
+    "queueScope": {
+      "area": "選択範囲",
+      "blocks": "{{count}} ブロック",
+      "blocks_one": "{{count}} ブロック",
+      "blocks_other": "{{count}} ブロック",
+      "metadata": "メタデータ",
+      "pages": "{{count}} ページ",
+      "pages_one": "{{count}} ページ",
+      "pages_other": "{{count}} ページ",
+      "project": "プロジェクト全体"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "今すぐ再実行",
+    "retryDownload": "ダウンロードを再試行",
+    "sections": {
+      "downloads": "ダウンロード",
+      "queued": "キュー",
+      "running": "実行中"
+    },
+    "stageRuntime": "ランタイム",
+    "stopRun": "処理を停止",
+    "title": "アクティビティ",
+    "waitingForDownload": "ダウンロード待機中"
   },
   "agent": {
     "cancel": "キャンセル",
@@ -40,6 +78,7 @@
     "working": "作業中…"
   },
   "canvas": {
+    "dropToAppend": "ファイルをドロップしてページを追加",
     "empty": "ページを選択して開始します。",
     "notice": {
       "eraser_needs_raster": "消去するにはラスターレイヤーを選択してください。"
@@ -68,6 +107,8 @@
   "export": {
     "export": "書き出す",
     "imageFormat": "画像形式",
+    "lossless": "可逆圧縮",
+    "losslessDescription": "圧縮ノイズなしで元のピクセルデータを保持します。",
     "quality": "画質",
     "title": "{{format}}で書き出す"
   },
@@ -161,6 +202,7 @@
       "resize": "サイズ変更",
       "rotate": "回転",
       "set_locked": "ロック/ロック解除",
+      "set_metadata": "メタデータを編集",
       "set_source_text": "原文を編集",
       "set_style": "書式を変更",
       "set_text": "テキストを編集",
@@ -181,7 +223,13 @@
     "output": "出力",
     "pipelineStages": "パイプラインの工程",
     "providerDefault": "プロバイダーの既定値",
+    "queue": "キューに追加",
+    "queueDescription": "現在の一括処理の後に実行します。",
+    "queueProcessing": "処理をキューに追加",
+    "rerunNow": "今すぐ再実行",
+    "rerunNowDescription": "次のステップで待機中の処理より先に実行します。",
     "run": "実行",
+    "runOptions": "実行オプション",
     "runProcessing": "処理を実行",
     "scope": "範囲",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}}工程",
     "stageCount_one": "{{count}}工程",
     "stageCount_other": "{{count}}工程",
-    "stages": "工程",
-    "stop": "停止",
-    "stopProcessing": "処理を停止"
+    "stages": "工程"
   },
   "inspector": {
     "alignBottom": "下揃え",
@@ -310,6 +356,7 @@
     "help": "ヘルプ",
     "history": "ヒストリー",
     "import": "ページを読み込む",
+    "metadata": "メタデータ…",
     "original": "元の画像を表示",
     "redo": "やり直す",
     "saveDefaultStyles": "書体を既定として保存",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "既定の書体を使用",
     "view": "表示"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "18歳以上のみ",
+      "earlyChildhood": "幼児向け",
+      "everyone": "全年齢",
+      "everyone10Plus": "10歳以上",
+      "g": "G",
+      "kidsToAdults": "子ども〜大人",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "17歳以上",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "審査予定",
+      "teen": "ティーン",
+      "unknown": "不明",
+      "x18Plus": "X18+"
+    },
+    "button": "メタデータ",
+    "description": "プロジェクトに保存され、CBZ書き出しに含まれる ComicInfo 2.1 メタデータを編集します。",
+    "fields": {
+      "ageRating": "年齢制限",
+      "alternateCount": "別シリーズ総数",
+      "alternateNumber": "別シリーズ番号",
+      "alternateSeries": "別シリーズ",
+      "blackAndWhite": "白黒",
+      "characters": "登場人物",
+      "colorist": "彩色",
+      "communityRating": "コミュニティ評価",
+      "count": "総数",
+      "coverArtist": "表紙作画",
+      "day": "日",
+      "editor": "編集",
+      "format": "形式",
+      "genre": "ジャンル",
+      "gtin": "GTIN",
+      "imprint": "レーベル",
+      "inker": "ペン入れ",
+      "languageIso": "言語 ISO",
+      "letterer": "写植",
+      "locations": "舞台・場所",
+      "mainCharacterOrTeam": "主人公・メインチーム",
+      "manga": "マンガ",
+      "month": "月",
+      "notes": "メモ",
+      "number": "話数・番号",
+      "pageCount": "ページ数",
+      "pages": "ページ",
+      "penciller": "作画",
+      "publisher": "出版社",
+      "review": "レビュー",
+      "scanInformation": "スキャン情報",
+      "series": "シリーズ",
+      "seriesGroup": "シリーズグループ",
+      "storyArc": "ストーリーアーク",
+      "storyArcNumber": "アーク番号",
+      "summary": "あらすじ",
+      "tags": "タグ",
+      "teams": "チーム",
+      "title": "タイトル",
+      "translator": "翻訳者",
+      "volume": "巻",
+      "web": "Web",
+      "writer": "原作者・脚本",
+      "year": "年"
+    },
+    "languageIsoHint": "CBZ書き出しでは {{target}}（現在の翻訳対象言語）が出力されます。",
+    "manga": {
+      "no": "いいえ",
+      "unknown": "不明",
+      "yes": "はい",
+      "yesAndRightToLeft": "はい（右から左）"
+    },
+    "moreFields": "その他の項目",
+    "noTranslatableFields": "翻訳するには少なくとも1つのテキスト項目に原文を入力してください。",
+    "original": "原文",
+    "pagesAutoComputed": "{{count}} ページ — CBZ書き出し時に自動再計算されます",
+    "pagesAutoComputed_one": "{{count}} ページ — CBZ書き出し時に自動再計算されます",
+    "pagesAutoComputed_other": "{{count}} ページ — CBZ書き出し時に自動再計算されます",
+    "sections": {
+      "charactersAndWorld": "キャラクター・世界観",
+      "classification": "分類・タグ",
+      "common": "基本",
+      "credits": "クレジット",
+      "notesAndReview": "メモ・レビュー",
+      "pages": "ページ",
+      "publishing": "出版・刊行",
+      "seriesAndStory": "シリーズ・ストーリー"
+    },
+    "title": "メタデータ",
+    "translate": "メタデータを翻訳",
+    "translated": "翻訳",
+    "translating": "翻訳中…",
+    "yesNo": {
+      "no": "いいえ",
+      "unknown": "不明",
+      "yes": "はい"
+    }
+  },
   "model": {
     "baseUrl": "ベース URL",
     "default": "既定",
     "targetLanguage": "対象言語"
   },
   "modelPicker": {
+    "chooseQuantization": "{{model}}の量子化を選択",
+    "downloaded": "ダウンロード済み",
     "empty": "利用できるモデルがありません。",
     "loading": "モデルを読み込み中…",
     "noResults": "この検索に一致するモデルはありません。",
+    "notDownloaded": "未ダウンロード",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "モデルを検索",
     "title": "モデルを選択",
-    "useModel": "{{provider}}の{{model}}を使用"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "{{provider}}の{{model}}を使用",
+    "vramFit": {
+      "fits": "収まる",
+      "swaps": "入替",
+      "tooLarge": "超過"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} / 空き {{available}}",
+      "withOther": "≈{{model}} (+ 他ステージ {{other}}) / 空き {{available}}"
+    }
   },
   "navigator": {
     "actionsFor": "{{page}}の操作",
@@ -343,6 +508,12 @@
     "importAction": "読み込む",
     "importFiles": "ファイル…",
     "importFolder": "フォルダー…",
+    "importSkipped": "未対応のファイル {{count}} 件をスキップしました",
+    "importSkippedMore": "{{files}}、ほか {{count}} 件",
+    "importSkippedMore_one": "{{files}}、ほか {{count}} 件",
+    "importSkippedMore_other": "{{files}}、ほか {{count}} 件",
+    "importSkipped_one": "未対応のファイル {{count}} 件をスキップしました",
+    "importSkipped_other": "未対応のファイル {{count}} 件をスキップしました",
     "importing": "ページを読み込み中…",
     "importingAction": "読み込み中…",
     "noImage": "画像なし",
@@ -460,8 +631,13 @@
       "thresholds": "しきい値",
       "title": "パイプライン",
       "translator": {
+        "combinePages": "ページをまとめて翻訳",
+        "combinePagesDescription": "連続するページをまとめて翻訳（Vision 有効時は前後の台詞を参考コンテキストとして添付）し、人名や文脈の一貫性を高めます。",
         "instructions": "追加の指示",
         "instructionsDescription": "任意。どの言語・形式でも書けます（名前の表記や口調など）。Koharu は自身のシステムプロンプトの後に、書いたとおりに追加します。",
+        "maxPages": "1リクエストあたりの最大ページ数",
+        "maxPagesAuto": "自動",
+        "maxPagesDescription": "空欄にするとモデルのコンテキスト長・出力上限に合わせて自動調整されます。",
         "reasoning": "推論",
         "reasoningDescription": "翻訳時にモデルの推論を使用します。",
         "targetLanguageDescription": "テキストの翻訳先言語を選択します。",
@@ -542,6 +718,15 @@
     "title": "Koharu を準備しています"
   },
   "status": {
+    "activity": "アクティビティ",
+    "activityActive": "{{count}} 件実行中",
+    "activityActive_one": "{{count}} 件実行中",
+    "activityActive_other": "{{count}} 件実行中",
+    "activityFailed": "{{count}} 件失敗",
+    "activityFailed_one": "{{count}} 件失敗",
+    "activityFailed_other": "{{count}} 件失敗",
+    "activityQueued": "{{active}} · +{{queued}} 件待機",
+    "openActivity": "アクティビティタブを開く",
     "zoom": "ズーム"
   },
   "story": {

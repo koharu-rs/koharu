@@ -19,8 +19,6 @@ cef = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
-globset = { workspace = true }
-hayro = { workspace = true }
 heck = { workspace = true }
 image = { workspace = true }
 indoc = { workspace = true }
@@ -28,18 +26,15 @@ koharu-agent = { workspace = true }
 koharu-canvas = { workspace = true }
 koharu-config = { workspace = true }
 koharu-extensions = { workspace = true }
+koharu-io = { workspace = true }
 koharu-llm = { workspace = true }
 koharu-pipeline = { workspace = true }
-koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-sentry = { workspace = true }
-krilla = { workspace = true }
 kurbo = { workspace = true }
 parking_lot = { workspace = true }
-rars = { workspace = true }
-rayon = { workspace = true }
 rfd = { workspace = true }
 reqwest = { workspace = true }
 sanitize-filename = { workspace = true }
@@ -66,7 +61,6 @@ ui-events = { workspace = true }
 url = { workspace = true }
 webp = { workspace = true }
 wgpu = { workspace = true }
-zip = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true }

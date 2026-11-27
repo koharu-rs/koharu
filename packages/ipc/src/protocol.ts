@@ -25,6 +25,23 @@ export type Account = {
   name: string | null
 }
 
+export type AgeRating =
+  | 'Unknown'
+  | 'Adults Only 18+'
+  | 'Early Childhood'
+  | 'Everyone'
+  | 'Everyone 10+'
+  | 'G'
+  | 'Kids to Adults'
+  | 'M'
+  | 'MA15+'
+  | 'Mature 17+'
+  | 'PG'
+  | 'R18+'
+  | 'Rating Pending'
+  | 'Teen'
+  | 'X18+'
+
 /**  `[agent]`: the agent's model and how much it reasons. */
 export type AgentConfig = {
   /**  A `vendor/model` reference, as koharu-llm connects one. */
@@ -55,7 +72,7 @@ export type Align = 'start' | 'center' | 'end' | 'justify'
  */
 export type Anchor = 'start' | 'center' | 'end'
 
-export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History
+export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History | { [key in string]: Value }
 
 /**
  *  A painted area of a page: a byte a pixel over `rect`, in page pixels,
@@ -228,6 +245,84 @@ export type Colors = {
 }
 
 /**
+ *  Full ComicInfo.xml 2.1 metadata (all 44 XSD elements).
+ *
+ *  The 14 prose elements use [`LocalizedField`] while structural elements are
+ *  stored raw.
+ */
+export type ComicInfo = {
+  title?: LocalizedField | null
+  series?: LocalizedField | null
+  number?: string | null
+  count?: number | null
+  volume?: number | null
+  alternate_series?: LocalizedField | null
+  alternate_number?: string | null
+  alternate_count?: number | null
+  summary?: LocalizedField | null
+  notes?: LocalizedField | null
+  year?: number | null
+  month?: number | null
+  day?: number | null
+  writer?: string | null
+  penciller?: string | null
+  inker?: string | null
+  colorist?: string | null
+  letterer?: string | null
+  cover_artist?: string | null
+  editor?: string | null
+  translator?: string | null
+  publisher?: string | null
+  imprint?: string | null
+  genre?: LocalizedField | null
+  tags?: LocalizedField | null
+  web?: string | null
+  page_count?: number | null
+  language_iso?: string | null
+  format?: string | null
+  black_and_white?: YesNo | null
+  manga?: Manga | null
+  characters?: LocalizedField | null
+  teams?: LocalizedField | null
+  locations?: LocalizedField | null
+  scan_information?: string | null
+  story_arc?: LocalizedField | null
+  story_arc_number?: string | null
+  series_group?: LocalizedField | null
+  age_rating?: AgeRating | null
+  pages?: ComicPageInfo[]
+  community_rating?: number | null
+  main_character_or_team?: LocalizedField | null
+  review?: LocalizedField | null
+  gtin?: string | null
+}
+
+/**  One `<Page .../>` entry inside `<Pages>` in ComicInfo.xml 2.1. */
+export type ComicPageInfo = {
+  image?: number
+  page_type?: ComicPageType | null
+  double_page?: boolean | null
+  image_size?: number | null
+  key?: string | null
+  bookmark?: string | null
+  image_width?: number | null
+  image_height?: number | null
+}
+
+export type ComicPageType =
+  | 'FrontCover'
+  | 'InnerCover'
+  | 'Roundup'
+  | 'Story'
+  | 'Advertisement'
+  | 'Editorial'
+  | 'Letters'
+  | 'Preview'
+  | 'BackCover'
+  | 'Other'
+  | 'Deleted'
+
+/**
  *  A layer's kind and what that kind holds. In JSON its fields sit beside the
  *  layer's own, tagged by `kind`.
  */
@@ -279,6 +374,23 @@ export type DetectorConfig = {
 
 export type Direction = 'horizontal' | 'vertical'
 
+/**  Snapshot of a single grouped download entry tracked by `DownloadManager`. */
+export type DownloadEntry = {
+  id: number
+  model_id: string
+  model_name: string
+  stage: string | null
+  completed: number
+  total: number
+  bytes_per_sec: number
+  files_done: number
+  files_total: number
+  state: DownloadState
+}
+
+/**  Lifecycle state of a tracked download entry. */
+export type DownloadState = 'Running' | 'Finished' | { Failed: string } | 'Cancelled'
+
 /**
  *  One change to the project, committed as one undo step, from whoever made
  *  it: the editor, the pipeline, or an agent.
@@ -329,6 +441,15 @@ export type Event =
   | { type: 'tool_started'; tool: string; arguments: Value }
   | { type: 'tool_finished'; tool: string; error: string | null }
 
+/**  Remembered export defaults persisted in `config.toml`. */
+export type ExportConfig = {
+  cbz_codec?: ImageCodec
+  /**  Lossy encoding quality in `1..=100` for JPEG, WebP, and JPEG XL. */
+  quality?: number
+  /**  Lossless encoding for WebP and JPEG XL (PNG is always lossless; JPEG is always lossy). */
+  lossless?: boolean
+}
+
 /**
  *  What the pages go out as: a folder of images or of PSDs, a CBZ of
  *  images, or a PDF.
@@ -358,6 +479,13 @@ export type FacingPage = {
   page: PageId
   side: Side
 }
+
+/**  A file or folder dragged over or dropped onto the main window, in CSS pixels. */
+export type FileDrag =
+  | { phase: 'enter'; x: number; y: number }
+  | { phase: 'over'; x: number; y: number }
+  | { phase: 'drop'; x: number; y: number; paths: string[] }
+  | { phase: 'leave' }
 
 export type FillRule = 'non_zero' | 'even_odd'
 
@@ -456,9 +584,12 @@ export type Image = {
   transform?: Transform
 }
 
+/**  Image codec identifier stored in preferences and accepted by the CLI. */
+export type ImageCodec = 'png' | 'jpeg' | 'webp' | 'jxl'
+
 /**
- *  How a flattened page is written: PNG's without loss, JPEG's and WebP's at
- *  a quality from 1 to 100.
+ *  How a flattened page is written: PNG is lossless; JPEG is lossy at a
+ *  quality from 1 to 100; WebP and JPEG XL support lossless or lossy at 1 to 100.
  */
 export type ImageFormat =
   | 'png'
@@ -466,16 +597,28 @@ export type ImageFormat =
       jpeg: {
         quality: number
       }
-    } & { webp?: never })
+    } & { jxl?: never; webp?: never })
   | ({
       webp: {
         quality: number
+        lossless?: boolean
       }
-    } & { jpeg?: never })
+    } & { jpeg?: never; jxl?: never })
+  | ({
+      jxl: {
+        quality: number
+        lossless?: boolean
+      }
+    } & { jpeg?: never; webp?: never })
+
+export type ImportReport = {
+  added_pages: number
+  skipped_files: string[]
+}
 
 export type ImportSource =
   | 'files'
-  /**  Every page file directly in a folder. */
+  /**  Every page file inside a folder. */
   | 'folder'
 
 /**  The inpainters, by id in the section and by name. */
@@ -631,6 +774,14 @@ export type Loading = {
   error: string | null
 }
 
+/**  A translatable prose field storing both original and optional translated text. */
+export type LocalizedField = {
+  original?: string
+  translated?: string | null
+}
+
+export type Manga = 'Unknown' | 'No' | 'Yes' | 'YesAndRightToLeft'
+
 /**
  *  Grey pixels that limit its parent's visibility, as Photoshop's and Clip
  *  Studio Paint's layer masks do; never drawn. Masks apply in order.
@@ -651,16 +802,22 @@ export type Meta = {
   styles?: Partial<{ [key in Kernel]: { [key in string]: Face } }>
 }
 
-/**  A model the translator or the agent can use, as rig's catalog describes it. */
-export type Model = {
-  /**  A `vendor/model` reference, as the preferences hold one. */
+export type ModelCatalog = {
+  available_vram_bytes: number | null
+  total_vram_bytes: number | null
+  detect: StageModelEntry[]
+  recognize: StageModelEntry[]
+  inpaint: StageModelEntry[]
+  translate: TranslateModelEntry[]
+}
+
+export type ModelVariant = {
+  id: string
   reference: string
   name: string
-  vendor: string
-  /**  Whether it reads images, as the translator's vision needs. */
-  images: boolean
-  /**  Whether it calls tools, as the agent needs. */
-  tools: boolean
+  disk_bytes: number
+  downloaded: boolean
+  measured_vram_bytes: number | null
 }
 
 /**  What `add_layer` takes, with every default a new layer gets. */
@@ -771,6 +928,8 @@ export type Op =
    *  Attributes are data for tools: provenance goes under `c2pa`, by step.
    */
   | { op: 'set_attribute'; layer: Ref; namespace: string; key: string; value?: Value | null }
+  /**  Set one project metadata entry, or remove it when `value` is null. */
+  | { op: 'set_project_metadata'; key: string; value?: Value | null }
   /**
    *  Replace pixels of a layer's picture, in its own pixel coordinates:
    *  RGBA8 for a raster or a block's `cleanup`, grey8 for a mask or a
@@ -808,7 +967,7 @@ export type Outcome =
    *  A failure that isn't one page's alone ends the run; what it finished
    *  stays.
    */
-  | { kind: 'failed'; page: PageId; stage: Stage; reason: string }
+  | { kind: 'failed'; page: PageId | null; stage: Stage; reason: string }
   | { kind: 'stopped' }
 
 /**
@@ -879,20 +1038,36 @@ export type PipelineConfig = {
 }
 
 /**
- *  A run was queued, a stage started, finished, or failed on a page, or a run
- *  ended. A stage starts when the GPU takes it, or for a hosted translation
- *  when it's sent.
+ *  A run was queued, waiting on downloads, coalesced, a stage started,
+ *  finished, failed, or was cancelled on a page, or a run ended. A stage
+ *  starts when the GPU takes it, or for a hosted translation when it's sent.
  */
 export type PipelineEvent =
   /**
    *  The run's first event: the page stages it does, each of which starts
-   *  once, and finishes or fails, unless the run ends first.
+   *  once, and finishes or fails, unless the job or run is cancelled or
+   *  coalesces first.
    */
-  | { kind: 'queued'; run: RunId; steps: number }
-  | { kind: 'started'; run: RunId; page: PageId; stage: Stage }
-  | { kind: 'finished'; run: RunId; page: PageId; stage: Stage }
-  /**  A failure that is the page's alone: the run goes on. */
-  | { kind: 'failed'; run: RunId; page: PageId; stage: Stage; reason: string }
+  | {
+      kind: 'queued'
+      run: RunId
+      steps: number
+      priority: RunPriority
+      scope: QueueScope
+      stages: Stage[]
+      jobs: QueuedStep[]
+    }
+  | { kind: 'waiting_for_download'; run: RunId; downloads: number[] }
+  | { kind: 'started'; run: RunId; page: PageId | null; stage: Stage; model: string | null }
+  | { kind: 'finished'; run: RunId; page: PageId | null; stage: Stage }
+  /**  A failure that is the page's (or metadata step's) alone: the run goes on. */
+  | { kind: 'failed'; run: RunId; page: PageId | null; stage: Stage; reason: string }
+  /**  A single page-stage (or metadata) job inside a run was cancelled. */
+  | { kind: 'job_cancelled'; run: RunId; page: PageId | null; stage: Stage }
+  /**  A queued batch run was merged into an earlier compatible queued run. */
+  | { kind: 'coalesced'; run: RunId; into: RunId }
+  /**  The scheduler's current queued and download-waiting order changed. */
+  | { kind: 'queue_updated'; order: QueuedRunSummary[] }
   | { kind: 'ended'; run: RunId; outcome: Outcome }
 
 /**
@@ -911,6 +1086,7 @@ export type Preferences = {
   renderer: RendererConfig
   agent: AgentConfig
   providers: Providers
+  export: ExportConfig
 }
 
 export type ProjectAnswer = {
@@ -952,6 +1128,42 @@ export type Query =
   | { query: 'get_story'; page: PageId }
   /**  Get the undo and redo labels. */
   | { query: 'get_history' }
+  /**  Get all project-level metadata entries. */
+  | { query: 'get_project_metadata' }
+
+/**  Why a queued run sits at its current position in the queue. */
+export type QueueOrderReason =
+  | 'fifo'
+  | 'grouped_by_loaded_model'
+  | 'lower_vram_cost'
+  | 'aged_priority'
+  | 'waiting_for_download'
+
+/**  Lightweight summary of a run's target scope (without pixel buffers). */
+export type QueueScope =
+  | { kind: 'project' }
+  | { kind: 'pages'; count: number }
+  | { kind: 'blocks'; count: number }
+  | { kind: 'area' }
+  | { kind: 'metadata' }
+
+/**  A queued or download-waiting run in the scheduler's current execution order. */
+export type QueuedRunSummary = {
+  run: RunId
+  steps: number
+  scope: QueueScope
+  stages: Stage[]
+  jobs: QueuedStep[]
+  priority: RunPriority
+  waiting_downloads: number[]
+  reason: QueueOrderReason | null
+}
+
+/**  One page-stage (or metadata-translation) job inside a run. */
+export type QueuedStep = {
+  page: PageId | null
+  stage: Stage
+}
 
 export type RangeInclusive<T> = {
   start: T
@@ -1070,6 +1282,12 @@ export type RubyEdit =
 /**  A run, numbered in the order runs were asked for. */
 export type RunId = number
 
+/**  Queue scheduling priority for a pipeline request. */
+export type RunPriority =
+  | 'normal'
+  /**  Jumps ahead of queued batch runs and starts at the next page/stage boundary. */
+  | 'rerun_now'
+
 /**  A series: its chapters in reading order. */
 export type Series = {
   title: string
@@ -1135,7 +1353,14 @@ export type Span = {
 /**  A stage, in the order a page's stages run. */
 export type Stage = 'detect' | 'recognize' | 'inpaint' | 'translate'
 
-export type State = 'Running' | 'Finished' | { Failed: string }
+export type StageModelEntry = {
+  id: string
+  name: string
+  stage: Stage
+  disk_bytes: number
+  downloaded: boolean
+  measured_vram_bytes: number | null
+}
 
 /**
  *  The Story panel as the canvas follows it: while it shows, every text's
@@ -1177,6 +1402,8 @@ export type Target =
         layer: LayerId | null
       }
     } & { blocks?: never; pages?: never })
+  /**  Project ComicInfo prose metadata translation only. */
+  | 'metadata'
 
 /**
  *  Styled text in a frame. `content` is set when its layer is added; after
@@ -1229,23 +1456,23 @@ export type Tool =
   | 'remove'
   | 'pan'
 
-/**  One transfer's whole state. */
-export type Transfer = {
-  /**  The same for every state of one transfer. */
-  id: number
-  /**  The file's name. */
-  name: string
-  completed: number
-  /**  0 while the size isn't known. */
-  total: number
-  state: State
-}
-
 /**
  *  A 2D affine `[[a, b, c], [d, e, f]]`, mapping `(x, y)` to
  *  `(a x + b y + c, d x + e y + f)`, like Figma's `relativeTransform`.
  */
 export type Transform = [[number, number, number], [number, number, number]]
+
+export type TranslateModelEntry = {
+  reference: string
+  name: string
+  vendor: string
+  images: boolean
+  tools: boolean
+  disk_bytes: number | null
+  downloaded: boolean
+  measured_vram_bytes: number | null
+  variants: ModelVariant[]
+}
 
 export type TranslatorConfig = {
   /**  A `vendor/model` reference, as koharu-llm connects one. */
@@ -1271,6 +1498,18 @@ export type TranslatorConfig = {
    *  can't stop reasoning.
    */
   reasoning?: string | null
+  /**
+   *  Whether to combine consecutive pages into multi-page batches (when
+   *  Vision is off) or include marked neighboring dialogue for continuity
+   *  (when Vision is on with general models). Inspired by NeKoharu.
+   */
+  combine_pages?: boolean
+  /**
+   *  Optional upper limit on pages per combined request (or neighbor window
+   *  when Vision is on). `None` sizes batches automatically from the model's
+   *  context and output limits.
+   */
+  max_pages_per_request?: number | null
 }
 
 /**  The text being typed into, as the host shows it. */
@@ -1310,6 +1549,8 @@ export type Vendor = {
   connected: boolean
 }
 
+export type YesNo = 'Unknown' | 'No' | 'Yes'
+
 export const commands = {
   listProjects: () =>
     runner('list_projects', (options) => invoke<string[]>('list_projects', {}, options)),
@@ -1342,12 +1583,14 @@ export const commands = {
     runner('get_page_thumbnail', (options) =>
       invoke<ArrayBuffer>('get_page_thumbnail', { page }, options),
     ),
-  /** Runs `stages` on `target`; each run's events go out as `pipeline`. */
-  runPipeline: (target: Target, stages: Stage[]) =>
-    runner('run_pipeline', (options) => invoke<RunId>('run_pipeline', { target, stages }, options)),
-  /** Stops every run, running and queued; what they finished stays. */
-  stopPipeline: () =>
-    runner('stop_pipeline', (options) => invoke<null>('stop_pipeline', {}, options)),
+  /** Runs `stages` on `target` at `priority` (queued normally when `None`); each run's events go out as `pipeline`. */
+  runPipeline: (target: Target, stages: Stage[], priority: RunPriority | null) =>
+    runner('run_pipeline', (options) =>
+      invoke<RunId>('run_pipeline', { target, stages, priority }, options),
+    ),
+  /** Cancels a single queued/running job `(run, page, stage)` when both `run` and `stage` are given, an entire run when `run` is `Some` and `stage` is `None`, or every run when `run` is `None`; what they finished stays. */
+  cancelRun: (run: RunId | null, page: PageId | null, stage: Stage | null) =>
+    runner('cancel_run', (options) => invoke<null>('cancel_run', { run, page, stage }, options)),
   /** Unloads every model the pipeline loaded once the GPU's current call ends, freeing its memory as Photoshop's Edit → Purge frees memory; each loads again when a stage next needs it. */
   unload: () => runner('unload', (options) => invoke<null>('unload', {}, options)),
   /** What every run told so far, for an interface that loaded late. */
@@ -1355,6 +1598,18 @@ export const commands = {
     runner('get_pipeline_events', (options) =>
       invoke<PipelineEvent[]>('get_pipeline_events', {}, options),
     ),
+  /** Every tracked download in ascending order of `id`. */
+  listDownloads: () =>
+    runner('list_downloads', (options) => invoke<DownloadEntry[]>('list_downloads', {}, options)),
+  /** Cancels the active download `id`. */
+  cancelDownload: (id: number) =>
+    runner('cancel_download', (options) => invoke<null>('cancel_download', { id }, options)),
+  /** Retries a failed or cancelled model download `id` in place. */
+  retryDownload: (id: number) =>
+    runner('retry_download', (options) => invoke<null>('retry_download', { id }, options)),
+  /** Removes a finished, failed, or cancelled download `id` from the list. */
+  dismissDownload: (id: number) =>
+    runner('dismiss_download', (options) => invoke<null>('dismiss_download', { id }, options)),
   /** Runs `prompt` on the open project, in its conversation, in place of the run going, and answers the run's id at once; `on_event` hears the run's events and how it ended. The model connects inside the run, so closing the project stops a connection as it stops a run. */
   runAgent: (prompt: string, onEvent: Channel<AgentEvent>) =>
     runner('run_agent', (options) => invoke<number>('run_agent', { prompt, onEvent }, options)),
@@ -1369,8 +1624,11 @@ export const commands = {
     runner('save_preferences', (options) =>
       invoke<Preferences>('save_preferences', { preferences }, options),
     ),
-  /** Koharu's own models, and each vendor's that has a key or a sign-in. */
-  listModels: () => runner('list_models', (options) => invoke<Model[]>('list_models', {}, options)),
+  /** Every stage's models and each vendor's language models, together with disk sizes, download status, and optional VRAM telemetry/footprints when a discrete CUDA/ROCm runtime is already installed locally. */
+  listModelCatalog: () =>
+    runner('list_model_catalog', (options) =>
+      invoke<ModelCatalog>('list_model_catalog', {}, options),
+    ),
   /** Every vendor Koharu lists models from, in its order. */
   listVendors: () =>
     runner('list_vendors', (options) => invoke<Vendor[]>('list_vendors', {}, options)),
@@ -1424,6 +1682,11 @@ export const commands = {
   /** Picks files or a folder and adds their pages after the project's last: the files in name order, numbers by value, an archive's or a PDF's own pages in theirs. */
   import: (source: ImportSource) =>
     runner('import', (options) => invoke<null>('import', { source }, options)),
+  /** Imports dropped or provided file/folder paths starting at `insert_at` (or at the end when `None`), expanding directories recursively in alphanumeric order. */
+  importPaths: (paths: string[], insertAt: number | null) =>
+    runner('import_paths', (options) =>
+      invoke<ImportReport>('import_paths', { paths, insertAt }, options),
+    ),
   /** Picks where the open project's pages go, and writes them there: `pages` alone, or every page when it's `None`, in the project's order. */
   export: (pages: PageId[] | null, format: ExportFormat) =>
     runner('export', (options) => invoke<null>('export', { pages, format }, options)),
@@ -1432,6 +1695,12 @@ export const commands = {
     runner('get_keyboard', (options) =>
       invoke<{ [key in string]: Place }>('get_keyboard', {}, options),
     ),
+  /** Returns the open project's ComicInfo metadata without mutating disk. */
+  getComicInfo: () =>
+    runner('get_comic_info', (options) => invoke<ComicInfo>('get_comic_info', {}, options)),
+  /** Reconciles stale prose translations against the stored metadata and commits the updated ComicInfo as an undoable `"set_metadata"` edit. */
+  setComicInfo: (comicInfo: ComicInfo) =>
+    runner('set_comic_info', (options) => invoke<Change>('set_comic_info', { comicInfo }, options)),
   /** The canvas element's rectangle, in CSS pixels from the window's corner. */
   setViewport: (x: number, y: number, width: number, height: number) =>
     runner('set_viewport', (options) =>
@@ -1498,8 +1767,10 @@ export const events = {
     listen<Notice>('notice', (event) => handler(event.payload)),
   pipeline: (handler: (payload: PipelineEvent) => void): Promise<UnlistenFn> =>
     listen<PipelineEvent>('pipeline', (event) => handler(event.payload)),
-  download: (handler: (payload: Transfer) => void): Promise<UnlistenFn> =>
-    listen<Transfer>('download', (event) => handler(event.payload)),
+  download: (handler: (payload: DownloadEntry) => void): Promise<UnlistenFn> =>
+    listen<DownloadEntry>('download', (event) => handler(event.payload)),
   chapter: (handler: (payload: Loading) => void): Promise<UnlistenFn> =>
     listen<Loading>('chapter', (event) => handler(event.payload)),
+  fileDrag: (handler: (payload: FileDrag) => void): Promise<UnlistenFn> =>
+    listen<FileDrag>('file_drag', (event) => handler(event.payload)),
 }

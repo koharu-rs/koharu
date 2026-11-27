@@ -17,7 +17,7 @@ use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 pub use self::model::Detector;
 use super::{Task, key};
-use crate::{PipelineConfig, Stage};
+use crate::{PipelineConfig, Stage, gpu::LoadOutcome};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -65,6 +65,9 @@ pub(crate) struct Detection {
 
 pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Result<()> {
     let member = &task.members[0];
+    if member.cancel.is_cancelled() {
+        return Err(super::Stopped.into());
+    }
     let read = member.clone();
     let scan = tokio::task::spawn_blocking(move || {
         let _span =
@@ -83,15 +86,27 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
         bubble: config.bubble,
         panel: config.panel,
     };
+    let run = member.run;
     let loading = key.clone();
     let (scan, detected) = task
         .inference(&[member], move |models| {
-            let (detector, _) = models.get(&loading, |device| model::load(config.model, device))?;
-            let detected = detector.inference(&scan, &options)?;
+            let detected = models.run(
+                &loading,
+                &[run],
+                None,
+                |device| async move {
+                    Ok(LoadOutcome {
+                        model: model::load(config.model, device).await?,
+                        teardown: None,
+                        full_gpu: true,
+                    })
+                },
+                |(detector, _)| detector.inference(&scan, &options),
+            )?;
             Ok((scan, detected))
         })
         .await?;
-    let page = member.page;
+    let page = member.page_id();
     let name = config.model.to_string();
     let (layout, typography, masks, crops) = tokio::task::spawn_blocking(move || {
         let pixels = scan.to_rgb8();
@@ -113,28 +128,41 @@ pub(crate) async fn detect(task: &Task, config: &PipelineConfig) -> anyhow::Resu
     let letterings = layout.lettering.len();
     let kernels = task
         .inference(&[member], move |models| {
-            let (_, fonts) = models.get(&key, |device| model::load(config.model, device))?;
             let (at, crops): (Vec<usize>, Vec<_>) = crops.into_iter().unzip();
-            let _span = tracing::info_span!("fonts", crops = crops.len()).entered();
-            // Each lettering's readings, one a crop, averaged.
-            let mut sums: Vec<Option<(layers::Kernels, f32)>> = vec![None; letterings];
-            for (at, read) in at.into_iter().zip(fonts.inference(&crops)?) {
-                let (sum, count) = sums[at].get_or_insert_with(Default::default);
-                for (kernel, probability) in read {
-                    *sum.entry(kernel).or_default() += probability;
-                }
-                *count += 1.0;
-            }
-            Ok(sums
-                .into_iter()
-                .map(|sum| {
-                    sum.map(|(sum, count)| {
-                        sum.into_iter()
-                            .map(|(kernel, total)| (kernel, total / count))
-                            .collect()
+            models.run(
+                &key,
+                &[run],
+                None,
+                |device| async move {
+                    Ok(LoadOutcome {
+                        model: model::load(config.model, device).await?,
+                        teardown: None,
+                        full_gpu: true,
                     })
-                })
-                .collect::<Vec<_>>())
+                },
+                |(_, fonts)| {
+                    let _span = tracing::info_span!("fonts", crops = crops.len()).entered();
+                    // Each lettering's readings, one a crop, averaged.
+                    let mut sums: Vec<Option<(layers::Kernels, f32)>> = vec![None; letterings];
+                    for (at, read) in at.iter().copied().zip(fonts.inference(&crops)?) {
+                        let (sum, count) = sums[at].get_or_insert_with(Default::default);
+                        for (kernel, probability) in read {
+                            *sum.entry(kernel).or_default() += probability;
+                        }
+                        *count += 1.0;
+                    }
+                    Ok(sums
+                        .into_iter()
+                        .map(|sum| {
+                            sum.map(|(sum, count)| {
+                                sum.into_iter()
+                                    .map(|(kernel, total)| (kernel, total / count))
+                                    .collect()
+                            })
+                        })
+                        .collect::<Vec<_>>())
+                },
+            )
         })
         .await?;
     member

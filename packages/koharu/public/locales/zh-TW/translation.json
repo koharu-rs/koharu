@@ -6,17 +6,55 @@
     "version": "版本"
   },
   "activity": {
+    "cancelDownload": "取消下載",
+    "cancelJob": "取消 {{job}}",
+    "cancelRun": "取消排隊任務",
     "dismiss": "關閉",
+    "dismissDownload": "關閉下載記錄",
+    "downloadCancelled": "下載已取消。",
     "downloadFailed": "下載失敗。",
-    "downloadingFiles": "正在下載 {{count}} 個檔案",
-    "downloadingFiles_one": "正在下載 {{count}} 個檔案",
-    "downloadingFiles_other": "正在下載 {{count}} 個檔案",
+    "downloadFiles": "{{done}} / {{total}} 個檔案",
+    "downloadFinished": "下載完成",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/s",
+    "emptyDescription": "執行中的任務、排隊佇列與模型下載會顯示在這裡。",
+    "emptyTitle": "暫無活動",
     "loadingPages": "正在載入頁面：{{loaded}} / {{total}}",
     "modelDownload": "模型下載",
+    "pageRange": "第 {{from}}–{{to}} 頁",
     "processing": "正在處理",
     "processingFailed": "處理失敗。",
-    "stop": "停止",
-    "title": "活動"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "等待逾時提權",
+      "fifo": "依提交順序",
+      "grouped_by_loaded_model": "依已載入模型分組",
+      "lower_vram_cost": "顯存切換開銷較低",
+      "waiting_for_download": "等待模型下載"
+    },
+    "queueScope": {
+      "area": "選取區域",
+      "blocks": "{{count}} 個文字區塊",
+      "blocks_one": "{{count}} 個文字區塊",
+      "blocks_other": "{{count}} 個文字區塊",
+      "metadata": "中繼資料",
+      "pages": "{{count}} 頁",
+      "pages_one": "{{count}} 頁",
+      "pages_other": "{{count}} 頁",
+      "project": "整個專案"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "立即重跑",
+    "retryDownload": "重試下載",
+    "sections": {
+      "downloads": "下載",
+      "queued": "排隊中",
+      "running": "執行中"
+    },
+    "stageRuntime": "執行環境",
+    "stopRun": "停止執行",
+    "title": "活動",
+    "waitingForDownload": "等待下載"
   },
   "agent": {
     "cancel": "取消",
@@ -40,6 +78,7 @@
     "working": "正在工作…"
   },
   "canvas": {
+    "dropToAppend": "拖放檔案以附加頁面",
     "empty": "請選擇頁面以開始。",
     "notice": {
       "eraser_needs_raster": "請先選擇點陣圖層再擦除。"
@@ -68,6 +107,8 @@
   "export": {
     "export": "匯出",
     "imageFormat": "影像格式",
+    "lossless": "無損",
+    "losslessDescription": "保留精確像素資料，不產生壓縮失真。",
     "quality": "品質",
     "title": "匯出為 {{format}}"
   },
@@ -161,6 +202,7 @@
       "resize": "調整大小",
       "rotate": "旋轉",
       "set_locked": "鎖定或解鎖",
+      "set_metadata": "編輯中繼資料",
       "set_source_text": "編輯原文",
       "set_style": "變更文字樣式",
       "set_text": "編輯文字",
@@ -181,7 +223,13 @@
     "output": "輸出",
     "pipelineStages": "處理流程階段",
     "providerDefault": "提供者預設值",
+    "queue": "加入佇列",
+    "queueDescription": "於目前批次處理完成後執行。",
+    "queueProcessing": "將處理加入佇列",
+    "rerunNow": "立即重跑",
+    "rerunNowDescription": "於下一步插隊至排隊批次處理之前執行。",
     "run": "執行",
+    "runOptions": "執行選項",
     "runProcessing": "執行處理",
     "scope": "範圍",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}} 個階段",
     "stageCount_one": "{{count}} 個階段",
     "stageCount_other": "{{count}} 個階段",
-    "stages": "階段",
-    "stop": "停止",
-    "stopProcessing": "停止處理"
+    "stages": "階段"
   },
   "inspector": {
     "alignBottom": "底端對齊",
@@ -310,6 +356,7 @@
     "help": "說明",
     "history": "步驟記錄",
     "import": "匯入頁面",
+    "metadata": "中繼資料…",
     "original": "顯示原圖",
     "redo": "重做",
     "saveDefaultStyles": "將書體存為預設",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "使用預設書體",
     "view": "檢視"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "僅限成人 18+",
+      "earlyChildhood": "幼兒",
+      "everyone": "普遍級",
+      "everyone10Plus": "10+ 普遍級",
+      "g": "G",
+      "kidsToAdults": "兒童至成人",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "限制級 17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "待分級",
+      "teen": "青少年",
+      "unknown": "未知",
+      "x18Plus": "X18+"
+    },
+    "button": "中繼資料",
+    "description": "編輯隨專案儲存並匯出至 CBZ 壓縮檔中的 ComicInfo 2.1 中繼資料。",
+    "fields": {
+      "ageRating": "年齡分級",
+      "alternateCount": "替代總期數",
+      "alternateNumber": "替代編號",
+      "alternateSeries": "替代系列",
+      "blackAndWhite": "黑白",
+      "characters": "角色",
+      "colorist": "上色",
+      "communityRating": "社群評分",
+      "count": "總期數",
+      "coverArtist": "封面繪師",
+      "day": "日",
+      "editor": "編輯",
+      "format": "格式",
+      "genre": "類型",
+      "gtin": "GTIN",
+      "imprint": "子品牌",
+      "inker": "描線",
+      "languageIso": "語言 ISO",
+      "letterer": "嵌字",
+      "locations": "地點",
+      "mainCharacterOrTeam": "主角或團隊",
+      "manga": "漫畫",
+      "month": "月",
+      "notes": "備註",
+      "number": "話數/編號",
+      "pageCount": "頁數",
+      "pages": "頁面",
+      "penciller": "線稿繪師",
+      "publisher": "出版社",
+      "review": "評論",
+      "scanInformation": "掃圖資訊",
+      "series": "系列",
+      "seriesGroup": "系列群組",
+      "storyArc": "故事線",
+      "storyArcNumber": "故事線編號",
+      "summary": "簡介",
+      "tags": "標籤",
+      "teams": "團隊",
+      "title": "標題",
+      "translator": "譯者",
+      "volume": "卷",
+      "web": "網址",
+      "writer": "作者",
+      "year": "年"
+    },
+    "languageIsoHint": "CBZ 匯出將寫入 {{target}}（目前翻譯目標語言）。",
+    "manga": {
+      "no": "否",
+      "unknown": "未知",
+      "yes": "是",
+      "yesAndRightToLeft": "是（由右至左）"
+    },
+    "moreFields": "更多欄位",
+    "noTranslatableFields": "請在至少一個文字欄位中填入原文後再翻譯。",
+    "original": "原文",
+    "pagesAutoComputed": "{{count}} 頁 — CBZ 匯出時自動重新計算",
+    "pagesAutoComputed_one": "{{count}} 頁 — CBZ 匯出時自動重新計算",
+    "pagesAutoComputed_other": "{{count}} 頁 — CBZ 匯出時自動重新計算",
+    "sections": {
+      "charactersAndWorld": "角色與世界觀",
+      "classification": "分類與標籤",
+      "common": "常用",
+      "credits": "製作人員",
+      "notesAndReview": "備註與評論",
+      "pages": "頁面",
+      "publishing": "出版與發行",
+      "seriesAndStory": "系列與故事"
+    },
+    "title": "中繼資料",
+    "translate": "翻譯中繼資料",
+    "translated": "譯文",
+    "translating": "翻譯中…",
+    "yesNo": {
+      "no": "否",
+      "unknown": "未知",
+      "yes": "是"
+    }
+  },
   "model": {
     "baseUrl": "基礎 URL",
     "default": "預設",
     "targetLanguage": "目標語言"
   },
   "modelPicker": {
+    "chooseQuantization": "為 {{model}} 選擇量化",
+    "downloaded": "已下載",
     "empty": "沒有可用的模型。",
     "loading": "正在載入模型…",
     "noResults": "沒有符合此搜尋的模型。",
+    "notDownloaded": "未下載",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "搜尋模型",
     "title": "選擇模型",
-    "useModel": "使用 {{provider}} 的 {{model}}"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "使用 {{provider}} 的 {{model}}",
+    "vramFit": {
+      "fits": "可容納",
+      "swaps": "需換出",
+      "tooLarge": "過大"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} / 可用 {{available}}",
+      "withOther": "≈{{model}} (+ 其他階段 {{other}}) / 可用 {{available}}"
+    }
   },
   "navigator": {
     "actionsFor": "{{page}} 的操作",
@@ -343,6 +508,12 @@
     "importAction": "匯入",
     "importFiles": "檔案…",
     "importFolder": "資料夾…",
+    "importSkipped": "已略過 {{count}} 個不支援的檔案",
+    "importSkippedMore": "{{files}} 等另外 {{count}} 個",
+    "importSkippedMore_one": "{{files}} 等另外 {{count}} 個",
+    "importSkippedMore_other": "{{files}} 等另外 {{count}} 個",
+    "importSkipped_one": "已略過 {{count}} 個不支援的檔案",
+    "importSkipped_other": "已略過 {{count}} 個不支援的檔案",
     "importing": "正在匯入頁面…",
     "importingAction": "正在匯入…",
     "noImage": "無影像",
@@ -460,8 +631,13 @@
       "thresholds": "閾值",
       "title": "流程",
       "translator": {
+        "combinePages": "合併頁面翻譯",
+        "combinePagesDescription": "將連續頁面合併翻譯（開啟視覺模式時附帶相鄰頁面台詞作為上下文），提升人名與劇情連貫性。",
         "instructions": "附加指示",
         "instructionsDescription": "選填，可使用任何語言和形式，例如名字的寫法或語氣。Koharu 會依原樣把它們附加在自己的系統提示詞之後。",
+        "maxPages": "單次請求最大頁數",
+        "maxPagesAuto": "自動",
+        "maxPagesDescription": "留空為自動（依模型的上下文與輸出上限動態調整）。",
         "reasoning": "推理",
         "reasoningDescription": "翻譯時使用模型推理。",
         "targetLanguageDescription": "選擇文字要翻譯成的語言。",
@@ -542,6 +718,15 @@
     "title": "正在準備 Koharu"
   },
   "status": {
+    "activity": "活動",
+    "activityActive": "{{count}} 項活動",
+    "activityActive_one": "{{count}} 項活動",
+    "activityActive_other": "{{count}} 項活動",
+    "activityFailed": "{{count}} 項失敗",
+    "activityFailed_one": "{{count}} 項失敗",
+    "activityFailed_other": "{{count}} 項失敗",
+    "activityQueued": "{{active}} · +{{queued}} 排隊",
+    "openActivity": "開啟活動分頁",
     "zoom": "縮放"
   },
   "story": {

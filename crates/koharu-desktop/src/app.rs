@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use futures::StreamExt as _;
 use koharu_agent::{Agent, McpServer, Tools};
 use koharu_canvas::{Canvas, Effect, Facing, Side, Snapshot};
-use koharu_pipeline::{Area, Pipeline, PipelineConfig, Request, RunId, Stage, Target};
+use koharu_pipeline::{Area, Pipeline, PipelineConfig, Request, RunId, RunPriority, Stage, Target};
 use koharu_renderer::Renderer;
 use koharu_scene::{Change, Edit, PageId, Session};
 use parking_lot::Mutex;
@@ -100,9 +100,9 @@ impl App {
         });
         let app = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
-            let mut transfers = koharu_runtime::transfers();
-            while let Some(transfer) = transfers.next().await {
-                app.emit(events::DOWNLOAD, transfer);
+            let mut downloads = koharu_runtime::downloads();
+            while let Some(download) = downloads.next().await {
+                app.emit(events::DOWNLOAD, download);
             }
         });
         let app = Arc::clone(self);
@@ -183,7 +183,7 @@ impl App {
             }
             project.take()
         };
-        self.pipeline.stop();
+        self.pipeline.cancel(None);
         self.screen.set_canvas(None);
         if let Some(project) = project {
             self.pipeline.close(project.session.lock().id());
@@ -218,6 +218,7 @@ impl App {
         target: Target,
         stages: BTreeSet<Stage>,
         config: Option<PipelineConfig>,
+        priority: RunPriority,
     ) -> Result<RunId> {
         Ok(self.pipeline.run(
             self.session()?,
@@ -225,6 +226,7 @@ impl App {
                 target,
                 stages,
                 config,
+                priority,
             },
         )?)
     }
@@ -403,6 +405,7 @@ impl App {
                         },
                         BTreeSet::from([Stage::Inpaint]),
                         None,
+                        RunPriority::RerunNow,
                     )
                     .map(drop),
             };
@@ -421,5 +424,80 @@ impl App {
         self.render(&session, page)
             .inspect_err(|error| tracing::error!("failed to show a canvas edit: {error:#}"))
             .ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use koharu_pipeline::Outcome;
+    use koharu_scene::Edit;
+
+    use super::*;
+
+    struct TempDir(std::path::PathBuf);
+    impl TempDir {
+        fn new() -> std::io::Result<Self> {
+            let path = std::env::temp_dir().join(format!(
+                "koharu-desktop-test-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            ));
+            fs_err::create_dir_all(&path)?;
+            Ok(Self(path))
+        }
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn app_process_and_close_cancel_runs() -> Result<()> {
+        let dir = TempDir::new()?;
+        let library = Library::new(dir.path().to_path_buf())?;
+        let app = Arc::new(App::new(
+            library,
+            Renderer::new(),
+            Pipeline::new(PipelineConfig::default()),
+        ));
+        let mut session =
+            Session::create(dir.path().join("book.khr"), koharu_scene::Meta::default())?;
+        session.apply(Edit {
+            label: "page".to_owned(),
+            ops: vec![serde_json::from_value(serde_json::json!({
+                "op": "add_page",
+                "index": 0,
+                "size": {"width": 100, "height": 100},
+            }))?],
+        })?;
+        app.open("book".to_owned(), session)?;
+
+        let run = app.process(
+            Target::Project,
+            BTreeSet::from([Stage::Detect]),
+            None,
+            RunPriority::RerunNow,
+        )?;
+        app.close();
+        assert!(app.session().is_err());
+
+        let history = app.pipeline.history(run, Duration::from_secs(5)).await?;
+        assert!(matches!(
+            history.last(),
+            Some(koharu_pipeline::Event::Ended {
+                outcome: Outcome::Done | Outcome::Stopped,
+                ..
+            })
+        ));
+        Ok(())
     }
 }

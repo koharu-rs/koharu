@@ -22,9 +22,9 @@ can't. The scene and the pipeline know nothing of tools.
 | `get_page` | a page's size, its scan, and its layers nested in reading order: panels, balloons, and blocks, each block with its source and translation | yes |
 | `get_layer` | one layer with all its values, and what's inside it as `get_page` answers it | yes |
 | `edit` | the scene's ops, applied as one undo step under a label, or not at all | no |
-| `run` | starts a pipeline run on the project, some pages, some blocks, or a painted area, and answers its id at once | no |
+| `run` | starts a pipeline run on the project, some pages, some blocks, a painted area, or metadata (with optional `priority`), and answers its id at once | no |
 | `wait` | waits up to 30 seconds for a run to end, and answers what it told so far | yes |
-| `stop` | stops every run, running and queued; what they finished stays | no |
+| `stop` | stops one run by id, or every run (running, queued, and waiting) when left out; what they finished stays | no |
 | `view_page` | the page as the editor draws it, or its scan alone, whole or a region of it, as a JPEG 1,280 pixels on its longer side | yes |
 
 - **Schemas** inline every subschema, because some providers refuse one that

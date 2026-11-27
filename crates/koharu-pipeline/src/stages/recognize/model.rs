@@ -1,6 +1,6 @@
 use image::DynamicImage;
 use koharu_ml::{baberu_ocr::BaberuOcr, hayai_ocr::HayaiOcr, manga_ocr_ar::MangaOcrAr};
-use koharu_runtime::Device;
+use koharu_runtime::{Device, PinnedFile};
 use serde::{Deserialize, Serialize};
 use strum::{Display, VariantArray};
 
@@ -18,6 +18,29 @@ pub enum Recognizer {
     #[default]
     #[strum(to_string = "Hayai OCR")]
     HayaiOcr,
+}
+
+impl Recognizer {
+    pub const ALL: &'static [Self] = Self::VARIANTS;
+
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::MangaOcrAr => "manga-ocr-ar",
+            Self::BaberuOcr => "baberu-ocr",
+            Self::HayaiOcr => "hayai-ocr",
+        }
+    }
+
+    #[must_use]
+    pub fn files(self) -> Vec<PinnedFile> {
+        let model = match self {
+            Self::MangaOcrAr => koharu_ml::Model::MangaOcrAr,
+            Self::BaberuOcr => koharu_ml::Model::BaberuOcr,
+            Self::HayaiOcr => koharu_ml::Model::HayaiOcr,
+        };
+        koharu_ml::files_for(model)
+    }
 }
 
 /// A recognizer, loaded.

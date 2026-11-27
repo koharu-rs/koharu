@@ -22,15 +22,15 @@ use anyhow::{Context, Result, ensure};
 use rig_core::{
     catalog::{ModelFacts, ModelSpec, ReasoningSupport},
     completion::Effort,
-    driver::{DynModel, Exchange, Model, Opened, Opening, Transport},
+    driver::{Exchange, Model, Opened, Opening, Transport},
     error::ProviderError,
-    operation::Completion,
     providers::registry::ProviderId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use engine::{Files, Job, Step};
+use koharu_runtime::PinnedFile;
 use markup::{Item, Markup, Parser};
 use wire::{Gguf, Part, Prompt};
 
@@ -143,36 +143,88 @@ pub struct Local {
     pub quantizations: Vec<Quantization>,
     /// The languages it translates into, as BCP 47 tags; `None` for any.
     pub languages: Option<&'static [&'static str]>,
+    pub revision: &'static str,
+    pub projector_bytes: Option<u64>,
+    pub projector_downloaded: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Quantization {
     pub id: &'static str,
     pub name: &'static str,
+    pub bytes: u64,
     pub downloaded: bool,
 }
 
-/// Koharu's catalog's facts on `spec`, when it's one of Koharu's models.
+fn resolve_entry(id: &str) -> Result<(&'static catalog::Entry, &'static catalog::Quantization)> {
+    let (id, quantization) = match id.split_once(':') {
+        Some((id, quantization)) => (id, Some(quantization)),
+        None => (id, None),
+    };
+    let entry = catalog::entry(id)?;
+    let quantization = entry.quantization(quantization)?;
+    Ok((entry, quantization))
+}
+
+fn pinned_files(
+    entry: &'static catalog::Entry,
+    quantization: &'static catalog::Quantization,
+    images: bool,
+) -> Vec<PinnedFile> {
+    let mut files = vec![PinnedFile::new(
+        entry.repository,
+        quantization.file,
+        quantization.bytes,
+    )];
+    if images && let Some(projector) = entry.projector {
+        files.push(PinnedFile::new(
+            entry.repository,
+            projector.file,
+            projector.bytes,
+        ));
+    }
+    files
+}
+
+/// Koharu's catalog's facts on `reference` (`koharu/<id>[:<quant>]`), when it's
+/// one of Koharu's models. `images` determines whether the multimodal projector
+/// is included in each quantization's `bytes` and `downloaded` check.
 #[must_use]
-pub fn local(spec: &ModelSpec) -> Option<Local> {
-    if spec.provider.vendor() != KOHARU {
+pub fn local(reference: &str, images: bool) -> Option<Local> {
+    let (vendor, id) = reference.split_once('/')?;
+    if vendor != KOHARU {
         return None;
     }
-    let entry = catalog::entry(&spec.id).ok()?;
+    let (id, _) = id.split_once(':').unwrap_or((id, ""));
+    let entry = catalog::entry(id).ok()?;
+    let projector_bytes = entry.projector.map(|projector| projector.bytes);
+    let projector_downloaded = entry
+        .projector
+        .is_some_and(|projector| entry.repository.exists(projector.file));
     Some(Local {
         quantizations: entry
             .quantizations
             .iter()
-            .map(|quantization| Quantization {
-                id: quantization.id,
-                name: quantization.name,
-                downloaded: std::iter::once(quantization.file)
-                    .chain(entry.projector)
-                    .all(|file| entry.repository.exists(file)),
+            .map(|quantization| {
+                let files = pinned_files(entry, quantization, images);
+                Quantization {
+                    id: quantization.id,
+                    name: quantization.name,
+                    bytes: files.iter().map(|file| file.bytes).sum(),
+                    downloaded: files.iter().all(PinnedFile::exists),
+                }
             })
             .collect(),
         languages: entry.languages,
+        revision: entry.repository.commit(),
+        projector_bytes,
+        projector_downloaded,
     })
+}
+
+pub(crate) fn files(id: &str, images: bool) -> Result<Vec<PinnedFile>> {
+    let (entry, quantization) = resolve_entry(id)?;
+    Ok(pinned_files(entry, quantization, images))
 }
 
 /// Every model of Koharu's catalog, as rig describes a model; how much
@@ -205,18 +257,13 @@ fn vendor() -> ProviderId {
 /// The catalog model `id` names, at the quantization after a colon or its
 /// first, its files fetched first if the store doesn't have them; its
 /// projector only when `size` asks for images.
-pub(crate) async fn connect(id: &str, size: Size) -> Result<DynModel<Completion>> {
-    let (id, quantization) = match id.split_once(':') {
-        Some((id, quantization)) => (id, Some(quantization)),
-        None => (id, None),
-    };
-    let entry = catalog::entry(id)?;
-    let quantization = entry.quantization(quantization)?;
+pub(crate) async fn connect(id: &str, size: Size) -> Result<crate::Connected> {
+    let (entry, quantization) = resolve_entry(id)?;
     let (model, projector) = match entry.projector.filter(|_| size.images) {
         Some(projector) => {
             let [model, projector] = entry
                 .repository
-                .resolve([quantization.file, projector])
+                .resolve([quantization.file, projector.file])
                 .await?;
             (model, Some(projector))
         }
@@ -245,9 +292,52 @@ pub(crate) struct Loading {
     pub(crate) markup: Option<&'static Markup>,
 }
 
+#[derive(Default)]
+struct ThreadDone {
+    exited: std::sync::Mutex<bool>,
+    condvar: std::sync::Condvar,
+}
+
+struct ExitSignal(Arc<ThreadDone>);
+
+impl Drop for ExitSignal {
+    fn drop(&mut self) {
+        let mut exited = self
+            .0
+            .exited
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *exited = true;
+        self.0.condvar.notify_all();
+    }
+}
+
+/// Handle to wait synchronously for a local engine thread to drop its
+/// llama.cpp context/model and exit after all `DynModel` clones drop.
+#[derive(Clone)]
+pub struct Teardown(Arc<ThreadDone>);
+
+impl Teardown {
+    /// Blocks until the local model thread has dropped its model/context and exited.
+    pub fn wait(&self) {
+        let mut exited = self
+            .0
+            .exited
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while !*exited {
+            exited = self
+                .0
+                .condvar
+                .wait(exited)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+    }
+}
+
 /// Loads a model, with its projector when it reads images, on the runtime's
 /// device.
-pub(crate) async fn load(loading: Loading, size: Size) -> Result<DynModel<Completion>> {
+pub(crate) async fn load(loading: Loading, size: Size) -> Result<crate::Connected> {
     ensure!(
         size.sequences > 0 && size.context > 0,
         "a local model needs at least one sequence and one token of context"
@@ -268,9 +358,16 @@ pub(crate) async fn load(loading: Loading, size: Size) -> Result<DynModel<Comple
             projector,
             device,
         };
+        let done = Arc::new(ThreadDone::default());
+        let thread_done = Arc::clone(&done);
         std::thread::Builder::new()
             .name(format!("llm {}", spec.id))
-            .spawn(move || engine::serve(files, size, ready, queue))?;
+            .spawn(move || {
+                // Bound first so it drops strictly after `engine::serve` drops
+                // `Engine` (context + mtmd) and `LlamaModel` and returns.
+                let _done = ExitSignal(thread_done);
+                engine::serve(files, size, ready, queue);
+            })?;
         let loaded = loaded.recv().context("the model's thread stopped")??;
         // An answer, reasoning included, may take the quarter of the context
         // a conversation's `Context` keeps free for it.
@@ -293,9 +390,14 @@ pub(crate) async fn load(loading: Loading, size: Size) -> Result<DynModel<Comple
         };
         // A reply says nothing while its prompt decodes or it writes a call,
         // which can take longer than rig waits for a stream's next part.
-        Ok(Model::new(wire, Queue(jobs))
+        let model = Model::new(wire, Queue(jobs))
             .with_idle_timeout(None)
-            .erase())
+            .erase();
+        Ok(crate::Connected {
+            model,
+            teardown: Some(Teardown(done)),
+            full_gpu: loaded.full_gpu,
+        })
     })
     .await?
 }
@@ -397,5 +499,90 @@ mod tests {
             translation.details.kind.as_deref(),
             Some(crate::TRANSLATION)
         );
+    }
+
+    #[test]
+    fn local_files_resolves_quant_and_projector_flag() {
+        // Vision-capable model with projector.
+        let text_only = crate::local_files("koharu/gemma4-e2b-it", false).unwrap();
+        assert_eq!(text_only.len(), 1);
+        assert_eq!(text_only[0].filename, "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf");
+        assert!(text_only[0].bytes > 0);
+
+        let with_images = crate::local_files("koharu/gemma4-e2b-it:Q2_K_XL", true).unwrap();
+        assert_eq!(with_images.len(), 2);
+        assert_eq!(
+            with_images[0].filename,
+            "gemma-4-E2B-it-qat-UD-Q2_K_XL.gguf"
+        );
+        assert_eq!(with_images[1].filename, "mmproj-F16.gguf");
+        assert!(with_images[1].bytes > 0);
+
+        // Text-only model with no projector ignores `images = true`.
+        let no_proj = crate::local_files("koharu/lfm3-1.7b", true).unwrap();
+        assert_eq!(no_proj.len(), 1);
+        assert_eq!(no_proj[0].filename, "LFM3-1.7B-Q4_K_M.gguf");
+
+        // Hosted models require no local files.
+        assert!(crate::local_files("openai/gpt-5", true).unwrap().is_empty());
+
+        // Invalid references fail closed.
+        assert!(crate::local_files("gemma4-e2b-it", false).is_err());
+        assert!(crate::local_files("koharu/unknown-model", false).is_err());
+        assert!(crate::local_files("koharu/gemma4-e2b-it:NOPE", false).is_err());
+    }
+
+    #[test]
+    fn local_metadata_respects_images_and_ignores_quant_suffix() {
+        let no_images = local("koharu/gemma4-e2b-it:Q2_K_XL", false).unwrap();
+        let with_images = local("koharu/gemma4-e2b-it", true).unwrap();
+        assert_eq!(no_images.revision, with_images.revision);
+        assert_eq!(no_images.revision.len(), 40);
+        assert!(no_images.projector_bytes.is_some());
+        assert_eq!(no_images.quantizations.len(), 2);
+        assert!(with_images.quantizations[0].bytes > no_images.quantizations[0].bytes);
+        assert!(local("openai/gpt-5", false).is_none());
+        assert!(local("koharu/unknown", false).is_none());
+    }
+
+    #[test]
+    fn teardown_waits_until_engine_thread_drops_resource_and_exits() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        struct Resource(Arc<AtomicBool>);
+        impl Drop for Resource {
+            fn drop(&mut self) {
+                std::thread::sleep(Duration::from_millis(40));
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let (jobs, queue) = mpsc::channel::<Job>();
+        let done = Arc::new(ThreadDone::default());
+        let teardown = Teardown(Arc::clone(&done));
+        let resource_dropped = Arc::new(AtomicBool::new(false));
+        let dropped_flag = Arc::clone(&resource_dropped);
+
+        std::thread::spawn(move || {
+            let _done = ExitSignal(done);
+            let _resource = Resource(dropped_flag);
+            while queue.recv().is_ok() {}
+        });
+
+        // Keep a cloned Queue alive on another thread briefly; Teardown::wait
+        // must block until all Queue clones drop AND the background thread
+        // drops `_resource` and exits.
+        let clone = Queue(jobs.clone());
+        drop(jobs);
+        let waiter = std::thread::spawn(move || {
+            teardown.wait();
+            assert!(resource_dropped.load(Ordering::SeqCst));
+        });
+
+        std::thread::sleep(Duration::from_millis(20));
+        assert!(!waiter.is_finished());
+        drop(clone);
+        waiter.join().expect("teardown waiter completes cleanly");
     }
 }

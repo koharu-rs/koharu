@@ -9,11 +9,12 @@ mod model;
 pub mod reasoning;
 
 use anyhow::{Context as _, Result};
+use koharu_runtime::PinnedFile;
 use rig_core::{catalog::ModelSpec, driver::DynModel, operation::Completion};
 
 pub use context::{Context, SummaryPrompts};
 pub use hosted::{Endpoint, Providers, SignInPrompt, VENDORS, sign_in, sign_out};
-pub use local::{Local, Quantization, Sampling, Size, local};
+pub use local::{Local, Quantization, Sampling, Size, Teardown, local};
 pub use model::answers;
 pub use rig_agent::{agent::AgentBuilder, completion::PromptError};
 /// rig, whose requests and streams every model here takes and gives.
@@ -27,18 +28,76 @@ pub const KOHARU: &str = "koharu";
 /// `image` and `embedding`.
 pub const TRANSLATION: &str = "translation";
 
+/// A connected model, with an optional teardown handle and GPU offload flag
+/// for local llama.cpp models.
+pub struct Connected {
+    pub model: DynModel<Completion>,
+    pub teardown: Option<Teardown>,
+    pub full_gpu: bool,
+}
+
 /// The model `reference` names, `vendor/model` as rig's `ModelSpec::reference`
 /// writes it, its files fetched first for one of Koharu's own. One of those
 /// may name a quantization after a colon, as Ollama's tags do
 /// (`koharu/index-translate-2b:Q8_0`), and otherwise loads its first; it loads
 /// with `size`, which a hosted model doesn't use.
-pub async fn connect(reference: &str, size: Size) -> Result<DynModel<Completion>> {
+pub async fn connect_tracked(reference: &str, size: Size) -> Result<Connected> {
     let (vendor, id) = reference
         .split_once('/')
         .with_context(|| format!("`{reference}` names no model: expected `vendor/model`"))?;
     match vendor {
         KOHARU => local::connect(id, size).await,
-        _ => hosted::connect(vendor, id),
+        _ => Ok(Connected {
+            model: hosted::connect(vendor, id)?,
+            teardown: None,
+            full_gpu: false,
+        }),
+    }
+}
+
+/// Connects `reference` with `size`, returning only the completion model handle.
+pub async fn connect(reference: &str, size: Size) -> Result<DynModel<Completion>> {
+    Ok(connect_tracked(reference, size).await?.model)
+}
+
+/// Returns `true` when `error` or any cause in its chain is a typed memory
+/// allocation or fitting failure from `koharu-llama`.
+#[must_use]
+pub fn is_oom(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        matches!(
+            cause.downcast_ref::<koharu_llama::LlamaCppError>(),
+            Some(
+                koharu_llama::LlamaCppError::FitError(
+                    koharu_llama::model::params::FitError::Failure
+                ) | koharu_llama::LlamaCppError::LlamaModelLoadError(
+                    koharu_llama::LlamaModelLoadError::NullResult
+                ) | koharu_llama::LlamaCppError::LlamaContextLoadError(
+                    koharu_llama::LlamaContextLoadError::NullReturn
+                )
+            )
+        ) || matches!(
+            cause.downcast_ref::<koharu_llama::model::params::FitError>(),
+            Some(koharu_llama::model::params::FitError::Failure)
+        ) || matches!(
+            cause.downcast_ref::<koharu_llama::LlamaModelLoadError>(),
+            Some(koharu_llama::LlamaModelLoadError::NullResult)
+        ) || matches!(
+            cause.downcast_ref::<koharu_llama::LlamaContextLoadError>(),
+            Some(koharu_llama::LlamaContextLoadError::NullReturn)
+        )
+    })
+}
+
+/// Pinned Hugging Face files required by `reference`. Hosted `vendor/model`
+/// references require no local files and return an empty list.
+pub fn local_files(reference: &str, images: bool) -> Result<Vec<PinnedFile>> {
+    let (vendor, id) = reference
+        .split_once('/')
+        .with_context(|| format!("`{reference}` names no model: expected `vendor/model`"))?;
+    match vendor {
+        KOHARU => local::files(id, images),
+        _ => Ok(Vec::new()),
     }
 }
 

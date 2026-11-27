@@ -1,35 +1,37 @@
 'use client'
 
-import {
-  Bot,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Play,
-  Settings,
-  Sparkles,
-  Square,
-} from 'lucide-react'
+import { Bot, Check, ChevronDown, ChevronRight, Play, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { MenuPanel } from '@/components/controls/MenuPanel'
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker } from '@/components/controls/OutputPicker'
-import { modelName, vendorOf } from '@/lib/models'
-import { send, useModels, usePreferences, useSavePreferences } from '@/lib/queries'
-import { pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
-import { languageName } from '@/lib/translation'
 import {
-  commands,
-  type Model,
-  type Preferences,
-  type Stage,
-  type TranslatorConfig,
+  computeOtherStagesVram,
+  findCatalogSelection,
+  formatModelName,
+  vendorOf,
+} from '@/lib/models'
+import { useModelCatalog, usePreferences, useSavePreferences } from '@/lib/queries'
+import { isActiveJob, pipelineStages, useKoharuStore, type PipelineScope } from '@/lib/store'
+import { languageName } from '@/lib/translation'
+import type {
+  Preferences,
+  RunPriority,
+  Stage,
+  TranslateModelEntry,
+  TranslatorConfig,
 } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
+import { ButtonGroup } from '@koharu/ui/components/button-group'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@koharu/ui/components/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
-import { cn } from '@koharu/ui/lib/utils'
 
 type SelectorView = 'root' | 'model' | 'scope' | 'stages' | 'output'
 
@@ -37,7 +39,7 @@ export function InferenceControl({
   onRun,
   disabled,
 }: {
-  onRun: (scope: PipelineScope, stages: Stage[]) => void
+  onRun: (scope: PipelineScope, stages: Stage[], priority: RunPriority) => void
   disabled: boolean
 }) {
   const { t } = useTranslation()
@@ -47,7 +49,7 @@ export function InferenceControl({
   const setStages = useKoharuStore((state) => state.setProcessingStages)
   const jobs = useKoharuStore((state) => state.jobs)
   const selectedPages = useKoharuStore((state) => state.selectedPages)
-  const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
+  const hasActiveWork = Object.values(jobs).some(isActiveJob)
   const unavailable = scope === 'selected-pages' && selectedPages.length === 0
 
   return (
@@ -56,25 +58,70 @@ export function InferenceControl({
         scope={scope}
         stages={stages}
         selectionCount={selectedPages.length}
-        running={Boolean(running)}
         onScopeChange={setScope}
         onStagesChange={setStages}
       />
 
-      <Button
-        type='button'
-        size='sm'
-        className={cn(
-          'rounded-lg px-2.5 text-[11px]',
-          !running && 'bg-primary/80 hover:bg-primary/90',
-        )}
-        disabled={(disabled || unavailable) && !running}
-        aria-label={running ? t('inference.stopProcessing') : t('inference.runProcessing')}
-        onClick={running ? () => send(commands.stopPipeline) : () => onRun(scope, stages)}
-      >
-        {running ? <Square className='size-3 fill-current' /> : <Play className='size-3' />}
-        <span>{running ? t('inference.stop') : t('inference.run')}</span>
-      </Button>
+      {hasActiveWork ? (
+        <ButtonGroup>
+          <Button
+            type='button'
+            size='sm'
+            className='bg-primary/80 px-2.5 text-[11px] hover:bg-primary/90'
+            disabled={disabled || unavailable}
+            aria-label={t('inference.queueProcessing')}
+            onClick={() => onRun(scope, stages, 'normal')}
+          >
+            <Play className='size-3' />
+            <span>{t('inference.queue')}</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type='button'
+                  size='sm'
+                  className='bg-primary/80 px-1.5 hover:bg-primary/90'
+                  disabled={disabled || unavailable}
+                  aria-label={t('inference.runOptions')}
+                />
+              }
+            >
+              <ChevronDown className='size-3' />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-56'>
+              <DropdownMenuItem onClick={() => onRun(scope, stages, 'normal')}>
+                <div className='flex flex-col gap-0.5'>
+                  <span className='text-[11px] font-medium'>{t('inference.queue')}</span>
+                  <span className='text-[10px] text-muted-foreground'>
+                    {t('inference.queueDescription')}
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRun(scope, stages, 'rerun_now')}>
+                <div className='flex flex-col gap-0.5'>
+                  <span className='text-[11px] font-medium'>{t('inference.rerunNow')}</span>
+                  <span className='text-[10px] text-muted-foreground'>
+                    {t('inference.rerunNowDescription')}
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </ButtonGroup>
+      ) : (
+        <Button
+          type='button'
+          size='sm'
+          className='rounded-lg bg-primary/80 px-2.5 text-[11px] hover:bg-primary/90'
+          disabled={disabled || unavailable}
+          aria-label={t('inference.runProcessing')}
+          onClick={() => onRun(scope, stages, 'normal')}
+        >
+          <Play className='size-3' />
+          <span>{t('inference.run')}</span>
+        </Button>
+      )}
     </div>
   )
 }
@@ -83,14 +130,12 @@ function RuntimeSelector({
   scope,
   stages,
   selectionCount,
-  running,
   onScopeChange,
   onStagesChange,
 }: {
   scope: PipelineScope
   stages: Stage[]
   selectionCount: number
-  running: boolean
   onScopeChange: (scope: PipelineScope) => void
   onStagesChange: (stages: Stage[]) => void
 }) {
@@ -98,14 +143,19 @@ function RuntimeSelector({
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<SelectorView>('root')
   const preferences = usePreferences().data
-  const models = useModels()
+  const catalog = useModelCatalog()
   const saveModel = useSavePreferences()
   const saveOutput = useSavePreferences()
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const translator = preferences?.pipeline.translator ?? null
   const model = translator?.model || null
-  const choices = availableModels(model, models.data ?? [])
-  const modelLabel = model ? modelName(choices, model) : t('inference.noModel')
+  const choices = availableModels(model, catalog.data?.translate ?? [])
+  const modelLabel = model ? formatModelName(choices, model, t) : t('inference.noModel')
+  const otherStagesVramBytes = computeOtherStagesVram(
+    catalog.data,
+    preferences?.pipeline,
+    'translate',
+  )
   const target = translator?.target
   const outputLabel = target ? languageName(target, i18n.language) : t('inference.notSet')
 
@@ -121,7 +171,7 @@ function RuntimeSelector({
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
     setView('root')
-    if (next) void models.refetch()
+    if (next) void catalog.refetch()
   }
 
   const chooseModel = (next: string) => {
@@ -158,21 +208,14 @@ function RuntimeSelector({
       <PopoverTrigger
         type='button'
         aria-label={t('inference.selector')}
-        className={cn(
-          'flex h-7 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
-          running && 'text-foreground',
-        )}
+        className='flex h-7 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground'
       >
-        {running ? (
-          <Sparkles className='size-3 shrink-0 text-primary' />
-        ) : (
-          <Bot className='size-3 shrink-0 text-primary' />
-        )}
+        <Bot className='size-3 shrink-0 text-primary' />
         <span className='min-w-0 truncate'>{modelLabel}</span>
         <ChevronDown className='size-3 shrink-0' />
       </PopoverTrigger>
 
-      <PopoverContent align='start' sideOffset={4} className='w-64 gap-0 overflow-hidden p-1'>
+      <PopoverContent align='start' sideOffset={4} className='w-72 gap-0 overflow-hidden p-1'>
         {view === 'root' && (
           <div className='grid gap-0.5' aria-label={t('inference.shortcuts')}>
             <SelectorRow
@@ -219,8 +262,10 @@ function RuntimeSelector({
           <ModelPicker
             value={model}
             models={choices}
-            loading={models.isFetching}
-            disabled={running || saveModel.isPending}
+            availableVramBytes={catalog.data?.available_vram_bytes ?? null}
+            otherStagesVramBytes={otherStagesVramBytes}
+            loading={catalog.isFetching}
+            disabled={saveModel.isPending}
             onBack={() => setView('root')}
             onSelect={chooseModel}
           />
@@ -272,7 +317,6 @@ function RuntimeSelector({
         {view === 'output' && translator && (
           <OutputPicker
             targetLanguage={translator.target ?? 'en'}
-            disabled={running}
             saving={saveOutput.isPending}
             onBack={() => setView('root')}
             onChange={chooseOutput}
@@ -344,8 +388,11 @@ function SelectorOption<Value extends string>({
 }
 
 /** The models to pick from, with the one the preferences hold first when the list lacks it. */
-function availableModels(selected: string | null, models: Model[]): Model[] {
-  if (!selected || models.some((model) => model.reference === selected)) return models
+function availableModels(
+  selected: string | null,
+  models: TranslateModelEntry[],
+): TranslateModelEntry[] {
+  if (!selected || findCatalogSelection(models, selected)) return models
   return [
     {
       reference: selected,
@@ -353,6 +400,10 @@ function availableModels(selected: string | null, models: Model[]): Model[] {
       vendor: vendorOf(selected),
       images: false,
       tools: false,
+      disk_bytes: null,
+      downloaded: false,
+      measured_vram_bytes: null,
+      variants: [],
     },
     ...models,
   ]

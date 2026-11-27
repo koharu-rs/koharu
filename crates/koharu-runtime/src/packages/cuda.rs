@@ -159,6 +159,12 @@ impl Wheel {
         }
     }
 
+    fn complete(&self, folder: &std::path::Path) -> bool {
+        self.libraries()
+            .iter()
+            .all(|library| folder.join(library).is_file())
+    }
+
     /// PyPI's stable path for the wheel for `host`, which redirects to where
     /// it's stored.
     fn url(&self, host: Host) -> Result<String> {
@@ -182,6 +188,13 @@ impl Wheel {
 }
 
 impl Package for Cuda {
+    fn is_ready(&self, _: Host, _: Backend) -> bool {
+        WHEELS.iter().all(|wheel| {
+            let folder = wheel.folder();
+            folder.is_dir() && wheel.complete(&folder)
+        })
+    }
+
     fn download(&self, host: Host, _: Backend) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
             for wheel in WHEELS {
@@ -190,12 +203,7 @@ impl Package for Cuda {
                 store::put(
                     &folder,
                     folder.clone(),
-                    |folder| {
-                        wheel
-                            .libraries()
-                            .iter()
-                            .all(|library| folder.join(library).is_file())
-                    },
+                    |folder| wheel.complete(folder),
                     move |stage| async move {
                         extract(&url, &stage, LIBRARIES).await?;
                         Ok(stage)

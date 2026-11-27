@@ -1,4 +1,6 @@
-//! Page ops.
+//! Page and project metadata ops.
+
+use serde_json::Value;
 
 use super::Run;
 use crate::{Background, Created, Error, Hash, Page, PageId, Ref, Result, Size};
@@ -107,6 +109,26 @@ impl Run<'_, '_> {
         }
         self.project.pages.remove(&id);
         self.project.order.retain(|page| *page != id);
+        Ok(())
+    }
+
+    pub(super) fn set_project_metadata(
+        &mut self,
+        op: usize,
+        key: &str,
+        value: Option<&Value>,
+    ) -> Result<()> {
+        if key.is_empty() {
+            return Err(Error::invalid(op, "metadata key cannot be empty"));
+        }
+        match value {
+            Some(value) if !value.is_null() => {
+                self.project.metadata.insert(key.to_owned(), value.clone());
+            }
+            _ => {
+                self.project.metadata.remove(key);
+            }
+        }
         Ok(())
     }
 }

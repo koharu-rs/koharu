@@ -36,12 +36,17 @@ fn backend() -> Result<&'static LlamaBackend> {
     Ok(BACKEND.get_or_init(|| backend))
 }
 
-/// The model, loaded to fit, and the `size` it fits.
-pub(super) fn model(files: &Files, size: Size) -> Result<(LlamaModel, Size)> {
+/// The model, loaded to fit, the `size` it fits, and whether all layers and
+/// the full requested context stayed on the GPU.
+pub(super) fn model(files: &Files, size: Size) -> Result<(LlamaModel, Size, bool)> {
     let (params, context) = fit(files, size)?;
     let model = LlamaModel::load_from_file(backend()?, &files.model, &params)
         .with_context(|| format!("couldn't load {}", files.model.display()))?;
-    Ok((model, Size { context, ..size }))
+    let full_gpu = (params.n_gpu_layers() < 0
+        || u32::try_from(params.n_gpu_layers()).is_ok_and(|layers| layers >= model.n_layer()))
+        && params.tensor_buft_override_patterns().is_empty()
+        && context == size.context;
+    Ok((model, Size { context, ..size }, full_gpu))
 }
 
 /// Fits the model to the device's free memory, and answers how it should load

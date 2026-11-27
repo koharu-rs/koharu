@@ -6,17 +6,55 @@
     "version": "版本"
   },
   "activity": {
+    "cancelDownload": "取消下载",
+    "cancelJob": "取消 {{job}}",
+    "cancelRun": "取消排队任务",
     "dismiss": "关闭",
+    "dismissDownload": "关掉下载记录",
+    "downloadCancelled": "下载取消脱哉。",
     "downloadFailed": "下载失败哉。",
-    "downloadingFiles": "来勒下载 {{count}} 个文件",
-    "downloadingFiles_one": "来勒下载 {{count}} 个文件",
-    "downloadingFiles_other": "来勒下载 {{count}} 个文件",
+    "downloadFiles": "{{done}} / {{total}} 个文件",
+    "downloadFinished": "下载好哉",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/s",
+    "emptyDescription": "运行中个任务、排队队列搭仔模型下载都会得显示勒拉此地。",
+    "emptyTitle": "最近呒没活动",
     "loadingPages": "来勒加载页面：{{loaded}} / {{total}}",
     "modelDownload": "模型下载",
+    "pageRange": "第 {{from}}–{{to}} 页",
     "processing": "来勒处理",
     "processingFailed": "处理失败哉。",
-    "stop": "停止",
-    "title": "活动"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "排队久优先",
+      "fifo": "按提交顺序",
+      "grouped_by_loaded_model": "按已加载模型分组",
+      "lower_vram_cost": "显存切换开销更小",
+      "waiting_for_download": "等模型下载"
+    },
+    "queueScope": {
+      "area": "选中区域",
+      "blocks": "{{count}} 个文本块",
+      "blocks_one": "{{count}} 个文本块",
+      "blocks_other": "{{count}} 个文本块",
+      "metadata": "元数据",
+      "pages": "{{count}} 页",
+      "pages_one": "{{count}} 页",
+      "pages_other": "{{count}} 页",
+      "project": "整个项目"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "马上重跑",
+    "retryDownload": "重试下载",
+    "sections": {
+      "downloads": "下载",
+      "queued": "排队中",
+      "running": "运行中"
+    },
+    "stageRuntime": "运行时",
+    "stopRun": "停止运行",
+    "title": "活动",
+    "waitingForDownload": "等下载中"
   },
   "agent": {
     "cancel": "取消",
@@ -40,6 +78,7 @@
     "working": "来勒处理任务…"
   },
   "canvas": {
+    "dropToAppend": "拖文件进来就好追加页面",
     "empty": "先选一页，就好开始。",
     "notice": {
       "eraser_needs_raster": "先选一个栅格图层，再好擦。"
@@ -68,6 +107,8 @@
   "export": {
     "export": "导出",
     "imageFormat": "图片格式",
+    "lossless": "无损",
+    "losslessDescription": "原原本本留牢像素数据，呒没压缩失真。",
     "quality": "质量",
     "title": "导出为 {{format}}"
   },
@@ -161,6 +202,7 @@
       "resize": "改大小",
       "rotate": "旋转",
       "set_locked": "锁牢或者解锁",
+      "set_metadata": "编辑元数据",
       "set_source_text": "编辑原文",
       "set_style": "改文字样式",
       "set_text": "编辑文字",
@@ -181,7 +223,13 @@
     "output": "输出",
     "pipelineStages": "处理流程阶段",
     "providerDefault": "提供商默认值",
+    "queue": "加入队列",
+    "queueDescription": "等当前批处理做完仔再跑。",
+    "queueProcessing": "加入处理队列",
+    "rerunNow": "马上重跑",
+    "rerunNowDescription": "勒下一步插队到排队批处理前面去。",
     "run": "运行",
+    "runOptions": "运行选项",
     "runProcessing": "开始处理",
     "scope": "范围",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}} 个阶段",
     "stageCount_one": "{{count}} 个阶段",
     "stageCount_other": "{{count}} 个阶段",
-    "stages": "阶段",
-    "stop": "停止",
-    "stopProcessing": "停止处理"
+    "stages": "阶段"
   },
   "inspector": {
     "alignBottom": "底端对齐",
@@ -310,6 +356,7 @@
     "help": "帮助",
     "history": "历史记录",
     "import": "导入页面",
+    "metadata": "元数据…",
     "original": "显示原图",
     "redo": "重做",
     "saveDefaultStyles": "拿书体存为默认",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "使用默认书体",
     "view": "视图"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "仅限成人 18+",
+      "earlyChildhood": "幼儿",
+      "everyone": "全年龄",
+      "everyone10Plus": "10+ 全年龄",
+      "g": "G",
+      "kidsToAdults": "儿童至成人",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "待分级",
+      "teen": "青少年",
+      "unknown": "未知",
+      "x18Plus": "X18+"
+    },
+    "button": "元数据",
+    "description": "编辑随项目保存并导出到 CBZ 压缩包里个 ComicInfo 2.1 元数据。",
+    "fields": {
+      "ageRating": "年龄分级",
+      "alternateCount": "替代总数",
+      "alternateNumber": "替代编号",
+      "alternateSeries": "替代系列",
+      "blackAndWhite": "黑白",
+      "characters": "角色",
+      "colorist": "上色",
+      "communityRating": "社区评分",
+      "count": "总数",
+      "coverArtist": "封面画师",
+      "day": "日",
+      "editor": "编辑",
+      "format": "格式",
+      "genre": "类型",
+      "gtin": "GTIN",
+      "imprint": "子品牌",
+      "inker": "描线",
+      "languageIso": "语言 ISO",
+      "letterer": "嵌字",
+      "locations": "地点",
+      "mainCharacterOrTeam": "主角或团队",
+      "manga": "漫画",
+      "month": "月",
+      "notes": "备注",
+      "number": "话数/编号",
+      "pageCount": "页数",
+      "pages": "页面",
+      "penciller": "草稿画师",
+      "publisher": "出版社",
+      "review": "评论",
+      "scanInformation": "扫图信息",
+      "series": "系列",
+      "seriesGroup": "系列组",
+      "storyArc": "故事线",
+      "storyArcNumber": "故事线编号",
+      "summary": "简介",
+      "tags": "标签",
+      "teams": "团队",
+      "title": "标题",
+      "translator": "翻译",
+      "volume": "卷",
+      "web": "网页",
+      "writer": "作者",
+      "year": "年"
+    },
+    "languageIsoHint": "CBZ 导出会写入 {{target}}（当前翻译目标语言）。",
+    "manga": {
+      "no": "否",
+      "unknown": "未知",
+      "yes": "是",
+      "yesAndRightToLeft": "是（从右到左）"
+    },
+    "moreFields": "更多字段",
+    "noTranslatableFields": "至少要勒一个文本字段里填原文才能翻译。",
+    "original": "原文",
+    "pagesAutoComputed": "{{count}} 页 — CBZ 导出辰光自动重新计算",
+    "pagesAutoComputed_one": "{{count}} 页 — CBZ 导出辰光自动重新计算",
+    "pagesAutoComputed_other": "{{count}} 页 — CBZ 导出辰光自动重新计算",
+    "sections": {
+      "charactersAndWorld": "角色与世界观",
+      "classification": "分类与标签",
+      "common": "常用",
+      "credits": "制作人员",
+      "notesAndReview": "备注与评论",
+      "pages": "页面",
+      "publishing": "出版与发行",
+      "seriesAndStory": "系列与故事"
+    },
+    "title": "元数据",
+    "translate": "翻译元数据",
+    "translated": "译文",
+    "translating": "翻译中…",
+    "yesNo": {
+      "no": "否",
+      "unknown": "未知",
+      "yes": "是"
+    }
+  },
   "model": {
     "baseUrl": "基础 URL",
     "default": "默认",
     "targetLanguage": "目标语言"
   },
   "modelPicker": {
+    "chooseQuantization": "替 {{model}} 选量化",
+    "downloaded": "已经下载",
     "empty": "呒没可用个模型。",
     "loading": "来勒加载模型…",
     "noResults": "寻弗着符合条件个模型。",
+    "notDownloaded": "未下载",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "搜寻模型",
     "title": "选模型",
-    "useModel": "用 {{provider}} 个 {{model}}"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "用 {{provider}} 个 {{model}}",
+    "vramFit": {
+      "fits": "放得落",
+      "swaps": "要换出",
+      "tooLarge": "忒大"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} / 空闲 {{available}}",
+      "withOther": "≈{{model}} (+ 别个阶段 {{other}}) / 空闲 {{available}}"
+    }
   },
   "navigator": {
     "actionsFor": "{{page}} 个操作",
@@ -343,6 +508,12 @@
     "importAction": "导入",
     "importFiles": "文件…",
     "importFolder": "文件夹…",
+    "importSkipped": "跳过仔 {{count}} 个弗支持个文件",
+    "importSkippedMore": "{{files}}，还有另外 {{count}} 个",
+    "importSkippedMore_one": "{{files}}，还有另外 {{count}} 个",
+    "importSkippedMore_other": "{{files}}，还有另外 {{count}} 个",
+    "importSkipped_one": "跳过仔 {{count}} 个弗支持个文件",
+    "importSkipped_other": "跳过仔 {{count}} 个弗支持个文件",
     "importing": "来勒导入页面…",
     "importingAction": "来勒导入…",
     "noImage": "呒没图像",
@@ -460,8 +631,13 @@
       "thresholds": "阈值",
       "title": "处理流程",
       "translator": {
+        "combinePages": "合并页面翻译",
+        "combinePagesDescription": "连续页面一道翻译（开启视觉模式时附带相邻页面台词作参考），保持人名搭剧情连贯。",
         "instructions": "额外指示",
         "instructionsDescription": "可以勿填，用啥个语言、啥个格式写侪可以，比方讲名字哪能写、语气哪能。Koharu 会照原样接勒自家个系统提示词后头。",
+        "maxPages": "单次请求最多页数",
+        "maxPagesAuto": "自动",
+        "maxPagesDescription": "留空则按模型上下文搭输出上限自动调整。",
         "reasoning": "推理",
         "reasoningDescription": "翻译个辰光用模型推理。",
         "targetLanguageDescription": "选译文要用个目标语言。",
@@ -542,6 +718,15 @@
     "title": "来勒准备 Koharu"
   },
   "status": {
+    "activity": "活动",
+    "activityActive": "{{count}} 项运行中",
+    "activityActive_one": "{{count}} 项运行中",
+    "activityActive_other": "{{count}} 项运行中",
+    "activityFailed": "{{count}} 项失败",
+    "activityFailed_one": "{{count}} 项失败",
+    "activityFailed_other": "{{count}} 项失败",
+    "activityQueued": "{{active}} · +{{queued}} 排队",
+    "openActivity": "打开活动标签页",
     "zoom": "缩放"
   },
   "story": {

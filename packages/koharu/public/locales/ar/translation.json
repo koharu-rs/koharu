@@ -6,17 +6,55 @@
     "version": "الإصدار"
   },
   "activity": {
+    "cancelDownload": "إلغاء التنزيل",
+    "cancelJob": "إلغاء {{job}}",
+    "cancelRun": "إلغاء التشغيل المنتظر",
     "dismiss": "تجاهل",
+    "dismissDownload": "تجاهل التنزيل",
+    "downloadCancelled": "تم إلغاء التنزيل.",
     "downloadFailed": "فشل التنزيل.",
-    "downloadingFiles": "جارٍ تنزيل {{count}} من الملفات",
-    "downloadingFiles_one": "جارٍ تنزيل {{count}} ملف",
-    "downloadingFiles_other": "جارٍ تنزيل {{count}} من الملفات",
+    "downloadFiles": "{{done}} / {{total}} ملفات",
+    "downloadFinished": "تم التنزيل",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/ث",
+    "emptyDescription": "تظهر هنا عمليات التشغيل والمهام المنتظرة وتنزيلات النماذج.",
+    "emptyTitle": "لا يوجد نشاط حديث",
     "loadingPages": "جارٍ تحميل الصفحات: {{loaded}} من {{total}}",
     "modelDownload": "تنزيل النموذج",
+    "pageRange": "الصفحات {{from}}–{{to}}",
     "processing": "قيد المعالجة",
     "processingFailed": "فشلت المعالجة.",
-    "stop": "إيقاف",
-    "title": "النشاط"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "أولوية متقادمة",
+      "fifo": "حسب ترتيب الإرسال",
+      "grouped_by_loaded_model": "مجمّع حسب النموذج المحمّل",
+      "lower_vram_cost": "تكلفة تبديل VRAM أقل",
+      "waiting_for_download": "بانتظار تنزيل النموذج"
+    },
+    "queueScope": {
+      "area": "المنطقة المحددة",
+      "blocks": "{{count}} كتل",
+      "blocks_one": "{{count}} كتلة",
+      "blocks_other": "{{count}} كتلة",
+      "metadata": "البيانات الوصفية",
+      "pages": "{{count}} صفحات",
+      "pages_one": "{{count}} صفحة",
+      "pages_other": "{{count}} صفحة",
+      "project": "المشروع بالكامل"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "إعادة التشغيل الآن",
+    "retryDownload": "إعادة محاولة التنزيل",
+    "sections": {
+      "downloads": "التنزيلات",
+      "queued": "في الانتظار",
+      "running": "قيد التشغيل"
+    },
+    "stageRuntime": "بيئة التشغيل",
+    "stopRun": "إيقاف التشغيل",
+    "title": "النشاط",
+    "waitingForDownload": "بانتظار التنزيل"
   },
   "agent": {
     "cancel": "إلغاء",
@@ -40,6 +78,7 @@
     "working": "جارٍ العمل..."
   },
   "canvas": {
+    "dropToAppend": "أسقط الملفات لإلحاق الصفحات",
     "empty": "اختر صفحة للبدء.",
     "notice": {
       "eraser_needs_raster": "حدد طبقة نقطية للمسح."
@@ -68,6 +107,8 @@
   "export": {
     "export": "تصدير",
     "imageFormat": "تنسيق الصورة",
+    "lossless": "بلا فقدان",
+    "losslessDescription": "الاحتفاظ ببيانات البكسل الدقيقة دون تشوّهات الضغط.",
     "quality": "الجودة",
     "title": "تصدير {{format}}"
   },
@@ -161,6 +202,7 @@
       "resize": "تغيير الحجم",
       "rotate": "تدوير",
       "set_locked": "قفل أو إلغاء القفل",
+      "set_metadata": "تعديل البيانات الوصفية",
       "set_source_text": "تحرير النص الأصلي",
       "set_style": "تغيير نمط النص",
       "set_text": "تحرير النص",
@@ -181,7 +223,13 @@
     "output": "الإخراج",
     "pipelineStages": "مراحل خط المعالجة",
     "providerDefault": "افتراضي المزوّد",
+    "queue": "إضافة إلى الطابور",
+    "queueDescription": "التشغيل بعد انتهاء مهام الدفعة النشطة.",
+    "queueProcessing": "إضافة المعالجة إلى الطابور",
+    "rerunNow": "إعادة التشغيل الآن",
+    "rerunNowDescription": "تجاوز المهام المنتظرة في الخطوة التالية.",
     "run": "تشغيل",
+    "runOptions": "خيارات التشغيل",
     "runProcessing": "تشغيل المعالجة",
     "scope": "النطاق",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}} من المراحل",
     "stageCount_one": "{{count}} مرحلة",
     "stageCount_other": "{{count}} من المراحل",
-    "stages": "المراحل",
-    "stop": "إيقاف",
-    "stopProcessing": "إيقاف المعالجة"
+    "stages": "المراحل"
   },
   "inspector": {
     "alignBottom": "محاذاة للأسفل",
@@ -310,6 +356,7 @@
     "help": "مساعدة",
     "history": "السجل",
     "import": "استيراد الصفحات",
+    "metadata": "البيانات الوصفية…",
     "original": "إظهار الأصل",
     "redo": "إعادة",
     "saveDefaultStyles": "حفظ الأنماط كافتراضية",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "استخدام الأنماط الافتراضية",
     "view": "عرض"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "للبالغين فقط 18+",
+      "earlyChildhood": "الطفولة المبكرة",
+      "everyone": "للجميع",
+      "everyone10Plus": "للجميع 10+",
+      "g": "G",
+      "kidsToAdults": "من الأطفال إلى البالغين",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "للبالغين 17+",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "التصنيف قيد الانتظار",
+      "teen": "للمراهقين",
+      "unknown": "غير معروف",
+      "x18Plus": "X18+"
+    },
+    "button": "البيانات الوصفية",
+    "description": "تعديل بيانات ComicInfo 2.1 المحفوظة مع هذا المشروع والمُصدَّرة في أرشيفات CBZ.",
+    "fields": {
+      "ageRating": "التصنيف العمري",
+      "alternateCount": "العدد البديل",
+      "alternateNumber": "الرقم البديل",
+      "alternateSeries": "السلسلة البديلة",
+      "blackAndWhite": "أبيض وأسود",
+      "characters": "الشخصيات",
+      "colorist": "التلوين",
+      "communityRating": "تقييم المجتمع",
+      "count": "العدد الإجمالي",
+      "coverArtist": "فنان الغلاف",
+      "day": "اليوم",
+      "editor": "المحرر",
+      "format": "التنسيق",
+      "genre": "النوع",
+      "gtin": "GTIN",
+      "imprint": "الناشر الفرعي",
+      "inker": "التحبير",
+      "languageIso": "رمز اللغة ISO",
+      "letterer": "منسق الحروف",
+      "locations": "المواقع",
+      "mainCharacterOrTeam": "الشخصية أو الفريق الرئيسي",
+      "manga": "مانغا",
+      "month": "الشهر",
+      "notes": "ملاحظات",
+      "number": "الرقم",
+      "pageCount": "عدد الصفحات",
+      "pages": "الصفحات",
+      "penciller": "الرسام بالقلم",
+      "publisher": "الناشر",
+      "review": "المراجعة",
+      "scanInformation": "معلومات المسح الضوئي",
+      "series": "السلسلة",
+      "seriesGroup": "مجموعة السلسلة",
+      "storyArc": "قوس القصة",
+      "storyArcNumber": "رقم قوس القصة",
+      "summary": "الملخص",
+      "tags": "الوسوم",
+      "teams": "الفرق",
+      "title": "العنوان",
+      "translator": "المترجم",
+      "volume": "المجلد",
+      "web": "الويب",
+      "writer": "الكاتب",
+      "year": "السنة"
+    },
+    "languageIsoHint": "تصدير CBZ يكتب {{target}} (لغة الترجمة المستهدفة النشطة).",
+    "manga": {
+      "no": "لا",
+      "unknown": "غير معروف",
+      "yes": "نعم",
+      "yesAndRightToLeft": "نعم (من اليمين إلى اليسار)"
+    },
+    "moreFields": "المزيد من الحقول",
+    "noTranslatableFields": "أضف نصًا أصليًا في حقل نصي واحد على الأقل للترجمة.",
+    "original": "الأصل",
+    "pagesAutoComputed": "{{count}} صفحة — يُعاد حسابها تلقائيًا عند تصدير CBZ",
+    "pagesAutoComputed_one": "صفحة واحدة ({{count}}) — يُعاد حسابها تلقائيًا عند تصدير CBZ",
+    "pagesAutoComputed_other": "{{count}} صفحة — يُعاد حسابها تلقائيًا عند تصدير CBZ",
+    "sections": {
+      "charactersAndWorld": "الشخصيات والعالم",
+      "classification": "التصنيف والوسوم",
+      "common": "شائع",
+      "credits": "طاقم العمل",
+      "notesAndReview": "الملاحظات والمراجعة",
+      "pages": "الصفحات",
+      "publishing": "النشر والإصدار",
+      "seriesAndStory": "السلسلة والقصة"
+    },
+    "title": "البيانات الوصفية",
+    "translate": "ترجمة البيانات الوصفية",
+    "translated": "المترجم",
+    "translating": "جارٍ الترجمة…",
+    "yesNo": {
+      "no": "لا",
+      "unknown": "غير معروف",
+      "yes": "نعم"
+    }
+  },
   "model": {
     "baseUrl": "عنوان URL الأساسي",
     "default": "افتراضي",
     "targetLanguage": "اللغة المستهدفة"
   },
   "modelPicker": {
+    "chooseQuantization": "اختر التكميم لـ {{model}}",
+    "downloaded": "تم التنزيل",
     "empty": "لا توجد نماذج متاحة.",
     "loading": "جارٍ تحميل النماذج…",
     "noResults": "لا توجد نماذج تطابق هذا البحث.",
+    "notDownloaded": "غير منزّل",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "ابحث عن نماذج",
     "title": "اختر نموذجًا",
-    "useModel": "استخدام {{model}} من {{provider}}"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "استخدام {{model}} من {{provider}}",
+    "vramFit": {
+      "fits": "مناسب",
+      "swaps": "تبديل",
+      "tooLarge": "كبير جدًا"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} من {{available}} متاح",
+      "withOther": "≈{{model}} (+ {{other}} مراحل أخرى) من {{available}} متاح"
+    }
   },
   "navigator": {
     "actionsFor": "إجراءات {{page}}",
@@ -343,6 +508,12 @@
     "importAction": "استيراد",
     "importFiles": "ملفات…",
     "importFolder": "مجلد…",
+    "importSkipped": "تم تخطي {{count}} من الملفات غير المدعومة",
+    "importSkippedMore": "{{files}}، و{{count}} أخرى",
+    "importSkippedMore_one": "{{files}}، و{{count}} آخر",
+    "importSkippedMore_other": "{{files}}، و{{count}} أخرى",
+    "importSkipped_one": "تم تخطي {{count}} ملف غير مدعوم",
+    "importSkipped_other": "تم تخطي {{count}} من الملفات غير المدعومة",
     "importing": "جارٍ استيراد الصفحات…",
     "importingAction": "جارٍ الاستيراد…",
     "noImage": "لا توجد صورة",
@@ -460,8 +631,13 @@
       "thresholds": "العتبات",
       "title": "خط المعالجة",
       "translator": {
+        "combinePages": "دمج الصفحات",
+        "combinePagesDescription": "ترجمة الصفحات المتتالية معاً (أو إرفاق حوار الصفحات المجاورة عند تفعيل الرؤية) للحفاظ على اتساق الأسماء والقصة.",
         "instructions": "تعليمات إضافية",
         "instructionsDescription": "اختيارية، بأي لغة وأي صيغة، مثل طريقة كتابة اسم أو نبرة الأسلوب. يضيفها Koharu كما هي بعد موجّه النظام الخاص به.",
+        "maxPages": "الحد الأقصى للصفحات لكل طلب",
+        "maxPagesAuto": "تلقائي",
+        "maxPagesDescription": "اتركه فارغاً للوضع التلقائي (حسب حدود سياق ومخرجات النموذج).",
         "reasoning": "التفكير",
         "reasoningDescription": "استخدام تفكير النموذج أثناء الترجمة.",
         "targetLanguageDescription": "اختر اللغة التي تُترجم إليها النصوص.",
@@ -542,6 +718,15 @@
     "title": "تحضير Koharu"
   },
   "status": {
+    "activity": "النشاط",
+    "activityActive": "{{count}} نشط",
+    "activityActive_one": "{{count}} نشط",
+    "activityActive_other": "{{count}} نشط",
+    "activityFailed": "{{count}} فشل",
+    "activityFailed_one": "{{count}} فشل",
+    "activityFailed_other": "{{count}} فشل",
+    "activityQueued": "{{active}} · +{{queued}} في الانتظار",
+    "openActivity": "فتح تبويب النشاط",
     "zoom": "تكبير"
   },
   "story": {

@@ -13,7 +13,7 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::{Library, Repository, Turn};
+use koharu_runtime::{Library, PinnedFile, Repository, Turn};
 
 use self::{
     config::Config,
@@ -25,6 +25,12 @@ const REPOSITORY: Repository = Repository::model(
     "muscgab/manga-ocr-ar-experimental",
     "20208154a8d34dc6e5fc13ba81bc35f0a2f1a26e",
 );
+
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(REPOSITORY, "config.json", 230),
+    PinnedFile::new(REPOSITORY, "model.safetensors", 522_397_016),
+    PinnedFile::new(REPOSITORY, "vocab.json", 47_439),
+];
 
 /// Upstream `MangaOCR.__call__`'s default.
 const BATCH_SIZE: usize = 64;
@@ -40,7 +46,7 @@ impl MangaOcrAr {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::torch::device(device);
         let [config, weights, vocabulary] = REPOSITORY
-            .resolve(["config.json", "model.safetensors", "vocab.json"])
+            .resolve([FILES[0].filename, FILES[1].filename, FILES[2].filename])
             .await
             .context("failed to resolve manga-ocr-ar's files")?;
         let config: Config = serde_json::from_slice(&fs_err::read(&config)?)?;

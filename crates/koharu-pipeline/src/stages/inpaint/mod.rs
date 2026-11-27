@@ -23,7 +23,6 @@ use indoc::indoc;
 use koharu_scene::{LayerId, Rect, Tiles};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
-use tokio_util::task::AbortOnDropHandle;
 
 pub use self::model::Inpainter;
 use self::{
@@ -118,6 +117,9 @@ pub(crate) async fn inpaint(
     area: Option<Arc<AreaWork>>,
 ) -> Result<()> {
     let member = &task.members[0];
+    if member.cancel.is_cancelled() {
+        return Err(super::Stopped.into());
+    }
     let (reader, painted) = (member.clone(), area.clone());
     let work = tokio::task::spawn_blocking(move || {
         let _span =
@@ -140,6 +142,7 @@ pub(crate) async fn inpaint(
     let name = own.clone().unwrap_or_default();
     let prompt = own.unwrap_or_else(|| config.inpainter.prompt.clone());
     let asked = prompt.clone();
+    let run = member.run;
     let (cancel, runtime) = (member.cancel.clone(), Handle::current());
     let work = task
         .inference(&[member], move |models| {
@@ -147,19 +150,10 @@ pub(crate) async fn inpaint(
             if work.regions.is_empty() {
                 return Ok(work);
             }
-            let inpainter = models.get(&key, |device| model::load(model, device))?;
-            // Stop ends the redraw under way as well as the windows after it.
-            let _stop = inpainter.canceller().map(|canceller| {
-                let cancel = cancel.clone();
-                AbortOnDropHandle::new(runtime.spawn(async move {
-                    cancel.cancelled().await;
-                    canceller.cancel();
-                }))
-            });
-            redraw::windows(work, inpainter.as_ref(), &asked, &cancel)
+            redraw::windows(work, models, &key, run, model, &asked, &cancel, &runtime)
         })
         .await?;
-    let page = member.page;
+    let page = member.page_id();
     let parameters = (!prompt.trim().is_empty()).then(|| serde_json::json!({"prompt": prompt}));
     let made = action("c2pa.created", &model.to_string(), parameters);
     member

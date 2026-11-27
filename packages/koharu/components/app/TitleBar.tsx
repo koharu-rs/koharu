@@ -3,7 +3,7 @@
 import * as Sentry from '@sentry/nextjs'
 import { useIsMutating, useMutation } from '@tanstack/react-query'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { BookOpen, FilePlus2, FolderOpen, LoaderCircle, PenLine } from 'lucide-react'
+import { BookOpen, BookText, FilePlus2, FolderOpen, LoaderCircle, PenLine } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +12,7 @@ import { AboutDialog } from '@/components/app/AboutDialog'
 import { checkForUpdates } from '@/components/app/Updater'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { Choice } from '@/components/controls/Choice'
+import { MetadataDialog } from '@/components/editor/MetadataPanel'
 import {
   send,
   useCommand,
@@ -24,7 +25,13 @@ import {
 import { applyDefaultStyles, deleteSelection } from '@/lib/scene'
 import { shortcutLabel, shortcuts, useKeyboard } from '@/lib/shortcuts'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type ImageFormat, type PageId } from '@koharu/ipc/protocol'
+import {
+  commands,
+  type ExportConfig,
+  type ImageCodec,
+  type ImageFormat,
+  type PageId,
+} from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   Dialog,
@@ -47,6 +54,7 @@ import {
   MenubarTrigger as UiMenubarTrigger,
 } from '@koharu/ui/components/menubar'
 import { Slider } from '@koharu/ui/components/slider'
+import { Switch } from '@koharu/ui/components/switch'
 import { ToggleGroup, ToggleGroupItem } from '@koharu/ui/components/toggle-group'
 import { cn } from '@koharu/ui/lib/utils'
 
@@ -78,6 +86,8 @@ export function TitleBar() {
   const selectedPages = useKoharuStore((state) => state.selectedPages)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const settingsOpen = useKoharuStore((state) => state.settingsOpen)
+  const metadataOpen = useKoharuStore((state) => state.metadataOpen)
+  const setMetadataOpen = useKoharuStore((state) => state.setMetadataOpen)
   const reading = useKoharuStore((state) => state.reading)
   const setReading = useKoharuStore((state) => state.setReading)
   const { importPages, importing } = useImportPages()
@@ -171,6 +181,11 @@ export function TitleBar() {
                 disabled={exportable.length === 0}
                 onOptions={askExportOptions}
               />
+              <MenubarSeparator />
+              <MenubarItem disabled={!project} onClick={() => setMetadataOpen(true)}>
+                <BookText />
+                {t('menu.metadata')}
+              </MenubarItem>
               <MenubarSeparator />
               {/* Google Docs' Use my default styles and Save as my default styles: a project keeps
                 its own styles, which Preferences' only start. */}
@@ -307,15 +322,19 @@ export function TitleBar() {
           </MenubarMenu>
         </Menubar>
 
-        <div className='min-w-0 flex-1' />
-        <div className='pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[40vw] min-w-16 -translate-x-1/2 items-center justify-center px-3 text-[11px] text-muted-foreground select-none'>
+        <div
+          data-tauri-drag-region='deep'
+          className='flex min-w-0 flex-1 items-center justify-center px-3 text-[11px] text-muted-foreground select-none'
+        >
           {project ? (
-            <span className='truncate'>
-              <span className='font-medium text-foreground'>{project.name}</span>
+            <span className='flex max-w-full min-w-0 items-center'>
+              <span className='min-w-0 truncate font-medium text-foreground'>{project.name}</span>
               {page && (
                 <>
-                  <span className='mx-2'>/</span>
-                  <span>{t('navigator.pageNumber', { number: pageNumber })}</span>
+                  <span className='mx-2 shrink-0'>/</span>
+                  <span className='shrink-0'>
+                    {t('navigator.pageNumber', { number: pageNumber })}
+                  </span>
                 </>
               )}
             </span>
@@ -325,32 +344,45 @@ export function TitleBar() {
         </div>
 
         {project && !settingsOpen && (
-          <ToggleGroup
-            value={[reading ? 'read' : 'edit']}
-            onValueChange={([next]) => next && setReading(next === 'read')}
-            aria-label={t('reader.mode')}
-            className='relative z-10 mr-2 shrink-0 rounded-md border border-input bg-background p-0.5'
-          >
-            {(
-              [
-                ['read', BookOpen, t('reader.read')],
-                ['edit', PenLine, t('reader.edit')],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <ToggleGroupItem
-                key={value}
-                value={value}
-                className='h-6 gap-1 px-2 text-[10px] text-muted-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground hover:aria-pressed:bg-primary/90'
-              >
-                <Icon className='size-3' />
-                {label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <>
+            <Button
+              type='button'
+              variant='ghost'
+              size='xs'
+              onClick={() => setMetadataOpen(true)}
+              className='relative z-10 mr-1.5 h-6 shrink-0 gap-1 px-2 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+            >
+              <BookText className='size-3' aria-hidden='true' />
+              {t('metadata.button')}
+            </Button>
+            <ToggleGroup
+              value={[reading ? 'read' : 'edit']}
+              onValueChange={([next]) => next && setReading(next === 'read')}
+              aria-label={t('reader.mode')}
+              className='relative z-10 mr-2 shrink-0 rounded-md border border-input bg-background p-0.5'
+            >
+              {(
+                [
+                  ['read', BookOpen, t('reader.read')],
+                  ['edit', PenLine, t('reader.edit')],
+                ] as const
+              ).map(([value, Icon, label]) => (
+                <ToggleGroupItem
+                  key={value}
+                  value={value}
+                  className='h-6 gap-1 px-2 text-[10px] text-muted-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground hover:aria-pressed:bg-primary/90'
+                >
+                  <Icon className='size-3' />
+                  {label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </>
         )}
         {!macOS && <WindowControls />}
       </header>
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+      <MetadataDialog open={metadataOpen} onOpenChange={setMetadataOpen} />
       {exportOptions && (
         <ExportDialog options={exportOptions} open={exportOpen} onOpenChange={setExportOpen} />
       )}
@@ -361,12 +393,21 @@ export function TitleBar() {
 type ExportLabel = 'menu.export' | 'menu.exportSelected'
 
 /** An export whose options its dialog asks for. */
-type ExportOptions = { label: ExportLabel; pages: PageId[] | null; format: 'jpeg' | 'webp' | 'cbz' }
+type ExportOptions = {
+  label: ExportLabel
+  pages: PageId[] | null
+  format: 'jpeg' | 'webp' | 'jxl' | 'cbz'
+}
 
-const imageNames = { png: 'PNG', jpeg: 'JPEG', webp: 'WebP' } as const
+const imageNames: Record<ImageCodec, string> = {
+  png: 'PNG',
+  jpeg: 'JPEG',
+  webp: 'WebP',
+  jxl: 'JPEG XL',
+}
 
-/** The formats the pages go out in, all of them when `pages` is null. JPEG, WebP, and CBZ ask for
- * their options first. One export runs at a time. */
+/** The formats the pages go out in, all of them when `pages` is null. JPEG, WebP, JPEG XL, and CBZ
+ * ask for their options first. One export runs at a time. */
 function ExportMenu({
   label,
   pages,
@@ -385,6 +426,7 @@ function ExportMenu({
     ['PNG', () => run(pages, { images: 'png' })],
     ['JPEG', () => onOptions({ label, pages, format: 'jpeg' })],
     ['WebP', () => onOptions({ label, pages, format: 'webp' })],
+    ['JPEG XL', () => onOptions({ label, pages, format: 'jxl' })],
     [
       'PSD',
       () =>
@@ -418,7 +460,8 @@ function ExportMenu({
 }
 
 /** An export's options before its destination, as Photoshop's Export As asks for them: a CBZ's
- * image format, and a JPEG's or WebP's quality. They stay as last set while the app runs. */
+ * image format, lossless mode for WebP/JPEG XL, and lossy quality. Saved to preferences on export
+ * so defaults carry across sessions and CLI runs. */
 function ExportDialog({
   options,
   open,
@@ -429,12 +472,9 @@ function ExportDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
+  const { data: preferences } = usePreferences(open)
+  const savePreferences = useSavePreferences()
   const { run } = useCommand(['export', options.label], commands.export, options.label)
-  const [cbz, setCbz] = useState<keyof typeof imageNames>('png')
-  const [quality, setQuality] = useState(90)
-  const image = options.format === 'cbz' ? cbz : options.format
-  const format: ImageFormat =
-    image === 'png' ? 'png' : image === 'jpeg' ? { jpeg: { quality } } : { webp: { quality } }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -446,50 +486,132 @@ function ExportDialog({
             })}
           </DialogTitle>
         </DialogHeader>
-        <div className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-[12px]'>
-          {options.format === 'cbz' && (
-            <>
-              <span className='text-muted-foreground'>{t('export.imageFormat')}</span>
-              <Choice
-                value={cbz}
-                choices={imageNames}
-                label={t('export.imageFormat')}
-                onChange={setCbz}
-              />
-            </>
-          )}
-          {image !== 'png' && (
-            <>
-              <span className='text-muted-foreground'>{t('export.quality')}</span>
-              <div className='flex min-w-0 items-center gap-3'>
-                <Slider
-                  aria-label={t('export.quality')}
-                  min={1}
-                  max={100}
-                  step={1}
-                  value={quality}
-                  onValueChange={setQuality}
-                />
-                <span className='w-6 shrink-0 text-right tabular-nums'>{quality}</span>
-              </div>
-            </>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            onClick={() => {
-              onOpenChange(false)
-              run(options.pages, options.format === 'cbz' ? { cbz: format } : { images: format })
-            }}
-          >
-            {t('export.export')}
-          </Button>
-        </DialogFooter>
+        {open &&
+          (preferences ? (
+            <ExportForm
+              key={options.format}
+              options={options}
+              initial={preferences.export}
+              saving={savePreferences.isPending}
+              onCancel={() => onOpenChange(false)}
+              onConfirm={async (nextExport, imageFormat) => {
+                try {
+                  await savePreferences.mutateAsync({ ...preferences, export: nextExport })
+                  onOpenChange(false)
+                  run(
+                    options.pages,
+                    options.format === 'cbz' ? { cbz: imageFormat } : { images: imageFormat },
+                  )
+                } catch {
+                  // MutationCache.onError reports the failure toast; keep dialog open.
+                }
+              }}
+            />
+          ) : (
+            <p className='py-4 text-[11px] text-muted-foreground'>{t('settings.loading')}</p>
+          ))}
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ExportForm({
+  options,
+  initial,
+  saving,
+  onCancel,
+  onConfirm,
+}: {
+  options: ExportOptions
+  initial: ExportConfig
+  saving: boolean
+  onCancel: () => void
+  onConfirm: (nextExport: ExportConfig, imageFormat: ImageFormat) => Promise<void>
+}) {
+  const { t } = useTranslation()
+  const [cbzCodec, setCbzCodec] = useState<ImageCodec>(initial.cbz_codec ?? 'png')
+  const [quality, setQuality] = useState(initial.quality ?? 90)
+  const [lossless, setLossless] = useState(initial.lossless ?? false)
+  const codec: ImageCodec = options.format === 'cbz' ? cbzCodec : options.format
+  const supportsLossless = codec === 'webp' || codec === 'jxl'
+  const showsQuality = codec === 'jpeg' || (supportsLossless && !lossless)
+  const imageFormat: ImageFormat =
+    codec === 'png'
+      ? 'png'
+      : codec === 'jpeg'
+        ? { jpeg: { quality } }
+        : codec === 'webp'
+          ? { webp: { quality, lossless } }
+          : { jxl: { quality, lossless } }
+
+  return (
+    <>
+      <div className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 text-[12px]'>
+        {options.format === 'cbz' && (
+          <>
+            <span className='text-muted-foreground'>{t('export.imageFormat')}</span>
+            <Choice
+              value={cbzCodec}
+              choices={imageNames}
+              label={t('export.imageFormat')}
+              onChange={setCbzCodec}
+            />
+          </>
+        )}
+        {supportsLossless && (
+          <>
+            <div className='min-w-0'>
+              <span className='text-muted-foreground'>{t('export.lossless')}</span>
+            </div>
+            <div className='flex items-center justify-end'>
+              <Switch
+                aria-label={t('export.lossless')}
+                checked={lossless}
+                onCheckedChange={setLossless}
+              />
+            </div>
+          </>
+        )}
+        {showsQuality && (
+          <>
+            <span className='text-muted-foreground'>{t('export.quality')}</span>
+            <div className='flex min-w-0 items-center gap-3'>
+              <Slider
+                aria-label={t('export.quality')}
+                min={1}
+                max={100}
+                step={1}
+                value={quality}
+                onValueChange={setQuality}
+              />
+              <span className='w-6 shrink-0 text-right tabular-nums'>{quality}</span>
+            </div>
+          </>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant='outline' onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>
+        <Button
+          disabled={saving}
+          aria-busy={saving}
+          onClick={() =>
+            void onConfirm(
+              {
+                cbz_codec: options.format === 'cbz' ? cbzCodec : (initial.cbz_codec ?? 'png'),
+                quality,
+                lossless: supportsLossless ? lossless : (initial.lossless ?? false),
+              },
+              imageFormat,
+            )
+          }
+        >
+          {saving && <LoaderCircle className='size-3.5 animate-spin' aria-hidden='true' />}
+          {t('export.export')}
+        </Button>
+      </DialogFooter>
+    </>
   )
 }
 

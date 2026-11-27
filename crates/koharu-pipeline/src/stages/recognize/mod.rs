@@ -13,7 +13,7 @@ use serde_json::json;
 
 pub use self::model::Recognizer;
 use super::{Member, Task, action, key, writable};
-use crate::{PipelineConfig, Stage};
+use crate::{PipelineConfig, RunId, Stage, gpu::LoadOutcome};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -27,6 +27,9 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
     let read = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let mut read = Vec::new();
         for member in members {
+            if member.cancel.is_cancelled() {
+                continue;
+            }
             let _span =
                 tracing::info_span!("read", stage = %Stage::Recognize, page = member.index + 1)
                     .entered();
@@ -44,14 +47,28 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
         read.into_iter().unzip();
     let key = key(Stage::Recognize, config).expect("a recognizer is Koharu's");
     let model = config.recognizer.model;
+    let runs: Vec<RunId> = members.iter().map(|member| member.run).collect();
+    let counts: Vec<usize> = crops.iter().map(Vec::len).collect();
+    let (blocks, images): (Vec<LayerId>, Vec<DynamicImage>) = crops.into_iter().flatten().unzip();
     let (texts, language) = task
         .inference(&members.iter().collect::<Vec<_>>(), move |models| {
-            let recognizer = models.get(&key, |device| model::load(model, device))?;
-            let counts: Vec<usize> = crops.iter().map(Vec::len).collect();
-            let (blocks, images): (Vec<LayerId>, Vec<DynamicImage>) =
-                crops.into_iter().flatten().unzip();
-            let _span = tracing::info_span!("ocr", crops = images.len()).entered();
-            let texts = recognizer.inference(&images)?;
+            let (texts, language) = models.run(
+                &key,
+                &runs,
+                None,
+                |device| async move {
+                    Ok(LoadOutcome {
+                        model: model::load(model, device).await?,
+                        teardown: None,
+                        full_gpu: true,
+                    })
+                },
+                |recognizer| {
+                    let _span = tracing::info_span!("ocr", crops = images.len()).entered();
+                    let texts = recognizer.inference(&images)?;
+                    Ok((texts, recognizer.language()))
+                },
+            )?;
             anyhow::ensure!(
                 texts.len() == images.len(),
                 "{} texts for {} blocks",
@@ -63,7 +80,7 @@ pub(crate) async fn recognize(task: &Task, config: &PipelineConfig) -> anyhow::R
                 .into_iter()
                 .map(|count| read.by_ref().take(count).collect())
                 .collect();
-            Ok((texts, recognizer.language()))
+            Ok((texts, language))
         })
         .await?;
     let name = model.to_string();
@@ -105,7 +122,7 @@ fn crops(member: &Member) -> anyhow::Result<Option<Vec<(LayerId, DynamicImage)>>
     let masks: Vec<(LayerId, Rect, GrayImage)> = {
         let session = member.session.lock();
         project
-            .blocks(member.page)
+            .blocks(member.page_id())
             .unwrap_or_default()
             .into_iter()
             .filter_map(|(id, block)| {

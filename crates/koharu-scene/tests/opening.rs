@@ -4,7 +4,7 @@ mod common;
 use std::{io::Cursor, path::Path};
 
 use common::*;
-use koharu_scene::{Error, Hash, History, Meta, Op, PageId, Query, Rect, Session};
+use koharu_scene::{Answer, Error, Hash, History, Meta, Op, PageId, Query, Rect, Session};
 use serde_json::json;
 
 /// Reopens the project at `path` after `change` alters its file by hand.
@@ -82,7 +82,7 @@ fn only_compatible_versions_open() {
     let (_dir, path) = path();
     drop(Session::create(&path, Meta::default()).expect("a project"));
     let bytes = fs_err::read(&path).expect("its bytes");
-    for version in ["1.4.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
+    for version in ["1.5.0", "2.0.0", "0.9.0", "1.0.0-alpha", "x"] {
         let copy = path.with_extension(format!("v{version}"));
         fs_err::copy(&path, &copy).expect("a copy");
         let conn = rusqlite::Connection::open(&copy).expect("the file opens");
@@ -100,7 +100,7 @@ fn only_compatible_versions_open() {
         assert_eq!(fs_err::read(&copy).expect("its bytes"), before, "{version}");
     }
     assert_eq!(fs_err::read(&path).expect("its bytes"), bytes);
-    Session::open(&path, Meta::default()).expect("1.3.0 opens");
+    Session::open(&path, Meta::default()).expect("1.4.0 opens");
 }
 
 /// Two texts of a page as 0.96.2 stored it, in version 1.0.0: a block's, with
@@ -176,7 +176,7 @@ fn a_page_1_0_0_wrote_opens_as_it_was_and_keeps_the_styles_it_took() {
     apply(&mut session, ops).expect("ruby");
     drop(session);
     let session = Session::open(&path, Meta::default()).expect("it opens again");
-    assert_eq!(version(&session), "1.3.0");
+    assert_eq!(version(&session), "1.4.0");
     assert_eq!(meta(&session), json!(preferred));
     let mut written = stored;
     written["layers"][0]["translation"]["content"] = spans;
@@ -354,4 +354,140 @@ fn files_go_at_reopening_when_nothing_names_them() {
     assert_eq!(session.file(&hb).expect("the image's file"), b"b");
     assert!(session.file(&hscan).is_ok(), "a background names its file");
     assert_eq!(session.history(), History::default());
+}
+
+#[test]
+fn a_1_1_0_project_opens_read_only_and_upgrades_atomically_on_first_write() {
+    let (_dir, path) = path();
+    drop(Session::create(&path, Meta::default()).expect("a project"));
+    {
+        let conn = rusqlite::Connection::open(&path).expect("raw sqlite open");
+        conn.execute_batch(
+            "ALTER TABLE project DROP COLUMN meta;
+             DROP TABLE metadata;
+             UPDATE project SET version = '1.1.0';
+             PRAGMA wal_checkpoint(TRUNCATE);",
+        )
+        .expect("downgrade to 1.1.0");
+    }
+
+    let before_bytes = fs_err::read(&path).expect("before bytes");
+    let before_mtime = fs_err::metadata(&path)
+        .expect("metadata")
+        .modified()
+        .expect("mtime");
+
+    {
+        let session = Session::open(&path, Meta::default()).expect("1.1.0 opens read-only");
+        let Answer::Project(project) = session.query(Query::GetProject).expect("project") else {
+            panic!("not a project");
+        };
+        assert_eq!(project.version, "1.1.0");
+        let Answer::Metadata(meta) = session
+            .query(Query::GetProjectMetadata)
+            .expect("metadata query")
+        else {
+            panic!("not metadata");
+        };
+        assert!(meta.is_empty());
+    }
+
+    assert_eq!(fs_err::read(&path).expect("after open bytes"), before_bytes);
+    assert_eq!(
+        fs_err::metadata(&path)
+            .expect("metadata")
+            .modified()
+            .expect("mtime"),
+        before_mtime
+    );
+
+    let has_metadata_table = |path: &Path| -> bool {
+        let conn =
+            rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("read-only open");
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'metadata')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("sqlite_master query")
+    };
+    assert!(!has_metadata_table(&path));
+
+    // A failing edit rolls back cleanly without creating `metadata` or bumping version.
+    let mut session = Session::open(&path, Meta::default()).expect("reopen 1.1.0");
+    let missing = PageId(koharu_scene::Uuid::nil());
+    let err = session
+        .apply(edit(vec![
+            Op::SetProjectMetadata {
+                key: "comic_info".to_owned(),
+                value: Some(json!({"series": {"original": "よつばと!"}})),
+            },
+            Op::RemovePage {
+                page: missing.into(),
+            },
+        ]))
+        .expect_err("failing edit rolls back");
+    assert!(matches!(err, Error::NotFound(_)), "{err:?}");
+    let Answer::Project(project) = session.query(Query::GetProject).expect("project") else {
+        panic!("not a project");
+    };
+    assert_eq!(project.version, "1.1.0");
+    assert!(session.project().metadata("comic_info").is_none());
+    drop(session);
+    assert!(!has_metadata_table(&path));
+    assert_eq!(
+        fs_err::read(&path).expect("bytes after rollback"),
+        before_bytes
+    );
+
+    // Empty key is rejected.
+    let mut session = Session::open(&path, Meta::default()).expect("reopen 1.1.0");
+    let err = session
+        .apply(edit(vec![Op::SetProjectMetadata {
+            key: String::new(),
+            value: Some(json!("x")),
+        }]))
+        .expect_err("empty key fails");
+    assert!(matches!(err, Error::Invalid { .. }), "{err:?}");
+
+    // First valid write atomically creates `metadata`, writes data, and bumps version to `1.4.0`.
+    let value = json!({"series": {"original": "よつばと!"}});
+    session
+        .apply(edit(vec![Op::SetProjectMetadata {
+            key: "comic_info".to_owned(),
+            value: Some(value.clone()),
+        }]))
+        .expect("set metadata");
+    let Answer::Project(project) = session.query(Query::GetProject).expect("project") else {
+        panic!("not a project");
+    };
+    assert_eq!(project.version, "1.4.0");
+    assert_eq!(session.project().metadata("comic_info"), Some(&value));
+    let Answer::Metadata(meta) = session.query(Query::GetProjectMetadata).expect("metadata") else {
+        panic!("not metadata");
+    };
+    assert_eq!(meta.get("comic_info"), Some(&value));
+
+    // Undo and redo round-trip cleanly.
+    session.undo().expect("undo").expect("step");
+    assert!(session.project().metadata("comic_info").is_none());
+    session.redo().expect("redo").expect("step");
+    assert_eq!(session.project().metadata("comic_info"), Some(&value));
+    drop(session);
+
+    // Reopening persists 1.4.0 and metadata; null/None removes entry.
+    let mut session = Session::open(&path, Meta::default()).expect("reopen 1.4.0");
+    let Answer::Project(project) = session.query(Query::GetProject).expect("project") else {
+        panic!("not a project");
+    };
+    assert_eq!(project.version, "1.4.0");
+    assert_eq!(session.project().metadata("comic_info"), Some(&value));
+    session
+        .apply(edit(vec![Op::SetProjectMetadata {
+            key: "comic_info".to_owned(),
+            value: Some(serde_json::Value::Null),
+        }]))
+        .expect("null removes metadata");
+    assert!(session.project().metadata("comic_info").is_none());
 }

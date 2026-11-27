@@ -6,17 +6,55 @@
     "version": "버전"
   },
   "activity": {
+    "cancelDownload": "다운로드 취소",
+    "cancelJob": "{{job}} 취소",
+    "cancelRun": "대기 작업 취소",
     "dismiss": "닫기",
+    "dismissDownload": "다운로드 닫기",
+    "downloadCancelled": "다운로드가 취소되었습니다.",
     "downloadFailed": "다운로드에 실패했습니다.",
-    "downloadingFiles": "{{count}}개 파일 다운로드 중",
-    "downloadingFiles_one": "{{count}}개 파일 다운로드 중",
-    "downloadingFiles_other": "{{count}}개 파일 다운로드 중",
+    "downloadFiles": "{{done}} / {{total}} 파일",
+    "downloadFinished": "다운로드 완료",
+    "downloadProgress": "{{completed}} / {{total}}",
+    "downloadSpeed": "{{speed}}/s",
+    "emptyDescription": "실행 중인 작업, 대기열, 모델 다운로드가 여기에 표시됩니다.",
+    "emptyTitle": "최근 활동 없음",
     "loadingPages": "페이지 불러오는 중: {{loaded}} / {{total}}",
     "modelDownload": "모델 다운로드",
+    "pageRange": "{{from}}–{{to}}페이지",
     "processing": "처리 중",
     "processingFailed": "처리에 실패했습니다.",
-    "stop": "중지",
-    "title": "활동"
+    "queueOrder": "#{{index}}",
+    "queueReason": {
+      "aged_priority": "대기 시간 우선순위",
+      "fifo": "요청 순서",
+      "grouped_by_loaded_model": "로드된 모델 기준 묶음",
+      "lower_vram_cost": "낮은 VRAM 교체 비용",
+      "waiting_for_download": "모델 다운로드 대기 중"
+    },
+    "queueScope": {
+      "area": "선택 영역",
+      "blocks": "{{count}}개 블록",
+      "blocks_one": "{{count}}개 블록",
+      "blocks_other": "{{count}}개 블록",
+      "metadata": "메타데이터",
+      "pages": "{{count}}페이지",
+      "pages_one": "{{count}}페이지",
+      "pages_other": "{{count}}페이지",
+      "project": "전체 프로젝트"
+    },
+    "queuedStep": "{{target}} {{stage}}",
+    "rerunNow": "지금 다시 실행",
+    "retryDownload": "다운로드 재시도",
+    "sections": {
+      "downloads": "다운로드",
+      "queued": "대기열",
+      "running": "실행 중"
+    },
+    "stageRuntime": "런타임",
+    "stopRun": "작업 중지",
+    "title": "활동",
+    "waitingForDownload": "다운로드 대기 중"
   },
   "agent": {
     "cancel": "취소",
@@ -40,6 +78,7 @@
     "working": "작업 중…"
   },
   "canvas": {
+    "dropToAppend": "파일을 놓아 페이지 추가",
     "empty": "시작할 페이지를 선택하세요.",
     "notice": {
       "eraser_needs_raster": "지우려면 래스터 레이어를 선택하세요."
@@ -68,6 +107,8 @@
   "export": {
     "export": "내보내기",
     "imageFormat": "이미지 형식",
+    "lossless": "무손실",
+    "losslessDescription": "압축 손상 없이 원본 픽셀 데이터를 유지합니다.",
     "quality": "품질",
     "title": "{{format}} 내보내기"
   },
@@ -161,6 +202,7 @@
       "resize": "크기 조정",
       "rotate": "회전",
       "set_locked": "잠금/잠금 해제",
+      "set_metadata": "메타데이터 편집",
       "set_source_text": "원문 편집",
       "set_style": "글꼴 서식 변경",
       "set_text": "텍스트 편집",
@@ -181,7 +223,13 @@
     "output": "출력",
     "pipelineStages": "파이프라인 단계",
     "providerDefault": "제공자 기본값",
+    "queue": "대기열에 추가",
+    "queueDescription": "진행 중인 일괄 작업이 끝난 후 실행합니다.",
+    "queueProcessing": "처리를 대기열에 추가",
+    "rerunNow": "지금 다시 실행",
+    "rerunNowDescription": "다음 단계에서 대기 중인 작업보다 먼저 실행합니다.",
     "run": "실행",
+    "runOptions": "실행 옵션",
     "runProcessing": "처리 실행",
     "scope": "범위",
     "scopeShort": {
@@ -198,9 +246,7 @@
     "stageCount": "{{count}}단계",
     "stageCount_one": "{{count}}단계",
     "stageCount_other": "{{count}}단계",
-    "stages": "단계",
-    "stop": "중지",
-    "stopProcessing": "처리 중지"
+    "stages": "단계"
   },
   "inspector": {
     "alignBottom": "아래 정렬",
@@ -310,6 +356,7 @@
     "help": "도움말",
     "history": "작업 내역",
     "import": "페이지 가져오기",
+    "metadata": "메타데이터…",
     "original": "원본 보기",
     "redo": "다시 실행",
     "saveDefaultStyles": "서체를 기본값으로 저장",
@@ -320,18 +367,136 @@
     "useDefaultStyles": "기본 서체 사용",
     "view": "보기"
   },
+  "metadata": {
+    "ageRating": {
+      "adultsOnly18Plus": "성인 전용 18+",
+      "earlyChildhood": "유아용",
+      "everyone": "전체 이용가",
+      "everyone10Plus": "10세 이상",
+      "g": "G",
+      "kidsToAdults": "아동~성인",
+      "m": "M",
+      "ma15Plus": "MA15+",
+      "mature17Plus": "17세 이상",
+      "pg": "PG",
+      "r18Plus": "R18+",
+      "ratingPending": "등급 보류",
+      "teen": "청소년",
+      "unknown": "알 수 없음",
+      "x18Plus": "X18+"
+    },
+    "button": "메타데이터",
+    "description": "프로젝트에 저장되고 CBZ 내보내기에 포함되는 ComicInfo 2.1 메타데이터를 편집합니다.",
+    "fields": {
+      "ageRating": "연령 등급",
+      "alternateCount": "대체 총 수",
+      "alternateNumber": "대체 번호",
+      "alternateSeries": "대체 시리즈",
+      "blackAndWhite": "흑백",
+      "characters": "등장인물",
+      "colorist": "채색",
+      "communityRating": "커뮤니티 평점",
+      "count": "총 수",
+      "coverArtist": "표지 작가",
+      "day": "일",
+      "editor": "편집자",
+      "format": "형식",
+      "genre": "장르",
+      "gtin": "GTIN",
+      "imprint": "임프린트",
+      "inker": "펜터치",
+      "languageIso": "언어 ISO",
+      "letterer": "식자",
+      "locations": "장소",
+      "mainCharacterOrTeam": "주인공 또는 팀",
+      "manga": "만화",
+      "month": "월",
+      "notes": "메모",
+      "number": "화/번호",
+      "pageCount": "페이지 수",
+      "pages": "페이지",
+      "penciller": "작화",
+      "publisher": "출판사",
+      "review": "리뷰",
+      "scanInformation": "스캔 정보",
+      "series": "시리즈",
+      "seriesGroup": "시리즈 그룹",
+      "storyArc": "스토리 아크",
+      "storyArcNumber": "아크 번호",
+      "summary": "줄거리",
+      "tags": "태그",
+      "teams": "팀",
+      "title": "제목",
+      "translator": "번역가",
+      "volume": "권",
+      "web": "웹",
+      "writer": "글 작가",
+      "year": "연도"
+    },
+    "languageIsoHint": "CBZ 내보내기 시 {{target}}(활성 번역 대상 언어)가 기록됩니다.",
+    "manga": {
+      "no": "아니요",
+      "unknown": "알 수 없음",
+      "yes": "예",
+      "yesAndRightToLeft": "예 (오른쪽에서 왼쪽)"
+    },
+    "moreFields": "추가 항목",
+    "noTranslatableFields": "번역하려면 텍스트 필드에 원문을 하나 이상 입력하세요.",
+    "original": "원문",
+    "pagesAutoComputed": "{{count}}페이지 — CBZ 내보내기 시 자동으로 다시 계산됩니다",
+    "pagesAutoComputed_one": "{{count}}페이지 — CBZ 내보내기 시 자동으로 다시 계산됩니다",
+    "pagesAutoComputed_other": "{{count}}페이지 — CBZ 내보내기 시 자동으로 다시 계산됩니다",
+    "sections": {
+      "charactersAndWorld": "등장인물 및 세계관",
+      "classification": "분류 및 태그",
+      "common": "기본",
+      "credits": "제작진",
+      "notesAndReview": "메모 및 리뷰",
+      "pages": "페이지",
+      "publishing": "출판 및 발매",
+      "seriesAndStory": "시리즈 및 스토리"
+    },
+    "title": "메타데이터",
+    "translate": "메타데이터 번역",
+    "translated": "번역",
+    "translating": "번역 중…",
+    "yesNo": {
+      "no": "아니요",
+      "unknown": "알 수 없음",
+      "yes": "예"
+    }
+  },
   "model": {
     "baseUrl": "기본 URL",
     "default": "기본값",
     "targetLanguage": "대상 언어"
   },
   "modelPicker": {
+    "chooseQuantization": "{{model}} 양자화 선택",
+    "downloaded": "다운로드됨",
     "empty": "사용 가능한 모델이 없습니다.",
     "loading": "모델 불러오는 중…",
     "noResults": "검색과 일치하는 모델이 없습니다.",
+    "notDownloaded": "다운로드되지 않음",
+    "quantizationLabel": "{{model}} ({{quantization}})",
     "search": "모델 검색",
     "title": "모델 선택",
-    "useModel": "{{provider}}의 {{model}} 사용"
+    "units": {
+      "b": "{{value}} B",
+      "gb": "{{value}} GB",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    },
+    "useModel": "{{provider}}의 {{model}} 사용",
+    "vramFit": {
+      "fits": "여유",
+      "swaps": "교체",
+      "tooLarge": "초과"
+    },
+    "vramTooltip": {
+      "alone": "≈{{model}} / 여유 {{available}}",
+      "withOther": "≈{{model}} (+ 다른 단계 {{other}}) / 여유 {{available}}"
+    }
   },
   "navigator": {
     "actionsFor": "{{page}} 작업",
@@ -343,6 +508,12 @@
     "importAction": "가져오기",
     "importFiles": "파일…",
     "importFolder": "폴더…",
+    "importSkipped": "지원하지 않는 파일 {{count}}개 건너뜀",
+    "importSkippedMore": "{{files}} 외 {{count}}개",
+    "importSkippedMore_one": "{{files}} 외 {{count}}개",
+    "importSkippedMore_other": "{{files}} 외 {{count}}개",
+    "importSkipped_one": "지원하지 않는 파일 {{count}}개 건너뜀",
+    "importSkipped_other": "지원하지 않는 파일 {{count}}개 건너뜀",
     "importing": "페이지 가져오는 중…",
     "importingAction": "가져오는 중…",
     "noImage": "이미지 없음",
@@ -460,8 +631,13 @@
       "thresholds": "임곗값",
       "title": "파이프라인",
       "translator": {
+        "combinePages": "페이지 묶어 번역",
+        "combinePagesDescription": "연속된 페이지를 함께 번역하거나(Vision 사용 시 인접 페이지 대사 첨부) 인물 이름과 전개 일관성을 유지합니다.",
         "instructions": "추가 지시",
         "instructionsDescription": "선택 사항이며 어떤 언어와 형식으로든 쓸 수 있습니다(이름 표기나 말투 등). Koharu는 자체 시스템 프롬프트 뒤에 쓴 그대로 덧붙입니다.",
+        "maxPages": "요청당 최대 페이지 수",
+        "maxPagesAuto": "자동",
+        "maxPagesDescription": "비워 두면 모델의 컨텍스트 및 출력 한도에 맞춰 자동으로 설정됩니다.",
         "reasoning": "추론",
         "reasoningDescription": "번역할 때 모델 추론을 사용합니다.",
         "targetLanguageDescription": "텍스트를 번역할 언어를 선택합니다.",
@@ -542,6 +718,15 @@
     "title": "Koharu 준비 중"
   },
   "status": {
+    "activity": "활동",
+    "activityActive": "{{count}}개 진행 중",
+    "activityActive_one": "{{count}}개 진행 중",
+    "activityActive_other": "{{count}}개 진행 중",
+    "activityFailed": "{{count}}개 실패",
+    "activityFailed_one": "{{count}}개 실패",
+    "activityFailed_other": "{{count}}개 실패",
+    "activityQueued": "{{active}} · +{{queued}}개 대기",
+    "openActivity": "활동 탭 열기",
     "zoom": "확대/축소"
   },
   "story": {

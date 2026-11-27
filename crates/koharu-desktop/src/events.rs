@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use koharu_canvas::{Camera, Notice, Typed};
 use koharu_pipeline::Event as PipelineEvent;
-use koharu_runtime::Transfer;
+use koharu_runtime::DownloadEntry;
 use koharu_scene::{Bounds, Change, LayerId, PageId, Rgba};
 use serde::Serialize;
 use specta::{Type, Types, datatype::DataType};
@@ -67,10 +67,22 @@ pub const COLOR: Event<Rgba> = Event::new("color");
 pub const BRUSH_DIAMETER: Event<f64> = Event::new("brush_diameter");
 pub const NOTICE: Event<Notice> = Event::new("notice");
 pub const PIPELINE: Event<PipelineEvent> = Event::new("pipeline");
-/// A model or font file's download, as it goes.
-pub const DOWNLOAD: Event<Transfer> = Event::new("download");
+/// A model or runtime package download, as it goes.
+pub const DOWNLOAD: Event<DownloadEntry> = Event::new("download");
 /// An extension's chapter loading into the open project, as it goes.
 pub const CHAPTER: Event<Loading> = Event::new("chapter");
+
+/// A file or folder dragged over or dropped onto the main window, in CSS pixels.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+pub enum FileDrag {
+    Enter { x: f64, y: f64 },
+    Over { x: f64, y: f64 },
+    Drop { x: f64, y: f64, paths: Vec<String> },
+    Leave,
+}
+
+pub const FILE_DRAG: Event<FileDrag> = Event::new("file_drag");
 
 /// Every event's name and payload, for the bindings.
 pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
@@ -89,5 +101,6 @@ pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
         PIPELINE.binding(types),
         DOWNLOAD.binding(types),
         CHAPTER.binding(types),
+        FILE_DRAG.binding(types),
     ]
 }

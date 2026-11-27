@@ -6,12 +6,12 @@ use std::{
     time::Duration,
 };
 
-use koharu_scene::{ProjectId, Session};
+use koharu_scene::{PageId, ProjectId, Session};
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
-    Error, Event, PipelineConfig, Request, Result, RunId,
+    Error, Event, PipelineConfig, QueueScope, Request, Result, RunId,
     event::Events,
     scheduler::{Command, Plan, Run, Scheduler},
 };
@@ -34,9 +34,28 @@ impl Pipeline {
     /// Tokio runtime. Models load on first use.
     #[must_use]
     pub fn new(config: PipelineConfig) -> Self {
+        Self::new_with_lock(config, None)
+    }
+
+    /// Starts the scheduler and the thread owning the models using a
+    /// pre-acquired [`koharu_runtime::AcceleratorLock`], so callers such as
+    /// `koharu-cli` can hold the cross-process lock upfront without
+    /// self-contending.
+    #[must_use]
+    pub fn with_accelerator_lock(
+        config: PipelineConfig,
+        lock: Arc<koharu_runtime::AcceleratorLock>,
+    ) -> Self {
+        Self::new_with_lock(config, Some(lock))
+    }
+
+    fn new_with_lock(
+        config: PipelineConfig,
+        lock: Option<Arc<koharu_runtime::AcceleratorLock>>,
+    ) -> Self {
         let config = Arc::new(RwLock::new(config));
         let events = Events::new();
-        let commands = Scheduler::spawn(Arc::clone(&config), events.clone());
+        let commands = Scheduler::spawn_with_lock(Arc::clone(&config), events.clone(), lock);
         Self(Arc::new(Shared {
             config,
             events,
@@ -65,14 +84,28 @@ impl Pipeline {
             .config
             .unwrap_or_else(|| self.0.config.read().clone());
         let project = session.lock().project();
-        let plan = Plan::new(&project, &request.target, &request.stages)?;
+        let plan = Plan::new(&project, &request.target, &request.stages, request.priority)?;
         let id = RunId(self.0.next.fetch_add(1, Ordering::Relaxed));
+        let scope = QueueScope::from_target(&request.target);
         // Told before the scheduler can tell anything of the run.
         self.0.events.send(Event::Queued {
             run: id,
-            steps: plan.pages() * request.stages.len(),
+            steps: plan.steps(request.stages.len()),
+            priority: request.priority,
+            scope,
+            stages: request.stages.clone(),
+            jobs: plan.ordered_jobs(&request.stages),
         });
-        let run = Run::new(id, session, project.id(), config, plan, &request.stages);
+        let run = Run::new(
+            id,
+            session,
+            project.id(),
+            config,
+            plan,
+            &request.stages,
+            request.priority,
+            scope,
+        );
         self.send(Command::Run(run));
         Ok(id)
     }
@@ -95,11 +128,18 @@ impl Pipeline {
         self.0.events.told()
     }
 
-    /// Stops every run, running and queued. What they finished stays, and
-    /// nothing more is written; a model call on the GPU finishes, but a
-    /// local translation stops at its next token.
-    pub fn stop(&self) {
-        self.send(Command::Stop);
+    /// Cancels `run` (waiting for download, queued, or running), or every run
+    /// when `run` is `None`. What they finished stays, and nothing more is
+    /// written; a model call on the GPU finishes, but a local translation stops
+    /// at its next token.
+    pub fn cancel(&self, run: Option<RunId>) {
+        self.send(Command::Cancel(run));
+    }
+
+    /// Cancels a single page-stage (or metadata when `page` is `None`) job
+    /// inside `run` without stopping the rest of the run.
+    pub fn cancel_job(&self, run: RunId, page: Option<PageId>, stage: crate::Stage) {
+        self.send(Command::CancelJob { run, page, stage });
     }
 
     /// Unloads every model once the GPU's current work ends, as ComfyUI's
@@ -129,7 +169,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::{Event, Outcome, Stage, Target};
+    use crate::{Event, Outcome, RunPriority, Stage, Target};
 
     /// A project of one blank page, with no scan, so detection loads no
     /// model, in a folder removed with it.
@@ -154,6 +194,7 @@ mod tests {
             target: Target::Project,
             stages: BTreeSet::from([Stage::Detect]),
             config: None,
+            priority: RunPriority::Normal,
         };
         let run = pipeline.run(session, request).expect("the run starts");
         let ended = Event::Ended {

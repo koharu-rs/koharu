@@ -20,7 +20,12 @@ use crate::stages::Failed;
 
 pub(super) struct Turn<'a> {
     system: String,
+    /// The clean JSON payload of the page(s) being translated, recorded in
+    /// conversation history without transient neighbor wrappers or images.
     page: String,
+    /// Optional wrapped user message (e.g. `<previous-pages>`, `<current-page>`,
+    /// `<upcoming-pages>`) sent for this turn only.
+    prompt_body: Option<String>,
     keys: Vec<String>,
     texts: &'a [String],
     /// The page, which the model sees with its texts.
@@ -35,10 +40,29 @@ impl<'a> Turn<'a> {
         image: Option<&'a str>,
         reasoning: Option<Reasoning>,
     ) -> Self {
-        let keys = keys(texts.len());
+        Self::keyed(system, keys(texts.len()), texts, image, reasoning)
+    }
+
+    pub(super) fn with_prompt_body(mut self, prompt_body: String) -> Self {
+        self.prompt_body = Some(prompt_body);
+        self
+    }
+
+    pub(super) fn page_json(&self) -> &str {
+        &self.page
+    }
+
+    pub(super) fn keyed(
+        system: String,
+        keys: Vec<String>,
+        texts: &'a [String],
+        image: Option<&'a str>,
+        reasoning: Option<Reasoning>,
+    ) -> Self {
         Self {
             system,
             page: numbered(&keys, texts.iter().map(String::as_str)),
+            prompt_body: None,
             keys,
             texts,
             image,
@@ -52,7 +76,11 @@ impl<'a> Turn<'a> {
         conversation: &mut Conversation,
         model: &DynModel<Completion>,
     ) -> Result<Vec<String>> {
-        let next = Message::user(self.page.clone());
+        let next = Message::user(
+            self.prompt_body
+                .clone()
+                .unwrap_or_else(|| self.page.clone()),
+        );
         conversation.context.fit(model, &next).await;
         let mut asked = self.ask(model, &mut conversation.context).await?;
         // A small model can answer a page with its answer to the page
@@ -63,7 +91,9 @@ impl<'a> Turn<'a> {
             asked = self.ask(model, &mut Context::default()).await?;
         }
         let (translations, messages, usage) = asked;
-        conversation.context.record([(remembered(messages), usage)]);
+        conversation
+            .context
+            .record([(remembered(messages, &self.page), usage)]);
         conversation.last = Some((self.texts.to_vec(), translations.clone()));
         Ok(translations)
     }
@@ -138,7 +168,11 @@ impl<'a> Turn<'a> {
             }
             None => {}
         }
-        content.push(UserContent::text(self.page.clone()));
+        content.push(UserContent::text(
+            self.prompt_body
+                .clone()
+                .unwrap_or_else(|| self.page.clone()),
+        ));
         Message::from(content)
     }
 
@@ -233,28 +267,23 @@ fn failure(error: PromptError) -> anyhow::Error {
     }
 }
 
-/// A turn's messages as the conversation keeps them: the page's texts and
-/// the answer. The image, the reasoning, and an answer that had to be asked for
-/// again served this turn alone; kept, every later turn would send them again,
-/// and they'd fill the context.
-fn remembered(mut messages: Vec<Message>) -> Vec<Message> {
+/// A turn's messages as the conversation keeps them: the clean page JSON and
+/// the answer. The image, any transient neighbor-page context wrapper, the
+/// reasoning, and any retry exchange served this turn alone; kept, every later
+/// turn would resend them and bloat or duplicate the context.
+fn remembered(mut messages: Vec<Message>, clean_page: &str) -> Vec<Message> {
     let answer = messages.pop();
-    messages.truncate(1);
-    messages
-        .into_iter()
-        .chain(answer)
-        .map(|message| match message {
-            Message::User { mut content } => {
-                content.retain(|part| !matches!(part, UserContent::Image(_)));
-                Message::User { content }
-            }
+    let has_user = !messages.is_empty();
+    let user = has_user.then(|| Message::user(clean_page.to_owned()));
+    user.into_iter()
+        .chain(answer.map(|message| match message {
             Message::Assistant(mut turn) => {
                 turn.content
                     .retain(|part| !matches!(part, AssistantContent::Reasoning(_)));
                 Message::Assistant(turn)
             }
             message => message,
-        })
+        }))
         .collect()
 }
 
@@ -354,12 +383,20 @@ mod tests {
             AssistantContent::reasoning("Sensei is the reader."),
             AssistantContent::text("{\"01\": \"Hi\"}"),
         ]);
-        let kept = remembered(vec![
-            Message::from(vec![image, UserContent::text("{\"01\": \"やあ\"}")]),
-            Message::assistant("{}"),
-            Message::user("Answer again."),
-            Message::Assistant(answer),
-        ]);
+        let kept = remembered(
+            vec![
+                Message::from(vec![
+                    image,
+                    UserContent::text(
+                        "<upcoming-pages>Page 2:\n- 明日</upcoming-pages>\n\n<current-page>\n{\"01\": \"やあ\"}\n</current-page>",
+                    ),
+                ]),
+                Message::assistant("{}"),
+                Message::user("Answer again."),
+                Message::Assistant(answer),
+            ],
+            "{\"01\": \"やあ\"}",
+        );
         assert_eq!(
             kept,
             [
@@ -394,5 +431,19 @@ mod tests {
             ```"#
         };
         assert_eq!(answers(fenced, &keys).expect("an answer"), ["One", "Two"]);
+    }
+
+    #[tokio::test]
+    async fn keyed_turn_validates_comic_info_field_keys_against_mock_llm() -> Result<()> {
+        let mock = MockCompletionModel::from_turns([MockTurn::text(
+            r#"{"Title": "Hot Summer", "Summary": "Everyday life of Yotsuba."}"#,
+        )]);
+        let keys = vec!["Title".to_owned(), "Summary".to_owned()];
+        let texts = vec!["あつい夏".to_owned(), "よつばの日常".to_owned()];
+        let answer = Turn::keyed("Translate.".to_owned(), keys, &texts, None, None)
+            .take(&mut Conversation::new(), &mock.erase())
+            .await?;
+        assert_eq!(answer, ["Hot Summer", "Everyday life of Yotsuba."]);
+        Ok(())
     }
 }

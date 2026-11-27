@@ -2,8 +2,8 @@
 
 use koharu_torch_sys::{
     ATEN_CUDNN_BENCHMARK, ATEN_CUDNN_ENABLED, ATEN_HAS_CUDNN, AtenMemoryStats, AtenSetting,
-    aten_accelerator, aten_empty_cache, aten_has, aten_memory_stats, aten_set_device,
-    aten_set_setting, aten_setting, aten_synchronize,
+    aten_accelerator, aten_empty_cache, aten_has, aten_memory_stats, aten_reset_peak_memory_stats,
+    aten_set_device, aten_set_setting, aten_setting, aten_synchronize,
 };
 
 use super::utils::check;
@@ -73,9 +73,16 @@ impl Cuda {
         let count = |count: i64| u64::try_from(count).unwrap_or(0);
         Ok(AllocatorMemory {
             reserved: count(stats.reserved_bytes.current),
+            reserved_peak: count(stats.reserved_bytes.peak),
             active: count(stats.active_bytes.current),
+            active_peak: count(stats.active_bytes.peak),
             ooms: count(stats.num_ooms),
         })
+    }
+
+    /// Resets the caching allocator's peak memory statistics on a CUDA device.
+    pub fn reset_peak_memory_stats(device_index: i64) -> Result<()> {
+        check(unsafe { aten_reset_peak_memory_stats(index(device_index)?) })
     }
 
     /// Returns the caching allocator's unused device memory to the device.
@@ -114,7 +121,9 @@ impl Cuda {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AllocatorMemory {
     pub reserved: u64,
+    pub reserved_peak: u64,
     pub active: u64,
+    pub active_peak: u64,
     pub ooms: u64,
 }
 

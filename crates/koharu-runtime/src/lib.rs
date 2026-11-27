@@ -1,5 +1,6 @@
 //! Gets Koharu ready to run models on this machine's GPU.
 
+mod accelerator_lock;
 mod device;
 mod hardware;
 mod huggingface;
@@ -17,9 +18,12 @@ use std::{
 use anyhow::Context;
 use tokio::sync::OnceCell;
 
+pub use accelerator_lock::{AcceleratorLock, AcceleratorLocked};
 pub use device::{Backend, Device, Memory};
-pub use huggingface::Repository;
-pub use transfer::{State, Transfer, transfers};
+pub use huggingface::{PinnedFile, Repository};
+pub use transfer::{
+    Cancelled, DownloadEntry, DownloadHandle, DownloadManager, DownloadState, downloads,
+};
 pub use turn::{Library, Turn};
 
 /// Koharu's root: the folder setup put it in, in Windows release builds, where
@@ -59,4 +63,18 @@ pub async fn device() -> anyhow::Result<&'static Device> {
             Ok(device)
         })
         .await
+}
+
+/// Returns the active runtime device without downloading missing native
+/// packages. Initializes and loads it if every required package is already on
+/// disk, or returns `None` otherwise.
+pub async fn try_device() -> Option<&'static Device> {
+    if let Some(device) = DEVICE.get() {
+        return Some(device);
+    }
+    let gpu = hardware::candidates().into_iter().next()?;
+    if !packages::all_ready(&gpu) {
+        return None;
+    }
+    device().await.ok()
 }

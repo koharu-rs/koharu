@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fork features</title>
+<style>
+:root{
+  --paper:#f7f4ef; --ink:#1d1b19; --muted:#6b6459; --line:#e0d9cd;
+  --rail:#14130f; --rail-ink:#ded6c7; --rail-dim:#8d8574;
+  --accent:#b5462f; --accent-soft:#f0e2da; --gold:#a8813c;
+  --code:#efe9df;
+  --surface:#fff; --row-hover:#f2ece1; --heading:#241f1a; --intro:#3c372f;
+  --lede:#4a4237; --callout-label:#5c5346; --th-line:#cfc6b5;
+  --callout-bg:#f1ece2; --callout-line:#e3dbc9; --fork-bg:#efe9dd;
+  --prior-bg:#eef1ec; --prior-line:#dde4d8; --open-bg:#f6efe6; --open-line:#ecd9cf;
+}
+html[data-theme="dark"]{
+  --paper:#171410; --ink:#e7e0d2; --muted:#9c937f; --line:#2e2a20;
+  --accent:#c9664f; --accent-soft:#2a1c15; --gold:#bb9350; --code:#211d16;
+  --surface:#1e1a14; --row-hover:#221e17; --heading:#ece5d4; --intro:#d9d2bf;
+  --lede:#c7bfab; --callout-label:#a89d87; --th-line:#3a3425;
+  --callout-bg:#1e1b15; --callout-line:#322d22; --fork-bg:#211d14;
+  --prior-bg:#1a1e17; --prior-line:#2a3026; --open-bg:#251b14; --open-line:#3b2b20;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+.layout{display:flex;min-height:100vh;align-items:flex-start}
+
+/* ---- contents rail ---- */
+.rail{
+  width:296px;flex:0 0 296px;position:sticky;top:0;height:100vh;overflow-y:auto;
+  background:var(--rail);color:var(--rail-ink);padding:32px 24px 48px;
+  scrollbar-width:thin;scrollbar-color:#3a3527 transparent;
+}
+.rail .brand{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--rail-dim);margin-bottom:14px}
+.rail h1.doc-title{font-size:21px;line-height:1.25;margin:0 0 6px;color:#fff;font-weight:640;letter-spacing:-.01em}
+.rail .sub{color:var(--rail-dim);font-size:13px;margin:0 0 22px}
+.docs-switch{display:flex;flex-direction:column;gap:6px;margin:0 0 26px;padding:0 0 22px;border-bottom:1px solid #2a281f}
+.docs-switch a{
+  display:block;padding:8px 11px;border-radius:7px;color:var(--rail-ink);font-size:13.5px;
+  border:1px solid transparent;
+}
+.docs-switch a:hover{background:#1f1d17;text-decoration:none}
+.docs-switch a.active{background:#262319;border-color:#3a3527;color:#fff}
+.docs-switch a .tag{display:block;font-size:11px;color:var(--rail-dim);letter-spacing:.04em;margin-top:2px}
+.rail .toc-label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--rail-dim);margin:0 0 10px}
+.rail nav{display:flex;flex-direction:column;gap:1px}
+.rail nav a{
+  display:block;font-size:13.25px;line-height:1.35;color:#b9b1a1;
+  padding:5px 9px;border-left:2px solid transparent;border-radius:0 6px 6px 0;
+}
+.rail nav a:hover{color:#fff;background:#1d1b16;text-decoration:none}
+.rail nav a.lvl3{padding-left:22px;font-size:12.5px;color:#968e7e}
+.rail nav a.active{color:#fff;border-left-color:var(--accent);background:#201d16}
+
+/* ---- content ---- */
+main{flex:1 1 auto;min-width:0;padding:56px 56px 140px;display:flex;justify-content:center}
+article{width:100%;max-width:760px}
+article > h1{
+  font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;margin:0 0 10px;
+}
+article > p.intro{font-size:19px;line-height:1.6;color:var(--intro);margin:0 0 22px}
+article > p.intro a{text-decoration:underline;text-underline-offset:2px;text-decoration-color:#d8c7b6}
+article h2{
+  font-size:29px;line-height:1.2;letter-spacing:-.02em;font-weight:660;
+  margin:64px 0 18px;padding-top:26px;border-top:1px solid var(--line);
+}
+article h3{
+  font-size:21px;line-height:1.3;letter-spacing:-.012em;font-weight:640;
+  margin:44px 0 12px;color:var(--heading);
+}
+article h4{font-size:17px;margin:28px 0 8px}
+article p{margin:0 0 16px}
+article ul,article ol{margin:0 0 18px;padding-left:24px}
+article li{margin:0 0 7px}
+article li::marker{color:var(--accent)}
+strong{font-weight:640}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0}
+code{background:var(--code);padding:2px 5px;border-radius:4px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,monospace}
+blockquote.lede{
+  margin:0 0 22px;padding:2px 0 2px 18px;border-left:3px solid var(--gold);
+  font-size:19px;line-height:1.5;color:var(--lede);font-style:italic;
+}
+blockquote.lede p{margin:0}
+
+/* ---- notes ---- */
+.callout{
+  margin:0 0 20px;padding:13px 16px 13px 16px;border-radius:8px;
+  background:var(--callout-bg);border:1px solid var(--callout-line);font-size:15.5px;line-height:1.55;
+}
+.callout-fork{background:var(--fork-bg);border-left:3px solid var(--gold)}
+.callout-prior{background:var(--prior-bg);border-left:3px solid #7d8f6c;border-color:var(--prior-line)}
+.callout-open{background:var(--open-bg);border-left:3px solid var(--accent);border-color:var(--open-line)}
+.callout > em:first-child,.callout > strong:first-child{color:var(--callout-label);letter-spacing:.01em}
+.callout-open > strong:first-child{color:var(--accent)}
+
+/* ---- table ---- */
+table{border-collapse:collapse;width:100%;margin:0 0 26px;font-size:15px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--th-line)}
+tbody tr:hover{background:var(--row-hover)}
+
+/* ---- anchors ---- */
+.anchor{opacity:0;margin-left:.35em;font-size:.62em;color:var(--muted);text-decoration:none;transition:opacity .12s}
+h2:hover .anchor,h3:hover .anchor{opacity:1}
+
+.top{position:fixed;right:28px;bottom:26px;background:var(--surface);border:1px solid var(--line);
+  color:var(--muted);padding:8px 12px;border-radius:999px;font-size:12px;box-shadow:0 4px 14px rgba(30,20,10,.08)}
+.top:hover{color:var(--accent);text-decoration:none}
+.theme-toggle{bottom:66px;cursor:pointer;font-family:inherit}
+
+@media (max-width:1000px){
+  .layout{flex-direction:column}
+  .rail{position:relative;width:100%;flex:none;height:auto;padding:24px 20px}
+  .rail nav{max-height:none}
+  main{padding:36px 22px 90px}
+  article h2{margin-top:48px}
+}
+</style>
+<script>
+(function(){
+  var theme = 'light';
+  try {
+    var stored = localStorage.getItem('koharu-docs-theme');
+    if (stored === 'dark' || stored === 'light') theme = stored;
+    else if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark';
+  } catch (e) {}
+  document.documentElement.dataset.theme = theme;
+})();
+</script>
+</head>
+<body id="top">
+<div class="layout">
+  <aside class="rail">
+    <div class="brand">Koharu fork · planning</div>
+    <h1 class="doc-title">Fork features</h1>
+    <p class="sub">Compiled 2026-11-20</p>
+    <div class="docs-switch"><a class="active" href="fork-features.html">Fork features<span class="tag">what the other forks ship</span></a><a class="" href="our-features.html">Our features<span class="tag">this fork's planned features</span></a></div>
+    <p class="toc-label">Contents</p>
+    <nav><a class="lvl2" href="#editor-and-canvas">Editor and canvas</a><a class="lvl2" href="#translation">Translation</a><a class="lvl2" href="#chapter-level-translation-workspace--koharu-context">Chapter-level translation workspace — koharu-context</a><a class="lvl2" href="#cleanup-and-inpainting--spgsroot">Cleanup and inpainting — spgsroot</a><a class="lvl2" href="#batch-automation-and-collaboration">Batch, automation, and collaboration</a><a class="lvl2" href="#export">Export</a><a class="lvl2" href="#performance-and-stability--gudoy">Performance and stability — gudoy</a><a class="lvl2" href="#distribution-and-packaging">Distribution and packaging</a><a class="lvl2" href="#deferred-adoption-candidates">Deferred adoption candidates</a><a class="lvl3" href="#merged-spreads-nekoharu">Merged spreads (NeKoharu)</a><a class="lvl3" href="#selective-page-export-nekoharu-koharu-ex-gudoy">Selective page export (NeKoharu, koharu-ex, gudoy)</a></nav>
+  </aside>
+  <main>
+    <article><h1 class="srch1" id="fork-features">Fork features</h1>
+<blockquote class="lede">
+<p>What the six reference forks add on top of upstream Koharu, grouped by feature — and the fork features this fork has considered and deliberately deferred.</p>
+</blockquote>
+<p class="intro">Companion to <a href="our-features.html">our-features.md</a>, the specs of this fork’s planned features — their Prior art sections compare each planned feature against what the forks ship. This file is the other direction. Where several forks ship the same feature, it is listed once with all forks named. Based on each fork’s README and fork documentation, checked 2026-11-13.</p>
+<p>Reference forks: <a href="https://github.com/nekojin116/NeKoharu">NeKoharu</a>, <a href="https://github.com/spgsroot/koharu">spgsroot/koharu</a>, <a href="https://github.com/Wkingxc/koharu-context">koharu-context</a>, <a href="https://github.com/gudoy/koharu">gudoy/koharu</a>, <a href="https://github.com/Gray-Rice/koharu-ex">koharu-ex</a>, <a href="https://github.com/MOULINIER/koharu-edge">koharu-edge</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Fork</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NeKoharu</td>
+<td>Editor and export conveniences; tracks upstream <code>main</code></td>
+</tr>
+<tr>
+<td>spgsroot/koharu</td>
+<td>Production translation workflow (cleanup, orders, automation); based on upstream 0.79.4</td>
+</tr>
+<tr>
+<td>koharu-context</td>
+<td>Chapter-level contextual translation; Chinese-language fork</td>
+</tr>
+<tr>
+<td>gudoy/koharu</td>
+<td>Performance, stability, batch folder translation</td>
+</tr>
+<tr>
+<td>koharu-ex</td>
+<td>Experimental UX and robustness features; based on upstream 0.83.x</td>
+</tr>
+<tr>
+<td>koharu-edge</td>
+<td>Reviewed cherry-picks of pending or closed upstream PRs plus own fixes; tracks upstream <code>main</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="editor-and-canvas">Editor and canvas<a class="anchor" href="#editor-and-canvas">#</a></h2>
+<ul>
+<li><strong>Arrow-key page navigation</strong> — NeKoharu (active page stays visible in the page rail), koharu-context (switch pages with ←/→ on the main page; ignored while typing in inputs).</li>
+<li><strong>Drag-and-drop reordering</strong> — NeKoharu (pages in the page rail), koharu-edge (layers, including into groups; from upstream PR #959).</li>
+<li><strong>Multi-layer and rectangle selection</strong> — NeKoharu (drag a rectangle from empty canvas with the select tool; Shift/Ctrl/Cmd adds; ported from upstream PR #1148), koharu-ex (drag to multi-select layers; rectangle selection for the eraser and remove tools).</li>
+<li><strong>Copy and paste between pages</strong> — NeKoharu (selected text layers with text, placement, and formatting), spgsroot (layer clipboard for text and raster layers), koharu-edge (text style only: font, weight, color, and border via Ctrl+Alt+C / Ctrl+Alt+V).</li>
+<li><strong>Saved colors</strong> — NeKoharu (last eight colors as recent swatches, eyedropper included; ported from upstream PR #989), koharu-edge (project colors: save a color to the manga with <strong>+</strong>, reuse it on any page, stored in the project file).</li>
+<li><strong>Page flags and reset</strong> — NeKoharu (manually mark chapter starts in the page rail), koharu-edge (Mark as Done with a thumbnail checkmark; Reset returns a page to its imported image, undoable).</li>
+<li><strong>History panel</strong> — spgsroot (Photoshop-style list of named states, snapshots, clear history).</li>
+<li><strong>Resource monitor</strong> — spgsroot (CPU, RAM, GPU, and VRAM in the status bar).</li>
+<li><strong>Consistent text styles</strong> — koharu-edge (detection gives same-looking text the same color and border within and across pages; manual edits propagate to later same-style detections; thin borders that used to be dropped are kept).</li>
+<li><strong>Font preview on selection</strong> — NeKoharu (browse candidates with keyboard or pointer, each applied live to the selected text).</li>
+<li><strong>Per-frame OCR</strong> — koharu-edge (an OCR button on each text layer, also for hand-drawn frames; clearing a frame’s source text lets OCR fill it again; from upstream PR #1065).</li>
+<li><strong>Cleaner overlapping detection</strong> — koharu-edge (a paragraph detected as both one large box and smaller inner boxes becomes a single text block; from upstream PR #1070).</li>
+<li><strong>Spreads</strong> — NeKoharu (merge adjacent split-panel pages into one wide spread from the page menu, keeping text layers, translations, cleanup layers, and analysis regions).</li>
+<li><strong>Brush conveniences</strong> — NeKoharu (cleanup layer auto-selected when switching to brush or eraser), spgsroot (three manual repair brushes — Fast (LaMa/AOT), Inpainting (FLUX) with saved presets, and Decensor — strokes queue and run while drawing).</li>
+</ul>
+<h2 id="translation">Translation<a class="anchor" href="#translation">#</a></h2>
+<ul>
+<li><strong>Cross-page translation context</strong> — NeKoharu (optionally translate multiple pages in one request, with a configurable page limit, for name and plot consistency), koharu-edge (“Context from previous pages” setting, off by default), koharu-context (whole-chapter translation; see the next section).</li>
+<li><strong>Page-level failure isolation</strong> — koharu-ex (a failing page is skipped instead of failing the run, with a summary of per-page errors, success/failed counts, and retry for failed pages), gudoy (a processing failure is confined to its page; real stage errors survive Stop), spgsroot (a provider’s refusal of one page leaves the other pages translated; refused page numbers reported).</li>
+<li><strong>Translation validation</strong> — spgsroot (rejects translations that still contain a blocked script — Latin, kana, Han, Hangul presets or custom rules — and retries with feedback), koharu-context (verifies returned text-block IDs for completeness, duplicates, and empty translations before writing back).</li>
+<li><strong>Profiles and presets</strong> — spgsroot (Manga, Comic, and Hentai content profiles, each with an editable system prompt; per-model reasoning effort), koharu-context (saveable processing configurations covering pipeline engine, model, target language, reading order, and font/rendering style; ships Japanese-manga and Korean presets with matched OCR models).</li>
+<li><strong>Token and cost tracking</strong> — spgsroot (journal of every model request with reported tokens and cost, filterable by provider, model, operation, and date; prompts and responses never stored).</li>
+<li><strong>Extra providers</strong> — spgsroot (Cursor as a translation provider; agent sign-in via Grok and Kimi Code, all with device-code OAuth).</li>
+</ul>
+<h2 id="chapter-level-translation-workspace--koharu-context">Chapter-level translation workspace — koharu-context<a class="anchor" href="#chapter-level-translation-workspace--koharu-context">#</a></h2>
+<p>The fork’s core feature, as a dedicated top-bar page: detection and OCR run across the whole project first, then translation is written back per text-block ID, and re-running overwrites old translations (a translate → refine → re-translate loop). Requests cover the whole chapter in one go, or batches sized by page count; each batch returns a summary the user proofreads and edits before continuing, and confirmed summaries are carried into later batches. Uses API models only (OpenAI, OpenAI-compatible, Claude, Gemini, DeepSeek) with favorites, target language, and max output tokens, plus prompt fields for work background, fixed name translations, honorifics, and tone. Progress shows real page counts, and results inherit the editor’s global font and per-block styles.</p>
+<h2 id="cleanup-and-inpainting--spgsroot">Cleanup and inpainting — spgsroot<a class="anchor" href="#cleanup-and-inpainting--spgsroot">#</a></h2>
+<ul>
+<li><strong>Split lettering routes:</strong> detection writes separate masks for text inside bubbles and lettering over artwork; bubbles get a flat fill or LaMa/AOT, artwork gets a generative model, and sound effects upstream leaves on the page are removed.</li>
+<li><strong>More artwork models:</strong> a FLUX.2 Klein 9B profile (optional LoRA) and ComfyUI SDXL backends (Animagine XL 4.0, Illustrious XL 2.0) alongside upstream’s models, each stage keeping its own prompt and sampling settings.</li>
+<li><strong>Censor detection and decensor:</strong> black bars, white strokes, and optional pixel mosaics are found into a reviewable mask; reconstruction then applies only to that mask.</li>
+</ul>
+<h2 id="batch-automation-and-collaboration">Batch, automation, and collaboration<a class="anchor" href="#batch-automation-and-collaboration">#</a></h2>
+<ul>
+<li><strong>Batch translation of many projects</strong> — gudoy (batch-translate a folder of projects; dialog with progress, pause, and time estimate; resumes only pages a stage has not finished; re-translates sources edited since).</li>
+<li><strong>Automation API</strong> — spgsroot (loopback HTTP API to create a project, import pages, run the pipeline, and export results from another program, such as a chat bot).</li>
+<li><strong>Orders dashboard</strong> — spgsroot (orders, stages, deadlines, notes, and an audit log).</li>
+<li><strong>Translation exchange</strong> — koharu-ex (JSON-based import/export with page-level granularity, for collaborative workflows), spgsroot (.xlsx/.csv translation exchange for outside translators, via the orders dashboard).</li>
+<li><strong>Project organization</strong> — koharu-ex (project archiving), spgsroot (isolated configuration and project directories via <code>KOHARU_CONFIG_DIR</code> / <code>KOHARU_PROJECTS_DIR</code>).</li>
+<li><strong>Gallery import</strong> — spgsroot (download e-hentai, exhentai, and nhentai galleries into one project; cookies kept in the system keychain).</li>
+</ul>
+<h2 id="export">Export<a class="anchor" href="#export">#</a></h2>
+<ul>
+<li><strong>Selective page export</strong> — NeKoharu (export selected pages as PNG, PSD, or CBZ from the export menu), koharu-ex (individual or grouped export of selected pages without exporting the whole project), gudoy (incremental page export; each page rendered once per requested format).</li>
+</ul>
+<h2 id="performance-and-stability--gudoy">Performance and stability — gudoy<a class="anchor" href="#performance-and-stability--gudoy">#</a></h2>
+<p>gudoy’s fork is almost entirely performance and reliability work: the editor no longer re-renders on pan, zoom, or hover; the canvas page cache is memory-bounded; the model picker mounts only visible rows; neighbour pages are prefetched; PSD and PNG encoding is faster; llama.cpp contexts are reused per loaded model; detection and inpainting run in bfloat16 on Apple GPUs; the UI opens before the ML runtime finishes loading; models stay loaded when a config reload leaves a stage unchanged; inpainting crop sizes are bucketed to bound accelerator memory; text drafts autosave on quit and periodically; one undo step per text-edit session; unreferenced blobs are collected when a project opens; HTTP read timeout; and telemetry can be disabled with <code>KOHARU_DISABLE_TELEMETRY</code>.</p>
+<h2 id="distribution-and-packaging">Distribution and packaging<a class="anchor" href="#distribution-and-packaging">#</a></h2>
+<ul>
+<li><strong>NeKoharu</strong> — self-updating releases served from its own repository.</li>
+<li><strong>koharu-edge</strong> — installs as a separate app with an “EDGE” badge, sharing settings, models, API keys, and projects with upstream Koharu.</li>
+<li><strong>spgsroot/koharu</strong> — upstream auto-updater removed (built and installed locally); bundles the Er0mangaSeg censor model.</li>
+<li><strong>koharu-ex</strong> — distributes under MIT only; builds for Linux and Windows only.</li>
+<li><strong>koharu-context</strong> — ships a Windows installer and macOS app builds; UI text maintained in Simplified Chinese and English.</li>
+</ul>
+<h2 id="deferred-adoption-candidates">Deferred adoption candidates<a class="anchor" href="#deferred-adoption-candidates">#</a></h2>
+<p>Fork features considered for adoption but deliberately postponed, with what to decide when they come back — so the decision is not re-derived from scratch. Add an entry whenever a fork feature comes up and the answer is “later.”</p>
+<h3 id="merged-spreads-nekoharu">Merged spreads (NeKoharu)<a class="anchor" href="#merged-spreads-nekoharu">#</a></h3>
+<p><strong>What it is.</strong> Merge two adjacent split-panel pages into one wide spread from the page menu, keeping text layers, translations, cleanup layers, and analysis regions (NeKoharu’s implementation).</p>
+<p><strong>Why deferred.</strong> Not on the fork’s feature list, and the feature needs to be seen in use first — what merging actually does to the rail, the layers, and the processing flow — before deciding whether this fork wants it.</p>
+<p><strong>To decide when it returns.</strong></p>
+<ul>
+<li>How a spread exports in the comic formats: one wide page, or split back into two pages on export. This is the one interaction with the planned features — comic-format export — which is why the export spec points here.</li>
+<li>How a merged page interacts with per-page stage eligibility and only-undone scoping: a spread is one canvas built from two source pages, so which page counts as done?</li>
+</ul>
+<h3 id="selective-page-export-nekoharu-koharu-ex-gudoy">Selective page export (NeKoharu, koharu-ex, gudoy)<a class="anchor" href="#selective-page-export-nekoharu-koharu-ex-gudoy">#</a></h3>
+<p><strong>What it is.</strong> Export a subset of pages instead of the whole project — NeKoharu exports the selected pages as PNG, PSD, or CBZ from the export menu; koharu-ex exports individually or in groups; gudoy exports incrementally, each page rendered once per requested format.</p>
+<p><strong>Why deferred.</strong> Upstream’s export command takes only a format and exports every page. Decided on 2026-11-14 to keep whole-project export as the only scope for the comic-format work — the smallest change; selection is a fork feature that can be adopted wholesale later.</p>
+<p><strong>To decide when it returns.</strong></p>
+<ul>
+<li>Whether selection rides the export menu (NeKoharu’s shape) or a dedicated flow.</li>
+<li>Whether incremental export (gudoy’s shape — render each page once per requested format) comes with it.</li>
+</ul>
+</article>
+  </main>
+</div>
+<button class="top theme-toggle" id="themeToggle" type="button">Dark mode</button>
+<a class="top" href="#top">Back to top</a>
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail nav a'));
+  var targets = links.map(function(a){ return document.getElementById(decodeURIComponent(a.hash.slice(1))); });
+  var byId = {};
+  links.forEach(function(a,i){ if(targets[i]) byId[targets[i].id] = a; });
+  var current = null;
+  function update(){
+    var probe = window.scrollY + 140, best = targets[0];
+    targets.forEach(function(t){ if(t && t.offsetTop <= probe) best = t; });
+    if(best && byId[best.id] && byId[best.id] !== current){
+      if(current) current.classList.remove('active');
+      current = byId[best.id];
+      current.classList.add('active');
+    }
+  }
+  document.addEventListener('scroll', update, {passive:true});
+  update();
+  var themeRoot = document.documentElement;
+  var themeToggle = document.getElementById('themeToggle');
+  function syncTheme() {
+    themeToggle.textContent = themeRoot.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode';
+  }
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function() {
+      var next = themeRoot.dataset.theme === 'dark' ? 'light' : 'dark';
+      themeRoot.dataset.theme = next;
+      try { localStorage.setItem('koharu-docs-theme', next); } catch (e) {}
+      syncTheme();
+    });
+    syncTheme();
+    var scheme = window.matchMedia('(prefers-color-scheme: dark)');
+    scheme.addEventListener('change', function(event) {
+      var stored = null;
+      try { stored = localStorage.getItem('koharu-docs-theme'); } catch (e) {}
+      if (stored) return;
+      themeRoot.dataset.theme = event.matches ? 'dark' : 'light';
+      syncTheme();
+    });
+  }
+})();
+</script>
+</body>
+</html>

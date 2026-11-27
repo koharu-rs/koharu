@@ -9,7 +9,7 @@ mod processor;
 use anyhow::{Context, Result, ensure};
 use image::{DynamicImage, RgbImage, imageops};
 use koharu_diffusion::{Canceller, ImageParams, SampleMethod};
-use koharu_runtime::Repository;
+use koharu_runtime::{PinnedFile, Repository};
 
 use self::model::{Model, ModelPaths};
 
@@ -26,6 +26,24 @@ const TEXT_ENCODER: Repository = Repository::model(
     "Qwen/Qwen3-VL-4B-Instruct-GGUF",
     "1cd86afb9a95c410a6038ab3b40d8b578c892266",
 );
+
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(
+        TRANSFORMER,
+        "flux-3-image-klein-UD-Q4_K_XL.gguf",
+        3_929_944_992,
+    ),
+    PinnedFile::new(
+        TEXT_ENCODER,
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        2_497_281_664,
+    ),
+    PinnedFile::new(
+        DECODER,
+        "full_encoder_small_decoder.safetensors",
+        249_519_092,
+    ),
+];
 
 /// The flow map's time shift, `alpha` in the reference's `Pipeline.generate`.
 /// sd.cpp's default for this model, 6.93, is the reference's at release
@@ -74,15 +92,9 @@ impl Flux3Klein {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let paths = async {
             // The model card's recommended file.
-            let [transformer] = TRANSFORMER
-                .resolve(["flux-3-image-klein-UD-Q4_K_XL.gguf"])
-                .await?;
-            let [text_encoder] = TEXT_ENCODER
-                .resolve(["Qwen3VL-4B-Instruct-Q4_K_M.gguf"])
-                .await?;
-            let [vae] = DECODER
-                .resolve(["full_encoder_small_decoder.safetensors"])
-                .await?;
+            let [transformer] = TRANSFORMER.resolve([FILES[0].filename]).await?;
+            let [text_encoder] = TEXT_ENCODER.resolve([FILES[1].filename]).await?;
+            let [vae] = DECODER.resolve([FILES[2].filename]).await?;
             anyhow::Ok(ModelPaths {
                 transformer,
                 text_encoder,

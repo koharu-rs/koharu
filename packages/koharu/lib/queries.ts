@@ -16,6 +16,7 @@ import { useDebouncedCallback } from 'use-debounce'
 
 import {
   commands,
+  type ComicInfo,
   type FontFamily,
   type History,
   type LayerId,
@@ -38,7 +39,8 @@ export const thumbnailKey = ['thumbnail'] as const
 export const projectsKey = ['projects'] as const
 export const fontsKey = ['fonts'] as const
 export const preferencesKey = ['preferences'] as const
-export const modelsKey = ['models'] as const
+export const modelCatalogKey = ['model-catalog'] as const
+export const metadataKey = ['metadata'] as const
 
 /** The open project as the editor lists it: its name, the page the canvas shows, its pages, and
  * its history, read through the scene's own queries. */
@@ -181,12 +183,13 @@ export function useFonts(enabled = true) {
  * file that can't be written may not read either. */
 let stored: Preferences | undefined
 
-export function usePreferences() {
+export function usePreferences(enabled = true) {
   return useQuery({
     queryKey: preferencesKey,
     queryFn: async () => (stored = await commands.getPreferences()),
     // The cache keeps the very object a save sent, which the save is known by.
     structuralSharing: false,
+    enabled,
   })
 }
 
@@ -200,12 +203,22 @@ export function useSavePreferences() {
     mutationFn: (preferences: Preferences) => commands.savePreferences(preferences),
     onMutate: async (preferences) => {
       await queryClient.cancelQueries({ queryKey: preferencesKey })
+      const previous = queryClient.getQueryData<Preferences>(preferencesKey)
       queryClient.setQueryData(preferencesKey, preferences)
+      return { previous }
     },
-    onSettled: (saved, _, preferences) => {
+    onSettled: (saved, _, preferences, context) => {
+      const previous = stored ?? context?.previous
       stored = saved ?? stored
       if (queryClient.getQueryData(preferencesKey) === preferences) {
         queryClient.setQueryData(preferencesKey, stored)
+      }
+      if (
+        saved &&
+        Boolean(previous?.pipeline.translator?.vision) !==
+          Boolean(saved.pipeline.translator?.vision)
+      ) {
+        void queryClient.invalidateQueries({ queryKey: modelCatalogKey })
       }
     },
   })
@@ -224,9 +237,39 @@ export function useEditPreferences() {
   return { edit, flush: save.flush }
 }
 
-/** The models the translator and the agent can use. */
-export function useModels() {
-  return useQuery({ queryKey: modelsKey, queryFn: () => commands.listModels() })
+/** Every stage's models, disk sizes, download status, and VRAM fit telemetry. */
+export function useModelCatalog() {
+  return useQuery({ queryKey: modelCatalogKey, queryFn: () => commands.listModelCatalog() })
+}
+
+export function useComicInfo(enabled = true) {
+  return useQuery({
+    queryKey: metadataKey,
+    queryFn: () => commands.getComicInfo(),
+    enabled,
+  })
+}
+
+export function useSaveComicInfo() {
+  return useMutation({
+    mutationKey: metadataKey,
+    scope: { id: 'comic-info' },
+    mutationFn: (comicInfo: ComicInfo) => commands.setComicInfo(comicInfo),
+    onMutate: async (comicInfo) => {
+      await queryClient.cancelQueries({ queryKey: metadataKey })
+      const previous = queryClient.getQueryData<ComicInfo>(metadataKey)
+      queryClient.setQueryData(metadataKey, comicInfo)
+      return { previous }
+    },
+    onError: (_error, _comicInfo, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(metadataKey, context.previous)
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: metadataKey })
+    },
+  })
 }
 
 /** The projects the start view lists, read again each time it shows. */
@@ -273,6 +316,36 @@ export function useCommand<Args extends unknown[], Result>(
 export function useImportPages() {
   const { run, busy } = useCommand(['import-pages'], commands.import, 'navigator.importing')
   return { importPages: run, importing: busy }
+}
+
+/** Imports OS-dropped file/folder paths at `insertAt` and reports skipped unsupported files. */
+export async function importPaths(paths: string[], insertAt: number | null): Promise<void> {
+  const observer = new MutationObserver(queryClient, {
+    mutationKey: ['import-pages'],
+    mutationFn: () => commands.importPaths(paths, insertAt),
+    meta: { activity: 'navigator.importing' },
+    gcTime: 0,
+  })
+  try {
+    const report = await observer.mutate()
+    if (report.skipped_files.length > 0) {
+      const names = report.skipped_files.map((item) => item.split(/[/\\]/).pop() || item)
+      const shown = names.slice(0, 3).join(', ')
+      const description =
+        names.length > 3
+          ? i18n.t('navigator.importSkippedMore', { files: shown, count: names.length - 3 })
+          : shown
+      toast.add({
+        type: 'warning',
+        title: i18n.t('navigator.importSkipped', { count: report.skipped_files.length }),
+        description,
+      })
+    }
+  } catch {
+    // MutationCache.onError reports the failure toast.
+  } finally {
+    observer.reset()
+  }
 }
 
 /** Resolves once the shown page has been read since the call: a read already under way, as a

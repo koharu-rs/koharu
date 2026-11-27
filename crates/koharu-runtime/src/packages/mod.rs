@@ -31,6 +31,9 @@ use crate::{Backend, Device, store};
 /// A native package a GPU needs. Its folder in the store follows from the host
 /// and the GPU, so `load` finds what `download` put there.
 trait Package: Send + Sync {
+    /// Whether this package is already present on disk without downloading.
+    fn is_ready(&self, host: Host, backend: Backend) -> bool;
+
     /// Downloads it into the store.
     fn download(&self, host: Host, backend: Backend) -> BoxFuture<'_, Result<()>>;
 
@@ -61,6 +64,16 @@ fn packages(backend: Backend) -> Vec<Box<dyn Package>> {
     packages.push(Box::new(ggml::Llama));
     packages.push(Box::new(ggml::Diffusion));
     packages
+}
+
+/// Returns `true` when every native package `gpu` needs is already on disk.
+pub(crate) fn all_ready(gpu: &Device) -> bool {
+    let Ok(host) = Host::current() else {
+        return false;
+    };
+    packages(gpu.backend)
+        .iter()
+        .all(|package| package.is_ready(host, gpu.backend))
 }
 
 /// Downloads what `gpu` needs and loads it. Everything downloads before anything
@@ -119,4 +132,32 @@ fn preload(path: &Path, global: bool) -> Result<()> {
     };
     forget(library);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_ready_returns_false_when_packages_are_absent() {
+        let missing_cuda = Device {
+            name: "CUDA0".to_owned(),
+            index: 0,
+            description: "Synthetic CUDA".to_owned(),
+            backend: Backend::Cuda {
+                compute_capability: 89,
+            },
+            integrated: false,
+        };
+        if !Host::current()
+            .map(|host| {
+                packages(missing_cuda.backend)
+                    .iter()
+                    .all(|package| package.is_ready(host, missing_cuda.backend))
+            })
+            .unwrap_or(false)
+        {
+            assert!(!all_ready(&missing_cuda));
+        }
+    }
 }

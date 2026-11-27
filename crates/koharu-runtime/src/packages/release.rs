@@ -31,6 +31,17 @@ impl Release {
         self.version().join(format!("{triple}-{variant}"))
     }
 
+    /// Whether the archive for `host` and `backend` is already extracted on disk.
+    pub(super) fn is_ready(
+        &self,
+        host: Host,
+        backend: Backend,
+        complete: impl Fn(&Path) -> bool,
+    ) -> bool {
+        let folder = self.folder(host, backend);
+        folder.is_dir() && complete(&folder)
+    }
+
     /// Downloads the archive for `host` and `backend`, named
     /// `{triple}-{variant}.tar.gz`, which is complete when `complete` says so.
     pub(super) async fn download(

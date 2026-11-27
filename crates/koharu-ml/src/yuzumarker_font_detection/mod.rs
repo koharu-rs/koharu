@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, ensure};
 use fast_image_resize::{FilterType, ResizeAlg};
 use image::RgbImage;
-use koharu_runtime::{Library, Repository, Turn};
+use koharu_runtime::{Library, PinnedFile, Repository, Turn};
 use koharu_torch::{Device, Kind, Tensor};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,11 @@ const REPOSITORY: Repository = Repository::model(
     "mayocream/yuzumarker-fontdetection",
     "c58f09e7151904f5b6d3f1e6c5678558a16d5ea9",
 );
+
+pub const FILES: &[PinnedFile] = &[
+    PinnedFile::new(REPOSITORY, "model.safetensors", 144_778_040),
+    PinnedFile::new(REPOSITORY, "kernels.json", 64_414),
+];
 
 /// `config.FONT_COUNT`: the first outputs, one per font.
 const FONTS: usize = 6150;
@@ -76,7 +81,7 @@ impl YuzuMarkerFontDetection {
     pub async fn load(device: &crate::Device) -> Result<Self> {
         let (device, kind) = crate::torch::device(device);
         let [weights, kernels] = REPOSITORY
-            .resolve(["model.safetensors", "kernels.json"])
+            .resolve([FILES[0].filename, FILES[1].filename])
             .await
             .context("failed to resolve YuzuMarker's files")?;
         let kernels: Vec<Kernel> = serde_json::from_slice(&fs_err::read(&kernels)?)
