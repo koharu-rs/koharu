@@ -49,8 +49,9 @@ export function Updater() {
   const state = useUpdater((updater) => updater.state)
   const popup = useRef<HTMLDivElement>(null)
 
+  // A dev build trails every release since its checkout, so only Help checks there.
   useEffect(() => {
-    void checkForUpdates(false)
+    if (process.env.NODE_ENV !== 'development') void checkForUpdates(false)
   }, [])
 
   const install = (update: Update) => {
