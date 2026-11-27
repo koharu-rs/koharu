@@ -1,3 +1,9 @@
+## [0.101.0](https://github.com/koharu-rs/koharu/compare/0.100.3..0.101.0) - 2026-11-27
+
+### ⛰️  Features
+
+- Stand selected characters of a column upright, sideways, or in one cell, and set emphasis marks beside them, in project format 1.3.0 - ([962de5b](https://github.com/koharu-rs/koharu/commit/962de5b731a3e2c4c1a3c04ae6e461fd0ea1e4fb))
+
 ## [0.100.3](https://github.com/koharu-rs/koharu/compare/0.100.2..0.100.3) - 2026-11-26
 
 ### 🐛 Bug Fixes
