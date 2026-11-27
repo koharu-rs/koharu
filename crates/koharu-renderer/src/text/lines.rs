@@ -60,6 +60,8 @@ fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
     let mut cost = match last.after {
         Break::Mandatory | Break::End => 0.0,
         Break::Normal if last.punctuation => 0.0,
+        // A break inside a phrase's 2, and half a line left empty's 25.
+        Break::Normal if last.inside_word => 27.0,
         // A break inside a phrase rather than after punctuation.
         Break::Normal => 2.0,
         // Above any line's slack, so a word hyphenates only where its line
@@ -218,6 +220,7 @@ mod tests {
             hyphen: 0.0,
             after: Break::Normal,
             punctuation: false,
+            inside_word: false,
             size: 0.0,
             rise: 0.0,
             sink: 0.0,

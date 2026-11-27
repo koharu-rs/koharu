@@ -737,6 +737,13 @@ impl InPath<'_> {
             .iter()
             .map(|range| lines::length(self.segments, range.clone(), self.scale))
             .collect();
+        // What the lines' breaks inside words cost, each half a line left
+        // empty, as `line_cost` weighs one, so a count that keeps its words
+        // whole can win over one that splits them.
+        let inside_words = (lines.lines.iter())
+            .filter(|range| self.segments[range.end - 1].inside_word)
+            .count() as f32
+            * 0.25;
         // The lines' unfilled shares squared, and far more for one longer
         // than its room, to compare line counts.
         let cost = used
@@ -753,7 +760,8 @@ impl InPath<'_> {
                     0.0
                 }
             })
-            .sum();
+            .sum::<f32>()
+            + inside_words;
         // Where a block sharing an edge starts: centred, unless that takes
         // it past the shared edge or a line past its span's far end.
         let middle = match self.vertical {
@@ -1003,6 +1011,7 @@ mod tests {
             hyphen: 5.0,
             after,
             punctuation: false,
+            inside_word: false,
             size: 10.0,
             rise: 0.0,
             sink: 0.0,
@@ -1024,6 +1033,7 @@ mod tests {
                 line_height: 1.2,
                 hyphenation: Some(Lang::English),
                 chinese: false,
+                vietnamese: false,
                 frame,
                 ruby: Vec::new(),
                 marks: Vec::new(),
@@ -1081,6 +1091,66 @@ mod tests {
         Ok(())
     }
 
+    /// The lines centred `words` take at their set size in a balloon `path`
+    /// outlines, with no margin.
+    fn balloon_lines(path: &str, words: Vec<Segment>) -> Result<Vec<Range<usize>>> {
+        let (mut styled, _) = in_box(0.0, 0.0, "none")?;
+        styled.align = Align::Center;
+        styled.frame = serde_json::from_value(serde_json::json!({
+            "path": {"path": path, "fit": "none", "anchor": "center", "inset": 0}
+        }))?;
+        let (_, placed) = fit(&styled, &Room::new(&styled.frame, false), |_| words.clone());
+        assert!(!placed.overflowed);
+        Ok(placed.lines.into_iter().map(|line| line.segments).collect())
+    }
+
+    #[test]
+    fn a_balloon_keeps_a_word_whole_when_both_layouts_fit() -> Result<()> {
+        // The word of the second and third takes 50 pixels including its
+        // space. At 51 both layouts fit; at 49 it must split to fit on two
+        // lines.
+        let lines = |width: u32, inside_word| {
+            let words = vec![
+                word(18.0, Break::Normal),
+                Segment {
+                    inside_word,
+                    ..word(20.0, Break::Normal)
+                },
+                word(29.0, Break::End),
+            ];
+            balloon_lines(&format!("M0 0 H{width} V25 H0 Z"), words)
+        };
+        assert_eq!(lines(51, false)?, [0..2, 2..3]);
+        assert_eq!(lines(51, true)?, [0..1, 1..3]);
+        assert_eq!(lines(49, true)?, [0..2, 2..3]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_balloon_takes_another_line_count_to_keep_a_word_whole() -> Result<()> {
+        // A balloon 50 wide but where two lines' letters fall, from 7 to 17
+        // and from 19 to 29 down, `wide` across. Six words 22 long fill
+        // three lines of 50 two to a line, or two of 100 three to a line,
+        // which leave more room unfilled; the second and third words make one,
+        // which a line of the three splits.
+        let lines = |wide: f64, inside_word| {
+            let (left, right) = (50.0 - wide / 2.0, 50.0 + wide / 2.0);
+            let path = format!(
+                "M25 0 H75 V7 H{right} V17 H75 V19 H{right} V29 H75 V36 H25 V29 H{left} V19 \
+                 H25 V17 H{left} V7 H25 Z"
+            );
+            let mut words = vec![word(22.0, Break::Normal); 6];
+            words[1].inside_word = inside_word;
+            words[5].after = Break::End;
+            balloon_lines(&path, words)
+        };
+        assert_eq!(lines(100.0, false)?, [0..2, 2..4, 4..6]);
+        assert_eq!(lines(100.0, true)?, [0..3, 3..6]);
+        // Where two lines can't hold three words, the word splits.
+        assert_eq!(lines(60.0, true)?, [0..2, 2..4, 4..6]);
+        Ok(())
+    }
+
     #[test]
     fn a_balloon_s_text_too_long_for_it_runs_past_its_top_and_foot_not_its_sides() -> Result<()> {
         // Eight words 25 long at their set size in a balloon 60 wide and 40
@@ -1096,6 +1166,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: false,
+            vietnamese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),
@@ -1130,6 +1201,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: false,
+            vietnamese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),
@@ -1175,6 +1247,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: true,
+            vietnamese: false,
             frame: frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),
@@ -1187,6 +1260,7 @@ mod tests {
             hyphen: 0.0,
             after,
             punctuation: false,
+            inside_word: false,
             size: 21.0,
             rise: 0.0,
             sink: 0.0,

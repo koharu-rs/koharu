@@ -26,6 +26,9 @@ pub(super) struct Styled {
     /// Its language is Chinese, whose vertical stop marks sit in the middle
     /// of their cells.
     pub chinese: bool,
+    /// Its language is Vietnamese, whose words its lines keep whole where
+    /// they can.
+    pub vietnamese: bool,
     /// Where the text sets, in its own coordinates.
     pub frame: Frame,
     /// In text order.
@@ -100,6 +103,7 @@ impl Styled {
                 .ok()
                 .and_then(Lang::from_iso),
             chinese: text.language.language.as_str() == "zh",
+            vietnamese: text.language.language.as_str() == "vi",
             frame: text.frame.clone(),
             ruby: Vec::new(),
             marks: Vec::new(),

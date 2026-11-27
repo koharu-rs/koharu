@@ -1,7 +1,7 @@
 //! Where lines may break: Unicode line breaking, with Chinese words kept
-//! whole, Korean broken between words, words at hyphenation points, and a
-//! drawn-out sound in its run of one letter; and the text between two breaks
-//! measured from its glyphs.
+//! whole, Vietnamese ones together where they can be, Korean broken between
+//! words, words at hyphenation points, and a drawn-out sound in its run of
+//! one letter; and the text between two breaks measured from its glyphs.
 
 use std::{ops::Range, sync::LazyLock};
 
@@ -73,6 +73,9 @@ pub(super) struct Segment {
     pub after: Break,
     /// It ends with punctuation, the best place for a break.
     pub punctuation: bool,
+    /// It ends inside a word, between two of its syllables, where a line had
+    /// better not break: Vietnamese spaces every syllable.
+    pub inside_word: bool,
     /// Its largest span's size.
     pub size: f32,
     /// How far its ruby and emphasis marks reach above its line's centre,
@@ -266,6 +269,11 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
     for value in &mut advances {
         (*value, sum) = (sum, sum + *value);
     }
+    // Vietnamese words, whose syllables a line had better not break between.
+    let words = match styled.vietnamese {
+        true => pyvi::tokenize(&styled.text),
+        false => Vec::new(),
+    };
     // A cut inside a cluster, such as a ligature, inside an upright group, or
     // under a ruby joins the next piece.
     let mut segments = Vec::new();
@@ -273,7 +281,10 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
     for (range, next, after) in opportunities(&styled.text, breaking, styled.hyphenation) {
         let start = joined.take().unwrap_or(range.start);
         if matches!(after, Break::Mandatory | Break::End) || breakable[next] {
-            segments.push(measure(shaped, &advances, start..range.end, after));
+            let inside_word = after == Break::Normal
+                && (words.iter()).any(|word| next > word.start && next < word.end);
+            let segment = measure(shaped, &advances, start..range.end, after, inside_word);
+            segments.push(segment);
         } else {
             joined = Some(start);
         }
@@ -282,7 +293,13 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
 }
 
 /// The segment `range` makes, measured by `advances`.
-fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Break) -> Segment {
+fn measure(
+    shaped: &ShapedText,
+    advances: &[f64],
+    range: Range<usize>,
+    after: Break,
+    inside_word: bool,
+) -> Segment {
     let styled = shaped.styled;
     let advance = |range: Range<usize>| (advances[range.end] - advances[range.start]) as f32;
     let visible_end = range.start + styled.text[range.clone()].trim_end().len();
@@ -330,6 +347,7 @@ fn measure(shaped: &ShapedText, advances: &[f64], range: Range<usize>, after: Br
         },
         after,
         punctuation,
+        inside_word,
         size,
         rise,
         sink,
@@ -378,6 +396,7 @@ mod tests {
             line_height: 1.2,
             hyphenation: None,
             chinese: false,
+            vietnamese: false,
             frame: Frame::Point,
             ruby: Vec::new(),
             marks: Vec::new(),
