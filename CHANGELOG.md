@@ -1,3 +1,9 @@
+## [0.102.2](https://github.com/koharu-rs/koharu/compare/0.102.1..0.102.2) - 2026-11-27
+
+### 🐛 Bug Fixes
+
+- *(pipeline)* Give LaMa a mask over art as it is, without the border that hid the art between glyphs and washed out its fills - ([8aeccf5](https://github.com/koharu-rs/koharu/commit/8aeccf509d4c7b66833ee5ff7ee4e3915fd99744))
+
 ## [0.102.1](https://github.com/koharu-rs/koharu/compare/0.102.0..0.102.1) - 2026-11-27
 
 ### 🐛 Bug Fixes
