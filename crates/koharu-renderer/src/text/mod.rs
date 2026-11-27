@@ -94,8 +94,11 @@ pub(crate) fn layout(
     }
     let shaped = ShapedText::new(&styled)?;
     let room = Room::new(&styled.frame, styled.vertical);
+    let vietnamese_balloon = text.language.language.as_str() == "vi"
+        && !styled.vertical
+        && matches!(room, Room::Path { .. });
     let (segments, placed) = fit::fit(&styled, &room, |breaking| {
-        breaks::segments(&shaped, breaking)
+        breaks::segments(&shaped, breaking, vietnamese_balloon)
     });
     arrange::arrange(&shaped, &segments, placed).map(Some)
 }

@@ -29,6 +29,9 @@ pub(super) struct Lines {
 /// default hyphen limit is two.
 const RUNS: usize = 3;
 
+/// The cost of splitting a phrase, in the same units as squared line slack.
+pub(super) const PHRASE_BREAK_COST: f32 = 0.25;
+
 /// The length of segments `range` set on one line, at `scale`.
 pub(super) fn length(segments: &[Segment], range: Range<usize>, scale: f32) -> f32 {
     let Some(last) = range.end.checked_sub(1).map(|at| &segments[at]) else {
@@ -62,6 +65,7 @@ fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
         Break::Normal if last.punctuation => 0.0,
         // A break inside a phrase rather than after punctuation.
         Break::Normal => 2.0,
+        Break::Discouraged => 2.0 + 100.0 * PHRASE_BREAK_COST,
         // Above any line's slack, so a word hyphenates only where its line
         // can't hold it whole: Comicraft avoids a hyphen whenever it can.
         Break::Hyphen => 1_000.0,

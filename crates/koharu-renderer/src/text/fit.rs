@@ -732,28 +732,24 @@ impl InPath<'_> {
             Some(count),
             |line| rooms[line],
         )?;
-        let used: Vec<f32> = lines
-            .lines
-            .iter()
-            .map(|range| lines::length(self.segments, range.clone(), self.scale))
-            .collect();
-        // The lines' unfilled shares squared, and far more for one longer
-        // than its room, to compare line counts.
-        let cost = used
-            .iter()
-            .enumerate()
-            .map(|(line, &used)| {
-                let room = rooms[line];
-                if used > room {
-                    1e6 * (1.0 + used - room)
-                } else if room > 0.0 {
-                    let slack = (room - used) / room;
-                    slack * slack
-                } else {
-                    0.0
-                }
-            })
-            .sum();
+        // Compare line counts by slack and discouraged breaks, with far more
+        // cost for a line longer than its room.
+        let mut used = Vec::with_capacity(count);
+        let mut cost = 0.0;
+        for (range, &room) in lines.lines.iter().zip(&rooms) {
+            let length = lines::length(self.segments, range.clone(), self.scale);
+            used.push(length);
+            if length > room {
+                cost += 1e6 * (1.0 + length - room);
+            } else if room > 0.0 {
+                let slack = (room - length) / room;
+                let penalty = match self.segments[range.end - 1].after {
+                    Break::Discouraged => lines::PHRASE_BREAK_COST,
+                    _ => 0.0,
+                };
+                cost += slack * slack + penalty;
+            }
+        }
         // Where a block sharing an edge starts: centred, unless that takes
         // it past the shared edge or a line past its span's far end.
         let middle = match self.vertical {
@@ -1078,6 +1074,37 @@ mod tests {
         });
         assert!(!placed.overflowed);
         assert!((0.4..=0.417).contains(&placed.scale), "{}", placed.scale);
+        Ok(())
+    }
+
+    #[test]
+    fn a_vietnamese_balloon_avoids_a_discouraged_break_when_both_layouts_fit() -> Result<()> {
+        let (mut styled, _) = in_box(100.0, 25.0, "none")?;
+        styled.align = Align::Center;
+        // The phrase takes 50 pixels including its space. At 51 both
+        // layouts fit; at 49 it must split to fit on two lines.
+        let mut lines = |width, after| -> Result<Vec<Range<usize>>> {
+            styled.frame = serde_json::from_value(serde_json::json!({
+                "path": {
+                    "path": format!("M0 0 H{width} V25 H0 Z"),
+                    "fit": "none", "anchor": "center", "inset": 0
+                }
+            }))?;
+            let room = Room::new(&styled.frame, false);
+            let (_, placed) = fit(&styled, &room, |_| {
+                vec![
+                    word(18.0, Break::Normal),
+                    word(20.0, after),
+                    word(29.0, Break::End),
+                ]
+            });
+            assert!(!placed.overflowed);
+            assert_eq!(placed.scale, 1.0);
+            Ok(placed.lines.into_iter().map(|line| line.segments).collect())
+        };
+        assert_eq!(lines(51, Break::Normal)?, [0..2, 2..3]);
+        assert_eq!(lines(51, Break::Discouraged)?, [0..1, 1..3]);
+        assert_eq!(lines(49, Break::Discouraged)?, [0..2, 2..3]);
         Ok(())
     }
 
