@@ -1,3 +1,9 @@
+## [0.101.2](https://github.com/koharu-rs/koharu/compare/0.101.1..0.101.2) - 2026-11-27
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Centre sideways text in a column on its font's em box, and a bracket turned among upright characters on its ink ([#1576](https://github.com/koharu-rs/koharu/issues/1576)) - ([b18a8d9](https://github.com/koharu-rs/koharu/commit/b18a8d99f306c8a86544b5ea6aab8f1949f9894d))
+
 ## [0.101.1](https://github.com/koharu-rs/koharu/compare/0.101.0..0.101.1) - 2026-11-27
 
 ### 🐛 Bug Fixes
