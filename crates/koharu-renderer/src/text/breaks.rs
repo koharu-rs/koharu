@@ -274,10 +274,6 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
         true => pyvi::tokenize(&styled.text),
         false => Vec::new(),
     };
-    let inside_word = |at: usize| {
-        (words.get(words.partition_point(|word| word.end <= at)))
-            .is_some_and(|word| word.start < at)
-    };
     // A cut inside a cluster, such as a ligature, inside an upright group, or
     // under a ruby joins the next piece.
     let mut segments = Vec::new();
@@ -285,14 +281,10 @@ pub(super) fn segments(shaped: &ShapedText, breaking: Breaking) -> Vec<Segment> 
     for (range, next, after) in opportunities(&styled.text, breaking, styled.hyphenation) {
         let start = joined.take().unwrap_or(range.start);
         if matches!(after, Break::Mandatory | Break::End) || breakable[next] {
-            let inside_word = after == Break::Normal && inside_word(next);
-            segments.push(measure(
-                shaped,
-                &advances,
-                start..range.end,
-                after,
-                inside_word,
-            ));
+            let inside_word = after == Break::Normal
+                && (words.iter()).any(|word| next > word.start && next < word.end);
+            let segment = measure(shaped, &advances, start..range.end, after, inside_word);
+            segments.push(segment);
         } else {
             joined = Some(start);
         }

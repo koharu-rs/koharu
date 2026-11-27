@@ -737,9 +737,9 @@ impl InPath<'_> {
             .iter()
             .map(|range| lines::length(self.segments, range.clone(), self.scale))
             .collect();
-        // What the lines' breaks inside words cost, each as much as half a
-        // line left empty, as breaking lines weighs them, so a count that
-        // keeps its words whole can win over one that splits them.
+        // What the lines' breaks inside words cost, each half a line left
+        // empty, as `line_cost` weighs one, so a count that keeps its words
+        // whole can win over one that splits them.
         let inside_words = (lines.lines.iter())
             .filter(|range| self.segments[range.end - 1].inside_word)
             .count() as f32
@@ -1091,34 +1091,34 @@ mod tests {
         Ok(())
     }
 
+    /// The lines centred `words` take at their set size in a balloon `path`
+    /// outlines, with no margin.
+    fn balloon_lines(path: &str, words: Vec<Segment>) -> Result<Vec<Range<usize>>> {
+        let (mut styled, _) = in_box(0.0, 0.0, "none")?;
+        styled.align = Align::Center;
+        styled.frame = serde_json::from_value(serde_json::json!({
+            "path": {"path": path, "fit": "none", "anchor": "center", "inset": 0}
+        }))?;
+        let (_, placed) = fit(&styled, &Room::new(&styled.frame, false), |_| words.clone());
+        assert!(!placed.overflowed);
+        Ok(placed.lines.into_iter().map(|line| line.segments).collect())
+    }
+
     #[test]
     fn a_balloon_keeps_a_word_whole_when_both_layouts_fit() -> Result<()> {
-        let (mut styled, _) = in_box(100.0, 25.0, "none")?;
-        styled.align = Align::Center;
         // The word of the second and third takes 50 pixels including its
         // space. At 51 both layouts fit; at 49 it must split to fit on two
         // lines.
-        let mut lines = |width, inside_word| -> Result<Vec<Range<usize>>> {
-            styled.frame = serde_json::from_value(serde_json::json!({
-                "path": {
-                    "path": format!("M0 0 H{width} V25 H0 Z"),
-                    "fit": "none", "anchor": "center", "inset": 0
-                }
-            }))?;
-            let room = Room::new(&styled.frame, false);
-            let (_, placed) = fit(&styled, &room, |_| {
-                vec![
-                    word(18.0, Break::Normal),
-                    Segment {
-                        inside_word,
-                        ..word(20.0, Break::Normal)
-                    },
-                    word(29.0, Break::End),
-                ]
-            });
-            assert!(!placed.overflowed);
-            assert_eq!(placed.scale, 1.0);
-            Ok(placed.lines.into_iter().map(|line| line.segments).collect())
+        let lines = |width: u32, inside_word| {
+            let words = vec![
+                word(18.0, Break::Normal),
+                Segment {
+                    inside_word,
+                    ..word(20.0, Break::Normal)
+                },
+                word(29.0, Break::End),
+            ];
+            balloon_lines(&format!("M0 0 H{width} V25 H0 Z"), words)
         };
         assert_eq!(lines(51, false)?, [0..2, 2..3]);
         assert_eq!(lines(51, true)?, [0..1, 1..3]);
@@ -1133,26 +1133,16 @@ mod tests {
         // three lines of 50 two to a line, or two of 100 three to a line,
         // which leave more room unfilled; the second and third words make one,
         // which a line of the three splits.
-        let (mut styled, _) = in_box(100.0, 36.0, "none")?;
-        styled.align = Align::Center;
-        let mut lines = |wide: f64, inside_word| -> Result<Vec<Range<usize>>> {
+        let lines = |wide: f64, inside_word| {
             let (left, right) = (50.0 - wide / 2.0, 50.0 + wide / 2.0);
             let path = format!(
                 "M25 0 H75 V7 H{right} V17 H75 V19 H{right} V29 H75 V36 H25 V29 H{left} V19 \
                  H25 V17 H{left} V7 H25 Z"
             );
-            styled.frame = serde_json::from_value(serde_json::json!({
-                "path": {"path": path, "fit": "none", "anchor": "center", "inset": 0}
-            }))?;
-            let room = Room::new(&styled.frame, false);
-            let (_, placed) = fit(&styled, &room, |_| {
-                let mut words = vec![word(22.0, Break::Normal); 6];
-                words[1].inside_word = inside_word;
-                words[5].after = Break::End;
-                words
-            });
-            assert!(!placed.overflowed);
-            Ok(placed.lines.into_iter().map(|line| line.segments).collect())
+            let mut words = vec![word(22.0, Break::Normal); 6];
+            words[1].inside_word = inside_word;
+            words[5].after = Break::End;
+            balloon_lines(&path, words)
         };
         assert_eq!(lines(100.0, false)?, [0..2, 2..4, 4..6]);
         assert_eq!(lines(100.0, true)?, [0..3, 3..6]);

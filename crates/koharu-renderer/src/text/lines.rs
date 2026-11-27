@@ -60,8 +60,7 @@ fn line_cost(last: &Segment, used: f32, room: f32, balance: Balance) -> f32 {
     let mut cost = match last.after {
         Break::Mandatory | Break::End => 0.0,
         Break::Normal if last.punctuation => 0.0,
-        // A break inside a phrase's 2, and as much as half a line left empty:
-        // 100 times a half squared.
+        // A break inside a phrase's 2, and half a line left empty's 25.
         Break::Normal if last.inside_word => 27.0,
         // A break inside a phrase rather than after punctuation.
         Break::Normal => 2.0,
