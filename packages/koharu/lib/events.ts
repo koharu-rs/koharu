@@ -5,6 +5,7 @@ import { toast } from '@koharu/ui/components/toast'
 
 import { useConversation } from './agent'
 import { toHex } from './color'
+import { receivePainter } from './formatPainter'
 import i18n from './i18n'
 import {
   pageKey,
@@ -55,6 +56,7 @@ export function hear(active: () => boolean): Promise<void> {
     listen(events.notice, (notice) =>
       toast.add({ type: 'info', title: i18n.t(`canvas.notice.${notice}`) }),
     ),
+    listen(events.painter, receivePainter),
     listen(events.pipeline, receivePipeline),
     listen(events.download, receiveDownload),
     listen(events.chapter, receiveChapter),

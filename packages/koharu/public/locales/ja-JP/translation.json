@@ -115,6 +115,15 @@
     "removeFavorite": "{{name}} をお気に入りから削除",
     "search": "フォントを検索"
   },
+  "formatPainter": {
+    "applySelected": "選択中に適用（{{count}}）",
+    "clear": "スタイルを破棄",
+    "copied": "「{{words}}」のスタイル：テキストをクリックして貼り付け",
+    "empty": "空のテキスト",
+    "failed": "スタイルを貼り付けられませんでした",
+    "pick": "テキストをクリックしてスタイルをコピー",
+    "reload": "Alt+クリックで別のスタイルをコピー"
+  },
   "gallery": {
     "back": "戻る",
     "chapters": "{{count}}話",
@@ -157,6 +166,7 @@
       "move_layer": "レイヤーを移動",
       "move_page": "ページを移動",
       "paint": "ペイント",
+      "paste_style": "スタイルを貼り付け",
       "recognize": "OCR",
       "resize": "サイズ変更",
       "rotate": "回転",
@@ -597,6 +607,7 @@
     "direct_select": "パス選択",
     "draw": "描画",
     "eraser": "消しゴム",
+    "format_painter": "書式のコピー/貼り付け",
     "increaseBrushSize": "ブラシサイズを拡大",
     "lasso": "なげなわ",
     "marquee": "長方形選択",

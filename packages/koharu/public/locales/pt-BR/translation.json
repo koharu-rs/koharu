@@ -115,6 +115,15 @@
     "removeFavorite": "Remover {{name}} dos favoritos",
     "search": "Buscar fontes"
   },
+  "formatPainter": {
+    "applySelected": "Aplicar à seleção ({{count}})",
+    "clear": "Descartar o estilo",
+    "copied": "Estilo de “{{words}}”: clique em textos para colá-lo",
+    "empty": "um texto vazio",
+    "failed": "Não foi possível colar o estilo",
+    "pick": "Clique em um texto para copiar o estilo",
+    "reload": "Alt+clique copia outro"
+  },
   "gallery": {
     "back": "Voltar",
     "chapters": "{{count}} capítulos",
@@ -157,6 +166,7 @@
       "move_layer": "Mover camadas",
       "move_page": "Mover página",
       "paint": "Pintar",
+      "paste_style": "Colar estilo",
       "recognize": "OCR",
       "resize": "Redimensionar",
       "rotate": "Girar",
@@ -597,6 +607,7 @@
     "direct_select": "Seleção direta",
     "draw": "Desenhar",
     "eraser": "Borracha",
+    "format_painter": "Pincel de formatação",
     "increaseBrushSize": "Aumentar tamanho do pincel",
     "lasso": "Laço",
     "marquee": "Letreiro retangular",

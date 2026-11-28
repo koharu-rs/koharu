@@ -115,6 +115,15 @@
     "removeFavorite": "将 {{name}} 从收藏中移除",
     "search": "搜索字体"
   },
+  "formatPainter": {
+    "applySelected": "应用到所选（{{count}}）",
+    "clear": "丢弃样式",
+    "copied": "“{{words}}”的样式：点击文本即可粘贴",
+    "empty": "空文本",
+    "failed": "无法粘贴样式",
+    "pick": "点击文本以复制其样式",
+    "reload": "Alt+点击复制另一个"
+  },
   "gallery": {
     "back": "返回",
     "chapters": "{{count}} 话",
@@ -157,6 +166,7 @@
       "move_layer": "移动图层",
       "move_page": "移动页面",
       "paint": "绘画",
+      "paste_style": "粘贴样式",
       "recognize": "OCR",
       "resize": "调整大小",
       "rotate": "旋转",
@@ -597,6 +607,7 @@
     "direct_select": "直接选择",
     "draw": "绘画",
     "eraser": "橡皮擦",
+    "format_painter": "格式刷",
     "increaseBrushSize": "增大画笔大小",
     "lasso": "套索",
     "marquee": "矩形选框",

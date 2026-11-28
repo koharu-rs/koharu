@@ -34,6 +34,18 @@ pub enum Effect {
     /// Paste while typing: the host gives its clipboard's text to
     /// `Canvas::insert`.
     Paste,
+    /// A text the Format Painter was pressed on, whose style
+    /// the host copies or pastes.
+    Painter(PainterPress),
+}
+
+/// A press of the Format Painter on a text: the host holds the style it
+/// copied, so it copies this text's when it holds none or `reload` is set
+/// (Alt, as InDesign's Eyedropper reloads), and pastes onto it otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Type)]
+pub struct PainterPress {
+    pub layer: LayerId,
+    pub reload: bool,
 }
 
 /// Why a gesture did nothing, for the app to say in the user's language.

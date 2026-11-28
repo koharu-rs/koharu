@@ -115,6 +115,15 @@
     "removeFavorite": "{{name}}을(를) 즐겨찾기에서 제거",
     "search": "글꼴 검색"
   },
+  "formatPainter": {
+    "applySelected": "선택 항목에 적용 ({{count}})",
+    "clear": "스타일 버리기",
+    "copied": "“{{words}}”의 스타일: 텍스트를 클릭해 붙여넣으세요",
+    "empty": "빈 텍스트",
+    "failed": "스타일을 붙여넣지 못했습니다",
+    "pick": "텍스트를 클릭해 스타일을 복사하세요",
+    "reload": "Alt+클릭으로 다른 스타일 복사"
+  },
   "gallery": {
     "back": "뒤로",
     "chapters": "{{count}}화",
@@ -157,6 +166,7 @@
       "move_layer": "레이어 이동",
       "move_page": "페이지 이동",
       "paint": "칠하기",
+      "paste_style": "스타일 붙여넣기",
       "recognize": "OCR",
       "resize": "크기 조정",
       "rotate": "회전",
@@ -597,6 +607,7 @@
     "direct_select": "직접 선택",
     "draw": "그리기",
     "eraser": "지우개",
+    "format_painter": "서식 복사",
     "increaseBrushSize": "브러시 크기 늘리기",
     "lasso": "올가미",
     "marquee": "사각형 선택 윤곽",

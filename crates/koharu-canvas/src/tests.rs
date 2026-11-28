@@ -18,7 +18,7 @@ use ui_events::{
     },
 };
 
-use crate::{Brush, Canvas, CharKey, Colors, Effect, Notice, RubyEdit, Tool};
+use crate::{Brush, Canvas, CharKey, Colors, Effect, Notice, PainterPress, RubyEdit, Tool};
 
 /// One renderer for every test, as the app has one, setting text in
 /// installed fonts so no test downloads one.
@@ -924,6 +924,51 @@ fn the_colour_picker_takes_the_page_colour_under_the_pointer() {
         .input(down((20.0, 75.0), Modifiers::default()))
         .expect("input");
     assert!(picked(effects).is_empty());
+}
+
+#[test]
+fn the_format_painter_tells_the_text_pressed_and_alt_to_copy_it_afresh() {
+    let text = |index: usize, x: f64| {
+        json!({"op": "add_layer", "page": "$page", "index": index,
+        "layer": {
+            "kind": "text", "content": "Hello",
+            "frame": {"box": {"bounds": {"x": 0, "y": 0, "width": 100, "height": 40}}},
+            "transform": [[1.0, 0.0, x], [0.0, 1.0, 50.0]],
+        }})
+    };
+    let Some(mut fixture) = unscaled(vec![text(0, 50.0), text(1, 250.0)]) else {
+        return;
+    };
+    let [first, second] = layers(&fixture)[..] else {
+        panic!("two texts");
+    };
+    let canvas = &mut fixture.canvas;
+    canvas.set_tool(Tool::FormatPainter);
+    let mut pressed = |at: (f64, f64), modifiers: Modifiers| {
+        let effects = canvas.input(down(at, modifiers)).expect("input");
+        canvas.input(up(1, at)).expect("input");
+        effects
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::Painter(press) => Some(press),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let press = |layer, reload| PainterPress { layer, reload };
+    assert_eq!(
+        pressed((100.0, 70.0), Modifiers::default()),
+        [press(first, false)]
+    );
+    assert_eq!(
+        pressed((300.0, 70.0), Modifiers::default()),
+        [press(second, false)]
+    );
+    assert_eq!(
+        pressed((300.0, 70.0), Modifiers::ALT),
+        [press(second, true)]
+    );
+    assert!(pressed((200.0, 300.0), Modifiers::default()).is_empty());
 }
 
 /// The canvas starts its view on a whole viewport pixel, so the

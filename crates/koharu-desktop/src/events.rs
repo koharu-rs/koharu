@@ -3,7 +3,7 @@
 
 use std::marker::PhantomData;
 
-use koharu_canvas::{Camera, Notice, Typed};
+use koharu_canvas::{Camera, Notice, PainterPress, Typed};
 use koharu_pipeline::Event as PipelineEvent;
 use koharu_runtime::Transfer;
 use koharu_scene::{Bounds, Change, LayerId, PageId, Rgba};
@@ -66,6 +66,8 @@ pub const COLOR: Event<Rgba> = Event::new("color");
 /// The brush diameter Alt and the wheel asked for, in page pixels.
 pub const BRUSH_DIAMETER: Event<f64> = Event::new("brush_diameter");
 pub const NOTICE: Event<Notice> = Event::new("notice");
+/// A press of the Format Painter on a text.
+pub const PAINTER: Event<PainterPress> = Event::new("painter");
 pub const PIPELINE: Event<PipelineEvent> = Event::new("pipeline");
 /// A model or font file's download, as it goes.
 pub const DOWNLOAD: Event<Transfer> = Event::new("download");
@@ -86,6 +88,7 @@ pub fn bindings(types: &mut Types) -> Vec<(&'static str, DataType)> {
         COLOR.binding(types),
         BRUSH_DIAMETER.binding(types),
         NOTICE.binding(types),
+        PAINTER.binding(types),
         PIPELINE.binding(types),
         DOWNLOAD.binding(types),
         CHAPTER.binding(types),
