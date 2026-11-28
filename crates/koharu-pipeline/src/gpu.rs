@@ -89,6 +89,11 @@ impl Gpu {
         let _ = self.0.send((turn, Box::new(work)));
     }
 
+    /// Clears the model cache at the worker's next turn.
+    pub(crate) fn unload(&self) {
+        self.run(Turn::Upkeep, |models| models.retain(&HashSet::new()));
+    }
+
     /// Gives back to the device what libtorch's caching allocator keeps of
     /// the tensors calls freed, ahead of the calls queued. The cache grows
     /// page by page, as pages need different sizes, and the device counts
@@ -257,5 +262,60 @@ fn failure(key: &Key, device: &Device, cuda: bool, source: anyhow::Error) -> Err
         reserved: ByteSize(held.map_or(0, |held| held.reserved)),
         active: ByteSize(held.map_or(0, |held| held.active)),
         source,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio::{sync::oneshot, time::timeout};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn unload_waits_for_active_work_and_lets_the_same_model_be_cached_again() {
+        let gpu = Gpu::spawn(Handle::current());
+        let key = Key {
+            stage: Stage::Detect,
+            name: "mock".to_owned(),
+        };
+        let (started, active) = oneshot::channel();
+        let (finish, pending) = oneshot::channel();
+        let (mock, mut loaded) = oneshot::channel::<()>();
+        let active_key = key.clone();
+        gpu.run(Turn::Upkeep, move |models| {
+            models.loaded.insert(active_key, Box::new(mock));
+            let _ = started.send(());
+            let _ = pending.blocking_recv();
+        });
+        let wait = Duration::from_secs(5);
+        timeout(wait, active)
+            .await
+            .expect("work starts")
+            .expect("started");
+
+        gpu.unload();
+        gpu.unload();
+        assert_eq!(loaded.try_recv(), Err(oneshot::error::TryRecvError::Empty));
+        finish.send(()).expect("active work is waiting");
+        timeout(wait, loaded)
+            .await
+            .expect("the cache is cleared")
+            .expect_err("the mock model was dropped");
+
+        let (send, cached) = oneshot::channel();
+        gpu.run(Turn::Upkeep, move |models| {
+            let previous = models.loaded.insert(key.clone(), Box::new("reloaded"));
+            let next = models.loaded[&key].downcast_ref::<&str>().copied();
+            let _ = send.send((previous.is_none(), next));
+        });
+        assert_eq!(
+            timeout(wait, cached)
+                .await
+                .expect("next work runs")
+                .expect("cached"),
+            (true, Some("reloaded")),
+        );
     }
 }

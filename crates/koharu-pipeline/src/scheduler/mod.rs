@@ -170,9 +170,7 @@ impl Scheduler {
                 }
                 self.rest();
             }
-            Command::Unload => self
-                .gpu
-                .run(Turn::Upkeep, |models| models.retain(&HashSet::new())),
+            Command::Unload => self.gpu.unload(),
             Command::Settle => self.settle(),
             Command::Close(project) => self.conversations.close(project),
         }

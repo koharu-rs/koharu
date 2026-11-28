@@ -32,6 +32,7 @@ Reading the project's layers is enough for many text edits. Ask for visual inspe
 | `run`         | Starts a pipeline run on the project, some pages, some text blocks, or a painted area          |
 | `wait`        | Waits up to 30 seconds for a run to end and reports what it has done so far                    |
 | `stop`        | Stops every pipeline run                                                                       |
+| `unload`      | Queues clearing the pipeline's model cache after the GPU worker's current call                  |
 | `view_page`   | Shows a page as the editor draws it, or its scan alone, whole or a part of it enlarged         |
 
 <Note>
@@ -42,6 +43,8 @@ Reading the project's layers is enough for many text edits. Ask for visual inspe
 ## Edits, cancellation, and history
 
 Agent changes use the same edits as the editor, so they redraw the canvas as they happen and each is an undo step. Pipeline runs the Agent starts appear in the activity center like any other run.
+
+`unload` takes no arguments and requires an open project. It queues the same operation as **Edit → Unload Models**. Runs continue and reload models as needed.
 
 One request runs at a time, with no limit on its model calls. **Cancel** stops the Agent, and an edit already being applied finishes whole. A pipeline run the Agent started keeps going; stop it from the activity center. The conversation continues across requests and ends when you change the Agent's model or close the project.
 
