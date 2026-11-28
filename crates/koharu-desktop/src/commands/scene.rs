@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use koharu_scene::{Answer, Change, Edit, Query};
+use koharu_scene::{Answer, Change, Edit, Query, Revision};
 use tauri::State;
 
 use super::Result;
@@ -22,9 +22,13 @@ pub async fn query(app: State<'_, Arc<App>>, query: Query) -> Result<Answer> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn edit(app: State<'_, Arc<App>>, edit: Edit) -> Result<Change> {
+pub async fn edit(
+    app: State<'_, Arc<App>>,
+    edit: Edit,
+    expected: Option<Revision>,
+) -> Result<Change> {
     let app = Arc::clone(&app);
-    Ok(tokio::task::spawn_blocking(move || app.edit(edit)).await??)
+    Ok(tokio::task::spawn_blocking(move || app.edit(edit, expected.as_ref())).await??)
 }
 
 #[tauri::command]

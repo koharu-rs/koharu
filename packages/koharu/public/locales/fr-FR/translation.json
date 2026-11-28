@@ -293,6 +293,13 @@
     "unlock": "Déverrouiller {{name}}",
     "unlocked": "Déverrouillé"
   },
+  "matching": {
+    "title": "Copier les traductions correspondantes",
+    "direction": "De la page {{from}} à la page {{to}}. Vérifiez les correspondances uniques du texte source.",
+    "empty": "Aucune correspondance unique avec une traduction vide.",
+    "copy": "Copier la sélection",
+    "changed": "Les pages ont changé. Vérifiez à nouveau les correspondances."
+  },
   "menu": {
     "about": "À propos",
     "checkForUpdates": "Rechercher des mises à jour",

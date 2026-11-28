@@ -293,6 +293,13 @@
     "unlock": "{{name}} öğesinin kilidini aç",
     "unlocked": "Kilitsiz"
   },
+  "matching": {
+    "title": "Eşleşen çevirileri kopyala",
+    "direction": "{{from}}. sayfadan {{to}}. sayfaya. Kaynak metni yalnız bir kez eşleşen çevirileri inceleyin.",
+    "empty": "Çevirisi boş olan benzersiz eşleşme yok.",
+    "copy": "Seçilenleri kopyala",
+    "changed": "Sayfalar değişti. Eşleşmeleri yeniden inceleyin."
+  },
   "menu": {
     "about": "Hakkında",
     "checkForUpdates": "Güncellemeleri denetle",

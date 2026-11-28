@@ -55,7 +55,7 @@ export type Align = 'start' | 'center' | 'end' | 'justify'
  */
 export type Anchor = 'start' | 'center' | 'end'
 
-export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History
+export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History | Revision
 
 /**
  *  A painted area of a page: a byte a pixel over `rect`, in page pixels,
@@ -952,6 +952,8 @@ export type Query =
   | { query: 'get_story'; page: PageId }
   /**  Get the undo and redo labels. */
   | { query: 'get_history' }
+  /**  The revision an edit can require to apply to the document it previewed. */
+  | { query: 'get_revision' }
 
 export type RangeInclusive<T> = {
   start: T
@@ -1332,7 +1334,8 @@ export const commands = {
     runner('show', (options) => invoke<null>('show', { page, facing }, options)),
   query: (query: Query) =>
     runner('query', (options) => invoke<Answer>('query', { query }, options)),
-  edit: (edit: Edit) => runner('edit', (options) => invoke<Change>('edit', { edit }, options)),
+  edit: (edit: Edit, expected: Revision | null) =>
+    runner('edit', (options) => invoke<Change>('edit', { edit, expected }, options)),
   undo: () => runner('undo', (options) => invoke<null>('undo', {}, options)),
   redo: () => runner('redo', (options) => invoke<null>('redo', {}, options)),
   /** Goes to the project as it was after `step` steps, as a click in Photoshop's History panel does; 0 is the project as it opened. */

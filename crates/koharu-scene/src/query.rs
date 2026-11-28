@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Background, History, Layer, LayerId, Meta, Page, PageId, ProjectId, Result, Session, Size,
+    Background, History, Layer, LayerId, Meta, Page, PageId, ProjectId, Result, Revision, Session,
+    Size,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, JsonSchema)]
@@ -26,6 +27,8 @@ pub enum Query {
     GetStory { page: PageId },
     /// Get the undo and redo labels.
     GetHistory,
+    /// The revision an edit can require to apply to the document it previewed.
+    GetRevision,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -36,6 +39,7 @@ pub enum Answer {
     Layer(Box<Layer>),
     Story(Vec<LayerId>),
     History(History),
+    Revision(Revision),
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -92,6 +96,7 @@ impl Session {
             Query::GetPage { page } => Answer::Page(project.page(page)?.clone()),
             Query::GetLayer { layer } => Answer::Layer(Box::new(project.layer(layer)?.clone())),
             Query::GetStory { page } => Answer::Story(project.story(page)?),
+            Query::GetRevision => Answer::Revision(self.revision()),
             Query::GetHistory => Answer::History(self.history()),
         })
     }

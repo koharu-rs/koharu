@@ -152,10 +152,13 @@ pub async fn import(
                 background,
             });
         }
-        app.edit(Edit {
-            label: "import".to_owned(),
-            ops,
-        })?;
+        app.edit(
+            Edit {
+                label: "import".to_owned(),
+                ops,
+            },
+            None,
+        )?;
         Ok(())
     })
     .await??)
