@@ -25,6 +25,7 @@ can't. The scene and the pipeline know nothing of tools.
 | `run` | starts a pipeline run on the project, some pages, some blocks, or a painted area, and answers its id at once | no |
 | `wait` | waits up to 30 seconds for a run to end, and answers what it told so far | yes |
 | `stop` | stops every run, running and queued; what they finished stays | no |
+| `unload` | queues clearing the pipeline's model cache after the GPU worker's current call. Runs continue and reload models as needed | no |
 | `view_page` | the page as the editor draws it, or its scan alone, whole or a region of it, as a JPEG 1,280 pixels on its longer side | yes |
 
 - **Schemas** inline every subschema, because some providers refuse one that

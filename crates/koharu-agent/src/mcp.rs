@@ -239,6 +239,28 @@ mod tests {
         assert_eq!(text(&result), "no project is open");
     }
 
+    #[tokio::test]
+    async fn unload_is_listed_with_an_empty_object_schema_and_needs_a_project() {
+        let handler = Handler::new();
+        let definitions = handler.tools.tool_definitions();
+        let definition = definitions
+            .iter()
+            .find(|tool| tool.name.as_str() == "unload")
+            .expect("the unload tool");
+        let tool = listed(definition);
+        assert_eq!(tool.input_schema["type"], "object");
+        assert_eq!(tool.input_schema["properties"], json!({}));
+        assert_eq!(tool.input_schema["additionalProperties"], false);
+
+        let invalid = handler.answer("unload", json!({"unexpected": true})).await;
+        assert_eq!(invalid.is_error, Some(true));
+        assert!(text(&invalid).contains("schema"), "{}", text(&invalid));
+
+        let result = handler.answer("unload", json!({})).await;
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(text(&result), "no project is open");
+    }
+
     /// An outside agent's call is held to the tool's schema, as the agent's
     /// own is.
     #[tokio::test]

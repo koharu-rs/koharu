@@ -1,8 +1,9 @@
 //! Koharu's tools on the open project, as rig's own tools: the scene's
 //! queries but its undo history, which an agent can't act on, an edit of the
-//! scene's ops, the pipeline's run, wait, and stop, and a look at a page. The in-app agent registers them with rig,
-//! and the MCP server serves the same set to outside agents. A call finds
-//! the open project in the tool context it runs with.
+//! scene's ops, the pipeline's run, wait, stop, and unload, and a look at a
+//! page. The in-app agent registers them with rig, and the MCP server serves
+//! the same set to outside agents. A call finds the open project in the tool
+//! context it runs with.
 
 use std::{collections::BTreeSet, io::Cursor, sync::Arc, time::Duration};
 
@@ -66,6 +67,7 @@ impl Tools {
         tools.add_tool(Run);
         tools.add_tool(Wait);
         tools.add_tool(Stop);
+        tools.add_tool(Unload);
         tools.add_tool(ViewPage);
         tools
     }
@@ -316,6 +318,30 @@ impl Tool for Stop {
     }
 }
 
+struct Unload;
+
+impl Tool for Unload {
+    const NAME: &'static str = "unload";
+    type Args = NoArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Queue clearing the pipeline's model cache, as Edit → Unload Models does. The GPU worker \
+         finishes its current call first. Runs continue and reload models as needed."
+            .to_owned()
+    }
+
+    fn parameters(&self) -> Value {
+        schema::<NoArgs>()
+    }
+
+    async fn call(&self, context: &mut ToolContext, _: NoArgs) -> Result<String, Self::Error> {
+        project(context)?.pipeline.unload();
+        Ok("Model unloading queued. The GPU worker will finish any current call first.".to_owned())
+    }
+}
+
 struct Wait;
 
 impl Tool for Wait {
@@ -527,7 +553,7 @@ fn seen(drawn: &RgbaImage) -> Result<String, ToolExecutionError> {
 #[cfg(test)]
 mod tests {
     use image::Rgb;
-    use koharu_pipeline::PipelineConfig;
+    use koharu_pipeline::{Outcome, PipelineConfig};
     use koharu_scene::{Background, Created, Hash, Ref};
     use rig_core::completion::message::DocumentSourceKind;
     use serde_json::json;
@@ -723,6 +749,52 @@ mod tests {
             events.last().map(|event| json!(event)),
             Some(json!({"kind": "ended", "run": run, "outcome": {"kind": "done"}}))
         );
+    }
+
+    #[tokio::test]
+    async fn repeated_unload_calls_leave_a_queued_run_and_later_runs_intact() {
+        let (_dir, tools) = open();
+        // A blank page exercises the scheduler without loading model weights.
+        add_page(&tools, 100, 100);
+        let request = Request {
+            target: Target::Project,
+            stages: BTreeSet::from([Stage::Detect]),
+            config: None,
+        };
+        let run = tools
+            .pipeline
+            .run(Arc::clone(&tools.session), request.clone())
+            .expect("the run is queued");
+        let toolset = Tools::toolset();
+        let mut context = tools.tool_context();
+        for _ in 0..2 {
+            assert!(
+                toolset
+                    .execute("unload", "{}".to_owned(), &mut context)
+                    .await
+                    .into_result()
+                    .is_ok()
+            );
+        }
+
+        let later = tools
+            .pipeline
+            .run(Arc::clone(&tools.session), request)
+            .expect("another run is queued");
+        for run in [run, later] {
+            let events = tools
+                .pipeline
+                .history(run, Duration::from_secs(5))
+                .await
+                .expect("the run's events");
+            assert_eq!(
+                events.last(),
+                Some(&Event::Ended {
+                    run,
+                    outcome: Outcome::Done,
+                }),
+            );
+        }
     }
 
     async fn view(tools: &Tools, args: Value) -> Result<DynamicImage, ToolExecutionError> {
