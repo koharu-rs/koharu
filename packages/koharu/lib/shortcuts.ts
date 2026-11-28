@@ -25,7 +25,7 @@ export const shortcuts = {
 
 /** Each tool's key, Photoshop's for its counterpart: the Move tool's V, the Direct Selection
  * tool's A, the Type tool's T, the Frame tool's K, the Brush's B, the Eraser's E, the Eyedropper's
- * I, the Remove tool's J, and the Hand's H. */
+ * I, the Remove tool's J, the Format Painter's P, and the Hand's H. */
 export const toolKeys: Record<Tool, string> = {
   select: 'v',
   direct_select: 'a',
@@ -37,6 +37,8 @@ export const toolKeys: Record<Tool, string> = {
   eraser: 'e',
   color_picker: 'i',
   remove: 'j',
+  // Photoshop has no Format Painter; P for Painter, which no tool here takes.
+  format_painter: 'p',
   pan: 'h',
 }
 

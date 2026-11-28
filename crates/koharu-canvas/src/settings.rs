@@ -25,6 +25,9 @@ pub enum Tool {
     Eraser,
     ColorPicker,
     Remove,
+    /// Copies a text's style and pastes it onto others, as
+    /// InDesign's Eyedropper does with type.
+    FormatPainter,
     Pan,
 }
 
@@ -41,7 +44,7 @@ impl Tool {
             Self::Select | Self::DirectSelect => Some(CursorIcon::Default),
             Self::Text => Some(CursorIcon::Text),
             Self::Draw | Self::Eraser | Self::Remove => None,
-            Self::Marquee | Self::Lasso | Self::Block | Self::ColorPicker => {
+            Self::Marquee | Self::Lasso | Self::Block | Self::ColorPicker | Self::FormatPainter => {
                 Some(CursorIcon::Crosshair)
             }
             Self::Pan => Some(CursorIcon::Grab),

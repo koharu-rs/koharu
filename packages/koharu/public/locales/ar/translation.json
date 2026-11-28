@@ -115,6 +115,15 @@
     "removeFavorite": "إزالة {{name}} من المفضلة",
     "search": "ابحث عن خطوط"
   },
+  "formatPainter": {
+    "applySelected": "تطبيق على المحدد ({{count}})",
+    "clear": "تجاهل النمط",
+    "copied": "نمط «{{words}}»: انقر على النصوص للصقه",
+    "empty": "نص فارغ",
+    "failed": "تعذّر لصق النمط",
+    "pick": "انقر على نص لنسخ نمطه",
+    "reload": "Alt+نقر ينسخ نمطًا آخر"
+  },
   "gallery": {
     "back": "رجوع",
     "chapters": "{{count}} من الفصول",
@@ -157,6 +166,7 @@
       "move_layer": "نقل الطبقات",
       "move_page": "نقل الصفحة",
       "paint": "رسم",
+      "paste_style": "لصق النمط",
       "recognize": "OCR",
       "resize": "تغيير الحجم",
       "rotate": "تدوير",
@@ -597,6 +607,7 @@
     "direct_select": "التحديد المباشر",
     "draw": "فرشاة",
     "eraser": "ممحاة",
+    "format_painter": "ناسخ التنسيق",
     "increaseBrushSize": "زيادة حجم الفرشاة",
     "lasso": "اللاسو",
     "marquee": "التحديد المستطيل",

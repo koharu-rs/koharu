@@ -115,6 +115,15 @@
     "removeFavorite": "Quitar {{name}} de favoritas",
     "search": "Buscar fuentes"
   },
+  "formatPainter": {
+    "applySelected": "Aplicar a la selección ({{count}})",
+    "clear": "Descartar el estilo",
+    "copied": "Estilo de «{{words}}»: haz clic en textos para pegarlo",
+    "empty": "un texto vacío",
+    "failed": "No se pudo pegar el estilo",
+    "pick": "Haz clic en un texto para copiar su estilo",
+    "reload": "Alt+clic copia otro"
+  },
   "gallery": {
     "back": "Atrás",
     "chapters": "{{count}} capítulos",
@@ -157,6 +166,7 @@
       "move_layer": "Mover capas",
       "move_page": "Mover página",
       "paint": "Pintar",
+      "paste_style": "Pegar estilo",
       "recognize": "OCR",
       "resize": "Cambiar tamaño",
       "rotate": "Rotar",
@@ -597,6 +607,7 @@
     "direct_select": "Selección directa",
     "draw": "Dibujar",
     "eraser": "Borrador",
+    "format_painter": "Copiar formato",
     "increaseBrushSize": "Aumentar tamaño del pincel",
     "lasso": "Lazo",
     "marquee": "Marco rectangular",

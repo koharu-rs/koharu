@@ -115,6 +115,15 @@
     "removeFavorite": "Retirer {{name}} des favoris",
     "search": "Rechercher des polices"
   },
+  "formatPainter": {
+    "applySelected": "Appliquer à la sélection ({{count}})",
+    "clear": "Abandonner le style",
+    "copied": "Style de « {{words}} » : cliquez sur des textes pour le coller",
+    "empty": "un texte vide",
+    "failed": "Impossible de coller le style",
+    "pick": "Cliquez sur un texte pour copier son style",
+    "reload": "Alt+clic en copie un autre"
+  },
   "gallery": {
     "back": "Retour",
     "chapters": "{{count}} chapitres",
@@ -157,6 +166,7 @@
       "move_layer": "Déplacer des calques",
       "move_page": "Déplacer la page",
       "paint": "Peindre",
+      "paste_style": "Coller le style",
       "recognize": "OCR",
       "resize": "Redimensionner",
       "rotate": "Faire pivoter",
@@ -597,6 +607,7 @@
     "direct_select": "Sélection directe",
     "draw": "Pinceau",
     "eraser": "Gomme",
+    "format_painter": "Reproduire la mise en forme",
     "increaseBrushSize": "Augmenter la taille du pinceau",
     "lasso": "Lasso",
     "marquee": "Rectangle de sélection",

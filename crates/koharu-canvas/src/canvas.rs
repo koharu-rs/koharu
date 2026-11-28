@@ -666,6 +666,9 @@ impl Canvas {
             (Tool::ColorPicker, Some(PointerButton::Primary)) => {
                 Press::answers(tools::picker::pick(&cx, sample)?)
             }
+            (Tool::FormatPainter, Some(PointerButton::Primary)) => {
+                tools::painter::press(&cx, sample)
+            }
             (tool, Some(PointerButton::Primary)) if tool.is_brush() => {
                 tools::brush::press(&cx, sample)
             }
@@ -709,6 +712,7 @@ impl Canvas {
                 if idle {
                     let hover = match (self.tool, self.context()) {
                         (Tool::Select, Some(cx)) => tools::select::hover(&cx, last.page),
+                        (Tool::FormatPainter, Some(cx)) => tools::painter::hover(&cx, last.page),
                         _ => None,
                     };
                     self.selection.set_hover(hover);
@@ -1133,7 +1137,7 @@ fn id(pointer: &PointerInfo) -> u64 {
 
 /// The text a press at `page` types into: the topmost text or block it
 /// picks, with what `typable` gives for it.
-fn text_at(cx: &Context, page: Point) -> Option<(LayerId, Text)> {
+pub(crate) fn text_at(cx: &Context, page: Point) -> Option<(LayerId, Text)> {
     let layer = cx.snapshot.hit(page)?.layer;
     let text = typable(&cx.snapshot.page().layers, layer)?;
     Some((layer, text))

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { useColorSampling } from '@/components/controls/ColorSampling'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
 import { FillBar } from '@/components/editor/FillBar'
+import { FormatPainterBar } from '@/components/editor/FormatPainterBar'
 import { HistoryWindow } from '@/components/editor/HistoryWindow'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
@@ -215,6 +216,7 @@ export function CanvasWorkspace() {
         >
           {page && <TypeBar />}
           {page && <FillBar />}
+          {page && <FormatPainterBar />}
           {page && <HistoryWindow />}
           {!page && (
             <div className='pointer-events-none absolute inset-0 grid place-items-center'>

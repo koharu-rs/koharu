@@ -856,6 +856,16 @@ export type PageSummary = {
 }
 
 /**
+ *  A press of the Format Painter on a text: the host holds the style it
+ *  copied, so it copies this text's when it holds none or `reload` is set
+ *  (Alt, as InDesign's Eyedropper reloads), and pastes onto it otherwise.
+ */
+export type PainterPress = {
+  layer: LayerId
+  reload: boolean
+}
+
+/**
  *  A panel of the page: what's read in it, drawn where it is, past the
  *  outline too. The outline is never drawn, as a Clip Studio Paint frame
  *  border folder's with Draw border off.
@@ -1227,6 +1237,11 @@ export type Tool =
   | 'eraser'
   | 'color_picker'
   | 'remove'
+  /**
+   *  Copies a text's style and pastes it onto others, as
+   *  InDesign's Eyedropper does with type.
+   */
+  | 'format_painter'
   | 'pan'
 
 /**  One transfer's whole state. */
@@ -1496,6 +1511,8 @@ export const events = {
     listen<number>('brush_diameter', (event) => handler(event.payload)),
   notice: (handler: (payload: Notice) => void): Promise<UnlistenFn> =>
     listen<Notice>('notice', (event) => handler(event.payload)),
+  painter: (handler: (payload: PainterPress) => void): Promise<UnlistenFn> =>
+    listen<PainterPress>('painter', (event) => handler(event.payload)),
   pipeline: (handler: (payload: PipelineEvent) => void): Promise<UnlistenFn> =>
     listen<PipelineEvent>('pipeline', (event) => handler(event.payload)),
   download: (handler: (payload: Transfer) => void): Promise<UnlistenFn> =>

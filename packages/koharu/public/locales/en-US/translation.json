@@ -115,6 +115,15 @@
     "removeFavorite": "Remove {{name}} from favorites",
     "search": "Search fonts"
   },
+  "formatPainter": {
+    "applySelected": "Apply to selected ({{count}})",
+    "clear": "Drop the style",
+    "copied": "Style of “{{words}}”: click texts to paste it",
+    "empty": "an empty text",
+    "failed": "The style couldn’t be pasted",
+    "pick": "Click a text to copy its style",
+    "reload": "Alt-click copies another"
+  },
   "gallery": {
     "back": "Back",
     "chapters": "{{count}} chapters",
@@ -157,6 +166,7 @@
       "move_layer": "Move layers",
       "move_page": "Move page",
       "paint": "Paint",
+      "paste_style": "Paste style",
       "recognize": "OCR",
       "resize": "Resize",
       "rotate": "Rotate",
@@ -597,6 +607,7 @@
     "direct_select": "Direct Selection",
     "draw": "Brush",
     "eraser": "Eraser",
+    "format_painter": "Format Painter",
     "increaseBrushSize": "Increase brush size",
     "lasso": "Lasso",
     "marquee": "Rectangular Marquee",

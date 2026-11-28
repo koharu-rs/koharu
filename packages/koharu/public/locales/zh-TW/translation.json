@@ -115,6 +115,15 @@
     "removeFavorite": "將 {{name}} 從我的最愛移除",
     "search": "搜尋字型"
   },
+  "formatPainter": {
+    "applySelected": "套用到所選（{{count}}）",
+    "clear": "捨棄樣式",
+    "copied": "「{{words}}」的樣式：點選文字即可貼上",
+    "empty": "空白文字",
+    "failed": "無法貼上樣式",
+    "pick": "點選文字以複製其樣式",
+    "reload": "Alt+點選複製另一個"
+  },
   "gallery": {
     "back": "返回",
     "chapters": "{{count}} 話",
@@ -157,6 +166,7 @@
       "move_layer": "移動圖層",
       "move_page": "移動頁面",
       "paint": "繪製",
+      "paste_style": "貼上樣式",
       "recognize": "OCR",
       "resize": "調整大小",
       "rotate": "旋轉",
@@ -597,6 +607,7 @@
     "direct_select": "直接選取",
     "draw": "繪圖",
     "eraser": "橡皮擦",
+    "format_painter": "複製格式",
     "increaseBrushSize": "增加筆刷大小",
     "lasso": "套索",
     "marquee": "矩形選取畫面",

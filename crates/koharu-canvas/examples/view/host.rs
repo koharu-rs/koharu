@@ -82,6 +82,7 @@ impl Host {
                     tracing::info!("copied {text:?}; the example has no clipboard")
                 }
                 Effect::Paste => tracing::info!("the example has no clipboard to paste from"),
+                Effect::Painter(press) => tracing::info!("the Format Painter pressed {press:?}"),
             }
         }
         Ok(())

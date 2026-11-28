@@ -17,7 +17,7 @@ mod typing;
 mod view;
 
 pub use canvas::{Canvas, Facing, Side};
-pub use effect::{Effect, Notice};
+pub use effect::{Effect, Notice, PainterPress};
 pub use kurbo::{Point, Rect, Size, TranslateScale, Vec2};
 pub use settings::{Brush, Colors, Story, Tool};
 pub use snapshot::Snapshot;

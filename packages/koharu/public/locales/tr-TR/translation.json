@@ -115,6 +115,15 @@
     "removeFavorite": "{{name}} yazı tipini favorilerden çıkar",
     "search": "Yazı tipi ara"
   },
+  "formatPainter": {
+    "applySelected": "Seçilenlere uygula ({{count}})",
+    "clear": "Stili bırak",
+    "copied": "“{{words}}” stili: yapıştırmak için metinlere tıklayın",
+    "empty": "boş bir metin",
+    "failed": "Stil yapıştırılamadı",
+    "pick": "Stilini kopyalamak için bir metne tıklayın",
+    "reload": "Alt+tıklama başka birini kopyalar"
+  },
   "gallery": {
     "back": "Geri",
     "chapters": "{{count}} bölüm",
@@ -157,6 +166,7 @@
       "move_layer": "Katmanları taşı",
       "move_page": "Sayfayı taşı",
       "paint": "Boya",
+      "paste_style": "Stili yapıştır",
       "recognize": "OCR",
       "resize": "Yeniden boyutlandır",
       "rotate": "Döndür",
@@ -597,6 +607,7 @@
     "direct_select": "Doğrudan Seçim",
     "draw": "Çizim",
     "eraser": "Silgi",
+    "format_painter": "Biçim Boyacısı",
     "increaseBrushSize": "Fırça boyutunu artır",
     "lasso": "Kement",
     "marquee": "Dikdörtgen Seçim Çerçevesi",

@@ -729,7 +729,7 @@ function SampleMenu<T extends string>({
 
 /** What every character of `texts` shares, each span's marks over its text's style, and the values
  * they don't, which it leaves empty, as the canvas reports a typed selection's. */
-function sharedChars(texts: Text[]): { chars: CharStyle; mixed: CharKey[] } {
+export function sharedChars(texts: Text[]): { chars: CharStyle; mixed: CharKey[] } {
   const styles: CharStyle[] = texts.flatMap((text) => {
     const base = text.style?.chars ?? {}
     const spans = text.content?.length ? text.content : [{ insert: '' }]

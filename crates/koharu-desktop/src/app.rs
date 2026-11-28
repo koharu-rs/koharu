@@ -379,6 +379,10 @@ impl App {
                     self.emit(events::NOTICE, notice);
                     Ok(())
                 }
+                Effect::Painter(press) => {
+                    self.emit(events::PAINTER, press);
+                    Ok(())
+                }
                 Effect::Copy(text) => arboard::Clipboard::new()
                     .and_then(|mut clipboard| clipboard.set_text(text))
                     .context("the clipboard took no text"),

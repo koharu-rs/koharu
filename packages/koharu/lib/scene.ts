@@ -129,6 +129,11 @@ export function setStyle(layers: Layer[], style: TextStyle): Promise<Change> {
   return edit('set_style', restyled(layers, style, true))
 }
 
+/** The Format Painter's paste of `style` onto `layers`, as `setStyle` merges it. */
+export function pasteStyle(layers: Layer[], style: TextStyle): Promise<Change> {
+  return edit('paste_style', restyled(layers, style, true))
+}
+
 /** Redefines this project's `kernel` in `script` as `face`, as Google Docs' Update 'Heading 1' to
  * match does: every text of that style takes it, and `layers`, which it was taken from, drop their
  * own font, weight, and italic, so they follow it. Their marked characters keep theirs. */
