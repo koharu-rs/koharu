@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { translationMatches } from '@/lib/translation-matches'
-import { commands, type Page } from '@koharu/ipc/protocol'
+import { commands, type PagePair } from '@koharu/ipc/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Checkbox } from '@koharu/ui/components/checkbox'
 import {
@@ -34,13 +34,8 @@ export function TranslationPreview({
     queryKey: ['translation-preview', source, target],
     gcTime: 0,
     queryFn: async () => {
-      const revision = (await commands.query({ query: 'get_revision' })) as string
-      const [from, to] = await Promise.all(
-        [source, target].map(
-          (page) => commands.query({ query: 'get_page', page }) as Promise<Page>,
-        ),
-      )
-      return { revision, matches: translationMatches(from, to) }
+      const pair = (await commands.query({ query: 'get_page_pair', source, target })) as PagePair
+      return { revision: pair.revision, matches: translationMatches(pair.source, pair.target) }
     },
   })
   const [excluded, setExcluded] = useState<string[]>([])

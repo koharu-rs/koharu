@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest'
 
 import { TranslationPreview } from '@/components/editor/TranslationPreview'
 import { queryClient } from '@/lib/queries'
-import { commands, type Page } from '@koharu/ipc/protocol'
+import { commands, type PagePair } from '@koharu/ipc/protocol'
 
 function preview() {
   const pages = Object.fromEntries(
@@ -22,9 +22,8 @@ function preview() {
       },
     ]),
   )
-  vi.spyOn(commands, 'query').mockImplementation(async (q) =>
-    q.query === 'get_page' ? (pages[q.page] as unknown as Page) : 'initial',
-  )
+  const pair = { source: pages.A, target: pages.B, revision: 'initial' }
+  const query = vi.spyOn(commands, 'query').mockResolvedValue(pair as unknown as PagePair)
   const edit = vi.spyOn(commands, 'edit').mockImplementation(async () => {
     throw Error('unexpected edit')
   })
@@ -34,13 +33,18 @@ function preview() {
       <TranslationPreview source='A' target='B' sourceNumber={1} targetNumber={2} close={close} />
     </QueryClientProvider>,
   )
-  return { pages, edit, close }
+  return { pair, query, edit, close }
 }
 
 it('copies only confirmed matches in one edit', async () => {
-  const { edit, close } = preview()
+  const { edit, close, query } = preview()
   edit.mockResolvedValue({} as Awaited<ReturnType<typeof commands.edit>>)
   const boxes = await screen.findAllByRole('checkbox')
+  expect(query).toHaveBeenCalledExactlyOnceWith({
+    query: 'get_page_pair',
+    source: 'A',
+    target: 'B',
+  })
   const user = userEvent.setup()
   await user.click(boxes[0])
   await user.click(screen.getByRole('button', { name: 'Copy selected' }))
@@ -55,12 +59,10 @@ it('copies only confirmed matches in one edit', async () => {
 })
 
 it('keeps a translation filled after preview and asks for review', async () => {
-  const { pages, edit } = preview()
+  const { pair, edit } = preview()
   await screen.findAllByRole('checkbox')
-  pages.B.layers[0].translation.content[0].insert = 'Manual change'
-  vi.mocked(commands.query).mockImplementation(async (q) =>
-    q.query === 'get_page' ? (pages[q.page] as unknown as Page) : 'updated',
-  )
+  pair.target.layers[0].translation.content[0].insert = 'Manual change'
+  pair.revision = 'updated'
   edit.mockRejectedValue(new Error('project changed since preview'))
   await userEvent.click(screen.getByRole('button', { name: 'Copy selected' }))
   expect(await screen.findByText('The pages changed. Review the matches again.')).toBeVisible()

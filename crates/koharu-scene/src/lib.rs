@@ -25,7 +25,7 @@ pub use ids::{Hash, LayerId, PageId, ProjectId, Ref, Revision, Uuid};
 pub use kinds::*;
 pub use layer::{Attributes, Layer, NewLayer, PixelFormat};
 pub use project::{Background, Meta, Page, Project, locked_inside};
-pub use query::{Answer, PageSummary, ProjectAnswer, Query};
+pub use query::{Answer, PagePair, PageSummary, ProjectAnswer, Query};
 pub use session::{EXTENSION, Session};
 pub use text::{CharStyle, Emphasis, Face, Kernel, Orientation, RichText, Span, Text, TextStyle};
 pub use tiles::{Tile, Tiles};

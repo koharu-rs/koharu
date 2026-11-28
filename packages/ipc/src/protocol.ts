@@ -55,7 +55,7 @@ export type Align = 'start' | 'center' | 'end' | 'justify'
  */
 export type Anchor = 'start' | 'center' | 'end'
 
-export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History | Revision
+export type Answer = ProjectAnswer | Page | Layer | LayerId[] | History | PagePair
 
 /**
  *  A painted area of a page: a byte a pixel over `rect`, in page pixels,
@@ -833,6 +833,12 @@ export type PageChanges = {
 /**  A page; stored, so it survives undo. */
 export type PageId = string
 
+export type PagePair = {
+  source: Page
+  target: Page
+  revision: Revision
+}
+
 /**  A side of a two-page spread. */
 export type PageSide = 'left' | 'right'
 
@@ -952,8 +958,8 @@ export type Query =
   | { query: 'get_story'; page: PageId }
   /**  Get the undo and redo labels. */
   | { query: 'get_history' }
-  /**  The revision an edit can require to apply to the document it previewed. */
-  | { query: 'get_revision' }
+  /**  Both pages at the revision an edit based on them must match. */
+  | { query: 'get_page_pair'; source: PageId; target: PageId }
 
 export type RangeInclusive<T> = {
   start: T

@@ -327,3 +327,35 @@ fn stale_preview_preserves_both_text_and_history() {
     session.apply_at(copy, Some(&before.2)).unwrap();
     assert_eq!(text(&session, layer).content.text(), "From reference");
 }
+
+#[test]
+fn undo_after_preview_cannot_overwrite_a_restored_translation() {
+    use koharu_scene::{Answer, Query};
+
+    let (_dir, mut session, source) = session();
+    let target = page(&mut session);
+    let block = add(&mut session, target, None, block(0.0));
+    set_text(&mut session, block, "Manual translation").unwrap();
+    let filled = session.revision();
+    set_text(&mut session, block, "").unwrap();
+    let Answer::PagePair(preview) = session
+        .query(Query::GetPagePair { source, target })
+        .unwrap()
+    else {
+        panic!("expected a page pair")
+    };
+    assert_eq!(preview.target, *session.project().page(target).unwrap());
+    assert_eq!(preview.source.id, source);
+    assert_ne!(preview.revision, filled);
+    session.undo().unwrap();
+    assert_eq!(session.revision(), filled);
+    let copy = edit(vec![Op::SetText {
+        layer: block.into(),
+        text: "From reference".into(),
+    }]);
+    assert!(matches!(
+        session.apply_at(copy, Some(&preview.revision)),
+        Err(Error::Rejected(_))
+    ));
+    assert_eq!(text(&session, block).content.text(), "Manual translation");
+}
