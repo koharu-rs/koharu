@@ -279,14 +279,35 @@ impl Names {
         if !self.keep {
             return format!("{stem}.{extension}");
         }
-        let mut name = format!("{stem}.{extension}");
         let mut copy = 0;
-        while !self.taken.insert(name.to_lowercase()) {
+        loop {
+            let suffix = match copy {
+                0 => String::new(),
+                copy => format!("-{copy}"),
+            };
+            let name = fit(&stem, &suffix, extension);
+            if self.taken.insert(name.to_lowercase()) {
+                return name;
+            }
             copy += 1;
-            name = format!("{stem}-{copy}.{extension}");
         }
-        name
     }
+}
+
+/// The most bytes a file name holds on Linux and macOS. Windows holds 255
+/// UTF-16 units, which a name of at most 255 bytes never passes.
+const NAME: usize = 255;
+
+/// `stem`, `suffix`, and `extension` as one file name: the stem cut to fit a
+/// name's length, whole characters only, without a trailing dot or space.
+fn fit(stem: &str, suffix: &str, extension: &str) -> String {
+    let tail = suffix.len() + 1 + extension.len();
+    let mut end = stem.len().min(NAME.saturating_sub(tail));
+    while !stem.is_char_boundary(end) {
+        end -= 1;
+    }
+    let stem = stem[..end].trim_end_matches(['.', ' ']);
+    format!("{stem}{suffix}.{extension}")
 }
 
 /// A source name as a file name on every platform.
@@ -362,5 +383,25 @@ mod tests {
     fn numbered_exports_replace_their_own_files() {
         let mut names = names(false, &["0001.png"]);
         assert_eq!(names.file("0001", Some("page"), "png"), "0001.png");
+    }
+
+    #[test]
+    fn a_long_source_name_leaves_room_for_the_extension_and_suffix() {
+        let stem = "a".repeat(251);
+        let name = names(true, &[]).file("0001", Some(&stem), "webp");
+        assert_eq!(name, format!("{}.webp", "a".repeat(250)));
+
+        // The folder holding that name leaves no room for a suffix, which
+        // the stem gives up instead.
+        let suffixed = names(true, &[name.as_str()]).file("0001", Some(&stem), "webp");
+        assert_eq!(suffixed, format!("{}-1.webp", "a".repeat(248)));
+    }
+
+    #[test]
+    fn a_cut_name_holds_whole_characters_only() {
+        let mut names = names(true, &[]);
+        let name = names.file("0001", Some(&"字".repeat(100)), "png");
+        assert!(name.len() <= 255);
+        assert!(name.ends_with(".png"));
     }
 }
