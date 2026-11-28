@@ -293,6 +293,13 @@
     "unlock": "Desbloquear {{name}}",
     "unlocked": "Desbloqueada"
   },
+  "matching": {
+    "title": "Copiar traducciones coincidentes",
+    "direction": "De la página {{from}} a la {{to}}. Revisa las coincidencias únicas del texto original.",
+    "empty": "No hay coincidencias únicas con la traducción vacía.",
+    "copy": "Copiar selección",
+    "changed": "Las páginas han cambiado. Revisa las coincidencias."
+  },
   "menu": {
     "about": "Acerca de",
     "checkForUpdates": "Buscar actualizaciones",

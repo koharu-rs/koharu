@@ -293,6 +293,13 @@
     "unlock": "Unlock {{name}}",
     "unlocked": "Unlocked"
   },
+  "matching": {
+    "title": "Copy matching translations",
+    "direction": "From page {{from}} to page {{to}}. Review translations for unique OCR matches.",
+    "empty": "No unique matches with an empty translation.",
+    "copy": "Copy selected",
+    "changed": "The pages changed. Review the matches again."
+  },
   "menu": {
     "about": "About",
     "checkForUpdates": "Check for Updates",

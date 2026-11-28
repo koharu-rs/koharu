@@ -29,7 +29,7 @@ import type { Faces } from './styles'
  * History panel translates. */
 
 function edit(label: string, ops: Op[]): Promise<Change> {
-  return commands.edit({ label, ops })
+  return commands.edit({ label, ops }, null)
 }
 
 /** Shows, hides, or fades layers. */

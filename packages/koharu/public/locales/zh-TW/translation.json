@@ -293,6 +293,13 @@
     "unlock": "解鎖 {{name}}",
     "unlocked": "未鎖定"
   },
+  "matching": {
+    "title": "複製相符的譯文",
+    "direction": "從第 {{from}} 頁複製到第 {{to}} 頁。請核對原文唯一相符的譯文。",
+    "empty": "沒有原文唯一相符且譯文空白的文字。",
+    "copy": "複製所選譯文",
+    "changed": "頁面已變更，請重新核對。"
+  },
   "menu": {
     "about": "關於",
     "checkForUpdates": "檢查更新",

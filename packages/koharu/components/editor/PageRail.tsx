@@ -49,6 +49,8 @@ import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
 
+import { TranslationPreview } from './TranslationPreview'
+
 const emptyPages: PageSummary[] = []
 
 export function PageRail() {
@@ -68,6 +70,8 @@ export function PageRail() {
   // The page Delete asks about, kept while its dialog closes so the dialog still names it.
   const [pageToDelete, setPageToDelete] = useState<{ page: string; number: number } | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [preview, setPreview] = useState(false)
+  const reference = selected.find((id) => id !== active)
   const pageList = useRef<HTMLDivElement>(null)
   const pageVirtualizer = useVirtualizer({
     count: pages.length,
@@ -149,6 +153,23 @@ export function PageRail() {
           )}
         </header>
 
+        {selected.length === 2 && active && selected.includes(active) && reference && (
+          <>
+            <Button variant='ghost' size='sm' onClick={() => setPreview(true)}>
+              {t('matching.title')}
+            </Button>
+            {preview && (
+              <TranslationPreview
+                key={reference + active}
+                source={reference}
+                target={active}
+                sourceNumber={pages.findIndex((page) => page.id === reference) + 1}
+                targetNumber={pages.findIndex((page) => page.id === active) + 1}
+                close={() => setPreview(false)}
+              />
+            )}
+          </>
+        )}
         {pages.length === 0 ? (
           <div className='flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center'>
             <p className='text-[11px] font-medium'>{t('navigator.emptyTitle')}</p>

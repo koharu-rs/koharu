@@ -14,7 +14,7 @@ use koharu_agent::{Agent, McpServer, Tools};
 use koharu_canvas::{Canvas, Effect, Facing, Side, Snapshot};
 use koharu_pipeline::{Area, Pipeline, PipelineConfig, Request, RunId, Stage, Target};
 use koharu_renderer::Renderer;
-use koharu_scene::{Change, Edit, PageId, Session};
+use koharu_scene::{Change, Edit, PageId, Revision, Session};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager as _};
@@ -230,9 +230,9 @@ impl App {
     }
 
     /// Runs `edit` on the open project as one undo step.
-    pub fn edit(&self, edit: Edit) -> Result<Change> {
+    pub fn edit(&self, edit: Edit, expected: Option<&Revision>) -> Result<Change> {
         tracing::info!(label = %edit.label, ops = edit.ops.len(), "edit");
-        Ok(self.session()?.lock().apply(edit)?)
+        Ok(self.session()?.lock().apply_at(edit, expected)?)
     }
 
     /// Tells the interface `session`'s changes, and shows them on the canvas
@@ -357,7 +357,7 @@ impl App {
         let mut edited = false;
         for effect in effects {
             let result = match effect {
-                Effect::Edit(edit) => self.edit(edit).map(|_| edited = true),
+                Effect::Edit(edit) => self.edit(edit, None).map(|_| edited = true),
                 Effect::Selection(layers) => {
                     tracing::info!(layers = layers.len(), "selection");
                     self.emit(events::SELECTION, layers);

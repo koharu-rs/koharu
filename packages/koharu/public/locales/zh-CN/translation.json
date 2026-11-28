@@ -293,6 +293,13 @@
     "unlock": "解锁 {{name}}",
     "unlocked": "未锁定"
   },
+  "matching": {
+    "title": "复制匹配的译文",
+    "direction": "从第 {{from}} 页复制到第 {{to}} 页。请核对原文唯一匹配的译文。",
+    "empty": "没有原文唯一匹配且译文为空的文本。",
+    "copy": "复制所选译文",
+    "changed": "页面已更改，请重新核对。"
+  },
   "menu": {
     "about": "关于",
     "checkForUpdates": "检查更新",

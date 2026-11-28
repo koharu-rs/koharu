@@ -126,6 +126,14 @@ impl Session {
 
     /// Runs `edit` as one undo step. If it fails, nothing changes.
     pub fn apply(&mut self, edit: Edit) -> Result<Change> {
+        self.apply_at(edit, None)
+    }
+
+    /// Rejects the entire edit if another writer has changed the document since preview.
+    pub fn apply_at(&mut self, edit: Edit, expected: Option<&Revision>) -> Result<Change> {
+        if expected.is_some_and(|seen| seen != &self.revision) {
+            return Err(Error::Rejected("project changed since preview".into()));
+        }
         let tx = self.store.begin()?;
         let (next, created) = edit::run(&self.project, &edit, &tx)?;
         tx.write_diff(&self.project, &next)?;
