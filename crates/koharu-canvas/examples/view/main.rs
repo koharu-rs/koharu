@@ -91,6 +91,7 @@ fn create(path: &Path, images: &[PathBuf]) -> Result<Session> {
             index,
             size: None,
             background,
+            source: None,
         });
     }
     session.apply(Edit {

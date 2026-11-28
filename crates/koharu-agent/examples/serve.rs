@@ -63,6 +63,7 @@ fn create(path: &PathBuf, pages: &[PathBuf]) -> Result<Session> {
             index,
             size: None,
             background,
+            source: None,
         });
     }
     session.apply(Edit {

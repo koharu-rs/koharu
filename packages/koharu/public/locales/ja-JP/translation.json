@@ -68,6 +68,7 @@
   "export": {
     "export": "書き出す",
     "imageFormat": "画像形式",
+    "keepSourceNames": "元のファイル名を保持",
     "quality": "画質",
     "title": "{{format}}で書き出す"
   },

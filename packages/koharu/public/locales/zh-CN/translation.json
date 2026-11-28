@@ -68,6 +68,7 @@
   "export": {
     "export": "导出",
     "imageFormat": "图片格式",
+    "keepSourceNames": "保留源文件名",
     "quality": "质量",
     "title": "导出为 {{format}}"
   },

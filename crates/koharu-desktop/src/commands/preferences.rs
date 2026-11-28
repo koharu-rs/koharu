@@ -15,6 +15,7 @@ use specta::Type;
 use tauri::{State, ipc::Channel};
 
 use super::Result;
+use super::export::ExportConfig;
 use crate::app::App;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -23,6 +24,7 @@ pub struct Preferences {
     pub renderer: RendererConfig,
     pub agent: AgentConfig,
     pub providers: Providers,
+    pub export: ExportConfig,
 }
 
 fn preferences() -> anyhow::Result<Preferences> {
@@ -31,6 +33,7 @@ fn preferences() -> anyhow::Result<Preferences> {
         renderer: koharu_config::get()?,
         agent: koharu_config::get()?,
         providers: koharu_config::get()?,
+        export: koharu_config::get()?,
     })
 }
 
@@ -55,11 +58,13 @@ pub async fn save_preferences(
             renderer,
             agent,
             providers,
+            export,
         } = preferences;
         koharu_config::update(|section: &mut PipelineConfig| *section = pipeline)?;
         koharu_config::update(|section: &mut RendererConfig| *section = renderer)?;
         koharu_config::update(|section: &mut AgentConfig| *section = agent)?;
         koharu_config::update(|section: &mut Providers| *section = providers)?;
+        koharu_config::update(|section: &mut ExportConfig| *section = export)?;
         let saved = self::preferences()?;
         app.pipeline.set_config(saved.pipeline.clone());
         // The preferences are saved by now, so a page that fails to redraw

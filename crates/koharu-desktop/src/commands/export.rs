@@ -1,7 +1,7 @@
 //! Export: every page, or some of them, as PNG, JPEG, WebP, or PSD files in a
 //! folder, as a CBZ of images, or as a PDF.
 
-use std::{io::Write as _, path::Path, sync::Arc};
+use std::{collections::HashSet, io::Write as _, path::Path, sync::Arc};
 
 use anyhow::{Context as _, anyhow, ensure};
 use fs_err::File;
@@ -16,13 +16,26 @@ use image::{
 use koharu_psd::Labels;
 use koharu_scene::PageId;
 use krilla::{Document, geom::Size, image::Image, page::PageSettings};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{State, Window};
 use tauri_runtime_cef::CefRuntime;
 
 use super::{Result, import::PDF_SCALE};
 use crate::app::App;
+
+/// `[export]`: how the export command names what it writes.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default)]
+pub struct ExportConfig {
+    /// Whether images and PSDs go out named after their pages' source files
+    /// instead of numbered.
+    pub preserve_source_names: bool,
+}
+
+impl koharu_config::Section for ExportConfig {
+    const NAME: &'static str = "export";
+}
 
 /// What the pages go out as: a folder of images or of PSDs, a CBZ of
 /// images, or a PDF.
@@ -161,38 +174,48 @@ fn write(
     format: ExportFormat,
     destination: &Path,
 ) -> anyhow::Result<()> {
+    let keep = koharu_config::get::<ExportConfig>()?.preserve_source_names;
     let session = app.session()?;
-    let order: Vec<PageId> = session
-        .lock()
-        .project()
-        .pages()
-        .map(|page| page.id)
-        .collect();
+    let order: Vec<(PageId, Option<String>)> = {
+        let session = session.lock();
+        session
+            .project()
+            .pages()
+            .map(|page| (page.id, page.source.clone()))
+            .collect()
+    };
     let digits = order.len().to_string().len().max(3);
     // A page keeps its number in the project whichever pages go with it, so
-    // one exported again replaces its own file.
-    let pages = order
+    // a numbered export replaces its own file; a kept source name never
+    // replaces anything.
+    let pages: Vec<(String, Option<String>, PageId)> = order
         .iter()
         .enumerate()
-        .filter(|(_, page)| pages.is_none_or(|pages| pages.contains(page)))
-        .map(|(index, &page)| (format!("{:0digits$}", index + 1), page));
+        .filter(|(_, (page, _))| pages.is_none_or(|pages| pages.contains(page)))
+        .map(|(index, (page, source))| (format!("{:0digits$}", index + 1), source.clone(), *page))
+        .collect();
     let draw = |page| -> anyhow::Result<RgbaImage> {
         let frame = app.renderer.render(&session.lock(), page)?;
         Ok(frame.rasterize()?.image)
     };
     match format {
         ExportFormat::Images(format) => {
-            for (number, page) in pages {
+            let mut names = Names::new(destination, keep)?;
+            for (number, source, page) in pages {
                 fs_err::write(
-                    destination.join(format!("{number}.{}", format.extension())),
+                    destination.join(names.file(&number, source.as_deref(), format.extension())),
                     format.encode(draw(page)?)?,
                 )?;
             }
         }
         ExportFormat::Psd(labels) => {
-            for (number, page) in pages {
+            let mut names = Names::new(destination, keep)?;
+            for (number, source, page) in pages {
                 let psd = koharu_psd::export(&session.lock(), &app.renderer, page, &labels)?;
-                fs_err::write(destination.join(format!("{number}.psd")), psd)?;
+                fs_err::write(
+                    destination.join(names.file(&number, source.as_deref(), "psd")),
+                    psd,
+                )?;
             }
         }
         ExportFormat::Cbz(format) => {
@@ -200,7 +223,7 @@ fn write(
             // Already-compressed images gain nothing from deflate.
             let options = ::zip::write::SimpleFileOptions::default()
                 .compression_method(::zip::CompressionMethod::Stored);
-            for (number, page) in pages {
+            for (number, _, page) in pages {
                 archive.start_file(format!("{number}.{}", format.extension()), options)?;
                 archive.write_all(&format.encode(draw(page)?)?)?;
             }
@@ -208,7 +231,7 @@ fn write(
         }
         ExportFormat::Pdf => {
             let mut document = Document::new();
-            for (_, page) in pages {
+            for (_, _, page) in pages {
                 let image = draw(page)?;
                 let (width, height) = image.dimensions();
                 // Import's own scale, so a page read back keeps its pixels.
@@ -223,4 +246,108 @@ fn write(
         }
     }
     Ok(())
+}
+
+/// What an export's files are called: a page's source name when kept, or its
+/// number, with `-1`, `-2`… on a name the folder or an earlier page took.
+struct Names {
+    /// Whether source names stand in for numbers; numbered files keep
+    /// replacing what a previous export of the page wrote.
+    keep: bool,
+    taken: HashSet<String>,
+}
+
+impl Names {
+    fn new(directory: &Path, keep: bool) -> anyhow::Result<Self> {
+        let mut taken = HashSet::new();
+        if keep {
+            for entry in fs_err::read_dir(directory)? {
+                taken.insert(entry?.file_name().to_string_lossy().to_lowercase());
+            }
+        }
+        Ok(Self { keep, taken })
+    }
+
+    /// `number`'s file name, or the page's source name when kept, made
+    /// distinct from the folder's files and the pages before it.
+    fn file(&mut self, number: &str, source: Option<&str>, extension: &str) -> String {
+        let stem = source
+            .filter(|_| self.keep)
+            .and_then(|source| Path::new(source).file_stem())
+            .and_then(|stem| stem.to_str())
+            .map(sanitize)
+            .filter(|stem| !stem.is_empty());
+        let stem = stem.unwrap_or_else(|| number.to_owned());
+        if !self.keep {
+            return format!("{stem}.{extension}");
+        }
+        let mut name = format!("{stem}.{extension}");
+        let mut copy = 0;
+        while !self.taken.insert(name.to_lowercase()) {
+            copy += 1;
+            name = format!("{stem}-{copy}.{extension}");
+        }
+        name
+    }
+}
+
+/// A source name as a file name on every platform.
+fn sanitize(stem: &str) -> String {
+    sanitize_filename::sanitize_with_options(
+        stem,
+        sanitize_filename::Options {
+            windows: true,
+            truncate: true,
+            replacement: "",
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Names;
+
+    fn names(keep: bool, taken: &[&str]) -> Names {
+        Names {
+            keep,
+            taken: taken.iter().map(|name| (*name).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_kept_source_name_takes_the_output_extension() {
+        assert_eq!(
+            names(true, &[]).file("0001", Some("page.jpg"), "png"),
+            "page.png"
+        );
+    }
+
+    #[test]
+    fn a_kept_name_avoids_the_folders_files_and_the_pages_before_it() {
+        let mut names = names(true, &["page.png", "other.png"]);
+        assert_eq!(names.file("0001", Some("page.jpg"), "png"), "page-1.png");
+        assert_eq!(names.file("0002", Some("page.jpg"), "png"), "page-2.png");
+        assert_eq!(names.file("0003", Some("other.jpg"), "png"), "other-1.png");
+    }
+
+    #[test]
+    fn a_page_without_a_source_name_keeps_its_number() {
+        let mut names = names(true, &["0001.png"]);
+        assert_eq!(names.file("0001", None, "png"), "0001-1.png");
+        assert_eq!(names.file("0002", None, "png"), "0002.png");
+    }
+
+    #[test]
+    fn a_source_name_with_nothing_left_falls_back_to_the_number() {
+        assert_eq!(
+            names(true, &[]).file("0001", Some("??:?.webp"), "png"),
+            "0001.png"
+        );
+    }
+
+    #[test]
+    fn numbered_exports_replace_their_own_files() {
+        let mut names = names(false, &["0001.png"]);
+        assert_eq!(names.file("0001", Some("page.jpg"), "png"), "0001.png");
+    }
 }

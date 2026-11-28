@@ -68,6 +68,7 @@
   "export": {
     "export": "내보내기",
     "imageFormat": "이미지 형식",
+    "keepSourceNames": "원본 파일 이름 유지",
     "quality": "품질",
     "title": "{{format}} 내보내기"
   },

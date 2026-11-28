@@ -68,6 +68,7 @@
   "export": {
     "export": "Экспортировать",
     "imageFormat": "Формат изображений",
+    "keepSourceNames": "Сохранять исходные имена файлов",
     "quality": "Качество",
     "title": "Экспорт в {{format}}"
   },

@@ -74,6 +74,7 @@ pub async fn read(
         http,
         chapter,
         app.session()?,
+        name.clone(),
         move |loaded, error| {
             let loading = Loading {
                 loaded,
@@ -123,19 +124,23 @@ fn name(chapter: &Chapter, url: &Url) -> String {
 
 /// Loads `chapter`'s pages into `session` in order, through `extension` and
 /// `http`, telling `tell` how many are in after each, and why it stopped
-/// when one fails.
+/// when one fails. A page takes the chapter's name and its number,
+/// `‹chapter›-‹number›`, as its source name.
 async fn load(
     extension: &'static dyn Extension,
     http: reqwest::Client,
     chapter: Chapter,
     session: Arc<Mutex<Session>>,
+    name: String,
     tell: impl Fn(u32, Option<String>) + Send,
 ) {
     let mut loaded = 0;
     let mut previous = None;
+    let digits = chapter.pages.len().to_string().len().max(3);
     tell(loaded, None);
-    for page in &chapter.pages {
-        match self::page(extension, &http, page, &session, previous).await {
+    for (index, page) in chapter.pages.iter().enumerate() {
+        let source = format!("{name}-{:0digits$}", index + 1);
+        match self::page(extension, &http, page, &session, previous, source).await {
             Ok(page) => {
                 previous = Some(page);
                 loaded += 1;
@@ -158,16 +163,22 @@ async fn page(
     page: &str,
     session: &Arc<Mutex<Session>>,
     previous: Option<PageId>,
+    source: String,
 ) -> Result<PageId> {
     let bytes = extension.page(http, page).await?;
     let placing = Arc::clone(session);
-    tokio::task::spawn_blocking(move || place(&placing, bytes, previous)).await?
+    tokio::task::spawn_blocking(move || place(&placing, bytes, previous, source)).await?
 }
 
 /// The page the image `bytes` is: the page already made from it, or else a
 /// new one, added as import adds one, right after `previous`, at the start
 /// when there's none, and at the end when it's gone.
-fn place(session: &Mutex<Session>, bytes: Vec<u8>, previous: Option<PageId>) -> Result<PageId> {
+fn place(
+    session: &Mutex<Session>,
+    bytes: Vec<u8>,
+    previous: Option<PageId>,
+    source: String,
+) -> Result<PageId> {
     let hash = Hash::of(&bytes);
     let mut session = session.lock();
     let project = session.project();
@@ -193,6 +204,7 @@ fn place(session: &Mutex<Session>, bytes: Vec<u8>, previous: Option<PageId>) -> 
                 index,
                 size: None,
                 background: Some(hash),
+                source: Some(source),
             },
         ],
     })?;

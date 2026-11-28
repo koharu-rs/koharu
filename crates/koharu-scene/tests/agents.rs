@@ -56,6 +56,6 @@ fn agents_patch_a_block_and_read_it_in_its_page() {
     };
     assert_eq!(
         (project.version.as_str(), project.pages.len()),
-        ("1.3.0", 1)
+        ("1.4.0", 1)
     );
 }

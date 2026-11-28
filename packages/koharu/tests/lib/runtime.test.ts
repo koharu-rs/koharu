@@ -25,6 +25,7 @@ const preferences: Preferences = {
   renderer: { styles: { antique: { Latn: { family: 'CCWildWords' } } } },
   agent: {},
   providers: {},
+  export: {},
 }
 
 /** The desktop with `open` as its open project, empty. */

@@ -379,6 +379,8 @@ function ExportMenu({
   onOptions: (options: ExportOptions) => void
 }) {
   const { t } = useTranslation()
+  const preferences = usePreferences().data
+  const savePreferences = useSavePreferences()
   const { run, busy } = useCommand(['export', label], commands.export, label)
   const exporting = useIsMutating({ mutationKey: ['export'] }) > 0
   const formats = [
@@ -412,6 +414,21 @@ function ExportMenu({
             {name}…
           </MenubarItem>
         ))}
+        <MenubarSeparator />
+        <MenubarCheckboxItem
+          checked={preferences?.export.preserve_source_names ?? false}
+          disabled={!preferences}
+          onCheckedChange={(keep) =>
+            preferences &&
+            savePreferences.mutate({
+              ...preferences,
+              export: { ...preferences.export, preserve_source_names: keep },
+            })
+          }
+          closeOnClick
+        >
+          {t('export.keepSourceNames')}
+        </MenubarCheckboxItem>
       </MenubarSubContent>
     </MenubarSub>
   )

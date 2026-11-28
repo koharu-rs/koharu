@@ -60,6 +60,9 @@ pub enum Op {
         size: Option<Size>,
         #[serde(default)]
         background: Option<Hash>,
+        /// The imported file the page was made from, if it has a name.
+        #[serde(default)]
+        source: Option<String>,
     },
     /// Set or clear a page's background. A new file must be an image of the
     /// page's size.
@@ -345,7 +348,15 @@ impl Run<'_, '_> {
                 index: at,
                 size,
                 background,
-            } => self.add_page(index, id.as_ref(), *at, *size, background.as_ref()),
+                source,
+            } => self.add_page(
+                index,
+                id.as_ref(),
+                *at,
+                *size,
+                background.as_ref(),
+                source.as_deref(),
+            ),
             Op::SetBackground { page, background } => {
                 self.set_background(index, page, background.as_ref())
             }

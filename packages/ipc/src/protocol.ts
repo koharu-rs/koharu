@@ -329,6 +329,15 @@ export type Event =
   | { type: 'tool_started'; tool: string; arguments: Value }
   | { type: 'tool_finished'; tool: string; error: string | null }
 
+/**  `[export]`: how the export command names what it writes. */
+export type ExportConfig = {
+  /**
+   *  Whether images and PSDs go out named after their pages' source files
+   *  instead of numbered.
+   */
+  preserve_source_names?: boolean
+}
+
 /**
  *  What the pages go out as: a folder of images or of PSDs, a CBZ of
  *  images, or a PDF.
@@ -694,7 +703,15 @@ export type Op =
    *  Add a page at `index`: of `size`, or made from an added file, which
    *  becomes its background and gives it its size.
    */
-  | { op: 'add_page'; id?: Ref | null; index: number; size?: Size | null; background?: Hash | null }
+  | {
+      op: 'add_page'
+      id?: Ref | null
+      index: number
+      size?: Size | null
+      background?: Hash | null
+      /**  The imported file the page was made from, if it has a name. */
+      source?: string | null
+    }
   /**
    *  Set or clear a page's background. A new file must be an image of the
    *  page's size.
@@ -819,6 +836,12 @@ export type Page = {
   id: PageId
   size: Size
   background: Background | null
+  /**
+   *  The imported file the page was made from, named as it was: an export
+   *  keeping source names writes its stem instead of the page's number.
+   *  Absent from a page no file named.
+   */
+  source?: string | null
   /**  Drawn first to last. */
   layers: Layer[]
 }
@@ -911,6 +934,7 @@ export type Preferences = {
   renderer: RendererConfig
   agent: AgentConfig
   providers: Providers
+  export: ExportConfig
 }
 
 export type ProjectAnswer = {

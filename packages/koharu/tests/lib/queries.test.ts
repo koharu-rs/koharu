@@ -36,6 +36,7 @@ describe('useSavePreferences', () => {
     renderer: { styles: { antique: { Latn: { family: font } } } },
     agent: {},
     providers: {},
+    export: {},
   })
 
   it('shows what the desktop last answered once a save fails, but not over a newer save', async () => {
