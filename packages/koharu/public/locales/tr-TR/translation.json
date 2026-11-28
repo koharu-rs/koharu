@@ -68,6 +68,7 @@
   "export": {
     "export": "Dışa Aktar",
     "imageFormat": "Görüntü biçimi",
+    "keepSourceNames": "Özgün dosya adlarını koru",
     "quality": "Kalite",
     "title": "{{format}} Olarak Dışa Aktar"
   },

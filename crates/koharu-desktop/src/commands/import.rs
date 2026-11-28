@@ -81,11 +81,33 @@ fn raster(name: &Path) -> bool {
     )
 }
 
-/// Reads a page file's pages: their images, encoded, in order.
-type Reader = fn(&Path) -> anyhow::Result<Vec<Vec<u8>>>;
+/// Reads a page file's pages: each one's source name, its file's stem when
+/// it has one, and its image, encoded, in order.
+type Reader = fn(&Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>>;
 
 /// An archive's images by member name.
 type Members = Vec<(String, Vec<u8>)>;
+
+/// A path's file stem, which an export keeping source names writes in place
+/// of the page's number.
+fn source_stem(path: &Path) -> Option<String> {
+    path.file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+}
+
+/// An archive member's stem, without the directories holding it.
+fn member_stem(name: &str) -> Option<String> {
+    let file = name
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())?;
+    source_stem(Path::new(file))
+}
+
+/// An image file's one page.
+fn read_image(path: &Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>> {
+    Ok(vec![(source_stem(path), fs_err::read(path)?)])
+}
 
 /// How a page file's pages are read, or `None` when it holds none.
 fn reader(path: &Path) -> Option<Reader> {
@@ -93,7 +115,7 @@ fn reader(path: &Path) -> Option<Reader> {
         "zip" | "cbz" => Some(extract_zip),
         "rar" | "cbr" => Some(extract_rar),
         "pdf" => Some(render_pdf),
-        _ if raster(path) => Some(|path| Ok(vec![fs_err::read(path)?])),
+        _ if raster(path) => Some(read_image),
         _ => None,
     }
 }
@@ -127,7 +149,7 @@ pub async fn import(
     });
     let app = Arc::clone(&app);
     Ok(tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
-        let pages: Vec<Vec<u8>> = paths
+        let pages: Vec<(Option<String>, Vec<u8>)> = paths
             .into_par_iter()
             .map(|path| {
                 let read = reader(&path).with_context(|| {
@@ -142,7 +164,7 @@ pub async fn import(
         let session = app.session()?;
         let start = session.lock().project().pages().count();
         let mut ops = Vec::with_capacity(pages.len() * 2);
-        for (index, bytes) in pages.into_iter().enumerate() {
+        for (index, (source, bytes)) in pages.into_iter().enumerate() {
             let background = Some(Hash::of(&bytes));
             ops.push(Op::AddFile { bytes });
             ops.push(Op::AddPage {
@@ -150,6 +172,7 @@ pub async fn import(
                 index: start + index,
                 size: None,
                 background,
+                source,
             });
         }
         app.edit(Edit {
@@ -162,16 +185,22 @@ pub async fn import(
 }
 
 /// An archive's images in name order, numbers by value.
-fn in_name_order(path: &Path, mut images: Members) -> anyhow::Result<Vec<Vec<u8>>> {
+fn in_name_order(
+    path: &Path,
+    mut images: Members,
+) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>> {
     if images.is_empty() {
         bail!("{} holds no images", path.display());
     }
     alphanumeric_sort::sort_slice_by_str_key(&mut images, |(name, _)| name);
-    Ok(images.into_iter().map(|(_, bytes)| bytes).collect())
+    Ok(images
+        .into_iter()
+        .map(|(name, bytes)| (member_stem(&name), bytes))
+        .collect())
 }
 
 /// A ZIP or CBZ archive's images.
-fn extract_zip(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
+fn extract_zip(path: &Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>> {
     let mut archive = zip::ZipArchive::new(File::open(path)?)
         .with_context(|| format!("failed to read the archive {}", path.display()))?;
     let mut images = Vec::new();
@@ -219,7 +248,7 @@ impl Write for LastMember {
 }
 
 /// A RAR or CBR archive's images.
-fn extract_rar(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
+fn extract_rar(path: &Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>> {
     let archive = ArchiveReader::read_path(path)
         .with_context(|| format!("failed to open the archive {}", path.display()))?;
     let images = Rc::new(RefCell::new(Vec::new()));
@@ -238,14 +267,19 @@ fn extract_rar(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
 }
 
 /// A PDF's pages, each rendered with hayro, in parallel. hayro's cache isn't
-/// thread-safe, so each thread keeps its own.
-fn render_pdf(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
+/// thread-safe, so each thread keeps its own. A page takes the file's stem
+/// and its number, `‹stem›-‹number›`, as its source name.
+fn render_pdf(path: &Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>> {
     let pdf = Pdf::new(fs_err::read(path)?)
         .map_err(|error| anyhow::anyhow!("failed to parse {}: {error:?}", path.display()))?;
     let pages = pdf.pages();
     if pages.is_empty() {
         bail!("{} has no pages", path.display());
     }
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned());
+    let digits = pages.len().to_string().len().max(3);
     let pixmap = PixmapSettings {
         x_scale: PDF_SCALE,
         y_scale: PDF_SCALE,
@@ -273,7 +307,10 @@ fn render_pdf(path: &Path) -> anyhow::Result<Vec<Vec<u8>>> {
                 .with_context(|| {
                     format!("failed to encode page {} of {}", index + 1, path.display())
                 })?;
-            Ok(png)
+            let source = stem
+                .as_ref()
+                .map(|stem| format!("{stem}-{:0digits$}", index + 1));
+            Ok((source, png))
         })
         .collect()
 }

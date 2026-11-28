@@ -94,6 +94,7 @@ async fn main() -> Result<()> {
             index,
             size: None,
             background,
+            source: None,
         });
     }
     session.apply(Edit {

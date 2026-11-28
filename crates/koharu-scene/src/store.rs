@@ -28,7 +28,7 @@ use crate::{
 /// on it, so opening refuses any other database before reading its rows.
 const APPLICATION_ID: i32 = 0x4B48_5255;
 /// The format version this build writes.
-const VERSION: Version = Version::new(1, 3, 0);
+const VERSION: Version = Version::new(1, 4, 0);
 /// What each version added to the tables, which a file from before it takes
 /// in this build's first write to it.
 const UPGRADES: [(Version, &str); 1] = [(

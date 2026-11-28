@@ -11,6 +11,7 @@ impl Run<'_, '_> {
         index: usize,
         size: Option<Size>,
         background: Option<&Hash>,
+        source: Option<&str>,
     ) -> Result<()> {
         // A page made from a file takes that file's size.
         let (size, background) = match (size, background) {
@@ -47,6 +48,7 @@ impl Run<'_, '_> {
                 id,
                 size,
                 background,
+                source: source.map(str::to_owned),
                 layers: Vec::new(),
             },
         );

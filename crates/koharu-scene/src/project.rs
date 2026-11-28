@@ -51,6 +51,11 @@ pub struct Page {
     pub id: PageId,
     pub size: Size,
     pub background: Option<Background>,
+    /// What an export keeping source names writes instead of the page's
+    /// number: the imported file's stem, or `‹stem›-‹number›` for a PDF's or
+    /// a chapter's page. Absent from a page no file named.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// Drawn first to last.
     pub layers: Vec<Layer>,
 }

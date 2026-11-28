@@ -60,6 +60,10 @@ pub enum Op {
         size: Option<Size>,
         #[serde(default)]
         background: Option<Hash>,
+        /// The name an export keeping source names writes, such as the
+        /// imported file's stem.
+        #[serde(default)]
+        source: Option<String>,
     },
     /// Set or clear a page's background. A new file must be an image of the
     /// page's size.
@@ -345,7 +349,15 @@ impl Run<'_, '_> {
                 index: at,
                 size,
                 background,
-            } => self.add_page(index, id.as_ref(), *at, *size, background.as_ref()),
+                source,
+            } => self.add_page(
+                index,
+                id.as_ref(),
+                *at,
+                *size,
+                background.as_ref(),
+                source.as_deref(),
+            ),
             Op::SetBackground { page, background } => {
                 self.set_background(index, page, background.as_ref())
             }
