@@ -709,7 +709,10 @@ export type Op =
       index: number
       size?: Size | null
       background?: Hash | null
-      /**  The imported file the page was made from, if it has a name. */
+      /**
+       *  The name an export keeping source names writes, such as the
+       *  imported file's stem.
+       */
       source?: string | null
     }
   /**
@@ -837,9 +840,9 @@ export type Page = {
   size: Size
   background: Background | null
   /**
-   *  The imported file the page was made from, named as it was: an export
-   *  keeping source names writes its stem instead of the page's number.
-   *  Absent from a page no file named.
+   *  What an export keeping source names writes instead of the page's
+   *  number: the imported file's stem, or `‹stem›-‹number›` for a PDF's or
+   *  a chapter's page. Absent from a page no file named.
    */
   source?: string | null
   /**  Drawn first to last. */

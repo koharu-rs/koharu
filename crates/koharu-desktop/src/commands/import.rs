@@ -81,31 +81,32 @@ fn raster(name: &Path) -> bool {
     )
 }
 
-/// Reads a page file's pages: each one's source name, if its file had one,
-/// and its image, encoded, in order.
+/// Reads a page file's pages: each one's source name, its file's stem when
+/// it has one, and its image, encoded, in order.
 type Reader = fn(&Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>>;
 
 /// An archive's images by member name.
 type Members = Vec<(String, Vec<u8>)>;
 
-/// A path's file name, which an export keeping source names writes instead
+/// A path's file stem, which an export keeping source names writes in place
 /// of the page's number.
-fn file_name(path: &Path) -> Option<String> {
-    path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
+fn source_stem(path: &Path) -> Option<String> {
+    path.file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
 }
 
-/// An archive member's file name, without the directories holding it.
-fn member_name(name: &str) -> Option<String> {
-    name.rsplit(['/', '\\'])
+/// An archive member's stem, without the directories holding it.
+fn member_stem(name: &str) -> Option<String> {
+    let file = name
+        .rsplit(['/', '\\'])
         .next()
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
+        .filter(|name| !name.is_empty())?;
+    source_stem(Path::new(file))
 }
 
 /// An image file's one page.
 fn read_image(path: &Path) -> anyhow::Result<Vec<(Option<String>, Vec<u8>)>> {
-    Ok(vec![(file_name(path), fs_err::read(path)?)])
+    Ok(vec![(source_stem(path), fs_err::read(path)?)])
 }
 
 /// How a page file's pages are read, or `None` when it holds none.
@@ -194,7 +195,7 @@ fn in_name_order(
     alphanumeric_sort::sort_slice_by_str_key(&mut images, |(name, _)| name);
     Ok(images
         .into_iter()
-        .map(|(name, bytes)| (member_name(&name), bytes))
+        .map(|(name, bytes)| (member_stem(&name), bytes))
         .collect())
 }
 

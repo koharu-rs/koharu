@@ -273,8 +273,6 @@ impl Names {
     fn file(&mut self, number: &str, source: Option<&str>, extension: &str) -> String {
         let stem = source
             .filter(|_| self.keep)
-            .and_then(|source| Path::new(source).file_stem())
-            .and_then(|stem| stem.to_str())
             .map(sanitize)
             .filter(|stem| !stem.is_empty());
         let stem = stem.unwrap_or_else(|| number.to_owned());
@@ -317,7 +315,7 @@ mod tests {
     #[test]
     fn a_kept_source_name_takes_the_output_extension() {
         assert_eq!(
-            names(true, &[]).file("0001", Some("page.jpg"), "png"),
+            names(true, &[]).file("0001", Some("page"), "png"),
             "page.png"
         );
     }
@@ -325,9 +323,24 @@ mod tests {
     #[test]
     fn a_kept_name_avoids_the_folders_files_and_the_pages_before_it() {
         let mut names = names(true, &["page.png", "other.png"]);
-        assert_eq!(names.file("0001", Some("page.jpg"), "png"), "page-1.png");
-        assert_eq!(names.file("0002", Some("page.jpg"), "png"), "page-2.png");
-        assert_eq!(names.file("0003", Some("other.jpg"), "png"), "other-1.png");
+        assert_eq!(names.file("0001", Some("page"), "png"), "page-1.png");
+        assert_eq!(names.file("0002", Some("page"), "png"), "page-2.png");
+        assert_eq!(names.file("0003", Some("other"), "png"), "other-1.png");
+    }
+
+    /// A PDF's or a chapter's page name holds dots before its number, which
+    /// an extension would otherwise take for its own.
+    #[test]
+    fn a_page_numbered_after_a_dotted_name_keeps_its_number() {
+        let mut names = names(true, &[]);
+        assert_eq!(
+            names.file("0001", Some("Vol.1-001"), "png"),
+            "Vol.1-001.png"
+        );
+        assert_eq!(
+            names.file("0002", Some("One Piece Ch.1 – example.com-002"), "png"),
+            "One Piece Ch.1 – example.com-002.png"
+        );
     }
 
     #[test]
@@ -340,7 +353,7 @@ mod tests {
     #[test]
     fn a_source_name_with_nothing_left_falls_back_to_the_number() {
         assert_eq!(
-            names(true, &[]).file("0001", Some("??:?.webp"), "png"),
+            names(true, &[]).file("0001", Some("??:?"), "png"),
             "0001.png"
         );
     }
@@ -348,6 +361,6 @@ mod tests {
     #[test]
     fn numbered_exports_replace_their_own_files() {
         let mut names = names(false, &["0001.png"]);
-        assert_eq!(names.file("0001", Some("page.jpg"), "png"), "0001.png");
+        assert_eq!(names.file("0001", Some("page"), "png"), "0001.png");
     }
 }

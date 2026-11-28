@@ -60,7 +60,8 @@ pub enum Op {
         size: Option<Size>,
         #[serde(default)]
         background: Option<Hash>,
-        /// The imported file the page was made from, if it has a name.
+        /// The name an export keeping source names writes, such as the
+        /// imported file's stem.
         #[serde(default)]
         source: Option<String>,
     },
